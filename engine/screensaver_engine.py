@@ -1563,6 +1563,20 @@ class ScreensaverEngine(QObject):
                         exit_app,
                     )
 
+                # Instrumentation: aggregate display states before shutdown
+                if is_perf_metrics_enabled():
+                    try:
+                        display_states = []
+                        for disp in getattr(self.display_manager, "displays", []):
+                            try:
+                                state = disp.describe_runtime_state()
+                                display_states.append(state)
+                            except Exception as exc:
+                                logger.debug("[ENGINE] Failed to get display state: %s", exc)
+                        logger.info("[PERF][ENGINE] pre_clear_display_states count=%s states=%s", display_count, display_states)
+                    except Exception as exc:
+                        logger.debug("[ENGINE] Failed to aggregate display states: %s", exc)
+
                 try:
                     self.display_manager.clear_all()
                 except Exception as e:

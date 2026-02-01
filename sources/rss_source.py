@@ -812,15 +812,24 @@ class RSSSource(ImageProvider):
     
     def _download_image(self, image_url: str, entry) -> Optional[Path]:
         """
-        Download and cache an image.
+        Download and cache an image atomically with shutdown awareness.
+        
+        Writes to a temp file first, then atomically renames to final location.
+        If shutdown is requested during download, the temp file is deleted
+        and None is returned. This ensures the cache never contains partial files.
         
         Args:
             image_url: URL of the image to download
             entry: Feed entry (for generating cache filename)
         
         Returns:
-            Path to cached image, or None if download failed
+            Path to cached image, or None if download failed or was aborted
         """
+        # Check shutdown before starting any network operation
+        if not self._should_continue():
+            logger.info(f"[RSS] Download aborted before starting: {image_url}")
+            return None
+        
         # Generate cache filename from URL hash
         url_hash = hashlib.md5(image_url.encode()).hexdigest()
         
@@ -829,6 +838,7 @@ class RSSSource(ImageProvider):
         ext = Path(parsed.path).suffix or '.jpg'
         
         cache_file = self.cache_dir / f"{url_hash}{ext}"
+        temp_file = self.cache_dir / f".tmp.{url_hash}{ext}"
         
         # Return cached file if exists and track it
         if cache_file.exists():
@@ -855,12 +865,39 @@ class RSSSource(ImageProvider):
                 logger.warning(f"URL does not point to an image: {content_type}")
                 return None
             
-            # Write to cache
-            with open(cache_file, 'wb') as f:
+            # Write to temp file first (atomic write pattern)
+            # This ensures we never have partial files in the cache
+            downloaded_bytes = 0
+            with open(temp_file, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
+                    # Check shutdown during download - abort immediately if shutting down
+                    if not self._should_continue():
+                        logger.info(f"[RSS] Shutdown during download, aborting: {image_url}")
+                        # Close the file and delete the partial temp file
+                        f.close()
+                        try:
+                            temp_file.unlink(missing_ok=True)
+                        except Exception as e:
+                            logger.debug(f"[RSS] Failed to cleanup temp file: {e}")
+                        return None
+                    
+                    if chunk:
+                        f.write(chunk)
+                        downloaded_bytes += len(chunk)
             
-            logger.info(f"Downloaded image: {cache_file.name} ({cache_file.stat().st_size} bytes)")
+            # Atomic rename: only succeeds if temp file is complete
+            # This prevents partial files from ever appearing in cache
+            try:
+                temp_file.rename(cache_file)
+            except Exception as e:
+                logger.error(f"[RSS] Failed to rename temp file to cache: {e}")
+                try:
+                    temp_file.unlink(missing_ok=True)
+                except Exception as cleanup_e:
+                    logger.debug(f"[RSS] Failed to cleanup temp file after rename error: {cleanup_e}")
+                return None
+            
+            logger.info(f"Downloaded image: {cache_file.name} ({downloaded_bytes} bytes)")
             
             # Track this URL as cached
             self._cached_urls.add(url_hash)
@@ -879,6 +916,19 @@ class RSSSource(ImageProvider):
         
         except requests.RequestException as e:
             logger.error(f"Download failed for {image_url}: {e}")
+            # Cleanup temp file on download failure
+            try:
+                temp_file.unlink(missing_ok=True)
+            except Exception as cleanup_e:
+                logger.debug(f"[RSS] Failed to cleanup temp file after error: {cleanup_e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error downloading {image_url}: {e}")
+            # Cleanup temp file on any unexpected error
+            try:
+                temp_file.unlink(missing_ok=True)
+            except Exception as cleanup_e:
+                logger.debug(f"[RSS] Failed to cleanup temp file after error: {cleanup_e}")
             return None
     
     def _parse_date(self, entry) -> Optional[datetime]:

@@ -24,10 +24,6 @@ from rendering.gl_compositor_pkg.metrics import (
     _PaintMetrics,
     _RenderTimerMetrics,
 )
-from rendering.render_strategy import (
-    RenderStrategyManager,
-    RenderStrategyConfig,
-)
 from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     AdaptiveTimerConfig,
@@ -237,6 +233,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_easing: EasingCurve = EasingCurve.QUAD_IN_OUT
         self._current_anim_metrics: Optional[_AnimationRunMetrics] = None
         self._anim_dt_spike_threshold_ms: float = 72.0
+        self._current_transition_name: Optional[str] = None
 
         # Phase 1 GLSL pipeline scaffolding. The actual OpenGL resource
         # creation is deferred to initializeGL so that a valid context is
@@ -367,6 +364,50 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._frame_state is not None:
             return self._frame_state.get_interpolated_progress()
         return fallback
+
+    def get_current_animation_info(self) -> Optional[dict]:
+        """Return current animation info for instrumentation during shutdown."""
+        if self._current_anim_id is None:
+            return None
+        return {
+            "anim_id": self._current_anim_id,
+            "transition": self._current_transition_name,
+            "has_frame_state": self._frame_state is not None,
+        }
+
+    def describe_state(self) -> dict:
+        """Return a lightweight snapshot of compositor runtime state."""
+        frame_state = None
+        if self._frame_state is not None:
+            try:
+                frame_state = self._frame_state.describe()
+            except Exception as exc:
+                logger.debug("[GL COMPOSITOR] FrameState describe failed: %s", exc)
+        strategy_state = None
+        if self._render_strategy_manager is not None:
+            try:
+                strategy_state = self._render_strategy_manager.describe_state()
+            except Exception as exc:
+                logger.debug("[GL COMPOSITOR] Strategy describe failed: %s", exc)
+        return {
+            "current_transition": self._current_transition_name,
+            "has_frame_state": self._frame_state is not None,
+            "frame_state": frame_state,
+            "render_strategy": strategy_state,
+        }
+
+    def stop_rendering(self, reason: str = "unspecified") -> None:
+        """Stop timers/animations driving this compositor."""
+        if is_perf_metrics_enabled():
+            try:
+                logger.info("[PERF][GL COMPOSITOR] stop_rendering reason=%s state=%s", reason, self.describe_state())
+            except Exception as exc:
+                logger.debug("[GL COMPOSITOR] describe_state logging failed: %s", exc)
+        try:
+            self._stop_frame_pacing()
+        except Exception as exc:
+            logger.debug("[GL COMPOSITOR] stop_frame_pacing failed: %s", exc)
+        self._stop_render_strategy()
 
     def _start_frame_pacing(self, duration_sec: float) -> FrameState:
         """Create and return a new FrameState for a transition.
@@ -710,6 +751,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._raindrops = None
         self._crumble = None
         self._particle = None
+        self._current_transition_name = None
         self._finalize_animation_metrics(outcome="cleared")
 
     def _handle_no_old_image(self, new_pixmap: QPixmap, on_finished: Optional[Callable[[], None]], name: str) -> bool:

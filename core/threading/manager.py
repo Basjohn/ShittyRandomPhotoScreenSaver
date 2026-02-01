@@ -156,9 +156,16 @@ class ThreadManager:
         
         logger.info("ThreadManager initialized with IO=%d, COMPUTE=%d workers",
                    self.config[ThreadPoolType.IO], self.config[ThreadPoolType.COMPUTE])
+        
+        # Instrumentation: log stack trace when new ThreadManager is created
+        # This helps identify code paths creating rogue managers that prevent clean exit
+        if is_perf_metrics_enabled():
+            import traceback
+            stack = ''.join(traceback.format_stack()[:-1])  # Exclude this call itself
+            logger.info("[PERF] [THREADING] ThreadManager instantiated from:\n%s", stack)
 
     def _initialize_pools(self):
-        """Initialize thread pools based on configuration"""
+        """Initialize thread pools based on configuration."""
         for pool_type, max_workers in self.config.items():
             try:
                 executor = ThreadPoolExecutor(
@@ -209,6 +216,7 @@ class ThreadManager:
             raise RuntimeError("Thread manager is shut down")
         
         task = Task(func, *args, task_id=task_id, priority=priority, **kwargs)
+        task.pool_type = pool_type
         executor = self._executors[pool_type]
         
         def wrapped_func():
@@ -329,12 +337,20 @@ class ThreadManager:
         self._shutdown = True
         
         # Cancel active tasks
-        for task_id in list(self._active_tasks.keys()):
+        active_ids = list(self._active_tasks.keys())
+        if active_ids:
+            logger.info("Cancelling %d active tasks before shutdown: %s", len(active_ids), active_ids)
+        for task_id in active_ids:
             self.cancel_task(task_id)
         
         # Shutdown executors
         for pool_type, executor in self._executors.items():
             try:
+                pool_active = [t.task_id for t in self._active_tasks.values()
+                               if getattr(t, 'pool_type', None) == pool_type]
+                if pool_active:
+                    logger.info("Pool %s has %d pending tasks during shutdown: %s",
+                                pool_type.value, len(pool_active), pool_active)
                 logger.debug(f"Shutting down {pool_type.value} pool...")
                 # FIX: cancel_futures added in Python 3.9, handle older versions
                 try:
@@ -345,6 +361,10 @@ class ThreadManager:
                     logger.debug("Using Python < 3.9 shutdown (no cancel_futures)")
             except Exception as e:
                 logger.error(f"Error shutting down {pool_type.value} pool: {e}")
+        
+        # Clear executors to release references
+        self._executors.clear()
+        self._active_tasks.clear()
         
         logger.info("Thread manager shut down complete")
 

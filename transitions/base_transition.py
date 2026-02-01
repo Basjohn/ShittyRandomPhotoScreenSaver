@@ -321,17 +321,18 @@ class BaseTransition(QObject, metaclass=QABCMeta):
 
     def _get_thread_manager(self, widget: QWidget):
         """
-        Retrieve or attach a per-widget ThreadManager for UI scheduling helpers.
+        Retrieve the ThreadManager from widget for UI scheduling helpers.
+        
+        The ThreadManager must be injected by the engine via DisplayManager.
+        Creating ad-hoc ThreadManagers causes exit hangs from orphaned threads.
         """
         tm = getattr(widget, "_thread_manager", None)
         if tm is None:
-            from core.threading.manager import ThreadManager
-            try:
-                tm = ThreadManager()
-            except Exception as e:
-                logger.debug("[TRANSITION] Exception suppressed: %s", e)
-                tm = ThreadManager()
-            setattr(widget, "_thread_manager", tm)
+            logger.error(
+                "[TRANSITION] ThreadManager not found on widget %s. "
+                "Ensure DisplayManager injects engine's ThreadManager via set_thread_manager().",
+                widget.__class__.__name__
+            )
         return tm
     
     def __repr__(self) -> str:

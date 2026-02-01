@@ -647,7 +647,7 @@ class DisplayWidget(QWidget):
             if self._thread_manager is not None:
                 self._thread_manager.single_shot(200, self._prewarm_context_menu)
             else:
-                ThreadManager.single_shot(200, self._prewarm_context_menu)
+                logger.error("[DISPLAY_WIDGET] ThreadManager not injected; skipping context menu prewarm")
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
@@ -704,7 +704,65 @@ class DisplayWidget(QWidget):
             self._context_menu_prewarmed = True
         except Exception:
             logger.debug("Failed to prewarm context menu", exc_info=True)
-    
+
+    def shutdown_render_pipeline(self, reason: str = "unspecified") -> None:
+        """Stop transitions, animations, and render timers for this display."""
+        if is_perf_metrics_enabled():
+            try:
+                logger.info(
+                    "[PERF][DISPLAY] shutdown_render_pipeline screen=%s reason=%s state=%s",
+                    self.screen_index,
+                    reason,
+                    self.describe_runtime_state(),
+                )
+            except Exception as exc:
+                logger.debug("[DISPLAY_WIDGET] Failed to describe state during shutdown: %s", exc)
+
+        # Stop transitions via controller or legacy path
+        try:
+            if self._transition_controller is not None:
+                self._transition_controller.stop_current(reason=reason)
+            elif self._current_transition:
+                transition_to_stop = self._current_transition
+                self._current_transition = None
+                try:
+                    transition_to_stop.stop()
+                except Exception as exc:
+                    logger.debug("[DISPLAY_WIDGET] Transition stop failed: %s", exc)
+                try:
+                    transition_to_stop.cleanup()
+                except Exception as exc:
+                    logger.debug("[DISPLAY_WIDGET] Transition cleanup failed: %s", exc)
+        except Exception as exc:
+            logger.debug("[DISPLAY_WIDGET] Transition shutdown failed: %s", exc)
+
+        # Stop GL compositor render strategy
+        comp = getattr(self, "_gl_compositor", None)
+        if comp is not None and hasattr(comp, "stop_rendering"):
+            try:
+                comp.stop_rendering(reason=f"display:{reason}")
+            except Exception as exc:
+                logger.debug("[DISPLAY_WIDGET] GL compositor stop failed: %s", exc)
+
+    def describe_runtime_state(self) -> dict:
+        """Lightweight snapshot used during shutdown instrumentation."""
+        try:
+            transition_state = self._transition_controller.describe_state() if self._transition_controller else None
+        except Exception as exc:
+            logger.debug("[DISPLAY_WIDGET] describe_state transition failed: %s", exc)
+            transition_state = None
+        try:
+            compositor_state = self._gl_compositor.describe_state() if self._gl_compositor else None
+        except Exception as exc:
+            logger.debug("[DISPLAY_WIDGET] describe_state compositor failed: %s", exc)
+            compositor_state = None
+        return {
+            "screen_index": self.screen_index,
+            "has_gl_compositor": bool(self._gl_compositor),
+            "transition": transition_state,
+            "render_strategy": compositor_state,
+        }
+
     def _refresh_transition_state_from_settings(self) -> tuple[str, bool]:
         """Load transition type/random flag from settings and cache local state."""
         fallback = self._transition_fallback_type or "Crossfade"
@@ -2157,22 +2215,24 @@ class DisplayWidget(QWidget):
     
     def clear(self) -> None:
         """Clear displayed image and stop any transitions."""
-        # Stop transition via TransitionController
-        if self._transition_controller is not None:
-            self._transition_controller.stop_current()
-        elif self._current_transition:
-            transition_to_stop = self._current_transition
-            self._current_transition = None
-            try:
-                transition_to_stop.stop()
-            except Exception as e:
-                logger.warning(f"Error stopping transition in clear(): {e}")
+        self.shutdown_render_pipeline("clear")
+        self.current_pixmap = None
+        self.previous_pixmap = None
+
+        # Reset state to defaults
+        self._seed_pixmap = None
+        self._last_pixmap_seed_ts = None
+        self._pre_raise_log_emitted = False
+        self._base_fallback_paint_logged = False
+        self.error_message = None
+        self._current_transition = None
+
         # Ensure overlays are hidden to prevent residual frames during exit
         try:
             hide_all_overlays(self)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
+
         # Hide and destroy cursor halo (top-level window that persists independently)
         # Must hide immediately and process events to ensure it's gone before settings dialog
         try:
@@ -2184,7 +2244,7 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             self._self._ctrl_cursor_hint = None
-        
+
         # Reset global Ctrl state to prevent halo from reappearing
         try:
             from rendering.multi_monitor_coordinator import get_coordinator
@@ -2194,13 +2254,6 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-        self.previous_pixmap = self.current_pixmap
-        self.current_pixmap = None
-        self._seed_pixmap = None
-        self._last_pixmap_seed_ts = None
-        self.error_message = None
-        self._pre_raise_log_emitted = False
-        self._base_fallback_paint_logged = False
         self.update()
 
     def reset_after_settings(self) -> None:

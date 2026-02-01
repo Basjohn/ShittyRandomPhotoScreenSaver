@@ -724,6 +724,7 @@ class AsyncShadowRenderer:
         size: QSize,
         config: ShadowConfig,
         corner_radius: int = 0,
+        thread_manager: Optional[Any] = None,
     ) -> bool:
         """Pre-render shadow asynchronously on worker thread.
         
@@ -734,9 +735,11 @@ class AsyncShadowRenderer:
             size: Widget size
             config: Shadow configuration
             corner_radius: Corner radius for rounded shadow
+            thread_manager: ThreadManager to use for async rendering. If None,
+                           falls back to synchronous rendering (no new ThreadManager created).
             
         Returns:
-            True if async render was submitted, False if already cached/in-progress
+            True if async render was submitted, False if already cached/in-progress or no thread_manager
         """
         if size.isEmpty() or not config.enabled:
             return False
@@ -759,10 +762,15 @@ class AsyncShadowRenderer:
             _PRERENDER_IN_PROGRESS.add(key)
         
         # Submit to compute pool
+        if thread_manager is None:
+            # No ThreadManager provided - fall back to synchronous rendering
+            # This prevents exit hangs from orphaned ThreadManagers
+            logger.debug("[SHADOW_ASYNC] No ThreadManager provided, skipping async render")
+            with _PRERENDER_LOCK:
+                _PRERENDER_IN_PROGRESS.discard(key)
+            return False
+        
         try:
-            from core.threading.manager import ThreadManager
-            thread_mgr = ThreadManager()
-            
             # Capture values for closure
             w, h = size.width(), size.height()
             blur = config.blur_radius
@@ -816,7 +824,7 @@ class AsyncShadowRenderer:
                 except Exception as e:
                     logger.debug("[SHADOW_ASYNC] Cache store failed: %s", e)
             
-            thread_mgr.submit_compute_task(_render_worker, callback=_on_complete)
+            thread_manager.submit_compute_task(_render_worker, callback=_on_complete)
             return True
             
         except Exception as e:
@@ -826,7 +834,7 @@ class AsyncShadowRenderer:
             return False
     
     @classmethod
-    def warm_cache(cls, config: ShadowConfig, corner_radius: int = 0) -> int:
+    def warm_cache(cls, config: ShadowConfig, corner_radius: int = 0, thread_manager: Optional[Any] = None) -> int:
         """Pre-render shadows for common widget sizes.
         
         Call this during application startup to warm the cache with
@@ -841,7 +849,7 @@ class AsyncShadowRenderer:
         """
         count = 0
         for w, h in cls.COMMON_SIZES:
-            if cls.prerender_async(QSize(w, h), config, corner_radius):
+            if cls.prerender_async(QSize(w, h), config, corner_radius, thread_manager):
                 count += 1
         
         if count > 0:
@@ -907,7 +915,9 @@ def prerender_widget_shadow(
         size = widget.size()
         if size.isEmpty():
             return False
-        return AsyncShadowRenderer.prerender_async(size, config, corner_radius)
+        # Extract ThreadManager from widget (injected by DisplayManager)
+        thread_manager = getattr(widget, "_thread_manager", None)
+        return AsyncShadowRenderer.prerender_async(size, config, corner_radius, thread_manager)
     except Exception as e:
         logger.debug("[SHADOW] Exception suppressed: %s", e)
         return False

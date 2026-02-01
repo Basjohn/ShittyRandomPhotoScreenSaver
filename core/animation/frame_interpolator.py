@@ -76,6 +76,23 @@ class FrameState:
             self._curr = None
             self.started = False
             self.completed = False
+
+    def describe(self) -> dict:
+        """Return a snapshot of the current state for diagnostics."""
+        with self._lock:
+            curr = self._curr
+            prev = self._prev
+            started = self.started
+            completed = self.completed
+        desc = {
+            "started": started,
+            "completed": completed,
+            "current_progress": curr.progress if curr else None,
+            "previous_progress": prev.progress if prev else None,
+        }
+        if curr is not None:
+            desc["age_ms"] = round((time.time() - curr.timestamp) * 1000.0, 2)
+        return desc
     
     def get_interpolated_progress(self, render_time: Optional[float] = None) -> float:
         """Get interpolated progress for the given render time.

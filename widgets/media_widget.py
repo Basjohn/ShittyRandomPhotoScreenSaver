@@ -98,6 +98,7 @@ class MediaWidget(BaseOverlayWidget):
         parent: Optional[QWidget] = None,
         position: MediaPosition = MediaPosition.BOTTOM_LEFT,
         controller: Optional[BaseMediaController] = None,
+        thread_manager: Optional[ThreadManager] = None,
     ) -> None:
         # Convert MediaPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
@@ -107,7 +108,18 @@ class MediaWidget(BaseOverlayWidget):
         self._defer_visibility_for_fade_sync = True
 
         self._media_position = position  # Keep original enum for compatibility
-        self._controller: BaseMediaController = controller or create_media_controller()
+        self._pending_controller_tm: Optional[ThreadManager] = None
+        if thread_manager is not None:
+            self.set_thread_manager(thread_manager)
+        controller_tm = thread_manager or self._thread_manager or self._pending_controller_tm
+        self._controller: BaseMediaController = controller or create_media_controller(thread_manager=controller_tm)
+        if controller_tm is not None:
+            try:
+                self._controller.set_thread_manager(controller_tm)
+            except Exception as exc:
+                logger.debug("[MEDIA_WIDGET] Exception suppressing controller TM injection: %s", exc)
+        else:
+            self._pending_controller_tm = None
         try:
             logger.info("[MEDIA_WIDGET] Using controller: %s", type(self._controller).__name__)
         except Exception as e:
@@ -366,15 +378,21 @@ class MediaWidget(BaseOverlayWidget):
         self.stop()
 
     def set_thread_manager(self, thread_manager) -> None:
-        previous = self._thread_manager
-        self._thread_manager = thread_manager
+        super().set_thread_manager(thread_manager)
+        controller_tm = thread_manager or self._thread_manager
+        if hasattr(self, "_controller") and self._controller is not None and controller_tm is not None:
+            try:
+                self._controller.set_thread_manager(controller_tm)
+            except Exception as exc:
+                logger.debug("[MEDIA_WIDGET] Unable to inject ThreadManager into media controller: %s", exc)
+        else:
+            self._pending_controller_tm = controller_tm
         invalidate = getattr(self, "_invalidate_controls_layout", None)
         if callable(invalidate):
             invalidate()
         if self._enabled and thread_manager is not None:
             self._ensure_timer(force=True)
-            if previous is None:
-                self._refresh_async()
+            self._refresh_async()
         if is_verbose_logging():
             logger.debug("[MEDIA_WIDGET] ThreadManager injected: %s", type(thread_manager).__name__ if thread_manager else None)
 

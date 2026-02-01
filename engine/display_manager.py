@@ -8,7 +8,7 @@ from typing import List, Dict, Optional, Set
 from PySide6.QtCore import QObject, Signal, QUrl
 from PySide6.QtGui import QGuiApplication, QScreen, QPixmap, QDesktopServices
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from rendering.display_modes import DisplayMode
 from rendering.display_widget import DisplayWidget
@@ -635,6 +635,17 @@ class DisplayManager(QObject):
                         setattr(display, "_pending_reddit_url", None)
                     except Exception as e:
                         logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
+                # Instrumentation: log state and stop render pipeline before clearing
+                if is_perf_metrics_enabled():
+                    try:
+                        state = display.describe_runtime_state()
+                        logger.info("[PERF][DISPLAY_MANAGER] cleanup_display screen=%s state=%s", screen_index, state)
+                    except Exception as exc:
+                        logger.debug("[DISPLAY_MANAGER] Failed to describe state: %s", exc)
+                try:
+                    display.shutdown_render_pipeline("cleanup")
+                except Exception as exc:
+                    logger.debug("[DISPLAY_MANAGER] shutdown_render_pipeline failed: %s", exc)
                 # Ensure per-display cleanup (pan & scan, transitions, overlays)
                 try:
                     display.clear()

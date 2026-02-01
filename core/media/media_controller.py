@@ -17,14 +17,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
+import threading
 
 from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
-
-
-_media_tm = None
-_media_tm_lock = None
 
 
 class MediaPlaybackState(Enum):
@@ -62,6 +59,13 @@ class BaseMediaController:
     Implementations must be safe to call from the UI thread. All
     methods should catch and log their own failures rather than raising.
     """
+
+    def __init__(self, thread_manager=None) -> None:
+        self._thread_manager = thread_manager
+
+    def set_thread_manager(self, thread_manager) -> None:
+        """Inject the engine-owned ThreadManager."""
+        self._thread_manager = thread_manager
 
     def get_current_track(self) -> Optional[MediaTrackInfo]:  # pragma: no cover - interface
         """Return a snapshot of the current track or None if unavailable."""
@@ -107,10 +111,13 @@ class WindowsGlobalMediaController(BaseMediaController):
     the ThreadManager IO pool with a hard timeout.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, thread_manager=None) -> None:
+        super().__init__(thread_manager)
         self._available: bool = False
         self._MediaManager = None
         self._PlaybackStatus = None
+        self._gsmc_disabled = False
+        self._gsmc_inflight = False
         self._init_winrt()
 
     def _init_winrt(self) -> None:
@@ -141,8 +148,7 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    @staticmethod
-    def _run_coroutine(coro):
+    def _run_coroutine(self, coro):
         """Run an async coroutine in an isolated event loop.
 
         This avoids interfering with any existing asyncio usage.
@@ -155,22 +161,6 @@ class WindowsGlobalMediaController(BaseMediaController):
         """
 
         import asyncio
-        import threading
-
-        # Lazily provision a shared ThreadManager for media IO.
-        global _media_tm, _media_tm_lock
-        if _media_tm_lock is None:
-            _media_tm_lock = threading.Lock()
-        if _media_tm is None:
-            with _media_tm_lock:
-                if _media_tm is None:
-                    try:
-                        from core.threading.manager import ThreadManager
-
-                        _media_tm = ThreadManager()
-                    except Exception as e:
-                        logger.debug("[MEDIA] Failed to create ThreadManager for GSMTC", exc_info=True)
-                        _media_tm = None
 
         def _close_coro() -> None:
             try:
@@ -180,12 +170,13 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception as e:
                 logger.debug("[MEDIA] Exception suppressed: %s", e)
 
-        tm = _media_tm
+        tm = self._thread_manager
         if tm is None:
             _close_coro()
+            logger.warning("[MEDIA] ThreadManager not injected for GSMTC controller; skipping coroutine")
             return None
 
-        if getattr(tm, "_srpss_media_disabled", False):
+        if self._gsmc_disabled:
             _close_coro()
             return None
 
@@ -226,12 +217,11 @@ class WindowsGlobalMediaController(BaseMediaController):
             finally:
                 done.set()
 
-        # Prevent piling up stuck WinRT calls: allow only one inflight query.
-        inflight = getattr(tm, "_srpss_media_inflight", False)
-        if inflight:
+        # Prevent piling up stuck WinRT calls: allow only one inflight query per controller.
+        if self._gsmc_inflight:
             _close_coro()
             return None
-        setattr(tm, "_srpss_media_inflight", True)
+        self._gsmc_inflight = True
 
         try:
             try:
@@ -249,19 +239,13 @@ class WindowsGlobalMediaController(BaseMediaController):
 
             if not done.wait(timeout=2.5):
                 logger.debug("[MEDIA] GSMTC query hard-timeout, returning None")
-                try:
-                    setattr(tm, "_srpss_media_disabled", True)
-                except Exception as e:
-                    logger.debug("[MEDIA] Exception suppressed: %s", e)
+                self._gsmc_disabled = True
                 _close_coro()
                 return None
 
             return holder.get("result")
         finally:
-            try:
-                setattr(tm, "_srpss_media_inflight", False)
-            except Exception as e:
-                logger.debug("[MEDIA] Exception suppressed: %s", e)
+            self._gsmc_inflight = False
 
     def _select_spotify_session(self, mgr):
         """Select the Spotify media session from a GSMTC manager.
@@ -490,7 +474,7 @@ class WindowsGlobalMediaController(BaseMediaController):
         self._invoke_simple_action("previous", lambda s: s.try_skip_previous_async())
 
 
-def create_media_controller() -> BaseMediaController:
+def create_media_controller(thread_manager=None) -> BaseMediaController:
     """Factory that returns the best available media controller.
 
     On Windows this prefers the GSMTC-based controller and falls back
@@ -499,11 +483,12 @@ def create_media_controller() -> BaseMediaController:
     """
 
     try:
-        controller = WindowsGlobalMediaController()
+        controller = WindowsGlobalMediaController(thread_manager=thread_manager)
         if getattr(controller, "_available", False):
             return controller
     except Exception as e:
         logger.debug("[MEDIA] Failed to initialize WindowsGlobalMediaController", exc_info=True)
 
     logger.info("[MEDIA] Falling back to NoOpMediaController")
-    return NoOpMediaController()
+    controller = NoOpMediaController(thread_manager=thread_manager)
+    return controller

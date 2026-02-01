@@ -13,11 +13,11 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Optional
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager, ThreadPoolType
 from core.resources.manager import ResourceManager
 from utils.lockfree.spsc_queue import SPSCQueue
@@ -50,6 +50,8 @@ class AdaptiveTimerConfig:
     idle_timeout_sec: float = 5.0
     # New: Max deep sleep duration before safety check (seconds)
     max_deep_sleep_sec: float = 60.0
+    # New: Exit fast-path flag for shutdown (set to True on shutdown)
+    exit_immediate: bool = False
 
 
 @dataclass
@@ -142,6 +144,7 @@ class AdaptiveTimerStrategy:
         
         # Threading
         self._task_future = None
+        self._task_id: Optional[str] = None
         self._thread_manager: Optional[ThreadManager] = None
         
         # Resource management
@@ -171,7 +174,10 @@ class AdaptiveTimerStrategy:
                 self._metrics.record_state_change(current)
                 self._state.store(TimerState.RUNNING)
                 self._wake_event.set()
-                logger.debug("[ADAPTIVE_TIMER] Waking from %s to RUNNING", current.name)
+                if is_perf_metrics_enabled():
+                    logger.info("[PERF][ADAPTIVE_TIMER] wake_to_running id=%s state=%s", self._task_id, current.name)
+                else:
+                    logger.debug("[ADAPTIVE_TIMER] Waking from %s to RUNNING", current.name)
             return True
         
         # Need to create thread - check if ThreadManager is available
@@ -197,6 +203,7 @@ class AdaptiveTimerStrategy:
                     def done(self): return False
                     def result(self, timeout=None): return None
                 self._task_future = MockFuture()
+                self._task_id = f"adaptive_timer_thread_{id(thread)}"
                 
                 # Immediately wake to RUNNING state
                 self._state.store(TimerState.RUNNING)
@@ -226,6 +233,7 @@ class AdaptiveTimerStrategy:
             )
             # Store task_id to track if thread is running
             self._task_id = task_id
+            self._task_future = None
             
             # Register with ResourceManager
             if self._resource_manager is not None:
@@ -243,7 +251,7 @@ class AdaptiveTimerStrategy:
             self._state.store(TimerState.RUNNING)
             self._wake_event.set()
             
-            logger.info("[ADAPTIVE_TIMER] Started (target=%dHz)", self._config.target_fps)
+            logger.info("[ADAPTIVE_TIMER] Started (target=%dHz, task=%s)", self._config.target_fps, self._task_id)
             return True
             
         except Exception as e:
@@ -257,7 +265,10 @@ class AdaptiveTimerStrategy:
             self._metrics.record_state_change(current)
             self._state.store(TimerState.PAUSED)
             self._transition_ended_at = time.monotonic()
-            logger.debug("[ADAPTIVE_TIMER] Paused")
+            if is_perf_metrics_enabled():
+                logger.info("[PERF][ADAPTIVE_TIMER] paused id=%s", self._task_id)
+            else:
+                logger.debug("[ADAPTIVE_TIMER] Paused")
     
     def resume(self) -> None:
         """Resume timer (transition PAUSED/IDLE -> RUNNING)."""
@@ -266,22 +277,37 @@ class AdaptiveTimerStrategy:
             self._metrics.record_state_change(current)
             self._state.store(TimerState.RUNNING)
             self._wake_event.set()
-            logger.debug("[ADAPTIVE_TIMER] Resumed from %s", current.name)
+            if is_perf_metrics_enabled():
+                logger.info("[PERF][ADAPTIVE_TIMER] resumed_from=%s id=%s", current.name, self._task_id)
+            else:
+                logger.debug("[ADAPTIVE_TIMER] Resumed from %s", current.name)
     
     def stop(self) -> None:
-        """Stop timer permanently (app exit)."""
+        """Stop timer permanently (app exit).
+        
+        If exit_immediate is set in config, skip wait and tear down instantly.
+        """
         # Signal stop
         self._stop_event.set()
-        self._wake_event.set()  # Wake if sleeping
+        self._wake_event.set()
         
-        # Wait for thread to exit
+        # Fast-path: don't wait for thread if exit_immediate
+        if self._config.exit_immediate:
+            if is_perf_metrics_enabled():
+                logger.info("[PERF][ADAPTIVE_TIMER] fast_stop id=%s", self._task_id)
+            self._task_future = None
+            self._task_id = None
+            return
+        
+        # Normal wait with timeout
         if self._task_future is not None:
             try:
                 max_wait = max(1.0, 2 * self._config.min_frame_time_ms / 1000.0)
                 self._task_future.result(timeout=max_wait)
             except Exception:
-                pass  # Thread may raise on shutdown
+                pass
             self._task_future = None
+        self._task_id = None
         
         # Unregister from ResourceManager
         if self._timer_resource_id and self._resource_manager:
@@ -291,8 +317,22 @@ class AdaptiveTimerStrategy:
                 pass
             self._timer_resource_id = None
         
-        logger.info("[ADAPTIVE_TIMER] Stopped")
+        if is_perf_metrics_enabled():
+            logger.info("[PERF][ADAPTIVE_TIMER] stopped")
+        else:
+            logger.info("[ADAPTIVE_TIMER] Stopped")
         self._log_metrics()
+
+    def describe_state(self) -> dict:
+        """Return current timer snapshot for diagnostics."""
+        state = self._state.load()
+        return {
+            "task_id": self._task_id,
+            "state": state.name,
+            "stop_event": self._stop_event.is_set(),
+            "wake_event": self._wake_event.is_set(),
+            "frames": self._metrics.frame_count,
+        }
     
     def _timer_loop(self) -> None:
         """Main timer loop with state machine."""
@@ -436,26 +476,37 @@ class AdaptiveRenderStrategyManager:
         with self._lock:
             if self._timer is None:
                 self._timer = AdaptiveTimerStrategy(self._compositor, self._config)
-            return self._timer.start()
+            result = self._timer.start()
+        if is_perf_metrics_enabled():
+            logger.info("[PERF][ADAPTIVE_TIMER] manager_start result=%s state=%s", result, self.describe_state())
+        return result
     
     def pause(self) -> None:
         """Pause timer after transition ends."""
         with self._lock:
             if self._timer is not None:
                 self._timer.pause()
+        if is_perf_metrics_enabled():
+            logger.info("[PERF][ADAPTIVE_TIMER] manager_paused state=%s", self.describe_state())
     
     def resume(self) -> None:
         """Resume timer for new transition."""
         with self._lock:
             if self._timer is not None:
                 self._timer.resume()
+        if is_perf_metrics_enabled():
+            logger.info("[PERF][ADAPTIVE_TIMER] manager_resumed state=%s", self.describe_state())
     
     def stop(self) -> None:
         """Stop timer permanently."""
         with self._lock:
             if self._timer is not None:
+                # Enable exit fast-path before stopping
+                self._timer._config.exit_immediate = True
                 self._timer.stop()
                 self._timer = None
+        if is_perf_metrics_enabled():
+            logger.info("[PERF][ADAPTIVE_TIMER] manager_stopped state=%s", self.describe_state())
     
     def request_frame(self) -> None:
         """Request immediate frame."""
@@ -467,3 +518,13 @@ class AdaptiveRenderStrategyManager:
         """Check if timer is active."""
         with self._lock:
             return self._timer is not None and self._timer.is_active()
+
+    def describe_state(self) -> dict:
+        """Snapshot of manager/timer state for diagnostics."""
+        with self._lock:
+            config_snapshot = asdict(self._config)
+            timer_state = self._timer.describe_state() if self._timer else None
+        return {
+            "config": config_snapshot,
+            "timer": timer_state,
+        }

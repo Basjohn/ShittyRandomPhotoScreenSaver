@@ -70,6 +70,17 @@ class RenderMetrics:
             return self.frame_count / elapsed
         return 0.0
 
+    def to_dict(self) -> dict:
+        """Serialize metrics for logging/debugging."""
+        return {
+            "frames": self.frame_count,
+            "avg_fps": round(self.get_avg_fps(), 2),
+            "dt_min_ms": round(self.min_dt_ms, 2),
+            "dt_max_ms": round(self.max_dt_ms, 2),
+            "strategy": self.strategy_type.value,
+            "fallbacks": self.fallback_count,
+        }
+
 
 class RenderStrategy(ABC):
     """Abstract base class for render strategies.
@@ -285,6 +296,16 @@ class TimerRenderStrategy(RenderStrategy):
         """Queue immediate frame request (coalesced)."""
         self._frame_queue.push_drop_oldest(True)
 
+    def describe_state(self) -> dict:
+        """Return current timer diagnostics."""
+        with self._lock:
+            return {
+                "active": self._active,
+                "stop_event": self._stop_event.is_set(),
+                "resource_id": self._timer_resource_id,
+                "frames": self._metrics.frame_count,
+            }
+
 
 class RenderStrategyManager:
     """Manager for switching between render strategies.
@@ -361,3 +382,14 @@ class RenderStrategyManager:
             if self._current_strategy is not None:
                 return self._current_strategy.get_metrics()
             return None
+
+    def describe_state(self) -> dict:
+        """Return lightweight debug info about the active strategy."""
+        with self._lock:
+            strategy_type = self._current_strategy.strategy_type if self._current_strategy else None
+            return {
+                "strategy": strategy_type.value if strategy_type else None,
+                "running": self._current_strategy.is_active() if self._current_strategy else False,
+                "metrics": self._current_strategy.get_metrics().to_dict() if (self._current_strategy and self._current_strategy.get_metrics()) else None,
+                "timer": getattr(self._current_strategy, "describe_state", lambda: None)(),
+            }

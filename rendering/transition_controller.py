@@ -15,7 +15,7 @@ from typing import Callable, Optional, TYPE_CHECKING
 from PySide6.QtCore import Signal, QObject, QTimer
 from PySide6.QtGui import QPixmap
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from transitions.base_transition import BaseTransition
 
@@ -122,6 +122,21 @@ class TransitionController(QObject):
         except Exception as e:
             logger.debug("[TRANSITION] Exception suppressed: %s", e)
             return None
+
+    def describe_state(self) -> dict:
+        """Return a snapshot of the current transition state."""
+        transition = self._current_transition
+        try:
+            name = transition.__class__.__name__ if transition else None
+        except Exception:
+            name = None
+        return {
+            "running": self.is_running,
+            "transition": name,
+            "overlay_key": self._current_overlay_key,
+            "elapsed_s": self.get_active_transition_elapsed_s(),
+            "skip_count": self._skip_count,
+        }
     
     @property
     def is_running(self) -> bool:
@@ -208,17 +223,38 @@ class TransitionController(QObject):
             self._cleanup_transition(transition)
             return False
     
-    def stop_current(self, snap_to_new: bool = True) -> None:
+    def stop_current(self, snap_to_new: bool = True, reason: str = "unspecified") -> None:
         """Stop the current transition if running.
         
         Args:
             snap_to_new: If True, signal compositor to snap to new image
                          to avoid visual pops when interrupted.
+            reason: Reason for stopping (used for instrumentation)
         """
         if self._current_transition is None:
             return
         
         transition = self._current_transition
+        transition_name = None
+        try:
+            transition_name = transition.__class__.__name__
+        except Exception:
+            pass
+        
+        # Instrumentation: log stop reason with perf metrics
+        if is_perf_metrics_enabled():
+            anim_info = None
+            try:
+                compositor = getattr(self._parent, "_gl_compositor", None)
+                if compositor is not None and hasattr(compositor, "get_current_animation_info"):
+                    anim_info = compositor.get_current_animation_info()
+            except Exception as exc:
+                logger.debug("[TRANSITION] Failed to get animation info: %s", exc)
+            logger.info(
+                "[PERF][TRANSITION] stop_current reason=%s transition=%s anim_info=%s",
+                reason, transition_name, anim_info
+            )
+        
         self._current_transition = None
         
         # Signal compositor to snap to new image if requested
@@ -229,6 +265,16 @@ class TransitionController(QObject):
                     compositor.cancel_current_transition(snap_to_new=True)
             except Exception as e:
                 logger.debug("[TRANSITION] Exception suppressed: %s", e)
+        
+        # Cancel any AnimationManager animations if available
+        try:
+            anim_manager = getattr(self._parent, "_animation_manager", None)
+            if anim_manager is not None and hasattr(anim_manager, "cancel_all"):
+                anim_manager.cancel_all()
+                if is_perf_metrics_enabled():
+                    logger.info("[PERF][TRANSITION] AnimationManager.cancel_all() called")
+        except Exception as e:
+            logger.debug("[TRANSITION] AnimationManager cancel failed: %s", e)
         
         try:
             transition.stop()
