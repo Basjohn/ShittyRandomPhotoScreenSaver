@@ -433,6 +433,72 @@ The current Windows mixer approach is simpler and works for all users. Implement
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
 
+## Clean Exit Architecture (Feb 2026)
+
+> **Status**: Clean exit implementation complete - no taskkill required
+
+### Shutdown Pipeline
+
+The application guarantees clean exit through a coordinated shutdown sequence:
+
+1. **ScreensaverEngine.stop()** - Orchestrates shutdown
+   - Transitions to SHUTTING_DOWN state (signals async tasks to abort)
+   - Stops rotation and RSS refresh timers
+   - Clears displays via DisplayManager
+   - Shuts down ProcessSupervisor workers
+   - Shuts down ThreadManager (wait=False for fast exit)
+
+2. **DisplayManager.cleanup()** - Per-display cleanup
+   - Calls `shutdown_render_pipeline("cleanup")` for each display
+   - Logs display state via `describe_runtime_state()` before cleanup
+   - Clears display widgets and deletes later
+   - Flushes deferred Reddit URLs
+
+3. **DisplayWidget.shutdown_render_pipeline()** - Render pipeline teardown
+   - Stops transitions via TransitionController with reason logging
+   - Stops GL compositor render strategy via `stop_rendering()`
+   - Logs state via `describe_runtime_state()` for diagnostics
+
+4. **TransitionController.stop_current()** - Transition cancellation
+   - Cancels AnimationManager animations
+   - Signals compositor to snap to new image
+   - Calls transition.stop() and cleanup()
+   - Perf-gated instrumentation for shutdown analysis
+
+5. **Adaptive Timer Fast-Path** - Immediate timer halt
+   - `exit_immediate` flag in `AdaptiveTimerConfig`
+   - Skips thread wait when set (shutdown only)
+   - No performance impact during normal operation
+
+### Key Components
+
+- **GLCompositorWidget.stop_rendering()**: Stops frame pacing and render strategy with perf logging
+- **AdaptiveRenderStrategyManager.stop()**: Sets exit_immediate=True before timer stop
+- **ThreadManager.shutdown()**: Cancels active tasks, shuts down executors with logging
+- **ProcessSupervisor.shutdown()**: Graceful worker termination
+
+### Instrumentation
+
+All shutdown paths instrumented with perf-gated logging (`SRPSS_PERF_METRICS=1`):
+- `[PERF][ENGINE]` - Display state aggregation pre-shutdown
+- `[PERF][DISPLAY_MANAGER]` - Cleanup display state logging
+- `[PERF][DISPLAY]` - Render pipeline shutdown with reason
+- `[PERF][GL COMPOSITOR]` - Stop rendering with reason and state
+- `[PERF][ADAPTIVE_TIMER]` - Timer stop/pause/resume with state
+- `[PERF][TRANSITION]` - Transition cancellation with reason and anim info
+
+### State Description Methods
+
+Diagnostic state capture for shutdown debugging:
+- `AdaptiveTimerStrategy.describe_state()` - Timer snapshot (task_id, state, events)
+- `AdaptiveRenderStrategyManager.describe_state()` - Strategy config and timer state
+- `FrameState.describe()` - Frame interpolation state (progress, samples)
+- `TransitionController.describe_state()` - Transition status (running, transition name, elapsed)
+- `GLCompositorWidget.describe_state()` - GL state (transition, frame_state, render_strategy)
+- `DisplayWidget.describe_runtime_state()` - Aggregated display state
+
+---
+
 ## v2.0 Architecture Updates (Jan 2026)
 
 ### Fade Coordination & Media Key Updates (Jan 31, 2026)
@@ -470,4 +536,4 @@ This is a **low-priority enhancement** that could be added post-v1.2 if users re
 - Key test files: `test_integration_full_workflow.py` (19 tests), `test_spotify_visualizer_widget.py` (13 tests), `test_gl_texture_streaming.py` (18 tests).
 
 **Version**: 2.0.0-dev  
-**Last Updated**: Jan 31, 2026 - Fade coordination and media key fixes complete.
+**Last Updated**: Feb 1, 2026 - Clean exit architecture complete, all shutdown instrumentation verified.

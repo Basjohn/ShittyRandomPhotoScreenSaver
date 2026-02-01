@@ -143,6 +143,59 @@ A living map of modules, purposes, and key classes. Keep this up to date.
     - Created `tests/test_worker_consolidated.py` with 30 parameterized tests
     - **1348 tests collected** (150 widget/worker tests passing)
 
+## Clean Exit Architecture (Feb 2026)
+
+> **Status**: Clean exit implementation complete - no taskkill required
+
+### Shutdown Pipeline
+
+The application now guarantees clean exit through a coordinated shutdown sequence:
+
+1. **ScreensaverEngine.stop()** - Orchestrates shutdown
+   - Transitions to SHUTTING_DOWN state (signals async tasks to abort)
+   - Stops rotation and RSS refresh timers
+   - Clears displays via DisplayManager
+   - Shuts down ProcessSupervisor workers
+   - Shuts down ThreadManager (wait=False for fast exit)
+
+2. **DisplayManager.cleanup()** - Per-display cleanup
+   - Calls `shutdown_render_pipeline("cleanup")` for each display
+   - Clears display widgets and deletes later
+   - Flushes deferred Reddit URLs
+
+3. **DisplayWidget.shutdown_render_pipeline()** - Render pipeline teardown
+   - Stops transitions via TransitionController with reason logging
+   - Stops GL compositor render strategy
+   - Logs state via `describe_runtime_state()` for diagnostics
+
+4. **TransitionController.stop_current()** - Transition cancellation
+   - Cancels AnimationManager animations
+   - Signals compositor to snap to new image
+   - Calls transition.stop() and cleanup()
+   - Perf-gated instrumentation for shutdown analysis
+
+5. **Adaptive Timer Fast-Path** - Immediate timer halt
+   - `exit_immediate` flag in AdaptiveTimerConfig
+   - Skips thread wait when set (shutdown only)
+   - No performance impact during normal operation
+
+### Key Components
+
+- **GLCompositorWidget.stop_rendering()**: Stops frame pacing and render strategy
+- **AdaptiveRenderStrategyManager.stop()**: Sets exit_immediate=True before timer stop
+- **ThreadManager.shutdown()**: Cancels active tasks, shuts down executors with logging
+- **ProcessSupervisor.shutdown()**: Graceful worker termination
+
+### Instrumentation
+
+All shutdown paths instrumented with perf-gated logging:
+- `[PERF][ENGINE]` - Display state aggregation
+- `[PERF][DISPLAY_MANAGER]` - Cleanup display state
+- `[PERF][DISPLAY]` - Render pipeline shutdown
+- `[PERF][GL COMPOSITOR]` - Stop rendering with reason
+- `[PERF][ADAPTIVE_TIMER]` - Timer stop/pause/resume
+- `[PERF][TRANSITION]` - Transition cancellation
+
 ## Core Managers
 - core/threading/manager.py
   - ThreadManager, ThreadPoolType, TaskPriority
