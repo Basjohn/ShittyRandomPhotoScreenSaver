@@ -66,11 +66,11 @@ CACHE_MAX_AGE_MS = 60000
 PREFETCH_STAGGER_MS = 100
 """Delay between prefetch operations to avoid overwhelming I/O."""
 
-DISPLAY_INIT_STAGGER_MS = 50
-"""Delay between display widget creations to spread GL init load."""
+DISPLAY_INIT_STAGGER_MS = 100
+"""Delay between display widget creations to spread GL init load (increased from 50ms)."""
 
-TRANSITION_STAGGER_MS = 100
-"""Delay between transition starts on multiple displays."""
+TRANSITION_STAGGER_MS = 200
+"""Delay between transition starts on multiple displays (increased from 100ms to 200ms for better desync)."""
 
 SETTINGS_CACHE_TTL_MS = 5000
 """Time-to-live for in-memory settings cache entries."""

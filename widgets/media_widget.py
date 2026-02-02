@@ -16,7 +16,7 @@ import weakref
 from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING, ClassVar
+from typing import Optional, TYPE_CHECKING, ClassVar, Any
 
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect, QRectF, QPoint
@@ -197,6 +197,11 @@ class MediaWidget(BaseOverlayWidget):
         self._telemetry_logged_missing_tm = False
         self._telemetry_last_visibility: Optional[bool] = None
         self._telemetry_logged_fade_request = False
+        
+        # Desync: Cache GSMTC results for 500ms to reduce IO contention
+        self._gsmtc_cache_ms = 500
+        self._gsmtc_cached_result: Optional[Any] = None
+        self._gsmtc_cache_ts: float = 0.0
         
         # Artwork vertical bias for dynamic positioning
         self._artwork_vertical_bias: float = 0.4
@@ -953,6 +958,16 @@ class MediaWidget(BaseOverlayWidget):
         # Don't call get_current_track() synchronously - it blocks!
 
     def _refresh_async(self) -> None:
+        # Desync: Check GSMTC cache first to reduce IO contention
+        now = time.time()
+        if self._gsmtc_cached_result is not None:
+            elapsed_ms = (now - self._gsmtc_cache_ts) * 1000
+            if elapsed_ms < self._gsmtc_cache_ms:
+                if is_perf_metrics_enabled():
+                    logger.debug("[PERF] MediaWidget: using cached GSMTC result (age=%.0fms)", elapsed_ms)
+                self._update_display(self._gsmtc_cached_result)
+                return
+        
         if self._refresh_in_flight:
             return
         tm = self._thread_manager
@@ -984,6 +999,9 @@ class MediaWidget(BaseOverlayWidget):
                     if not Shiboken.isValid(self):
                         return
                     info = task_result.result if getattr(task_result, "success", False) else None
+                    # Desync: Cache the result for 500ms
+                    self._gsmtc_cached_result = info
+                    self._gsmtc_cache_ts = time.time()
                     self._update_display(info)
                 except Exception as exc:
                     logger.debug("[MEDIA_WIDGET] Exception during async refresh consume: %s", exc)

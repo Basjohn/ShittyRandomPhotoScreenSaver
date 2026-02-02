@@ -159,6 +159,15 @@ class DisplayTab(QWidget):
         quality_group = QGroupBox("Image Quality")
         quality_layout = QVBoxLayout(quality_group)
         
+        self.lanczos_check = QCheckBox("Use Lanczos scaling (higher quality, more CPU)")
+        self.lanczos_check.setChecked(True)
+        self.lanczos_check.setToolTip(
+            "Lanczos provides better image quality when scaling, especially for downscaling. "
+            "Disable if experiencing performance issues during transitions."
+        )
+        self.lanczos_check.stateChanged.connect(self._save_settings)
+        quality_layout.addWidget(self.lanczos_check)
+        
         self.sharpen_check = QCheckBox("Apply sharpening filter when downscaling")
         self.sharpen_check.setChecked(False)
         self.sharpen_check.stateChanged.connect(self._save_settings)
@@ -287,6 +296,7 @@ class DisplayTab(QWidget):
         self.mode_combo.blockSignals(True)
         self.interval_spin.blockSignals(True)
         self.shuffle_check.blockSignals(True)
+        self.lanczos_check.blockSignals(True)
         self.sharpen_check.blockSignals(True)
         self.backend_combo.blockSignals(True)
         # Block input toggles
@@ -357,7 +367,11 @@ class DisplayTab(QWidget):
             shuffle = SettingsManager.to_bool(shuffle_raw, True)
             self.shuffle_check.setChecked(shuffle)
             
-            # Quality (Lanczos intentionally hidden/disabled; only sharpen exposed)
+            # Quality (Lanczos and sharpen)
+            lanczos_raw = self._settings.get('display.use_lanczos', True)
+            lanczos = SettingsManager.to_bool(lanczos_raw, True)
+            self.lanczos_check.setChecked(lanczos)
+            
             sharpen_raw = self._settings.get('display.sharpen_downscale', False)
             sharpen = SettingsManager.to_bool(sharpen_raw, False)
             self.sharpen_check.setChecked(sharpen)
@@ -379,13 +393,14 @@ class DisplayTab(QWidget):
                 index = 0
             self.backend_combo.setCurrentIndex(index)
 
-            logger.debug(f"Loaded display settings: sharpen={sharpen}")
+            logger.debug(f"Loaded display settings: lanczos={lanczos}, sharpen={sharpen}")
         finally:
             # Re-enable signals
             self.same_image_check.blockSignals(False)
             self.mode_combo.blockSignals(False)
             self.interval_spin.blockSignals(False)
             self.shuffle_check.blockSignals(False)
+            self.lanczos_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
@@ -423,7 +438,10 @@ class DisplayTab(QWidget):
         self._settings.set('timing.interval', self.interval_spin.value())
         self._settings.set('queue.shuffle', self.shuffle_check.isChecked())
         
-        # Quality (only sharpen is user-configurable)
+        # Quality (Lanczos and sharpen)
+        lanczos = self.lanczos_check.isChecked()
+        self._settings.set('display.use_lanczos', lanczos)
+        
         sharpen = self.sharpen_check.isChecked()
         self._settings.set('display.sharpen_downscale', sharpen)
 
@@ -440,7 +458,7 @@ class DisplayTab(QWidget):
 
         logger.info(
             f"Saved display settings: mode={mode_map.get(mode_index, 'fill')}, "
-            f"sharpen={sharpen}, "
+            f"lanczos={lanczos}, sharpen={sharpen}, "
             f"same_image={self.same_image_check.isChecked()}"
         )
 

@@ -4,14 +4,16 @@ Image prefetcher built on ThreadManager and ImageCache.
 - Decodes images into QImage on IO threads (thread-safe)
 - Caches decoded images in an LRU cache
 - Prefetches next N images ahead with limited concurrency
+- Supports post-transition delay to reduce IO contention
 """
 from __future__ import annotations
 
 from typing import List, Optional, Set
 import threading
+import time
 from PySide6.QtGui import QImage
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager, TaskPriority, ThreadPoolType
 from utils.image_cache import ImageCache
 
@@ -24,12 +26,34 @@ class ImagePrefetcher:
         thread_manager: ThreadManager,
         cache: ImageCache,
         max_concurrent: int = 2,
+        post_transition_delay_ms: float = 100.0,
     ) -> None:
         self._threads = thread_manager
         self._cache = cache
         self._max_concurrent = max(1, int(max_concurrent))
         self._inflight: Set[str] = set()
         self._lock = threading.Lock()
+        # Desync: post-transition delay to reduce IO contention
+        self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
+        self._transition_end_time: float = 0.0
+
+    def notify_transition_complete(self) -> None:
+        """Notify prefetcher that a transition just completed.
+        
+        Prefetching will be delayed by post_transition_delay_ms to reduce
+        IO contention with transition rendering.
+        """
+        self._transition_end_time = time.time()
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] ImagePrefetcher: transition complete, delaying prefetch for %.0fms",
+                        self._post_transition_delay_ms)
+
+    def _is_in_post_transition_delay(self) -> bool:
+        """Check if we're still within the post-transition delay window."""
+        if self._post_transition_delay_ms <= 0:
+            return False
+        elapsed_ms = (time.time() - self._transition_end_time) * 1000
+        return elapsed_ms < self._post_transition_delay_ms
 
     def get_cached(self, path: str) -> Optional[QImage]:
         img = self._cache.get(path)
@@ -46,6 +70,11 @@ class ImagePrefetcher:
 
     def prefetch_paths(self, paths: List[str]) -> None:
         if not paths:
+            return
+        # Desync: Skip prefetching during post-transition delay to reduce IO contention
+        if self._is_in_post_transition_delay():
+            if is_verbose_logging():
+                logger.debug("ImagePrefetcher: skipping prefetch due to post-transition delay")
             return
         # Submit up to max_concurrent new loads that are not already cached or in-flight
         submitted = 0

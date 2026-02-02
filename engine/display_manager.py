@@ -204,7 +204,7 @@ class DisplayManager(QObject):
         # Create display for each allowed screen with staggered initialization.
         # This prevents simultaneous GL compositor init on multiple displays
         # which can cause 100-200ms UI thread blocks.
-        stagger_ms = 50  # 50ms between display creations
+        stagger_ms = 100  # 100ms between display creations (increased from 50ms)
         created_count = 0
         for i in range(screen_count):
             if i in allowed_indices:

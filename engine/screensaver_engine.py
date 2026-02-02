@@ -945,7 +945,14 @@ class ScreensaverEngine(QObject):
                 logger.debug("[ENGINE] Exception suppressed: %s", e)
                 interval_min = 10
 
+            # Desync: Add ±1 minute jitter to prevent alignment with other timers
+            import random
+            jitter_min = random.randint(-1, 1)
+            interval_min += jitter_min
+            
             interval_ms = max(60_000, interval_min * 60_000)
+            if is_perf_metrics_enabled():
+                logger.debug("[PERF] RSS background refresh: interval=%d min (jitter: %+d min)", interval_min, jitter_min)
             try:
                 self._rss_refresh_timer = self.thread_manager.schedule_recurring(
                     interval_ms,
@@ -1865,6 +1872,13 @@ class ScreensaverEngine(QObject):
         try:
             import time
             
+            # Get quality settings from settings manager
+            use_lanczos = True
+            if self.settings_manager:
+                use_lanczos = self.settings_manager.get('display.use_lanczos', True)
+                if isinstance(use_lanczos, str):
+                    use_lanczos = use_lanczos.lower() == 'true'
+            
             # Send prescale request to ImageWorker
             correlation_id = self._process_supervisor.send_message(
                 WorkerType.IMAGE,
@@ -1874,7 +1888,7 @@ class ScreensaverEngine(QObject):
                     "target_width": target_width,
                     "target_height": target_height,
                     "mode": display_mode,
-                    "use_lanczos": True,
+                    "use_lanczos": use_lanczos,
                     "sharpen": sharpen,
                 },
             )

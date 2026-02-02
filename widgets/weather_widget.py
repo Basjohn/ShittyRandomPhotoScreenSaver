@@ -9,6 +9,7 @@ from enum import Enum
 from pathlib import Path
 import os
 import json
+import random
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QObject
 from PySide6.QtGui import QFont, QPainter, QPen, QColor, QFontMetrics
@@ -235,9 +236,15 @@ class WeatherWidget(BaseOverlayWidget):
             self._update_display(self._cached_data)
             self._has_displayed_valid_data = True
         
-        # Start periodic updates
+        # Start periodic updates with desync jitter to prevent alignment with other widgets
         self._fetch_weather()
-        interval_ms = 30 * 60 * 1000
+        base_interval_ms = 30 * 60 * 1000  # 30 minutes
+        # Add ±2 minute jitter to desync from other widgets and transitions
+        jitter_ms = random.randint(-2 * 60 * 1000, 2 * 60 * 1000)
+        interval_ms = base_interval_ms + jitter_ms
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] WeatherWidget: refresh interval %.1f min (jitter: %+.1f min)",
+                        interval_ms / 60000, jitter_ms / 60000)
         handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
         self._update_timer_handle = handle
         self._update_timer = getattr(handle, "_timer", None)

@@ -542,7 +542,18 @@ class RedditWidget(BaseOverlayWidget):
             # Timer already running; nothing to do.
             return
 
-        interval_ms = int(self._refresh_interval.total_seconds() * 1000)
+        # Desync: Offset by widget index to stagger multiple Reddit widgets
+        # reddit (index 0): +0s, reddit2 (index 1): +10s, etc.
+        widget_index = 1 if self._cache_key == "reddit2" else 0
+        offset_ms = widget_index * 10000  # 10 seconds between widgets
+        
+        base_interval_ms = int(self._refresh_interval.total_seconds() * 1000)
+        interval_ms = base_interval_ms + offset_ms
+        
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] RedditWidget (%s): timer interval %d ms (offset: +%d ms)",
+                        self._cache_key, interval_ms, offset_ms)
+        
         handle = create_overlay_timer(self, interval_ms, self._fetch_feed, description="RedditWidget refresh")
         self._update_timer_handle = handle
         try:
