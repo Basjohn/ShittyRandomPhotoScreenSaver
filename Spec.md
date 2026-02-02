@@ -57,7 +57,7 @@ Single source of truth for architecture and key decisions.
 - **SRPSS_MC.exe**: Manual Controller variant
 - **Inno Setup installer**: `scripts/SRPSS_Installer.iss`
 - **Build scripts**: PyInstaller and Nuitka options
-- **Defender heuristic mitigation (Jan 2026)**: Windows Defender began flagging the SCR as `Trojan:Win32/Wacatac.B!m` until we supplied proper PE version metadata. `scripts/build_nuitka.ps1` now forwards `APP_VERSION`, `APP_COMPANY`, `APP_DESCRIPTION`, and `APP_NAME` into Nuitka’s `--product-version`, `--file-version`, `--company-name`, `--file-description`, and `--product-name` flags. If heuristics flare up again, first confirm those fields are emitted before changing binaries or helper flows; keeping the SCR rename but omitting metadata recreates the false positive, whereas retaining the metadata (even with the `.scr` extension) passes Defender. `-KeepExe` / `-SkipScrRename` exist for experiments only and were not needed for the fix.
+- **Defender heuristic mitigation**: Windows Defender may flag the SCR as `Trojan:Win32/Wacatac.B!m` without proper PE version metadata. `scripts/build_nuitka.ps1` forwards `APP_VERSION`, `APP_COMPANY`, `APP_DESCRIPTION`, and `APP_NAME` into Nuitka's `--product-version`, `--file-version`, `--company-name`, `--file-description`, and `--product-name` flags. If heuristics flare up, first confirm those fields are emitted before changing binaries. `-KeepExe` / `-SkipScrRename` exist for experiments only.
 
 ## Runtime Variants
 - Normal screensaver build:
@@ -67,9 +67,9 @@ Single source of truth for architecture and key decisions.
   - Entry: `main_mc.py`, deployed as `SRPSS_Media_Center.exe` (Nuitka onedir) or legacy `SRPSS MC.exe` (PyInstaller onefile).
   - Uses the same organization but stores settings in `%APPDATA%/SRPSS_MC/settings_v2.json`, keeping MC configuration isolated from the normal screensaver profile. Detection now includes the renamed executable stems (`srpss_media_center.exe`) so MC settings stay isolated regardless of the build artifact name and JSON directory.
   - At startup, forces `input.hard_exit=True` in the MC profile so mouse movement/clicks do not exit unless the user explicitly relaxes this in MC settings.
-  - The historical `SetThreadExecutionState()` call that suppressed the OS screensaver/display sleep during MC runs has been removed to reduce Defender heuristics; MC simply runs like any other fullscreen app and relies on the user to leave Windows power management as-is.
+  - `SetThreadExecutionState()` call removed to reduce Defender heuristics; MC runs like any other fullscreen app and relies on Windows power management.
   - MC builds keep their fullscreen DisplayWidget windows out of the taskbar/Alt+Tab list by applying `Qt.Tool` (mirroring the historical behaviour) while a guarded toggle (`rendering.display_widget.MC_USE_SPLASH_FLAGS`) allows splash-style flags when we need to experiment. A dedicated regression test (`tests/test_mc_window_flags.py`) pins this behaviour so any deviation (e.g., accidental SplashScreen flip) is caught immediately.
-  - MC packaging defaults to a Nuitka onedir bundle so Defender sees a single EXE plus DLL folder; when AV heuristics regress we can still fall back to the PyInstaller script (`scripts/build_mc.ps1`), but the Nuitka bundle is the primary path referenced by `scripts/SRPSS_MediaCenter_Installer.iss`.
+  - MC packaging defaults to a Nuitka onedir bundle so Defender sees a single EXE plus DLL folder; PyInstaller script (`scripts/build_mc.ps1`) remains as fallback. Nuitka bundle is the primary path referenced by `scripts/SRPSS_MediaCenter_Installer.iss`.
 
 ## Image Pipeline
 1) Queue selects next `ImageMetadata`.
@@ -110,7 +110,7 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - **Rotating cache**: Cache cleanup always retains at least 20 images (`min_keep=20`) regardless of size limits, ensuring faster startup for RSS users. Disk cache is also limited by file count (max 2x min_keep or 30, whichever is larger) to prevent unbounded growth.
   - **Runtime caps**: Initial load limits cached images to `sources.rss_rotating_cache_size` (default 20). Async and background refresh enforce `sources.rss_background_cap` (default 30) as the maximum RSS images in queue at any time.
   - **Async loading**: `_load_rss_images_async()` processes sources in priority order (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10) with 8 images per source per cycle to prevent any single source from blocking.
-  - **State Management (2025-12-14)**: Engine uses `EngineState` enum instead of boolean flags for lifecycle management:
+  - **State Management**: Engine uses `EngineState` enum instead of boolean flags for lifecycle management:
     - States: UNINITIALIZED → INITIALIZING → STOPPED → STARTING → RUNNING → STOPPING/SHUTTING_DOWN
     - REINITIALIZING state used during settings changes (not STOPPING)
     - `_shutting_down` property returns False for REINITIALIZING, True for STOPPING/SHUTTING_DOWN
@@ -211,6 +211,8 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - Timer-only rendering: DisplayWidget always derives `_target_fps` from the detected panel refresh rate (adaptive ladder disabled) and GL surfaces request `swapInterval=0`, so no user-facing refresh-sync toggle exists.
 - `display.hw_accel`: bool
 - `display.mode`: fill|fit|shrink
+- `display.use_lanczos`: bool - Use Lanczos resampling for image scaling (higher quality, slightly more CPU intensive)
+- `display.sharpen_downscale`: bool - Apply sharpening when downscaling images
 - `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.
 - `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve"|Crumble|Particle (legacy `Shuffle` values are mapped to `Crossfade` for back-compat and are no longer exposed in the UI)
 - `transitions.random_always`: bool
@@ -247,7 +249,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
     - 9 position options (Top/Middle/Bottom × Left/Center/Right)
     - Title Case display for location and condition text
   - `widgets.media.*`: Spotify/media widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), 9 position options (Top/Middle/Bottom × Left/Center/Right), font family/size, margin, text colour, optional background frame and border with independent opacity, background opacity, artwork size, controls/header style flags). Uses Title Case for track title and artist display. Media participates in the shared overlay fade-in coordination and uses the global widget shadow configuration once its own opacity fade completes. Artwork uses a square frame for album covers and adapts to non-square thumbnails (e.g. Spotify video stills) by adjusting the card frame towards the source aspect ratio while preserving cover-style scaling (no letterboxing/pillarboxing).
-  - `widgets.spotify_visualizer.*`: Spotify Beat Visualizer configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3) but positioned automatically just above the Spotify/media card, `bar_count`, `bar_fill_color`, `bar_border_color`, `bar_border_opacity`, `ghosting_enabled`, `ghost_alpha` (0.0–1.0 opacity multiplier for the ghost trail), `ghost_decay` (decay rate for the peak/ghost envelope), and `software_visualizer_enabled` for allowing a QWidget-only fallback on non-GL stacks). The visualiser card inherits its background/border styling from the Spotify/media widget at runtime and participates in the **primary** overlay fade wave via `DisplayWidget.request_overlay_fade_sync("spotify_visualizer", ...)`, attaching its drop shadow through the shared `ShadowFadeProfile`. The GPU bar overlay and Spotify-only volume slider are treated as a **secondary** wave: a derived GPU fade factor is computed from the card's fade progress (same 1500ms InOutCubic profile, with a delayed cubic ramp starting once the card fade passes a configured threshold) so bars and the volume control rise in more slowly after the card is already present, eliminating popping and abrupt green-dot artefacts. Jan 30, 2026 added an anchored deferral so the secondary fade starter retries until the media card reports `isVisible()==True`, preventing cold-boot misses when the card is still mid-fade. The visualiser only animates while the centralized media controller reports Spotify as actively playing; when Spotify is paused/stopped, the beat engine decays target bar magnitudes to zero and only the shader's guaranteed 1-segment idle floor is visible, preserving a single-row baseline when Spotify is open but not playing. At render time, a dedicated `SpotifyBarsGLOverlay` QOpenGLWidget draws the bars as a thin GPU overlay with that 1-segment idle floor and a configurable ghosting trail (border-colour segments above the live bar height) that uses a per-segment alpha falloff so older trail segments fade faster. **Feb 2, 2026**: Removed 60Hz FPS throttle during transitions - was causing 2x audio lag (187ms→533ms). Now runs at full 90Hz base rate; see `Docs/DESYNC_STRATEGIES.md` for contention mitigation approaches.
+  - `widgets.spotify_visualizer.*`: Spotify Beat Visualizer configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3) but positioned automatically just above the Spotify/media card, `bar_count`, `bar_fill_color`, `bar_border_color`, `bar_border_opacity`, `ghosting_enabled`, `ghost_alpha` (0.0–1.0 opacity multiplier for the ghost trail), `ghost_decay` (decay rate for the peak/ghost envelope), and `software_visualizer_enabled` for allowing a QWidget-only fallback on non-GL stacks). The visualiser card inherits its background/border styling from the Spotify/media widget at runtime and participates in the **primary** overlay fade wave via `DisplayWidget.request_overlay_fade_sync("spotify_visualizer", ...)`, attaching its drop shadow through the shared `ShadowFadeProfile`. The GPU bar overlay and Spotify-only volume slider are treated as a **secondary** wave: a derived GPU fade factor is computed from the card's fade progress (same 1500ms InOutCubic profile, with a delayed cubic ramp starting once the card fade passes a configured threshold) so bars and the volume control rise in more slowly after the card is already present, eliminating popping and abrupt green-dot artefacts. An anchored deferral ensures so the secondary fade starter retries until the media card reports `isVisible()==True`, preventing cold-boot misses when the card is still mid-fade. The visualiser only animates while the centralized media controller reports Spotify as actively playing; when Spotify is paused/stopped, the beat engine decays target bar magnitudes to zero and only the shader's guaranteed 1-segment idle floor is visible, preserving a single-row baseline when Spotify is open but not playing. At render time, a dedicated `SpotifyBarsGLOverlay` QOpenGLWidget draws the bars as a thin GPU overlay with that 1-segment idle floor and a configurable ghosting trail (border-colour segments above the live bar height) that uses a per-segment alpha falloff so older trail segments fade faster. Visualizer runs at 90Hz base rate always. See `Docs/DESYNC_STRATEGIES.md` for contention mitigation approaches.
   - Spotify visualizer sensitivity naming:
     - UI label is **Recommended**.
     - Stored settings key remains `widgets.spotify_visualizer.adaptive_sensitivity` for backward compatibility.
@@ -279,7 +281,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - SST files contain a top-level object with `settings_version` (int), `application` (str, currently informational) and `snapshot` (mapping). The `snapshot` map mirrors the nested schema above: top-level `widgets` and `transitions` sections plus nested `display`, `timing`, `input`, `sources`, and any future sections represented by dotted keys.
 - Import is merge‑by‑default: values from the snapshot overwrite the current profile where they overlap, but keys that do not exist in the snapshot are preserved. A full restore is therefore "Reset To Defaults" followed by "Import Settings…".
 
-## Settings Type Safety (Dec 2025)
+## Settings Type Safety
 - Type-safe settings dataclass models in `core/settings/models.py` provide IDE autocompletion and runtime validation.
 - Enums: `DisplayMode` (fill/fit/shrink), `TransitionType` (all transition types), `WidgetPosition` (9 positions).
 - Core models: `DisplaySettings`, `TransitionSettings`, `InputSettings`, `CacheSettings`, `SourceSettings`.
@@ -288,7 +290,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - Each model has `to_dict()` for serialization back to flat keys.
 - **22 unit tests** in `tests/test_settings_models.py`.
 
-## Intense Shadows (Dec 2025)
+## Intense Shadows
 - Optional "Intense Shadows" styling for all overlay widgets with dramatic visual effect.
 - Multipliers in `widgets/shadow_utils.py`: blur 2.0x, opacity 1.8x, offset 1.5x.
 - `BaseOverlayWidget.set_intense_shadow(bool)` method for all widgets.
@@ -324,7 +326,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
   - Size calculation helpers for stacking/collision detection
   - Widget-specific position enums (ClockPosition, WeatherPosition, MediaPosition, RedditPosition) support 9 positions: Top Left/Center/Right, Middle Left/Center/Right, Bottom Left/Center/Right
   - Position enums are stored separately from the base class `OverlayPosition` for type safety
-  - **Lifecycle State Machine (Dec 2025)**: `WidgetLifecycleState` enum (CREATED→INITIALIZED→ACTIVE⇄HIDDEN→DESTROYED) with validated transitions via `is_valid_lifecycle_transition()`. Public methods `initialize()`, `activate()`, `deactivate()`, `cleanup()` drive state changes and invoke subclass hooks (`_initialize_impl`, `_activate_impl`, `_deactivate_impl`, `_cleanup_impl`). Thread-safe state access via `_lifecycle_lock`. ResourceManager integration for automatic resource cleanup. All 6 overlay widgets (Clock, Weather, Media, Reddit, SpotifyVisualizer, SpotifyVolume) implement lifecycle hooks while preserving backward-compatible `start()`/`stop()` methods.
+  - **Lifecycle State Machine**: `WidgetLifecycleState` enum (CREATED→INITIALIZED→ACTIVE⇄HIDDEN→DESTROYED) with validated transitions via `is_valid_lifecycle_transition()`. Public methods `initialize()`, `activate()`, `deactivate()`, `cleanup()` drive state changes and invoke subclass hooks (`_initialize_impl`, `_activate_impl`, `_deactivate_impl`, `_cleanup_impl`). Thread-safe state access via `_lifecycle_lock`. ResourceManager integration for automatic resource cleanup. All 6 overlay widgets (Clock, Weather, Media, Reddit, SpotifyVisualizer, SpotifyVolume) implement lifecycle hooks while preserving backward-compatible `start()`/`stop()` methods.
 - Overlay widgets follow the patterns defined in `Docs/10_WIDGET_GUIDELINES.md` for:
   - Card styling and typography.
   - Coordinated fade/shadow application via `ShadowFadeProfile` and the
@@ -433,7 +435,7 @@ The current Windows mixer approach is simpler and works for all users. Implement
 
 This is a **low-priority enhancement** that could be added post-v1.2 if users request Spotify-synced volume.
 
-## Clean Exit Architecture (Feb 2026)
+## Clean Exit Architecture
 
 > **Status**: Clean exit implementation complete - no taskkill required
 
@@ -499,9 +501,9 @@ Diagnostic state capture for shutdown debugging:
 
 ---
 
-## v2.0 Architecture Updates (Jan 2026)
+## v2.0 Architecture Updates
 
-### Fade Coordination & Media Key Updates (Jan 31, 2026)
+### Fade Coordination & Media Key Updates
 - **Lock-free fade coordination** (`rendering/widget_manager.py`):
   - Uses `SPSCQueue` (256 capacity) and `TripleBuffer` for atomic fade state exchange
   - WidgetManager waits for ALL expected overlays before starting fades (prevents Reddit desync)
@@ -535,5 +537,4 @@ Diagnostic state capture for shutdown debugging:
 - **307 unit tests** across 19 test files covering process isolation, GL state, widgets, MC features, settings, performance tuning, and integration.
 - Key test files: `test_integration_full_workflow.py` (19 tests), `test_spotify_visualizer_widget.py` (13 tests), `test_gl_texture_streaming.py` (18 tests).
 
-**Version**: 2.0.0-dev  
-**Last Updated**: Feb 1, 2026 - Clean exit architecture complete, all shutdown instrumentation verified.
+**Version**: 2.0.0-dev

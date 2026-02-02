@@ -45,7 +45,19 @@ be treated as the primary reference when adding or refactoring widgets.
   explicit user intent (Ctrl‑held or hard‑exit mode), mediated centrally by
   `DisplayWidget`.
 
----
+- **Anti-thread contention policies**  
+  Widgets must use `ThreadManager` for ALL background work. Never use raw
+  `threading.Thread()` or `ThreadPoolExecutor`. Use simple locks ONLY for
+  protecting flags/data (`threading.Lock()` / `threading.RLock()`). Never
+  call Qt widget methods directly from background threads—use
+  `invoke_in_ui_thread()` for any UI updates.
+
+- **Minimal painting**  
+  Widgets must avoid unnecessary repaints. Use `self.update()` (schedules a
+  repaint) instead of `self.repaint()` (forces immediate paint). Cache
+  expensive paint operations to pixmap and blit. Avoid per-frame work in
+  `paintEvent()`. Use dirty-flags and regenerate cached content only when
+  data actually changes.
 
 ## 2. Canonical Widget Structure (Spotify-based)
 
@@ -204,10 +216,12 @@ The Spotify widget defines the canonical header behaviour:
   When `show_header_frame` is enabled:
   - Compute frame width/height using the same `QFontMetrics` and cached logo
     size so the frame comfortably wraps the glyph + wordmark.
-  - Draw a rounded rect **border only** using `painter.setBrush(Qt.NoBrush)`
-    and the widget’s border colour/opacity.
+  - Draw a rounded rect **border only** using `draw_rounded_rect_with_shadow()`
+    from `shadow_utils.py`.
+  - Use `radius = min(self._bg_corner_radius + 1, min(rect.width(), rect.height()) / 2)`
+    for subtle visual hierarchy (slightly larger radius than card).
   - Do **not** fill the header frame; the card background already provides the
-    tone, and a second fill would darken the SPOTIFY text.
+    tone, and a second fill would darken the text.
   - Small offsets of the frame rect (few pixels left/down) can be used to
     visually centre the glyph + wordmark within the frame without moving the
     header content itself.
@@ -488,12 +502,37 @@ When creating a new overlay widget, follow this scaffold:
      - Update the backing field.
      - Refresh position or stylesheet when the widget is already running.
 
-4. **Painting**
+4. **Painting & Caching**
    - Prefer text via QLabel (rich text) and logos/artwork via `QPainter`.
    - Use `devicePixelRatioF()` and `QFontMetrics` for all manual drawing.
-   - Avoid per‑paint logging.
+   - **NEVER call `repaint()`** — use `self.update()` to schedule repaints.
+   - Cache expensive paint operations to pixmap:
+     ```python
+     # In paintEvent:
+     if self._cache_invalidated or not self._cached_pixmap:
+         self._regenerate_cache()
+     painter.drawPixmap(0, 0, self._cached_pixmap)
+     ```
+   - Invalidate cache only when data changes:
+     ```python
+     def _on_data_changed(self):
+         self._cache_invalidated = True
+         self.update()  # Schedule repaint, don't force
+     ```
+   - Avoid per‑paint logging; use sampling timers for perf metrics.
 
-5. **Integration**
+5. **Thread Safety**
+   - Use `ThreadManager` for all background work (IO, network, file ops).
+   - Never use `threading.Thread()` or `ThreadPoolExecutor` directly.
+   - Protect shared state with `threading.Lock()` or `threading.RLock()`:
+     ```python
+     self._state_lock = threading.Lock()
+     with self._state_lock:
+         self._ready = True
+     ```
+   - Always use `invoke_in_ui_thread()` for Qt widget updates from callbacks.
+
+6. **Integration**
    - Wire into `DisplayWidget._setup_widgets()` and
      `overlay_manager.raise_overlay()` following the Spotify widget as the
      template.
@@ -506,7 +545,84 @@ alignment issues already solved for the Spotify widget.
 
 ---
 
-## 9. Spotify Beat Visualizer specifics (GPU bar overlay & ghosting)
+## 9. Paint Caching Patterns (Reddit Widget Reference)
+
+The Reddit widget demonstrates the canonical paint caching pattern for widgets
+with infrequently-changing content:
+
+### Cache Architecture
+
+```python
+def __init__(self, ...):
+    # Paint caching: only repaint when data changes
+    self._cached_content_pixmap: Optional[QPixmap] = None
+    self._cache_invalidated: bool = True  # Start invalidated
+
+def paintEvent(self, event) -> None:
+    """Paint using cached pixmap, regenerating only when invalidated."""
+    with widget_paint_sample(self, "reddit.paint"):
+        # Let QLabel paint its background
+        super().paintEvent(event)
+        
+        if not self._posts:
+            return
+        
+        # Check if cache needs regeneration
+        cache_valid = self._verify_cache_validity()
+        
+        if self._cache_invalidated or not cache_valid:
+            self._regenerate_cache(self.size())
+            self._cache_invalidated = False
+        
+        # Blit cached content
+        if self._cached_content_pixmap:
+            painter = QPainter(self)
+            painter.drawPixmap(0, 0, self._cached_content_pixmap)
+            painter.end()
+
+def _regenerate_cache(self, size) -> None:
+    """Regenerate the cached content pixmap."""
+    dpr = self.devicePixelRatioF()
+    
+    # Create pixmap with proper DPI scaling
+    pixmap = QPixmap(int(size.width() * dpr), int(size.height() * dpr))
+    pixmap.setDevicePixelRatio(dpr)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+    # ... draw all content ...
+    painter.end()
+    
+    self._cached_content_pixmap = pixmap
+
+def _invalidate_paint_cache(self) -> None:
+    """Mark the paint cache as needing regeneration."""
+    self._cache_invalidated = True
+    self.update()  # Schedule repaint, don't force
+```
+
+### When to Invalidate
+
+Invalidate cache only when:
+- Data changes (new posts fetched, track changed)
+- Settings change (font, colors, margins)
+- Widget size changes significantly
+
+**Never** invalidate cache on:
+- Timer ticks (use dirty-flags for animated elements)
+- Mouse hover events (use separate overlay or skip)
+- Every paint event (defeats the purpose)
+
+### Performance Impact
+
+- **Without caching**: ~6ms per paint (text layout, shadow rendering, metrics)
+- **With caching**: <0.5ms per paint (simple blit)
+- Cache regeneration happens only when data changes (e.g., every 10 minutes for Reddit)
+
+---
+
+## 10. Spotify Beat Visualizer specifics (GPU bar overlay & ghosting)
 
 The Spotify Beat Visualizer follows the same card/overlay patterns as the
 media widget but adds a dedicated GPU bar overlay and a configurable ghosting
@@ -587,7 +703,7 @@ framebuffer residue.
 
 ---
 
-## 10. Widget Flicker Prevention (CRITICAL)
+## 11. Widget Flicker Prevention (CRITICAL)
 
 Widget flicker during GL compositor transitions is a recurring issue that has
 been solved. **Follow these rules strictly to prevent regressions.**

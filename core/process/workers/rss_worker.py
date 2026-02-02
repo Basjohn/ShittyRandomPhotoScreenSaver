@@ -227,6 +227,17 @@ class RSSWorker(BaseWorker):
         images: List[Dict] = []
         is_reddit = 'reddit.com' in feed_url.lower()
         
+        # Check if we should skip Reddit fetches to preserve quota for widgets
+        if is_reddit:
+            try:
+                from core.reddit_rate_limiter import RedditRateLimiter, RateLimitPriority
+                if RedditRateLimiter.should_skip_for_quota(priority=RateLimitPriority.NORMAL):
+                    if self._logger:
+                        self._logger.info("[RATE_LIMIT] Skipping RSS worker Reddit fetch to preserve quota for widgets")
+                    return []
+            except ImportError:
+                pass
+        
         # Fetch feed
         try:
             if is_reddit and '.json' in feed_url:

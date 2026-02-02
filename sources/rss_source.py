@@ -516,8 +516,9 @@ class RSSSource(ImageProvider):
             return
 
         try:
+            from core.reddit_rate_limiter import get_reddit_user_agent
             feed = feedparser.parse(request_url, request_headers={
-                'User-Agent': 'ShittyRandomPhotoScreenSaver/1.0'
+                'User-Agent': get_reddit_user_agent()
             })
             
             if feed.bozo:
@@ -567,30 +568,42 @@ class RSSSource(ImageProvider):
 
         # Use centralized rate limiter for Reddit feeds
         is_reddit = 'reddit.com' in request_url.lower()
+        
+        # Check if we should skip this Reddit fetch to preserve quota for widgets
         if is_reddit:
             try:
-                from core.reddit_rate_limiter import RedditRateLimiter
-                wait_time = RedditRateLimiter.wait_if_needed()
-                if wait_time > 0:
-                    logger.info(f"[RATE_LIMIT] Waiting {wait_time:.1f}s before Reddit request")
-                    # Interruptible wait
-                    wait_chunks = int(wait_time / 0.5) + 1
-                    for _ in range(wait_chunks):
-                        if not self._should_continue():
-                            logger.info("[RSS] Shutdown during rate limit wait")
-                            return
-                        time.sleep(0.5)
-                RedditRateLimiter.record_request()
+                from core.reddit_rate_limiter import RedditRateLimiter, RateLimitPriority, get_reddit_user_agent
+                if RedditRateLimiter.should_skip_for_quota(priority=RateLimitPriority.NORMAL):
+                    logger.info("[RATE_LIMIT] Skipping RSS Reddit fetch to preserve quota for widgets")
+                    return
             except ImportError:
-                logger.debug("[RSS] RedditRateLimiter not available, proceeding without coordination")
+                pass
+        
+        # Use centralized rate limiter to coordinate with Reddit widget
+        # Use NORMAL priority since wallpapers are less critical than widget posts
+        try:
+            from core.reddit_rate_limiter import RedditRateLimiter, RateLimitPriority, get_reddit_user_agent
+            wait_time = RedditRateLimiter.wait_if_needed(priority=RateLimitPriority.NORMAL)
+            if wait_time > 0:
+                logger.info(f"[RATE_LIMIT] Waiting {wait_time:.1f}s before Reddit request")
+                # Interruptible wait
+                wait_chunks = int(wait_time / 0.5) + 1
+                for _ in range(wait_chunks):
+                    if not self._should_continue():
+                        logger.info("[RSS] Shutdown during rate limit wait")
+                        return
+                    time.sleep(0.5)
+            RedditRateLimiter.record_request(namespace="rss")
+        except ImportError:
+            logger.debug("[RSS] RedditRateLimiter not available, proceeding without coordination")
 
         try:
-            # Use a browser-like user agent - Reddit blocks custom user agents
+            # Use rotated browser-like user agent - Reddit blocks custom/fingerprinted agents
             response = requests.get(
                 request_url,
                 timeout=self.timeout,
                 headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'User-Agent': get_reddit_user_agent(),
                     'Accept': 'application/json',
                 },
             )
@@ -850,11 +863,12 @@ class RSSSource(ImageProvider):
         logger.debug(f"Downloading image: {image_url}")
         
         try:
-            # Use browser-like user agent for better compatibility
+            from core.reddit_rate_limiter import get_reddit_user_agent
+            # Use rotated browser-like user agent for better compatibility
             response = requests.get(
                 image_url,
                 timeout=self.timeout,
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
+                headers={'User-Agent': get_reddit_user_agent()},
                 stream=True
             )
             response.raise_for_status()
