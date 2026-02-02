@@ -39,6 +39,12 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 - **audits/VISUALIZER_DEBUG.md** - Visualizer debugging reference
 - **Archived:** `bak/audits_archive_20260105/` - Completed audit documents (Full_Architectural_Audit_Jan_2026, Performance_Investigation, Solution_3, etc.)
 
+- **Feb 2, 2026**: Visualizer FPS throttle during transitions **REMOVED**
+  - Previous: Throttled to 60Hz during transitions (thought to reduce contention)
+  - Result: Caused 2x audio lag (187ms → 533ms max) due to buffer accumulation
+  - Fix: Run at full 90Hz base rate always; contention better handled by desync strategies
+  - See: `Docs/DESYNC_STRATEGIES.md` for full analysis and future approaches
+
 - Phase 0 Improvements (Jan 2026)
   - **WidgetManager**: Robust position normalization (Enum/String/Coerce); Smart positioning logic for Visualizer (Top vs Bottom alignment).
   - **InputHandler**: Global media key passthrough; Double-click "Next Image" navigation.
@@ -269,7 +275,6 @@ All shutdown paths instrumented with perf-gated logging:
   - `EcoModeConfig`: Occlusion threshold (95%), check interval, pause settings
   - `is_mc_build()`: Detect MC build entry point
   - **Jan 6, 2026**: FFT worker removed from eco mode stop list (causes visualizer stalls)
-  - **21 unit tests** in `tests/test_mc_eco_mode.py`
 - core/reddit_rate_limiter.py
   - `RedditRateLimiter`: Centralized Reddit API rate limiting (singleton)
   - Coordinates all Reddit API calls across RSS source and Reddit widget

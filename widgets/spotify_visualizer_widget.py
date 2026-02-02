@@ -2421,14 +2421,11 @@ class SpotifyVisualizerWidget(QWidget):
     def _resolve_max_fps(self, transition_ctx: Dict[str, Any]) -> float:
         """Determine the FPS cap based on transition activity."""
         max_fps = self._base_max_fps  # 90Hz default
-        if transition_ctx.get("running"):
-            # PERFORMANCE: Throttle to 60Hz during transitions to reduce UI thread contention
-            # while maintaining smooth visual feel (don't go below 60)
-            max_fps = 60.0
-        else:
-            idle_age = transition_ctx.get("idle_age")
-            if idle_age is not None and idle_age >= self._idle_fps_boost_delay:
-                max_fps = min(self._idle_max_fps, self._base_max_fps + 10.0)
+        # TEST: Run at full 90Hz during transitions (remove 60Hz throttle)
+        # Previously throttled to 60Hz during transitions
+        idle_age = transition_ctx.get("idle_age")
+        if idle_age is not None and idle_age >= self._idle_fps_boost_delay:
+            max_fps = min(self._idle_max_fps, self._base_max_fps + 10.0)
         return max(15.0, float(max_fps))
 
     def _update_timer_interval(self, max_fps: float) -> None:
@@ -2535,6 +2532,7 @@ class SpotifyVisualizerWidget(QWidget):
         if last >= 0.0 and dt_since_last < min_dt:
             # Rate limited - skip this tick entirely
             return
+        
         self._last_update_ts = now_ts
         if dt_since_last * 1000.0 >= self._dt_spike_threshold_ms:
             self._log_tick_spike(dt_since_last, transition_ctx)
