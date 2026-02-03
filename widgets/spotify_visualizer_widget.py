@@ -1835,6 +1835,19 @@ class SpotifyVisualizerWidget(QWidget):
         self._last_media_state_ts = time.time()
         self._fallback_logged = False
 
+        # WAKE TRIGGER: Play state transition from paused→playing
+        if self._spotify_playing and not prev:
+            self._trigger_wake()
+
+        # WAKE TRIGGER: Artwork changed (indicates track change, possibly during pause)
+        artwork_url = payload.get("artwork_url", "")
+        artwork_hash = hash(artwork_url) if artwork_url else 0
+        if artwork_hash != getattr(self, "_last_artwork_hash", 0):
+            self._last_artwork_hash = artwork_hash
+            if not self._spotify_playing:
+                # Artwork changed while paused - likely a wake event
+                self._trigger_wake()
+
         # CRITICAL: Pass playback state to beat engine for FFT processing gating
         try:
             if self._engine is not None:
@@ -1971,6 +1984,16 @@ class SpotifyVisualizerWidget(QWidget):
                     )
         else:
             self._fallback_mismatch_start = 0.0
+
+    def _trigger_wake(self) -> None:
+        """Trigger wake sequence for visualizer recovery after pause."""
+        logger.debug("[SPOTIFY_VIS] Wake triggered")
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+            if engine and hasattr(engine, 'wake'):
+                engine.wake()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Wake failed", exc_info=True)
 
     # ------------------------------------------------------------------
     # Lifecycle Implementation Hooks

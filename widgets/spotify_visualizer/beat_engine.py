@@ -315,6 +315,25 @@ class _SpotifyBeatEngine(QObject):
         """Get pre-smoothed bars for UI display."""
         return list(self._smoothed_bars)
 
+    def wake(self) -> None:
+        """Force wake after pause detection - restart audio capture if unhealthy."""
+        logger.debug("[SPOTIFY_VIS] Beat engine wake triggered")
+        try:
+            # Check audio capture health via audio worker
+            if hasattr(self._audio_worker, 'is_capture_healthy'):
+                if not self._audio_worker.is_capture_healthy():
+                    logger.info("[SPOTIFY_VIS] Audio capture unhealthy, restarting...")
+                    self._audio_worker.restart_capture()
+            
+            # Reset smoothing timestamp to prevent dt>2.0 jump
+            self._last_smooth_ts = time.time()
+            
+            # Ensure worker is running
+            self.ensure_started()
+            
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Wake failed", exc_info=True)
+
 
 class BeatEngineRegistry:
     """Registry for beat engine instances - supports dependency injection.

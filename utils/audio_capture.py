@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Any
 import os
 import platform
+import time
 
 from core.logging.logger import get_logger, is_verbose_logging
 
@@ -73,6 +74,24 @@ class AudioCaptureBackend(ABC):
         """Get the number of channels being captured."""
         pass
 
+    @abstractmethod
+    def is_healthy(self) -> bool:
+        """Check if capture is receiving audio data (callback firing).
+
+        Returns:
+            True if receiving callbacks within last 500ms while running
+        """
+        pass
+
+    @abstractmethod
+    def restart(self) -> bool:
+        """Restart the capture stream.
+
+        Returns:
+            True if restarted successfully
+        """
+        pass
+
 
 class PyAudioWPatchBackend(AudioCaptureBackend):
     """Audio capture using PyAudioWPatch WASAPI loopback (Windows only)."""
@@ -85,6 +104,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         self._sample_rate = self._config.sample_rate
         self._channels = self._config.channels
         self._np = None
+        self._last_callback_ts: float = 0.0
+        self._callback: Optional[Callable[[Any], None]] = None
     
     def _find_loopback_device(self, pa) -> Optional[dict]:
         """Find the best loopback device for WASAPI capture."""
@@ -191,8 +212,11 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
             return False
         
         # Create stream callback
+        self._callback = callback  # Store for restart
+        
         def stream_callback(in_data, frame_count, time_info, status):
             try:
+                self._last_callback_ts = time.time()
                 samples = self._np.frombuffer(in_data, dtype=self._np.float32)
                 try:
                     ch = int(self._channels) if self._channels else 1
@@ -246,6 +270,19 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         self._cleanup_pa()
         return False
     
+    def is_healthy(self) -> bool:
+        """Check if capture is receiving audio data (callback firing)."""
+        if not self._running:
+            return False
+        return (time.time() - self._last_callback_ts) < 0.5
+
+    def restart(self) -> bool:
+        """Restart the capture stream."""
+        self.stop()
+        if self._callback is not None:
+            return self.start(self._callback)
+        return False
+
     def _cleanup_pa(self) -> None:
         """Clean up PyAudio resources."""
         if self._pa:
@@ -289,12 +326,14 @@ class SounddeviceBackend(AudioCaptureBackend):
         self._sample_rate = self._config.sample_rate
         self._channels = self._config.channels
         self._np = None
-    
+        self._last_callback_ts: float = 0.0
+        self._callback: Optional[Callable[[Any], None]] = None
+
     def _find_wasapi_loopback_device(self) -> Optional[dict]:
         """Find WASAPI loopback device via sounddevice."""
         if not platform.system().lower().startswith("win"):
             return None
-            
+
         try:
             hostapis = self._sd.query_hostapis()
             wasapi_idx = None
@@ -396,8 +435,11 @@ class SounddeviceBackend(AudioCaptureBackend):
             self._sample_rate = 48000
         
         # Create callback wrapper
+        self._callback = callback  # Store for restart
+
         def stream_callback(indata, frames, time_info, status):
             try:
+                self._last_callback_ts = time.time()
                 # Mix to mono if stereo
                 if indata.shape[1] > 1:
                     samples = indata.mean(axis=1).astype(self._np.float32)
@@ -449,6 +491,19 @@ class SounddeviceBackend(AudioCaptureBackend):
     @property
     def channels(self) -> int:
         return self._channels
+
+    def is_healthy(self) -> bool:
+        """Check if capture is receiving audio data (callback firing)."""
+        if not self._running:
+            return False
+        return (time.time() - self._last_callback_ts) < 0.5
+
+    def restart(self) -> bool:
+        """Restart the capture stream."""
+        self.stop()
+        if self._callback is not None:
+            return self.start(self._callback)
+        return False
 
 
 def create_audio_capture(config: AudioCaptureConfig = None) -> Optional[AudioCaptureBackend]:

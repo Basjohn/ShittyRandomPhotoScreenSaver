@@ -372,6 +372,26 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._backend = None
         logger.info("[SPOTIFY_VIS] Audio worker stopped")
 
+    def is_capture_healthy(self) -> bool:
+        """Check if audio capture is receiving data (callback firing)."""
+        if self._backend is None:
+            return False
+        try:
+            return self._backend.is_healthy()
+        except Exception:
+            return False
+
+    def restart_capture(self) -> bool:
+        """Restart the audio capture stream."""
+        if self._backend is None:
+            return False
+        try:
+            logger.info("[SPOTIFY_VIS] Restarting audio capture...")
+            return self._backend.restart()
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Failed to restart capture: %s", e)
+            return False
+
     # ------------------------------------------------------------------
     # FFT Processing
     # ------------------------------------------------------------------

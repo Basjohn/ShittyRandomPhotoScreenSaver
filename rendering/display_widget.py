@@ -77,6 +77,27 @@ from core.mc import is_mc_build
 from rendering.backends import BackendSelectionResult, create_backend_from_settings
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
 
+# Import Raw Input for media key detection (Windows only)
+if sys.platform == "win32":
+    try:
+        from core.windows.media_key_rawinput import (
+            get_raw_input_instance,
+            WM_INPUT,
+        )
+        # Raw Input enabled for background media key detection in screensaver mode
+        _RAW_INPUT_AVAILABLE = True
+    except Exception:
+        _RAW_INPUT_AVAILABLE = False
+    # Import optional low-level keyboard hook for media key passthrough
+    try:
+        from core.windows.media_key_ll_hook import MediaKeyLLHook
+        _MEDIA_KEY_LL_HOOK_AVAILABLE = True
+    except Exception:
+        _MEDIA_KEY_LL_HOOK_AVAILABLE = False
+else:
+    _RAW_INPUT_AVAILABLE = False
+    _MEDIA_KEY_LL_HOOK_AVAILABLE = False
+
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
@@ -103,7 +124,7 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
 
 # Toggle for MC window style experiments. Leave False to use the historical
 # Qt.Tool behavior; switch to True when testing the splash-style flag.
-MC_USE_SPLASH_FLAGS = False
+MC_USE_SPLASH_FLAGS = True
 
 # Windows-specific constants for diagnostics and input handling
 WM_APPCOMMAND = 0x0319
@@ -283,6 +304,11 @@ class DisplayWidget(QWidget):
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
         
+        # Optional low-level keyboard hook for media key passthrough
+        # Only enabled if settings input.enable_media_key_hook is True
+        self._media_key_ll_hook: Optional[MediaKeyLLHook] = None
+        self._init_media_key_ll_hook()
+        
         # MC mode state - default to always on top for MC builds
         self._is_mc_build: bool = is_mc_build()
         self._always_on_top: bool = self._is_mc_build  # Default ON for MC builds
@@ -372,14 +398,15 @@ class DisplayWidget(QWidget):
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Failed to bind screen: %s", e)
 
-        # Setup widget: frameless, always-on-top display window. For the MC
-        # build (SRPSS_MC), also mark the window as a tool window so it does
-        # not appear in the taskbar or standard Alt+Tab.
+        # Setup widget: frameless, always-on-top display window.
+        # Use SplashScreen flag to ensure WM_APPCOMMAND messages are received
+        # for media key passthrough (works for both screensaver and MC builds)
         self._mc_window_flag_mode: Optional[str] = None
 
         flags = (
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.SplashScreen  # Ensures WM_APPCOMMAND reception
         )
         try:
             exe0 = str(getattr(sys, "argv", [""])[0]).lower()
@@ -390,12 +417,7 @@ class DisplayWidget(QWidget):
                 or "srpss media center" in exe0
                 or "main_mc.py" in exe0
             ):
-                if MC_USE_SPLASH_FLAGS:
-                    flags |= Qt.WindowType.SplashScreen
-                    self._mc_window_flag_mode = "splash"
-                else:
-                    flags |= Qt.WindowType.Tool
-                    self._mc_window_flag_mode = "tool"
+                self._mc_window_flag_mode = "splash"
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Failed to detect MC build: %s", e)
 
@@ -1871,6 +1893,100 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
+    def _init_media_key_ll_hook(self) -> None:
+        """
+        Initialize optional low-level keyboard hook for media key passthrough.
+        
+        This hook bypasses Winlogon desktop isolation to allow media keys to
+        be detected in screensaver mode while still passing through to the OS.
+        
+        Only enabled if:
+        1. Platform is Windows (_MEDIA_KEY_LL_HOOK_AVAILABLE)
+        2. settings_manager has input.enable_media_key_hook = True
+        
+        When disabled (default), there is zero performance impact.
+        """
+        if not _MEDIA_KEY_LL_HOOK_AVAILABLE:
+            return
+        
+        if self.settings_manager is None:
+            return
+        
+        try:
+            # Check if user has enabled the low-level hook
+            enabled = SettingsManager.to_bool(
+                self.settings_manager.get("input.enable_media_key_hook", False), False
+            )
+            
+            if not enabled:
+                logger.debug("[MEDIA_KEY_LL] Hook disabled by settings (input.enable_media_key_hook=False)")
+                return
+            
+            # Create and start the hook
+            self._media_key_ll_hook = MediaKeyLLHook()
+            
+            # Connect signal to handler
+            self._media_key_ll_hook.media_key_detected.connect(
+                self._on_media_key_from_ll_hook
+            )
+            
+            # Start the hook
+            if self._media_key_ll_hook.start():
+                logger.info("[MEDIA_KEY_LL] Low-level keyboard hook started for media key passthrough")
+                
+                # Register with ResourceManager for cleanup if available
+                if self._resource_manager is not None:
+                    try:
+                        self._resource_manager.register_qt(
+                            self._media_key_ll_hook,
+                            description="MediaKeyLLHook (low-level keyboard hook)"
+                        )
+                    except Exception as e:
+                        logger.debug("[MEDIA_KEY_LL] Failed to register with ResourceManager: %s", e)
+            else:
+                logger.warning("[MEDIA_KEY_LL] Failed to start low-level keyboard hook")
+                self._media_key_ll_hook = None
+                
+        except Exception as e:
+            logger.debug("[MEDIA_KEY_LL] Failed to initialize hook: %s", e)
+            self._media_key_ll_hook = None
+    
+    def _on_media_key_from_ll_hook(self, vk_code: int, key_name: str) -> None:
+        """
+        Handle media key detected by low-level keyboard hook.
+        
+        Maps VK codes to APPCOMMAND equivalents and dispatches for visual feedback.
+        This does NOT block the key - the hook always passes through to OS.
+        """
+        try:
+            # Map VK codes to APPCOMMAND values for visual feedback
+            vk_to_appcommand = {
+                0xB0: 0x0005,  # VK_MEDIA_NEXT_TRACK -> APPCOMMAND_MEDIA_NEXTTRACK
+                0xB1: 0x0006,  # VK_MEDIA_PREV_TRACK -> APPCOMMAND_MEDIA_PREVIOUSTRACK
+                0xB2: 0x0007,  # VK_MEDIA_STOP -> APPCOMMAND_MEDIA_STOP
+                0xB3: 0x000E,  # VK_MEDIA_PLAY_PAUSE -> APPCOMMAND_MEDIA_PLAY_PAUSE
+                0xAD: 0x0011,  # VK_VOLUME_MUTE -> APPCOMMAND_VOLUME_MUTE
+                0xAE: 0x0010,  # VK_VOLUME_DOWN -> APPCOMMAND_VOLUME_DOWN
+                0xAF: 0x0012,  # VK_VOLUME_UP -> APPCOMMAND_VOLUME_UP
+            }
+            
+            command = vk_to_appcommand.get(vk_code)
+            if command is not None:
+                command_name = _APPCOMMAND_NAMES.get(command, f"APPCOMMAND_{command:04x}")
+                logger.debug("[MEDIA_KEY_LL] Dispatching %s (0x%02X) -> %s", key_name, vk_code, command_name)
+                self._dispatch_appcommand(command, command_name)
+                
+                # Also wake Spotify visualizer if present
+                try:
+                    vis = getattr(self, "spotify_visualizer_widget", None)
+                    if vis is not None and hasattr(vis, '_trigger_wake'):
+                        vis._trigger_wake()
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            logger.debug("[MEDIA_KEY_LL] Error handling media key: %s", e)
+
     def _init_renderer_backend(self) -> None:
         """Select and initialize the configured renderer backend."""
 
@@ -2674,6 +2790,17 @@ class DisplayWidget(QWidget):
         
         super().closeEvent(event)
 
+    def _on_destroyed(self) -> None:
+        """Cleanup when widget is destroyed."""
+        # Stop and cleanup MediaKeyLLHook if active
+        if self._media_key_ll_hook is not None:
+            try:
+                self._media_key_ll_hook.stop()
+                logger.debug("[MEDIA_KEY_LL] Hook stopped during widget destruction")
+            except Exception as e:
+                logger.debug("[MEDIA_KEY_LL] Error stopping hook during destruction: %s", e)
+            self._media_key_ll_hook = None
+
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""
         key = event.key()
@@ -3455,10 +3582,70 @@ class DisplayWidget(QWidget):
                 return super().nativeEvent(eventType, message)
 
             mid = int(getattr(msg, "message", 0) or 0)
+            
+            # DEBUG: Log WM_APPCOMMAND to verify it's being received
+            if mid == WM_APPCOMMAND:
+                logger.info("[DEBUG] WM_APPCOMMAND received in nativeEvent")
+                # For media keys, DON'T mark as handled - let Qt process normally
+                # Just dispatch for visual feedback but don't intercept
+                self._dispatch_appcommand_for_feedback(msg)
+                # Return False to let Qt and Windows handle it normally
+                return False, 0
+
             if mid == WM_APPCOMMAND:
                 handled, result = self._handle_win_appcommand(msg)
                 if handled:
                     return True, result
+
+            # Handle Raw Input for media key detection (non-blocking)
+            if mid == WM_INPUT and _RAW_INPUT_AVAILABLE:
+                try:
+                    hwnd = int(getattr(msg, "hwnd", 0) or 0)
+                    wparam = int(getattr(msg, "wParam", 0) or 0)
+                    lparam = int(getattr(msg, "lParam", 0) or 0)
+                    
+                    # CRITICAL: Check if input is from foreground (RIM_INPUT = 0)
+                    # Windows REQUIRES DefWindowProc for RIM_INPUT cleanup
+                    is_foreground = (wparam & 0xFF) == 0  # RIM_INPUT = 0
+                    
+                    raw_input = get_raw_input_instance()
+                    if not raw_input.is_registered():
+                        # Initialize raw input registration
+                        def on_media_key(command: str) -> None:
+                            """Callback when media key detected - trigger visualizer wake."""
+                            try:
+                                # Find Spotify visualizer and wake it
+                                for widget in self.findChildren(SpotifyVisualizerWidget):
+                                    if hasattr(widget, '_trigger_wake'):
+                                        widget._trigger_wake()
+                                        break
+                                # Also dispatch to media widget for UI feedback
+                                mw = getattr(self, "media_widget", None)
+                                if mw and hasattr(mw, "handle_transport_command"):
+                                    mw.handle_transport_command(command, source="media_key", execute=False)
+                            except Exception:
+                                pass
+                        
+                        raw_input.register(hwnd, on_media_key)
+                    
+                    # Process the raw input message (detect media keys)
+                    raw_input.process_wm_input(wparam, lparam)
+                    
+                    # CRITICAL: For RIM_INPUT (foreground), MUST call DefWindowProc
+                    # This allows Windows to clean up and pass the input to other apps
+                    if is_foreground and _USER32 is not None and hwnd:
+                        try:
+                            result = int(_USER32.DefWindowProcW(hwnd, WM_INPUT, wparam, lparam))
+                            return True, result  # Indicate we handled it (including cleanup)
+                        except Exception:
+                            pass
+                    
+                    # For RIM_INPUTSINK or if DefWindowProc fails, 
+                    # return False to let Qt handle it normally
+                    return False, 0
+                    
+                except Exception:
+                    pass  # Ignore raw input errors
 
             if not win_diag_logger.isEnabledFor(logging.DEBUG):
                 return super().nativeEvent(eventType, message)
@@ -3593,10 +3780,12 @@ class DisplayWidget(QWidget):
             lparam,
         )
 
-        handled = self._dispatch_appcommand(command, command_name)
-        if handled:
-            return True, 0
+        # Always dispatch for visual feedback, but ALWAYS pass through to OS
+        # by calling DefWindowProcW. The media keys should never be blocked.
+        self._dispatch_appcommand(command, command_name)
 
+        # CRITICAL: Always call DefWindowProcW to ensure media keys pass through
+        # to the OS and other applications like Spotify
         if _USER32 is not None and hwnd:
             try:
                 result = int(_USER32.DefWindowProcW(hwnd, WM_APPCOMMAND, wparam, lparam))
@@ -3606,6 +3795,18 @@ class DisplayWidget(QWidget):
                 target_logger.debug("[WIN_APPCOMMAND] DefWindowProcW failed", exc_info=True)
 
         return False, 0
+
+    def _dispatch_appcommand_for_feedback(self, msg) -> None:
+        """Lightweight appcommand handler that only triggers visual feedback without blocking."""
+        try:
+            lparam = int(getattr(msg, "lParam", 0) or 0)
+            command = (lparam >> 16) & 0xFFFF
+            command_name = _APPCOMMAND_NAMES.get(command, f"APPCOMMAND_{command:04x}")
+            
+            # Just dispatch for visual feedback - don't block
+            self._dispatch_appcommand(command, command_name)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] _dispatch_appcommand_for_feedback error: %s", e)
 
     def _dispatch_appcommand(self, command: int, command_name: str) -> bool:
         media_widget = getattr(self, "media_widget", None)
