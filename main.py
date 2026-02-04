@@ -19,7 +19,7 @@ from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
-from core.logging.logger import setup_logging, get_logger, get_log_dir, is_viz_logging_enabled
+from core.logging.logger import setup_logging, get_logger, get_log_dir
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
@@ -285,7 +285,7 @@ def run_screensaver(app: QApplication) -> int:
         if hard_exit_enabled:
             try:
                 tray_icon = ScreensaverTrayIcon(app, app.windowIcon())
-            except Exception as e:
+            except Exception:
                 logger.debug("Failed to create system tray icon", exc_info=True)
 
             if tray_icon is not None:
@@ -296,13 +296,13 @@ def run_screensaver(app: QApplication) -> int:
                         # _on_settings_requested performs a full stop →
                         # settings dialog → restart cycle.
                         engine._on_settings_requested()  # type: ignore[attr-defined]
-                    except Exception as e:
+                    except Exception:
                         logger.exception("Failed to open settings from system tray")
 
                 def _on_tray_exit() -> None:
                     try:
                         engine.stop()
-                    except Exception as e:
+                    except Exception:
                         logger.exception("Failed to stop engine from system tray")
                     app.quit()
 
@@ -320,8 +320,8 @@ def run_screensaver(app: QApplication) -> int:
                                     if eco_manager.is_eco_mode_active():
                                         return True
                         return False
-                    except Exception as e:
-                        logger.debug("[MAIN] Exception suppressed: %s", e)
+                    except Exception:
+                        logger.debug("[MAIN] Exception suppressed in eco mode check")
                         return False
                 
                 tray_icon.set_eco_mode_callback(_check_eco_mode)
@@ -443,8 +443,8 @@ def main():
     app.setOrganizationName("ShittyRandomPhotoScreenSaver")
     try:
         app.setApplicationVersion(APP_VERSION)
-    except Exception as e:
-        logger.debug("[MAIN] Exception suppressed: %s", e)
+    except Exception:
+        logger.debug("[MAIN] Failed to set application version")
 
     # Apply application icon from SRPSS.ico when available so the
     # taskbar/systray and dialogs share a consistent identity.
@@ -452,7 +452,7 @@ def main():
     if icon_path.exists():
         try:
             app.setWindowIcon(QIcon(str(icon_path)))
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to set application icon from SRPSS.ico", exc_info=True)
     
     # Increase Qt image allocation limit from 256MB to 1GB for high-res images
@@ -491,7 +491,7 @@ def main():
                     profile_path = get_log_dir() / "screensaver_run.pstats"
                     profiler.dump_stats(str(profile_path))
                     logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
-                except Exception as e:
+                except Exception:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
             else:
                 exit_code = run_screensaver(app)
@@ -510,16 +510,16 @@ def main():
                     profile_path = get_log_dir() / "screensaver_config.pstats"
                     profiler.dump_stats(str(profile_path))
                     logger.info("[PERF] [CPU] cProfile stats written to %s", profile_path)
-                except Exception as e:
+                except Exception:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
             else:
                 exit_code = run_config(app)
             
         elif mode == ScreensaverMode.PREVIEW:
             logger.info(f"Starting preview mode (hwnd={preview_hwnd})")
-            # TODO: Embed preview into the host window. For now we do not
-            # start a full-screen run here to avoid surprising the user when
-            # the Screen Saver dialog requests a small thumbnail preview.
+            # FEATURE BACKLOG: Preview mode shows thumbnail in Windows Screen Saver dialog.
+            # Currently not implemented - would embed into host window via hwnd.
+            # No window shown to avoid surprising users in dialog preview.
             logger.warning("PREVIEW mode not yet implemented (no window shown)")
         
     except Exception as e:
@@ -553,12 +553,12 @@ def main():
             try:
                 from scripts import spotify_vis_metrics_parser as _sv  # type: ignore[import]
                 _sv.main()
-            except Exception as e:
+            except Exception:
                 logger.debug(
                     "[PERF] spotify_vis_metrics_parser auto-run failed",
                     exc_info=True,
                 )
-    except Exception as e:
+    except Exception:
         logger.debug(
             "[PERF] spotify_vis_metrics_parser auto-run guard failed",
             exc_info=True,

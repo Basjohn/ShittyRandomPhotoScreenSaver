@@ -209,15 +209,6 @@ class DisplayTab(QWidget):
         self.hard_exit_check.stateChanged.connect(self._save_settings)
         input_layout.addWidget(self.hard_exit_check)
         
-        # Media Key LL Hook option
-        self.media_key_ll_hook_check = QCheckBox("Media Key LL Hook")
-        self.media_key_ll_hook_check.setToolTip(
-            "Very Small Anti-Cheat Chance, Requires Restart."
-        )
-        self.media_key_ll_hook_check.setChecked(False)
-        self.media_key_ll_hook_check.stateChanged.connect(self._save_settings)
-        input_layout.addWidget(self.media_key_ll_hook_check)
-        
         layout.addWidget(input_group)
         
         # Add stretch at bottom
@@ -311,7 +302,6 @@ class DisplayTab(QWidget):
         self.backend_combo.blockSignals(True)
         # Block input toggles
         self.hard_exit_check.blockSignals(True)
-        self.media_key_ll_hook_check.blockSignals(True)
         
         try:
             # Monitor selection (new canonical: display.show_on_monitors)
@@ -392,11 +382,6 @@ class DisplayTab(QWidget):
             hard_exit = SettingsManager.to_bool(hard_exit_raw, False)
             self.hard_exit_check.setChecked(hard_exit)
 
-            # Input / Media Key LL Hook
-            media_key_ll_hook_raw = self._settings.get('input.enable_media_key_hook', False)
-            media_key_ll_hook = SettingsManager.to_bool(media_key_ll_hook_raw, False)
-            self.media_key_ll_hook_check.setChecked(media_key_ll_hook)
-
             # Renderer backend preferences
             backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')
             backend_mode = str(backend_mode_raw).lower()
@@ -420,7 +405,6 @@ class DisplayTab(QWidget):
             self.sharpen_check.blockSignals(False)
             self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
-            self.media_key_ll_hook_check.blockSignals(False)
             self._loading = False
     
     def _save_settings(self) -> None:
@@ -464,7 +448,6 @@ class DisplayTab(QWidget):
 
         # Input / Exit
         self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())
-        self._settings.set('input.enable_media_key_hook', self.media_key_ll_hook_check.isChecked())
 
         # Renderer backend
         backend_value = self.backend_combo.currentData() or 'opengl'

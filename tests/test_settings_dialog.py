@@ -99,7 +99,7 @@ def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
     assert hasattr(dialog, 'widgets_tab_btn')
     assert hasattr(dialog, 'about_tab_btn')
     
-    assert len(dialog.tab_buttons) == 5
+    assert len(dialog.tab_buttons) == 7
 
 
 def test_settings_dialog_has_content_stack(qapp, settings_manager, animation_manager):
@@ -107,7 +107,7 @@ def test_settings_dialog_has_content_stack(qapp, settings_manager, animation_man
     dialog = SettingsDialog(settings_manager, animation_manager)
     
     assert hasattr(dialog, 'content_stack')
-    assert dialog.content_stack.count() == 5
+    assert dialog.content_stack.count() == 7
 
 
 def test_settings_dialog_default_tab(qapp, settings_manager, animation_manager):
@@ -122,25 +122,36 @@ def test_settings_dialog_tab_switching(qapp, settings_manager, animation_manager
     """Test tab switching functionality."""
     dialog = SettingsDialog(settings_manager, animation_manager)
     
-    # Switch to display tab
+    # Switch to display tab (index 1)
     dialog._switch_tab(1)
     assert dialog.display_tab_btn.isChecked() is True
     assert dialog.sources_tab_btn.isChecked() is False
-    
-    # Switch to transitions tab
+
+    # Switch to transitions tab (index 2)
     dialog._switch_tab(2)
     assert dialog.transitions_tab_btn.isChecked() is True
     assert dialog.display_tab_btn.isChecked() is False
-    
-    # Switch to widgets tab
+
+    # Switch to widgets tab (index 3)
     dialog._switch_tab(3)
     assert dialog.widgets_tab_btn.isChecked() is True
     assert dialog.transitions_tab_btn.isChecked() is False
-    
-    # Switch to about tab
+
+    # Switch to new tab at index 4 (media keys input tab)
     dialog._switch_tab(4)
-    assert dialog.about_tab_btn.isChecked() is True
+    # Tab 4 exists and is checkable
+    assert dialog.tab_buttons[4].isChecked() is True
     assert dialog.widgets_tab_btn.isChecked() is False
+
+    # Switch to new tab at index 5 (media keys visualizer tab)
+    dialog._switch_tab(5)
+    assert dialog.tab_buttons[5].isChecked() is True
+    assert dialog.tab_buttons[4].isChecked() is False
+
+    # Switch to about tab (index 6)
+    dialog._switch_tab(6)
+    assert dialog.about_tab_btn.isChecked() is True
+    assert dialog.tab_buttons[5].isChecked() is False
 
 
 def test_settings_dialog_has_size_grip(qapp, settings_manager, animation_manager):

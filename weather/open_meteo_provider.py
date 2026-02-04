@@ -268,7 +268,8 @@ class OpenMeteoProvider:
                 'latitude': latitude,
                 'longitude': longitude,
                 'current_weather': 'true',
-                'current': 'relative_humidity_2m',  # Additional current data
+                'current': 'relative_humidity_2m,precipitation_probability',  # Additional current data
+                'hourly': 'precipitation_probability',  # Hourly forecast for rain chance
                 'daily': 'temperature_2m_max,temperature_2m_min,weathercode',  # Tomorrow's forecast
                 'forecast_days': 2,  # Today + tomorrow
                 'timezone': 'auto'
@@ -291,6 +292,25 @@ class OpenMeteoProvider:
             humidity = None
             if 'relative_humidity_2m' in current_units:
                 humidity = current_units['relative_humidity_2m']
+            
+            # Get precipitation probability from current data (if available)
+            precipitation = None
+            if 'precipitation_probability' in current_units:
+                precipitation = current_units['precipitation_probability']
+            
+            # If not in current, try hourly data
+            if precipitation is None:
+                hourly = data.get('hourly', {})
+                if hourly and 'precipitation_probability' in hourly:
+                    precip_list = hourly['precipitation_probability']
+                    if isinstance(precip_list, list) and precip_list:
+                        # Get current hour
+                        from datetime import datetime
+                        current_hour = datetime.now().hour
+                        if current_hour < len(precip_list):
+                            precipitation = precip_list[current_hour]
+                        else:
+                            precipitation = precip_list[0] if precip_list else None
             
             # Map weather code to condition
             condition = self.WEATHER_CODES.get(weather_code, "Unknown")
@@ -321,6 +341,7 @@ class OpenMeteoProvider:
                 'weather_code': weather_code,
                 'windspeed': windspeed,
                 'humidity': humidity,
+                'precipitation_probability': precipitation,
                 'forecast': forecast_text
             }
             

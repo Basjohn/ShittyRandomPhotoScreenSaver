@@ -180,40 +180,13 @@ class AdaptiveTimerStrategy:
                     logger.debug("[ADAPTIVE_TIMER] Waking from %s to RUNNING", current.name)
             return True
         
-        # Need to create thread - check if ThreadManager is available
+        # Need to create thread - ThreadManager is required
         if self._thread_manager is None:
-            # For testing: allow creating without ThreadManager using direct thread
-            try:
-                self._stop_event.clear()
-                self._wake_event.clear()
-                self._frame_queue.clear()
-                self._state.store(TimerState.IDLE)
-                
-                # Create thread directly for testing
-                import threading
-                thread = threading.Thread(
-                    target=self._timer_loop,
-                    daemon=True,
-                    name=f"adaptive_timer_{id(self)}"
-                )
-                thread.start()
-                
-                # Store mock future-like object
-                class MockFuture:
-                    def done(self): return False
-                    def result(self, timeout=None): return None
-                self._task_future = MockFuture()
-                self._task_id = f"adaptive_timer_thread_{id(thread)}"
-                
-                # Immediately wake to RUNNING state
-                self._state.store(TimerState.RUNNING)
-                self._wake_event.set()
-                
-                logger.info("[ADAPTIVE_TIMER] Started (direct thread, target=%dHz)", self._config.target_fps)
-                return True
-            except Exception as e:
-                logger.error("[ADAPTIVE_TIMER] Failed to start: %s", e)
-                return False
+            logger.error(
+                "[ADAPTIVE_TIMER] ThreadManager required but not available. "
+                "Ensure compositor has a parent with _thread_manager."
+            )
+            return False
         
         # Use ThreadManager
         try:

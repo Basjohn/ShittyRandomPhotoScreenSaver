@@ -1,0 +1,72 @@
+# Test Suite Documentation
+
+## Overview
+
+This document describes the test suite structure, skip markers, and policy enforcement tests.
+
+## Skip Markers
+
+### Flaky Qt Tests (Skipped in CI)
+
+The following tests are marked with `@pytest.mark.skip` due to Qt event loop instability in automated test environments:
+
+| Test File | Test Name | Reason |
+|-----------|-----------|--------|
+| `test_thread_manager.py` | `test_overlay_timer_stop_is_safe_from_other_threads` | Qt event loop cleanup causes access violations during teardown in CI |
+| `test_qt_timer_threading.py` | `test_overlay_timer_stop_is_safe_from_other_threads` | Qt event loop cleanup causes access violations during teardown in CI |
+
+**When to run**: These tests should be run manually on a development workstation to validate cross-thread timer safety behavior.
+
+**Command to run manually**:
+```bash
+python -m pytest tests/test_thread_manager.py::TestOverlayTimerIntegration::test_overlay_timer_stop_is_safe_from_other_threads -v
+python -m pytest tests/test_qt_timer_threading.py::test_overlay_timer_stop_is_safe_from_other_threads -v
+```
+
+### Why These Tests Are Important
+
+These tests validate that overlay timers can be safely stopped from non-Qt threads (e.g., pycaw audio callbacks, Windows hooks) without triggering Qt warnings about thread safety. The tests are functionally correct but suffer from pytest-qt's event loop cleanup limitations in CI environments.
+
+## Test Categories
+
+### Unit Tests
+Located in `tests/unit/` - Fast, isolated tests with no Qt dependencies.
+
+### Integration Tests
+Located in `tests/` - Tests that verify component interactions, may have Qt dependencies.
+
+### Policy Enforcement Tests
+Located in `tests/policy/` - Static analysis tests that verify codebase compliance with architectural policies.
+
+## Running Tests
+
+### All tests except skipped:
+```bash
+python -m pytest tests/ -v
+```
+
+### Including skipped tests:
+```bash
+python -m pytest tests/ -v --run-skipped
+```
+
+### Only unit tests:
+```bash
+python -m pytest tests/unit/ -v
+```
+
+### Only policy tests:
+```bash
+python -m pytest tests/policy/ -v
+```
+
+## Threading Policy Exceptions in Tests
+
+Some tests intentionally use `threading.Thread` to simulate external library behavior:
+
+- `test_thread_manager.py` - Tests UI thread dispatch from worker threads
+- `test_threading.py` - Tests ThreadManager cross-thread behavior
+- `test_qt_timer_threading.py` - Tests timer safety from external threads
+- `test_media_key_ll_hook.py` - Tests hook thread safety
+
+These are **not policy violations** - they are legitimate test scenarios that verify our code correctly handles callbacks from external libraries (pycaw, Windows APIs) that don't use our ThreadManager.

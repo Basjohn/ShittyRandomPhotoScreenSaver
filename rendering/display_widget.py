@@ -88,15 +88,8 @@ if sys.platform == "win32":
         _RAW_INPUT_AVAILABLE = True
     except Exception:
         _RAW_INPUT_AVAILABLE = False
-    # Import optional low-level keyboard hook for media key passthrough
-    try:
-        from core.windows.media_key_ll_hook import MediaKeyLLHook
-        _MEDIA_KEY_LL_HOOK_AVAILABLE = True
-    except Exception:
-        _MEDIA_KEY_LL_HOOK_AVAILABLE = False
 else:
     _RAW_INPUT_AVAILABLE = False
-    _MEDIA_KEY_LL_HOOK_AVAILABLE = False
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
@@ -303,11 +296,6 @@ class DisplayWidget(QWidget):
         self._context_menu_active: bool = False
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
-        
-        # Optional low-level keyboard hook for media key passthrough
-        # Only enabled if settings input.enable_media_key_hook is True
-        self._media_key_ll_hook: Optional[MediaKeyLLHook] = None
-        self._init_media_key_ll_hook()
         
         # MC mode state - default to always on top for MC builds
         self._is_mc_build: bool = is_mc_build()
@@ -1893,100 +1881,6 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-    def _init_media_key_ll_hook(self) -> None:
-        """
-        Initialize optional low-level keyboard hook for media key passthrough.
-        
-        This hook bypasses Winlogon desktop isolation to allow media keys to
-        be detected in screensaver mode while still passing through to the OS.
-        
-        Only enabled if:
-        1. Platform is Windows (_MEDIA_KEY_LL_HOOK_AVAILABLE)
-        2. settings_manager has input.enable_media_key_hook = True
-        
-        When disabled (default), there is zero performance impact.
-        """
-        if not _MEDIA_KEY_LL_HOOK_AVAILABLE:
-            return
-        
-        if self.settings_manager is None:
-            return
-        
-        try:
-            # Check if user has enabled the low-level hook
-            enabled = SettingsManager.to_bool(
-                self.settings_manager.get("input.enable_media_key_hook", False), False
-            )
-            
-            if not enabled:
-                logger.debug("[MEDIA_KEY_LL] Hook disabled by settings (input.enable_media_key_hook=False)")
-                return
-            
-            # Create and start the hook
-            self._media_key_ll_hook = MediaKeyLLHook()
-            
-            # Connect signal to handler
-            self._media_key_ll_hook.media_key_detected.connect(
-                self._on_media_key_from_ll_hook
-            )
-            
-            # Start the hook
-            if self._media_key_ll_hook.start():
-                logger.info("[MEDIA_KEY_LL] Low-level keyboard hook started for media key passthrough")
-                
-                # Register with ResourceManager for cleanup if available
-                if self._resource_manager is not None:
-                    try:
-                        self._resource_manager.register_qt(
-                            self._media_key_ll_hook,
-                            description="MediaKeyLLHook (low-level keyboard hook)"
-                        )
-                    except Exception as e:
-                        logger.debug("[MEDIA_KEY_LL] Failed to register with ResourceManager: %s", e)
-            else:
-                logger.warning("[MEDIA_KEY_LL] Failed to start low-level keyboard hook")
-                self._media_key_ll_hook = None
-                
-        except Exception as e:
-            logger.debug("[MEDIA_KEY_LL] Failed to initialize hook: %s", e)
-            self._media_key_ll_hook = None
-    
-    def _on_media_key_from_ll_hook(self, vk_code: int, key_name: str) -> None:
-        """
-        Handle media key detected by low-level keyboard hook.
-        
-        Maps VK codes to APPCOMMAND equivalents and dispatches for visual feedback.
-        This does NOT block the key - the hook always passes through to OS.
-        """
-        try:
-            # Map VK codes to APPCOMMAND values for visual feedback
-            vk_to_appcommand = {
-                0xB0: 0x0005,  # VK_MEDIA_NEXT_TRACK -> APPCOMMAND_MEDIA_NEXTTRACK
-                0xB1: 0x0006,  # VK_MEDIA_PREV_TRACK -> APPCOMMAND_MEDIA_PREVIOUSTRACK
-                0xB2: 0x0007,  # VK_MEDIA_STOP -> APPCOMMAND_MEDIA_STOP
-                0xB3: 0x000E,  # VK_MEDIA_PLAY_PAUSE -> APPCOMMAND_MEDIA_PLAY_PAUSE
-                0xAD: 0x0011,  # VK_VOLUME_MUTE -> APPCOMMAND_VOLUME_MUTE
-                0xAE: 0x0010,  # VK_VOLUME_DOWN -> APPCOMMAND_VOLUME_DOWN
-                0xAF: 0x0012,  # VK_VOLUME_UP -> APPCOMMAND_VOLUME_UP
-            }
-            
-            command = vk_to_appcommand.get(vk_code)
-            if command is not None:
-                command_name = _APPCOMMAND_NAMES.get(command, f"APPCOMMAND_{command:04x}")
-                logger.debug("[MEDIA_KEY_LL] Dispatching %s (0x%02X) -> %s", key_name, vk_code, command_name)
-                self._dispatch_appcommand(command, command_name)
-                
-                # Also wake Spotify visualizer if present
-                try:
-                    vis = getattr(self, "spotify_visualizer_widget", None)
-                    if vis is not None and hasattr(vis, '_trigger_wake'):
-                        vis._trigger_wake()
-                except Exception:
-                    pass
-                    
-        except Exception as e:
-            logger.debug("[MEDIA_KEY_LL] Error handling media key: %s", e)
-
     def _init_renderer_backend(self) -> None:
         """Select and initialize the configured renderer backend."""
 
@@ -2792,14 +2686,8 @@ class DisplayWidget(QWidget):
 
     def _on_destroyed(self) -> None:
         """Cleanup when widget is destroyed."""
-        # Stop and cleanup MediaKeyLLHook if active
-        if self._media_key_ll_hook is not None:
-            try:
-                self._media_key_ll_hook.stop()
-                logger.debug("[MEDIA_KEY_LL] Hook stopped during widget destruction")
-            except Exception as e:
-                logger.debug("[MEDIA_KEY_LL] Error stopping hook during destruction: %s", e)
-            self._media_key_ll_hook = None
+        # Widget cleanup handled by other methods
+        pass
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""

@@ -45,7 +45,7 @@ class TestWidgetsTab:
         assert tab.clock_format.currentText() == "24 Hour"
         assert tab.clock_seconds.isChecked() is True
         assert tab.clock_show_background.isChecked() is True
-        assert tab.clock_bg_opacity.value() == 70
+        assert tab.clock_bg_opacity.value() == 60
         # Monitor selection uses canonical 'ALL' default so combo reflects that
         assert tab.clock_monitor_combo.currentText() == "ALL"
 
@@ -58,7 +58,7 @@ class TestWidgetsTab:
         assert isinstance(loc, str) and loc
         assert tab.weather_show_forecast.isChecked() is True  # Default is True per defaults.py
         assert tab.weather_show_background.isChecked() is True
-        assert tab.weather_bg_opacity.value() == 70
+        assert tab.weather_bg_opacity.value() == 60
 
         tab.deleteLater()
 

@@ -184,4 +184,6 @@ Version information is centralised in `versioning.py` and used by both runtime a
 
 ## Credits
 
+https://basmilius.github.io/ For the pillaged weather icons!
+
 This README focuses on wasting your time.

@@ -694,6 +694,43 @@ class WidgetsTab(QWidget):
         self.weather_show_forecast.stateChanged.connect(self._update_stack_status)
         weather_layout.addWidget(self.weather_show_forecast)
 
+        # Show details row (rain/humidity/wind)
+        self.weather_show_details = QCheckBox("Show Details (Rain/Humidity/Wind)")
+        self.weather_show_details.setChecked(self._default_bool('weather', 'show_details_row', True))
+        self.weather_show_details.setToolTip("Display weather detail metrics with icons")
+        self.weather_show_details.stateChanged.connect(self._save_settings)
+        weather_layout.addWidget(self.weather_show_details)
+
+        # Show condition icon
+        self.weather_show_icon = QCheckBox("Show Weather Icon")
+        self.weather_show_icon.setChecked(self._default_bool('weather', 'show_condition_icon', True))
+        self.weather_show_icon.setToolTip("Display weather condition icon (clear, cloudy, rain, etc.)")
+        self.weather_show_icon.stateChanged.connect(self._save_settings)
+        weather_layout.addWidget(self.weather_show_icon)
+
+        # Icon alignment
+        icon_align_row = QHBoxLayout()
+        icon_align_row.addWidget(QLabel("Icon Position:"))
+        self.weather_icon_alignment = QComboBox()
+        self.weather_icon_alignment.addItems(["LEFT", "RIGHT"])
+        self._set_combo_text(self.weather_icon_alignment, self._default_str('weather', 'icon_alignment', 'RIGHT'))
+        self.weather_icon_alignment.currentTextChanged.connect(self._save_settings)
+        icon_align_row.addWidget(self.weather_icon_alignment)
+        icon_align_row.addStretch()
+        weather_layout.addLayout(icon_align_row)
+
+        # Icon size
+        icon_size_row = QHBoxLayout()
+        icon_size_row.addWidget(QLabel("Icon Size:"))
+        self.weather_icon_size = QSpinBox()
+        self.weather_icon_size.setRange(32, 192)
+        self.weather_icon_size.setValue(self._default_int('weather', 'icon_size', 96))
+        self.weather_icon_size.setSuffix(" px")
+        self.weather_icon_size.valueChanged.connect(self._save_settings)
+        icon_size_row.addWidget(self.weather_icon_size)
+        icon_size_row.addStretch()
+        weather_layout.addLayout(icon_size_row)
+
         # Intense shadow
         self.weather_intense_shadow = QCheckBox("Intense Shadows")
         self.weather_intense_shadow.setChecked(self._default_bool('weather', 'intense_shadow', True))
@@ -1873,6 +1910,10 @@ class WidgetsTab(QWidget):
             self.weather_font_combo.setCurrentFont(QFont(self._config_str('weather', weather_config, 'font_family', 'Segoe UI')))
             self.weather_font_size.setValue(self._config_int('weather', weather_config, 'font_size', 24))
             self.weather_show_forecast.setChecked(self._config_bool('weather', weather_config, 'show_forecast', True))
+            self.weather_show_details.setChecked(self._config_bool('weather', weather_config, 'show_details_row', True))
+            self.weather_show_icon.setChecked(self._config_bool('weather', weather_config, 'show_condition_icon', True))
+            self._set_combo_text(self.weather_icon_alignment, self._config_str('weather', weather_config, 'icon_alignment', 'RIGHT'))
+            self.weather_icon_size.setValue(self._config_int('weather', weather_config, 'icon_size', 96))
             self.weather_intense_shadow.setChecked(
                 self._config_bool('weather', weather_config, 'intense_shadow', True)
             )
@@ -2357,6 +2398,10 @@ class WidgetsTab(QWidget):
             'font_size': self.weather_font_size.value(),
             'margin': self.weather_margin.value(),
             'show_forecast': self.weather_show_forecast.isChecked(),
+            'show_details_row': self.weather_show_details.isChecked(),
+            'show_condition_icon': self.weather_show_icon.isChecked(),
+            'icon_alignment': self.weather_icon_alignment.currentText(),
+            'icon_size': self.weather_icon_size.value(),
             'intense_shadow': self.weather_intense_shadow.isChecked(),
             'show_background': self.weather_show_background.isChecked(),
             'bg_opacity': self.weather_bg_opacity.value() / 100.0,
