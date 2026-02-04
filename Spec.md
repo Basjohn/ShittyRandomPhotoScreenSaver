@@ -503,13 +503,22 @@ Diagnostic state capture for shutdown debugging:
 
 ## v2.0 Architecture Updates
 
-### Fade Coordination & Media Key Updates
-- **Lock-free fade coordination** (`rendering/widget_manager.py`):
-  - Uses `SPSCQueue` (256 capacity) and `TripleBuffer` for atomic fade state exchange
-  - WidgetManager waits for ALL expected overlays before starting fades (prevents Reddit desync)
-  - Fade sync timeout increased to 5000ms for late-registering widgets
-  - Late widgets use 500ms secondary fade timing for coordinated appearance
-- **Media key instant glyph update** (`widgets/media_widget.py`):
+### Fade Coordination Architecture
+
+- **FadeCoordinator** (`rendering/fade_coordinator.py`) provides centralized, lock-free fade synchronization:
+  - Atomic state machine (IDLE → READY → STARTED) using simple attribute assignments (GIL-protected)
+  - Lock-free SPSCQueue for cross-thread fade requests
+  - Participant registration and compositor-ready signaling
+  - Automatic batch fade start when all participants registered and compositor ready
+  - No raw locks for business logic - uses atomic operations and queue-based threading
+- **WidgetManager** delegates all fade coordination to FadeCoordinator:
+  - `reset_fade_coordination()` → `FadeCoordinator.reset()`
+  - `set_expected_overlays()` / `add_expected_overlay()` → `FadeCoordinator.register_participant()`
+  - `request_overlay_fade_sync()` → `FadeCoordinator.request_fade()`
+  - `_on_compositor_ready()` → `FadeCoordinator.signal_compositor_ready()`
+- Legacy SPSCQueue/TripleBuffer fade coordination has been removed in favor of the centralized FadeCoordinator
+
+### Media Key Updates
   - `play_pause()` bypasses diff gating for optimistic state updates
   - Uses `repaint()` (not `update()`) for immediate feedback
   - Performance-guarded: only repaints if `_show_controls` and `isVisible()`

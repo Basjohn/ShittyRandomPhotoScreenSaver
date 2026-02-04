@@ -225,6 +225,10 @@ class MediaWidget(BaseOverlayWidget):
         self._skipped_identity_updates: int = 0
         self._max_identity_skip: int = 4
         
+        # Widget state tracking for lifecycle management
+        self._activation_time: float = 0.0
+        self._post_activation_grace_sec: float = 5.0  # Grace period after activation
+
         # Register this instance for shared feedback
         type(self)._instances.add(self)
 
@@ -284,6 +288,9 @@ class MediaWidget(BaseOverlayWidget):
             logger.error("[MEDIA_WIDGET] ThreadManager missing during activation; performing synchronous refresh")
             self._refresh()
             return
+        
+        # Record activation time for grace period
+        self._activation_time = time.monotonic()
         
         self._refresh()
         self._ensure_timer()
@@ -1130,6 +1137,13 @@ class MediaWidget(BaseOverlayWidget):
                 pass
         
         if info is None:
+            # Check grace period after activation - don't hide immediately
+            time_since_activation = time.monotonic() - self._activation_time
+            if self._activation_time > 0 and time_since_activation < self._post_activation_grace_sec:
+                if is_verbose_logging():
+                    logger.debug("[MEDIA_WIDGET] In grace period after activation (%.1fs), skipping hide", time_since_activation)
+                return
+            
             # Smart polling: idle detection - track consecutive None results
             self._consecutive_none_count += 1
             

@@ -390,9 +390,14 @@ class RSSSource(ImageProvider):
             
             try:
                 images_before = len(self._images)
-                self._parse_feed(feed_url, existing_paths, max_images=max_images_per_source)
+                result = self._parse_feed(feed_url, existing_paths, max_images=max_images_per_source)
                 images_after = len(self._images)
                 new_images = images_after - images_before
+                
+                # Check if feed was skipped due to quota (not a failure)
+                if result == "__QUOTA_SKIPPED__":
+                    logger.debug(f"[RATE_LIMIT] Feed skipped due to quota: {feed_url}")
+                    continue  # Skip to next feed without marking as failed
                 
                 # If we got 0 images from a Reddit feed, it might be rate limited
                 if new_images == 0 and is_reddit:
@@ -512,8 +517,8 @@ class RSSSource(ImageProvider):
         request_url, mode, original_url = self._resolve_feed_mode(feed_url)
 
         if mode == "json":
-            self._parse_json_feed(request_url, original_url, existing_paths, max_images=max_images)
-            return
+            result = self._parse_json_feed(request_url, original_url, existing_paths, max_images=max_images)
+            return result  # Propagate quota skip marker
 
         try:
             from core.reddit_rate_limiter import get_reddit_user_agent
@@ -570,12 +575,13 @@ class RSSSource(ImageProvider):
         is_reddit = 'reddit.com' in request_url.lower()
         
         # Check if we should skip this Reddit fetch to preserve quota for widgets
+        # Return a special marker to indicate quota skip vs actual failure
         if is_reddit:
             try:
                 from core.reddit_rate_limiter import RedditRateLimiter, RateLimitPriority, get_reddit_user_agent
                 if RedditRateLimiter.should_skip_for_quota(priority=RateLimitPriority.NORMAL):
                     logger.info("[RATE_LIMIT] Skipping RSS Reddit fetch to preserve quota for widgets")
-                    return
+                    return "__QUOTA_SKIPPED__"  # Special marker, not a failure
             except ImportError:
                 pass
         

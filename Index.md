@@ -84,14 +84,11 @@ endering/gl_transition_renderer.py | GLTransitionRenderer | Centralized transiti
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| WidgetManager | 
-endering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fades |
-| WidgetPositioner | 
-endering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
-| WidgetFactories | 
-endering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |
-| WidgetSetup | 
-endering/widget_setup.py | parse_color_to_qcolor(), compute_expected_overlays() | Setup helpers |
+| WidgetManager | rendering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fade coordination via FadeCoordinator |
+| FadeCoordinator | rendering/fade_coordinator.py | FadeCoordinator | Centralized lock-free fade synchronization |
+| WidgetPositioner | rendering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
+| WidgetFactories | rendering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |
+| WidgetSetup | rendering/widget_setup.py | parse_color_to_qcolor(), compute_expected_overlays() | Setup helpers |
 
 ## Rendering - Input & Control
 

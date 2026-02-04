@@ -721,6 +721,13 @@ class ScreensaverEngine(QObject):
                     cache_dir = str(src._cache_dir)
                     break
             
+            # Calculate per-feed image limits
+            # Reddit: distribute 10 total images across all Reddit feeds
+            reddit_sources = [s for s in sources if hasattr(s, 'feed_urls') and s.feed_urls and 'reddit.com' in s.feed_urls[0].lower()]
+            
+            REDDIT_TOTAL_IMAGE_LIMIT = 10  # Max 10 images from Reddit per refresh
+            reddit_per_feed_limit = max(1, REDDIT_TOTAL_IMAGE_LIMIT // len(reddit_sources)) if reddit_sources else 0
+            
             for i, rss_source in enumerate(sources):
                 # CHECK FOR SHUTDOWN - only abort if actually shutting down
                 if engine._shutting_down:
@@ -737,10 +744,12 @@ class ScreensaverEngine(QObject):
                     
                     # Try RSSWorker first if available
                     if use_worker:
+                        is_reddit = 'reddit.com' in feed_url.lower()
+                        max_images = reddit_per_feed_limit if is_reddit else 8
                         worker_result = engine._fetch_rss_via_worker(
                             feed_url,
                             cache_dir=cache_dir,
-                            max_images=8,
+                            max_images=max_images,
                             timeout_ms=30000,
                         )
                         
@@ -771,7 +780,7 @@ class ScreensaverEngine(QObject):
                     if not worker_succeeded:
                         if use_worker:
                             logger.debug("[ASYNC RSS] RSSWorker failed, falling back to RSSSource")
-                        rss_source.refresh(max_images_per_source=8)
+                        rss_source.refresh(max_images_per_source=reddit_per_feed_limit)
                         images = rss_source.get_images()
                     
                     rss_images.extend(images)

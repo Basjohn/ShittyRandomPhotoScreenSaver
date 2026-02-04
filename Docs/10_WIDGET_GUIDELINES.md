@@ -346,8 +346,9 @@ follow the same pattern:
 **Order of operations**
 
 1. Widget `start()` calls `parent.request_overlay_fade_sync(...)` but must **not** start fading until the compositor has delivered its first frame (`DisplayWidget.image_displayed`).
-2. `DisplayWidget` now defers `_start_overlay_fades()` until `_compositor_ready` is set; widgets rely on this to avoid appearing before the wallpaper is visible.
-3. Once `_compositor_ready` is True, widgets invoke the shared `ShadowFadeProfile` for coordinated card + shadow animation.
+2. `FadeCoordinator` waits for compositor ready signal before starting fades; widgets rely on this to avoid appearing before the wallpaper is visible.
+3. Once compositor is ready and all participants registered, `FadeCoordinator` triggers the batch fade start.
+4. Widgets invoke the shared `ShadowFadeProfile` for coordinated card + shadow animation.
 
    - `parent.request_overlay_fade_sync("media", starter)`
    - `parent.request_overlay_fade_sync("weather", starter)`
@@ -355,7 +356,7 @@ follow the same pattern:
    - `parent.request_overlay_fade_sync("spotify_visualizer", starter)`
    - `parent.request_overlay_fade_sync("clock"/"clock2"/"clock3", starter)`
 
-2. In `starter`, call the widget’s fade helper, which must delegate to the
+5. In `starter`, call the widget's fade helper, which must delegate to the
    shared `ShadowFadeProfile`:
 
    - Media: `MediaWidget._start_widget_fade_in()` →
@@ -366,13 +367,15 @@ follow the same pattern:
    - Spotify Visualizer: `SpotifyVisualizerWidget._start_widget_fade_in()` →
      `ShadowFadeProfile.start_fade_in(...)`.
 
-3. `ShadowFadeProfile.start_fade_in` performs a **two‑stage animation**:
+6. `ShadowFadeProfile.start_fade_in` performs a **two-stage animation**:
    - Card opacity fade 0.0 → 1.0 using a temporary `QGraphicsOpacityEffect`.
    - Shadow fade 0 → target alpha using a shared `QGraphicsDropShadowEffect`
      configured from `widgets.shadows.*`.
 
 This guarantees that all widgets on a display fade in together and receive
-their drop shadows with identical timing.
+their drop shadows with identical timing. The coordination is managed by
+`FadeCoordinator` (`rendering/fade_coordinator.py`) which uses lock-free
+atomic operations and an SPSC queue for thread-safe fade request handling.
 
 ### 6.4 Overlay manager (`transitions.overlay_manager.raise_overlay`) – legacy GL overlays only
 
@@ -671,8 +674,8 @@ trail:
 - **Lifecycle & debugging checklist**  
   To debug fade or bar issues, follow this order:
   - Confirm `DisplayWidget._setup_widgets()` creates `SpotifyVisualizerWidget`
-    when media + Spotify visualiser are enabled and that
-    `_overlay_fade_expected` includes `"spotify_visualizer"` on that display.
+    when media + Spotify visualiser are enabled and that the widget is registered
+    with `FadeCoordinator` via `request_overlay_fade_sync("spotify_visualizer", ...)`.
   - Verify `SpotifyVisualizerWidget.start()` is called exactly once and that it
     registers a `request_overlay_fade_sync("spotify_visualizer", starter)`
     callback on the parent before any media updates arrive.

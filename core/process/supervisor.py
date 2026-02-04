@@ -15,7 +15,7 @@ import time
 import uuid
 from multiprocessing import Queue
 from queue import Empty as QueueEmpty
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Optional
 
 from core.constants.timing import (
     PROCESS_TERMINATE_TIMEOUT_S,
@@ -82,21 +82,19 @@ class ProcessSupervisor:
         self._event_system = event_system
         
         # Worker tracking
-        self._workers: Dict[WorkerType, mp.Process] = {}
-        self._health: Dict[WorkerType, HealthStatus] = {}
-        self._request_queues: Dict[WorkerType, Queue] = {}
-        self._response_queues: Dict[WorkerType, Queue] = {}
-        self._worker_factories: Dict[WorkerType, Callable] = {}
-        
-        # Sequence tracking per worker type
-        self._seq_counters: Dict[WorkerType, int] = {wt: 0 for wt in WorkerType}
+        self._workers: dict[str, mp.Process] = {}
+        self._health: dict[str, HealthStatus] = {}
+        self._request_queues: dict[str, Queue] = {}
+        self._response_queues: dict[str, Queue] = {}
+        self._worker_factories: dict[str, Callable] = {}
+        self._seq_counters: dict[str, int] = {wt: 0 for wt in WorkerType}
         
         # Heartbeat monitoring
         self._heartbeat_timer: Optional[threading.Timer] = None
         self._heartbeat_interval_s = HealthStatus.HEARTBEAT_INTERVAL_MS / 1000.0
         
         # Async response handling - disabled, using poll_responses() instead
-        self._response_callbacks: Dict[str, ResponseCallback] = {}
+        self._response_callbacks: dict[str, ResponseCallback] = {}
         
         # Initialize health status for all worker types
         for wt in WorkerType:
@@ -312,7 +310,7 @@ class ProcessSupervisor:
         self,
         worker_type: WorkerType,
         msg_type: MessageType,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         correlation_id: Optional[str] = None,
     ) -> Optional[str]:
         """
@@ -449,12 +447,12 @@ class ProcessSupervisor:
                 state=WorkerState.STOPPED,
             ))
     
-    def get_all_health(self) -> Dict[WorkerType, HealthStatus]:
+    def get_all_health(self) -> dict[WorkerType, HealthStatus]:
         """Get health status for all workers."""
         with self._lock:
             return {wt: self._health[wt] for wt in WorkerType}
     
-    def get_detailed_health(self, worker_type: WorkerType) -> Dict[str, Any]:
+    def get_detailed_health(self, worker_type: WorkerType) -> dict[str, Any]:
         """Get detailed health diagnostics for a worker.
         
         Returns comprehensive health information including:
@@ -590,7 +588,7 @@ class ProcessSupervisor:
         self,
         worker_type: WorkerType,
         msg_type: MessageType,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         callback: ResponseCallback,
         timeout_ms: int = 5000,
     ) -> Optional[str]:
