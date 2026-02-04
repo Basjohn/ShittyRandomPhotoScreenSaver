@@ -36,7 +36,8 @@ All business logic goes through these managers. Never use raw threading or Qt li
 
 | Module | File | Key Classes/Functions | Purpose |
 |--------|------|----------------------|---------|
-| Threading | core/threading/manager.py | un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
+| Threading | core/threading/manager.py | 
+un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Resources | core/resources/types.py | ResourceType, ResourceHandle | Resource type definitions |
 | Events | core/events/event_system.py | EventSystem | Pub/sub event bus |
 | Events | core/events/event_types.py | ImageChanged, TransitionStarted | Event type definitions |
@@ -72,57 +73,88 @@ All business logic goes through these managers. Never use raw threading or Qt li
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| DisplayWidget | endering/display_widget.py | DisplayWidget | Borderless fullscreen presenter |
-| GLCompositor | endering/gl_compositor.py | GLCompositorWidget | Single GL surface for transitions |
-| TransitionRenderer | endering/gl_transition_renderer.py | GLTransitionRenderer | Centralized transition rendering |
+| DisplayWidget | 
+endering/display_widget.py | DisplayWidget | Borderless fullscreen presenter |
+| GLCompositor | 
+endering/gl_compositor.py | GLCompositorWidget | Single GL surface for transitions |
+| TransitionRenderer | 
+endering/gl_transition_renderer.py | GLTransitionRenderer | Centralized transition rendering |
 
 ## Rendering - Widget Management
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| WidgetManager | endering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fades |
-| WidgetPositioner | endering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
-| WidgetFactories | endering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |
-| WidgetSetup | endering/widget_setup.py | parse_color_to_qcolor(), compute_expected_overlays() | Setup helpers |
+| WidgetManager | 
+endering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fades |
+| WidgetPositioner | 
+endering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
+| WidgetFactories | 
+endering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |
+| WidgetSetup | 
+endering/widget_setup.py | parse_color_to_qcolor(), compute_expected_overlays() | Setup helpers |
 
 ## Rendering - Input & Control
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| InputHandler | endering/input_handler.py | InputHandler | Mouse/keyboard/media keys |
-| TransitionController | endering/transition_controller.py | TransitionController | Transition lifecycle |
-| ImagePresenter | endering/image_presenter.py | ImagePresenter | Pixmap management |
-| MultiMonitorCoordinator | endering/multi_monitor_coordinator.py | MultiMonitorCoordinator | Cross-display coordination |
+| InputHandler | 
+endering/input_handler.py | InputHandler | Mouse/keyboard/media keys |
+| TransitionController | 
+endering/transition_controller.py | TransitionController | Transition lifecycle |
+| ImagePresenter | 
+endering/image_presenter.py | ImagePresenter | Pixmap management |
+| MultiMonitorCoordinator | 
+endering/multi_monitor_coordinator.py | MultiMonitorCoordinator | Cross-display coordination |
 
 ## Rendering - GL Infrastructure
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| GL State | endering/gl_state_manager.py | GLStateManager, GLStateGuard | GL context state |
-| GL Error | endering/gl_error_handler.py | GLErrorHandler | Centralized error handling |
-| GL Profiler | endering/gl_profiler.py | TransitionProfiler | Frame timing metrics |
-| Render Strategy | endering/render_strategy.py | TimerRenderStrategy | Timer-based rendering |
-| Adaptive Timer | endering/adaptive_timer.py | AdaptiveTimerStrategy | Adaptive frame pacing |
+| GL State | 
+endering/gl_state_manager.py | GLStateManager, GLStateGuard | GL context state |
+| GL Error | 
+endering/gl_error_handler.py | GLErrorHandler | Centralized error handling |
+| GL Profiler | 
+endering/gl_profiler.py | TransitionProfiler | Frame timing metrics |
+| Render Strategy | 
+endering/render_strategy.py | TimerRenderStrategy | Timer-based rendering |
+| Adaptive Timer | 
+endering/adaptive_timer.py | AdaptiveTimerStrategy | Adaptive frame pacing |
 
 ## Rendering - GL Programs
 
 | Module | File | Key Class | Transition |
 |--------|------|-----------|------------|
-| Program Cache | endering/gl_programs/program_cache.py | GLProgramCache | All |
-| Geometry | endering/gl_programs/geometry_manager.py | GLGeometryManager | All |
-| Texture | endering/gl_programs/texture_manager.py | GLTextureManager | All |
-| Crossfade | endering/gl_programs/crossfade_program.py | CrossfadeProgram | Crossfade |
-| Slide | endering/gl_programs/slide_program.py | SlideProgram | Slide |
-| Wipe | endering/gl_programs/wipe_program.py | WipeProgram | Wipe |
-| Blinds | endering/gl_programs/blinds_program.py | BlindsProgram | Blinds |
-| Diffuse | endering/gl_programs/diffuse_program.py | DiffuseProgram | Diffuse |
-| BlockFlip | endering/gl_programs/blockflip_program.py | BlockFlipProgram | Block Puzzle Flip |
-| BlockSpin | endering/gl_programs/blockspin_program.py | BlockSpinProgram | 3D Block Spins |
-| Peel | endering/gl_programs/peel_program.py | PeelProgram | Peel |
-| Warp | endering/gl_programs/warp_program.py | WarpProgram | Warp Dissolve |
-| Raindrops | endering/gl_programs/raindrops_program.py | RaindropsProgram | Ripple |
-| Crumble | endering/gl_programs/crumble_program.py | CrumbleProgram | Crumble |
-| Particle | endering/gl_programs/particle_program.py | ParticleProgram | Particle |
+| Program Cache | 
+endering/gl_programs/program_cache.py | GLProgramCache | All |
+| Geometry | 
+endering/gl_programs/geometry_manager.py | GLGeometryManager | All |
+| Texture | 
+endering/gl_programs/texture_manager.py | GLTextureManager | All |
+| Crossfade | 
+endering/gl_programs/crossfade_program.py | CrossfadeProgram | Crossfade |
+| Slide | 
+endering/gl_programs/slide_program.py | SlideProgram | Slide |
+| Wipe | 
+endering/gl_programs/wipe_program.py | WipeProgram | Wipe |
+| Blinds | 
+endering/gl_programs/blinds_program.py | BlindsProgram | Blinds |
+| Diffuse | 
+endering/gl_programs/diffuse_program.py | DiffuseProgram | Diffuse |
+| BlockFlip | 
+endering/gl_programs/blockflip_program.py | BlockFlipProgram | Block Puzzle Flip |
+| BlockSpin | 
+endering/gl_programs/blockspin_program.py | BlockSpinProgram | 3D Block Spins |
+| Peel | 
+endering/gl_programs/peel_program.py | PeelProgram | Peel |
+| Warp | 
+endering/gl_programs/warp_program.py | WarpProgram | Warp Dissolve |
+| Raindrops | 
+endering/gl_programs/raindrops_program.py | RaindropsProgram | Ripple |
+| Crumble | 
+endering/gl_programs/crumble_program.py | CrumbleProgram | Crumble |
+| Particle | 
+endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 
 ## Transitions
 
@@ -179,9 +211,12 @@ All business logic goes through these managers. Never use raw threading or Qt li
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| Image Processor | endering/image_processor.py | ImageProcessor | Synchronous wrapper |
-| Async Processor | endering/image_processor_async.py | AsyncImageProcessor | ThreadManager-based |
-| Display Modes | endering/display_modes.py | DisplayMode | FILL/FIT/SHRINK enums |
+| Image Processor | 
+endering/image_processor.py | ImageProcessor | Synchronous wrapper |
+| Async Processor | 
+endering/image_processor_async.py | AsyncImageProcessor | ThreadManager-based |
+| Display Modes | 
+endering/display_modes.py | DisplayMode | FILL/FIT/SHRINK enums |
 
 ## Key Settings
 
@@ -255,10 +290,10 @@ value = settings.get("display.mode", "fill")
 
 | Test File | Coverage |
 |-----------|----------|
-| 	ests/test_process_supervisor.py | Worker process lifecycle |
-| 	ests/test_image_worker.py | Image decode/prescale |
-| 	ests/test_fft_worker.py | FFT computation |
-| 	ests/test_settings_models.py | Settings dataclasses |
-| 	ests/test_widget_positioner.py | Widget positioning |
-| 	ests/test_gl_state_manager.py | GL state management |
-| 	ests/test_transition_*.py | Transition types |
+| tests/test_process_supervisor.py | Worker process lifecycle |
+| tests/test_image_worker.py | Image decode/prescale |
+| tests/test_fft_worker.py | FFT computation |
+| tests/test_settings_models.py | Settings dataclasses |
+| tests/test_widget_positioner.py | Widget positioning |
+| tests/test_gl_state_manager.py | GL state management |
+| tests/test_transition_*.py | Transition types |

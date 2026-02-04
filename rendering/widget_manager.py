@@ -2086,19 +2086,30 @@ class WidgetManager:
 
             started = False
             # Prefer lifecycle-aware initialization/activation when available
-            if hasattr(widget, "initialize") and callable(getattr(widget, "initialize")):
-                try:
-                    initialized = widget.initialize()
-                    started = started or bool(initialized)
-                except Exception as e:
-                    logger.debug("[LIFECYCLE] Failed to initialize %s: %s", attr_name, e)
+            # Check if widget is already active (reused from previous session)
+            is_already_active = (
+                hasattr(widget, "is_lifecycle_active") and 
+                callable(getattr(widget, "is_lifecycle_active")) and
+                widget.is_lifecycle_active()
+            )
+            
+            if is_already_active:
+                logger.debug("[LIFECYCLE] %s already active, skipping init/activate", attr_name)
+                started = True
+            else:
+                if hasattr(widget, "initialize") and callable(getattr(widget, "initialize")):
+                    try:
+                        initialized = widget.initialize()
+                        started = started or bool(initialized)
+                    except Exception as e:
+                        logger.debug("[LIFECYCLE] Failed to initialize %s: %s", attr_name, e)
 
-            if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
-                try:
-                    activated = widget.activate()
-                    started = started or bool(activated)
-                except Exception as e:
-                    logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
+                if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
+                    try:
+                        activated = widget.activate()
+                        started = started or bool(activated)
+                    except Exception as e:
+                        logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
 
             if not started and hasattr(widget, 'start') and callable(getattr(widget, 'start')):
                 try:
