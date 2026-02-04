@@ -1678,7 +1678,10 @@ class WidgetManager:
         ]:
             clock_settings = widgets_config.get(settings_key, {})
             monitor_sel = clock_settings.get('monitor', 'ALL')
-            if not _show_on_this_monitor(monitor_sel):
+            show_on_this = _show_on_this_monitor(monitor_sel)
+            logger.debug(f"[WIDGET_MANAGER] Clock {settings_key}: monitor_sel={monitor_sel}, screen_index={screen_index}, show_on_this={show_on_this}")
+            if not show_on_this:
+                logger.debug(f"[WIDGET_MANAGER] Clock {settings_key}: SKIPPING - not showing on this monitor")
                 continue
             
             # Add expected overlay for fade coordination
@@ -1811,30 +1814,60 @@ class WidgetManager:
 
             started = False
             # Prefer lifecycle-aware initialization/activation when available
-            # Check if widget is already active (reused from previous session)
+            # Check if widget is already active or initialized (reused from previous session)
             is_already_active = (
                 hasattr(widget, "is_lifecycle_active") and 
                 callable(getattr(widget, "is_lifecycle_active")) and
                 widget.is_lifecycle_active()
             )
+            is_already_initialized = (
+                hasattr(widget, "is_lifecycle_initialized") and 
+                callable(getattr(widget, "is_lifecycle_initialized")) and
+                widget.is_lifecycle_initialized()
+            )
             
             if is_already_active:
                 logger.debug("[LIFECYCLE] %s already active, skipping init/activate", attr_name)
                 started = True
-            else:
-                if hasattr(widget, "initialize") and callable(getattr(widget, "initialize")):
-                    try:
-                        initialized = widget.initialize()
-                        started = started or bool(initialized)
-                    except Exception as e:
-                        logger.debug("[LIFECYCLE] Failed to initialize %s: %s", attr_name, e)
-
+            elif is_already_initialized:
+                # Already initialized but not active - just activate, don't re-initialize
+                logger.debug("[LIFECYCLE] %s already initialized, skipping init", attr_name)
                 if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
                     try:
                         activated = widget.activate()
                         started = started or bool(activated)
+                        logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
                     except Exception as e:
                         logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
+            else:
+                # New widget in CREATED state - need to initialize then activate
+                if hasattr(widget, "initialize") and callable(getattr(widget, "initialize")):
+                    try:
+                        # Double-check state to avoid warnings from reused widgets
+                        if hasattr(widget, "is_lifecycle_active") and callable(getattr(widget, "is_lifecycle_active")):
+                            if widget.is_lifecycle_active():
+                                logger.debug("[LIFECYCLE] %s already active (late check), skipping init/activate", attr_name)
+                                started = True
+                                continue
+                        if hasattr(widget, "is_lifecycle_initialized") and callable(getattr(widget, "is_lifecycle_initialized")):
+                            if widget.is_lifecycle_initialized():
+                                logger.debug("[LIFECYCLE] %s already initialized (late check), skipping init", attr_name)
+                                if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
+                                    try:
+                                        activated = widget.activate()
+                                        started = started or bool(activated)
+                                        logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
+                                    except Exception as e:
+                                        logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
+                                continue
+                        initialized = widget.initialize()
+                        logger.debug(f"[LIFECYCLE] {attr_name} initialize() returned {initialized}")
+                        if initialized and hasattr(widget, "activate") and callable(getattr(widget, "activate")):
+                            activated = widget.activate()
+                            started = started or bool(activated)
+                            logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
+                    except Exception as e:
+                        logger.debug("[LIFECYCLE] Failed to init/activate %s: %s", attr_name, e)
 
             if not started and hasattr(widget, 'start') and callable(getattr(widget, 'start')):
                 try:
@@ -1854,7 +1887,7 @@ class WidgetManager:
                 except Exception as e:
                     logger.debug("Failed to raise %s: %s", attr_name, e)
 
-        logger.info("Widget setup complete: %d widgets created and started via factories", len(created))
+        logger.info(f"Widget setup complete: {len(created)} widgets created and started via factories for screen {screen_index}")
         return created
 
     def create_spotify_volume_widget(

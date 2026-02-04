@@ -118,7 +118,15 @@ Optional compute pre-scale: after prefetch, a compute-pool task may scale the fi
   - **Shutdown callback**: Each RSSSource receives a `set_shutdown_check(callback)` so downloads abort mid-stream when the engine shuts down.
   - **Cache pre-loading**: Cached RSS images are added to the queue before async download starts, providing immediate variety.
   - Background: the engine enforces a global RSS background cap (`sources.rss_background_cap`, default 30) and a time‑to‑live (`sources.rss_stale_minutes`, default 30 minutes) so older, unseen RSS images are gradually replaced when new ones arrive, but only when a background refresh successfully adds replacements.
-- **Usage Ratio (Local vs RSS)**:
+  - **Reddit Rate Limiting (Centralized)**: All Reddit API calls are coordinated through `RedditRateLimiter` (`core/reddit_rate_limiter.py`) to stay under Reddit's 10 req/min unauthenticated limit:
+    - **Safety target**: 8 req/min max (`MAX_REQUESTS_PER_MINUTE = 8`) with safety threshold at 6 requests (`SAFETY_THRESHOLD = 6`).
+    - **Minimum interval**: 8 seconds between consecutive requests (`MIN_REQUEST_INTERVAL = 8.0`).
+    - **RSS limits**: Maximum 2 Reddit feeds processed at startup (`MAX_REDDIT_FEEDS_GLOBAL = 2`), 1 per background refresh cycle (`MAX_REDDIT_BG_REFRESH = 1`). 8-second delays enforced between RSS fetches.
+    - **Widget refresh**: 5-minute interval (`_refresh_interval = timedelta(minutes=5)`), staggered by 2.5 minutes between widgets (reddit at 0/5/10min, reddit2 at 2.5/7.5/12.5min) with ±2s random jitter.
+    - **Widget growth**: Progressive reveal from cached data—4 posts immediately, 10 posts at +2min, 20 posts at +4min—requires zero additional API calls.
+    - **Quota coordination**: Widgets use HIGH priority (`RateLimitPriority.HIGH`, 5s min interval) and `reserve_quota()`/`record_request()` to prevent RSS from consuming widget quota. RSS uses NORMAL priority (8s min interval) and `should_skip_for_quota()` checks.
+    - **RSSWorker**: Records requests via `record_request(namespace="rss_worker")` for cross-process coordination; checks `should_skip_for_quota()` before Reddit fetches.
+    - **Theoretical max**: ~0.6 req/min with all safeguards active, leaving ~7.4 req/min headroom.
   - `ImageQueue` maintains separate pools for local (folder) and RSS images.
   - `sources.local_ratio` (default 60) controls the percentage of images drawn from local sources; the remainder comes from RSS.
   - Ratio-based selection uses probabilistic sampling: each `next()` call randomly decides which pool to draw from based on the configured ratio.

@@ -309,6 +309,13 @@ class RSSWorker(BaseWorker):
         )
         response.raise_for_status()
         
+        # Record successful Reddit API request for rate limiting coordination
+        try:
+            from core.reddit_rate_limiter import RedditRateLimiter
+            RedditRateLimiter.record_request(namespace="rss_worker")
+        except ImportError:
+            pass
+        
         data = response.json()
         images: List[Dict] = []
         priority = self._get_source_priority(feed_url)

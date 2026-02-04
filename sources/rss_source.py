@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 # Reddit API limit: 10 requests per minute unauthenticated
 RATE_LIMIT_DELAY_SECONDS = 8.0  # Delay between feed requests (8s = 7.5 req/min, under 10 req/min limit)
 RATE_LIMIT_RETRY_DELAY_SECONDS = 120  # Delay when rate limited (2 minutes)
-MAX_REDDIT_FEEDS_PER_STARTUP = 8  # Maximum Reddit feeds to process per startup (leaves 2 req/min buffer)
+MAX_REDDIT_FEEDS_PER_STARTUP = 2  # Maximum Reddit feeds to process per startup (leaves buffer for widgets)
 MIN_CACHE_SIZE_BEFORE_CLEANUP = 20  # Don't cleanup until we have at least 20 images
 MAX_CACHED_IMAGES_TO_LOAD = 30  # Maximum cached images to load on startup (matches rss_background_cap)
 

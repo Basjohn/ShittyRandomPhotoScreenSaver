@@ -27,7 +27,7 @@ import requests
 
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
 from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap
-from PySide6.QtWidgets import QWidget, QToolTip
+from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
@@ -171,7 +171,7 @@ class RedditWidget(BaseOverlayWidget):
         self._sort: str = "hot"
         self._limit: int = 10  # Target limit (may be reduced during progressive loading)
         self._target_limit: int = 10  # User's desired limit
-        self._refresh_interval = timedelta(minutes=10)
+        self._refresh_interval = timedelta(minutes=5)  # 5 min refresh for fresher data
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
@@ -184,8 +184,9 @@ class RedditWidget(BaseOverlayWidget):
         self._all_fetched_posts: List[RedditPost] = []  # Store all posts for progressive reveal
         
         # Time-based stage advancement (growth timer)
+        # Match refresh interval: show 4 immediately, 10 at +2min, 20 at +4min
         self._growth_timer: Optional[QTimer] = None
-        self._growth_stage_delays_minutes: List[int] = [0, 5, 10]  # Stage 0: immediate, Stage 1: +5min, Stage 2: +10min
+        self._growth_stage_delays_minutes: List[int] = [0, 2, 4]  # Stage 0: immediate, Stage 1: +2min, Stage 2: +4min
 
         # Cached posts and click hit-rects
         self._posts: List[RedditPost] = []
@@ -658,9 +659,9 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         # Desync: Offset by widget index to stagger multiple Reddit widgets
-        # reddit (index 0): +0s, reddit2 (index 1): +10s, etc.
+        # reddit (index 0): +0s, reddit2 (index 1): +150s (2.5min), etc.
         widget_index = 1 if self._cache_key == "reddit2" else 0
-        offset_ms = widget_index * 10000  # 10 seconds between widgets
+        offset_ms = widget_index * 150000  # 2.5 minutes between widgets
         
         # Add random jitter (±2 seconds) to prevent correlated request spikes
         jitter_ms = random.randint(-2000, 2000)
@@ -1029,12 +1030,27 @@ class RedditWidget(BaseOverlayWidget):
                 cached_dpr = self._cached_content_pixmap.devicePixelRatio()
                 cached_logical_w = int(self._cached_content_pixmap.width() / cached_dpr)
                 cached_logical_h = int(self._cached_content_pixmap.height() / cached_dpr)
-                cache_valid = (cached_logical_w == widget_size.width() and 
-                              cached_logical_h == widget_size.height())
+                # Use tolerance for size comparison (±2 pixels) to avoid regeneration
+                # due to minor layout differences
+                width_ok = abs(cached_logical_w - widget_size.width()) <= 2
+                height_ok = abs(cached_logical_h - widget_size.height()) <= 2
+                cache_valid = width_ok and height_ok
             except Exception:
                 cache_valid = False
         
         needs_regen = self._cache_invalidated or not cache_valid
+        
+        # Rate limit: don't regenerate more than once per second
+        if needs_regen:
+            now = time.time()
+            last_regen = getattr(self, "_last_cache_regen_ts", 0.0)
+            if now - last_regen < 1.0:
+                # Too soon, use existing cache even if not perfect
+                needs_regen = False
+                if is_perf_metrics_enabled() and self._cache_invalidated:
+                    logger.debug("[PERF] Reddit widget cache regeneration deferred (rate limited)")
+            else:
+                self._last_cache_regen_ts = now
         
         if needs_regen:
             # Regenerate the cached pixmap
@@ -1469,54 +1485,13 @@ class RedditWidget(BaseOverlayWidget):
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     def handle_hover(self, local_pos: QPoint, global_pos: QPoint) -> None:
-        if not self._row_hit_rects:
-            if self._hover_timer is not None:
-                self._hover_timer.stop()
-            self._hover_row_index = None
-            QToolTip.hideText()
-            return
-
-        row_index = -1
-        for idx, (rect, _url, _title) in enumerate(self._row_hit_rects):
-            if rect.contains(local_pos):
-                row_index = idx
-                break
-
-        if row_index < 0:
-            if self._hover_timer is not None:
-                self._hover_timer.stop()
-            self._hover_row_index = None
-            QToolTip.hideText()
-            return
-
-        if self._hover_row_index == row_index:
-            self._hover_global_pos = QPoint(global_pos)
-            return
-
-        self._hover_row_index = row_index
-        self._hover_global_pos = QPoint(global_pos)
-        _rect, _url, title = self._row_hit_rects[row_index]
-        self._hover_title = title
-
-        if self._hover_timer is None:
-            self._hover_timer = QTimer(self)
-            self._hover_timer.setSingleShot(True)
-            self._hover_timer.timeout.connect(self._show_title_tooltip)
-        else:
-            self._hover_timer.stop()
-
-        self._hover_timer.start(1000)
+        # Tooltips disabled for performance - hover handling is a no-op
+        # Clicks still work via separate mouse event handling
+        return
 
     def _show_title_tooltip(self) -> None:
-        if not self._hover_title:
-            return
-        pos = self._hover_global_pos
-        if pos is None:
-            return
-        try:
-            QToolTip.showText(pos, self._hover_title, self)
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
+        # Tooltips disabled for performance
+        pass
 
     def _paint_header_frame(self, painter: QPainter) -> None:
         """Paint a rounded sub-frame around the logo + subreddit header.

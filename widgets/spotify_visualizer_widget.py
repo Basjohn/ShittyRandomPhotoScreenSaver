@@ -2557,7 +2557,11 @@ class SpotifyVisualizerWidget(QWidget):
             return
         
         self._last_update_ts = now_ts
-        if dt_since_last * 1000.0 >= self._dt_spike_threshold_ms:
+        # Cap dt to avoid logging spikes after system sleep/resume
+        # dt > 1s indicates system sleep, not a performance issue
+        _dt_spike_max_reasonable_ms: float = 1000.0  # 1 second
+        dt_for_spike_check = min(dt_since_last * 1000.0, _dt_spike_max_reasonable_ms)
+        if dt_since_last * 1000.0 >= self._dt_spike_threshold_ms and dt_for_spike_check < _dt_spike_max_reasonable_ms:
             self._log_tick_spike(dt_since_last, transition_ctx)
 
         # PERFORMANCE: Inline PERF metrics with gap filtering

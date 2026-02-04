@@ -3341,6 +3341,17 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _perform_activation_refresh(self, reason: str) -> None:
+        # Debounce: skip if called too recently (< 2 seconds)
+        try:
+            now = time.monotonic()
+            last_refresh = getattr(self, "_last_activation_refresh_ts", 0.0)
+            if now - last_refresh < 2.0:
+                logger.debug("[ACTIVATE_REFRESH] Debounced (%.2fs since last)", now - last_refresh)
+                return
+            self._last_activation_refresh_ts = now
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
         try:
             self._pending_activation_refresh = False
         except Exception as e:

@@ -20,8 +20,11 @@ from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QPen, QPaintEve
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import ShadowFadeProfile, apply_widget_shadow
-from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from widgets.shadow_utils import (
+    apply_widget_shadow,
+    ShadowFadeProfile,
+)
+from widgets.clock_ticker import get_global_clock_ticker
 from core.logging.logger import get_logger
 from core.performance import widget_paint_sample
 
@@ -102,7 +105,6 @@ class ClockWidget(BaseOverlayWidget):
         self._show_seconds = show_seconds
         self._show_timezone = show_timezone
         self._thread_manager: Optional["ThreadManager"] = None
-        self._timer_handle: Optional[OverlayTimerHandle] = None
         
         # Separate label for timezone
         self._tz_label: Optional[QLabel] = None
@@ -210,17 +212,17 @@ class ClockWidget(BaseOverlayWidget):
         logger.debug("[LIFECYCLE] ClockWidget initialized")
     
     def _activate_impl(self) -> None:
-        """Activate clock - start timer and show widget (lifecycle hook)."""
+        """Activate clock - subscribe to global ticker and show widget (lifecycle hook)."""
         if not self._ensure_thread_manager("ClockWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
         
         # Update immediately
         self._update_time()
         
-        # Start recurring updates
-        handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
-        self._timer_handle = handle
-        self._timer = getattr(handle, "_timer", None)
+        # Subscribe to global clock ticker (shared across all clock widgets)
+        ticker = get_global_clock_ticker()
+        ticker.set_thread_manager(self._thread_manager)
+        ticker.subscribe(self._update_time)
         
         # Start fade-in
         parent = self.parent()
@@ -237,21 +239,10 @@ class ClockWidget(BaseOverlayWidget):
         logger.debug("[LIFECYCLE] ClockWidget activated")
     
     def _deactivate_impl(self) -> None:
-        """Deactivate clock - stop timer and hide widget (lifecycle hook)."""
-        if self._timer_handle is not None:
-            try:
-                self._timer_handle.stop()
-            except Exception as e:
-                logger.debug("[CLOCK] Exception suppressed: %s", e)
-            self._timer_handle = None
-        
-        if self._timer is not None:
-            try:
-                self._timer.stop()
-                self._timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._timer = None
+        """Deactivate clock - unsubscribe from global ticker (lifecycle hook)."""
+        # Unsubscribe from global clock ticker
+        ticker = get_global_clock_ticker()
+        ticker.unsubscribe(self._update_time)
         
         logger.debug("[LIFECYCLE] ClockWidget deactivated")
     
@@ -276,7 +267,7 @@ class ClockWidget(BaseOverlayWidget):
     # -------------------------------------------------------------------------
     
     def start(self) -> None:
-        """Start clock updates."""
+        """Start clock updates using shared global ticker."""
         if self._enabled:
             logger.warning("[FALLBACK] Clock already running")
             return
@@ -286,14 +277,10 @@ class ClockWidget(BaseOverlayWidget):
         # Update immediately
         self._update_time()
 
-        # Start recurring updates via the centralized overlay timer helper.
-        # Keep the legacy QTimer attribute for compatibility with any
-        # existing diagnostics/tests while routing creation through
-        # create_overlay_timer so timers participate in ThreadManager /
-        # ResourceManager tracking when available.
-        handle = create_overlay_timer(self, 1000, self._update_time, description="ClockWidget tick")
-        self._timer_handle = handle
-        self._timer = getattr(handle, "_timer", None)
+        # Subscribe to global clock ticker (shared across all clock widgets)
+        ticker = get_global_clock_ticker()
+        ticker.set_thread_manager(self._thread_manager)
+        ticker.subscribe(self._update_time)
 
         self._enabled = True
         parent = self.parent()
@@ -321,20 +308,9 @@ class ClockWidget(BaseOverlayWidget):
         if not self._enabled:
             return
         
-        if self._timer_handle is not None:
-            try:
-                self._timer_handle.stop()
-            except Exception as e:
-                logger.debug("[CLOCK] Exception suppressed: %s", e)
-            self._timer_handle = None
-
-        if self._timer is not None:
-            try:
-                self._timer.stop()
-                self._timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._timer = None
+        # Unsubscribe from global clock ticker
+        ticker = get_global_clock_ticker()
+        ticker.unsubscribe(self._update_time)
         
         self._enabled = False
         self.hide()
@@ -542,21 +518,6 @@ class ClockWidget(BaseOverlayWidget):
         """Update displayed time."""
         try:
             if not Shiboken.isValid(self):
-                if getattr(self, "_timer_handle", None) is not None:
-                    try:
-                        self._timer_handle.stop()  # type: ignore[union-attr]
-                    except Exception as e:
-                        logger.debug("[CLOCK] Exception suppressed: %s", e)
-                    self._timer_handle = None  # type: ignore[assignment]
-
-                if getattr(self, "_timer", None) is not None:
-                    try:
-                        self._timer.stop()  # type: ignore[union-attr]
-                        self._timer.deleteLater()  # type: ignore[union-attr]
-                    except Exception as e:
-                        logger.debug("[CLOCK] Exception suppressed: %s", e)
-                    self._timer = None  # type: ignore[assignment]
-
                 self._enabled = False
                 return
         except Exception as e:
@@ -627,24 +588,18 @@ class ClockWidget(BaseOverlayWidget):
                 self._tz_label.hide()
         if self._show_background:
             self._update_stylesheet()
-            self.adjustSize()
-
         
-        # Adjust size to content in digital mode; analogue mode relies more on
-        # its minimum size and custom paint logic.
-        if self._display_mode != "analog":
-            self.adjustSize()
-        
-        # Update position (includes timezone label positioning)
-        if self.parent():
-            self._update_position()
+        # Note: No need for adjustSize() or _update_position() here - 
+        # clock dimensions only change when font/size settings change, not every second.
+        # These are now called only when settings actually change (set_font_size, etc.)
         
         # Emit signal
         self.time_updated.emit(time_str)
 
-        # Note: No need to call update() here - clock face is cached and Qt will
-        # automatically trigger repaint when setText() changes the label text.
-        # Analog mode hands are drawn in paintEvent which is called automatically.
+        # For analog mode, explicitly trigger repaint since setText("") doesn't
+        # cause Qt to automatically repaint, and hands need to redraw each second
+        if self._display_mode == "analog":
+            self.update()
     
     def _update_position(self) -> None:
         """Update widget position using centralized base class logic.
@@ -1237,6 +1192,10 @@ class ClockWidget(BaseOverlayWidget):
             hour_angle = (hour / 12.0) * 360.0
             minute_angle = (minute / 60.0) * 360.0
             second_angle = (sec / 60.0) * 360.0
+            
+            # Debug: log second angle periodically
+            if self._show_seconds and now.second % 5 == 0 and now.microsecond < 100_000:
+                logger.debug(f"[CLOCK_PAINT] sec={sec:.2f}, second_angle={second_angle:.1f}, time={now.strftime('%H:%M:%S')}")
 
             # Draw hands in order: second, hour, minute so the seconds hand sits below.
             # The seconds hand is drawn without a drop shadow to avoid shadow

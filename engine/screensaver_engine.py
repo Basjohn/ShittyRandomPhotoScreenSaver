@@ -728,6 +728,11 @@ class ScreensaverEngine(QObject):
             REDDIT_TOTAL_IMAGE_LIMIT = 10  # Max 10 images from Reddit per refresh
             reddit_per_feed_limit = max(1, REDDIT_TOTAL_IMAGE_LIMIT // len(reddit_sources)) if reddit_sources else 0
             
+            # GLOBAL limit: Process up to 2 Reddit feeds at startup with proper spacing
+            # The RedditRateLimiter coordinates between RSS and widget (8 req/min total)
+            MAX_REDDIT_FEEDS_GLOBAL = 2  # 2 feeds at startup, then background takes over
+            reddit_processed_count = 0
+            
             for i, rss_source in enumerate(sources):
                 # CHECK FOR SHUTDOWN - only abort if actually shutting down
                 if engine._shutting_down:
@@ -736,6 +741,15 @@ class ScreensaverEngine(QObject):
                 
                 try:
                     feed_url = rss_source.feed_urls[0] if hasattr(rss_source, 'feed_urls') and rss_source.feed_urls else 'unknown'
+                    is_reddit = 'reddit.com' in feed_url.lower()
+                    
+                    # Skip Reddit feeds beyond the global limit
+                    if is_reddit:
+                        if reddit_processed_count >= MAX_REDDIT_FEEDS_GLOBAL:
+                            logger.info(f"[ASYNC RSS] Skipping Reddit feed {feed_url[:60]}... (global limit: {MAX_REDDIT_FEEDS_GLOBAL})")
+                            continue
+                        reddit_processed_count += 1
+                    
                     logger.info(f"[ASYNC RSS] Processing source {i+1}/{len(sources)}: {feed_url[:60]}...")
                     
                     images_before = len(rss_images)
@@ -808,14 +822,14 @@ class ScreensaverEngine(QObject):
                     engine._rss_first_load_done = True
                     
                     # Add delay between sources to avoid rate limiting
-                    # Use shorter delays and check for shutdown during wait
-                    # Skip delay if using worker (worker handles rate limiting internally)
+                    # Use 8s minimum interval (matches RedditRateLimiter.MIN_REQUEST_INTERVAL)
+                    # Check for shutdown during wait to allow clean exit
                     if i < len(sources) - 1 and not worker_succeeded:
-                        for _ in range(4):  # 4 x 0.5s = 2s total, but can exit early
+                        for _ in range(8):  # 8 x 1s = 8s total, but can exit early
                             if engine._shutting_down:
                                 logger.info("[ASYNC RSS] Engine shutting down during delay, aborting")
                                 return
-                            time.sleep(0.5)
+                            time.sleep(1.0)
                         
                 except Exception as e:
                     logger.warning(f"[ASYNC RSS] Failed to load RSS source: {e}")
@@ -1019,8 +1033,29 @@ class ScreensaverEngine(QObject):
             
             # Only refresh a subset of sources per tick to avoid overwhelming
             # the network and to spread out the load
-            max_sources_per_tick = min(3, len(shuffled_sources))
-            sources_to_refresh = shuffled_sources[:max_sources_per_tick]
+            # CRITICAL: Limit Reddit in background refresh to preserve quota for widget
+            # Widget refreshes every 5-10 min (1-2 req), RSS gets remaining quota
+            reddit_count = 0
+            MAX_REDDIT_BG_REFRESH = 1  # Max 1 Reddit feed per background refresh
+            sources_to_refresh = []
+            
+            for src in shuffled_sources:
+                feed_urls = getattr(src, 'feed_urls', [])
+                is_reddit = any('reddit.com' in url.lower() for url in feed_urls) if feed_urls else False
+                
+                if is_reddit:
+                    if reddit_count >= MAX_REDDIT_BG_REFRESH:
+                        continue  # Skip additional Reddit feeds
+                    reddit_count += 1
+                
+                sources_to_refresh.append(src)
+                
+                # Limit total sources per tick
+                if len(sources_to_refresh) >= 3:
+                    break
+            
+            if reddit_count > 0:
+                logger.debug(f"[RATE_LIMIT] Background RSS: limiting to {reddit_count} Reddit feed(s)")
             
             logger.debug(f"Background RSS refresh: checking {len(sources_to_refresh)} of {len(self.rss_sources)} sources")
 
