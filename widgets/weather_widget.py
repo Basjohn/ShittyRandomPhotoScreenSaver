@@ -1439,6 +1439,18 @@ class WeatherWidget(BaseOverlayWidget):
             city_width = city_fm.horizontalAdvance(location_display)
 
             # Build condition line: "22°C - Partly Cloudy"
+            # Issue #2 Fix: Handle long conditions (3+ words) with smaller font and word wrap
+            condition_words = condition_display.split()
+            is_long_condition = len(condition_words) >= 3
+            
+            if is_long_condition:
+                # 3+ word conditions: reduce font by 30%, enable word wrap
+                condition_pt = max(6, int(self._font_size * 0.8 * 0.7))  # 80% * 70% = 56% of base
+                self._conditions_label.setWordWrap(True)
+            else:
+                # Short conditions (1-2 words): normal size, no word wrap
+                self._conditions_label.setWordWrap(False)
+            
             condition_text = f"{temp:.0f}°C - {condition_display}"
             self._conditions_label.setStyleSheet(f"font-size: {condition_pt}pt; font-weight: 700; color: {color_rgba};")
             self._conditions_label.setText(condition_text)
@@ -1448,15 +1460,21 @@ class WeatherWidget(BaseOverlayWidget):
             condition_fm = QFontMetrics(condition_font)
             condition_width = condition_fm.horizontalAdvance(condition_text)
             
-            # Issue #3 Fix: Calculate required width from actual text metrics
-            # Use the maximum of location and condition widths, plus padding
-            required_width = max(city_width, condition_width) + 20
+            # Issue #2 Fix: Calculate required width from actual text metrics
+            # Use the maximum of location and condition widths, plus generous padding
+            # The issue was the text being clipped despite having visual space
+            required_width = max(city_width, condition_width) + 30
             self._city_label.setMinimumWidth(required_width)
             self._conditions_label.setMinimumWidth(required_width)
             
-            # Also update text column minimum width to prevent clipping
+            # Update text column to fit content - ensure it's wide enough
             if self._text_column:
-                self._text_column.setMinimumWidth(required_width + 12)
+                self._text_column.setMinimumWidth(required_width + 20)
+            
+            # Force primary row to accommodate text column width + icon
+            if self._primary_row:
+                icon_space = self._icon_size + 20 if self._show_condition_icon and self._icon_alignment != "NONE" else 0
+                self._primary_row.setMinimumWidth(required_width + icon_space + 40)
 
             # Update condition icon
             if self._show_condition_icon and self._icon_alignment != "NONE":

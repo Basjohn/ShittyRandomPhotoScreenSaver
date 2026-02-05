@@ -1085,6 +1085,8 @@ class MediaWidget(BaseOverlayWidget):
                 self._consecutive_none_count = 0
                 was_idle = self._is_idle
                 self._is_idle = False
+                # Reset activation time to get fresh grace period after recovery
+                self._activation_time = time.monotonic()
                 # Reset to fast polling when resuming from idle
                 if was_idle:
                     self._reset_poll_stage()

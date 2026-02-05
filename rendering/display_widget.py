@@ -1140,6 +1140,7 @@ class DisplayWidget(QWidget):
             (getattr(self, 'spotify_visualizer_widget', None), 'spotify_visualizer_widget'),
             (getattr(self, 'reddit_widget', None), 'reddit_widget'),
             (getattr(self, 'reddit2_widget', None), 'reddit2_widget'),
+            (getattr(self, 'imgur_widget', None), 'imgur_widget'),
         ]
         self._widget_manager.apply_widget_stacking(widget_list)
     

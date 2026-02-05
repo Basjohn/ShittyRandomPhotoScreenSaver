@@ -193,6 +193,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Weather | widgets/weather_widget.py | WeatherWidget | widgets.weather |
 | Media | widgets/media_widget.py | MediaWidget | widgets.media |
 | Reddit | widgets/reddit_widget.py | RedditWidget | widgets.reddit, widgets.reddit2 |
+| Imgur | widgets/imgur/ | ImgurWidget, ImgurScraper, ImgurImageCache | widgets.imgur | Progressive image loading with fade coordination |
 | Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer |
 | Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | - |
 | Spotify Volume | widgets/spotify_volume_widget.py | SpotifyVolumeWidget | widgets.spotify_volume |

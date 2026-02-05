@@ -116,7 +116,6 @@ class WindowsGlobalMediaController(BaseMediaController):
         self._available: bool = False
         self._MediaManager = None
         self._PlaybackStatus = None
-        self._gsmc_disabled = False
         self._gsmc_inflight = False
         self._init_winrt()
 
@@ -148,36 +147,27 @@ class WindowsGlobalMediaController(BaseMediaController):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
-    def _run_coroutine(self, coro):
+    def _run_coroutine(self, coro_factory):
         """Run an async coroutine in an isolated event loop.
+
+        Args:
+            coro_factory: Callable that returns a fresh coroutine object.
+                         This prevents "cannot reuse already awaited coroutine" errors.
 
         This avoids interfering with any existing asyncio usage.
         Failures are logged and result in None.
 
         IMPORTANT: This function must never block the UI thread on a
         potentially-stuck WinRT await. We therefore run the loop on the
-        ThreadManager IO pool and enforce a hard timeout; after a hard
-        timeout we disable GSMTC queries for the remainder of the session.
+        ThreadManager IO pool and enforce a hard timeout. Inflight check
+        prevents query pileup.
         """
 
         import asyncio
 
-        def _close_coro() -> None:
-            try:
-                close = getattr(coro, "close", None)
-                if callable(close):
-                    close()
-            except Exception as e:
-                logger.debug("[MEDIA] Exception suppressed: %s", e)
-
         tm = self._thread_manager
         if tm is None:
-            _close_coro()
             logger.warning("[MEDIA] ThreadManager not injected for GSMTC controller; skipping coroutine")
-            return None
-
-        if self._gsmc_disabled:
-            _close_coro()
             return None
 
         done = threading.Event()
@@ -191,6 +181,8 @@ class WindowsGlobalMediaController(BaseMediaController):
 
                     async def _runner():
                         try:
+                            # Create fresh coroutine inside the loop to avoid reuse errors
+                            coro = coro_factory()
                             # Best-effort timeout (WinRT awaits do not always
                             # honour cancellation).
                             return await asyncio.wait_for(coro, timeout=2.0)
@@ -219,7 +211,6 @@ class WindowsGlobalMediaController(BaseMediaController):
 
         # Prevent piling up stuck WinRT calls: allow only one inflight query per controller.
         if self._gsmc_inflight:
-            _close_coro()
             return None
         self._gsmc_inflight = True
 
@@ -234,13 +225,10 @@ class WindowsGlobalMediaController(BaseMediaController):
                 )
             except Exception as e:
                 logger.debug("[MEDIA] Failed to submit GSMTC query task", exc_info=True)
-                _close_coro()
                 return None
 
             if not done.wait(timeout=2.5):
                 logger.debug("[MEDIA] GSMTC query hard-timeout, returning None")
-                self._gsmc_disabled = True
-                _close_coro()
                 return None
 
             return holder.get("result")
@@ -430,7 +418,7 @@ class WindowsGlobalMediaController(BaseMediaController):
 
             return info
 
-        result = self._run_coroutine(_query())
+        result = self._run_coroutine(lambda: _query())
         if isinstance(result, MediaTrackInfo):
             return result
         return None
@@ -460,7 +448,7 @@ class WindowsGlobalMediaController(BaseMediaController):
             except Exception as e:
                 logger.debug("[MEDIA] %s failed", action_name, exc_info=True)
 
-        result = self._run_coroutine(_act())
+        result = self._run_coroutine(lambda: _act())
         if isinstance(result, Exception):
             logger.debug("[MEDIA] %s coroutine raised: %s", action_name, result, exc_info=True)
 

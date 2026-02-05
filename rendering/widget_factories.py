@@ -343,6 +343,29 @@ class WeatherWidgetFactory(WidgetFactory):
             if hasattr(widget, 'set_intense_shadow'):
                 widget.set_intense_shadow(intense_shadow)
             
+            # Icon alignment (LEFT, RIGHT, NONE) - Issue #3 Fix
+            icon_alignment = config.get('icon_alignment', 'RIGHT')
+            if hasattr(widget, 'set_icon_alignment'):
+                widget.set_icon_alignment(str(icon_alignment).upper())
+            
+            # Show condition icon
+            show_condition_icon = SettingsManager.to_bool(config.get('show_condition_icon', True), True)
+            if hasattr(widget, 'set_show_condition_icon'):
+                widget.set_show_condition_icon(show_condition_icon)
+            
+            # Icon size
+            icon_size = config.get('icon_size', 96)
+            if hasattr(widget, 'set_icon_size'):
+                try:
+                    widget.set_icon_size(int(icon_size))
+                except Exception:
+                    pass
+            
+            # Show details row
+            show_details_row = SettingsManager.to_bool(config.get('show_details_row', True), True)
+            if hasattr(widget, 'set_show_details_row'):
+                widget.set_show_details_row(show_details_row)
+            
             # Shadow config
             if shadows_config:
                 try:
@@ -707,6 +730,165 @@ class SpotifyVolumeFactory(WidgetFactory):
 
 
 # ---------------------------------------------------------------------------
+# Imgur Widget Factory
+# ---------------------------------------------------------------------------
+
+class ImgurWidgetFactory(WidgetFactory):
+    """Factory for creating ImgurWidget instances."""
+    
+    def get_widget_name(self) -> str:
+        return "imgur"
+    
+    def create(self, parent: QWidget, config: Dict[str, Any]) -> Optional[QWidget]:
+        """Create and configure an ImgurWidget."""
+        from widgets.imgur.widget import ImgurWidget, ImgurPosition
+        from core.settings.models import WidgetPosition, coerce_widget_position
+        
+        if not SettingsManager.to_bool(config.get("enabled", False), False):
+            return None
+        
+        try:
+            # Position mapping
+            position_map = {
+                WidgetPosition.TOP_LEFT: ImgurPosition.TOP_LEFT,
+                WidgetPosition.TOP_CENTER: ImgurPosition.TOP_CENTER,
+                WidgetPosition.TOP_RIGHT: ImgurPosition.TOP_RIGHT,
+                WidgetPosition.MIDDLE_LEFT: ImgurPosition.MIDDLE_LEFT,
+                WidgetPosition.CENTER: ImgurPosition.CENTER,
+                WidgetPosition.MIDDLE_RIGHT: ImgurPosition.MIDDLE_RIGHT,
+                WidgetPosition.BOTTOM_LEFT: ImgurPosition.BOTTOM_LEFT,
+                WidgetPosition.BOTTOM_CENTER: ImgurPosition.BOTTOM_CENTER,
+                WidgetPosition.BOTTOM_RIGHT: ImgurPosition.BOTTOM_RIGHT,
+            }
+            
+            widget_pos = coerce_widget_position(
+                config.get('position', 'Top Right'),
+                WidgetPosition.TOP_RIGHT
+            )
+            position = position_map.get(widget_pos, ImgurPosition.TOP_RIGHT)
+            
+            # Create widget
+            tag = config.get('tag', 'most_viral')
+            widget = ImgurWidget(parent=parent, tag=tag, position=position)
+            
+            # Thread manager
+            if self._thread_manager and hasattr(widget, "set_thread_manager"):
+                widget.set_thread_manager(self._thread_manager)
+            
+            # Font settings
+            font_family = config.get('font_family', 'Segoe UI')
+            font_size = config.get('font_size', 11)
+            if hasattr(widget, 'set_font_family'):
+                widget.set_font_family(font_family)
+            if hasattr(widget, 'set_font_size'):
+                widget.set_font_size(int(font_size))
+            
+            # Margin
+            margin = config.get('margin', 30)
+            if hasattr(widget, 'set_margin'):
+                widget.set_margin(int(margin))
+            
+            # Text color
+            text_color = config.get('color', [255, 255, 255, 230])
+            qcolor = parse_color_to_qcolor(text_color)
+            if qcolor and hasattr(widget, 'set_text_color'):
+                widget.set_text_color(qcolor)
+            
+            # Background
+            show_background = SettingsManager.to_bool(config.get('show_background', True), True)
+            if hasattr(widget, 'set_show_background'):
+                widget.set_show_background(show_background)
+            
+            # Background color
+            bg_color = config.get('bg_color', [35, 35, 35, 255])
+            bg_qcolor = parse_color_to_qcolor(bg_color)
+            if bg_qcolor and hasattr(widget, 'set_background_color'):
+                widget.set_background_color(bg_qcolor)
+            
+            # Background opacity
+            bg_opacity = config.get('bg_opacity', 0.6)
+            if hasattr(widget, 'set_background_opacity'):
+                widget.set_background_opacity(float(bg_opacity))
+            
+            # Border
+            border_color = config.get('border_color', [255, 255, 255, 255])
+            border_opacity = config.get('border_opacity', 1.0)
+            try:
+                bo = float(border_opacity)
+            except Exception as e:
+                logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
+                bo = 1.0
+            border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
+            if border_qcolor and hasattr(widget, 'set_background_border'):
+                widget.set_background_border(2, border_qcolor)
+            
+            # Imgur-specific settings
+            custom_tag = config.get('custom_tag', '')
+            if hasattr(widget, 'set_custom_tag'):
+                widget.set_custom_tag(custom_tag)
+            
+            grid_rows = config.get('grid_rows', 2)
+            if hasattr(widget, 'set_grid_rows'):
+                widget.set_grid_rows(int(grid_rows))
+            
+            grid_cols = config.get('grid_columns', 4)
+            if hasattr(widget, 'set_grid_columns'):
+                widget.set_grid_columns(int(grid_cols))
+            
+            layout_mode = config.get('layout_mode', 'hybrid')
+            if hasattr(widget, 'set_layout_mode'):
+                widget.set_layout_mode(layout_mode)
+            
+            image_spacing = config.get('image_spacing', 4)
+            if hasattr(widget, 'set_image_spacing'):
+                widget.set_image_spacing(int(image_spacing))
+            
+            update_interval = config.get('update_interval', 600)
+            if hasattr(widget, 'set_update_interval'):
+                widget.set_update_interval(int(update_interval))
+            
+            # Image border settings
+            image_border_enabled = SettingsManager.to_bool(config.get('image_border_enabled', True), True)
+            if hasattr(widget, 'set_image_border_enabled'):
+                widget.set_image_border_enabled(image_border_enabled)
+            
+            image_border_width = config.get('image_border_width', 2)
+            if hasattr(widget, 'set_image_border_width'):
+                widget.set_image_border_width(int(image_border_width))
+            
+            image_border_color = config.get('image_border_color', [255, 255, 255, 255])
+            ib_qcolor = parse_color_to_qcolor(image_border_color)
+            if ib_qcolor and hasattr(widget, 'set_image_border_color'):
+                widget.set_image_border_color(ib_qcolor)
+            
+            image_border_radius = config.get('image_border_radius', 4)
+            if hasattr(widget, 'set_image_border_radius'):
+                widget.set_image_border_radius(int(image_border_radius))
+            
+            # Header
+            show_header = SettingsManager.to_bool(config.get('show_header', True), True)
+            if hasattr(widget, 'set_show_header'):
+                widget.set_show_header(show_header)
+            
+            # Click behavior
+            click_opens_browser = SettingsManager.to_bool(config.get('click_opens_browser', True), True)
+            if hasattr(widget, 'set_click_opens_browser'):
+                widget.set_click_opens_browser(click_opens_browser)
+            
+            # Intense shadow
+            intense_shadow = SettingsManager.to_bool(config.get('intense_shadow', True), True)
+            if hasattr(widget, 'set_intense_shadow'):
+                widget.set_intense_shadow(intense_shadow)
+            
+            logger.debug("[IMGUR_FACTORY] Created ImgurWidget")
+            return widget
+            
+        except Exception as e:
+            logger.error(f"[IMGUR_FACTORY] Failed to create ImgurWidget: {e}", exc_info=True)
+            return None
+
+
+# ---------------------------------------------------------------------------
 # Factory Registry
 # ---------------------------------------------------------------------------
 
@@ -738,6 +920,7 @@ class WidgetFactoryRegistry:
         self.register(WeatherWidgetFactory(self._settings, self._thread_manager))
         self.register(MediaWidgetFactory(self._settings, self._thread_manager))
         self.register(RedditWidgetFactory(self._settings, self._thread_manager))
+        self.register(ImgurWidgetFactory(self._settings, self._thread_manager))
         self.register(SpotifyVisualizerFactory(self._settings, self._thread_manager))
         self.register(SpotifyVolumeFactory(self._settings, self._thread_manager))
 
