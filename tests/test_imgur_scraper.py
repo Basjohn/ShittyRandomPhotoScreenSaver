@@ -6,9 +6,10 @@ Tests cover:
 - Image extraction
 - Error handling
 """
+from __future__ import annotations
+
 import pytest
-from unittest.mock import patch, MagicMock
-import time
+from unittest.mock import MagicMock, patch
 
 from widgets.imgur.scraper import (
     ImgurScraper, ImgurImage, ScrapeResult,
@@ -29,7 +30,7 @@ class TestImgurImage:
             gallery_url="https://imgur.com/gallery/abc123",
         )
         assert img.id == "abc123"
-        assert img.is_animated == False
+        assert not img.is_animated
         assert img.extension == "jpg"
     
     def test_get_large_url(self):
@@ -41,7 +42,8 @@ class TestImgurImage:
             gallery_url="",
             extension="png",
         )
-        assert img.get_large_url() == "https://i.imgur.com/test123l.png"
+        # URL format changed - no longer uses 'l' suffix
+        assert img.get_large_url() == "https://i.imgur.com/test123.png"
     
     def test_get_original_url(self):
         """Test original URL generation."""
@@ -186,8 +188,8 @@ class TestImgurScraper:
     @patch('widgets.imgur.scraper.requests.get')
     def test_scrape_tag_network_error(self, mock_get):
         """Test network error handling."""
-        import requests
-        mock_get.side_effect = requests.RequestException("Connection failed")
+        from requests import RequestException
+        mock_get.side_effect = RequestException("Connection failed")
         
         scraper = ImgurScraper()
         result = scraper.scrape_tag("test")

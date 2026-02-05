@@ -651,6 +651,7 @@ class InputHandler(QObject):
         reddit_widget,
         reddit2_widget,
         gmail_widget=None,
+        imgur_widget=None,
     ) -> tuple:
         """
         Route clicks to interactive widgets in interaction mode.
@@ -744,6 +745,26 @@ class InputHandler(QObject):
                             handled = True
             except Exception:
                 logger.debug("[INPUT] Gmail click routing failed", exc_info=True)
+        
+        # Imgur widget (treat like Reddit - return URL to trigger exit)
+        if not handled and imgur_widget is not None:
+            try:
+                iw = imgur_widget
+                if iw.isVisible() and iw.geometry().contains(pos):
+                    geom = iw.geometry()
+                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+                    if hasattr(iw, 'handle_click'):
+                        result = iw.handle_click(local_pos)
+                        logger.debug("[INPUT] Imgur handle_click returned: %s", result)
+                        if isinstance(result, str) and result:
+                            # Imgur returns URL like Reddit does
+                            handled = True
+                            reddit_handled = True  # Reuse Reddit exit behavior
+                            reddit_url = result
+                        elif result:
+                            handled = True
+            except Exception:
+                logger.debug("[INPUT] Imgur click routing failed", exc_info=True)
         
         logger.debug(
             "[INPUT] route_widget_click returning: handled=%s reddit_handled=%s reddit_url=%s",

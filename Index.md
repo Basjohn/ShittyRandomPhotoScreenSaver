@@ -20,6 +20,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | main.py | Screensaver entry point (SRPSS.scr/SRPSS.exe) |
 | main_mc.py | Manual Controller entry point (SRPSS_MC) |
 
+## Environment Variables
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| SRPSS_PERF_METRICS | false | Enable performance metrics logging to screensaver_perf.log |
+| SRPSS_ENABLE_DEV | false | Enable experimental/broken features (e.g., Imgur widget) |
+
 ## Core Managers
 
 All business logic goes through these managers. Never use raw threading or Qt lifecycle methods.
@@ -193,7 +200,14 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Weather | widgets/weather_widget.py | WeatherWidget | widgets.weather |
 | Media | widgets/media_widget.py | MediaWidget | widgets.media |
 | Reddit | widgets/reddit_widget.py | RedditWidget | widgets.reddit, widgets.reddit2 |
-| Imgur | widgets/imgur/ | ImgurWidget, ImgurScraper, ImgurImageCache | widgets.imgur | Progressive image loading with fade coordination |
+| Imgur | widgets/imgur/ | ImgurWidget, ImgurScraper, ImgurImageCache | widgets.imgur |
+
+**Imgur Widget Details:**
+- **widget.py**: ImgurWidget - Grid-based image display with configurable layout modes (vertical/square/hybrid), circular buffer rotation, smooth fade transitions, high-DPI support, **synchronous cache loading** (matches Reddit pattern for immediate fade-in with content)
+- **scraper.py**: ImgurScraper - BeautifulSoup HTML parsing, conservative rate limiting (24 req/10min), exponential backoff, 429 handling, gallery page parsing (NOTE: not viable due to Imgur React SPA)
+- **image_cache.py**: ImgurImageCache - LRU disk cache (100MB max), GIF-to-first-frame conversion, high-DPI pixmap loading, **metadata persistence after every put**, **auto-rebuild from files if metadata missing**
+- **Features**: Concurrent downloads (4 at a time), cell pixmap caching, click-to-browser, header with logo colorization, fade coordination
+- **Limitation**: Only 160x160 thumbnails available - Imgur deprecated size suffixes and gallery parsing requires JS rendering
 | Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer |
 | Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | - |
 | Spotify Volume | widgets/spotify_volume_widget.py | SpotifyVolumeWidget | widgets.spotify_volume |

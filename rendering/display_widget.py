@@ -2773,6 +2773,7 @@ class DisplayWidget(QWidget):
                         getattr(self, "reddit_widget", None),
                         getattr(self, "reddit2_widget", None),
                         getattr(self, "gmail_widget", None),
+                        getattr(self, "imgur_widget", None),
                     )
                     logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",
                                handled, reddit_handled, self.screen_index)

@@ -24,6 +24,28 @@ from core.reddit_rate_limiter import get_reddit_user_agent
 
 logger = get_logger(__name__)
 
+
+def _slugify_title(title: str) -> str:
+    """Convert a title to a URL-safe slug matching Imgur's format.
+    
+    Examples:
+        "Watching" -> "watching"
+        "Photo of dog Panko every day" -> "photo-of-dog-panko-every-day"
+    """
+    if not title:
+        return ""
+    # Convert to lowercase
+    slug = title.lower()
+    # Replace spaces and special chars with hyphens
+    slug = re.sub(r'[^\w\s-]', '', slug)
+    slug = re.sub(r'[-\s]+', '-', slug)
+    # Remove leading/trailing hyphens
+    slug = slug.strip('-')
+    # Limit length (Imgur seems to truncate long titles)
+    if len(slug) > 50:
+        slug = slug[:50].rsplit('-', 1)[0]  # Cut at last word boundary
+    return slug
+
 # Imgur URL patterns
 IMGUR_TAG_URL = "https://imgur.com/t/{tag}"
 IMGUR_HOT_URL = "https://imgur.com/hot"
@@ -45,8 +67,15 @@ DEFAULT_TIMEOUT = 10  # seconds
 
 # Regex to extract image IDs from Imgur HTML
 IMAGE_ID_PATTERN = re.compile(r'data-id=["\']([a-zA-Z0-9]+)["\']')
-GALLERY_LINK_PATTERN = re.compile(r'/gallery/([a-zA-Z0-9]+)')
+# Match full gallery path including title slug: /gallery/title-slug-id or /gallery/id
+GALLERY_LINK_PATTERN = re.compile(r'/gallery/([a-zA-Z0-9_-]+)')
+# Match gallery/album with full path including title
+GALLERY_PATH_PATTERN = re.compile(r'/(gallery|a)/([a-zA-Z0-9_-]+)')
 POST_ID_PATTERN = re.compile(r'/(gallery|a)/([a-zA-Z0-9]+)')
+
+# Regex for gallery page parsing (full-size image extraction)
+OG_IMAGE_PATTERN = re.compile(r'<meta[^>]*property=["\']og:image["\'][^>]*content=["\']([^"\'>]+)["\']', re.IGNORECASE)
+OG_IMAGE_ALT_PATTERN = re.compile(r'<meta[^>]*content=["\']([^"\'>]+)["\'][^>]*property=["\']og:image["\']', re.IGNORECASE)
 
 
 @dataclass
@@ -60,12 +89,19 @@ class ImgurImage:
     extension: str = "jpg"
     title: str = ""
     
+    # Full-size URL from gallery page parsing (if available)
+    full_size_url: str = ""
+    
     def get_large_url(self) -> str:
-        """Get the large (640px) version URL."""
-        return f"https://i.imgur.com/{self.id}l.{self.extension}"
+        """Get the large version URL (prefers full-size from gallery parsing)."""
+        if self.full_size_url:
+            return self.full_size_url
+        return f"https://i.imgur.com/{self.id}.{self.extension}"
     
     def get_original_url(self) -> str:
-        """Get the original size URL."""
+        """Get the original size URL (prefers full-size from gallery parsing)."""
+        if self.full_size_url:
+            return self.full_size_url
         return f"https://i.imgur.com/{self.id}.{self.extension}"
 
 
@@ -107,11 +143,23 @@ class ImgurScraper:
     ]
     
     def __init__(self) -> None:
-        """Initialize the scraper with rate limiting state."""
-        self._rate_lock = threading.Lock()
+        """Initialize the scraper with rate limiting state.
+        
+        Conservative rate limiting to prevent hitting Imgur's limits:
+        - Max 24 requests per 10 minutes (2.4 req/min)
+        - Track request count and enforce cooldown before limit
+        - Rely on cache to minimize requests
+        
+        Uses simple lock for data protection (per policy allows locks for simple data).
+        """
+        self._rate_lock = threading.Lock()  # Simple data protection (per policy)
         self._last_request_time: float = 0.0
         self._backoff_ms: int = MIN_REQUEST_INTERVAL_MS
         self._consecutive_failures: int = 0
+        # Request tracking for conservative rate limiting
+        self._request_timestamps: list = []  # Track last N request times
+        self._max_requests_per_window: int = 24  # Conservative: 24 per 10min (2.4 req/min)
+        self._window_seconds: int = 600  # 10 minutes
         
     def _get_headers(self) -> dict:
         """Get request headers with rotated User-Agent."""
@@ -125,6 +173,20 @@ class ImgurScraper:
             "Upgrade-Insecure-Requests": "1",
         }
     
+    def _is_approaching_rate_limit(self) -> bool:
+        """Check if we're approaching rate limit (should use cache instead).
+        
+        Returns True if we've made too many requests in the time window.
+        """
+        with self._rate_lock:
+            now = time.time()
+            # Remove timestamps outside the window
+            cutoff = now - self._window_seconds
+            self._request_timestamps = [ts for ts in self._request_timestamps if ts > cutoff]
+            
+            # Check if we're at 90% of limit (conservative)
+            return len(self._request_timestamps) >= int(self._max_requests_per_window * 0.9)
+    
     def _wait_for_rate_limit(self) -> None:
         """Wait if necessary to respect rate limits."""
         with self._rate_lock:
@@ -136,6 +198,8 @@ class ImgurScraper:
                 time.sleep(wait_time / 1000.0)
             
             self._last_request_time = time.time()
+            # Track this request
+            self._request_timestamps.append(time.time())
     
     def _record_success(self) -> None:
         """Record a successful request, reset backoff."""
@@ -168,35 +232,50 @@ class ImgurScraper:
     def _parse_image_from_element(self, element, soup: BeautifulSoup) -> Optional[ImgurImage]:
         """Parse an image from an HTML element."""
         try:
-            # Try to find image ID from various attributes
-            img_id = None
+            # Try to find gallery/post path and image ID separately
+            gallery_path = None  # Full path including title slug (e.g., "watching-8ayb0WE")
+            img_id = None        # For the actual image file (just the ID part)
             
-            # Check data-id attribute
-            if element.get("data-id"):
-                img_id = element.get("data-id")
-            
-            # Check href for gallery link
-            if not img_id:
-                href = element.get("href", "")
-                match = GALLERY_LINK_PATTERN.search(href)
+            # PRIORITY 1: Check href for gallery/album link (this is what we want to open)
+            href = element.get("href", "")
+            if href:
+                # Try to capture full path with title slug: /gallery/title-slug-id
+                match = GALLERY_PATH_PATTERN.search(href)
                 if match:
-                    img_id = match.group(1)
+                    gallery_path = match.group(2)  # Full path including title slug
+                    # Extract just the ID from the end (after last hyphen if present)
+                    # Format is usually "title-slug-ID" where ID is 7-8 chars
+                    parts = gallery_path.split('-')
+                    if len(parts) > 1 and len(parts[-1]) >= 5:
+                        img_id = parts[-1]  # Last part is usually the ID
+                    else:
+                        img_id = gallery_path  # No title slug, just ID
             
-            # Check for img src
+            # PRIORITY 2: Check data-id attribute (fallback for image ID)
+            if not img_id and element.get("data-id"):
+                img_id = element.get("data-id")
+                if not gallery_path:
+                    gallery_path = img_id  # Use as gallery path if we don't have one
+            
+            # PRIORITY 3: Check for img src (last resort)
             if not img_id:
                 img = element.find("img")
                 if img:
                     src = img.get("src", "") or img.get("data-src", "")
                     # Extract ID from URL like //i.imgur.com/abc123l.jpg
-                    match = re.search(r'i\.imgur\.com/([a-zA-Z0-9]+)', src)
+                    match = re.search(r'i\.imgur\.com/([a-zA-Z0-9]+)\.', src)
                     if match:
                         img_id = match.group(1)
-                        # Remove size suffix if present
-                        if img_id and img_id[-1] in "tmslh":
+                        # Remove size suffix if present (t,m,s,l,h)
+                        if img_id and len(img_id) > 5 and img_id[-1] in "tmslh":
                             img_id = img_id[:-1]
+                        if not gallery_path:
+                            gallery_path = img_id
             
             if not img_id or len(img_id) < 5:
                 return None
+            if not gallery_path:
+                gallery_path = img_id
             
             # Determine if animated (GIF/MP4)
             is_animated = False
@@ -207,10 +286,10 @@ class ImgurScraper:
                 is_animated = True
                 extension = "gif"
             
-            # Build URLs
-            thumbnail_url = f"https://i.imgur.com/{img_id}t.jpg"
-            direct_url = f"https://i.imgur.com/{img_id}l.{extension}"
-            gallery_url = f"https://imgur.com/gallery/{img_id}"
+            # Build URLs - modern Imgur no longer supports size suffixes
+            # The old suffix system (t,m,s,l,h) is deprecated
+            # Scraping now only provides 160x160 thumbnails via i.imgur.com
+            direct_url = f"https://i.imgur.com/{img_id}.{extension}"
             
             # Extract title if available
             title = ""
@@ -218,10 +297,20 @@ class ImgurScraper:
             if title_elem:
                 title = title_elem.get_text(strip=True)
             
+            # Build gallery URL with title slug if we have a title
+            # Format: https://imgur.com/gallery/title-slug-ID
+            if title and gallery_path == img_id:
+                # We only have an ID, not a full path, so construct it from title
+                title_slug = _slugify_title(title)
+                if title_slug:
+                    gallery_path = f"{title_slug}-{img_id}"
+            
+            gallery_url = f"https://imgur.com/gallery/{gallery_path}"
+            
             return ImgurImage(
                 id=img_id,
                 url=direct_url,
-                thumbnail_url=thumbnail_url,
+                thumbnail_url="",  # No thumbnails needed
                 gallery_url=gallery_url,
                 is_animated=is_animated,
                 extension=extension,
@@ -257,17 +346,27 @@ class ImgurScraper:
                         seen_ids.add(img.id)
                         images.append(img)
             
-            # Fallback: regex search for image IDs in entire HTML
+            # Fallback: regex search for gallery paths in entire HTML
+            # Note: Modern Imgur HTML doesn't contain title slugs, only IDs
+            # We can't construct proper URLs without titles in fallback mode
             if len(images) < 5:
                 for match in GALLERY_LINK_PATTERN.finditer(html):
-                    img_id = match.group(1)
+                    gallery_path = match.group(1)  # Usually just an ID
+                    # Extract just the ID from the end for deduplication
+                    parts = gallery_path.split('-')
+                    if len(parts) > 1 and len(parts[-1]) >= 5:
+                        img_id = parts[-1]  # Last part is the ID
+                    else:
+                        img_id = gallery_path  # No title slug, just ID
+                    
                     if img_id not in seen_ids and len(img_id) >= 5:
                         seen_ids.add(img_id)
+                        # Fallback URLs won't have title slugs since we have no title text
                         images.append(ImgurImage(
                             id=img_id,
-                            url=f"https://i.imgur.com/{img_id}l.jpg",
-                            thumbnail_url=f"https://i.imgur.com/{img_id}t.jpg",
-                            gallery_url=f"https://imgur.com/gallery/{img_id}",
+                            url=f"https://i.imgur.com/{img_id}.jpg",
+                            thumbnail_url="",  # No thumbnails needed
+                            gallery_url=f"https://imgur.com/gallery/{gallery_path}",
                         ))
             
             logger.debug("[IMGUR] Parsed %d images from HTML", len(images))
@@ -424,3 +523,113 @@ class ImgurScraper:
         """Get current backoff time in milliseconds."""
         with self._rate_lock:
             return self._backoff_ms
+    
+    def fetch_full_size_url(self, image: ImgurImage) -> Optional[str]:
+        """Fetch full-size image URL from gallery page via og:image meta tag.
+        
+        This parses the gallery page to extract the og:image URL which
+        contains the full-resolution image (typically 1920px or original).
+        
+        Args:
+            image: ImgurImage with gallery_url set
+            
+        Returns:
+            Full-size URL or None if parsing failed
+        """
+        if not image.gallery_url:
+            return None
+        
+        self._wait_for_rate_limit()
+        
+        try:
+            response = requests.get(
+                image.gallery_url,
+                headers=self._get_headers(),
+                timeout=DEFAULT_TIMEOUT,
+            )
+            
+            if response.status_code == 429:
+                self._record_failure(is_rate_limit=True)
+                return None
+            
+            if response.status_code != 200:
+                self._record_failure()
+                return None
+            
+            # Parse og:image from HTML (much faster than full BeautifulSoup parse)
+            html = response.text
+            
+            # Try primary pattern
+            match = OG_IMAGE_PATTERN.search(html)
+            if not match:
+                # Try alternate pattern (content before property)
+                match = OG_IMAGE_ALT_PATTERN.search(html)
+            
+            if match:
+                url = match.group(1)
+                # Validate it's an imgur image URL
+                if 'imgur.com' in url and not url.endswith('.gif'):
+                    self._record_success()
+                    logger.debug("[IMGUR] Parsed full-size URL: %s", url)
+                    return url
+            
+            self._record_failure()
+            return None
+            
+        except Exception as e:
+            self._record_failure()
+            logger.debug("[IMGUR] Gallery parse failed for %s: %s", image.id, e)
+            return None
+    
+    def enrich_images_with_full_urls(
+        self,
+        images: List[ImgurImage],
+        max_parallel: int = 3,
+        timeout_per_image: float = 5.0,
+    ) -> List[ImgurImage]:
+        """Enrich images with full-size URLs via parallel gallery page parsing.
+        
+        Fetches gallery pages in parallel to extract og:image URLs.
+        Uses ThreadPoolExecutor for parallel fetching (separate from main ThreadManager
+        to avoid deadlocks).
+        
+        Args:
+            images: List of ImgurImage to enrich
+            max_parallel: Maximum concurrent requests (keep low to avoid rate limits)
+            timeout_per_image: Timeout per image fetch
+            
+        Returns:
+            List of images (modified in place with full_size_url set where available)
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
+        if not images:
+            return images
+        
+        start_time = time.time()
+        enriched_count = 0
+        
+        # Use separate thread pool to avoid deadlocking main ThreadManager
+        with ThreadPoolExecutor(max_workers=max_parallel, thread_name_prefix="imgur_gallery") as executor:
+            # Submit all fetch tasks
+            future_to_image = {
+                executor.submit(self.fetch_full_size_url, img): img
+                for img in images
+            }
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_image, timeout=timeout_per_image * len(images)):
+                img = future_to_image[future]
+                try:
+                    full_url = future.result(timeout=timeout_per_image)
+                    if full_url:
+                        img.full_size_url = full_url
+                        enriched_count += 1
+                except Exception as e:
+                    logger.debug("[IMGUR] Failed to enrich %s: %s", img.id, e)
+        
+        elapsed = time.time() - start_time
+        logger.info("[IMGUR] Enriched %d/%d images with full-size URLs in %.2fs",
+                   enriched_count, len(images), elapsed)
+        
+        return images

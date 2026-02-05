@@ -1778,25 +1778,30 @@ class WidgetManager:
                 _ensure_thread_manager(widget, settings_key)
 
         # Create Imgur widget via factory
-        imgur_factory = self._factory_registry.get_factory("imgur")
-        imgur_settings = widgets_config.get('imgur', {})
-        monitor_sel = imgur_settings.get('monitor', 'ALL')
-        if _show_on_this_monitor(monitor_sel):
-            if SettingsManager.to_bool(imgur_settings.get('enabled', False), False):
-                self.add_expected_overlay("imgur")
-            
-            widget = _reuse_existing_widget('imgur_widget', 'imgur')
-            if widget is None and imgur_factory:
-                widget = imgur_factory.create(
-                    self._parent, imgur_settings,
-                )
-                if widget:
-                    self.register_widget("imgur", widget)
-                    created['imgur_widget'] = widget
-                    self._bind_parent_attribute('imgur_widget', widget)
+        # Gated by SRPSS_ENABLE_DEV for experimental/broken features
+        import os
+        dev_features_enabled = os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
+        
+        if dev_features_enabled:
+            imgur_factory = self._factory_registry.get_factory("imgur")
+            imgur_settings = widgets_config.get('imgur', {})
+            monitor_sel = imgur_settings.get('monitor', 'ALL')
+            if _show_on_this_monitor(monitor_sel):
+                if SettingsManager.to_bool(imgur_settings.get('enabled', False), False):
+                    self.add_expected_overlay("imgur")
+                
+                widget = _reuse_existing_widget('imgur_widget', 'imgur')
+                if widget is None and imgur_factory:
+                    widget = imgur_factory.create(
+                        self._parent, imgur_settings,
+                    )
+                    if widget:
+                        self.register_widget("imgur", widget)
+                        created['imgur_widget'] = widget
+                        self._bind_parent_attribute('imgur_widget', widget)
 
-            if widget is not None:
-                _ensure_thread_manager(widget, 'imgur')
+                if widget is not None:
+                    _ensure_thread_manager(widget, 'imgur')
 
         # Gmail widget archived - see archive/gmail_feature/
 

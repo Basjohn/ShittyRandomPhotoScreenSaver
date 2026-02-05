@@ -193,6 +193,10 @@ class WidgetsTab(QWidget):
     
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
+        # Check dev features gate once at the start
+        import os
+        dev_features_enabled = os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
+        
         # Create scroll area
         scroll = QScrollArea(self)
         self._scroll_area = scroll
@@ -246,7 +250,10 @@ class WidgetsTab(QWidget):
         self._btn_weather = QPushButton("Weather")
         self._btn_media = QPushButton("Media")
         self._btn_reddit = QPushButton("Reddit")
-        self._btn_imgur = QPushButton("Imgur")
+        
+        # Imgur button - gated by SRPSS_ENABLE_DEV
+        if dev_features_enabled:
+            self._btn_imgur = QPushButton("Imgur")
 
         button_style = (
             "QPushButton {"
@@ -269,7 +276,12 @@ class WidgetsTab(QWidget):
             " }"
         )
 
-        for idx, btn in enumerate((self._btn_clocks, self._btn_weather, self._btn_media, self._btn_reddit, self._btn_imgur)):
+        # Build button list conditionally
+        buttons = [self._btn_clocks, self._btn_weather, self._btn_media, self._btn_reddit]
+        if dev_features_enabled:
+            buttons.append(self._btn_imgur)
+        
+        for idx, btn in enumerate(buttons):
             btn.setCheckable(True)
             btn.setStyleSheet(button_style)
             self._subtab_group.addButton(btn, idx)
@@ -1551,244 +1563,245 @@ class WidgetsTab(QWidget):
         # Google OAuth verification requirements block unverified apps from using
         # sensitive Gmail scopes. See archive/gmail_feature/RESTORE_GMAIL.md
 
-        # Imgur widget group
-        imgur_group = QGroupBox("Imgur Widget")
-        imgur_layout = QVBoxLayout(imgur_group)
+        # Imgur widget group - gated by SRPSS_ENABLE_DEV (variable defined at top of _setup_ui)
+        if dev_features_enabled:
+            imgur_group = QGroupBox("Imgur Widget")
+            imgur_layout = QVBoxLayout(imgur_group)
 
-        self.imgur_enabled = QCheckBox("Enable Imgur Widget")
-        self.imgur_enabled.setToolTip("Shows a grid of images from Imgur tags.")
-        self.imgur_enabled.setChecked(self._default_bool('imgur', 'enabled', False))
-        self.imgur_enabled.stateChanged.connect(self._save_settings)
-        imgur_layout.addWidget(self.imgur_enabled)
+            self.imgur_enabled = QCheckBox("Enable Imgur Widget")
+            self.imgur_enabled.setToolTip("Shows a grid of images from Imgur tags.")
+            self.imgur_enabled.setChecked(self._default_bool('imgur', 'enabled', False))
+            self.imgur_enabled.stateChanged.connect(self._save_settings)
+            imgur_layout.addWidget(self.imgur_enabled)
 
-        imgur_info = QLabel(
-            "Displays curated images from Imgur. Click images to open in browser."
-        )
-        imgur_info.setWordWrap(True)
-        imgur_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-        imgur_layout.addWidget(imgur_info)
+            imgur_info = QLabel(
+                "Displays curated images from Imgur. Click images to open in browser."
+            )
+            imgur_info.setWordWrap(True)
+            imgur_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+            imgur_layout.addWidget(imgur_info)
 
-        # Tag selection
-        imgur_tag_row = QHBoxLayout()
-        imgur_tag_row.addWidget(QLabel("Tag:"))
-        self.imgur_tag = QComboBox()
-        self.imgur_tag.addItems([
-            "most_viral", "memes", "aww", "dog", "cats", "funny",
-            "earthporn", "architecture", "wallpapers", "gifs", "pics", "custom"
-        ])
-        self.imgur_tag.setToolTip("Select Imgur tag or choose 'custom' to enter your own")
-        self.imgur_tag.currentTextChanged.connect(self._save_settings)
-        self.imgur_tag.currentTextChanged.connect(self._on_imgur_tag_changed)
-        imgur_tag_row.addWidget(self.imgur_tag)
-        self._set_combo_text(self.imgur_tag, self._default_str('imgur', 'tag', 'most_viral'))
-        
-        imgur_tag_row.addWidget(QLabel("Custom:"))
-        self.imgur_custom_tag = QLineEdit()
-        self.imgur_custom_tag.setPlaceholderText("e.g. nature")
-        self.imgur_custom_tag.setMaximumWidth(120)
-        self.imgur_custom_tag.textChanged.connect(self._save_settings)
-        imgur_tag_row.addWidget(self.imgur_custom_tag)
-        imgur_tag_row.addStretch()
-        imgur_layout.addLayout(imgur_tag_row)
+            # Tag selection
+            imgur_tag_row = QHBoxLayout()
+            imgur_tag_row.addWidget(QLabel("Tag:"))
+            self.imgur_tag = QComboBox()
+            self.imgur_tag.addItems([
+                "most_viral", "memes", "aww", "dog", "cats", "funny",
+                "earthporn", "architecture", "wallpapers", "gifs", "pics", "custom"
+            ])
+            self.imgur_tag.setToolTip("Select Imgur tag or choose 'custom' to enter your own")
+            self.imgur_tag.currentTextChanged.connect(self._save_settings)
+            self.imgur_tag.currentTextChanged.connect(self._on_imgur_tag_changed)
+            imgur_tag_row.addWidget(self.imgur_tag)
+            self._set_combo_text(self.imgur_tag, self._default_str('imgur', 'tag', 'most_viral'))
+            
+            imgur_tag_row.addWidget(QLabel("Custom:"))
+            self.imgur_custom_tag = QLineEdit()
+            self.imgur_custom_tag.setPlaceholderText("e.g. nature")
+            self.imgur_custom_tag.setMaximumWidth(120)
+            self.imgur_custom_tag.textChanged.connect(self._save_settings)
+            imgur_tag_row.addWidget(self.imgur_custom_tag)
+            imgur_tag_row.addStretch()
+            imgur_layout.addLayout(imgur_tag_row)
 
-        # Grid dimensions
-        imgur_grid_row = QHBoxLayout()
-        imgur_grid_row.addWidget(QLabel("Grid Rows:"))
-        self.imgur_grid_rows = QSpinBox()
-        self.imgur_grid_rows.setRange(1, 6)
-        self.imgur_grid_rows.setValue(self._default_int('imgur', 'grid_rows', 2))
-        self.imgur_grid_rows.setToolTip("Number of rows in the image grid (1-6)")
-        self.imgur_grid_rows.valueChanged.connect(self._save_settings)
-        self.imgur_grid_rows.valueChanged.connect(self._update_imgur_grid_total)
-        imgur_grid_row.addWidget(self.imgur_grid_rows)
-        
-        imgur_grid_row.addWidget(QLabel("Columns:"))
-        self.imgur_grid_cols = QSpinBox()
-        self.imgur_grid_cols.setRange(1, 8)
-        self.imgur_grid_cols.setValue(self._default_int('imgur', 'grid_columns', 4))
-        self.imgur_grid_cols.setToolTip("Number of columns in the image grid (1-8)")
-        self.imgur_grid_cols.valueChanged.connect(self._save_settings)
-        self.imgur_grid_cols.valueChanged.connect(self._update_imgur_grid_total)
-        imgur_grid_row.addWidget(self.imgur_grid_cols)
-        
-        self.imgur_grid_total = QLabel("= 8 images")
-        imgur_grid_row.addWidget(self.imgur_grid_total)
-        imgur_grid_row.addStretch()
-        imgur_layout.addLayout(imgur_grid_row)
+            # Grid dimensions
+            imgur_grid_row = QHBoxLayout()
+            imgur_grid_row.addWidget(QLabel("Grid Rows:"))
+            self.imgur_grid_rows = QSpinBox()
+            self.imgur_grid_rows.setRange(1, 6)
+            self.imgur_grid_rows.setValue(self._default_int('imgur', 'grid_rows', 2))
+            self.imgur_grid_rows.setToolTip("Number of rows in the image grid (1-6)")
+            self.imgur_grid_rows.valueChanged.connect(self._save_settings)
+            self.imgur_grid_rows.valueChanged.connect(self._update_imgur_grid_total)
+            imgur_grid_row.addWidget(self.imgur_grid_rows)
+            
+            imgur_grid_row.addWidget(QLabel("Columns:"))
+            self.imgur_grid_cols = QSpinBox()
+            self.imgur_grid_cols.setRange(1, 8)
+            self.imgur_grid_cols.setValue(self._default_int('imgur', 'grid_columns', 4))
+            self.imgur_grid_cols.setToolTip("Number of columns in the image grid (1-8)")
+            self.imgur_grid_cols.valueChanged.connect(self._save_settings)
+            self.imgur_grid_cols.valueChanged.connect(self._update_imgur_grid_total)
+            imgur_grid_row.addWidget(self.imgur_grid_cols)
+            
+            self.imgur_grid_total = QLabel("= 8 images")
+            imgur_grid_row.addWidget(self.imgur_grid_total)
+            imgur_grid_row.addStretch()
+            imgur_layout.addLayout(imgur_grid_row)
 
-        # Position
-        imgur_pos_row = QHBoxLayout()
-        imgur_pos_row.addWidget(QLabel("Position:"))
-        self.imgur_position = QComboBox()
-        self.imgur_position.addItems([
-            "Top Left", "Top Center", "Top Right",
-            "Middle Left", "Center", "Middle Right",
-            "Bottom Left", "Bottom Center", "Bottom Right",
-        ])
-        self.imgur_position.setToolTip("Screen position for the Imgur widget")
-        self.imgur_position.currentTextChanged.connect(self._save_settings)
-        imgur_pos_row.addWidget(self.imgur_position)
-        self._set_combo_text(self.imgur_position, self._default_str('imgur', 'position', 'Top Right'))
-        imgur_pos_row.addStretch()
-        imgur_layout.addLayout(imgur_pos_row)
+            # Position
+            imgur_pos_row = QHBoxLayout()
+            imgur_pos_row.addWidget(QLabel("Position:"))
+            self.imgur_position = QComboBox()
+            self.imgur_position.addItems([
+                "Top Left", "Top Center", "Top Right",
+                "Middle Left", "Center", "Middle Right",
+                "Bottom Left", "Bottom Center", "Bottom Right",
+            ])
+            self.imgur_position.setToolTip("Screen position for the Imgur widget")
+            self.imgur_position.currentTextChanged.connect(self._save_settings)
+            imgur_pos_row.addWidget(self.imgur_position)
+            self._set_combo_text(self.imgur_position, self._default_str('imgur', 'position', 'Top Right'))
+            imgur_pos_row.addStretch()
+            imgur_layout.addLayout(imgur_pos_row)
 
-        # Display (monitor selection)
-        imgur_disp_row = QHBoxLayout()
-        imgur_disp_row.addWidget(QLabel("Display:"))
-        self.imgur_monitor_combo = QComboBox()
-        self.imgur_monitor_combo.addItems(["ALL", "1", "2", "3"])
-        self.imgur_monitor_combo.setToolTip("Which monitor(s) to show the Imgur widget on")
-        self.imgur_monitor_combo.currentTextChanged.connect(self._save_settings)
-        imgur_disp_row.addWidget(self.imgur_monitor_combo)
-        imgur_monitor_default = self._widget_default('imgur', 'monitor', 2)
-        self._set_combo_text(self.imgur_monitor_combo, str(imgur_monitor_default))
-        imgur_disp_row.addStretch()
-        imgur_layout.addLayout(imgur_disp_row)
+            # Display (monitor selection)
+            imgur_disp_row = QHBoxLayout()
+            imgur_disp_row.addWidget(QLabel("Display:"))
+            self.imgur_monitor_combo = QComboBox()
+            self.imgur_monitor_combo.addItems(["ALL", "1", "2", "3"])
+            self.imgur_monitor_combo.setToolTip("Which monitor(s) to show the Imgur widget on")
+            self.imgur_monitor_combo.currentTextChanged.connect(self._save_settings)
+            imgur_disp_row.addWidget(self.imgur_monitor_combo)
+            imgur_monitor_default = self._widget_default('imgur', 'monitor', 2)
+            self._set_combo_text(self.imgur_monitor_combo, str(imgur_monitor_default))
+            imgur_disp_row.addStretch()
+            imgur_layout.addLayout(imgur_disp_row)
 
-        # Update interval
-        imgur_interval_row = QHBoxLayout()
-        imgur_interval_row.addWidget(QLabel("Update Interval:"))
-        self.imgur_interval = QSpinBox()
-        self.imgur_interval.setRange(5, 60)
-        self.imgur_interval.setSuffix(" min")
-        self.imgur_interval.setValue(self._default_int('imgur', 'update_interval', 600) // 60)
-        self.imgur_interval.setToolTip("How often to refresh images from Imgur (5-60 minutes)")
-        self.imgur_interval.valueChanged.connect(self._save_settings)
-        imgur_interval_row.addWidget(self.imgur_interval)
-        imgur_interval_row.addStretch()
-        imgur_layout.addLayout(imgur_interval_row)
+            # Update interval
+            imgur_interval_row = QHBoxLayout()
+            imgur_interval_row.addWidget(QLabel("Update Interval:"))
+            self.imgur_interval = QSpinBox()
+            self.imgur_interval.setRange(5, 60)
+            self.imgur_interval.setSuffix(" min")
+            self.imgur_interval.setValue(self._default_int('imgur', 'update_interval', 600) // 60)
+            self.imgur_interval.setToolTip("How often to refresh images from Imgur (5-60 minutes)")
+            self.imgur_interval.valueChanged.connect(self._save_settings)
+            imgur_interval_row.addWidget(self.imgur_interval)
+            imgur_interval_row.addStretch()
+            imgur_layout.addLayout(imgur_interval_row)
 
-        # Show header
-        self.imgur_show_header = QCheckBox("Show Header")
-        self.imgur_show_header.setToolTip("Show Imgur logo and tag name in header")
-        self.imgur_show_header.setChecked(self._default_bool('imgur', 'show_header', True))
-        self.imgur_show_header.stateChanged.connect(self._save_settings)
-        imgur_layout.addWidget(self.imgur_show_header)
+            # Show header
+            self.imgur_show_header = QCheckBox("Show Header")
+            self.imgur_show_header.setToolTip("Show Imgur logo and tag name in header")
+            self.imgur_show_header.setChecked(self._default_bool('imgur', 'show_header', True))
+            self.imgur_show_header.stateChanged.connect(self._save_settings)
+            imgur_layout.addWidget(self.imgur_show_header)
 
-        # Font family
-        imgur_font_family_row = QHBoxLayout()
-        imgur_font_family_row.addWidget(QLabel("Font:"))
-        self.imgur_font_combo = QFontComboBox()
-        default_imgur_font = self._default_str('imgur', 'font_family', 'Segoe UI')
-        self.imgur_font_combo.setCurrentFont(QFont(default_imgur_font))
-        self.imgur_font_combo.setMinimumWidth(220)
-        self.imgur_font_combo.setToolTip("Font family for Imgur widget text")
-        self.imgur_font_combo.currentFontChanged.connect(self._save_settings)
-        imgur_font_family_row.addWidget(self.imgur_font_combo)
-        imgur_font_family_row.addStretch()
-        imgur_layout.addLayout(imgur_font_family_row)
+            # Font family
+            imgur_font_family_row = QHBoxLayout()
+            imgur_font_family_row.addWidget(QLabel("Font:"))
+            self.imgur_font_combo = QFontComboBox()
+            default_imgur_font = self._default_str('imgur', 'font_family', 'Segoe UI')
+            self.imgur_font_combo.setCurrentFont(QFont(default_imgur_font))
+            self.imgur_font_combo.setMinimumWidth(220)
+            self.imgur_font_combo.setToolTip("Font family for Imgur widget text")
+            self.imgur_font_combo.currentFontChanged.connect(self._save_settings)
+            imgur_font_family_row.addWidget(self.imgur_font_combo)
+            imgur_font_family_row.addStretch()
+            imgur_layout.addLayout(imgur_font_family_row)
 
-        # Font size
-        imgur_font_row = QHBoxLayout()
-        imgur_font_row.addWidget(QLabel("Font Size:"))
-        self.imgur_font_size = QSpinBox()
-        self.imgur_font_size.setRange(8, 48)
-        self.imgur_font_size.setValue(self._default_int('imgur', 'font_size', 11))
-        self.imgur_font_size.setAccelerated(True)
-        self.imgur_font_size.setToolTip("Font size for Imgur widget text (8-48px)")
-        self.imgur_font_size.valueChanged.connect(self._save_settings)
-        imgur_font_row.addWidget(self.imgur_font_size)
-        imgur_font_row.addWidget(QLabel("px"))
-        imgur_font_row.addStretch()
-        imgur_layout.addLayout(imgur_font_row)
+            # Font size
+            imgur_font_row = QHBoxLayout()
+            imgur_font_row.addWidget(QLabel("Font Size:"))
+            self.imgur_font_size = QSpinBox()
+            self.imgur_font_size.setRange(8, 48)
+            self.imgur_font_size.setValue(self._default_int('imgur', 'font_size', 11))
+            self.imgur_font_size.setAccelerated(True)
+            self.imgur_font_size.setToolTip("Font size for Imgur widget text (8-48px)")
+            self.imgur_font_size.valueChanged.connect(self._save_settings)
+            imgur_font_row.addWidget(self.imgur_font_size)
+            imgur_font_row.addWidget(QLabel("px"))
+            imgur_font_row.addStretch()
+            imgur_layout.addLayout(imgur_font_row)
 
-        # Margin
-        imgur_margin_row = QHBoxLayout()
-        imgur_margin_row.addWidget(QLabel("Margin:"))
-        self.imgur_margin = QSpinBox()
-        self.imgur_margin.setRange(0, 100)
-        self.imgur_margin.setValue(self._default_int('imgur', 'margin', 30))
-        self.imgur_margin.setAccelerated(True)
-        self.imgur_margin.valueChanged.connect(self._save_settings)
-        imgur_margin_row.addWidget(self.imgur_margin)
-        imgur_margin_row.addWidget(QLabel("px"))
-        imgur_margin_row.addStretch()
-        imgur_layout.addLayout(imgur_margin_row)
+            # Margin
+            imgur_margin_row = QHBoxLayout()
+            imgur_margin_row.addWidget(QLabel("Margin:"))
+            self.imgur_margin = QSpinBox()
+            self.imgur_margin.setRange(0, 100)
+            self.imgur_margin.setValue(self._default_int('imgur', 'margin', 30))
+            self.imgur_margin.setAccelerated(True)
+            self.imgur_margin.valueChanged.connect(self._save_settings)
+            imgur_margin_row.addWidget(self.imgur_margin)
+            imgur_margin_row.addWidget(QLabel("px"))
+            imgur_margin_row.addStretch()
+            imgur_layout.addLayout(imgur_margin_row)
 
-        # Text color
-        imgur_color_row = QHBoxLayout()
-        imgur_color_row.addWidget(QLabel("Text Color:"))
-        self.imgur_color_btn = QPushButton("Choose Color...")
-        self.imgur_color_btn.clicked.connect(self._choose_imgur_color)
-        imgur_color_row.addWidget(self.imgur_color_btn)
-        imgur_color_row.addStretch()
-        imgur_layout.addLayout(imgur_color_row)
+            # Text color
+            imgur_color_row = QHBoxLayout()
+            imgur_color_row.addWidget(QLabel("Text Color:"))
+            self.imgur_color_btn = QPushButton("Choose Color...")
+            self.imgur_color_btn.clicked.connect(self._choose_imgur_color)
+            imgur_color_row.addWidget(self.imgur_color_btn)
+            imgur_color_row.addStretch()
+            imgur_layout.addLayout(imgur_color_row)
 
-        # Background frame
-        self.imgur_show_background = QCheckBox("Show Background Frame")
-        self.imgur_show_background.setToolTip("Show a semi-transparent background behind the widget")
-        self.imgur_show_background.setChecked(self._default_bool('imgur', 'show_background', True))
-        self.imgur_show_background.stateChanged.connect(self._save_settings)
-        imgur_layout.addWidget(self.imgur_show_background)
+            # Background frame
+            self.imgur_show_background = QCheckBox("Show Background Frame")
+            self.imgur_show_background.setToolTip("Show a semi-transparent background behind the widget")
+            self.imgur_show_background.setChecked(self._default_bool('imgur', 'show_background', True))
+            self.imgur_show_background.stateChanged.connect(self._save_settings)
+            imgur_layout.addWidget(self.imgur_show_background)
 
-        # Intense shadow
-        self.imgur_intense_shadow = QCheckBox("Intense Shadow")
-        self.imgur_intense_shadow.setToolTip("Use a more pronounced drop shadow effect")
-        self.imgur_intense_shadow.setChecked(self._default_bool('imgur', 'intense_shadow', True))
-        self.imgur_intense_shadow.stateChanged.connect(self._save_settings)
-        imgur_layout.addWidget(self.imgur_intense_shadow)
+            # Intense shadow
+            self.imgur_intense_shadow = QCheckBox("Intense Shadow")
+            self.imgur_intense_shadow.setToolTip("Use a more pronounced drop shadow effect")
+            self.imgur_intense_shadow.setChecked(self._default_bool('imgur', 'intense_shadow', True))
+            self.imgur_intense_shadow.stateChanged.connect(self._save_settings)
+            imgur_layout.addWidget(self.imgur_intense_shadow)
 
-        # Background opacity
-        imgur_opacity_row = QHBoxLayout()
-        imgur_opacity_row.addWidget(QLabel("Background Opacity:"))
-        self.imgur_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.imgur_bg_opacity.setMinimum(0)
-        self.imgur_bg_opacity.setMaximum(100)
-        imgur_bg_opacity_pct = int(self._default_float('imgur', 'bg_opacity', 0.6) * 100)
-        self.imgur_bg_opacity.setValue(imgur_bg_opacity_pct)
-        self.imgur_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.imgur_bg_opacity.setTickInterval(10)
-        self.imgur_bg_opacity.valueChanged.connect(self._save_settings)
-        imgur_opacity_row.addWidget(self.imgur_bg_opacity)
-        self.imgur_bg_opacity_label = QLabel(f"{imgur_bg_opacity_pct}%")
-        self.imgur_bg_opacity.valueChanged.connect(
-            lambda v: self.imgur_bg_opacity_label.setText(f"{v}%")
-        )
-        imgur_opacity_row.addWidget(self.imgur_bg_opacity_label)
-        imgur_layout.addLayout(imgur_opacity_row)
+            # Background opacity
+            imgur_opacity_row = QHBoxLayout()
+            imgur_opacity_row.addWidget(QLabel("Background Opacity:"))
+            self.imgur_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+            self.imgur_bg_opacity.setMinimum(0)
+            self.imgur_bg_opacity.setMaximum(100)
+            imgur_bg_opacity_pct = int(self._default_float('imgur', 'bg_opacity', 0.6) * 100)
+            self.imgur_bg_opacity.setValue(imgur_bg_opacity_pct)
+            self.imgur_bg_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+            self.imgur_bg_opacity.setTickInterval(10)
+            self.imgur_bg_opacity.valueChanged.connect(self._save_settings)
+            imgur_opacity_row.addWidget(self.imgur_bg_opacity)
+            self.imgur_bg_opacity_label = QLabel(f"{imgur_bg_opacity_pct}%")
+            self.imgur_bg_opacity.valueChanged.connect(
+                lambda v: self.imgur_bg_opacity_label.setText(f"{v}%")
+            )
+            imgur_opacity_row.addWidget(self.imgur_bg_opacity_label)
+            imgur_layout.addLayout(imgur_opacity_row)
 
-        # Background color
-        imgur_bg_color_row = QHBoxLayout()
-        imgur_bg_color_row.addWidget(QLabel("Background Color:"))
-        self.imgur_bg_color_btn = QPushButton("Choose Color...")
-        self.imgur_bg_color_btn.clicked.connect(self._choose_imgur_bg_color)
-        imgur_bg_color_row.addWidget(self.imgur_bg_color_btn)
-        imgur_bg_color_row.addStretch()
-        imgur_layout.addLayout(imgur_bg_color_row)
+            # Background color
+            imgur_bg_color_row = QHBoxLayout()
+            imgur_bg_color_row.addWidget(QLabel("Background Color:"))
+            self.imgur_bg_color_btn = QPushButton("Choose Color...")
+            self.imgur_bg_color_btn.clicked.connect(self._choose_imgur_bg_color)
+            imgur_bg_color_row.addWidget(self.imgur_bg_color_btn)
+            imgur_bg_color_row.addStretch()
+            imgur_layout.addLayout(imgur_bg_color_row)
 
-        # Border color
-        imgur_border_color_row = QHBoxLayout()
-        imgur_border_color_row.addWidget(QLabel("Border Color:"))
-        self.imgur_border_color_btn = QPushButton("Choose Color...")
-        self.imgur_border_color_btn.clicked.connect(self._choose_imgur_border_color)
-        imgur_border_color_row.addWidget(self.imgur_border_color_btn)
-        imgur_border_color_row.addStretch()
-        imgur_layout.addLayout(imgur_border_color_row)
+            # Border color
+            imgur_border_color_row = QHBoxLayout()
+            imgur_border_color_row.addWidget(QLabel("Border Color:"))
+            self.imgur_border_color_btn = QPushButton("Choose Color...")
+            self.imgur_border_color_btn.clicked.connect(self._choose_imgur_border_color)
+            imgur_border_color_row.addWidget(self.imgur_border_color_btn)
+            imgur_border_color_row.addStretch()
+            imgur_layout.addLayout(imgur_border_color_row)
 
-        # Border opacity
-        imgur_border_opacity_row = QHBoxLayout()
-        imgur_border_opacity_row.addWidget(QLabel("Border Opacity:"))
-        self.imgur_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
-        self.imgur_border_opacity.setMinimum(0)
-        self.imgur_border_opacity.setMaximum(100)
-        imgur_border_opacity_pct = int(self._default_float('imgur', 'border_opacity', 1.0) * 100)
-        self.imgur_border_opacity.setValue(imgur_border_opacity_pct)
-        self.imgur_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.imgur_border_opacity.setTickInterval(10)
-        self.imgur_border_opacity.valueChanged.connect(self._save_settings)
-        imgur_border_opacity_row.addWidget(self.imgur_border_opacity)
-        self.imgur_border_opacity_label = QLabel(f"{imgur_border_opacity_pct}%")
-        self.imgur_border_opacity.valueChanged.connect(
-            lambda v: self.imgur_border_opacity_label.setText(f"{v}%")
-        )
-        imgur_border_opacity_row.addWidget(self.imgur_border_opacity_label)
-        imgur_layout.addLayout(imgur_border_opacity_row)
+            # Border opacity
+            imgur_border_opacity_row = QHBoxLayout()
+            imgur_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+            self.imgur_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+            self.imgur_border_opacity.setMinimum(0)
+            self.imgur_border_opacity.setMaximum(100)
+            imgur_border_opacity_pct = int(self._default_float('imgur', 'border_opacity', 1.0) * 100)
+            self.imgur_border_opacity.setValue(imgur_border_opacity_pct)
+            self.imgur_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+            self.imgur_border_opacity.setTickInterval(10)
+            self.imgur_border_opacity.valueChanged.connect(self._save_settings)
+            imgur_border_opacity_row.addWidget(self.imgur_border_opacity)
+            self.imgur_border_opacity_label = QLabel(f"{imgur_border_opacity_pct}%")
+            self.imgur_border_opacity.valueChanged.connect(
+                lambda v: self.imgur_border_opacity_label.setText(f"{v}%")
+            )
+            imgur_border_opacity_row.addWidget(self.imgur_border_opacity_label)
+            imgur_layout.addLayout(imgur_border_opacity_row)
 
-        self._imgur_container = QWidget()
-        imgur_container_layout = QVBoxLayout(self._imgur_container)
-        imgur_container_layout.setContentsMargins(0, 20, 0, 0)
-        imgur_container_layout.addWidget(imgur_group)
-        layout.addWidget(self._imgur_container)
+            self._imgur_container = QWidget()
+            imgur_container_layout = QVBoxLayout(self._imgur_container)
+            imgur_container_layout.setContentsMargins(0, 20, 0, 0)
+            imgur_container_layout.addWidget(imgur_group)
+            layout.addWidget(self._imgur_container)
 
         layout.addStretch()
 
@@ -1889,6 +1902,8 @@ class WidgetsTab(QWidget):
     
     def _on_imgur_tag_changed(self, tag: str) -> None:
         """Handle imgur tag selection change - enable/disable custom tag field."""
+        if not hasattr(self, 'imgur_custom_tag'):
+            return
         try:
             self.imgur_custom_tag.setEnabled(tag == "custom")
         except Exception:
@@ -1896,10 +1911,13 @@ class WidgetsTab(QWidget):
     
     def _update_imgur_grid_total(self) -> None:
         """Update the grid total label."""
+        if not hasattr(self, 'imgur_grid_total'):
+            return
         try:
             rows = self.imgur_grid_rows.value()
             cols = self.imgur_grid_cols.value()
-            self.imgur_grid_total.setText(f"= {rows * cols} images")
+            total = rows * cols
+            self.imgur_grid_total.setText(f"= {total} images")
         except Exception:
             pass
 
@@ -2467,59 +2485,60 @@ class WidgetsTab(QWidget):
             if reddit2_mon_idx >= 0:
                 self.reddit2_monitor_combo.setCurrentIndex(reddit2_mon_idx)
 
-            # Imgur settings
-            imgur_config = widgets.get('imgur', {})
-            self.imgur_enabled.setChecked(self._config_bool('imgur', imgur_config, 'enabled', False))
-            imgur_tag = self._config_str('imgur', imgur_config, 'tag', 'most_viral')
-            imgur_tag_idx = self.imgur_tag.findText(imgur_tag)
-            if imgur_tag_idx >= 0:
-                self.imgur_tag.setCurrentIndex(imgur_tag_idx)
-            self.imgur_custom_tag.setText(self._config_str('imgur', imgur_config, 'custom_tag', ''))
-            self.imgur_grid_rows.setValue(self._config_int('imgur', imgur_config, 'grid_rows', 2))
-            self.imgur_grid_cols.setValue(self._config_int('imgur', imgur_config, 'grid_columns', 4))
-            imgur_pos = self._config_str('imgur', imgur_config, 'position', 'Top Right')
-            imgur_pos_idx = self.imgur_position.findText(imgur_pos)
-            if imgur_pos_idx >= 0:
-                self.imgur_position.setCurrentIndex(imgur_pos_idx)
-            imgur_monitor = imgur_config.get('monitor', self._widget_default('imgur', 'monitor', 2))
-            imgur_mon_text = str(imgur_monitor) if isinstance(imgur_monitor, (int, str)) else '2'
-            imgur_mon_idx = self.imgur_monitor_combo.findText(imgur_mon_text)
-            if imgur_mon_idx >= 0:
-                self.imgur_monitor_combo.setCurrentIndex(imgur_mon_idx)
-            imgur_interval = self._config_int('imgur', imgur_config, 'update_interval', 600) // 60
-            self.imgur_interval.setValue(max(5, min(60, imgur_interval)))
-            self.imgur_show_header.setChecked(self._config_bool('imgur', imgur_config, 'show_header', True))
-            
-            # New Imgur settings (parity with other widgets)
-            self.imgur_font_combo.setCurrentFont(QFont(self._config_str('imgur', imgur_config, 'font_family', 'Segoe UI')))
-            self.imgur_font_size.setValue(self._config_int('imgur', imgur_config, 'font_size', 11))
-            self.imgur_margin.setValue(self._config_int('imgur', imgur_config, 'margin', 30))
-            self.imgur_show_background.setChecked(self._config_bool('imgur', imgur_config, 'show_background', True))
-            self.imgur_intense_shadow.setChecked(self._config_bool('imgur', imgur_config, 'intense_shadow', True))
-            
-            imgur_opacity_pct = int(self._config_float('imgur', imgur_config, 'bg_opacity', 0.6) * 100)
-            self.imgur_bg_opacity.setValue(imgur_opacity_pct)
-            self.imgur_bg_opacity_label.setText(f"{imgur_opacity_pct}%")
-            
-            imgur_border_opacity_pct = int(self._config_float('imgur', imgur_config, 'border_opacity', 1.0) * 100)
-            self.imgur_border_opacity.setValue(imgur_border_opacity_pct)
-            self.imgur_border_opacity_label.setText(f"{imgur_border_opacity_pct}%")
-            
-            imgur_color_data = imgur_config.get('color', self._widget_default('imgur', 'color', [255, 255, 255, 230]))
-            self._imgur_color = QColor(*imgur_color_data)
-            imgur_bg_color_data = imgur_config.get('bg_color', self._widget_default('imgur', 'bg_color', [35, 35, 35, 255]))
-            try:
-                self._imgur_bg_color = QColor(*imgur_bg_color_data)
-            except Exception:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid imgur bg color", exc_info=True)
-            imgur_border_color_data = imgur_config.get('border_color', self._widget_default('imgur', 'border_color', [255, 255, 255, 255]))
-            try:
-                self._imgur_border_color = QColor(*imgur_border_color_data)
-            except Exception:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: invalid imgur border color", exc_info=True)
-            
-            self._on_imgur_tag_changed(imgur_tag)
-            self._update_imgur_grid_total()
+            # Imgur settings - only load if dev features enabled
+            if hasattr(self, 'imgur_enabled'):
+                imgur_config = widgets.get('imgur', {})
+                self.imgur_enabled.setChecked(self._config_bool('imgur', imgur_config, 'enabled', False))
+                imgur_tag = self._config_str('imgur', imgur_config, 'tag', 'most_viral')
+                imgur_tag_idx = self.imgur_tag.findText(imgur_tag)
+                if imgur_tag_idx >= 0:
+                    self.imgur_tag.setCurrentIndex(imgur_tag_idx)
+                self.imgur_custom_tag.setText(self._config_str('imgur', imgur_config, 'custom_tag', ''))
+                self.imgur_grid_rows.setValue(self._config_int('imgur', imgur_config, 'grid_rows', 2))
+                self.imgur_grid_cols.setValue(self._config_int('imgur', imgur_config, 'grid_columns', 4))
+                imgur_pos = self._config_str('imgur', imgur_config, 'position', 'Top Right')
+                imgur_pos_idx = self.imgur_position.findText(imgur_pos)
+                if imgur_pos_idx >= 0:
+                    self.imgur_position.setCurrentIndex(imgur_pos_idx)
+                imgur_monitor = imgur_config.get('monitor', self._widget_default('imgur', 'monitor', 2))
+                imgur_mon_text = str(imgur_monitor) if isinstance(imgur_monitor, (int, str)) else '2'
+                imgur_mon_idx = self.imgur_monitor_combo.findText(imgur_mon_text)
+                if imgur_mon_idx >= 0:
+                    self.imgur_monitor_combo.setCurrentIndex(imgur_mon_idx)
+                imgur_interval = self._config_int('imgur', imgur_config, 'update_interval', 600) // 60
+                self.imgur_interval.setValue(max(5, min(60, imgur_interval)))
+                self.imgur_show_header.setChecked(self._config_bool('imgur', imgur_config, 'show_header', True))
+                
+                # New Imgur settings (parity with other widgets)
+                self.imgur_font_combo.setCurrentFont(QFont(self._config_str('imgur', imgur_config, 'font_family', 'Segoe UI')))
+                self.imgur_font_size.setValue(self._config_int('imgur', imgur_config, 'font_size', 11))
+                self.imgur_margin.setValue(self._config_int('imgur', imgur_config, 'margin', 30))
+                self.imgur_show_background.setChecked(self._config_bool('imgur', imgur_config, 'show_background', True))
+                self.imgur_intense_shadow.setChecked(self._config_bool('imgur', imgur_config, 'intense_shadow', True))
+                
+                imgur_opacity_pct = int(self._config_float('imgur', imgur_config, 'bg_opacity', 0.6) * 100)
+                self.imgur_bg_opacity.setValue(imgur_opacity_pct)
+                self.imgur_bg_opacity_label.setText(f"{imgur_opacity_pct}%")
+                
+                imgur_border_opacity_pct = int(self._config_float('imgur', imgur_config, 'border_opacity', 1.0) * 100)
+                self.imgur_border_opacity.setValue(imgur_border_opacity_pct)
+                self.imgur_border_opacity_label.setText(f"{imgur_border_opacity_pct}%")
+                
+                imgur_color_data = imgur_config.get('color', self._widget_default('imgur', 'color', [255, 255, 255, 230]))
+                self._imgur_color = QColor(*imgur_color_data)
+                imgur_bg_color_data = imgur_config.get('bg_color', self._widget_default('imgur', 'bg_color', [35, 35, 35, 255]))
+                try:
+                    self._imgur_bg_color = QColor(*imgur_bg_color_data)
+                except Exception:
+                    logger.debug("[WIDGETS_TAB] Exception suppressed: invalid imgur bg color", exc_info=True)
+                imgur_border_color_data = imgur_config.get('border_color', self._widget_default('imgur', 'border_color', [255, 255, 255, 255]))
+                try:
+                    self._imgur_border_color = QColor(*imgur_border_color_data)
+                except Exception:
+                    logger.debug("[WIDGETS_TAB] Exception suppressed: invalid imgur border color", exc_info=True)
+                
+                self._on_imgur_tag_changed(imgur_tag)
+                self._update_imgur_grid_total()
 
             # Gmail settings - archived, see archive/gmail_feature/
         finally:
@@ -2654,6 +2673,8 @@ class WidgetsTab(QWidget):
 
     def _choose_imgur_color(self) -> None:
         """Choose Imgur text color."""
+        if not hasattr(self, '_imgur_color'):
+            return
         color = StyledColorPicker.get_color(self._imgur_color, self, "Choose Imgur Text Color")
         if color is not None:
             self._imgur_color = color
@@ -2661,6 +2682,8 @@ class WidgetsTab(QWidget):
 
     def _choose_imgur_bg_color(self) -> None:
         """Choose Imgur background color."""
+        if not hasattr(self, '_imgur_bg_color'):
+            return
         color = StyledColorPicker.get_color(self._imgur_bg_color, self, "Choose Imgur Background Color")
         if color is not None:
             self._imgur_bg_color = color
@@ -2668,6 +2691,8 @@ class WidgetsTab(QWidget):
 
     def _choose_imgur_border_color(self) -> None:
         """Choose Imgur border color."""
+        if not hasattr(self, '_imgur_border_color'):
+            return
         color = StyledColorPicker.get_color(self._imgur_border_color, self, "Choose Imgur Border Color")
         if color is not None:
             self._imgur_border_color = color
@@ -2915,30 +2940,31 @@ class WidgetsTab(QWidget):
         existing_widgets['reddit'] = reddit_config
         existing_widgets['reddit2'] = reddit2_config
 
-        # Imgur config
-        imgur_config = {
-            'enabled': self.imgur_enabled.isChecked(),
-            'tag': self.imgur_tag.currentText(),
-            'custom_tag': self.imgur_custom_tag.text().strip(),
-            'grid_rows': self.imgur_grid_rows.value(),
-            'grid_columns': self.imgur_grid_cols.value(),
-            'position': self.imgur_position.currentText(),
-            'update_interval': self.imgur_interval.value() * 60,  # Convert minutes to seconds
-            'show_header': self.imgur_show_header.isChecked(),
-            'font_family': self.imgur_font_combo.currentFont().family(),
-            'font_size': self.imgur_font_size.value(),
-            'margin': self.imgur_margin.value(),
-            'color': [self._imgur_color.red(), self._imgur_color.green(), self._imgur_color.blue(), self._imgur_color.alpha()],
-            'show_background': self.imgur_show_background.isChecked(),
-            'intense_shadow': self.imgur_intense_shadow.isChecked(),
-            'bg_opacity': self.imgur_bg_opacity.value() / 100.0,
-            'bg_color': [self._imgur_bg_color.red(), self._imgur_bg_color.green(), self._imgur_bg_color.blue(), self._imgur_bg_color.alpha()],
-            'border_color': [self._imgur_border_color.red(), self._imgur_border_color.green(), self._imgur_border_color.blue(), self._imgur_border_color.alpha()],
-            'border_opacity': self.imgur_border_opacity.value() / 100.0,
-        }
-        imgur_mon_text = self.imgur_monitor_combo.currentText()
-        imgur_config['monitor'] = imgur_mon_text if imgur_mon_text == 'ALL' else int(imgur_mon_text)
-        existing_widgets['imgur'] = imgur_config
+        # Imgur config - only save if dev features enabled
+        if hasattr(self, 'imgur_enabled'):
+            imgur_config = {
+                'enabled': self.imgur_enabled.isChecked(),
+                'tag': self.imgur_tag.currentText(),
+                'custom_tag': self.imgur_custom_tag.text().strip(),
+                'grid_rows': self.imgur_grid_rows.value(),
+                'grid_columns': self.imgur_grid_cols.value(),
+                'position': self.imgur_position.currentText(),
+                'update_interval': self.imgur_interval.value() * 60,  # Convert minutes to seconds
+                'show_header': self.imgur_show_header.isChecked(),
+                'font_family': self.imgur_font_combo.currentFont().family(),
+                'font_size': self.imgur_font_size.value(),
+                'margin': self.imgur_margin.value(),
+                'color': [self._imgur_color.red(), self._imgur_color.green(), self._imgur_color.blue(), self._imgur_color.alpha()],
+                'show_background': self.imgur_show_background.isChecked(),
+                'intense_shadow': self.imgur_intense_shadow.isChecked(),
+                'bg_opacity': self.imgur_bg_opacity.value() / 100.0,
+                'bg_color': [self._imgur_bg_color.red(), self._imgur_bg_color.green(), self._imgur_bg_color.blue(), self._imgur_bg_color.alpha()],
+                'border_color': [self._imgur_border_color.red(), self._imgur_border_color.green(), self._imgur_border_color.blue(), self._imgur_border_color.alpha()],
+                'border_opacity': self.imgur_border_opacity.value() / 100.0,
+            }
+            imgur_mon_text = self.imgur_monitor_combo.currentText()
+            imgur_config['monitor'] = imgur_mon_text if imgur_mon_text == 'ALL' else int(imgur_mon_text)
+            existing_widgets['imgur'] = imgur_config
 
         # Gmail config - archived, see archive/gmail_feature/
 

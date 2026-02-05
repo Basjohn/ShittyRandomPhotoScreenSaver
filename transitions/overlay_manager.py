@@ -335,6 +335,14 @@ def raise_overlay(widget: QWidget, overlay: QWidget) -> None:
     except Exception as e:
         logger.debug("[OVERLAY] Exception suppressed: %s", e)
 
+    try:
+        # Imgur widget should stay above transition overlays.
+        imgur = getattr(widget, "imgur_widget", None)
+        if imgur is not None:
+            imgur.raise_()
+    except Exception as e:
+        logger.debug("[OVERLAY] Exception suppressed: %s", e)
+
     # Ctrl cursor halo should always be topmost - raised LAST after all other widgets
     try:
         getattr(widget, "_ctrl_cursor_hint", None)

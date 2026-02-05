@@ -1537,8 +1537,16 @@ class WeatherWidget(BaseOverlayWidget):
 
         except Exception as e:
             logger.exception(f"Error updating weather display: {e}")
-            self._city_label.setText("Weather: Error")
-            self._conditions_label.setText("")
+            # Check if Qt objects are still valid before accessing them
+            try:
+                import Shiboken
+                if Shiboken.isValid(self._city_label):
+                    self._city_label.setText("Weather: Error")
+                if Shiboken.isValid(self._conditions_label):
+                    self._conditions_label.setText("")
+            except Exception:
+                # Widget is being destroyed, ignore
+                pass
 
     def _update_position(self) -> None:
         """Update widget position using base class visual padding helpers.

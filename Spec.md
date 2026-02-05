@@ -52,6 +52,39 @@ Single source of truth for architecture and key decisions.
 - System-agnostic: Uses `QGuiApplication.primaryScreen()` for detection, not screen index assumptions.
 - Dedicated investigation doc: `audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md`.
 
+## Developer Feature Gate (SRPSS_ENABLE_DEV)
+
+**Purpose**: Hide experimental, broken, or API-dependent features from end users while keeping code intact for future restoration or development.
+
+**Environment Variable**: `SRPSS_ENABLE_DEV`
+- **Default**: `false` (features disabled)
+- **Enable**: Set to `true` to activate gated features
+- **Usage**: `$env:SRPSS_ENABLE_DEV='true'; python main.py`
+
+**Currently Gated Features**:
+1. **Imgur Widget** (`widgets/imgur/`)
+   - **Reason**: Imgur's modern website is JavaScript-rendered; BeautifulSoup scraping cannot extract proper gallery URLs with title slugs (e.g., `https://imgur.com/gallery/watching-8ayb0WE`). Only ID-only URLs can be extracted (e.g., `https://imgur.com/gallery/8ayb0WE`), which result in 404 errors or incorrect redirects.
+   - **Gate Location**: `rendering/widget_manager.py` line ~1783
+   - **Future**: May be restored if Imgur reopens their API or if Selenium/Playwright implementation is added for JS rendering.
+   - **Alternative**: Consider Unsplash, Pexels, or Flickr as replacement image sources (all have free APIs or scrapable HTML).
+
+**Implementation Pattern**:
+```python
+import os
+dev_features_enabled = os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
+
+if dev_features_enabled:
+    # Create experimental widget
+    widget = ExperimentalWidgetFactory.create(...)
+```
+
+**Guidelines for Adding Gated Features**:
+- Use `SRPSS_ENABLE_DEV` for features that are broken, experimental, or require external APIs that may be unavailable
+- Document the reason for gating in this spec
+- Keep code intact rather than removing it (allows future restoration)
+- Do NOT expose gated features in settings UI or documentation unless dev mode is enabled
+- Test that features are properly hidden when gate is disabled
+
 ## Deployment
 - **SRPSS.scr** / **SRPSS.exe**: Main screensaver build
 - **SRPSS_MC.exe**: Manual Controller variant
@@ -282,7 +315,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - **SST compatibility** – `export_to_sst()` mirrors the JSON snapshot (including structured sections) and tags the payload with `settings_version`. `import_from_sst()` and `preview_import_from_sst()` coerce values through `_coerce_import_value`, merge structured sections when requested, and remain tolerant of older `.sst` files by flattening their legacy layout into the new schema before writing.
   - `widgets.reddit.*`: Reddit overlay widget configuration (enabled flag, per-monitor selection via `monitor` ('ALL'|1|2|3), 9 position options (Top/Middle/Bottom × Left/Center/Right), subreddit slug, item limit (4-, 10-, or 20-item layouts for ultra-wide/large displays), font family/size, margin, text colour, optional background frame and border with opacity, background opacity). The widget fetches Reddit's unauthenticated JSON listing endpoints with a fixed candidate pool (up to 25 posts), then sorts all valid entries by `created_utc` so the newest posts appear at the top; each layout simply changes how many rows are rendered from that sorted list. The widget hides itself on fetch/parse failure and only responds to clicks in Ctrl-held / hard-exit interaction modes. Initial visibility is coordinated through the shared overlay fade-in system so Reddit, Weather and Media fade together per display.
   - `widgets.reddit2.*`: Second Reddit widget configuration (enabled flag, per-monitor selection via `monitor`, 9 position options, subreddit slug, item limit). Inherits all styling (font, colors, background, border, opacity) from `widgets.reddit.*` to allow showing two different subreddits simultaneously.
-  - `widgets.imgur.*`: Imgur image gallery widget (enabled flag, per-monitor selection via `monitor`, 9 position options, tag selection from presets or custom, grid dimensions via `grid_rows`/`grid_columns` for NxM layout, layout mode (vertical/square/hybrid), update interval, header visibility, image border settings). Uses web scraping with BeautifulSoup since Imgur API is closed to new registrations. Implements LRU disk cache for downloaded images, exponential backoff rate limiting, and click-to-open-in-browser functionality. Paint-cached grid rendering follows minimal painting policy.
+  - `widgets.imgur.*`: Imgur image gallery widget (enabled flag, per-monitor selection via `monitor`, 9 position options, tag selection from presets or custom, grid dimensions via `grid_rows`/`grid_columns` for NxM layout, layout mode (vertical/square/hybrid with dynamic aspect ratio), update interval, header visibility with optional border, image border settings). Uses web scraping with BeautifulSoup since Imgur API is closed to new registrations. Implements LRU disk cache (100MB max) with GIF-to-first-frame conversion, conservative rate limiting (24 req/10min with rolling window tracking), exponential backoff, 429 handling, concurrent downloads (4 at a time via semaphore), circular buffer image rotation (max 100 images), smooth fade transitions (300ms), high-DPI pixmap support, async cache loading to prevent UI blocking, cell pixmap caching to avoid re-scaling, and click-to-open-in-browser functionality. Paint-cached grid rendering follows minimal painting policy with widget-level and cell-level caching. Fade coordination via FadeCoordinator for synchronized startup with other widgets.
  - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers). Individual widgets perform a two-stage startup animation: first a coordinated card opacity fade-in (driven by the overlay fade synchronizer), then a shadow fade where the drop shadow grows smoothly from transparent to its configured opacity using the same global duration/easing. Shadows are slightly enlarged/softened via a shared blur-radius multiplier so all widgets share a consistent halo.
  - Accessibility:
   - `accessibility.dimming.enabled` (bool, default false): enables compositor-based dimming via `GLCompositorWidget.set_dimming()`, rendered after the base image/transition but before overlay widgets.

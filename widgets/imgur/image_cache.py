@@ -33,7 +33,7 @@ CACHE_METADATA_FILE = "cache_metadata.json"
 
 # Image processing
 MAX_IMAGE_DIMENSION = 1024  # Max dimension for cached images
-THUMBNAIL_SIZE = 160
+THUMBNAIL_SIZE = 600  # Max dimension for thumbnails (fast loading, good quality)
 
 
 @dataclass
@@ -111,30 +111,83 @@ class ImgurImageCache:
         return self._cache_dir / CACHE_METADATA_FILE
     
     def _load_metadata(self) -> None:
-        """Load cache metadata from disk."""
+        """Load cache metadata from disk, rebuilding from files if needed."""
         meta_path = self._metadata_path()
-        if not meta_path.exists():
+        
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                
+                self._total_size_bytes = 0
+                for item_data in data.get("items", []):
+                    try:
+                        cached = CachedImage.from_dict(item_data)
+                        # Verify file still exists
+                        if Path(cached.path).exists():
+                            self._cache[cached.id] = cached
+                            self._total_size_bytes += cached.size_bytes
+                    except Exception as e:
+                        logger.debug("[IMGUR_CACHE] Failed to load cache item: %s", e)
+                
+                logger.debug("[IMGUR_CACHE] Loaded %d cached items from metadata", len(self._cache))
+                return
+                
+            except Exception as e:
+                logger.warning("[IMGUR_CACHE] Failed to load metadata: %s", e)
+        
+        # Rebuild from existing files if metadata missing/corrupt
+        self._rebuild_from_files()
+    
+    def _rebuild_from_files(self) -> None:
+        """Rebuild cache metadata from existing image files in cache directory."""
+        if not self._cache_dir.exists():
             return
         
-        try:
-            with open(meta_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            
-            self._total_size_bytes = 0
-            for item_data in data.get("items", []):
+        rebuilt_count = 0
+        for path in self._cache_dir.glob("*.jpg"):
+            try:
+                image_id = path.stem
+                if image_id in self._cache:
+                    continue
+                
+                size_bytes = path.stat().st_size
+                if size_bytes < 100:  # Skip corrupt/empty files
+                    continue
+                
+                # Try to get dimensions from image
+                width, height = 160, 160
                 try:
-                    cached = CachedImage.from_dict(item_data)
-                    # Verify file still exists
-                    if Path(cached.path).exists():
-                        self._cache[cached.id] = cached
-                        self._total_size_bytes += cached.size_bytes
-                except Exception as e:
-                    logger.debug("[IMGUR_CACHE] Failed to load cache item: %s", e)
-            
-            logger.debug("[IMGUR_CACHE] Loaded %d cached items", len(self._cache))
-            
-        except Exception as e:
-            logger.warning("[IMGUR_CACHE] Failed to load metadata: %s", e)
+                    img = QImage(str(path))
+                    if not img.isNull():
+                        width = img.width()
+                        height = img.height()
+                except Exception:
+                    pass
+                
+                now = time.time()
+                cached = CachedImage(
+                    id=image_id,
+                    path=str(path),
+                    size_bytes=size_bytes,
+                    width=width,
+                    height=height,
+                    last_accessed=now,
+                    download_time=path.stat().st_mtime,
+                    is_animated=False,
+                    gallery_url=f"https://imgur.com/gallery/{image_id}",
+                )
+                
+                self._cache[image_id] = cached
+                self._total_size_bytes += size_bytes
+                rebuilt_count += 1
+                
+            except Exception as e:
+                logger.debug("[IMGUR_CACHE] Failed to rebuild from %s: %s", path.name, e)
+        
+        if rebuilt_count > 0:
+            logger.info("[IMGUR_CACHE] Rebuilt %d items from existing files", rebuilt_count)
+            self._save_metadata()
     
     def _save_metadata(self) -> None:
         """Save cache metadata to disk."""
@@ -157,6 +210,7 @@ class ImgurImageCache:
         """Get the path for a cached image."""
         return self._cache_dir / f"{image_id}.{extension}"
     
+    
     def _evict_lru(self, needed_bytes: int = 0) -> None:
         """Evict least recently used items to make space.
         
@@ -172,11 +226,16 @@ class ImgurImageCache:
         while (self._total_size_bytes > target_size or len(self._cache) >= self._max_items) and items:
             item = items.pop(0)
             
-            # Remove file
+            # Remove file and thumbnail
             try:
                 path = Path(item.path)
                 if path.exists():
                     path.unlink()
+                # Also delete thumbnail if exists
+                if item.thumbnail_path:
+                    thumb_path = Path(item.thumbnail_path)
+                    if thumb_path.exists():
+                        thumb_path.unlink()
             except Exception as e:
                 logger.debug("[IMGUR_CACHE] Failed to delete %s: %s", item.id, e)
             
@@ -192,6 +251,7 @@ class ImgurImageCache:
         """Check if an image is in the cache."""
         with self._lock:
             return image_id in self._cache
+    
     
     def get(self, image_id: str) -> Optional[Tuple[Path, CachedImage]]:
         """Get a cached image path and metadata.
@@ -219,12 +279,13 @@ class ImgurImageCache:
             
             return (path, cached)
     
-    def get_pixmap(self, image_id: str, max_size: Optional[Tuple[int, int]] = None) -> Optional[QPixmap]:
+    def get_pixmap(self, image_id: str, max_size: Optional[Tuple[int, int]] = None, use_thumbnail: bool = True) -> Optional[QPixmap]:
         """Get a cached image as QPixmap.
         
         Args:
             image_id: Image ID
             max_size: Optional (width, height) to scale to
+            use_thumbnail: IGNORED - always use full resolution for quality
             
         Returns:
             QPixmap or None if not cached
@@ -233,19 +294,20 @@ class ImgurImageCache:
         if result is None:
             return None
         
-        path, _ = result
+        path, cached = result
         
         try:
+            # ALWAYS use full resolution image for quality (thumbnails cause blur)
             pixmap = QPixmap(str(path))
             if pixmap.isNull():
                 return None
             
-            if max_size:
-                pixmap = pixmap.scaled(
-                    max_size[0], max_size[1],
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
+            # Set DPR to 1.0 so the widget's paint cache can handle DPR scaling properly
+            # This prevents double-scaling issues
+            try:
+                pixmap.setDevicePixelRatio(1.0)
+            except Exception:
+                pass
             
             return pixmap
             
@@ -291,10 +353,32 @@ class ImgurImageCache:
             path = self._get_image_path(image_id, extension)
             
             try:
-                with open(path, "wb") as f:
-                    f.write(image_data)
+                # Handle animated GIFs - extract first frame
+                if is_animated or extension.lower() == "gif":
+                    try:
+                        from PIL import Image
+                        import io
+                        
+                        pil_img = Image.open(io.BytesIO(image_data))
+                        # Seek to first frame
+                        pil_img.seek(0)
+                        # Convert to RGB if necessary (GIFs may have palette)
+                        if pil_img.mode != 'RGB':
+                            pil_img = pil_img.convert('RGB')
+                        # Save as JPEG for efficiency
+                        path = self._get_image_path(image_id, "jpg")
+                        pil_img.save(str(path), 'JPEG', quality=85)
+                        extension = "jpg"
+                        logger.debug("[IMGUR_CACHE] Converted GIF %s to first frame JPEG", image_id)
+                    except Exception as e:
+                        logger.debug("[IMGUR_CACHE] GIF conversion failed, saving as-is: %s", e)
+                        with open(path, "wb") as f:
+                            f.write(image_data)
+                else:
+                    with open(path, "wb") as f:
+                        f.write(image_data)
                 
-                # Get image dimensions
+                # Get image dimensions (no thumbnail generation)
                 width, height = 0, 0
                 try:
                     img = QImage(str(path))
@@ -318,7 +402,7 @@ class ImgurImageCache:
                 # Get final file size
                 size_bytes = path.stat().st_size
                 
-                # Create metadata
+                # Create metadata (no thumbnail_path)
                 now = time.time()
                 cached = CachedImage(
                     id=image_id,
@@ -335,9 +419,8 @@ class ImgurImageCache:
                 self._cache[image_id] = cached
                 self._total_size_bytes += size_bytes
                 
-                # Save metadata periodically (every 10 items)
-                if len(self._cache) % 10 == 0:
-                    self._save_metadata()
+                # Save metadata after every cache operation for persistence
+                self._save_metadata()
                 
                 logger.debug("[IMGUR_CACHE] Cached %s (%dx%d, %d KB)",
                            image_id, width, height, size_bytes // 1024)

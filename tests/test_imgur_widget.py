@@ -7,7 +7,7 @@ Tests cover:
 - Settings application
 """
 import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import Mock, MagicMock
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QRect, QPoint
 from PySide6.QtGui import QColor
@@ -272,19 +272,16 @@ class TestImgurWidgetClickHandling:
         except Exception:
             pass
     
-    @patch('widgets.imgur.widget.launch_url_via_user_desktop')
-    def test_handle_click_on_cell(self, mock_launch, widget):
+    def test_handle_click_on_cell(self, widget):
         """Test clicking on an image cell."""
         widget._click_opens_browser = True
         
         # Click inside first cell
         result = widget.handle_click(QPoint(50, 100))
         
-        assert result
-        mock_launch.assert_called_once_with("https://imgur.com/gallery/abc")
+        assert result == "https://imgur.com/gallery/abc"
     
-    @patch('widgets.imgur.widget.launch_url_via_user_desktop')
-    def test_handle_click_on_header(self, mock_launch, widget):
+    def test_handle_click_on_header(self, widget):
         """Test clicking on header."""
         widget._click_opens_browser = True
         widget._tag = "cats"
@@ -292,10 +289,8 @@ class TestImgurWidgetClickHandling:
         # Click inside header
         result = widget.handle_click(QPoint(100, 20))
         
-        assert result
-        mock_launch.assert_called_once()
-        call_url = mock_launch.call_args[0][0]
-        assert "cats" in call_url
+        assert isinstance(result, str)
+        assert "cats" in result
     
     def test_handle_click_disabled(self, widget):
         """Test that clicks are ignored when disabled."""
@@ -305,16 +300,14 @@ class TestImgurWidgetClickHandling:
         
         assert not result
     
-    @patch('widgets.imgur.widget.launch_url_via_user_desktop')
-    def test_handle_click_outside(self, mock_launch, widget):
+    def test_handle_click_outside(self, widget):
         """Test clicking outside all elements."""
         widget._click_opens_browser = True
         
         # Click outside all cells and header
         result = widget.handle_click(QPoint(500, 500))
         
-        assert not result
-        mock_launch.assert_not_called()
+        assert result is False
 
 
 if __name__ == "__main__":
