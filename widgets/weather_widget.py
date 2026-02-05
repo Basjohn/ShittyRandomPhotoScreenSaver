@@ -78,7 +78,11 @@ _DEFAULT_DETAIL_ICON_SIZE = 16
 
 
 class WeatherConditionIcon(QWidget):
-    """Widget that renders static PNG weather icons with proper DPR scaling."""
+    """Widget that renders static PNG weather icons with proper DPR scaling.
+    
+    Feature #6: Supports optional monochrome (grayscale) rendering.
+    Conversion happens once on load (cached), not every paint - zero perf impact.
+    """
 
     def __init__(self, size_px: int = 96, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -86,6 +90,7 @@ class WeatherConditionIcon(QWidget):
         self._icon_path: Optional[Path] = None
         self._size_px = max(48, int(size_px))
         self._padding = 4
+        self._monochrome = False  # Feature #6: Monochrome mode
         self._set_fixed_box()
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
 
@@ -104,6 +109,23 @@ class WeatherConditionIcon(QWidget):
         self._pixmap = None  # Force reload at new size
         self.update()
 
+    def set_monochrome(self, enabled: bool) -> None:
+        """Enable/disable monochrome (grayscale) rendering.
+        
+        Feature #6: Conversion happens once on load, not every paint.
+        """
+        if self._monochrome == enabled:
+            return
+        self._monochrome = enabled
+        self._pixmap = None  # Force reload with new mode
+        if self._icon_path:
+            self._load_pixmap()
+        self.update()
+
+    def is_monochrome(self) -> bool:
+        """Return current monochrome state."""
+        return self._monochrome
+
     def clear_icon(self) -> None:
         self._pixmap = None
         self._icon_path = None
@@ -121,7 +143,10 @@ class WeatherConditionIcon(QWidget):
         self.update()
 
     def _load_pixmap(self) -> None:
-        """Load pixmap at full native resolution without scaling."""
+        """Load pixmap at full native resolution, optionally converting to grayscale.
+        
+        Feature #6: Grayscale conversion happens here (once), not in paintEvent.
+        """
         if self._icon_path is None:
             self._pixmap = None
             return
@@ -133,7 +158,46 @@ class WeatherConditionIcon(QWidget):
             self._pixmap = None
             return
 
+        # Feature #6: Convert to grayscale if monochrome mode enabled
+        if self._monochrome:
+            source = self._convert_to_grayscale(source)
+
         self._pixmap = source
+
+    def _convert_to_grayscale(self, pixmap: QPixmap) -> QPixmap:
+        """Convert pixmap to grayscale while preserving alpha channel.
+        
+        Feature #6: Performance-safe conversion - called once per icon load,
+        cached result used for all subsequent paints.
+        """
+        from PySide6.QtGui import QImage
+        
+        image = pixmap.toImage()
+        if image.isNull():
+            return pixmap
+        
+        # Convert to ARGB32 format if needed to ensure we can manipulate pixels
+        if image.format() != QImage.Format.Format_ARGB32:
+            image = image.convertToFormat(QImage.Format.Format_ARGB32)
+        
+        # Convert each pixel to grayscale while preserving alpha
+        width = image.width()
+        height = image.height()
+        for y in range(height):
+            for x in range(width):
+                pixel = image.pixel(x, y)
+                # Extract ARGB components
+                alpha = (pixel >> 24) & 0xFF
+                red = (pixel >> 16) & 0xFF
+                green = (pixel >> 8) & 0xFF
+                blue = pixel & 0xFF
+                # Calculate grayscale using luminance formula
+                gray = int(0.299 * red + 0.587 * green + 0.114 * blue)
+                # Reconstruct pixel with original alpha
+                new_pixel = (alpha << 24) | (gray << 16) | (gray << 8) | gray
+                image.setPixel(x, y, new_pixel)
+        
+        return QPixmap.fromImage(image)
 
     def has_icon(self) -> bool:
         return self._pixmap is not None and not self._pixmap.isNull()
@@ -148,19 +212,24 @@ class WeatherConditionIcon(QWidget):
             return
 
         # Draw pixmap scaled to target with smooth transformation
+        # Monochrome conversion already applied in _load_pixmap (zero overhead here)
         target = self.rect().adjusted(self._padding, self._padding, -self._padding, -self._padding)
         painter.drawPixmap(target, self._pixmap)
         painter.end()
 
 
 class WeatherDetailIcon(QWidget):
-    """Custom widget to paint detail metric icons (rain/humidity/wind)."""
+    """Custom widget to paint detail metric icons (rain/humidity/wind).
+    
+    Issue #2 Fix: Icons are pre-scaled when set via set_pixmap(), so paintEvent
+    draws at 1:1 scale without additional scaling to avoid quality degradation.
+    """
 
     def __init__(self, size_px: int, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
-        self._size_px = max(_DETAIL_ICON_MIN_PX, size_px)
-        self._box = QSize(self._size_px + 6, self._size_px + 6)
+        self._target_size = max(_DETAIL_ICON_MIN_PX, size_px)
+        self._box = QSize(self._target_size + 6, self._target_size + 6)
         self.setFixedSize(self._box)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -168,6 +237,7 @@ class WeatherDetailIcon(QWidget):
         self._baseline_offset = 0
 
     def set_pixmap(self, pixmap: Optional[QPixmap]) -> None:
+        """Set pixmap - expects pre-scaled pixmap at target size."""
         self._pixmap = pixmap
         self.update()
 
@@ -186,21 +256,22 @@ class WeatherDetailIcon(QWidget):
         return self._pixmap
 
     def paintEvent(self, event) -> None:  # noqa: N802
+        """Draw pre-scaled pixmap at 1:1 scale (no additional scaling)."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         if self._pixmap is None or self._pixmap.isNull():
             painter.end()
             return
-        target = self.rect().adjusted(3, self._vertical_inset, -3, -self._vertical_inset)
-        # Scale pixmap to target size with smooth transformation and center it
-        scaled = self._pixmap.scaled(
-            target.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        x = target.x() + (target.width() - scaled.width()) // 2
-        y = target.y() + (target.height() - scaled.height()) // 2
-        painter.drawPixmap(x, y, scaled)
+        
+        # Calculate centered position within the widget box
+        # Pixmap is already pre-scaled, so draw at 1:1 (no scaling here)
+        pm_w = self._pixmap.width()
+        pm_h = self._pixmap.height()
+        x = (self._box.width() - pm_w) // 2
+        y = self._vertical_inset + (self._box.height() - self._vertical_inset * 2 - pm_h) // 2
+        
+        painter.drawPixmap(x, y, self._pixmap)
         painter.end()
 
 
@@ -477,6 +548,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._show_condition_icon = True
         self._icon_alignment = _DEFAULT_ICON_ALIGNMENT
         self._icon_size = _DEFAULT_ICON_SIZE
+        self._icon_monochrome = False  # Feature #6: Monochrome icon mode
         self._show_details_row = True
         self._detail_icon_size = _DEFAULT_DETAIL_ICON_SIZE
         self._last_is_day = True
@@ -709,12 +781,18 @@ class WeatherWidget(BaseOverlayWidget):
     def _resolve_day_night_icon(icon_name: str, is_day: bool) -> str:
         """Convert day icon name to night variant if needed."""
         if is_day:
+            logger.debug(f"[WEATHER] Icon resolution: {icon_name} (is_day=True, keeping day icon)")
             return icon_name
         if "-day" in icon_name:
-            return icon_name.replace("-day", "-night")
+            result = icon_name.replace("-day", "-night")
+            logger.debug(f"[WEATHER] Icon resolution: {icon_name} -> {result} (is_day=False)")
+            return result
         if icon_name.endswith(".png"):
             base = icon_name[:-4]
-            return f"{base}-night.png"
+            result = f"{base}-night.png"
+            logger.debug(f"[WEATHER] Icon resolution: {icon_name} -> {result} (is_day=False, no -day suffix)")
+            return result
+        logger.debug(f"[WEATHER] Icon resolution: {icon_name} unchanged (is_day=False, no .png)")
         return icon_name
 
     def _get_detail_icon_pixmap(self, key: str, size: int) -> Optional[QPixmap]:
@@ -734,11 +812,12 @@ class WeatherWidget(BaseOverlayWidget):
         if pixmap.isNull():
             return None
 
-        # Scale to requested size - use FastTransformation for sharper icons
+        # Issue #2 Fix: Single scale operation using SmoothTransformation
+        # This is the ONLY scale - paintEvent draws at 1:1
         scaled = pixmap.scaled(
             size, size,
             Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.FastTransformation
+            Qt.TransformationMode.SmoothTransformation
         )
 
         # Apply monochrome tint
@@ -861,8 +940,12 @@ class WeatherWidget(BaseOverlayWidget):
             self._update_display(self._cached_data)
             self._has_displayed_valid_data = True
         
+        # Schedule early refresh 30 seconds after startup to get fresh data
+        # Open-Meteo free tier: 10k calls/day, we make ~48/day (well within limits)
+        ThreadManager.single_shot(30 * 1000, self._fetch_weather)
+        logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
+        
         # Start periodic updates with desync jitter to prevent alignment with other widgets
-        self._fetch_weather()
         base_interval_ms = 30 * 60 * 1000  # 30 minutes
         # Add ±2 minute jitter to desync from other widgets and transitions
         jitter_ms = random.randint(-2 * 60 * 1000, 2 * 60 * 1000)
@@ -976,7 +1059,11 @@ class WeatherWidget(BaseOverlayWidget):
             else:
                 _starter()
 
-            self._fetch_weather()
+            # Schedule early refresh 30 seconds after startup to get fresh data
+            # Open-Meteo free tier: 10k calls/day, we make ~50/day (well within limits)
+            ThreadManager.single_shot(30 * 1000, self._fetch_weather)
+            logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
+            
             interval_ms = 30 * 60 * 1000
             handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
             self._update_timer_handle = handle
@@ -993,6 +1080,11 @@ class WeatherWidget(BaseOverlayWidget):
         self._pending_first_show = True
 
         self._fetch_weather()
+        
+        # Schedule early refresh 30 seconds after startup to get fresh data
+        ThreadManager.single_shot(30 * 1000, self._fetch_weather)
+        logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
+        
         interval_ms = 30 * 60 * 1000
         handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
         self._update_timer_handle = handle
@@ -1197,10 +1289,17 @@ class WeatherWidget(BaseOverlayWidget):
         if temp is None or condition is None:
             return
 
+        # Load ALL fields from cache, not just temperature/condition/location
         self._cached_data = {
             "temperature": temp,
             "condition": condition,
             "location": loc,
+            "humidity": payload.get("humidity"),
+            "precipitation_probability": payload.get("precipitation_probability"),
+            "windspeed": payload.get("windspeed"),
+            "forecast": payload.get("forecast"),
+            "is_day": payload.get("is_day", 1),  # Default to day if not present
+            "weather_code": payload.get("weather_code"),
         }
         self._cache_time = dt
 
@@ -1254,6 +1353,20 @@ class WeatherWidget(BaseOverlayWidget):
                 payload["precipitation_probability"] = float(precipitation)
             if windspeed is not None:
                 payload["windspeed"] = float(windspeed)
+            
+            # Include forecast if available
+            forecast = data.get("forecast")
+            if forecast:
+                payload["forecast"] = str(forecast)
+            
+            # Include is_day and weather_code for icon selection
+            is_day = data.get("is_day")
+            if is_day is not None:
+                payload["is_day"] = int(is_day)
+            
+            weather_code = data.get("weather_code")
+            if weather_code is not None:
+                payload["weather_code"] = int(weather_code)
 
             _CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
         except Exception:
@@ -1306,32 +1419,44 @@ class WeatherWidget(BaseOverlayWidget):
             location_display = str(location).title()
             condition_display = str(condition).title()
 
-            city_pt = max(6, int(self._font_size * 0.9))  # Location: 10% smaller
-            details_pt = max(6, self._font_size - 2)
+            # Feature #5: Font size hierarchy
+            # Location = 100% of user setting (largest/base)
+            # Condition = 80% of user setting
+            # Detail row = 50% of user setting (calculated below)
+            location_pt = max(8, int(self._font_size))  # 100% - this is the base
+            condition_pt = max(6, int(self._font_size * 0.8))  # 80% of location
 
             # Set font sizes via stylesheet on labels
             color = self._text_color
             color_rgba = f"rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()})"
 
-            self._city_label.setStyleSheet(f"font-size: {city_pt}pt; font-weight: 700; color: {color_rgba};")
+            self._city_label.setStyleSheet(f"font-size: {location_pt}pt; font-weight: 700; color: {color_rgba};")
             self._city_label.setText(location_display)
             
             # Force city label to size properly
-            city_font = QFont(self._font_family, city_pt, QFont.Weight.Bold)
+            city_font = QFont(self._font_family, location_pt, QFont.Weight.Bold)
             city_fm = QFontMetrics(city_font)
             city_width = city_fm.horizontalAdvance(location_display)
-            self._city_label.setMinimumWidth(city_width + 10)
 
             # Build condition line: "22°C - Partly Cloudy"
             condition_text = f"{temp:.0f}°C - {condition_display}"
-            self._conditions_label.setStyleSheet(f"font-size: {details_pt}pt; font-weight: 700; color: {color_rgba};")
+            self._conditions_label.setStyleSheet(f"font-size: {condition_pt}pt; font-weight: 700; color: {color_rgba};")
             self._conditions_label.setText(condition_text)
             
             # Force label to size properly to fit text
-            details_font = QFont(self._font_family, details_pt, QFont.Weight.Bold)
-            fm = QFontMetrics(details_font)
-            text_width = fm.horizontalAdvance(condition_text)
-            self._conditions_label.setMinimumWidth(text_width + 10)
+            condition_font = QFont(self._font_family, condition_pt, QFont.Weight.Bold)
+            condition_fm = QFontMetrics(condition_font)
+            condition_width = condition_fm.horizontalAdvance(condition_text)
+            
+            # Issue #3 Fix: Calculate required width from actual text metrics
+            # Use the maximum of location and condition widths, plus padding
+            required_width = max(city_width, condition_width) + 20
+            self._city_label.setMinimumWidth(required_width)
+            self._conditions_label.setMinimumWidth(required_width)
+            
+            # Also update text column minimum width to prevent clipping
+            if self._text_column:
+                self._text_column.setMinimumWidth(required_width + 12)
 
             # Update condition icon
             if self._show_condition_icon and self._icon_alignment != "NONE":
@@ -1350,8 +1475,8 @@ class WeatherWidget(BaseOverlayWidget):
             if self._show_details_row:
                 metrics = self._build_detail_metrics(data)
                 if metrics:
-                    # Calculate detail font size
-                    detail_pt = max(6, self._font_size - 12)
+                    # Feature #5: Detail font = 50% of location size
+                    detail_pt = max(6, int(self._font_size * 0.5))
                     detail_font = QFont(self._font_family, detail_pt, QFont.Weight.Normal)
                     fm = QFontMetrics(detail_font)
                     icon_size = max(_DETAIL_ICON_MIN_PX, int(fm.height() * 1.15))
@@ -1377,7 +1502,8 @@ class WeatherWidget(BaseOverlayWidget):
 
             # Update forecast
             if self._show_forecast and self._forecast_data:
-                forecast_pt = max(6, self._font_size - 12)
+                # Feature #5: Forecast font = 50% of location size (same as detail row)
+                forecast_pt = max(6, int(self._font_size * 0.5))
                 forecast_html = f"<span style='font-size:{forecast_pt}pt; font-style:italic; font-weight:400; color:{color_rgba};'>{self._forecast_data}</span>"
                 self._forecast_label.setText(forecast_html)
                 self._forecast_label.setVisible(True)
@@ -1500,7 +1626,11 @@ class WeatherWidget(BaseOverlayWidget):
             self._update_display(self._cached_data)
 
     def _rebuild_primary_layout(self) -> None:
-        """Rebuild the primary row layout based on current icon alignment."""
+        """Rebuild the primary row layout based on current icon alignment.
+        
+        Issue #4 Fix: Properly remove widgets from layout before re-adding in new order,
+        and force layout update to ensure changes take effect immediately.
+        """
         if not hasattr(self, '_primary_row') or not self._primary_row:
             return
         
@@ -1509,24 +1639,42 @@ class WeatherWidget(BaseOverlayWidget):
         if not primary_layout:
             return
         
-        # Remove existing widgets from layout (but keep them as children)
-        while primary_layout.count():
-            item = primary_layout.takeAt(0)
-            if item.widget():
-                # Just remove from layout, don't delete
-                pass
+        logger.debug(f"[WEATHER] Rebuilding primary layout for alignment: {self._icon_alignment}")
         
-        # Re-add widgets in correct order
+        # Store references to widgets we need to re-add
+        text_col = self._text_column
+        icon_widget = self._condition_icon_widget
+        
+        # Remove all widgets from layout (but keep them as children of parent)
+        # We must remove ALL items, not just widgets
+        while primary_layout.count() > 0:
+            primary_layout.takeAt(0)  # Item is removed from layout but widget remains as child
+        
+        # Re-add widgets in correct order based on alignment
         if self._icon_alignment == "LEFT":
             # Icon on left, text on right
-            if self._condition_icon_widget:
-                primary_layout.addWidget(self._condition_icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
-            primary_layout.addWidget(self._text_column, 1)
+            logger.debug("[WEATHER] Setting layout: ICON | TEXT")
+            if icon_widget:
+                primary_layout.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
+            if text_col:
+                primary_layout.addWidget(text_col, 1)
+        elif self._icon_alignment == "NONE":
+            # Text only, no icon
+            logger.debug("[WEATHER] Setting layout: TEXT only")
+            if text_col:
+                primary_layout.addWidget(text_col, 1)
         else:
-            # Text on left, icon on right (default)
-            primary_layout.addWidget(self._text_column, 1)
-            if self._condition_icon_widget:
-                primary_layout.addWidget(self._condition_icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
+            # Text on left, icon on right (default: RIGHT)
+            logger.debug("[WEATHER] Setting layout: TEXT | ICON")
+            if text_col:
+                primary_layout.addWidget(text_col, 1)
+            if icon_widget:
+                primary_layout.addWidget(icon_widget, 0, Qt.AlignmentFlag.AlignVCenter)
+        
+        # Force layout update to apply changes immediately
+        primary_layout.invalidate()
+        self._primary_row.updateGeometry()
+        self._primary_row.update()
 
     def set_icon_size(self, size: int) -> None:
         """Set the condition icon size in pixels."""
@@ -1547,6 +1695,21 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_icon_size = max(16, int(size))
         if self._cached_data:
             self._update_display(self._cached_data)
+
+    def set_icon_monochrome(self, enabled: bool) -> None:
+        """Enable/disable monochrome (grayscale) weather icon.
+        
+        Feature #6: Monochrome icon option with zero performance impact.
+        Conversion happens once on icon load, not every paint.
+        """
+        self._icon_monochrome = bool(enabled)
+        if self._condition_icon_widget:
+            self._condition_icon_widget.set_monochrome(self._icon_monochrome)
+        logger.debug(f"[WEATHER] Icon monochrome set to: {self._icon_monochrome}")
+
+    def is_icon_monochrome(self) -> bool:
+        """Return current monochrome icon state."""
+        return self._icon_monochrome
 
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""

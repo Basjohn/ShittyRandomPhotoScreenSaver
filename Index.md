@@ -204,6 +204,22 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
 | Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker | Audio capture coordination |
 
+## Weather System
+
+| Module | File | Key Classes | Purpose |
+|--------|------|-------------|---------|
+| WeatherWidget | widgets/weather_widget.py | WeatherWidget, WeatherConditionIcon, WeatherDetailIcon, WeatherDetailRow | Weather display with icons, detail metrics, forecast |
+| OpenMeteoProvider | weather/open_meteo_provider.py | OpenMeteoProvider | Open-Meteo API integration, geocoding, caching |
+
+**Features:**
+- Day/night icon variants (auto-selected based on `is_day` from API)
+- Monochrome icon mode (grayscale conversion on load, zero paint overhead)
+- Font size hierarchy (location 100%, condition 80%, detail 50%)
+- Detail metrics row (rain chance, humidity, wind speed)
+- Icon alignment (LEFT/RIGHT/NONE)
+- 30-minute refresh with early 30s refresh after startup
+- Dual cache (provider + widget) with 30-minute TTL
+
 ## Image Processing
 
 | Module | File | Key Classes | Purpose |

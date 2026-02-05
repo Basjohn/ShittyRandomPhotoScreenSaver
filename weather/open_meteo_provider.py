@@ -268,8 +268,8 @@ class OpenMeteoProvider:
                 'latitude': latitude,
                 'longitude': longitude,
                 'current_weather': 'true',
-                'current': 'relative_humidity_2m,precipitation_probability',  # Additional current data
-                'hourly': 'precipitation_probability',  # Hourly forecast for rain chance
+                'current': 'relative_humidity_2m',  # Only humidity available in current
+                'hourly': 'precipitation_probability,relative_humidity_2m',  # Precipitation ONLY in hourly
                 'daily': 'temperature_2m_max,temperature_2m_min,weathercode',  # Tomorrow's forecast
                 'forecast_days': 2,  # Today + tomorrow
                 'timezone': 'auto'
@@ -280,37 +280,54 @@ class OpenMeteoProvider:
             
             data = response.json()
             
-            # Extract current weather
-            current = data.get('current_weather', {})
-            current_units = data.get('current', {})
+            # Log raw response structure for debugging
+            logger.debug(f"[WEATHER_API] Response keys: {list(data.keys())}")
             
-            temperature = current.get('temperature')
-            weather_code = current.get('weathercode', 0)
-            windspeed = current.get('windspeed', 0.0)
+            # Extract current weather (basic data: temp, wind, code)
+            current_weather = data.get('current_weather', {})
+            # Extended current data (humidity, precipitation) - requested via 'current' param
+            current_extended = data.get('current', {})
+            
+            logger.debug(f"[WEATHER_API] current_weather keys: {list(current_weather.keys()) if current_weather else 'None'}")
+            logger.debug(f"[WEATHER_API] current_extended keys: {list(current_extended.keys()) if current_extended else 'None'}")
+            
+            temperature = current_weather.get('temperature')
+            weather_code = current_weather.get('weathercode', 0)
+            windspeed = current_weather.get('windspeed', 0.0)
+            is_day = current_weather.get('is_day', 1)  # 1 = day, 0 = night
             
             # Get humidity from extended current data (if available)
+            # Note: current_extended contains single values, not arrays
             humidity = None
-            if 'relative_humidity_2m' in current_units:
-                humidity = current_units['relative_humidity_2m']
+            if current_extended and 'relative_humidity_2m' in current_extended:
+                humidity = current_extended['relative_humidity_2m']
+                logger.debug(f"[WEATHER_API] Extracted humidity from current_extended: {humidity}")
             
-            # Get precipitation probability from current data (if available)
+            # Precipitation probability is NOT available in current - only in hourly
+            # We'll extract it from hourly data below
             precipitation = None
-            if 'precipitation_probability' in current_units:
-                precipitation = current_units['precipitation_probability']
             
-            # If not in current, try hourly data
-            if precipitation is None:
-                hourly = data.get('hourly', {})
-                if hourly and 'precipitation_probability' in hourly:
+            # Extract precipitation from hourly data (always, since not in current)
+            hourly = data.get('hourly', {})
+            if hourly:
+                logger.debug(f"[WEATHER_API] hourly keys: {list(hourly.keys())}")
+                
+                # Get precipitation probability from hourly
+                if 'precipitation_probability' in hourly:
                     precip_list = hourly['precipitation_probability']
                     if isinstance(precip_list, list) and precip_list:
-                        # Get current hour
-                        from datetime import datetime
-                        current_hour = datetime.now().hour
-                        if current_hour < len(precip_list):
-                            precipitation = precip_list[current_hour]
-                        else:
-                            precipitation = precip_list[0] if precip_list else None
+                        # Use first value (current hour) - hourly data starts from current time
+                        precipitation = precip_list[0] if precip_list[0] is not None else None
+                        logger.debug(f"[WEATHER_API] Extracted precipitation from hourly[0]: {precipitation}")
+                
+                # Also try to get humidity from hourly if not in current
+                if humidity is None and 'relative_humidity_2m' in hourly:
+                    humidity_list = hourly['relative_humidity_2m']
+                    if isinstance(humidity_list, list) and humidity_list:
+                        humidity = humidity_list[0] if humidity_list[0] is not None else None
+                        logger.debug(f"[WEATHER_API] Extracted humidity from hourly[0]: {humidity}")
+            
+            logger.debug(f"[WEATHER_API] Final values: humidity={humidity}, precipitation={precipitation}, windspeed={windspeed}")
             
             # Map weather code to condition
             condition = self.WEATHER_CODES.get(weather_code, "Unknown")
@@ -330,7 +347,7 @@ class OpenMeteoProvider:
                         tomorrow_condition = self.WEATHER_CODES.get(tomorrow_code, "")
                         # Use title case for forecast condition
                         tomorrow_condition_display = tomorrow_condition.title() if tomorrow_condition else ""
-                        forecast_text = f"Tomorrow: {tomorrow_min:.0f}°-{tomorrow_max:.0f}°C {tomorrow_condition_display}"
+                        forecast_text = f"Tomorrow: {tomorrow_min:.0f}°-{tomorrow_max:.0f}°C/{tomorrow_condition_display}"
                 except Exception as e:
                     logger.debug("[MISC] Exception suppressed: %s", e)
             
@@ -339,6 +356,7 @@ class OpenMeteoProvider:
                 'temperature': temperature,
                 'condition': condition,
                 'weather_code': weather_code,
+                'is_day': is_day,
                 'windspeed': windspeed,
                 'humidity': humidity,
                 'precipitation_probability': precipitation,
