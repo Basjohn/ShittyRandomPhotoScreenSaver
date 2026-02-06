@@ -5,11 +5,14 @@ Contains dataclasses for per-transition state and helper functions.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Optional, Callable
 
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QPixmap, QRegion
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -127,7 +130,7 @@ class WarpState(TransitionStateBase):
 @dataclass
 class RaindropsState(TransitionStateBase):
     """State for a compositor-driven raindrops/ripple transition."""
-    pass
+    ripple_count: int = 3
 
 
 @dataclass

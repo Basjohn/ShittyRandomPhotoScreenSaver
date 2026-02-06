@@ -165,10 +165,10 @@ class TestDisplayTab:
         
         tab1.deleteLater()
     
-    def test_display_tab_default_values(self, qt_app):
+    def test_display_tab_default_values(self, qt_app, tmp_path):
         """Test that DisplayTab uses correct default values."""
         # Create fresh settings manager
-        fresh_settings = SettingsManager(organization="Test", application=f"DisplayTabTest_{uuid.uuid4().hex}")
+        fresh_settings = SettingsManager(organization="Test", application=f"DisplayTabTest_{uuid.uuid4().hex}", storage_base_dir=tmp_path)
         fresh_settings.reset_to_defaults()
         
         tab = DisplayTab(fresh_settings)

@@ -228,6 +228,8 @@ class TransitionsTab(QWidget):
             "Right to Left",
             "Top to Bottom",
             "Bottom to Top",
+            "Diagonal TL-BR",
+            "Diagonal TR-BL",
             "Random",
         ])
         self.blockspin_direction_combo.currentTextChanged.connect(self._save_settings)
@@ -255,16 +257,30 @@ class TransitionsTab(QWidget):
         shape_row = QHBoxLayout()
         shape_row.addWidget(QLabel("Shape:"))
         self.diffuse_shape_combo = QComboBox()
-        # GLSL-backed Diffuse currently supports only Rectangle and Membrane
-        # (shaped variants like Circle/Diamond/Plus were removed due to
-        # timing/visual issues). Keep the UI in sync with the active paths.
-        self.diffuse_shape_combo.addItems(["Rectangle", "Membrane"])
+        self.diffuse_shape_combo.addItems(["Rectangle", "Membrane", "Lines", "Diamonds", "Amorph"])
         self.diffuse_shape_combo.currentTextChanged.connect(self._save_settings)
         shape_row.addWidget(self.diffuse_shape_combo)
         shape_row.addStretch()
         diffuse_layout.addLayout(shape_row)
         
         layout.addWidget(self.diffuse_group)
+        
+        # Ripple specific settings
+        self.ripple_group = QGroupBox("Ripple Settings")
+        ripple_layout = QVBoxLayout(self.ripple_group)
+        
+        ripple_count_row = QHBoxLayout()
+        ripple_count_row.addWidget(QLabel("Ripple Count:"))
+        self.ripple_count_spin = QSpinBox()
+        self.ripple_count_spin.setRange(1, 8)
+        self.ripple_count_spin.setValue(3)
+        self.ripple_count_spin.setAccelerated(True)
+        self.ripple_count_spin.valueChanged.connect(self._save_settings)
+        ripple_count_row.addWidget(self.ripple_count_spin)
+        ripple_count_row.addStretch()
+        ripple_layout.addLayout(ripple_count_row)
+        
+        layout.addWidget(self.ripple_group)
         
         # Crumble specific settings
         self.crumble_group = QGroupBox("Crumble Settings")
@@ -273,7 +289,7 @@ class TransitionsTab(QWidget):
         piece_count_row = QHBoxLayout()
         piece_count_row.addWidget(QLabel("Piece Count:"))
         self.crumble_piece_count_spin = QSpinBox()
-        self.crumble_piece_count_spin.setRange(4, 16)
+        self.crumble_piece_count_spin.setRange(4, 64)
         self.crumble_piece_count_spin.setValue(8)
         self.crumble_piece_count_spin.setAccelerated(True)
         self.crumble_piece_count_spin.valueChanged.connect(self._save_settings)
@@ -347,7 +363,7 @@ class TransitionsTab(QWidget):
         radius_row = QHBoxLayout()
         radius_row.addWidget(QLabel("Particle Size:"))
         self.particle_radius_spin = QSpinBox()
-        self.particle_radius_spin.setRange(8, 64)
+        self.particle_radius_spin.setRange(1, 64)
         self.particle_radius_spin.setValue(24)
         self.particle_radius_spin.setSuffix(" px")
         self.particle_radius_spin.valueChanged.connect(self._save_settings)
@@ -603,6 +619,8 @@ class TransitionsTab(QWidget):
             getattr(self, 'blockspin_direction_combo', None),
             getattr(self, 'block_size_spin', None),
             getattr(self, 'diffuse_shape_combo', None),
+            # Ripple widgets
+            getattr(self, 'ripple_count_spin', None),
             # Crumble widgets
             getattr(self, 'crumble_piece_count_spin', None),
             getattr(self, 'crumble_complexity_spin', None),
@@ -701,6 +719,11 @@ class TransitionsTab(QWidget):
             index = self.diffuse_shape_combo.findText(shape)
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
+
+            # Load ripple settings
+            canonical_ripple = canonical_transitions.get('ripple', {})
+            ripple = transitions_config.get('ripple', {})
+            self.ripple_count_spin.setValue(int(ripple.get('ripple_count', canonical_ripple.get('ripple_count', 3))))
 
             # Load crumble settings - use canonical defaults from defaults.py
             canonical_crumble = canonical_transitions.get('crumble', {})
@@ -847,6 +870,9 @@ class TransitionsTab(QWidget):
         # Show/hide diffuse settings
         self.diffuse_group.setVisible(transition == "Diffuse")
 
+        # Show/hide ripple settings
+        self.ripple_group.setVisible(transition == "Ripple")
+
         # Show/hide 3D Block Spins settings
         self.blockspin_group.setVisible(transition == "3D Block Spins")
         
@@ -967,6 +993,9 @@ class TransitionsTab(QWidget):
             'diffuse': {
                 'block_size': self.block_size_spin.value(),
                 'shape': self.diffuse_shape_combo.currentText()
+            },
+            'ripple': {
+                'ripple_count': self.ripple_count_spin.value(),
             },
             'crumble': {
                 'piece_count': self.crumble_piece_count_spin.value(),

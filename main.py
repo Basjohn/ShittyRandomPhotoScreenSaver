@@ -248,12 +248,21 @@ def run_screensaver(app: QApplication) -> int:
     
     if not folders and not rss_feeds:
         logger.warning("No image sources configured - opening settings dialog")
-        QMessageBox.information(
-            None,
+        msg = QMessageBox(
+            QMessageBox.Icon.Information,
             "No Sources Configured",
             "No image sources have been configured.\n\n"
-            "Please add folders or RSS feeds in the settings dialog."
+            "Please add folders or RSS feeds in the settings dialog.\n\n"
+            "This dialog will close automatically in 10 seconds.",
         )
+        msg.setWindowFlags(msg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        msg.raise_()
+        msg.activateWindow()
+        # Auto-close after 10 seconds — uses QTimer.singleShot (static, no
+        # compositor active at this point so no performance concern).
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(10_000, msg.accept)
+        msg.exec()
         return run_config(app)
     # Create and start screensaver engine
     try:
@@ -261,23 +270,37 @@ def run_screensaver(app: QApplication) -> int:
         if not engine.initialize():
             logger.error("Failed to initialize screensaver engine")
             logger.warning("Opening settings dialog to configure sources")
-            QMessageBox.warning(
-                None,
+            msg2 = QMessageBox(
+                QMessageBox.Icon.Warning,
                 "Configuration Required",
                 "Failed to initialize screensaver.\n\n"
-                "Please configure image sources in the settings dialog."
+                "Please configure image sources in the settings dialog.\n\n"
+                "This dialog will close automatically in 10 seconds.",
             )
+            msg2.setWindowFlags(msg2.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            msg2.raise_()
+            msg2.activateWindow()
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(10_000, msg2.accept)
+            msg2.exec()
             return run_config(app)
         
         if not engine.start():
             logger.error("Failed to start screensaver engine")
             logger.warning("Opening settings dialog")
-            QMessageBox.warning(
-                None,
+            msg3 = QMessageBox(
+                QMessageBox.Icon.Warning,
                 "Startup Failed",
                 "Failed to start screensaver.\n\n"
-                "Please check your configuration."
+                "Please check your configuration.\n\n"
+                "This dialog will close automatically in 10 seconds.",
             )
+            msg3.setWindowFlags(msg3.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            msg3.raise_()
+            msg3.activateWindow()
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(10_000, msg3.accept)
+            msg3.exec()
             return run_config(app)
         
         # Optional system tray presence in hard-exit mode.
@@ -308,23 +331,6 @@ def run_screensaver(app: QApplication) -> int:
 
                 tray_icon.settings_requested.connect(_on_tray_settings)
                 tray_icon.exit_requested.connect(_on_tray_exit)
-                
-                # Wire up Eco Mode indicator callback
-                def _check_eco_mode() -> bool:
-                    try:
-                        if hasattr(engine, 'display_manager') and engine.display_manager:
-                            displays = getattr(engine.display_manager, '_displays', [])
-                            for display in displays:
-                                eco_manager = getattr(display, '_eco_mode_manager', None)
-                                if eco_manager and hasattr(eco_manager, 'is_eco_mode_active'):
-                                    if eco_manager.is_eco_mode_active():
-                                        return True
-                        return False
-                    except Exception:
-                        logger.debug("[MAIN] Exception suppressed in eco mode check")
-                        return False
-                
-                tray_icon.set_eco_mode_callback(_check_eco_mode)
 
         logger.info("Screensaver engine started - entering event loop")
         return app.exec()

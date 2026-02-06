@@ -362,7 +362,7 @@ class FFTWorker(BaseWorker):
             
             # Ridge peak boost
             if offset == 3:
-                base = base * 1.15 + bass_energy * 0.35
+                base = base * 1.05 + bass_energy * 0.15
             elif offset == 4:
                 base = base * 0.82
             

@@ -19,6 +19,7 @@ import weakref
 from PySide6.QtCore import Qt, QTimer, QPoint, QRect
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import QWidget
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.spotify_volume import SpotifyVolumeController
@@ -473,8 +474,17 @@ class SpotifyVolumeWidget(QWidget):
 
         timer.timeout.connect(_on_timeout)
         self._flush_timer = timer
+        try:
+            from core.resources.manager import ResourceManager
+            ResourceManager().register_qt(
+                timer, description="SpotifyVolumeWidget flush debounce timer",
+            )
+        except Exception:
+            pass
 
     def _apply_volume(self, level: float) -> None:
+        if not Shiboken.isValid(self):
+            return
         level = float(max(0.0, min(1.0, level)))
         if abs(level - self._volume) < 1e-3:
             return

@@ -50,6 +50,7 @@ def settings_manager(tmp_path):
     manager = SettingsManager(
         organization="Test",
         application=f"TransitionsIntegrationTest_{uuid.uuid4().hex}",
+        storage_base_dir=tmp_path,
     )
 
     # Configure for testing

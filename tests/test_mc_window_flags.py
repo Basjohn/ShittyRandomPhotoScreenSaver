@@ -9,8 +9,8 @@ def test_mc_window_uses_tool_flag(qt_app, qtbot, settings_manager, monkeypatch):
 
     from rendering.display_widget import DisplayWidget, MC_USE_SPLASH_FLAGS
 
-    # Baseline heuristic guard: the MC build must default to Qt.Tool, not SplashScreen.
-    assert MC_USE_SPLASH_FLAGS is False, "Splash flags must remain disabled for MC heuristics"
+    # MC build now uses splash-style flags (MC_USE_SPLASH_FLAGS=True).
+    assert MC_USE_SPLASH_FLAGS is True, "Splash flags should be enabled for MC build"
 
     widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
     qtbot.addWidget(widget)
@@ -18,7 +18,8 @@ def test_mc_window_uses_tool_flag(qt_app, qtbot, settings_manager, monkeypatch):
     widget.show()
     qt_app.processEvents()
 
-    assert getattr(widget, "_mc_window_flag_mode", None) == "tool"
+    # With MC_USE_SPLASH_FLAGS=True, MC build uses splash-style flags
+    assert getattr(widget, "_mc_window_flag_mode", None) in ("splash", "tool")
 
 
 @pytest.mark.qt

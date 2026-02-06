@@ -29,9 +29,9 @@ class TestWidgetsTab:
         assert tab._settings is settings_manager
         tab.deleteLater()
 
-    def test_widgets_tab_default_values(self, qt_app):
+    def test_widgets_tab_default_values(self, qt_app, tmp_path):
         """Default widget settings match canonical SettingsManager defaults."""
-        mgr = SettingsManager(organization="Test", application=f"WidgetsTabTest_{uuid.uuid4().hex}")
+        mgr = SettingsManager(organization="Test", application=f"WidgetsTabTest_{uuid.uuid4().hex}", storage_base_dir=tmp_path)
         # Ensure a clean slate and then re-apply canonical defaults so the
         # nested `widgets` map reflects SettingsManager._set_defaults().
         mgr.reset_to_defaults()

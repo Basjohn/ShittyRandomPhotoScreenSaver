@@ -51,6 +51,11 @@ uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_resolution;
+uniform int u_ripple_count;  // 1-8, default 3
+
+float hash1(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
 
 void main() {
     // Flip V to match Qt's top-left image origin.
@@ -60,55 +65,79 @@ void main() {
     vec4 newColor = texture(uNewTex, uv);
 
     float t = clamp(u_progress, 0.0, 1.0);
-
-    // Normalised coordinates with aspect compensation so the ripple is
-    // circular even on non-square render targets.
     float aspect = u_resolution.x / max(u_resolution.y, 1.0);
-    vec2 centered = uv - vec2(0.5, 0.5);
-    centered.x *= aspect;
-    float r = length(centered);
+    int count = clamp(u_ripple_count, 1, 8);
 
-    // Use the true maximum radius from the centre to the furthest corner so
-    // the ripple cleanly reaches the image corners without leaving a thin
-    // untransitioned band.
-    float maxR = length(vec2(0.5 * aspect, 0.5));
-    float rNorm = clamp(r / maxR, 0.0, 1.0);
-    float front = t;
+    // Accumulate wave displacement and reveal mask across all ripple sources.
+    float totalWave = 0.0;
+    float bestLocalMix = 0.0;
+    float bestRingMask = 0.0;
 
-    // Radial wave travelling outwards from the centre. Lower spatial and
-    // temporal frequency to avoid judder.
-    float wave = 0.0;
-    if (rNorm < front + 0.25) {
-        float spatialFreq = 18.0;
-        float temporalFreq = 4.0;
-        float phase = spatialFreq * (rNorm - front) - temporalFreq * t;
-        float attenuation = exp(-6.0 * abs(rNorm - front));
-        wave = 0.012 * sin(phase) * attenuation;
+    for (int i = 0; i < 8; i++) {
+        if (i >= count) break;
+
+        // Per-ripple random centre (first ripple always from screen centre).
+        vec2 center;
+        float timeOffset;
+        if (i == 0) {
+            center = vec2(0.5, 0.5);
+            timeOffset = 0.0;
+        } else {
+            float fi = float(i);
+            center = vec2(
+                0.15 + hash1(fi * 73.0 + 7.0) * 0.7,
+                0.15 + hash1(fi * 91.0 + 13.0) * 0.7
+            );
+            // Stagger start times so ripples don't all fire at once.
+            timeOffset = hash1(fi * 37.0 + 3.0) * 0.25;
+        }
+
+        vec2 centered = uv - center;
+        centered.x *= aspect;
+        float r = length(centered);
+        float maxR = length(vec2(0.5 * aspect, 0.5));
+        float rNorm = clamp(r / maxR, 0.0, 1.0);
+
+        float localT = clamp((t - timeOffset) / max(1.0 - timeOffset, 0.01), 0.0, 1.0);
+        float front = localT;
+
+        // Radial wave.
+        float wave = 0.0;
+        if (rNorm < front + 0.25 && localT > 0.0) {
+            float spatialFreq = 18.0;
+            float temporalFreq = 4.0;
+            float phase = spatialFreq * (rNorm - front) - temporalFreq * localT;
+            float attenuation = exp(-6.0 * abs(rNorm - front));
+            wave = 0.012 * sin(phase) * attenuation;
+        }
+        totalWave += wave;
+
+        // Reveal mask.
+        float localMix = smoothstep(-0.04, 0.18, front - rNorm);
+        bestLocalMix = max(bestLocalMix, localMix);
+
+        // Ring highlight.
+        float ringMask = smoothstep(front - 0.03, front, rNorm) *
+                         (1.0 - smoothstep(front, front + 0.03, rNorm));
+        bestRingMask = max(bestRingMask, ringMask);
     }
 
-    vec2 dir = (r > 1e-5) ? (centered / r) : vec2(0.0, 0.0);
-
-    // Displace the sampling position along the radial direction to create
-    // a water-like refraction of the old image.
-    vec2 rippleUv = uv + dir * wave;
+    // Displace sampling position.
+    vec2 centered0 = uv - vec2(0.5, 0.5);
+    centered0.x *= aspect;
+    float r0 = length(centered0);
+    vec2 dir = (r0 > 1e-5) ? (centered0 / r0) : vec2(0.0, 0.0);
+    vec2 rippleUv = uv + dir * totalWave;
     rippleUv = clamp(rippleUv, vec2(0.0), vec2(1.0));
     vec4 rippleOld = texture(uOldTex, rippleUv);
 
     vec4 base = mix(oldColor, rippleOld, 0.7);
 
-    // Reveal the NEW image from the centre outward. Points that the wave
-    // front has already passed transition to the new image, and a gentle
-    // global fade near the end guarantees we finish fully on the new frame.
-    float localMix = smoothstep(-0.04, 0.18, front - rNorm);
     float globalMix = smoothstep(0.78, 0.95, t);
-    float newMix = clamp(max(localMix, globalMix), 0.0, 1.0);
+    float newMix = clamp(max(bestLocalMix, globalMix), 0.0, 1.0);
 
     vec4 mixed = mix(base, newColor, newMix);
-
-    // Subtle highlight on the main ring to read as a bright water crest.
-    float ringMask = smoothstep(front - 0.03, front, rNorm) *
-                     (1.0 - smoothstep(front, front + 0.03, rNorm));
-    mixed.rgb += vec3(0.08) * ringMask;
+    mixed.rgb += vec3(0.08) * bestRingMask;
 
     FragColor = mixed;
 }
@@ -123,6 +152,7 @@ void main() {
             "u_resolution": gl.glGetUniformLocation(program, "u_resolution"),
             "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
+            "u_ripple_count": gl.glGetUniformLocation(program, "u_ripple_count"),
         }
 
     def render(
@@ -145,6 +175,8 @@ void main() {
         gl.glViewport(0, 0, vp_w, vp_h)
         gl.glDisable(gl.GL_DEPTH_TEST)
 
+        ripple_count = int(getattr(state, "ripple_count", 3))
+
         gl.glUseProgram(program)
         try:
             if uniforms.get("u_progress", -1) != -1:
@@ -152,6 +184,9 @@ void main() {
 
             if uniforms.get("u_resolution", -1) != -1:
                 gl.glUniform2f(uniforms["u_resolution"], float(vp_w), float(vp_h))
+
+            if uniforms.get("u_ripple_count", -1) != -1:
+                gl.glUniform1i(uniforms["u_ripple_count"], ripple_count)
 
             if uniforms.get("uOldTex", -1) != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)

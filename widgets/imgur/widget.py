@@ -24,6 +24,7 @@ from PySide6.QtGui import (
     QPainterPath, QPen,
 )
 from PySide6.QtWidgets import QWidget
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.performance import widget_paint_sample
@@ -268,7 +269,7 @@ class ImgurWidget(BaseOverlayWidget):
     def _initialize_impl(self) -> None:
         """Initialize resources (lifecycle hook)."""
         # Create scraper and cache
-        self._scraper = ImgurScraper()
+        self._scraper = ImgurScraper(thread_manager=self._thread_manager)
         self._image_cache = ImgurImageCache()
         logger.debug("[LIFECYCLE] ImgurWidget initialized")
     
@@ -701,6 +702,8 @@ class ImgurWidget(BaseOverlayWidget):
         
         Adds new images to circular buffer and updates display window.
         """
+        if not Shiboken.isValid(self):
+            return
         needed = self._grid_rows * self._grid_cols
         
         with self._state_lock:
@@ -861,6 +864,8 @@ class ImgurWidget(BaseOverlayWidget):
     
     def _on_pixmaps_loaded(self) -> None:
         """Called on UI thread after pixmaps loaded in background."""
+        if not Shiboken.isValid(self):
+            return
         self._invalidate_cache()
         self.update()
         logger.debug("[IMGUR] Pixmaps loaded from background thread")
@@ -870,6 +875,8 @@ class ImgurWidget(BaseOverlayWidget):
         
         Triggers background pixmap loading via ThreadManager.
         """
+        if not Shiboken.isValid(self):
+            return
         if not self._image_cache:
             return
         

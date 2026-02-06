@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from core.presets import (
+from core.settings.presets import (
     PRESET_DEFINITIONS,
     adjust_settings_for_mc_mode,
     apply_preset,
@@ -207,7 +207,7 @@ class TestMCModeAdjustments:
     
     def test_mc_mode_adjusts_monitor_1_to_2(self, monkeypatch):
         """Test that MC mode changes monitor 1 to monitor 2."""
-        monkeypatch.setattr("core.presets.is_mc_mode", lambda: True)
+        monkeypatch.setattr("core.settings.presets.is_mc_mode", lambda: True)
         settings = {
             'widgets': {
                 'clock': {'monitor': 1},
@@ -222,7 +222,7 @@ class TestMCModeAdjustments:
     
     def test_mc_mode_adjusts_all_to_2(self, monkeypatch):
         """Test that MC mode changes 'ALL' to monitor 2."""
-        monkeypatch.setattr("core.presets.is_mc_mode", lambda: True)
+        monkeypatch.setattr("core.settings.presets.is_mc_mode", lambda: True)
         settings = {
             'widgets': {
                 'clock': {'monitor': 'ALL'},

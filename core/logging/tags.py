@@ -81,9 +81,6 @@ TAG_SPOTIFY_VIS = "[SPOTIFY_VIS]"
 TAG_SPOTIFY_VOL = "[SPOTIFY_VOL]"
 """Spotify volume control - routed to screensaver_spotify_vol.log"""
 
-TAG_ECO_MODE = "[ECO MODE]"
-"""Eco mode operations."""
-
 TAG_MC = "[MC]"
 """Media Center mode operations."""
 
@@ -137,7 +134,6 @@ __all__ = [
     # Module-specific
     "TAG_SPOTIFY_VIS",
     "TAG_SPOTIFY_VOL",
-    "TAG_ECO_MODE",
     "TAG_MC",
     "TAG_SHADOW",
     "TAG_SHADOW_ASYNC",

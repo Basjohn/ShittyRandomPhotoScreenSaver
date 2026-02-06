@@ -17,9 +17,9 @@ def qapp():
 
 
 @pytest.fixture
-def settings_manager():
+def settings_manager(tmp_path):
     """Create settings manager."""
-    return SettingsManager()
+    return SettingsManager(storage_base_dir=tmp_path)
 
 
 @pytest.fixture

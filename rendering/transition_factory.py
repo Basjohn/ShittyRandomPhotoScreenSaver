@@ -49,6 +49,8 @@ SLIDE_DIRECTION_MAP = {
     'Right to Left': SlideDirection.RIGHT,
     'Top to Bottom': SlideDirection.DOWN,
     'Bottom to Top': SlideDirection.UP,
+    'Diagonal TL-BR': SlideDirection.DIAG_TL_BR,
+    'Diagonal TR-BL': SlideDirection.DIAG_TR_BL,
 }
 
 SLIDE_DIRECTION_REVERSE = {v: k for k, v in SLIDE_DIRECTION_MAP.items()}
@@ -67,6 +69,15 @@ ALL_SLIDE_DIRECTIONS = [
     SlideDirection.RIGHT,
     SlideDirection.UP,
     SlideDirection.DOWN,
+]
+
+ALL_BLOCKSPIN_DIRECTIONS = [
+    SlideDirection.LEFT,
+    SlideDirection.RIGHT,
+    SlideDirection.UP,
+    SlideDirection.DOWN,
+    SlideDirection.DIAG_TL_BR,
+    SlideDirection.DIAG_TR_BL,
 ]
 
 
@@ -337,7 +348,7 @@ class TransitionFactory:
             return self._create_diffuse(settings, duration_ms, easing_str, use_compositor)
         
         if transition_type in ('Rain Drops', 'Ripple'):
-            return self._create_raindrops(duration_ms, easing_str, use_compositor)
+            return self._create_raindrops(settings, duration_ms, easing_str, use_compositor)
         
         if transition_type == 'Block Puzzle Flip':
             return self._create_blockflip(settings, duration_ms, use_compositor)
@@ -404,9 +415,11 @@ class TransitionFactory:
             return GLCompositorDiffuseTransition(duration_ms, block_size, shape, easing_str)
         return DiffuseTransition(duration_ms, block_size, shape)
     
-    def _create_raindrops(self, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+    def _create_raindrops(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+        ripple_settings = settings.get('ripple', {}) if isinstance(settings.get('ripple', {}), dict) else {}
+        ripple_count = self._safe_int(ripple_settings.get('ripple_count', 3), 3)
         if use_compositor:
-            return GLCompositorRainDropsTransition(duration_ms, easing_str)
+            return GLCompositorRainDropsTransition(duration_ms, easing_str, ripple_count)
         return CrossfadeTransition(duration_ms, easing_str)
     
     def _create_blockflip(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
@@ -427,7 +440,7 @@ class TransitionFactory:
         dir_str = blockspin_settings.get('direction', 'Random') or 'Random'
         
         if dir_str == 'Random':
-            direction = random.choice(ALL_SLIDE_DIRECTIONS)
+            direction = random.choice(ALL_BLOCKSPIN_DIRECTIONS)
         else:
             direction = SLIDE_DIRECTION_MAP.get(dir_str, SlideDirection.LEFT)
         

@@ -79,9 +79,9 @@ def qapp():
 
 
 @pytest.fixture
-def settings_manager():
+def settings_manager(tmp_path):
     """Settings manager with pan & scan enabled."""
-    settings = SettingsManager()
+    settings = SettingsManager(storage_base_dir=tmp_path)
     # Enable pan & scan for all tests
     settings.set('display.pan_and_scan', True)
     settings.set('timing.interval', 10)  # 10 second intervals

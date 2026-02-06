@@ -11,10 +11,10 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QSizePolicy, QFileDialog, QMenu, QScrollArea,
+    QFileDialog, QMenu, QScrollArea,
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
-from PySide6.QtGui import QFont, QColor, QPixmap, QDesktopServices, QPainter, QPen, QGuiApplication
+from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPen, QGuiApplication
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
@@ -506,262 +506,10 @@ class SettingsDialog(QDialog):
         self.setGraphicsEffect(shadow)
     
     def _load_theme(self) -> None:
-        """Load dark theme stylesheet."""
-        try:
-            theme_path = Path(__file__).parent.parent / "themes" / "dark.qss"
-            if theme_path.exists():
-                with open(theme_path, 'r', encoding='utf-8') as f:
-                    stylesheet = f.read()
-                    
-                    # Add custom styles for settings dialog
-                    custom_styles = """
-                    /* Settings Dialog Custom Styles */
-                    QDialog {
-                        background-color: transparent;
-                        border: 3px solid #ffffff;
-                        border-radius: 12px;
-                    }
-                    
-                    #dialogContainer {
-                        background-color: #2B2B2B;
-                        border: 2px solid #9a9a9a;
-                        border-radius: 10px;
-                    }
-                    
-                    #customTitleBar {
-                        background-color: #1E1E1E;
-                        border-top-left-radius: 10px;
-                        border-top-right-radius: 10px;
-                    }
-                    
-                    #titleBarLabel {
-                        color: #ffffff;
-                        padding-left: 10px;
-                    }
-                    
-                    #titleBarButton {
-                        background-color: transparent;
-                        color: #ffffff;
-                        border: none;
-                        font-size: 16px;
-                        font-weight: bold;
-                    }
-                    
-                    #titleBarButton:hover {
-                        background-color: rgba(62, 62, 62, 0.8);
-                        border-radius: 4px;
-                    }
-                    
-                    #titleBarCloseButton {
-                        background-color: transparent;
-                        color: #ffffff;
-                        border: none;
-                        font-size: 18px;
-                        font-weight: bold;
-                    }
-                    
-                    #titleBarCloseButton:hover {
-                        background-color: rgba(232, 17, 35, 0.8);
-                        border-radius: 4px;
-                    }
-                    
-                    #sidebar {
-                        background-color: #232323;
-                        border-radius: 8px;
-                    }
-                    
-                    #tabButton {
-                        background-color: #2B2B2B;
-                        color: #cccccc;
-                        border: none;
-                        text-align: left;
-                        padding: 10px 20px;
-                        margin: 3px 5px 5px 3px; /* extra space for bottom-right shadow */
-                        border-radius: 6px;
-                        border-bottom: 2px solid rgba(0, 0, 0, 0.6);
-                        border-right: 2px solid rgba(0, 0, 0, 0.7);
-                    }
-                    
-                    #tabButton:hover {
-                        background-color: #3E3E3E;
-                        color: #ffffff;
-                    }
-                    
-                    #tabButton:checked {
-                        background-color: #3E3E3E;
-                        color: #ffffff;
-                        font-weight: bold;
-                    }
-                    
-                    #contentArea {
-                        background-color: #1E1E1E;
-                        border-radius: 8px;
-                        padding: 20px;
-                    }
-                    
-                    /* Input fields and controls - dark theme, no bright white */
-                    QLineEdit {
-                        background-color: rgba(45, 45, 45, 0.8);
-                        color: #ffffff;
-                        border: 1px solid rgba(90, 90, 90, 0.8);
-                        border-radius: 4px;
-                        padding: 6px;
-                    }
-                    
-                    QLineEdit:focus {
-                        border: 1px solid rgba(200, 200, 200, 0.85);
-                    }
-                    
-                    QComboBox {
-                        background-color: rgba(45, 45, 45, 0.8);
-                        color: #ffffff;
-                        border-radius: 4px;
-                        padding: 6px;
-                        border-top: 1px solid rgba(90, 90, 90, 0.75);
-                        border-left: 1px solid rgba(90, 90, 90, 0.75);
-                        border-right: 2px solid rgba(0, 0, 0, 0.7);
-                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
-                    }
-                    
-                    QComboBox:hover,
-                    QComboBox:focus {
-                        border-top: 1px solid rgba(200, 200, 200, 0.8);
-                        border-left: 1px solid rgba(200, 200, 200, 0.8);
-                        border-right: 2px solid rgba(0, 0, 0, 0.7);
-                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
-                    }
-                    
-                    QComboBox::drop-down {
-                        border: none;
-                        background-color: rgba(62, 62, 62, 0.8);
-                        border-radius: 2px;
-                    }
-                    
-                    QComboBox QAbstractItemView {
-                        background-color: rgba(45, 45, 45, 0.95);
-                        color: #ffffff;
-                        border: 1px solid rgba(90, 90, 90, 0.8);
-                        selection-background-color: rgba(80, 80, 80, 0.95);
-                    }
-                    QAbstractItemView::item:selected {
-                        background-color: rgba(70, 70, 70, 0.9);
-                        color: #ffffff;
-                    }
-                    QAbstractItemView::item:hover {
-                        background-color: rgba(62, 62, 62, 0.9);
-                    }
-                    
-                    QSpinBox {
-                        background-color: rgba(45, 45, 45, 0.8);
-                        color: #ffffff;
-                        border: 1px solid rgba(90, 90, 90, 0.8);
-                        border-radius: 4px;
-                        padding: 4px;
-                    }
-                    
-                    QSpinBox:focus {
-                        border: 1px solid rgba(200, 200, 200, 0.85);
-                    }
-                    
-                    QListWidget {
-                        background-color: rgba(35, 35, 35, 0.8);
-                        color: #ffffff;
-                        border: 1px solid rgba(90, 90, 90, 0.8);
-                        border-radius: 4px;
-                    }
-                    
-                    QListWidget::item:selected {
-                        background-color: rgba(70, 70, 70, 0.8);
-                        border-left: 3px solid rgba(120, 120, 120, 0.9);
-                    }
-                    
-                    QListWidget::item:hover {
-                        background-color: rgba(62, 62, 62, 0.8);
-                    }
-                    
-                    QPushButton {
-                        background-color: rgba(60, 60, 60, 0.8);
-                        color: #ffffff;
-                        border-radius: 4px;
-                        padding: 8px 16px;
-                        border-top: 1px solid rgba(80, 80, 80, 0.7);
-                        border-left: 1px solid rgba(80, 80, 80, 0.7);
-                        border-right: 2px solid rgba(0, 0, 0, 0.65);
-                        border-bottom: 2px solid rgba(0, 0, 0, 0.7);
-                    }
-                    
-                    QPushButton:hover {
-                        background-color: rgba(75, 75, 75, 0.8);
-                        border-top: 1px solid rgba(96, 96, 96, 0.8);
-                        border-left: 1px solid rgba(96, 96, 96, 0.8);
-                        border-right: 2px solid rgba(0, 0, 0, 0.7);
-                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
-                    }
-                    
-                    QPushButton:pressed {
-                        background-color: rgba(50, 50, 50, 0.8);
-                        border-top: 1px solid rgba(60, 60, 60, 0.75);
-                        border-left: 1px solid rgba(60, 60, 60, 0.75);
-                        border-right: 1px solid rgba(0, 0, 0, 0.65);
-                        border-bottom: 1px solid rgba(0, 0, 0, 0.65);
-                        margin-top: 1px;
-                        margin-left: 1px;
-                    }
-                    
-                    QGroupBox {
-                        background-color: rgba(40, 40, 40, 0.8);
-                        border: 1px solid rgba(90, 90, 90, 0.8);
-                        border-radius: 6px;
-                        margin-top: 15px;
-                        margin-bottom: 10px;
-                        padding: 15px 10px 10px 10px;
-                        color: #ffffff;
-                    }
-                    
-                    QGroupBox::title {
-                        subcontrol-origin: margin;
-                        subcontrol-position: top left;
-                        padding: 2px 8px;
-                        margin-top: 5px;
-                        color: #ffffff;
-                    }
-                    
-                    QCheckBox {
-                        color: #ffffff;
-                        spacing: 8px;
-                    }
-                    
-                    QCheckBox::indicator {
-                        width: 18px;
-                        height: 18px;
-                        background-color: rgba(45, 45, 45, 0.8);
-                        border-radius: 3px;
-                        border-top: 1px solid rgba(90, 90, 90, 0.75);
-                        border-left: 1px solid rgba(90, 90, 90, 0.75);
-                        border-right: 2px solid rgba(0, 0, 0, 0.7);
-                        border-bottom: 2px solid rgba(0, 0, 0, 0.75);
-                    }
-                    
-                    QCheckBox::indicator:checked {
-                        background-color: rgba(210, 210, 210, 0.85);
-                        border-top: 1px solid rgba(200, 200, 200, 0.8);
-                        border-left: 1px solid rgba(200, 200, 200, 0.8);
-                        border-right: 2px solid rgba(60, 60, 60, 0.7);
-                        border-bottom: 2px solid rgba(60, 60, 60, 0.75);
-                    }
-                    
-                    QLabel {
-                        color: #ffffff;
-                    }
-                    """
-                    
-                    self.setStyleSheet(stylesheet + custom_styles)
-                    logger.debug("Theme loaded successfully")
-            else:
-                logger.warning(f"[FALLBACK] Theme file not found: {theme_path}")
-        except Exception as e:
-            logger.exception(f"Failed to load theme: {e}")
-    
+        """Delegates to ui.settings_theme."""
+        from ui.settings_theme import load_theme
+        load_theme(self)
+
     def _setup_ui(self) -> None:
         """Setup dialog UI."""
         # Main container (for rounded corners and shadow)
@@ -870,375 +618,14 @@ class SettingsDialog(QDialog):
     
     
     def _create_about_tab(self) -> QWidget:
-        """Create about tab."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-
-        # Main content card (matches ABOUTExample mockup)
-        content_card = QWidget(widget)
-        content_card.setObjectName("aboutContentCard")
-        content_card.setStyleSheet(
-            "#aboutContentCard {"
-            "  background-color: #1f1f1f;"
-            "  border-radius: 8px;"
-            "}"
-        )
-        card_layout = QVBoxLayout(content_card)
-        # Slightly tighter top margin and vertical spacing to reduce empty space
-        card_layout.setContentsMargins(24, 12, 24, 24)
-        card_layout.setSpacing(12)
-
-        # Header with logo and Shoogle artwork, scaled down only
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(16)
-
-        # Keep references so we can rescale responsively on resize without
-        # repeatedly degrading the images.
-        self._about_content_card = content_card
-        self._about_header_layout = header_layout
-        self._about_logo_label = None
-        self._about_shoogle_label = None
-        self._about_logo_source = None
-        self._about_shoogle_source = None
-        self._about_last_card_width: int = 0
-
-        # Resolve images directory robustly (works both in dev and frozen builds)
-        try:
-            images_dir = (Path(__file__).resolve().parent.parent / "images").resolve()
-            if not images_dir.exists():
-                # Fallback: project launched from root, look for ./images
-                alt_dir = (Path.cwd() / "images").resolve()
-                if alt_dir.exists():
-                    images_dir = alt_dir
-            logger.debug("[ABOUT] Images directory resolved to %s (exists=%s)", images_dir, images_dir.exists())
-        except Exception:
-            logger.debug("[SETTINGS] Exception suppressed")
-            images_dir = Path.cwd() / "images"
-
-        logo_label = QLabel()
-        logo_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        self._about_logo_label = logo_label
-        try:
-            logo_path = images_dir / "Logo.png"
-            logo_pm = QPixmap(str(logo_path))
-            logger.debug("[ABOUT] Loading logo pixmap from %s (exists=%s, null=%s)", logo_path, logo_path.exists(), logo_pm.isNull())
-            if not logo_pm.isNull():
-                # Store the original, unscaled pixmap; scaling is handled
-                # centrally in _update_about_header_images().
-                self._about_logo_source = logo_pm
-        except Exception:
-            logger.debug("[ABOUT] Failed to load Logo.png", exc_info=True)
-        header_layout.addWidget(logo_label, 0, Qt.AlignmentFlag.AlignTop)
-
-        shoogle_label = QLabel()
-        shoogle_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        self._about_shoogle_label = shoogle_label
-        try:
-            shoogle_path = images_dir / "Shoogle300W.png"
-            shoogle_pm = QPixmap(str(shoogle_path))
-            logger.debug("[ABOUT] Loading Shoogle pixmap from %s (exists=%s, null=%s)", shoogle_path, shoogle_path.exists(), shoogle_pm.isNull())
-            if not shoogle_pm.isNull():
-                # Store the original, unscaled pixmap for responsive
-                # scaling based on the dialog width.
-                self._about_shoogle_source = shoogle_pm
-        except Exception:
-            logger.debug("[ABOUT] Failed to load Shoogle300W.png", exc_info=True)
-        header_layout.addWidget(shoogle_label, 0, Qt.AlignmentFlag.AlignTop)
-        header_layout.addStretch()
-        card_layout.addLayout(header_layout)
-
-        # Blurb loaded from external text file when available
-        blurb_label = QLabel()
-        blurb_label.setWordWrap(True)
-        # Left-align blurb so it lines up with the logo and buttons
-        blurb_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        blurb_label.setStyleSheet("color: #dddddd; font-size: 12pt;")
-        blurb_label.setTextFormat(Qt.TextFormat.RichText)
-
-        default_blurb = (
-            "Made for my own weird niche, shared freely for yours.<br>"
-            "You can always donate to my dumbass though or buy my shitty literature."
-        )
-        blurb_text = default_blurb
-        try:
-            about_path = Path.home() / "Documents" / "AboutBlurb.txt"
-            if about_path.exists():
-                raw = about_path.read_text(encoding="utf-8").splitlines()
-                blurb_lines: list[str] = []
-                for line in raw:
-                    stripped = line.strip()
-                    if not stripped:
-                        continue
-                    lower = stripped.lower()
-                    # Skip URLs and instructions from the spec file
-                    if lower.startswith("http://") or lower.startswith("https://"):
-                        continue
-                    if "centre-aligned" in lower or "center-aligned" in lower:
-                        continue
-                    if "then the following" in lower and "links" in lower:
-                        continue
-                    # Strip wrapping quotes if present
-                    if (stripped.startswith('"') and stripped.endswith('"')) or (
-                        stripped.startswith("'") and stripped.endswith("'")
-                    ):
-                        stripped = stripped[1:-1].strip()
-                    if stripped:
-                        blurb_lines.append(stripped)
-
-                if blurb_lines:
-                    blurb_text = "<br>".join(blurb_lines)
-        except Exception as e:
-            logger.debug("[SETTINGS] Exception suppressed: %s", e)
-
-        # Small stylistic tweak to italicize the "can" in the second sentence,
-        # matching the ABOUTExample reference mockup.
-        if "You can always" in blurb_text:
-            blurb_text = blurb_text.replace("You can", "You <i>can</i>", 1)
-
-        blurb_label.setText(blurb_text)
-        card_layout.addWidget(blurb_label)
-
-        # External links row (PayPal, Goodreads, Amazon, GitHub)
-        buttons_row = QHBoxLayout()
-        buttons_row.setSpacing(16)
-        # Left-align buttons to share a vertical line with the logo and blurb
-        buttons_row.setAlignment(Qt.AlignmentFlag.AlignLeft)
-
-        def _make_link_button(text: str, url: str) -> QPushButton:
-            btn = QPushButton(text)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFixedHeight(32)
-            btn.setStyleSheet(
-                "QPushButton {"
-                "  padding: 6px 18px;"
-                "  font-weight: bold;"
-                "  border-radius: 16px;"
-                "  background-color: #2f2f2f;"
-                "  color: #ffffff;"
-                "  border-top: 1px solid rgba(120, 120, 120, 0.95);"
-                "  border-left: 1px solid rgba(120, 120, 120, 0.95);"
-                "  border-right: 2px solid rgba(0, 0, 0, 0.9);"
-                "  border-bottom: 2px solid rgba(0, 0, 0, 0.95);"
-                "}"
-                "QPushButton:hover {"
-                "  background-color: #3a3a3a;"
-                "  border-top: 1px solid rgba(140, 140, 140, 0.95);"
-                "  border-left: 1px solid rgba(140, 140, 140, 0.95);"
-                "  border-right: 2px solid rgba(0, 0, 0, 0.95);"
-                "  border-bottom: 2px solid rgba(0, 0, 0, 0.98);"
-                "}"
-                "QPushButton:pressed {"
-                "  background-color: #262626;"
-                "  border-top: 1px solid rgba(80, 80, 80, 0.9);"
-                "  border-left: 1px solid rgba(80, 80, 80, 0.9);"
-                "  border-right: 1px solid rgba(0, 0, 0, 0.9);"
-                "  border-bottom: 1px solid rgba(0, 0, 0, 0.9);"
-                "  margin-top: 1px;"
-                "  margin-left: 1px;"
-                "}"
-            )
-
-            def _open() -> None:
-                try:
-                    QDesktopServices.openUrl(QUrl(url))
-                except Exception:
-                    logger.debug("[SETTINGS] Exception suppressed")
-
-            btn.clicked.connect(_open)
-            return btn
-
-        buttons_row.addWidget(_make_link_button("PAYPAL", "https://www.paypal.com/donate/?business=UBZJY8KHKKLGC&no_recurring=0&item_name=Why+are+you+doing+this?+Are+you+drunk?+&currency_code=USD"))
-        buttons_row.addWidget(_make_link_button("GOODREADS", "https://www.goodreads.com/book/show/25006763-usu"))
-        buttons_row.addWidget(_make_link_button("AMAZON", "https://www.amazon.com/Usu-Jayde-Ver-Elst-ebook/dp/B00V8A5K7Y"))
-        buttons_row.addWidget(_make_link_button("GITHUB", "https://github.com/Basjohn?tab=repositories"))
-        card_layout.addLayout(buttons_row)
-
-        # Hotkeys section beneath links (left-aligned, no bullet indent)
-        hotkeys_label = QLabel(
-            "<p><b>Hotkeys While Running:</b></p>"
-            "<p>"
-            "<b>Z</b>  - Go back to previous image<br>"
-            "<b>X</b>  - Go forward to next image<br>"
-            "<b>C</b>  - Cycle transition modes (Crossfade   Slide   Wipe   Diffuse   Block Flip)<br>"
-            "<b>S</b>  - Stop screensaver and open Settings<br>"
-            "<b>ESC</b> - Exit screensaver<br>"
-            "<b>Ctrl (HOLD)</b> - Temporary interaction mode (widgets clickable without exiting)<br>"
-            "<b>Mouse Click/Any Other Key</b> - Exit screensaver"
-            "</p>"
-        )
-        hotkeys_label.setWordWrap(True)
-        hotkeys_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        hotkeys_label.setStyleSheet("color: #cccccc; margin-top: 16px;")
-        hotkeys_label.setOpenExternalLinks(False)
-        card_layout.addWidget(hotkeys_label)
-
-        # Attach card to main layout
-        layout.addWidget(content_card)
-        layout.addStretch()
-
-        # Reset / Import / Export buttons (bottom row, small and unobtrusive)
-        button_row = QHBoxLayout()
-        self.reset_defaults_btn = QPushButton("Reset To Defaults")
-        self.reset_defaults_btn.setObjectName("resetDefaultsButton")
-        self.reset_defaults_btn.setFixedHeight(24)
-        self.reset_defaults_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
-        self.reset_defaults_btn.clicked.connect(self._on_reset_to_defaults_clicked)
-        button_row.addWidget(self.reset_defaults_btn)
-
-        button_row.addStretch()
-
-        # Import/Export settings snapshots using the SettingsManager SST
-        # helpers. These operate on the current QSettings profile only and
-        # are intended as human-friendly backups/restores rather than a
-        # replacement for QSettings itself.
-        self.import_settings_btn = QPushButton("Import Settings…")
-        self.import_settings_btn.setFixedHeight(24)
-        self.import_settings_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
-        self.import_settings_btn.clicked.connect(self._on_import_settings_clicked)
-        button_row.addWidget(self.import_settings_btn)
-
-        self.export_settings_btn = QPushButton("Export Settings…")
-        self.export_settings_btn.setFixedHeight(24)
-        self.export_settings_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
-        self.export_settings_btn.clicked.connect(self._on_export_settings_clicked)
-        button_row.addWidget(self.export_settings_btn)
-        
-        # More options button (context menu)
-        self.more_options_btn = QPushButton("⋮")
-        self.more_options_btn.setFixedSize(24, 24)
-        self.more_options_btn.setStyleSheet("""
-            QPushButton {
-                font-size: 14px;
-                font-weight: bold;
-                padding: 0;
-                border: 1px solid rgba(80, 80, 90, 150);
-                border-radius: 4px;
-                background-color: rgba(40, 40, 45, 200);
-                color: rgba(200, 200, 210, 220);
-            }
-            QPushButton:hover {
-                background-color: rgba(60, 60, 70, 220);
-            }
-        """)
-        self.more_options_btn.setToolTip("More options")
-        self.more_options_btn.clicked.connect(self._show_more_options_menu)
-        button_row.addWidget(self.more_options_btn)
-        layout.addLayout(button_row)
-
-        self.reset_notice_label = QLabel("Settings reverted to defaults!")
-        self.reset_notice_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self.reset_notice_label.setStyleSheet(
-            "color: #ffffff; font-size: 11px; padding: 4px 10px; "
-            "background-color: rgba(16, 16, 16, 230); border-radius: 6px;"
-        )
-        self.reset_notice_label.setVisible(False)
-        layout.addWidget(self.reset_notice_label)
-
-        return widget
+        """Create about tab. Delegates to ui.settings_about_tab."""
+        from ui.settings_about_tab import build_about_tab
+        return build_about_tab(self)
 
     def _update_about_header_images(self) -> None:
-        """Scale About header images responsively based on dialog width.
-
-        The logo and fish artwork are always scaled down from their source
-        resolution using smooth, high-DPI aware transforms and never
-        upscaled beyond 100% size. When the settings dialog is narrow the
-        images shrink together so they never clip or overlap.
-        """
-
-        card = getattr(self, "_about_content_card", None)
-        header_layout = getattr(self, "_about_header_layout", None)
-        logo_label = getattr(self, "_about_logo_label", None)
-        shoogle_label = getattr(self, "_about_shoogle_label", None)
-        logo_src = getattr(self, "_about_logo_source", None)
-        shoogle_src = getattr(self, "_about_shoogle_source", None)
-
-        if (
-            card is None
-            or header_layout is None
-            or logo_label is None
-            or shoogle_label is None
-            or logo_src is None
-            or logo_src.isNull()
-            or shoogle_src is None
-            or shoogle_src.isNull()
-        ):
-            return
-
-        current_width = card.width()
-        if current_width <= 0:
-            return
-
-        # Avoid aggressive rescaling on tiny drags by only recomputing when
-        # the card width has changed meaningfully since the last update.
-        last_width = getattr(self, "_about_last_card_width", 0)
-        if last_width and abs(current_width - last_width) < 12:
-            return
-        self._about_last_card_width = current_width
-
-        available = current_width - card.contentsMargins().left() - card.contentsMargins().right()
-        if available <= 0:
-            return
-
-        spacing = header_layout.spacing()
-        total_w = logo_src.width() + shoogle_src.width()
-        if total_w <= 0 or available <= spacing + 10:
-            scale = 1.0
-        else:
-            scale = (available - spacing) / float(total_w)
-            # Allow a modest upscale so the header artwork can occupy the
-            # available space on wide dialogs while still clamping to
-            # reasonable bounds.
-            scale = max(0.5, min(2.0, scale))
-
-        try:
-            dpr = float(self.devicePixelRatioF())
-        except Exception:
-            logger.debug("[SETTINGS] Exception suppressed")
-            dpr = 1.0
-        if dpr < 1.0:
-            dpr = 1.0
-
-        def _apply(src: QPixmap, label: QLabel, *, y_offset: int = 0) -> None:
-            if src is None or src.isNull():
-                return
-
-            target_w = max(1, int(round(src.width() * scale * dpr)))
-            target_h = max(1, int(round(src.height() * scale * dpr)))
-
-            scaled = src.scaled(
-                target_w,
-                target_h,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            if dpr != 1.0:
-                try:
-                    scaled.setDevicePixelRatio(dpr)
-                except Exception:
-                    logger.debug("[SETTINGS] Exception suppressed")
-
-            label.setPixmap(scaled)
-
-            # Use logical (device-independent) size for the label so the
-            # layout behaves consistently on high-DPI displays.
-            logical_w = max(1, int(round(scaled.width() / dpr)))
-            logical_h = max(1, int(round(scaled.height() / dpr)))
-            label.setMinimumSize(logical_w, logical_h)
-            label.setMaximumSize(logical_w, logical_h)
-            label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
-            if y_offset != 0:
-                label.setContentsMargins(0, max(0, y_offset), 0, 0)
-            else:
-                label.setContentsMargins(0, 0, 0, 0)
-
-        # Slight vertical nudge so the two images feel aligned by eye; the
-        # Shoogle artwork rides a touch lower so we bias the logo down a
-        # few extra pixels instead.
-        _apply(logo_src, logo_label, y_offset=5)
-        _apply(shoogle_src, shoogle_label, y_offset=0)
+        """Scale About header images responsively. Delegates to ui.settings_about_tab."""
+        from ui.settings_about_tab import update_about_header_images
+        update_about_header_images(self)
     
     def _connect_signals(self) -> None:
         """Connect signals to slots."""
@@ -1762,7 +1149,7 @@ class SettingsDialog(QDialog):
 
             # Apply imported settings to Custom preset
             try:
-                from core.presets import apply_preset
+                from core.settings.presets import apply_preset
                 # Switch to custom preset and save imported settings as custom backup
                 self._settings.set("preset", "custom")
                 apply_preset(self._settings, "custom")
@@ -1823,10 +1210,20 @@ class SettingsDialog(QDialog):
         if hasattr(self, '_resize_timer'):
             self._resize_timer.stop()
         else:
-            from PySide6.QtCore import QTimer
-            self._resize_timer = QTimer()
+            self._resize_timer = QTimer(self)
             self._resize_timer.setSingleShot(True)
             self._resize_timer.timeout.connect(self._save_geometry)
+            try:
+                from core.resources.manager import ResourceManager
+                from core.resources.types import ResourceType
+                ResourceManager().register_qt(
+                    self._resize_timer,
+                    resource_type=ResourceType.TIMER,
+                    description="Settings dialog resize debounce timer",
+                    group="qt",
+                )
+            except Exception:
+                pass
         self._resize_timer.start(500)  # Save 500ms after resize stops
         
         # Keep About header images scaled appropriately for the current
@@ -1851,10 +1248,20 @@ class SettingsDialog(QDialog):
         if hasattr(self, '_move_timer'):
             self._move_timer.stop()
         else:
-            from PySide6.QtCore import QTimer
-            self._move_timer = QTimer()
+            self._move_timer = QTimer(self)
             self._move_timer.setSingleShot(True)
             self._move_timer.timeout.connect(self._save_geometry)
+            try:
+                from core.resources.manager import ResourceManager
+                from core.resources.types import ResourceType
+                ResourceManager().register_qt(
+                    self._move_timer,
+                    resource_type=ResourceType.TIMER,
+                    description="Settings dialog move debounce timer",
+                    group="qt",
+                )
+            except Exception:
+                pass
         self._move_timer.start(500)  # Save 500ms after move stops
     
     def mousePressEvent(self, event):

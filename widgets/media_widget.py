@@ -15,19 +15,14 @@ import time
 import weakref
 from dataclasses import asdict
 from enum import Enum
-from pathlib import Path
 from typing import Optional, TYPE_CHECKING, ClassVar, Any
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect, QRectF, QPoint
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect, QPoint
 from PySide6.QtGui import (
     QFont,
-    QColor,
     QPixmap,
-    QPainter,
-    QPainterPath,
     QFontMetrics,
-    QLinearGradient,
 )
 from shiboken6 import Shiboken
 
@@ -41,9 +36,8 @@ from core.media.media_controller import (
 )
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import ShadowFadeProfile, draw_rounded_rect_with_shadow
+from widgets.shadow_utils import ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
-from utils.text_utils import smart_title_case
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
@@ -505,54 +499,10 @@ class MediaWidget(BaseOverlayWidget):
         self._update_timer = None
 
     def _update_position(self) -> None:
-        """Update widget position using centralized base class logic.
-        
-        Delegates to BaseOverlayWidget._update_position() which handles:
-        - Margin-based positioning for all 9 anchor positions
-        - Visual padding offsets (when background is disabled)
-        - Pixel shift and stack offset application
-        - Bounds clamping to prevent off-screen drift
-        
-        This ensures consistent margin alignment across all overlay widgets.
-        """
-        # Guard against positioning before widget has valid size
-        if self.width() <= 0 or self.height() <= 0:
-            QTimer.singleShot(16, self._update_position)
-            return
-        
-        # Sync MediaPosition to OverlayPosition for base class
-        position_map = {
-            MediaPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
-            MediaPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
-            MediaPosition.TOP_RIGHT: OverlayPosition.TOP_RIGHT,
-            MediaPosition.MIDDLE_LEFT: OverlayPosition.MIDDLE_LEFT,
-            MediaPosition.CENTER: OverlayPosition.CENTER,
-            MediaPosition.MIDDLE_RIGHT: OverlayPosition.MIDDLE_RIGHT,
-            MediaPosition.BOTTOM_LEFT: OverlayPosition.BOTTOM_LEFT,
-            MediaPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
-            MediaPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
-        }
-        
-        # Update base class position
-        self._position = position_map.get(self._media_position, OverlayPosition.BOTTOM_LEFT)
-        
-        # Delegate to base class for centralized margin/positioning logic
-        super()._update_position()
+        """Delegates to widgets.media_layout."""
+        from widgets.media_layout import update_position
+        update_position(self)
 
-        # Keep Spotify-related overlays anchored to the card
-        parent = self.parent()
-        if parent is not None:
-            if hasattr(parent, "_position_spotify_visualizer"):
-                try:
-                    parent._position_spotify_visualizer()
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            if hasattr(parent, "_position_spotify_volume"):
-                try:
-                    parent._position_spotify_volume()
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-    
     def _complete_hide_sequence(self) -> None:
         """Complete the hide sequence after fade out animation.
         
@@ -820,6 +770,7 @@ class MediaWidget(BaseOverlayWidget):
 
         timer.timeout.connect(_on_timeout)
         self._pending_state_timer = timer
+        self._register_resource(timer, "pending state debounce timer")
         timer.start()
 
     def next_track(self, source: str = "manual", execute: bool = True) -> None:
@@ -1037,351 +988,9 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Failed to emit media update: %s", e)
 
     def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
-        # Lifetime guard: async callbacks may fire after the widget has been
-        # destroyed. Bail out early and stop timers/handles if the underlying
-        # Qt object is no longer valid.
-        try:
-            if not Shiboken.isValid(self):
-                if getattr(self, "_update_timer_handle", None) is not None:
-                    try:
-                        self._update_timer_handle.stop()  # type: ignore[union-attr]
-                    except Exception as e:
-                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                    self._update_timer_handle = None  # type: ignore[assignment]
-
-                if getattr(self, "_update_timer", None) is not None:
-                    try:
-                        self._update_timer.stop()  # type: ignore[union-attr]
-                        self._update_timer.deleteLater()  # type: ignore[union-attr]
-                    except Exception as e:
-                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                    self._update_timer = None  # type: ignore[assignment]
-
-                self._enabled = False
-                self._refresh_in_flight = False
-                return
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            return
-
-        # Cache last track snapshot for diagnostics/interaction
-        prev_info = self._last_info
-        self._last_info = info
-        
-        # Update shared cache when we have valid info
-        if info is not None:
-            cls = type(self)
-            cls._shared_last_valid_info = info
-            cls._shared_last_valid_info_ts = time.monotonic()
-        
-        # Smart polling: diff gating - compute track identity
-        if info is not None:
-            current_identity = self._compute_track_identity(info)
-            
-            # Reset idle counter when we get valid track info
-            if self._consecutive_none_count > 0 or self._is_idle:
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Media widget exiting idle (track detected)")
-                self._consecutive_none_count = 0
-                was_idle = self._is_idle
-                self._is_idle = False
-                # Reset activation time to get fresh grace period after recovery
-                self._activation_time = time.monotonic()
-                # Reset to fast polling when resuming from idle
-                if was_idle:
-                    self._reset_poll_stage()
-                    # Update timer interval from idle (5s) to fast (1s)
-                    self._ensure_timer(force=True)
-            
-            # Adaptive polling: advance to slower interval after 2 successful polls
-            self._polls_at_current_stage += 1
-            if self._polls_at_current_stage >= 2:
-                self._advance_poll_stage()
-            
-            # Diff gating: skip update if track identity unchanged
-            # Always process first track (when _last_track_identity is None)
-            # Also process if we haven't completed fade-in yet (need 2 updates for fade-in)
-            if (
-                current_identity == self._last_track_identity
-                and self._last_track_identity is not None
-                and self._fade_in_completed
-            ):
-                self._skipped_identity_updates += 1
-                if self._skipped_identity_updates <= self._max_identity_skip:
-                    if is_perf_metrics_enabled():
-                        logger.debug(
-                            "[PERF] Media widget update skipped (diff gating - %d/%d)",
-                            self._skipped_identity_updates,
-                            self._max_identity_skip,
-                        )
-                    return
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Forcing metadata refresh after repeated skips")
-
-            # Track changed - update identity and proceed
-            self._last_track_identity = current_identity
-            self._skipped_identity_updates = 0
-            self._last_display_update_ts = time.monotonic()
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Media widget update applied (track changed)")
-
-        if info is None:
-            # MULTI-DISPLAY FIX: Check if other widgets have valid info
-            cls = type(self)
-            shared_info = cls._get_shared_valid_info()
-            if shared_info is not None:
-                logger.debug("[MEDIA_WIDGET] Using shared info from another display")
-                info = shared_info
-                self._last_info = info
-                # Don't count this as None - fall through to display shared info
-            else:
-                # No shared info - proceed with normal None handling
-                pass
-        
-        if info is None:
-            # Check grace period after activation - don't hide immediately
-            time_since_activation = time.monotonic() - self._activation_time
-            if self._activation_time > 0 and time_since_activation < self._post_activation_grace_sec:
-                if is_verbose_logging():
-                    logger.debug("[MEDIA_WIDGET] In grace period after activation (%.1fs), skipping hide", time_since_activation)
-                return
-            
-            # Smart polling: idle detection - track consecutive None results
-            self._consecutive_none_count += 1
-            
-            # Enter idle mode after threshold consecutive None results (~30s)
-            if self._consecutive_none_count >= self._idle_threshold and not self._is_idle:
-                self._is_idle = True
-                self._last_track_identity = None  # Reset identity for next track
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Media widget entering idle mode (Spotify closed)")
-                else:
-                    logger.info("[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls", 
-                               self._consecutive_none_count)
-                # Update timer interval from active (2.5s) to idle (5s)
-                self._ensure_timer(force=True)
-            
-            # No active media session (e.g. Spotify not playing) – hide widget with graceful fade
-            last_vis = self._telemetry_last_visibility
-            if last_vis or last_vis is None:
-                logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
-            self._artwork_pixmap = None
-            self._scaled_artwork_cache = None
-            self._scaled_artwork_cache_key = None
-            
-            # Graceful fade out instead of instant hide
-            if self.isVisible():
-                try:
-                    from widgets.shadow_utils import ShadowFadeProfile
-                    ShadowFadeProfile.start_fade_out(
-                        self,
-                        duration_ms=800,
-                        on_complete=lambda: self._complete_hide_sequence()
-                    )
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Fade out failed, hiding instantly: %s", e)
-                    self._complete_hide_sequence()
-            else:
-                self._complete_hide_sequence()
-            
-            self._telemetry_last_visibility = False
-            return
-
-        # Metadata: title and artist on separate lines; album is intentionally
-        # omitted to keep the block compact. Apply Title Case for readability.
-        title = smart_title_case((info.title or "").strip())
-        artist = smart_title_case((info.artist or "").strip())
-
-        # Typography: header is slightly larger than the base font, the song
-        # title is emphasised, and the artist is a touch smaller but still
-        # strong enough to read at a glance.
-        base_font = max(6, self._font_size)
-        header_font = max(6, int(base_font * 1.2))
-        
-        # Start from comfortable defaults and then downscale when titles get
-        # very long so they do not wrap so aggressively that they collide
-        # with the controls row. Artist text follows the title but with a
-        # smaller adjustment so hierarchy between the two is preserved.
-        title_font_base = max(6, base_font + 3)
-        artist_font_base = max(6, base_font - 2)
-        
-        title_len = len(title)
-        scale_title = 1.0
-        if title_len > 40:
-            scale_title = 0.86
-        if title_len > 55:
-            scale_title = 0.76
-        if title_len > 70:
-            scale_title = 0.66
-
-        # Artist font tracks part of the title scaling so that very long
-        # track names compress the whole metadata block slightly without
-        # making the artist look disproportionately small.
-        scale_artist = 1.0 - (1.0 - scale_title) * 0.4
-
-        title_font = max(6, int(title_font_base * scale_title))
-        artist_font = max(6, int(artist_font_base * scale_artist))
-
-        header_weight = 750  # a bit heavier than standard bold
-        title_weight = 700
-        artist_weight = 600
-
-        # Store logo metrics so paintEvent can size/position the glyph
-        # relative to the SPOTIFY text. The logo is kept slightly larger than
-        # the SPOTIFY word and the header text is indented accordingly.
-        self._header_font_pt = header_font
-        self._header_logo_size = max(12, int(header_font * 1.3))
-        self._header_logo_margin = self._header_logo_size
-
-        # Build metadata lines with per-line font sizes/weights.
-        if not title and not artist:
-            body_html = (
-                f"<div style='font-size:{base_font}pt; font-weight:500;'>(no metadata)</div>"
-            )
-            metadata_complexity = 0
-        else:
-            body_lines_html = []
-            if title:
-                body_lines_html.append(
-                    f"<div style='font-size:{title_font}pt; font-weight:{title_weight};'>{title}</div>"
-                )
-            if artist:
-                body_lines_html.append(
-                    f"<div style='margin-top:4px; font-size:{artist_font}pt; font-weight:{artist_weight}; opacity:0.95;'>{artist}</div>"
-                )
-            body_html = "".join(body_lines_html)
-            metadata_complexity = len(title.strip()) + len(artist.strip())
-
-        header_html = (
-            f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
-            f"letter-spacing:1px; margin-left:{self._header_logo_margin + 5}px; "
-            f"color:rgba(255,255,255,255);'>SPOTIFY</div>"
-        )
-        # Outer wrapper just establishes spacing; individual lines carry
-        # their own font sizes/weights.
-        body_wrapper = f"<div style='margin-top:8px;'>{body_html}</div>"
-
-        html_parts = ["<div style='line-height:1.25'>", header_html, body_wrapper]
-        html_parts.append("</div>")
-        html = "".join(html_parts)
-
-        self.setTextFormat(Qt.TextFormat.RichText)
-        self.setText(html)
-        
-        # Adjust artwork vertical bias so shorter metadata keeps the frame closer to center.
-        if metadata_complexity <= 0:
-            self._artwork_vertical_bias = 0.58
-        elif metadata_complexity <= 40:
-            self._artwork_vertical_bias = 0.55
-        elif metadata_complexity <= 80:
-            self._artwork_vertical_bias = 0.45
-        else:
-            self._artwork_vertical_bias = 0.32
-
-        # Lock the card height after the first track so that layout changes
-        # (for example when titles wrap to multiple lines) do not cause the
-        # widget to move vertically on screen. The height NEVER grows after first track.
-        # Text eliding handles overflow instead of resizing.
-        if self._fixed_card_height is None:
-            try:
-                hint_h = self.sizeHint().height()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                hint_h = 0
-            base_min = self.minimumHeight()
-            control_padding = self._controls_row_min_height()
-            self._fixed_card_height = max(220, base_min, hint_h + control_padding)
-
-        # Lock height permanently - never grow
-        self.setMinimumHeight(self._fixed_card_height)
-        self.setMaximumHeight(self._fixed_card_height)
-
-        # CRITICAL: Decode artwork BEFORE the first-track early return so that
-        # artwork is captured on the very first poll. Without this, the first
-        # update returns early and artwork is never decoded, causing blank
-        # artwork on startup.
-        artwork_pm = self._decode_artwork_pixmap(getattr(info, "artwork", None))
-        if artwork_pm is not None:
-            self._artwork_pixmap = artwork_pm
-            if is_verbose_logging():
-                logger.debug("[MEDIA_WIDGET] Artwork decoded: %dx%d", artwork_pm.width(), artwork_pm.height())
-
-        # CRITICAL: Set content margins BEFORE the first-track early return so
-        # that the text layout accounts for artwork space. Without this, the
-        # text wraps as if there's no artwork, causing overlap on startup.
-        right_margin = max(self._artwork_size + 40, 60)
-        # Reduce bottom margin so controls sit closer to the card edge.
-        self.setContentsMargins(29, 12, right_margin, self._controls_row_margin())
-
-        # On the very first non-empty track update we use this call to
-        # establish a stable layout (card stays hidden until fade sync), but we
-        # still need to propagate media state to dependent widgets so they can
-        # react immediately (visualizer wake-up, volume visibility, etc.).
-        if not self._has_seen_first_track:
-            self._has_seen_first_track = True
-            self._emit_media_update(info)
-            try:
-                self.hide()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            if not self._telemetry_logged_fade_request:
-                logger.info("[MEDIA_WIDGET] First track snapshot captured; waiting for coordinated fade-in")
-            parent = self.parent()
-
-            def _starter() -> None:
-                if not Shiboken.isValid(self):
-                    return
-                self._start_widget_fade_in(1500)
-                self._notify_spotify_widgets_visibility()
-                self._telemetry_last_visibility = True
-
-            if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-                try:
-                    parent.request_overlay_fade_sync("media", _starter)
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                    _starter()
-            else:
-                _starter()
-            return
-
-        self._emit_media_update(info)
-
-        # Decode optional artwork bytes (for subsequent updates after first track)
-        prev_pm = self._artwork_pixmap
-        had_artwork_before = prev_pm is not None and not prev_pm.isNull()
-        self._artwork_pixmap = None
-        artwork_pm = self._decode_artwork_pixmap(getattr(info, "artwork", None))
-        if artwork_pm is not None:
-            self._artwork_pixmap = artwork_pm
-
-            # Fade in artwork whenever it appears for the first time or when metadata changes.
-            should_fade_artwork = False
-            if not had_artwork_before:
-                should_fade_artwork = True
-            else:
-                try:
-                    if prev_info is None:
-                        should_fade_artwork = True
-                    else:
-                        def _norm(s: Optional[str]) -> str:
-                            return (s or "").strip()
-
-                        if (
-                            _norm(getattr(prev_info, "title", None))
-                            != _norm(getattr(info, "title", None))
-                            or _norm(getattr(prev_info, "artist", None))
-                            != _norm(getattr(info, "artist", None))
-                            or _norm(getattr(prev_info, "album", None))
-                            != _norm(getattr(info, "album", None))
-                        ):
-                            should_fade_artwork = True
-                except Exception as e:
-                    logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                    should_fade_artwork = False
-
-            if should_fade_artwork:
-                self._start_artwork_fade_in()
+        """Delegates to widgets.media.display_update."""
+        from widgets.media.display_update import update_display
+        update_display(self, info)
 
     def _decode_artwork_pixmap(self, artwork: Optional[bytes]) -> Optional[QPixmap]:
         """Decode artwork bytes into a pixmap, ensuring non-zero dimensions."""
@@ -1424,95 +1033,9 @@ class MediaWidget(BaseOverlayWidget):
         return max(10, int(self._controls_row_min_height() * 0.35))
     
     def _compute_controls_layout(self):
-        """Compute geometry for the transport controls row."""
-        if not self._show_controls:
-            self._controls_layout_cache = None
-            return None
-
-        width = self.width()
-        height = self.height()
-        if width <= 0 or height <= 0:
-            self._controls_layout_cache = None
-            return None
-
-        margins = self.contentsMargins()
-        content_left = margins.left()
-        content_right = width - margins.right()
-        content_width = content_right - content_left
-        if content_width <= 60:
-            self._controls_layout_cache = None
-            return None
-
-        controls_font_pt = max(8, int((self._font_size - 2) * 0.9))
-        font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
-        fm = QFontMetrics(font)
-        row_height = max(self._controls_row_min_height(), int((fm.height() + 10) * 0.85))
-
-        try:
-            header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            header_font_pt = self._font_size
-
-        cache_key = (
-            width,
-            height,
-            margins.left(),
-            margins.top(),
-            margins.right(),
-            margins.bottom(),
-            controls_font_pt,
-            header_font_pt,
-        )
-        cached = self._controls_layout_cache
-        if cached is not None and cached.get("_cache_key") == cache_key:
-            return cached
-
-        header_metrics = QFontMetrics(QFont(self._font_family, header_font_pt, QFont.Weight.Bold))
-        header_height = header_metrics.height()
-
-        base_row_top = height - margins.bottom() - row_height - 5  # Shift up 5px for 3D depth effect
-        min_row_top = margins.top() + header_height + 6
-        row_top = max(min_row_top, base_row_top)
-        if row_top + row_height > height - margins.bottom():
-            row_top = max(margins.top(), height - margins.bottom() - row_height)
-        if row_top < margins.top():
-            row_top = margins.top()
-
-        row_rect = QRect(
-            int(content_left),
-            int(row_top),
-            int(content_width),
-            int(row_height),
-        )
-
-        slot_width = content_width / 3.0
-        inner_pad_x = max(5.0, slot_width * 0.07)
-        inner_pad_y = max(2.0, row_height * 0.16)
-        hit_slop = max(8, int(row_height * 0.28))
-
-        button_rects = {}
-        hit_rects = {}
-        for index, key in enumerate(("prev", "play", "next")):
-            slot_left = content_left + slot_width * index
-            rect = QRect(
-                int(slot_left + inner_pad_x),
-                int(row_top + inner_pad_y),
-                int(slot_width - inner_pad_x * 2),
-                int(row_height - inner_pad_y * 2),
-            )
-            button_rects[key] = rect
-            hit_rects[key] = rect.adjusted(-hit_slop, -hit_slop, hit_slop, hit_slop)
-
-        layout = {
-            "font": font,
-            "row_rect": row_rect,
-            "button_rects": button_rects,
-            "hit_rects": hit_rects,
-        }
-        layout["_cache_key"] = cache_key
-        self._controls_layout_cache = layout
-        return layout
+        """Delegates to widgets.media_layout."""
+        from widgets.media_layout import compute_controls_layout
+        return compute_controls_layout(self)
 
     def resolve_control_hit(self, point: QPoint) -> Optional[str]:
         """Return the control key for a local point, if any."""
@@ -1526,161 +1049,15 @@ class MediaWidget(BaseOverlayWidget):
                 return key
         return None
     
-    def _paint_controls_row(self, painter: QPainter) -> None:
-        """Paint transport controls aligned with the click hit regions."""
-        layout = self._compute_controls_layout()
-        if layout is None:
-            return
+    def _paint_controls_row(self, painter) -> None:
+        """Delegates to widgets.media.painting."""
+        from widgets.media.painting import paint_controls_row
+        paint_controls_row(self, painter)
 
-        font: QFont = layout["font"]
-        row_rect: QRect = layout["row_rect"]
-        button_rects: dict = layout["button_rects"]
-
-        painter.save()
-        try:
-            base_color = QColor(self._bg_color)
-            matte_top = QColor(base_color)
-            matte_bottom = QColor(base_color)
-            matte_top.setAlpha(min(255, int(base_color.alpha() * 0.95) + 30))
-            matte_bottom.setAlpha(min(255, int(base_color.alpha() * 0.85)))
-
-            # 3D slab effect: filled darker border 4px right/4px down, with light shadow
-            if self._slab_effect_enabled:
-                shadow_offset_x = 4
-                shadow_offset_y = 4
-                slab_rect = row_rect.adjusted(shadow_offset_x, shadow_offset_y, shadow_offset_x, shadow_offset_y)
-                
-                # Slab fill: same gradient as control bar but darker
-                slab_matte_top = QColor(matte_top).darker(115)
-                slab_matte_bottom = QColor(matte_bottom).darker(115)
-                
-                # Light shadow around the slab (drawn first, behind slab)
-                shadow_color = QColor(0, 0, 0, 40)  # Very light shadow
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(shadow_color)
-                shadow_rect = slab_rect.adjusted(-2, -2, 2, 2)
-                painter.drawRoundedRect(shadow_rect, self._controls_row_radius + 1, self._controls_row_radius + 1)
-                
-                # Draw the filled slab underneath with matching gradient
-                slab_gradient = QLinearGradient(slab_rect.topLeft(), slab_rect.bottomLeft())
-                slab_gradient.setColorAt(0.0, slab_matte_top)
-                slab_gradient.setColorAt(1.0, slab_matte_bottom)
-                painter.setBrush(slab_gradient)
-                painter.drawRoundedRect(slab_rect, self._controls_row_radius, self._controls_row_radius)
-                
-                # Slab outline: white 10% darker than control bar outline
-                slab_outline = QColor(255, 255, 255, self._controls_row_outline_alpha).darker(110)
-                painter.setPen(slab_outline)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawRoundedRect(slab_rect, self._controls_row_radius, self._controls_row_radius)
-
-            # Main gradient fill (drawn on top of shadow)
-            gradient = QLinearGradient(row_rect.topLeft(), row_rect.bottomLeft())
-            gradient.setColorAt(0.0, matte_top)
-            gradient.setColorAt(1.0, matte_bottom)
-
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(gradient)
-            painter.drawRoundedRect(row_rect, self._controls_row_radius, self._controls_row_radius)
-
-            # Inner matte outline (2px thicker outer border)
-            outline = QColor(255, 255, 255, self._controls_row_outline_alpha)
-            # Outer shadow edge (bottom/right of row rect)
-            painter.setPen(QColor(0, 0, 0, self._controls_row_shadow_alpha))
-            painter.drawRoundedRect(
-                row_rect.adjusted(2, 2, -2, -2),
-                self._controls_row_radius - 1,
-                self._controls_row_radius - 1,
-            )
-            # Inner highlight edge (top/left of row rect)
-            painter.setPen(outline)
-            painter.drawRoundedRect(
-                row_rect.adjusted(0, 0, 0, 0),
-                self._controls_row_radius,
-                self._controls_row_radius,
-            )
-
-            # Divider lines (relative to row_rect)
-            divider_color = QColor(255, 255, 255, 55)
-            painter.setPen(divider_color)
-            top_divider = row_rect.top() + int(row_rect.height() * 0.15)
-            bottom_divider = row_rect.bottom() - int(row_rect.height() * 0.15)
-            for i in range(1, 3):
-                x = row_rect.left() + int(row_rect.width() * i / 3.0)
-                painter.drawLine(x, top_divider, x, bottom_divider)
-
-            painter.setFont(font)
-            painter.setPen(QColor(255, 255, 255, 225))
-            for key, rect in button_rects.items():
-                self._draw_control_icon(painter, rect, key)
-
-            # Click feedback overlay
-            if self._controls_feedback:
-                painter.setPen(Qt.PenStyle.NoPen)
-                for key, rect in button_rects.items():
-                    intensity = max(0.0, min(1.0, self._controls_feedback_progress.get(key, 0.0)))
-                    if intensity <= 0.0:
-                        continue
-
-                    base_rect = QRectF(rect)
-                    scale = 1.0 + self._controls_feedback_scale_boost * intensity
-                    if scale > 1.0:
-                        delta_w = base_rect.width() * (scale - 1.0) * 0.5
-                        delta_h = base_rect.height() * (scale - 1.0) * 0.5
-                        highlight_rect = base_rect.adjusted(-delta_w, -delta_h, delta_w, delta_h)
-                    else:
-                        highlight_rect = base_rect
-
-                    radius = max(4.0, min(highlight_rect.width(), highlight_rect.height()) * 0.3)
-                    glow_expand = max(2.0, min(highlight_rect.width(), highlight_rect.height()) * 0.12)
-
-                    # Soft outer glow
-                    glow_rect = highlight_rect.adjusted(-glow_expand, -glow_expand, glow_expand, glow_expand)
-                    glow_color = QColor(255, 255, 255, int(90 * intensity))
-                    painter.setBrush(glow_color)
-                    painter.drawRoundedRect(glow_rect, radius + glow_expand, radius + glow_expand)
-
-                    # Bright gradient core
-                    gradient = QLinearGradient(
-                        highlight_rect.topLeft(), highlight_rect.bottomLeft()
-                    )
-                    gradient.setColorAt(0.0, QColor(255, 255, 255, int(255 * intensity)))
-                    gradient.setColorAt(0.6, QColor(255, 255, 255, int(215 * intensity)))
-                    gradient.setColorAt(1.0, QColor(255, 255, 255, int(170 * intensity)))
-                    painter.setBrush(gradient)
-                    painter.drawRoundedRect(highlight_rect, radius, radius)
-        finally:
-            painter.restore()
-    
-    def _draw_control_icon(self, painter: QPainter, rect: QRect, key: str) -> None:
-        """Draw a single control icon (prev/play/next)."""
-        state = MediaPlaybackState.UNKNOWN
-        if self._last_info:
-            state = self._last_info.state
-
-        prev_sym = "\u2190"  # LEFTWARDS ARROW
-        next_sym = "\u2192"  # RIGHTWARDS ARROW
-        if state == MediaPlaybackState.PLAYING:
-            centre_sym = "||"  # pause
-        else:
-            centre_sym = "\u25b6"  # play
-
-        inactive_color = QColor(200, 200, 200, 230)
-        active_color = QColor(255, 255, 255, 255)
-
-        if key == "prev":
-            painter.setPen(inactive_color)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, prev_sym)
-        elif key == "next":
-            painter.setPen(inactive_color)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, next_sym)
-        elif key == "play":
-            # Centre play/pause gets heavier weight
-            pause_font_size = self._font_size - 4 if centre_sym == "||" else self._font_size - 2
-            font_centre = QFont(self._font_family, pause_font_size, QFont.Weight.Bold)
-            painter.setFont(font_centre)
-            painter.setPen(active_color)
-            painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, centre_sym)
+    def _draw_control_icon(self, painter, rect, key: str) -> None:
+        """Delegates to widgets.media.painting."""
+        from widgets.media.painting import draw_control_icon
+        draw_control_icon(self, painter, rect, key)
     
     def _complete_hide_sequence(self) -> None:
         """Complete the hide sequence after fade out."""
@@ -1865,216 +1242,47 @@ class MediaWidget(BaseOverlayWidget):
         return None
     
     # ------------------------------------------------------------------
-    # Shared Feedback System (Class Methods)
+    # Shared Feedback System — delegates to widgets.media.feedback
     # ------------------------------------------------------------------
-    
+
     @classmethod
     def _ensure_shared_feedback_timer(cls) -> None:
-        """Ensure shared feedback timer is running."""
-        timer = cls._shared_feedback_timer
-        if timer is None:
-            timer = QTimer()
-            timer.setTimerType(Qt.TimerType.PreciseTimer)
-            timer.setInterval(cls._shared_feedback_timer_interval_ms)
-            timer.timeout.connect(cls._on_shared_feedback_tick)
-            cls._shared_feedback_timer = timer
-        if not timer.isActive():
-            timer.start()
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Started shared feedback timer")
-    
+        from widgets.media.feedback import ensure_shared_feedback_timer
+        ensure_shared_feedback_timer(cls)
+
     @classmethod
     def _maybe_stop_shared_feedback_timer(cls) -> None:
-        """Stop timer if no active feedback (FIXED VERSION)."""
-        timer = cls._shared_feedback_timer
-        if timer is None or not timer.isActive():
-            return
-        
-        # Check if ANY instance has active feedback
-        has_feedback = False
-        for instance in list(cls._instances):
-            try:
-                if not Shiboken.isValid(instance):
-                    continue
-            except Exception:
-                continue
-            # Check both local feedback AND shared events
-            if instance._controls_feedback:
-                has_feedback = True
-                break
-        
-        # Also check shared events dict
-        if not has_feedback and cls._shared_feedback_events:
-            has_feedback = True
-        
-        # Stop timer only if NO feedback anywhere
-        if not has_feedback:
-            timer.stop()
-            if is_perf_metrics_enabled():
-                logger.debug("[PERF] Stopped shared feedback timer (no active feedback)")
-    
+        from widgets.media.feedback import maybe_stop_shared_feedback_timer
+        maybe_stop_shared_feedback_timer(cls)
+
     @classmethod
     def _on_shared_feedback_tick(cls) -> None:
-        """Process feedback tick for all instances."""
-        now = time.monotonic()
-        
-        # Process each instance
-        for instance in list(cls._instances):
-            try:
-                if not Shiboken.isValid(instance):
-                    continue
-            except Exception:
-                continue
-            instance._process_feedback_tick(now)
-        
-        # Expire old shared events
-        expired_ids = []
-        for event_id, meta in list(cls._shared_feedback_events.items()):
-            duration = meta.get("duration", 0.0) or 0.0
-            timestamp = meta.get("timestamp", now)
-            if (now - timestamp) >= duration:
-                expired_ids.append(event_id)
-        for event_id in expired_ids:
-            cls._shared_feedback_events.pop(event_id, None)
-        
-        # Stop timer if no more feedback
-        cls._maybe_stop_shared_feedback_timer()
-    
-    # ------------------------------------------------------------------
-    # Instance Feedback Methods
-    # ------------------------------------------------------------------
-    
+        from widgets.media.feedback import on_shared_feedback_tick
+        on_shared_feedback_tick(cls)
+
     def _process_feedback_tick(self, now: float) -> bool:
-        """Process feedback for this instance. Returns True if active."""
-        expired_keys: list[str] = []
-        for key, deadline in list(self._feedback_deadlines.items()):
-            if now >= deadline:
-                expired_keys.append(key)
+        from widgets.media.feedback import process_feedback_tick
+        return process_feedback_tick(self, now)
 
-        for key in expired_keys:
-            self._feedback_deadlines.pop(key, None)
-            self._finalize_feedback_key(key)
-
-        return bool(self._controls_feedback)
-    
     def _trigger_controls_feedback(self, key: str, source: str = "manual") -> None:
-        """Trigger control feedback animation."""
-        if key not in ("prev", "play", "next"):
-            logger.debug("[MEDIA_WIDGET][FEEDBACK] Invalid feedback key: %s", key)
-            return
-        
-        logger.debug("[MEDIA_WIDGET][FEEDBACK] Starting feedback animation for %s", key)
-        
-        cls = type(self)
-        now = time.monotonic()
-        event_id = f"{key}_{int(now * 1000)}"
-        
-        # Expire all existing feedback
-        self._expire_all_feedback()
-        
-        # Start new feedback
-        self._controls_feedback[key] = (now, event_id)
-        self._feedback_deadlines[key] = now + self._controls_feedback_duration
-        self._active_feedback_events[key] = event_id
-        self._start_feedback_animation(key)
-        
-        # Register in shared events
-        cls._shared_feedback_events[event_id] = {
-            "key": key,
-            "timestamp": now,
-            "source": source,
-            "duration": self._controls_feedback_duration,
-        }
-        
-        # Ensure timer is running
-        cls._ensure_shared_feedback_timer()
-        self._safe_update()
-        logger.debug("[MEDIA_WIDGET][FEEDBACK] Feedback animation started for %s", key)
+        from widgets.media.feedback import trigger_controls_feedback
+        trigger_controls_feedback(self, key, source)
 
     def _log_feedback_metric(self, *, phase: str, key: str, source: str, event_id: str) -> None:
-        """Emit structured logs for control feedback when diagnostics enabled."""
-        if not (is_perf_metrics_enabled() or is_verbose_logging()):
-            return
+        from widgets.media.feedback import log_feedback_metric
+        log_feedback_metric(self, phase=phase, key=key, source=source, event_id=event_id)
 
-        overlay = getattr(self, "_overlay_name", "media")
-        message = (
-            "[MEDIA_WIDGET][FEEDBACK] overlay=%s phase=%s key=%s source=%s event=%s"
-            % (overlay, phase, key, source, event_id)
-        )
-
-        if is_perf_metrics_enabled():
-            logger.info(message)
-        else:
-            logger.debug(message)
-    
     def _start_feedback_animation(self, key: str) -> None:
-        """Start fade animation for feedback."""
-        try:
-            from core.animation.animator import AnimationManager
-            from core.animation.types import EasingCurve
-            
-            if self._feedback_anim_mgr is None:
-                self._feedback_anim_mgr = AnimationManager()
-            
-            mgr = self._feedback_anim_mgr
-            self._controls_feedback_progress[key] = 1.0
-            
-            def _on_update(progress: float) -> None:
-                eased = max(0.0, 1.0 - progress)
-                value = eased * eased
-                self._controls_feedback_progress[key] = value
-                self._safe_update()
-            
-            def _on_complete() -> None:
-                self._finalize_feedback_key(key)
-            
-            anim_id = mgr.animate_custom(
-                duration=max(0.01, self._controls_feedback_duration),
-                update_callback=_on_update,
-                easing=EasingCurve.CUBIC_OUT,
-                on_complete=_on_complete,
-            )
-            self._controls_feedback_anim_ids[key] = anim_id
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Feedback animation failed: %s", e)
-            # Fallback: just set progress and let timer expire it
-            self._controls_feedback_progress[key] = 1.0
-    
+        from widgets.media.feedback import start_feedback_animation
+        start_feedback_animation(self, key)
+
     def _expire_all_feedback(self) -> None:
-        """Expire all active feedback."""
-        for key in list(self._controls_feedback.keys()):
-            self._finalize_feedback_key(key)
+        from widgets.media.feedback import expire_all_feedback
+        expire_all_feedback(self)
 
     def _finalize_feedback_key(self, key: str) -> None:
-        """Clean up feedback for a key."""
-        anim_id = self._controls_feedback_anim_ids.pop(key, None)
-        if anim_id and self._feedback_anim_mgr:
-            try:
-                self._feedback_anim_mgr.cancel_animation(anim_id)
-            except Exception:
-                pass
-
-        self._controls_feedback_progress.pop(key, None)
-        entry = self._controls_feedback.pop(key, None)
-        if entry:
-            _, event_id = entry
-            type(self)._shared_feedback_events.pop(event_id, None)
-
-        self._feedback_deadlines.pop(key, None)
-        active_id = self._active_feedback_events.pop(key, None)
-        if active_id and is_perf_metrics_enabled():
-            self._log_feedback_metric(
-                phase="expire",
-                key=key,
-                source="local",
-                event_id=active_id,
-            )
-
-        # Stop timer if no more feedback
-        if not self._controls_feedback and not self._feedback_deadlines:
-            type(self)._maybe_stop_shared_feedback_timer()
-
-        self._safe_update()
+        from widgets.media.feedback import finalize_feedback_key
+        finalize_feedback_key(self, key)
     
     def _gate_fft_worker(self, should_run: bool) -> None:
         """Start or stop the FFT worker based on media widget visibility.
@@ -2134,355 +1342,14 @@ class MediaWidget(BaseOverlayWidget):
             self._paint_contents(event)
 
     def _paint_contents(self, event) -> None:
-        """Internal paint implementation."""
-        super().paintEvent(event)
-
-        try:
-            painter = QPainter(self)
-            try:
-                painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-            # Optional header frame on the left side around logo + SPOTIFY.
-            self._paint_header_frame(painter)
-
-            pm = self._artwork_pixmap
-            if pm is not None and not pm.isNull():
-                # Artwork should be the dominant visual element but must
-                # respect padding so it never clips. We clamp by height and
-                # the requested logical size, avoiding overly conservative
-                # width-based caps.
-                max_by_height = max(24, self.height() - 60)  # 30px top/bottom padding
-                size = max(48, min(self._artwork_size, max_by_height))
-                if size > 0:
-                    # Scale in device pixels but compute the border in logical
-                    # coordinates so the frame fits tightly even on high-DPI
-                    # displays.
-                    try:
-                        dpr = float(self.devicePixelRatioF())
-                    except Exception as e:
-                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                        dpr = 1.0
-                    scale_dpr = max(1.0, dpr)
-
-                    # Base square frame for album artwork.
-                    frame_w = size
-                    frame_h = size
-
-                    # For clearly non-square artwork (e.g. Spotify video
-                    # thumbnails), widen the frame towards the source aspect
-                    # ratio while still using the existing cover-style
-                    # scaling. This keeps album covers square but allows
-                    # video-shaped frames to feel less distorted without
-                    # introducing letterboxing.
-                    try:
-                        src_w = float(pm.width())
-                        src_h = float(pm.height())
-                        aspect = src_w / src_h if (src_w > 0.0 and src_h > 0.0) else 1.0
-                    except Exception as e:
-                        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                        aspect = 1.0
-
-                    if aspect > 0.0:
-                        # Treat anything significantly wider than tall as a
-                        # "video"-ish frame. We keep the existing square
-                        # behaviour for near-1:1 artwork so album covers are
-                        # untouched.
-                        if aspect >= 1.4:
-                            # Grow width up to a reasonable multiple of the
-                            # base size, but clamp to the card width so we
-                            # never bleed past the left text column.
-                            natural_w = int(size * min(aspect, 2.4))
-                            max_card_w = max(48, self.width() - 80)
-                            frame_w = max(48, min(natural_w, max_card_w))
-                            frame_h = size
-                        elif aspect <= 0.7:
-                            # Very tall artwork (rare in practice) – invert
-                            # the logic so we extend height while keeping the
-                            # base width.
-                            natural_h = int(size * min(1.0 / max(aspect, 0.1), 2.4))
-                            max_card_h = max(48, self.height() - 80)
-                            frame_h = max(48, min(natural_h, max_card_h))
-
-                    # Scale-to-fill inside the frame while preserving aspect
-                    # ratio (object-fit: cover). We scale with
-                    # KeepAspectRatioByExpanding and then centre the pixmap
-                    # behind the frame, letting the clip path define the
-                    # visible region.
-                    #
-                    # PERF: Cache scaled artwork to avoid expensive SmoothTransformation
-                    # on every paint. Cache key includes pixmap identity, frame size, and DPR.
-                    cache_key = (id(pm), frame_w, frame_h, scale_dpr)
-                    if self._scaled_artwork_cache_key == cache_key and self._scaled_artwork_cache is not None:
-                        scaled = self._scaled_artwork_cache
-                    else:
-                        target_w_px = int(frame_w * scale_dpr)
-                        target_h_px = int(frame_h * scale_dpr)
-                        scaled = pm.scaled(
-                            target_w_px,
-                            target_h_px,
-                            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                            Qt.TransformationMode.SmoothTransformation,
-                        )
-                        try:
-                            scaled.setDevicePixelRatio(scale_dpr)
-                        except Exception as e:
-                            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                        self._scaled_artwork_cache = scaled
-                        self._scaled_artwork_cache_key = cache_key
-
-                    scaled_logical_w = max(1, int(round(scaled.width() / scale_dpr)))
-                    scaled_logical_h = max(1, int(round(scaled.height() / scale_dpr)))
-
-                    # Keep a fixed inset from the top/right card borders so the
-                    # artwork and its border never touch the outer frame.
-                    pad = 20
-                    x = max(pad, self.width() - pad - frame_w)
-                    y = pad
-                    painter.save()
-                    try:
-                        if self._artwork_opacity != 1.0:
-                            painter.setOpacity(max(0.0, min(1.0, float(self._artwork_opacity))))
-
-                        border_rect = QRect(x, y, frame_w, frame_h).adjusted(-1, -1, 1, 1)
-
-                        # Draw a soft drop shadow behind the artwork frame
-                        # using multiple passes with increasing offset/blur
-                        painter.save()
-                        painter.setPen(Qt.PenStyle.NoPen)
-                        # Multi-pass shadow for softer feathering
-                        shadow_passes = [
-                            (2, 25),   # inner shadow layer
-                            (4, 35),   # mid shadow layer
-                            (6, 45),   # outer shadow layer
-                            (8, 30),   # furthest, faintest layer
-                        ]
-                        for offset, alpha in shadow_passes:
-                            shadow_rect = border_rect.adjusted(offset, offset, offset, offset)
-                            shadow_path = QPainterPath()
-                            if self._rounded_artwork_border:
-                                radius = min(shadow_rect.width(), shadow_rect.height()) / 8.0
-                                shadow_path.addRoundedRect(shadow_rect, radius, radius)
-                            else:
-                                shadow_path.addRect(shadow_rect)
-                            painter.setBrush(QColor(0, 0, 0, alpha))
-                            painter.drawPath(shadow_path)
-                        painter.restore()
-
-                        # Clip the artwork to the same rounded/square frame so
-                        # pixels never bleed out past the border corners.
-                        path = QPainterPath()
-                        if self._rounded_artwork_border:
-                            radius = min(border_rect.width(), border_rect.height()) / 8.0
-                            path.addRoundedRect(border_rect, radius, radius)
-                        else:
-                            path.addRect(border_rect)
-                        painter.setClipPath(path)
-
-                        # Centre the scaled artwork inside the frame; because
-                        # we used KeepAspectRatioByExpanding above, the
-                        # pixmap will completely cover the frame in at least
-                        # one dimension and any overflow is clipped by the
-                        # border path.
-                        cx = x + frame_w // 2
-                        cy = y + frame_h // 2
-                        offset_x = int(round(cx - scaled_logical_w / 2))
-                        offset_y = int(round(cy - scaled_logical_h / 2))
-
-                        painter.drawPixmap(offset_x, offset_y, scaled)
-
-                        # Artwork border matching the widget frame colour/opacity.
-                        if self._bg_border_width > 0 and self._bg_border_color.alpha() > 0:
-                            pen = painter.pen()
-                            pen.setColor(self._bg_border_color)
-                            # A bit thicker than the card frame so the
-                            # artwork reads as a strong focal element.
-                            pen.setWidth(max(1, self._bg_border_width + 2))
-                            painter.setPen(pen)
-                            painter.setBrush(Qt.BrushStyle.NoBrush)
-                            if self._rounded_artwork_border:
-                                painter.drawPath(path)
-                            else:
-                                painter.drawRect(border_rect)
-                    finally:
-                        painter.restore()
-            # Paint the Spotify logo for the header using high-DPI aware
-            # scaling so it stays crisp and properly aligned with the SPOTIFY
-            # word rendered by QLabel's rich text.
-            self._paint_header_logo(painter)
-
-            # Finally, paint the transport controls row as a static stripe
-            # along the bottom of the text column so its position never
-            # drifts between tracks.
-            self._paint_controls_row(painter)
-        except Exception:
-            logger.debug("[MEDIA] Failed to paint artwork pixmap", exc_info=True)
+        """Internal paint implementation. Delegates to widgets.media.painting."""
+        from widgets.media.painting import paint_contents
+        paint_contents(self, event)
 
     def _load_brand_pixmap(self) -> Optional[QPixmap]:
-        """Best-effort load of a Spotify logo from the shared images folder.
-
-        We prefer the high-resolution primary logo asset when present so that
-        the glyph remains sharp even when scaled up on high-DPI displays.
-        """
-
-        try:
-            images_dir = Path(__file__).resolve().parent.parent / "images"
-            candidates = [
-                "Spotify_Primary_Logo_RGB_Black.png",
-                "spotify_logo.png",
-                "SpotifyLogo.png",
-                "spotify.png",
-            ]
-            for name in candidates:
-                candidate = images_dir / name
-                if candidate.exists() and candidate.is_file():
-                    pm = QPixmap(str(candidate))
-                    if not pm.isNull():
-                        return pm
-        except Exception:
-            logger.debug("[MEDIA] Failed to load Spotify logo", exc_info=True)
-        return None
-
-    def _paint_header_frame(self, painter: QPainter) -> None:
-        """Paint a rounded sub-frame around the logo + SPOTIFY header.
-
-        The frame inherits the media widget's background and border colours
-        and opacities so it feels like a lighter inner container instead of a
-        separate widget. It is confined to the left text column and never
-        overlaps the artwork on the right.
-        """
-
-        if not self._show_header_frame:
-            return
-        if not self._show_background:
-            # When the main card background is disabled, keep the header frame
-            # off as well so styling stays consistent.
-            return
-        if self._bg_border_width <= 0 or self._bg_border_color.alpha() <= 0:
-            return
-
-        margins = self.contentsMargins()
-        # Slightly offset the frame so the logo+SPOTIFY group reads more
-        # visually centred within it. Moving the frame left and down has the
-        # effect of the header content appearing ~5px right and ~3px up
-        # relative to the border without disturbing their mutual alignment.
-        left = margins.left() - 5
-        top = margins.top() + 3
-
-        # Use the same font metrics as the SPOTIFY header so the frame height
-        # comfortably contains both the wordmark and the logo glyph.
-        try:
-            header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            header_font_pt = self._font_size
-
-        font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
-        fm = QFontMetrics(font)
-        text_w = fm.horizontalAdvance("SPOTIFY")
-        text_h = fm.height()
-
-        logo_size = max(1, int(self._header_logo_size))
-        # Gap between logo and text mirrors the HTML margin.
-        gap = max(6, self._header_logo_margin - logo_size)
-
-        pad_x = 10
-        pad_y = 6
-
-        inner_w = logo_size + gap + text_w
-        row_h = max(text_h, logo_size)
-
-        extra_right_pad = 24
-        width = int(inner_w + pad_x * 2 + extra_right_pad)
-        height = int(row_h + pad_y * 2)
-
-        # Constrain the frame so it stays entirely within the text column on
-        # the left, leaving space for the artwork and its padding on the right.
-        max_width = max(0, self.width() - margins.right() - left - 10)
-        if max_width and width > max_width:
-            width = max_width
-
-        if width <= 0 or height <= 0:
-            return
-
-        rect = QRect(left, top, width, height)
-        # Match widget border radius + 1px for subtle visual hierarchy
-        radius = min(self._bg_corner_radius + 1, min(rect.width(), rect.height()) / 2)
-
-        # Use shadow helper for border with drop shadow
-        draw_rounded_rect_with_shadow(
-            painter,
-            rect,
-            radius,
-            self._bg_border_color,
-            max(1, self._bg_border_width),
-        )
-
-    def _paint_header_logo(self, painter: QPainter) -> None:
-        """Paint the Spotify logo glyph next to the SPOTIFY header text.
-
-        This is drawn separately from the rich-text header so that we can
-        control DPI scaling and alignment precisely while keeping the
-        markup simple on the QLabel side.
-        """
-
-        pm = self._brand_pixmap
-        size = self._header_logo_size
-        if pm is None or pm.isNull() or size <= 0:
-            return
-
-        try:
-            dpr = float(self.devicePixelRatioF())
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            dpr = 1.0
-
-        target_px = int(size * max(1.0, dpr))
-        if target_px <= 0:
-            return
-
-        scaled = pm.scaled(
-            target_px,
-            target_px,
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation,
-        )
-        try:
-            scaled.setDevicePixelRatio(max(1.0, dpr))
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-
-        margins = self.contentsMargins()
-        x = margins.left() + 7
-
-        # Align the logo vertically with the SPOTIFY text by centring the
-        # glyph within the first header line's text metrics instead of
-        # simply pinning it to the top margin.
-        try:
-            header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            header_font_pt = self._font_size
-
-        font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
-        fm = QFontMetrics(font)
-        line_height = fm.height()
-        # Nudge the visual centre a bit lower than the strict mid-line so the
-        # SPOTIFY word and glyph feel horizontally balanced. We then add a
-        # small fixed offset so the glyph does not touch the header frame.
-        line_centre = margins.top() + (line_height * 0.6)
-        icon_half = float(self._header_logo_size) / 2.0
-        y = int(line_centre - icon_half) + 4
-        if y < margins.top() + 4:
-            y = margins.top() + 4
-
-        painter.save()
-        try:
-            painter.drawPixmap(x, y, scaled)
-        finally:
-            painter.restore()
+        """Delegates to widgets.media.painting."""
+        from widgets.media.painting import load_brand_pixmap
+        return load_brand_pixmap()
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""

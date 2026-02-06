@@ -67,7 +67,7 @@ def _load_tray_menu_stylesheet() -> str | None:
         if not theme_path.exists():
             return None
         return theme_path.read_text(encoding="utf-8")
-    except Exception as e:
+    except Exception:
         logger.debug("Failed to load dark.qss for tray menu", exc_info=True)
         return None
 
@@ -112,7 +112,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
             stylesheet = _load_tray_menu_stylesheet()
             if stylesheet:
                 menu.setStyleSheet(stylesheet)
-        except Exception as e:
+        except Exception:
             logger.debug("Failed to apply dark.qss to tray menu", exc_info=True)
 
         settings_action = QAction("Settings", menu)
@@ -127,11 +127,9 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
 
         self.setContextMenu(menu)
         
-        # Connect double-click to disable eco mode and enable on-top
+        # Connect double-click to bring screensaver to foreground
         self.activated.connect(self._on_tray_activated)
         
-        # Store reference to eco mode callback for double-click handling
-        self._eco_mode_callback = None
         self._display_widgets = []  # Store display widgets for on-top control
 
         # Only show the icon if the system tray is available; if not,
@@ -139,19 +137,25 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         if QSystemTrayIcon.isSystemTrayAvailable():
             try:
                 self.show()
-            except Exception as e:
+            except Exception:
                 logger.debug("Failed to show system tray icon", exc_info=True)
         else:
             logger.info("System tray not available; skipping tray icon")
 
         # Register with the centralized ResourceManager so the icon
-        # is cleaned up on shutdown with other Qt resources.
+        # and its timers are cleaned up on shutdown with other Qt resources.
         try:
             manager = ResourceManager()
             manager.register_qt(
                 self,
                 resource_type=ResourceType.GUI_COMPONENT,
                 description="Screensaver system tray icon",
+                group="qt",
+            )
+            manager.register_qt(
+                self._tooltip_timer,
+                resource_type=ResourceType.TIMER,
+                description="Tray tooltip refresh timer (5s)",
                 group="qt",
             )
         except Exception:
@@ -161,8 +165,8 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
     def _on_tray_activated(self, reason):
         """Handle tray icon activation (clicks).
         
-        Double-click disables eco mode and enables always-on-top to bring
-        the screensaver back to the foreground smoothly without flashing.
+        Double-click enables always-on-top to bring the screensaver
+        back to the foreground smoothly without flashing.
         
         Args:
             reason: QSystemTrayIcon.ActivationReason
@@ -170,25 +174,18 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         logger.info("[SYSTEM_TRAY] Tray activated: reason=%s", reason)
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             logger.info("[SYSTEM_TRAY] Double-click detected on systray icon")
-            # Disable eco mode and enable always-on-top via proper methods
-            # This avoids the flashing caused by raw raise_() calls
             if not self._display_widgets:
                 logger.warning("[SYSTEM_TRAY] No display widgets registered for double-click handling")
             
             try:
                 for widget in self._display_widgets:
                     if hasattr(widget, '_on_context_always_on_top_toggled'):
-                        # Enable always-on-top which will:
-                        # 1. Disable eco mode
-                        # 2. Set window flags properly
-                        # 3. Avoid flashing by using proper Qt flag updates
                         widget._on_context_always_on_top_toggled(True)
                         logger.info("[SYSTEM_TRAY] Double-click: enabled always-on-top for display widget")
                     else:
                         logger.warning("[SYSTEM_TRAY] Display widget missing _on_context_always_on_top_toggled method")
             except Exception as e:
                 logger.warning("[SYSTEM_TRAY] Failed to enable always-on-top on double-click: %s", e)
-                # Fallback to simple raise if proper method fails
                 app = QApplication.instance()
                 if app:
                     for widget in app.topLevelWidgets():
@@ -196,14 +193,6 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
                             widget.raise_()
                             widget.activateWindow()
                             logger.info("[SYSTEM_TRAY] Fallback: raised widget to foreground")
-    
-    def set_eco_mode_callback(self, callback) -> None:
-        """Set callback to check Eco Mode status.
-        
-        Args:
-            callback: Function that returns True if Eco Mode is active
-        """
-        self._eco_mode_callback = callback
     
     def set_display_widgets(self, widgets: list) -> None:
         """Set display widgets for on-top control.
@@ -214,9 +203,9 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         self._display_widgets = widgets
     
     def _update_tooltip(self) -> None:
-        """Update tooltip with current CPU/GPU usage and Eco Mode status.
+        """Update tooltip with current GPU usage.
         
-        Called on init and can be called periodically if needed.
+        Called on init and periodically via timer.
         Uses lazy-loaded monitoring to avoid startup penalty.
         """
         try:
@@ -225,15 +214,6 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
             parts = ["SRPSS"]
             if gpu is not None:
                 parts.append(f"GPU: {gpu:.0f}%")
-            
-            # Add Eco Mode indicator if active
-            eco_callback = getattr(self, '_eco_mode_callback', None)
-            if eco_callback is not None:
-                try:
-                    if eco_callback():
-                        parts.append("ECO MODE ON")
-                except Exception as e:
-                    logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
             
             tooltip = " | ".join(parts) if len(parts) > 1 else parts[0]
             self.setToolTip(tooltip)

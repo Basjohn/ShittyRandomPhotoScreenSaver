@@ -16,9 +16,9 @@ def qapp():
 
 
 @pytest.fixture
-def settings_manager():
+def settings_manager(tmp_path):
     # Use a dedicated org/app so we don't pollute real settings
-    mgr = SettingsManager(organization="Test", application=f"TransitionsTabTest_{uuid.uuid4().hex}")
+    mgr = SettingsManager(organization="Test", application=f"TransitionsTabTest_{uuid.uuid4().hex}", storage_base_dir=tmp_path)
     mgr.reset_to_defaults()
     return mgr
 

@@ -14,6 +14,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Optional, List, Dict, Any
 from datetime import timedelta
+import threading
 import time
 import random
 import re
@@ -219,6 +220,8 @@ class RedditWidget(BaseOverlayWidget):
 
         self._row_vertical_spacing: int = 0
         self._show_separators: bool = False
+
+        self._shutdown_event = threading.Event()
 
         self._setup_ui()
 
@@ -647,6 +650,7 @@ class RedditWidget(BaseOverlayWidget):
         self._growth_timer = QTimer(self)
         self._growth_timer.setSingleShot(True)
         self._growth_timer.timeout.connect(_grow)
+        self._register_resource(self._growth_timer, "progressive growth timer")
         self._growth_timer.start(delay_ms)
 
     # ------------------------------------------------------------------
@@ -708,7 +712,8 @@ class RedditWidget(BaseOverlayWidget):
                 wait_time = RedditRateLimiter.wait_if_needed(priority=RateLimitPriority.HIGH)
                 if wait_time > 0:
                     logger.info(f"[RATE_LIMIT] Reddit widget waiting {wait_time:.1f}s for rate limit")
-                    time.sleep(wait_time)
+                    if self._shutdown_event.wait(wait_time):
+                        return []  # Shutdown requested
                 RedditRateLimiter.record_request(namespace="widget")
                 # Release the reservation after successful request recording
                 RedditRateLimiter.release_quota(count=1, namespace="widget")

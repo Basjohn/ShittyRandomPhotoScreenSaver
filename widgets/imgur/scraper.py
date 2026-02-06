@@ -142,7 +142,7 @@ class ImgurScraper:
         ("pics", "Pics"),
     ]
     
-    def __init__(self) -> None:
+    def __init__(self, thread_manager=None) -> None:
         """Initialize the scraper with rate limiting state.
         
         Conservative rate limiting to prevent hitting Imgur's limits:
@@ -152,7 +152,9 @@ class ImgurScraper:
         
         Uses simple lock for data protection (per policy allows locks for simple data).
         """
+        self._thread_manager = thread_manager
         self._rate_lock = threading.Lock()  # Simple data protection (per policy)
+        self._shutdown_event = threading.Event()
         self._last_request_time: float = 0.0
         self._backoff_ms: int = MIN_REQUEST_INTERVAL_MS
         self._consecutive_failures: int = 0
@@ -195,7 +197,8 @@ class ImgurScraper:
             wait_time = self._backoff_ms - elapsed
             
             if wait_time > 0:
-                time.sleep(wait_time / 1000.0)
+                if self._shutdown_event.wait(wait_time / 1000.0):
+                    return  # Shutdown requested
             
             self._last_request_time = time.time()
             # Track this request
@@ -590,8 +593,8 @@ class ImgurScraper:
         """Enrich images with full-size URLs via parallel gallery page parsing.
         
         Fetches gallery pages in parallel to extract og:image URLs.
-        Uses ThreadPoolExecutor for parallel fetching (separate from main ThreadManager
-        to avoid deadlocks).
+        Uses ThreadManager IO pool for parallel fetching when available,
+        falls back to sequential fetching otherwise.
         
         Args:
             images: List of ImgurImage to enrich
@@ -601,32 +604,42 @@ class ImgurScraper:
         Returns:
             List of images (modified in place with full_size_url set where available)
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        
         if not images:
             return images
         
         start_time = time.time()
         enriched_count = 0
+        results_lock = threading.Lock()
+        remaining = threading.Event()
+        pending = [len(images)]
         
-        # Use separate thread pool to avoid deadlocking main ThreadManager
-        with ThreadPoolExecutor(max_workers=max_parallel, thread_name_prefix="imgur_gallery") as executor:
-            # Submit all fetch tasks
-            future_to_image = {
-                executor.submit(self.fetch_full_size_url, img): img
-                for img in images
-            }
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_image, timeout=timeout_per_image * len(images)):
-                img = future_to_image[future]
-                try:
-                    full_url = future.result(timeout=timeout_per_image)
-                    if full_url:
-                        img.full_size_url = full_url
+        def _enrich_single(img: "ImgurImage") -> None:
+            nonlocal enriched_count
+            try:
+                full_url = self.fetch_full_size_url(img)
+                if full_url:
+                    img.full_size_url = full_url
+                    with results_lock:
                         enriched_count += 1
-                except Exception as e:
-                    logger.debug("[IMGUR] Failed to enrich %s: %s", img.id, e)
+            except Exception as e:
+                logger.debug("[IMGUR] Failed to enrich %s: %s", img.id, e)
+            finally:
+                with results_lock:
+                    pending[0] -= 1
+                    if pending[0] <= 0:
+                        remaining.set()
+        
+        if self._thread_manager:
+            for img in images:
+                self._thread_manager.submit_io_task(
+                    _enrich_single, img,
+                    task_id=f"imgur_enrich_{img.id}",
+                )
+            remaining.wait(timeout=timeout_per_image * len(images))
+        else:
+            # Sequential fallback when no ThreadManager available
+            for img in images:
+                _enrich_single(img)
         
         elapsed = time.time() - start_time
         logger.info("[IMGUR] Enriched %d/%d images with full-size URLs in %.2fs",

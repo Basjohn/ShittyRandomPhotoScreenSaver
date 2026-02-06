@@ -55,7 +55,8 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
 | Media | core/media/media_controller.py | MediaController | GSMTC media state |
 | Media | core/media/spotify_volume.py | SpotifyVolumeController | pycaw volume control |
-| Eco Mode | core/eco_mode.py | EcoModeManager | MC build resource conservation |
+| ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
+| Presets | core/settings/presets.py | PresetDefinition, apply_preset() | Widget presets system (moved from core/presets.py) |
 | Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
 
 ## RSS Image Source (`sources/rss/`)
@@ -84,20 +85,33 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| ScreensaverEngine | ngine/screensaver_engine.py | ScreensaverEngine | Main orchestrator |
-| DisplayManager | ngine/display_manager.py | DisplayManager | Multi-display management |
-| ImageQueue | ngine/image_queue.py | ImageQueue | Ratio-based image selection |
+| ScreensaverEngine | engine/screensaver_engine.py | ScreensaverEngine, EngineState | Core state machine, init, start (1158 lines after refactor) |
+| Image Pipeline | engine/image_pipeline.py | load_image_via_worker, load_image_task, load_and_display_image_async, schedule_prefetch | Image loading, prefetch, prescale, cache warmup |
+| Engine RSS | engine/engine_rss.py | load_rss_images_async, background_refresh_rss, merge_rss_images_from_refresh, get_rss_background_cap | RSS loading, background refresh, stale eviction |
+| Engine Lifecycle | engine/engine_lifecycle.py | stop, cleanup, stop_qtimer_safe | Shutdown sequence, QTimer safety, resource cleanup |
+| Engine Handlers | engine/engine_handlers.py | on_cycle_transition, on_settings_requested, on_sources_changed | Hotkey/event handlers |
+| DisplayManager | engine/display_manager.py | DisplayManager | Multi-display management |
+| ImageQueue | engine/image_queue.py | ImageQueue | Ratio-based image selection |
 
 ## Rendering - Core
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| DisplayWidget | 
-endering/display_widget.py | DisplayWidget | Borderless fullscreen presenter |
-| GLCompositor | 
-endering/gl_compositor.py | GLCompositorWidget | Single GL surface for transitions |
-| TransitionRenderer | 
-endering/gl_transition_renderer.py | GLTransitionRenderer | Centralized transition rendering |
+| DisplayWidget | rendering/display_widget.py | DisplayWidget | Core fullscreen presenter (1684 lines after refactor) |
+| Display Setup | rendering/display_setup.py | show_on_screen, setup_widgets, ensure_overlay_stack | Display initialization, widget setup, screen change |
+| Display Image Ops | rendering/display_image_ops.py | set_processed_image, on_transition_finished, push_spotify_visualizer_frame | Image display pipeline, transition finish |
+| Display GL Init | rendering/display_gl_init.py | init_renderer_backend, ensure_gl_compositor, ensure_render_surface | GL compositor/surface setup, cleanup |
+| Display Context Menu | rendering/display_context_menu.py | show_context_menu, on_context_transition_selected | Context menu creation and handlers |
+| Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter |
+| Display Input | rendering/display_input.py | handle_mousePressEvent, show_ctrl_cursor_hint | Cursor halo, mouse press/move |
+| Display Overlays | rendering/display_overlays.py | start_overlay_fades, perform_activation_refresh | Overlay fades, window diagnostics |
+| GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (2037 lines after refactor) |
+| GL Transitions | rendering/gl_compositor_pkg/transitions.py | start_crossfade, start_warp, etc. | 12 transition start methods |
+| GL Overlays | rendering/gl_compositor_pkg/overlays.py | paint_debug_overlay, paint_spotify_visualizer | Debug/Spotify/dimming overlays |
+| GL Lifecycle | rendering/gl_compositor_pkg/gl_lifecycle.py | handle_initializeGL, init_gl_pipeline | GL init, pipeline, shader creation |
+| GL Paint | rendering/gl_compositor_pkg/paint.py | handle_paintGL, paintGL_impl | Paint orchestration |
+| GL Trans Lifecycle | rendering/gl_compositor_pkg/transition_lifecycle.py | cancel_current_transition | Transition cancel, Spotify state |
+| TransitionRenderer | rendering/gl_transition_renderer.py | GLTransitionRenderer | Centralized transition rendering |
 
 ## Rendering - Widget Management
 
@@ -226,10 +240,13 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 
 ### Visualizer Components
 
-| Module | File | Key Classes | Purpose |
+| Module | File | Key Classes/Functions | Purpose |
 |--------|------|-------------|---------|
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
-| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker | Audio capture coordination |
+| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode, _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
+| Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing |
+| Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, process_via_fft_worker, get_zero_bars | DSP/FFT bar computation pipeline (extracted from audio_worker) |
+| Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
 
 ## Weather System
 
@@ -326,6 +343,42 @@ settings = SettingsManager()
 value = settings.get("display.mode", "fill")
 `
 
+## UI - Settings Dialog Tabs
+
+| Module | File | Key Classes/Functions | Purpose |
+|--------|------|-----------------------|---------|
+| SettingsDialog | ui/settings_dialog.py | SettingsDialog | Main settings dialog container (1595 LOC, refactored from ~1957) |
+| SettingsAboutTab | ui/settings_about_tab.py | build_about_tab(), update_about_header_images() | About tab UI, header image scaling |
+| WidgetsTab | ui/tabs/widgets_tab.py | WidgetsTab, NoWheelSlider | Widget config orchestrator (965 LOC, refactored from ~3200) |
+| WidgetsTab Clock | ui/tabs/widgets_tab_clock.py | build_clock_ui(), load_clock_settings(), save_clock_settings() | Clock 1/2/3 UI, load, save |
+| WidgetsTab Weather | ui/tabs/widgets_tab_weather.py | build_weather_ui(), load_weather_settings(), save_weather_settings() | Weather UI, load, save |
+| WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings() | Spotify + Beat Visualizer UI, load, save |
+| WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings() | Reddit 1/2 UI, load, save |
+| WidgetsTab Imgur | ui/tabs/widgets_tab_imgur.py | build_imgur_ui(), load_imgur_settings(), save_imgur_settings() | Imgur UI, load, save (dev-gated) |
+| SourcesTab | ui/tabs/sources_tab.py | SourcesTab | Image source config |
+| TransitionsTab | ui/tabs/transitions_tab.py | TransitionsTab | Transition config |
+| DisplayTab | ui/tabs/display_tab.py | DisplayTab | Display settings |
+| AccessibilityTab | ui/tabs/accessibility_tab.py | AccessibilityTab | Accessibility options |
+| PresetsTab | ui/tabs/presets_tab.py | PresetsTab | Setting presets |
+
+## Utilities Boundary
+
+| Package | Purpose | Key Modules |
+|---------|---------|-------------|
+| `utils/` | Runtime utilities (image, audio, monitors, lock-free) | `image_cache.py`, `image_loader.py`, `image_prefetcher.py`, `audio_capture.py`, `monitors.py`, `text_utils.py`, `profiler.py`, `lockfree/spsc_queue.py`, `lockfree/triple_buffer.py` |
+| `core/utils/` | Framework utilities (decorators) | `decorators.py` (retry, throttle, etc.) |
+
+## Audits
+
+| Document | Purpose |
+|----------|---------|
+| audits/ARCHITECTURE_AUDIT_2026_02.md | Master architecture audit (210 files, 55K LOC) |
+| audits/AUDIT_MONOLITH_REFACTORS.md | Refactoring plans for 8 files over 1500 lines |
+| audits/AUDIT_THREADING.md | time.sleep, raw QTimer, untracked deleteLater sites |
+| audits/AUDIT_DEAD_CODE.md | Dead/retired modules to clean up |
+| audits/AUDIT_THREADING_RACE_CONDITIONS_2026_02.md | Widget Shiboken guard audit, ThreadPoolExecutor fix |
+| audits/VISUALIZER_DEBUG.md | Spotify visualizer debugging checklist |
+
 ## Test Organization
 
 | Test File | Coverage |
@@ -337,3 +390,10 @@ value = settings.get("display.mode", "fill")
 | tests/test_widget_positioner.py | Widget positioning |
 | tests/test_gl_state_manager.py | GL state management |
 | tests/test_transition_*.py | Transition types |
+| tests/test_widgets_tab.py | WidgetsTab creation, defaults, save/load roundtrip |
+| tests/test_adaptive_timer.py | AdaptiveTimer strategies, thread lifecycle (27 tests) |
+| tests/test_display_integration.py | DisplayWidget transitions, engine, settings, widgets (57 tests) |
+| tests/test_weather_widget.py | Weather fetch, display, caching (26 tests) |
+| tests/test_slide_jitter.py | Slide transition frame timing (7 tests) |
+| tests/test_widget_manager.py | WidgetManager lifecycle, fade, factory |
+| tests/unit/test_policy_compliance.py | Threading/import policy enforcement |

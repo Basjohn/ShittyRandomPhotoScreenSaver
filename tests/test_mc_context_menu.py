@@ -22,56 +22,27 @@ class TestContextMenuMCFeatures:
         # Should not have the on_top_action
         assert menu._on_top_action is None
     
-    def test_always_on_top_visible_in_mc_mode(self, qtbot):
-        """Test that Always On Top is shown in MC mode."""
+    def test_always_on_top_removed_in_mc_mode(self, qtbot):
+        """Test that Always On Top was removed from MC mode per user request."""
         menu = ScreensaverContextMenu(is_mc_build=True)
         qtbot.addWidget(menu)
         
-        # Should have the on_top_action
-        assert menu._on_top_action is not None
-        assert menu._on_top_action.isCheckable()
+        # _on_top_action was intentionally removed from MC context menu
+        assert menu._on_top_action is None
     
-    def test_always_on_top_initial_state_false(self, qtbot):
-        """Test that Always On Top starts unchecked by default."""
+    def test_always_on_top_action_none_in_mc_mode(self, qtbot):
+        """Test that _on_top_action is None since it was removed."""
+        menu = ScreensaverContextMenu(is_mc_build=True, always_on_top=False)
+        qtbot.addWidget(menu)
+        assert menu._on_top_action is None
+    
+    def test_update_always_on_top_state_safe_when_removed(self, qtbot):
+        """Test that update_always_on_top_state is safe with no action."""
         menu = ScreensaverContextMenu(is_mc_build=True, always_on_top=False)
         qtbot.addWidget(menu)
         
-        assert menu._on_top_action is not None
-        assert not menu._on_top_action.isChecked()
-    
-    def test_always_on_top_initial_state_true(self, qtbot):
-        """Test that Always On Top can start checked."""
-        menu = ScreensaverContextMenu(is_mc_build=True, always_on_top=True)
-        qtbot.addWidget(menu)
-        
-        assert menu._on_top_action is not None
-        assert menu._on_top_action.isChecked()
-    
-    def test_always_on_top_signal_emitted(self, qtbot):
-        """Test that toggling Always On Top emits signal."""
-        menu = ScreensaverContextMenu(is_mc_build=True, always_on_top=False)
-        qtbot.addWidget(menu)
-        
-        signals_received = []
-        menu.always_on_top_toggled.connect(lambda v: signals_received.append(v))
-        
-        # Simulate toggle
-        menu._on_top_action.setChecked(True)
-        menu._on_always_on_top_toggled()
-        
-        assert len(signals_received) == 1
-        assert signals_received[0] is True
-    
-    def test_update_always_on_top_state(self, qtbot):
-        """Test updating always on top state programmatically."""
-        menu = ScreensaverContextMenu(is_mc_build=True, always_on_top=False)
-        qtbot.addWidget(menu)
-        
-        assert not menu._on_top_action.isChecked()
-        
+        # Should not raise even though action is None
         menu.update_always_on_top_state(True)
-        
-        assert menu._on_top_action.isChecked()
         assert menu._always_on_top is True
     
     def test_update_always_on_top_state_non_mc(self, qtbot):

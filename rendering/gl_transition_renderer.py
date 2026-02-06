@@ -173,11 +173,17 @@ class GLTransitionRenderer:
             axis_mode = 0
             if state.direction in (SlideDirection.UP, SlideDirection.DOWN):
                 axis_mode = 1
+            elif state.direction == SlideDirection.DIAG_TL_BR:
+                axis_mode = 2
+            elif state.direction == SlideDirection.DIAG_TR_BL:
+                axis_mode = 3
             if pipeline.u_axis_mode_loc != -1:
                 gl.glUniform1i(pipeline.u_axis_mode_loc, int(axis_mode))
             
             spin_dir = 1.0
             if state.direction in (SlideDirection.RIGHT, SlideDirection.DOWN):
+                spin_dir = -1.0
+            elif state.direction == SlideDirection.DIAG_TR_BL:
                 spin_dir = -1.0
             if pipeline.u_spec_dir_loc != -1:
                 gl.glUniform1f(pipeline.u_spec_dir_loc, float(spin_dir))

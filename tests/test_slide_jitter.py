@@ -2,10 +2,12 @@
 
 Measures frame timing during slide transitions to detect UI thread blocking.
 """
+import threading
 import time
 import pytest
 from PySide6.QtCore import QSize, QPoint
 from PySide6.QtGui import QImage, QPixmap, QColor
+from PySide6.QtWidgets import QWidget
 
 from rendering.gl_compositor import GLCompositorWidget
 from core.animation.animator import AnimationManager
@@ -53,12 +55,37 @@ def test_pixmap2():
     return QPixmap.fromImage(image)
 
 
+class _MockThreadManager:
+    """Minimal TM mock for adaptive timer."""
+    def __init__(self):
+        self._threads = []
+    def submit_task(self, pool_type, fn, *, task_id=None):
+        t = threading.Thread(target=fn, daemon=True, name=task_id or "mock")
+        t.start()
+        self._threads.append(t)
+    def shutdown(self):
+        for t in self._threads:
+            t.join(timeout=2)
+
+
+@pytest.fixture
+def compositor_parent(qtbot):
+    """Parent widget with _thread_manager for GLCompositorWidget."""
+    parent = QWidget()
+    parent._thread_manager = _MockThreadManager()
+    parent._resource_manager = None
+    qtbot.addWidget(parent)
+    parent.resize(1920, 1080)
+    yield parent
+    parent._thread_manager.shutdown()
+
+
 class TestSlideJitter:
     """Test slide transition for jitter/judder."""
     
-    def test_slide_dt_max_under_threshold(self, qtbot, test_pixmap, test_pixmap2):
+    def test_slide_dt_max_under_threshold(self, qtbot, test_pixmap, test_pixmap2, compositor_parent):
         """Slide transition should have dt_max < 50ms (no major UI blocking)."""
-        compositor = GLCompositorWidget(parent=None)
+        compositor = GLCompositorWidget(parent=compositor_parent)
         compositor.resize(1920, 1080)
         compositor.show()
         qtbot.waitExposed(compositor)
@@ -121,9 +148,9 @@ class TestSlideJitter:
         # Cleanup
         compositor.close()
     
-    def test_slide_frame_count_reasonable(self, qtbot, test_pixmap, test_pixmap2):
+    def test_slide_frame_count_reasonable(self, qtbot, test_pixmap, test_pixmap2, compositor_parent):
         """Slide transition should render enough frames (no massive drops)."""
-        compositor = GLCompositorWidget(parent=None)
+        compositor = GLCompositorWidget(parent=compositor_parent)
         compositor.resize(1920, 1080)
         compositor.show()
         qtbot.waitExposed(compositor)

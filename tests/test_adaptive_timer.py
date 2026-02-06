@@ -12,7 +12,7 @@ Tests cover:
 import threading
 import time
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock  # noqa: F401 - used by some test parametrizations
 
 import sys
 import os
@@ -24,8 +24,32 @@ from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     TimerState,
     AtomicTimerState,
-    AdaptiveTimerMetrics
 )
+
+
+class _MockThreadManager:
+    """Minimal ThreadManager mock that runs tasks in real daemon threads."""
+
+    def __init__(self):
+        self._threads: list = []
+
+    def submit_task(self, pool_type, fn, *, task_id=None):
+        t = threading.Thread(target=fn, daemon=True, name=task_id or "mock_tm")
+        t.start()
+        self._threads.append(t)
+
+    def shutdown(self):
+        for t in self._threads:
+            t.join(timeout=2)
+        self._threads.clear()
+
+
+class _MockParent:
+    """Mock parent widget that exposes _thread_manager."""
+
+    def __init__(self):
+        self._thread_manager = _MockThreadManager()
+        self._resource_manager = None
 
 
 class MockCompositor:
@@ -34,13 +58,14 @@ class MockCompositor:
     def __init__(self):
         self.update_count = 0
         self.update_lock = threading.Lock()
+        self._parent = _MockParent()
     
     def update(self):
         with self.update_lock:
             self.update_count += 1
     
     def parent(self):
-        return None
+        return self._parent
 
 
 class TestAtomicTimerState(unittest.TestCase):

@@ -49,10 +49,10 @@ class GLCompositorDiffuseTransition(BaseTransition):
     ) -> None:
         super().__init__(duration_ms)
         self._block_size = max(1, int(block_size))
-        # GLSL-backed diffuse only supports Rectangle and Membrane. Clamp any
-        # legacy/unknown shapes to Rectangle so CPU and GLSL paths stay
-        # aligned.
-        if shape not in ("Rectangle", "Membrane"):
+        # GLSL-backed diffuse supports Rectangle, Membrane, Lines, Diamonds,
+        # and Amorph. Clamp unknown shapes to Rectangle.
+        _VALID_SHAPES = ("Rectangle", "Membrane", "Lines", "Diamonds", "Amorph")
+        if shape not in _VALID_SHAPES:
             shape = "Rectangle"
         self._shape = shape
         self._easing_str = easing
@@ -218,26 +218,17 @@ class GLCompositorDiffuseTransition(BaseTransition):
     # ------------------------------------------------------------------
 
     def _build_cells(self, width: int, height: int) -> None:
-        """Create a grid of cells covering the widget area.
+        """Compute grid dimensions for the GLSL shader.
 
-        Mirrors the grid layout of GLDiffuseTransition so visuals remain
-        consistent while the rendering path moves to the compositor.
+        The GLSL shader handles all per-cell reveal logic in UV space, so we
+        only need cols/rows — no QRegion accumulation required. This makes
+        small block sizes (4–8px) viable without creating 100K+ QRect objects.
         """
         self._cells = []
-
         cols = max(1, (width + self._block_size - 1) // self._block_size)
         rows = max(1, (height + self._block_size - 1) // self._block_size)
-        for r in range(rows):
-            for c in range(cols):
-                x = c * self._block_size
-                y = r * self._block_size
-                w = self._block_size if c < cols - 1 else (width - x)
-                h = self._block_size if r < rows - 1 else (height - y)
-                self._cells.append(_DiffuseCell(QRect(x, y, w, h)))
-
-        self._region = QRegion()
+        self._total_cells = cols * rows
         self._revealed_count = 0
-        self._total_cells = len(self._cells)
         self._grid_cols = cols
         self._grid_rows = rows
 
@@ -247,27 +238,11 @@ class GLCompositorDiffuseTransition(BaseTransition):
 
         p = max(0.0, min(1.0, float(progress)))
 
-        any_new = False
-        for cell in self._cells:
-            if not cell.revealed and p >= cell.threshold:
-                cell.revealed = True
-                any_new = True
-                self._revealed_count += 1
-                r = cell.rect
-                # Region-based path is now purely rectangular; Membrane is
-                # implemented only in the GLSL shader.
-                self._region = self._region.united(QRegion(r))
+        # The GLSL shader handles per-cell reveal entirely in UV space via
+        # u_progress — no QRegion accumulation needed. Just emit progress.
+        self._emit_progress(p)
 
-        if any_new:
-            try:
-                self._compositor.set_diffuse_region(self._region)
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Failed to update diffuse region", exc_info=True)
-
-        if total > 0:
-            self._emit_progress(self._revealed_count / total)
-
-        if p >= 1.0 and self._revealed_count >= total:
+        if p >= 1.0:
             self._on_anim_complete()
 
     def _on_anim_complete(self) -> None:

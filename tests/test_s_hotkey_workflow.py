@@ -25,7 +25,8 @@ def engine_with_settings(qt_app, tmp_path):
     """Create engine with test settings."""
     settings = SettingsManager(
         organization="Test",
-        application=f"SHotkeyTest_{uuid.uuid4().hex}"
+        application=f"SHotkeyTest_{uuid.uuid4().hex}",
+        storage_base_dir=tmp_path / "settings",
     )
     
     # Create test folder with one image
@@ -193,8 +194,8 @@ def test_settings_dialog_import_exists():
     This would catch NameError issues.
     """
     from engine.screensaver_engine import QApplication
-    from engine.screensaver_engine import AnimationManager
-    from engine.screensaver_engine import SettingsDialog
+    from core.animation.animator import AnimationManager
+    from ui.settings_dialog import SettingsDialog
     
     assert QApplication is not None
     assert AnimationManager is not None

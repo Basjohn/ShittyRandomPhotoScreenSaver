@@ -43,12 +43,14 @@ class GLCompositorRainDropsTransition(BaseTransition):
         self,
         duration_ms: int = 1400,
         easing: str = "Auto",
+        ripple_count: int = 3,
     ) -> None:
         super().__init__(duration_ms)
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
         self._easing_str: str = easing
+        self._ripple_count: int = max(1, min(8, int(ripple_count)))
         self._drops: List[_RainDrop] = []
         self._region: QRegion = QRegion()
 
@@ -124,6 +126,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
                 easing=easing_curve,
                 animation_manager=am,
                 on_finished=_on_finished_shader,
+                ripple_count=self._ripple_count,
             )
         except Exception as e:
             logger.debug(

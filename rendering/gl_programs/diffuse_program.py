@@ -53,7 +53,7 @@ uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_resolution;
 uniform vec2 u_grid;        // (cols, rows)
-uniform int u_shapeMode;    // 0=Rectangle, 1=Membrane
+uniform int u_shapeMode;    // 0=Rectangle, 1=Membrane, 2=Lines, 3=Diamonds, 4=Amorph
 
 float hash1(float n) {
     return fract(sin(n) * 43758.5453123);
@@ -95,7 +95,6 @@ void main() {
     vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside block
 
     // Rectangle (0): whole-block transition with slight edge feathering.
-    // Add a small feather to soften the hard block edges.
     vec2 cellFrac = fract(uv * grid);
     float edgeDist = min(min(cellFrac.x, 1.0 - cellFrac.x), 
                         min(cellFrac.y, 1.0 - cellFrac.y));
@@ -113,28 +112,22 @@ void main() {
 
     if (u_shapeMode == 1) {
         // Membrane mode: cohesive overlapping circles that blend together.
-        // Sample multiple nearby cell centers and blend their contributions.
         float totalMask = 0.0;
         
-        // Check current cell and 8 neighbors for overlapping circles
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 vec2 neighborCell = cell + vec2(float(dx), float(dy));
                 
-                // Skip out-of-bounds cells
                 if (neighborCell.x < 0.0 || neighborCell.x >= cols ||
                     neighborCell.y < 0.0 || neighborCell.y >= rows) {
                     continue;
                 }
                 
                 float neighborIndex = neighborCell.y * cols + neighborCell.x;
-                
-                // Per-cell random threshold
                 float neighborRnd = hash1(neighborIndex * 37.0 + 13.0);
                 float neighborShaped = pow(neighborRnd, 1.35);
                 float neighborThreshold = min(neighborShaped, 1.0 - width);
                 
-                // This cell's progress
                 float neighborProgress = 0.0;
                 if (t > neighborThreshold) {
                     float span = max(1e-4, 1.0 - neighborThreshold);
@@ -143,45 +136,87 @@ void main() {
                 
                 if (neighborProgress <= 0.0) continue;
                 
-                // Cell center in UV space
                 vec2 neighborCenter = (neighborCell + vec2(0.5)) / grid;
-                
-                // Per-cell random offset for organic placement
                 float cellRnd1 = hash1(neighborIndex * 91.0 + 7.0);
                 float cellRnd2 = hash1(neighborIndex * 53.0 + 23.0);
                 vec2 offset = (vec2(cellRnd1, cellRnd2) - 0.5) * 0.3 / grid;
                 neighborCenter += offset * neighborProgress;
                 
-                // Distance from this pixel to the circle center
                 vec2 toCenter = uv - neighborCenter;
                 float dist = length(toCenter);
                 
-                // Expanding circle radius (in UV space, so scale by grid)
-                float baseRadius = 0.6 / min(cols, rows);  // Base radius
-                float maxRadius = 1.2 / min(cols, rows);   // Max radius to overlap
+                float maxRadius = 1.2 / min(cols, rows);
                 float circleR = mix(0.0, maxRadius, neighborProgress);
-                
-                // Soft feathered edge
                 float feather = 0.15 / min(cols, rows);
                 float circleMask = 1.0 - smoothstep(circleR - feather, circleR + feather, dist);
                 
-                // Accumulate (max blend for overlapping circles)
                 totalMask = max(totalMask, circleMask);
             }
         }
         
         blockMix = totalMask;
+
+    } else if (u_shapeMode == 2) {
+        // Lines mode: alternating horizontal/vertical line sweeps per block.
+        float lineDir = hash1(cellIndex * 71.0 + 3.0);
+        float linePos;
+        if (lineDir > 0.5) {
+            linePos = cellFrac.x;  // vertical line sweep
+        } else {
+            linePos = cellFrac.y;  // horizontal line sweep
+        }
+        // Sweep from one edge — direction per block
+        float sweepDir = hash1(cellIndex * 43.0 + 17.0);
+        if (sweepDir > 0.5) linePos = 1.0 - linePos;
+        float lineEdge = shapeProgress * 1.15;
+        float lineFeather = 0.12;
+        float lineMask = smoothstep(lineEdge - lineFeather, lineEdge, linePos);
+        lineMask = 1.0 - lineMask;
+        blockMix = lineMask;
+
+    } else if (u_shapeMode == 3) {
+        // Diamonds mode: diamond-shaped reveal expanding from block center.
+        vec2 centered = cellFrac - 0.5;
+        float diamondDist = abs(centered.x) + abs(centered.y);  // L1 norm
+        float maxDiamond = 1.0;
+        float diamondR = shapeProgress * maxDiamond * 1.1;
+        float diamondFeather = 0.08;
+        float diamondMask = 1.0 - smoothstep(diamondR - diamondFeather, diamondR + diamondFeather, diamondDist);
+        blockMix = diamondMask;
+
+    } else if (u_shapeMode == 4) {
+        // Amorph mode: semi-random oval shapes, like tiny crumble pieces.
+        // Each block gets a random ellipse orientation and eccentricity.
+        float angle = hash1(cellIndex * 67.0 + 11.0) * 3.14159;
+        float eccX = 0.6 + hash1(cellIndex * 89.0 + 31.0) * 0.8;
+        float eccY = 0.6 + hash1(cellIndex * 97.0 + 41.0) * 0.8;
+        vec2 centered = cellFrac - 0.5;
+        // Rotate local coords by per-block angle
+        float cs = cos(angle);
+        float sn = sin(angle);
+        vec2 rotated = vec2(
+            centered.x * cs - centered.y * sn,
+            centered.x * sn + centered.y * cs
+        );
+        // Elliptical distance with per-block eccentricity
+        float ovalDist = length(rotated * vec2(eccX, eccY));
+        // Add organic noise to the edge
+        float noise = hash2(cell + rotated * 3.0) * 0.15;
+        ovalDist += noise;
+        float ovalR = shapeProgress * 0.75;
+        float ovalFeather = 0.06;
+        float ovalMask = 1.0 - smoothstep(ovalR - ovalFeather, ovalR + ovalFeather, ovalDist);
+        blockMix = ovalMask;
     }
 
     // Global tail for clean landing.
     float tail;
     if (u_shapeMode == 1) {
-        // Membrane mode: circles expand to cover everything naturally.
-        // Use a late tail (0.92-1.0) to ensure full coverage at the end
-        // without fading out the circles prematurely, which would cause
-        // a flash of the old image.
+        // Membrane: late tail for full coverage
         tail = smoothstep(0.92, 1.0, t);
-        // Don't fade out blockMix - let circles expand fully
+    } else if (u_shapeMode == 4) {
+        // Amorph: slightly earlier tail due to irregular shapes
+        tail = smoothstep(0.90, 1.0, t);
     } else {
         tail = smoothstep(0.96, 1.0, t);
     }

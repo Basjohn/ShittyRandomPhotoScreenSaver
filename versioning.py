@@ -46,8 +46,7 @@ def parse_version(version_str: str = APP_VERSION) -> VersionInfo:
         while len(parts) < 3:
             parts.append(0)
         return VersionInfo(parts[0], parts[1], parts[2])
-    except Exception as e:
-        logger.debug("[MISC] Exception suppressed: %s", e)
+    except (ValueError, TypeError, IndexError):
         return VersionInfo(0, 0, 0)
 
 

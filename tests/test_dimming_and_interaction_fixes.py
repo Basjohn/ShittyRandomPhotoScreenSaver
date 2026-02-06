@@ -131,10 +131,10 @@ class TestSettingsDotNotation:
     """Test that settings are read with dot notation, not nested dict access."""
 
     def test_dimming_settings_use_dot_notation(self, qt_app):
-        """Verify _setup_widgets reads dimming settings with dot notation."""
-        from rendering.display_widget import DisplayWidget
+        """Verify setup_widgets reads dimming settings with dot notation."""
+        from rendering.display_setup import setup_widgets
         
-        source = inspect.getsource(DisplayWidget._setup_widgets)
+        source = inspect.getsource(setup_widgets)
         
         # Must use dot notation for dimming settings
         assert "accessibility.dimming.enabled" in source
@@ -144,20 +144,20 @@ class TestSettingsDotNotation:
         assert "accessibility_settings.get('dimming'" not in source
 
     def test_pixel_shift_settings_use_dot_notation(self, qt_app):
-        """Verify _setup_widgets reads pixel shift settings with dot notation."""
-        from rendering.display_widget import DisplayWidget
+        """Verify setup_widgets reads pixel shift settings with dot notation."""
+        from rendering.display_setup import setup_widgets
         
-        source = inspect.getsource(DisplayWidget._setup_widgets)
+        source = inspect.getsource(setup_widgets)
         
         # Must use dot notation for pixel shift settings
         assert "accessibility.pixel_shift.enabled" in source
         assert "accessibility.pixel_shift.rate" in source
 
     def test_context_menu_dimming_uses_dot_notation(self, qt_app):
-        """Verify _show_context_menu reads dimming state with dot notation."""
-        from rendering.display_widget import DisplayWidget
+        """Verify show_context_menu reads dimming state with dot notation."""
+        from rendering.display_context_menu import show_context_menu
         
-        source = inspect.getsource(DisplayWidget._show_context_menu)
+        source = inspect.getsource(show_context_menu)
         
         # Must use dot notation for dimming enabled check
         assert "accessibility.dimming.enabled" in source

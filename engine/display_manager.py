@@ -128,13 +128,13 @@ class DisplayManager(QObject):
                 if not isinstance(parsed, (list, tuple, set)):
                     return indices
                 values = {int(x) for x in parsed}
-            except Exception as e:
+            except Exception:
                 logger.debug("[DISPLAY] Failed to parse show_on_monitors=%r; defaulting to ALL", raw)
                 return indices
         elif isinstance(raw, (list, tuple, set)):
             try:
                 values = {int(x) for x in raw}
-            except Exception as e:
+            except Exception:
                 logger.debug("[DISPLAY] Invalid show_on_monitors=%r; defaulting to ALL", raw)
                 return indices
         else:
@@ -211,9 +211,10 @@ class DisplayManager(QObject):
                 # Stagger after first display to spread GL init load
                 if created_count > 0 and stagger_ms > 0:
                     from PySide6.QtCore import QCoreApplication
-                    # Process events and wait to stagger GL compositor init
-                    QCoreApplication.processEvents()
-                    time.sleep(stagger_ms / 1000.0)
+                    # Process events in loop to stagger GL init while keeping UI responsive
+                    deadline = time.perf_counter() + stagger_ms / 1000.0
+                    while time.perf_counter() < deadline:
+                        QCoreApplication.processEvents()
                 self._create_display_for_screen(i)
                 created_count += 1
             else:
@@ -294,7 +295,7 @@ class DisplayManager(QObject):
         for display in self.displays:
             try:
                 display.set_process_supervisor(supervisor)
-            except Exception as e:
+            except Exception:
                 logger.debug("Failed to set ProcessSupervisor on display", exc_info=True)
     
     def show_image(self, pixmap: QPixmap, image_path: str = "", 
@@ -536,8 +537,9 @@ class DisplayManager(QObject):
                     logger.warning(f"[SYNC] Timeout waiting for displays: {len(ready_set)}/{expected_count} ready after {elapsed:.2f}s")
                     return False
                 
-                # Small sleep to avoid busy-wait
-                time.sleep(0.001)
+                # Pump UI events while waiting (keeps UI responsive)
+                from PySide6.QtCore import QCoreApplication
+                QCoreApplication.processEvents()
         
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"[SYNC] All {expected_count} displays ready in {elapsed_ms:.1f}ms")
@@ -691,7 +693,7 @@ class DisplayManager(QObject):
                 app = QGuiApplication.instance()
                 if app is not None:
                     app.processEvents()
-            except Exception as e:
+            except Exception:
                 logger.debug("[REDDIT] processEvents failed before flush", exc_info=True)
 
         if REDDIT_FLUSH_LOGGING:
@@ -706,7 +708,7 @@ class DisplayManager(QObject):
         if helper_module is not None:
             try:
                 use_helper = helper_module.should_use_session_launcher()
-            except Exception as e:
+            except Exception:
                 logger.debug("[REDDIT] Helper capability check failed", exc_info=True)
                 use_helper = False
         if helper_bridge is not None and helper_bridge.is_bridge_available():
@@ -721,7 +723,7 @@ class DisplayManager(QObject):
                     if launched:
                         logger.info("[REDDIT] Deferred URL queued via ProgramData bridge: %s", url)
                         continue
-                except Exception as e:
+                except Exception:
                     logger.warning("[REDDIT] Bridge enqueue failed; falling back", exc_info=True)
                     launched = False
 
@@ -732,7 +734,7 @@ class DisplayManager(QObject):
                         logger.info("[REDDIT] Helper launched deferred URL: %s", url)
                     else:
                         logger.debug("[REDDIT] Helper declined to launch URL; falling back")
-                except Exception as e:
+                except Exception:
                     logger.warning("[REDDIT] Helper launch failed; falling back", exc_info=True)
                     launched = False
 

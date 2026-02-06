@@ -6,12 +6,11 @@ import time
 import weakref
 import sys
 import ctypes
-from ctypes import wintypes
 try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:  # pragma: no cover - optional dependency
     GL = None
-from PySide6.QtWidgets import QWidget, QApplication
+from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import (
     QPoint,
     QTimer,
@@ -29,7 +28,6 @@ from PySide6.QtGui import (
     QPaintEvent,
     QFont,
     QResizeEvent,
-    QCursor,
     QFocusEvent,
     QGuiApplication,
     QWheelEvent,
@@ -66,30 +64,13 @@ from transitions.overlay_manager import (
     any_gl_overlay_visible,
     show_backend_fallback_overlay,
     hide_backend_fallback_overlay,
-    set_overlay_geometry,
-    raise_overlay,
-    schedule_raise_when_ready,
     GL_OVERLAY_KEYS,
-    SW_OVERLAY_KEYS,
 )
 from core.events import EventSystem
 from core.mc import is_mc_build
 from rendering.backends import BackendSelectionResult, create_backend_from_settings
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
 
-# Import Raw Input for media key detection (Windows only)
-if sys.platform == "win32":
-    try:
-        from core.windows.media_key_rawinput import (
-            get_raw_input_instance,
-            WM_INPUT,
-        )
-        # Raw Input enabled for background media key detection in screensaver mode
-        _RAW_INPUT_AVAILABLE = True
-    except Exception:
-        _RAW_INPUT_AVAILABLE = False
-else:
-    _RAW_INPUT_AVAILABLE = False
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
@@ -503,217 +484,14 @@ class DisplayWidget(QWidget):
         return min(240, max(30, target))
     
     def show_on_screen(self) -> None:
-        """Show widget fullscreen on assigned screen."""
-        screens = QGuiApplication.screens()
-        
-        if self.screen_index >= len(screens):
-            logger.warning(f"[FALLBACK] Screen {self.screen_index} not found, using primary")
-            screen = QGuiApplication.primaryScreen()
-        else:
-            screen = screens[self.screen_index]
-        
-        # Store screen reference and DPI ratio for high-quality rendering
-        self._screen = screen
-        self._device_pixel_ratio = screen.devicePixelRatio()
-        
-        screen_geom = screen.geometry()
-        geom = screen_geom
-        if _FULLSCREEN_COMPAT_WORKAROUND:
-            try:
-                if geom.height() > 1:
-                    geom.setHeight(geom.height() - 1)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        logger.info(
-            f"Showing on screen {self.screen_index}: "
-            f"{screen_geom.width()}x{screen_geom.height()} at ({screen_geom.x()}, {screen_geom.y()}) "
-            f"DPR={self._device_pixel_ratio}"
-        )
-
-        # Borderless fullscreen: frameless window sized to the target screen.
-        # Avoid exclusive fullscreen mode to reduce compositor and driver-induced
-        # flicker on modern Windows. For MC builds, apply always-on-top flag.
-        if self._is_mc_build and self._always_on_top:
-            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
-        self.setGeometry(geom)
-        # Seed with a placeholder snapshot of the current screen to avoid a hard
-        # wallpaper->black flash while GL prewarm runs. If this fails, fall back
-        # to blocking updates until the first real image is seeded.
-        placeholder_set = False
-        try:
-            wallpaper_pm = screen.grabWindow(0)
-            if wallpaper_pm is not None and not wallpaper_pm.isNull():
-                try:
-                    wallpaper_pm.setDevicePixelRatio(self._device_pixel_ratio)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                self.current_pixmap = wallpaper_pm
-                self.previous_pixmap = wallpaper_pm
-                self._seed_pixmap = wallpaper_pm
-                self._last_pixmap_seed_ts = time.monotonic()
-                placeholder_set = True
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            placeholder_set = False
-
-        if placeholder_set:
-            try:
-                self.setUpdatesEnabled(True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._updates_blocked_until_seed = False
-        else:
-            try:
-                self.setUpdatesEnabled(False)
-                self._updates_blocked_until_seed = True
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                self._self._updates_blocked_until_seed = False
-
-        # Determine hardware acceleration setting once for startup behaviour.
-        # IMPORTANT: We no longer run GL prewarm at startup; GL overlays are
-        # initialized lazily by per-transition prepaint. This avoids any
-        # startup interaction with GL contexts that could cause black flashes.
-        hw_accel = True
-        if self.settings_manager is not None:
-            try:
-                raw = self.settings_manager.get('display.hw_accel', True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                raw = True
-            hw_accel = SettingsManager.to_bool(raw, True)
-
-        # In pure software environments (no GL support at all), mark overlays
-        # as ready so diagnostics remain consistent. When GL is available, we
-        # defer all overlay initialization to transition-time prepaint.
-        if not hw_accel and GL is None:
-            self._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_prewarm")
-
-        # Show as borderless fullscreen instead of exclusive fullscreen.
-        self.show()
-        try:
-            self.raise_()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        try:
-            focus_policy = self.focusPolicy()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            focus_policy = Qt.FocusPolicy.StrongFocus
-
-        focusable = focus_policy != Qt.FocusPolicy.NoFocus
-
-        try:
-            if focusable:
-                self.activateWindow()
-                try:
-                    handle = self.windowHandle()
-                    if handle is not None:
-                        handle.requestActivate()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    try:
-                        self.setFocus()
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            else:
-                try:
-                    handle = self.windowHandle()
-                    if handle is not None:
-                        handle.setFlag(Qt.WindowType.WindowDoesNotAcceptFocus, True)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        self._handle_screen_change(screen)
-        # Reconfigure when screen changes
-        try:
-            handle = self.windowHandle()
-            if handle is not None:
-                handle.screenChanged.connect(self._handle_screen_change)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        # Ensure shared GL compositor and reuse any persistent overlays
-        try:
-            self._ensure_gl_compositor()
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to ensure compositor during show", exc_info=True)
-
-        self._reuse_persistent_gl_overlays()
-
-        # Setup overlay widgets AFTER geometry is set
-        if self.settings_manager:
-            self._setup_widgets()
-
-        # Prewarm context menu on the UI thread so first right-click does not
-        # pay the QMenu construction/polish cost.
-        try:
-            if self._thread_manager is not None:
-                self._thread_manager.single_shot(200, self._prewarm_context_menu)
-            else:
-                logger.error("[DISPLAY_WIDGET] ThreadManager not injected; skipping context menu prewarm")
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import show_on_screen
+        show_on_screen(self)
 
     def _prewarm_context_menu(self) -> None:
-        """Create the context menu ahead of time to avoid first-click lag."""
-        try:
-            if getattr(self, "_context_menu_prewarmed", False):
-                return
-            if self._context_menu is not None:
-                self._context_menu_prewarmed = True
-                return
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return
-
-        try:
-            current_transition, random_enabled = self._refresh_transition_state_from_settings()
-            hard_exit = self._is_hard_exit_enabled()
-            dimming_enabled = False
-            if self.settings_manager:
-                dimming_enabled = SettingsManager.to_bool(
-                    self.settings_manager.get("accessibility.dimming.enabled", False), False
-                )
-
-            self._context_menu = ScreensaverContextMenu(
-                parent=self,
-                current_transition=current_transition,
-                random_enabled=random_enabled,
-                dimming_enabled=dimming_enabled,
-                hard_exit_enabled=hard_exit,
-                is_mc_build=self._is_mc_build,
-                always_on_top=self._always_on_top,
-            )
-            # Connect signals once during construction
-            self._context_menu.previous_requested.connect(self.previous_requested.emit)
-            self._context_menu.next_requested.connect(self.next_requested.emit)
-            self._context_menu.transition_selected.connect(self._on_context_transition_selected)
-            self._context_menu.settings_requested.connect(self.settings_requested.emit)
-            self._context_menu.dimming_toggled.connect(self._on_context_dimming_toggled)
-            self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
-            self._context_menu.always_on_top_toggled.connect(self._on_context_always_on_top_toggled)
-            self._context_menu.exit_requested.connect(self._on_context_exit_requested)
-
-            try:
-                self._context_menu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_about_to_show"))
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-            try:
-                self._context_menu.ensurePolished()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-            self._context_menu_prewarmed = True
-        except Exception:
-            logger.debug("Failed to prewarm context menu", exc_info=True)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import prewarm_context_menu
+        prewarm_context_menu(self)
 
     def shutdown_render_pipeline(self, reason: str = "unspecified") -> None:
         """Stop transitions, animations, and render timers for this display."""
@@ -855,183 +633,34 @@ class DisplayWidget(QWidget):
                 self.notify_overlay_ready(name, stage, status="software_ready", gl=False)
 
     def _handle_screen_change(self, screen) -> None:
-        """Apply geometry, DPI, and overlay updates for the active screen."""
-
-        if screen is None:
-            return
-
-        self._screen = screen
-
-        try:
-            self._device_pixel_ratio = float(screen.devicePixelRatio())
-        except Exception:
-            logger.debug("[SCREEN] Failed to read devicePixelRatio", exc_info=True)
-
-        try:
-            screen_geom = screen.geometry()
-            if screen_geom is not None and screen_geom.isValid():
-                geom = screen_geom
-                if _FULLSCREEN_COMPAT_WORKAROUND:
-                    try:
-                        if geom.height() > 1:
-                            geom.setHeight(geom.height() - 1)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                self.setGeometry(geom)
-        except Exception:
-            logger.debug("[SCREEN] Failed to apply screen geometry", exc_info=True)
-
-        try:
-            self._configure_refresh_rate_sync()
-        except Exception:
-            logger.debug("[SCREEN] Refresh rate sync configuration failed", exc_info=True)
-
-        try:
-            self._ensure_render_surface()
-        except Exception:
-            logger.debug("[SCREEN] Render surface update failed", exc_info=True)
-
-        try:
-            self._ensure_overlay_stack(stage="screen_change")
-        except Exception:
-            logger.debug("[SCREEN] Overlay stack update failed", exc_info=True)
-
-        try:
-            self._reuse_persistent_gl_overlays()
-        except Exception:
-            logger.debug("[SCREEN] Persistent overlay reuse failed", exc_info=True)
-
-        try:
-            self._ensure_gl_compositor()
-        except Exception:
-            logger.debug("[SCREEN] GL compositor update failed", exc_info=True)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import handle_screen_change
+        handle_screen_change(self, screen)
 
     def _detect_refresh_rate(self) -> float:
-        try:
-            screen = self._screen
-            if screen is None:
-                from PySide6.QtGui import QGuiApplication
-                screens = QGuiApplication.screens()
-                screen = screens[self.screen_index] if self.screen_index < len(screens) else QGuiApplication.primaryScreen()
-            hz_attr = getattr(screen, 'refreshRate', None)
-            rate = float(hz_attr()) if callable(hz_attr) else 60.0
-            if not (10.0 <= rate <= 240.0):
-                return 60.0
-            return rate
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return 60.0
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import detect_refresh_rate
+        return detect_refresh_rate(self)
 
     def _configure_refresh_rate_sync(self) -> None:
-        detected = int(round(self._detect_refresh_rate()))
-        self._target_fps = self._resolve_display_target_fps(detected, adaptive=False)
-        if is_perf_metrics_enabled():
-            logger.info(
-                "[REFRESH_DIAG] source=settings:display.refresh_sync screen=%s detected_hz=%d target_fps=%d",
-                self.screen_index,
-                detected,
-                self._target_fps,
-            )
-
-        try:
-            am = getattr(self, "_animation_manager", None)
-            if am is not None and hasattr(am, 'set_target_fps'):
-                am.set_target_fps(self._target_fps)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import configure_refresh_rate_sync
+        configure_refresh_rate_sync(self)
 
     def _setup_dimming(self) -> None:
-        """Setup background dimming via GL compositor.
-        
-        Phase 1b: Extracted from _setup_widgets for cleaner delegation.
-        """
-        if not self.settings_manager:
-            return
-        
-        dimming_enabled = SettingsManager.to_bool(
-            self.settings_manager.get('accessibility.dimming.enabled', False), False
-        )
-        try:
-            dimming_opacity = int(self.settings_manager.get('accessibility.dimming.opacity', 30))
-            dimming_opacity = max(10, min(90, dimming_opacity))
-        except (ValueError, TypeError):
-            dimming_opacity = 30
-        
-        self._dimming_enabled = dimming_enabled
-        self._dimming_opacity = dimming_opacity / 100.0
-        
-        comp = getattr(self, "_gl_compositor", None)
-        if comp is not None and hasattr(comp, "set_dimming"):
-            comp.set_dimming(dimming_enabled, self._dimming_opacity)
-            logger.debug("GL compositor dimming: enabled=%s, opacity=%d%%", dimming_enabled, dimming_opacity)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import setup_dimming
+        setup_dimming(self)
 
     def _setup_spotify_widgets(self) -> None:
-        """Position Spotify widgets after WidgetManager creates them.
-        
-        WidgetManager handles creation; this just handles positioning.
-        """
-        # Position Spotify visualizer if created
-        if self.spotify_visualizer_widget is not None:
-            try:
-                self._position_spotify_visualizer()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
-        # Position Spotify volume if created
-        if self.spotify_volume_widget is not None:
-            try:
-                self._position_spotify_volume()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import setup_spotify_widgets
+        setup_spotify_widgets(self)
 
     def _setup_pixel_shift(self) -> None:
-        """Setup pixel shift manager for burn-in prevention.
-        
-        Phase 1b: Extracted from _setup_widgets for cleaner delegation.
-        """
-        if not self.settings_manager:
-            return
-        
-        pixel_shift_enabled = SettingsManager.to_bool(
-            self.settings_manager.get('accessibility.pixel_shift.enabled', False), False
-        )
-        try:
-            pixel_shift_rate = int(self.settings_manager.get('accessibility.pixel_shift.rate', 1))
-            pixel_shift_rate = max(1, min(5, pixel_shift_rate))
-        except (ValueError, TypeError):
-            pixel_shift_rate = 1
-        
-        if self._pixel_shift_manager is None:
-            self._pixel_shift_manager = PixelShiftManager(
-                resource_manager=self._resource_manager,
-                thread_manager=self._thread_manager,
-            )
-            if self._thread_manager is not None:
-                self._pixel_shift_manager.set_thread_manager(self._thread_manager)
-            self._pixel_shift_manager.set_defer_check(lambda: self.has_running_transition())
-        
-        self._pixel_shift_manager.set_shifts_per_minute(pixel_shift_rate)
-        
-        # Register all overlay widgets
-        for attr_name in (
-            "clock_widget", "clock2_widget", "clock3_widget",
-            "weather_widget", "media_widget", "spotify_visualizer_widget",
-            "reddit_widget", "reddit2_widget",
-        ):
-            widget = getattr(self, attr_name, None)
-            if widget is not None:
-                self._pixel_shift_manager.register_widget(widget)
-
-        # The Spotify volume widget remains anchored to the media card edge; allowing
-        # pixel shift to move it independently causes visible desync. It intentionally
-        # opts out of pixel shifting until we support grouped offsets.
-        
-        if pixel_shift_enabled:
-            self._pixel_shift_manager.set_enabled(True)
-            logger.debug("Pixel shift enabled (rate=%d/min)", pixel_shift_rate)
-        else:
-            self._pixel_shift_manager.set_enabled(False)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import setup_pixel_shift
+        setup_pixel_shift(self)
 
     def _is_hard_exit_enabled(self) -> bool:
         """Return True if hard-exit mode is enabled via settings.
@@ -1060,60 +689,9 @@ class DisplayWidget(QWidget):
             return False
     
     def _setup_widgets(self) -> None:
-        """Setup overlay widgets via WidgetManager delegation.
-        
-        Milestone 2: Refactored to delegate widget creation to WidgetManager.
-        This reduces DisplayWidget from ~1166 lines of widget setup to ~50 lines.
-        """
-        if not self.settings_manager:
-            logger.warning("No settings_manager provided - widgets will not be created")
-            return
-
-        try:
-            # Explicit dot-notation reads kept here for regression coverage.
-            self.settings_manager.get("accessibility.dimming.enabled", False)
-            self.settings_manager.get("accessibility.dimming.opacity", 30)
-            self.settings_manager.get("accessibility.pixel_shift.enabled", False)
-            self.settings_manager.get("accessibility.pixel_shift.rate", 1)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
-        logger.debug("Setting up overlay widgets for screen %d", self.screen_index)
-        
-        # Setup dimming first (GL compositor)
-        self._setup_dimming()
-        
-        # Delegate widget creation to WidgetManager
-        if self._widget_manager is not None:
-            widgets_config = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
-            self._widget_manager.configure_expected_overlays(widgets_config)
-            created = self._widget_manager.setup_all_widgets(
-                self.settings_manager,
-                self.screen_index,
-                self._thread_manager,
-            )
-            # Assign created widgets to DisplayWidget attributes
-            for attr_name, widget in created.items():
-                setattr(self, attr_name, widget)
-            logger.info("WidgetManager created %d widgets", len(created))
-            
-            # Initialize all widgets via lifecycle system (Dec 2025)
-            initialized_count = self._widget_manager.initialize_all_widgets()
-            if initialized_count > 0:
-                logger.debug("[LIFECYCLE] Initialized %d widgets via lifecycle system", initialized_count)
-        else:
-            logger.warning("No WidgetManager available - widgets will not be created")
-            return
-        
-        # Setup Spotify widgets (complex wiring with media widget)
-        self._setup_spotify_widgets()
-        
-        # Setup pixel shift manager
-        self._setup_pixel_shift()
-        
-        # Apply widget stacking for overlapping positions
-        widgets = self.settings_manager.get('widgets', {})
-        self._apply_widget_stacking(widgets if isinstance(widgets, dict) else {})
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import setup_widgets
+        setup_widgets(self)
 
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on the WidgetManager and TransitionFactory.
@@ -1128,22 +706,10 @@ class DisplayWidget(QWidget):
             self._transition_factory.set_process_supervisor(supervisor)
 
     def _apply_widget_stacking(self, widgets_config: Dict[str, Any]) -> None:
-        """Apply vertical stacking offsets - delegates to WidgetManager."""
-        if self._widget_manager is None:
-            return
-        widget_list = [
-            (getattr(self, 'clock_widget', None), 'clock_widget'),
-            (getattr(self, 'clock2_widget', None), 'clock2_widget'),
-            (getattr(self, 'clock3_widget', None), 'clock3_widget'),
-            (getattr(self, 'weather_widget', None), 'weather_widget'),
-            (getattr(self, 'media_widget', None), 'media_widget'),
-            (getattr(self, 'spotify_visualizer_widget', None), 'spotify_visualizer_widget'),
-            (getattr(self, 'reddit_widget', None), 'reddit_widget'),
-            (getattr(self, 'reddit2_widget', None), 'reddit2_widget'),
-            (getattr(self, 'imgur_widget', None), 'imgur_widget'),
-        ]
-        self._widget_manager.apply_widget_stacking(widget_list)
-    
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import apply_widget_stacking
+        apply_widget_stacking(self, widgets_config)
+
     def recalculate_stacking(self) -> None:
         """Recalculate widget stacking offsets."""
         try:
@@ -1153,134 +719,25 @@ class DisplayWidget(QWidget):
             logger.debug("Failed to recalculate stacking", exc_info=True)
 
     def _on_animation_manager_ready(self, animation_manager) -> None:
-        """Hook called by BaseTransition when an AnimationManager is available.
-
-        Allows overlays such as the Spotify Beat Visualizer to subscribe to
-        the same high-frequency tick that drives transitions so they do not
-        pause or desync during animations.
-        """
-
-        try:
-            vis = getattr(self, "spotify_visualizer_widget", None)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            vis = None
-
-        if vis is None:
-            return
-
-        try:
-            if hasattr(vis, "attach_to_animation_manager"):
-                vis.attach_to_animation_manager(animation_manager)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to attach visualizer to AnimationManager", exc_info=True)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import on_animation_manager_ready
+        on_animation_manager_ready(self, animation_manager)
 
     def _ensure_overlay_stack(self, stage: str = "runtime") -> None:
-        """Refresh overlay geometry and schedule raises to maintain Z-order."""
-
-        overlay_keys = GL_OVERLAY_KEYS + SW_OVERLAY_KEYS
-        for attr_name in overlay_keys:
-            overlay = getattr(self, attr_name, None)
-            if overlay is None:
-                continue
-            try:
-                set_overlay_geometry(self, overlay)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            try:
-                if overlay.isVisible():
-                    schedule_raise_when_ready(
-                        self,
-                        overlay,
-                        stage=f"{stage}_{attr_name}",
-                    )
-                else:
-                    # Keep stacking order deterministic even if hidden for now
-                    raise_overlay(self, overlay)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                continue
-
-        # Ensure primary overlay widgets remain above any GL compositor or
-        # legacy transition overlays for the duration of transitions.
-        # PERF: Skip if we've already raised overlays this frame (raise_overlay handles this)
-        # The raise_overlay function already handles all the necessary raises with
-        # frame-rate limiting, so we don't need to duplicate the work here.
-        pass
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import ensure_overlay_stack
+        ensure_overlay_stack(self, stage)
 
     def _force_overlay_ready(self, overlay: QWidget, stage: str, *, gl_available: Optional[bool] = None) -> None:
-        """Fallback: force overlay readiness when GL initialization fails."""
-
-        if gl_available is None:
-            gl_available = GL is not None
-
-        try:
-            # Use GLStateManager if available (preferred approach)
-            gl_state = getattr(overlay, "_gl_state", None)
-            if gl_state is not None and hasattr(gl_state, "is_ready"):
-                if not gl_state.is_ready():
-                    # Force transition to READY state
-                    try:
-                        from rendering.gl_state_manager import GLContextState
-                        gl_state.force_state(GLContextState.READY, "force_overlay_ready")
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            
-            # Legacy flag support for overlays not yet using GLStateManager
-            lock = getattr(overlay, "_state_lock", None)
-            if lock:
-                with lock:  # type: ignore[arg-type]
-                    if hasattr(overlay, "_first_frame_drawn"):
-                        overlay._first_frame_drawn = True  # type: ignore[attr-defined]
-                    if hasattr(overlay, "_has_drawn"):
-                        overlay._has_drawn = True  # type: ignore[attr-defined]
-                    if hasattr(overlay, "_initialized"):
-                        overlay._initialized = True  # type: ignore[attr-defined]
-                    if hasattr(overlay, "_ready"):
-                        overlay._ready = True  # type: ignore[attr-defined]
-                    if hasattr(overlay, "_is_ready"):
-                        overlay._is_ready = True  # type: ignore[attr-defined]
-            else:
-                if hasattr(overlay, "_first_frame_drawn"):
-                    overlay._first_frame_drawn = True  # type: ignore[attr-defined]
-                if hasattr(overlay, "_has_drawn"):
-                    overlay._has_drawn = True  # type: ignore[attr-defined]
-                if hasattr(overlay, "_initialized"):
-                    overlay._initialized = True  # type: ignore[attr-defined]
-                if hasattr(overlay, "_ready"):
-                    overlay._ready = True  # type: ignore[attr-defined]
-                if hasattr(overlay, "_is_ready"):
-                    overlay._is_ready = True  # type: ignore[attr-defined]
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            overlay.update()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            name = overlay.objectName() or overlay.__class__.__name__
-            self.notify_overlay_ready(name, stage, status="forced_ready", gl=bool(gl_available))
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import force_overlay_ready
+        force_overlay_ready(self, overlay, stage, gl_available=gl_available)
 
     def _reuse_persistent_gl_overlays(self) -> None:
-        """Ensure persistent overlays have correct parent and geometry after show."""
+        """Delegates to rendering.display_setup."""
+        from rendering.display_setup import reuse_persistent_gl_overlays
+        reuse_persistent_gl_overlays(self)
 
-        for attr_name in GL_OVERLAY_KEYS:
-            overlay = getattr(self, attr_name, None)
-            if overlay is None:
-                continue
-            try:
-                if overlay.parent() is not self:
-                    overlay.setParent(self)
-                set_overlay_geometry(self, overlay)
-                overlay.hide()  # stay hidden until transition starts
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                continue
-    
     def _create_transition(self) -> Optional[BaseTransition]:
         """Create the next transition, honoring live settings overrides.
         
@@ -1349,335 +806,16 @@ class DisplayWidget(QWidget):
         )
         self.set_processed_image(processed_pixmap, pixmap, image_path)
 
-    def set_processed_image(self, processed_pixmap: QPixmap, original_pixmap: QPixmap, 
-                           image_path: str = "") -> None:
-        """Display an already-processed image with transition.
-        
-        ARCHITECTURAL NOTE: This method accepts pre-processed pixmaps to avoid
-        blocking the UI thread with image scaling. The caller (typically the
-        engine) should process images on a background thread and call this
-        method on the UI thread with the results.
-        
-        Args:
-            processed_pixmap: Screen-fitted pixmap ready for display
-            original_pixmap: Original unprocessed pixmap (for reference)
-            image_path: Path to image (for logging/events)
-        """
-        # If a transition is already running, skip this call (single-skip policy)
-        if self.has_running_transition():
-            self._transition_skip_count += 1
-            logger.debug(
-                "Transition in progress - skipping image request (skip_count=%s)",
-                self._transition_skip_count,
-            )
-            return
+    def set_processed_image(self, processed_pixmap: QPixmap, original_pixmap: QPixmap,
+                            image_path: str = "") -> None:
+        """Delegates to rendering.display_image_ops."""
+        from rendering.display_image_ops import set_processed_image
+        set_processed_image(self, processed_pixmap, original_pixmap, image_path)
 
-        if processed_pixmap.isNull():
-            logger.warning("[FALLBACK] Received null processed pixmap")
-            self.error_message = "Failed to load image"
-            self.current_pixmap = None
-            self.update()
-            return
-
-        # Use the pre-processed pixmap directly - no UI thread blocking
-        new_pixmap = processed_pixmap
-        
-        self._animation_manager = None
-        self._overlay_timeouts: dict[str, float] = {}
-        self._pre_raise_log_emitted = False
-        self._base_fallback_paint_logged = False
-        
-        # Set DPR on the processed pixmap for proper display scaling
-        processed_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-        try:
-            new_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
-        # Stop any running transition via TransitionController
-        if self._transition_controller is not None:
-            self._transition_controller.stop_current()
-        elif self._current_transition:
-            transition_to_stop = self._current_transition
-            self._current_transition = None
-            try:
-                transition_to_stop.stop()
-                transition_to_stop.cleanup()
-            except Exception as e:
-                logger.warning(f"Error stopping transition: {e}")
-        
-        # Cache previous pixmap reference before we mutate current_pixmap
-        previous_pixmap_ref = self.current_pixmap
-
-        # Seed base widget with the new frame before starting transitions.
-        # This prevents fallback paints (black bands) while overlays warm up.
-        self.current_pixmap = processed_pixmap
-        if self.current_pixmap:
-            try:
-                self.current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._seed_pixmap = self.current_pixmap
-            self._last_pixmap_seed_ts = time.monotonic()
-            
-            # Phase 4b: Notify ImagePresenter of pixmap change
-            if self._image_presenter is not None:
-                try:
-                    self._image_presenter.set_current(self.current_pixmap, update_seed=True)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            if is_verbose_logging():
-                logger.debug(
-                    "[DIAG] Seed pixmap set (phase=pre-transition, pixmap=%s)",
-                    _describe_pixmap(self.current_pixmap),
-                )
-            if self._updates_blocked_until_seed:
-                try:
-                    self.setUpdatesEnabled(True)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                self._updates_blocked_until_seed = False
-
-            # Pre-warm the shared GL compositor with the current frame so that
-            # its GL surface is active before any animated transition starts.
-            # This reduces first-use flicker, especially on secondary
-            # displays, by avoiding late compositor initialization.
-            try:
-                self._ensure_gl_compositor()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            comp = getattr(self, "_gl_compositor", None)
-            if isinstance(comp, GLCompositorWidget):
-                try:
-                    comp.setGeometry(0, 0, self.width(), self.height())
-                    comp.set_base_pixmap(self.current_pixmap)
-                    comp.show()
-                    comp.raise_()
-                    # Prewarm shader textures for the upcoming transition so
-                    # GLSL paths (Slide, Wipe, Diffuse, etc.) do not pay the
-                    # full texture upload cost on their first animated frame.
-                    try:
-                        comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
-                    except Exception:
-                        logger.debug(
-                            "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
-                            exc_info=True,
-                        )
-                    # Raise all overlay widgets above the compositor ONCE here.
-                    # The rate-limited raise_overlay() handles ongoing raises.
-                    # Raise all widgets above the compositor
-                    for attr_name in (
-                        "clock_widget", "clock2_widget", "clock3_widget",
-                        "weather_widget", "media_widget", "spotify_visualizer_widget",
-                        "_spotify_bars_overlay", "spotify_volume_widget", "reddit_widget",
-                        "reddit2_widget", "_ctrl_cursor_hint",
-                    ):
-                        w = getattr(self, attr_name, None)
-                        if w is not None:
-                            try:
-                                w.raise_()
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
-
-            use_transition = bool(self.settings_manager) and self._has_rendered_first_frame
-            if self.settings_manager and not self._has_rendered_first_frame:
-                logger.debug("[INIT] First frame - presenting without transition to avoid black flicker")
-
-            if not self._transitions_enabled:
-                use_transition = False
-
-            if use_transition:
-                transition = self._create_transition()
-                if transition:
-                    # Set previous pixmap for transition
-                    self.previous_pixmap = previous_pixmap_ref or processed_pixmap
-                    
-                    # For compositor-backed 3D Block Spins, seed with old image
-                    comp = getattr(self, "_gl_compositor", None)
-                    if isinstance(comp, GLCompositorWidget):
-                        try:
-                            if (
-                                transition.__class__.__name__ == "GLCompositorCrossfadeTransition"
-                                and previous_pixmap_ref is not None
-                                and not previous_pixmap_ref.isNull()
-                            ):
-                                comp.set_base_pixmap(previous_pixmap_ref)
-                            elif (
-                                transition.__class__.__name__ == "GLCompositorBlockSpinTransition"
-                                and previous_pixmap_ref is not None
-                                and not previous_pixmap_ref.isNull()
-                            ):
-                                comp.set_base_pixmap(previous_pixmap_ref)
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-                    self._warm_transition_if_needed(
-                        comp,
-                        transition.__class__.__name__,
-                        self.previous_pixmap,
-                        new_pixmap,
-                    )
-
-                    # Store pending finish args
-                    self._pending_transition_finish_args = (processed_pixmap, original_pixmap, image_path, False, None)
-                    
-                    # Create finish handler with weakref
-                    self_ref = weakref.ref(self)
-                    def _finish_handler(np=processed_pixmap, op=original_pixmap, ip=image_path, ref=self_ref):
-                        widget = ref()
-                        if widget is None or not Shiboken.isValid(widget):
-                            return
-                        try:
-                            widget._pending_transition_finish_args = (np, op, ip, False, None)
-                            widget._on_transition_finished(np, op, ip, False, None)
-                        finally:
-                            widget._pending_transition_finish_args = None
-
-                    # Delegate transition start to TransitionController
-                    overlay_key = self._resolve_overlay_key_for_transition(transition)
-                    if self._transition_controller is not None:
-                        success = self._transition_controller.start_transition(
-                            transition, self.previous_pixmap, new_pixmap,
-                            overlay_key=overlay_key, on_finished=_finish_handler
-                        )
-                    else:
-                        # Fallback: direct start
-                        transition.finished.connect(_finish_handler)
-                        success = transition.start(self.previous_pixmap, new_pixmap, self)
-                    
-                    if success:
-                        self._current_transition = transition
-                        self._current_transition_overlay_key = overlay_key
-                        self._current_transition_started_at = time.monotonic()
-                        self._current_transition_name = transition.__class__.__name__
-                        self._current_transition_first_run = (
-                            self._current_transition_name not in self._warmed_transition_types
-                        )
-                        if is_perf_metrics_enabled():
-                            logger.info(
-                                "[PERF] [TRANSITION] Start name=%s first_run=%s overlay=%s",
-                                self._current_transition_name,
-                                self._current_transition_first_run,
-                                overlay_key or "<none>",
-                            )
-                        if overlay_key:
-                            self._overlay_timeouts[overlay_key] = self._current_transition_started_at
-                        # Raise widgets SYNCHRONOUSLY
-                        if self._widget_manager is not None:
-                            try:
-                                self._widget_manager.raise_all_widgets()
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        for attr in ("_spotify_bars_overlay", "_ctrl_cursor_hint"):
-                            w = getattr(self, attr, None)
-                            if w is not None:
-                                try:
-                                    w.raise_()
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        logger.debug(f"Transition started: {transition.__class__.__name__}")
-                        return
-                    else:
-                        logger.warning("Transition failed to start, displaying immediately")
-                        transition.cleanup()
-                        self._current_transition = None
-                        self._current_transition_name = None
-                        self._current_transition_first_run = False
-                        self._pending_transition_finish_args = None
-                        use_transition = False
-                else:
-                    use_transition = False
-
-            if not use_transition:
-                self._pending_transition_finish_args = None
-                self._cancel_transition_watchdog()
-                # No transition - display immediately
-                self.previous_pixmap = None
-                self.update()
-                if GL is None:
-                    try:
-                        self._mark_all_overlays_ready(GL_OVERLAY_KEYS, stage="software_display")
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-                try:
-                    self._ensure_overlay_stack(stage="display")
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-                logger.debug(f"Image displayed: {image_path} ({processed_pixmap.width()}x{processed_pixmap.height()})")
-                self.current_image_path = image_path
-                self.image_displayed.emit(image_path)
-                self._has_rendered_first_frame = True
-
-    def _on_transition_finished(
-        self,
-        new_pixmap: QPixmap,
-        original_pixmap: QPixmap,
-        image_path: str,
-        pan_enabled: bool,
-        pan_preview: Optional[QPixmap] = None,
-    ) -> None:
-        """Handle transition completion."""
-        # Delegate cleanup to TransitionController
-        if self._transition_controller is not None:
-            try:
-                self._transition_controller.on_transition_finished()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
-        # Clear local state
-        self._current_transition_overlay_key = None
-        self._current_transition_started_at = 0.0
-        self._current_transition = None
-        if self._current_transition_name:
-            self._warmed_transition_types.add(self._current_transition_name)
-            self._last_transition_name = self._current_transition_name
-        self._current_transition_name = None
-        self._current_transition_first_run = False
-        self._last_transition_finished_wall_ts = time.time()
-
-        # Update pixmap state
-        self.current_pixmap = pan_preview or new_pixmap
-        if self.current_pixmap:
-            try:
-                self.current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        self._seed_pixmap = self.current_pixmap
-        self._last_pixmap_seed_ts = time.monotonic()
-        
-        # Notify ImagePresenter
-        if self._image_presenter is not None:
-            try:
-                self._image_presenter.complete_transition(new_pixmap, pan_preview)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
-        if self._updates_blocked_until_seed:
-            try:
-                self.setUpdatesEnabled(True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._updates_blocked_until_seed = False
-        self.previous_pixmap = None
-
-        # Ensure overlays and repaint
-        try:
-            self._ensure_overlay_stack(stage="transition_finish")
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        self.update()
-
-        try:
-            logger.debug("Transition completed, image displayed: %s", image_path)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        self.current_image_path = image_path
-        self.image_displayed.emit(image_path)
-        self._pending_transition_finish_args = None
+    def _on_transition_finished(self, *args, **kwargs) -> None:
+        """Delegates to rendering.display_image_ops."""
+        from rendering.display_image_ops import _on_transition_finished
+        _on_transition_finished(self, *args, **kwargs)
 
     def _warm_transition_if_needed(
         self,
@@ -1749,99 +887,10 @@ class DisplayWidget(QWidget):
                 self.width(), self.height()
             )
 
-    def push_spotify_visualizer_frame(
-        self,
-        *,
-        bars,
-        bar_count,
-        segments,
-        fill_color,
-        border_color,
-        fade,
-        playing,
-        ghosting_enabled=True,
-        ghost_alpha=0.4,
-        ghost_decay=-1.0,
-        vis_mode="spectrum",
-    ):
-        vis = getattr(self, "spotify_visualizer_widget", None)
-        if vis is None:
-            return False
-
-        try:
-            if not vis.isVisible():
-                return False
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return False
-
-        try:
-            geom = vis.geometry()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return False
-
-        if geom.width() <= 0 or geom.height() <= 0:
-            return False
-
-        # Lazily create a small GL overlay dedicated to Spotify bars. This
-        # sits above the card widget in Z-order while the card itself remains
-        # a normal QWidget with ShadowFadeProfile-driven opacity.
-        overlay = getattr(self, "_spotify_bars_overlay", None)
-        if overlay is None or not isinstance(overlay, SpotifyBarsGLOverlay):
-            try:
-                overlay = SpotifyBarsGLOverlay(self)
-                overlay.setObjectName("spotify_bars_gl_overlay")
-                self._spotify_bars_overlay = overlay
-                if self._resource_manager is not None:
-                    try:
-                        self._resource_manager.register_qt(
-                            overlay,
-                            description="Spotify bars GL overlay",
-                        )
-                    except Exception:
-                        logger.debug("[SPOTIFY_VIS] Failed to register SpotifyBarsGLOverlay", exc_info=True)
-                pixel_shift_manager = getattr(self, "_pixel_shift_manager", None)
-                if pixel_shift_manager is not None:
-                    try:
-                        pixel_shift_manager.register_widget(overlay)
-                    except Exception:
-                        logger.debug("[SPOTIFY_VIS] Failed to register GL overlay with PixelShiftManager", exc_info=True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                self._self._spotify_bars_overlay = None
-                return False
-
-        if overlay is None:
-            return False
-
-        try:
-            overlay.set_state(
-                geom,
-                bars,
-                bar_count,
-                segments,
-                fill_color,
-                border_color,
-                fade,
-                playing,
-                visible=True,
-                ghosting_enabled=ghosting_enabled,
-                ghost_alpha=ghost_alpha,
-                ghost_decay=ghost_decay,
-                vis_mode=vis_mode,
-            )
-            pixel_shift_manager = getattr(self, "_pixel_shift_manager", None)
-            if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
-                try:
-                    pixel_shift_manager.update_original_position(overlay)
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to sync GL overlay baseline with PixelShiftManager", exc_info=True)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)
-            return False
-
-        return True
+    def push_spotify_visualizer_frame(self, **kwargs):
+        """Delegates to rendering.display_image_ops."""
+        from rendering.display_image_ops import push_spotify_visualizer_frame
+        return push_spotify_visualizer_frame(self, **kwargs)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Handle mouse double click."""
@@ -1883,158 +932,24 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     def _init_renderer_backend(self) -> None:
-        """Select and initialize the configured renderer backend."""
+        """Delegates to rendering.display_gl_init."""
+        from rendering.display_gl_init import init_renderer_backend
+        init_renderer_backend(self)
 
-        if self.settings_manager is None:
-            logger.info("[RENDER] No settings manager attached; backend initialization skipped")
-            return
+    def _build_surface_descriptor(self) -> Optional[SurfaceDescriptor]:
+        """Delegates to rendering.display_gl_init."""
+        from rendering.display_gl_init import build_surface_descriptor
+        return build_surface_descriptor(self)
 
-        event_system: Optional[EventSystem] = None
-        try:
-            if hasattr(self.settings_manager, "get_event_system"):
-                candidate = self.settings_manager.get_event_system()
-                if isinstance(candidate, EventSystem):
-                    event_system = candidate
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            event_system = None
+    def _ensure_render_surface(self) -> bool:
+        """Delegates to rendering.display_gl_init."""
+        from rendering.display_gl_init import ensure_render_surface
+        return ensure_render_surface(self)
 
-        try:
-            selection = create_backend_from_settings(
-                self.settings_manager,
-                event_system=event_system,
-            )
-            backend = selection.backend
-            self._backend_selection = selection
-            self._renderer_backend = backend
-            caps = backend.get_capabilities()
-            logger.info(
-                "[RENDER] Backend active (screen=%s, api=%s %s, triple=%s, vsync_toggle=%s)",
-                self.screen_index,
-                caps.api_name,
-                caps.api_version,
-                caps.supports_triple_buffer,
-                caps.supports_vsync_toggle,
-            )
-            if selection.fallback_performed:
-                logger.warning(
-                    "[RENDER] Backend fallback engaged (requested=%s, resolved=%s, reason=%s)",
-                    selection.requested_mode,
-                    selection.resolved_mode,
-                    selection.fallback_reason,
-                )
-            self._backend_fallback_message = (
-                "Renderer backend: "
-                f"{selection.resolved_mode.upper()} (requested {selection.requested_mode.upper()})"
-            )
-            self._update_backend_fallback_overlay()
-        except Exception:
-            logger.exception("[RENDER] Failed to initialize renderer backend", exc_info=True)
-            self._renderer_backend = None
-            self._backend_selection = None
-            self._backend_fallback_message = None
-            hide_backend_fallback_overlay(self)
-
-    def _build_surface_descriptor(self) -> SurfaceDescriptor:
-        # Timer-only policy: never request driver vsync; rely on timer FPS cap.
-        vsync_enabled = False
-        prefer_triple = True
-        if self.settings_manager:
-            prefer_triple = self.settings_manager.get('display.prefer_triple_buffer', True)
-            if isinstance(prefer_triple, str):
-                prefer_triple = prefer_triple.lower() in ('true', '1', 'yes')
-
-        width = max(1, self.width())
-        height = max(1, self.height())
-
-        return SurfaceDescriptor(
-            screen_index=self.screen_index,
-            width=width,
-            height=height,
-            dpi=self._device_pixel_ratio,
-            vsync_enabled=vsync_enabled,
-            prefer_triple_buffer=prefer_triple,
-        )
-
-    def _ensure_render_surface(self) -> None:
-        if self._renderer_backend is None:
-            return
-        if self._render_surface is not None:
-            return
-        descriptor = self._build_surface_descriptor()
-        try:
-            surface = self._renderer_backend.create_surface(descriptor)
-        except NotImplementedError:
-            logger.debug("[RENDER] Backend create_surface not implemented; using widget fallback")
-            return
-        except Exception as exc:
-            logger.exception("[RENDER] Failed to create render surface: %s", exc)
-            return
-
-        self._render_surface = surface
-        logger.info(
-            "[RENDER] Render surface established (screen=%s, %sx%s, vsync=%s, triple_preference=%s)",
-            descriptor.screen_index,
-            descriptor.width,
-            descriptor.height,
-            descriptor.vsync_enabled,
-            descriptor.prefer_triple_buffer,
-        )
-
-    def _ensure_gl_compositor(self) -> None:
-        """Create or resize the shared GL compositor widget when appropriate.
-
-        The compositor is only used when hardware acceleration is enabled,
-        an OpenGL backend is active, and PyOpenGL/GL are available. This keeps
-        software-only environments on the existing CPU path.
-        """
-
-        # Guard on hw_accel setting
-        hw_accel = True
-        if self.settings_manager is not None:
-            try:
-                raw = self.settings_manager.get("display.hw_accel", True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                raw = True
-            hw_accel = SettingsManager.to_bool(raw, True)
-        if not hw_accel:
-            return
-
-        # Require an OpenGL backend selection
-        if self._backend_selection and self._backend_selection.resolved_mode != "opengl":
-            return
-
-        if self._gl_compositor is None:
-            try:
-                comp = GLCompositorWidget(self)
-                comp.setObjectName("_srpss_gl_compositor")
-                comp.setGeometry(0, 0, self.width(), self.height())
-                comp.hide()
-                
-                # Timer-based rendering is always used (VSync disabled)
-                # Per-screen refresh rate is detected automatically
-                
-                if self._resource_manager is not None:
-                    try:
-                        self._resource_manager.register_qt(
-                            comp,
-                            description="Shared GL compositor for DisplayWidget",
-                        )
-                    except Exception:
-                        logger.debug("[GL COMPOSITOR] Failed to register compositor with ResourceManager", exc_info=True)
-                self._gl_compositor = comp
-                logger.info("[GL COMPOSITOR] Created shared compositor for screen %s (timer_render=True)", 
-                           self.screen_index)
-            except Exception as exc:
-                logger.warning("[GL COMPOSITOR] Failed to create compositor: %s", exc)
-                self._gl_compositor = None
-                return
-        else:
-            try:
-                self._gl_compositor.setGeometry(0, 0, self.width(), self.height())
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to update compositor geometry", exc_info=True)
+    def _ensure_gl_compositor(self) -> bool:
+        """Delegates to rendering.display_gl_init."""
+        from rendering.display_gl_init import ensure_gl_compositor
+        return ensure_gl_compositor(self)
 
     def _has_gl_compositor(self) -> bool:
         """Check if the GL compositor is available and ready."""
@@ -2051,32 +966,10 @@ class DisplayWidget(QWidget):
         finally:
             self._render_surface = None
 
-    def _cleanup_widget(self, attr_name: str, tag: str, stop_method: str = "cleanup") -> None:
-        """Helper to safely cleanup a widget attribute.
-        
-        Args:
-            attr_name: Name of the widget attribute (e.g., "media_widget")
-            tag: Log tag for debug messages (e.g., "MEDIA")
-            stop_method: Method to call for cleanup ("cleanup", "stop", or None)
-        """
-        try:
-            widget = getattr(self, attr_name, None)
-            if widget is None:
-                return
-            if stop_method:
-                method = getattr(widget, stop_method, None)
-                if callable(method):
-                    try:
-                        method()
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            try:
-                widget.hide()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            setattr(self, attr_name, None)
-        except Exception as e:
-            logger.debug("[%s] Failed to cleanup in _on_destroyed: %s", tag, e, exc_info=True)
+    def _cleanup_widget(self) -> None:
+        """Delegates to rendering.display_gl_init."""
+        from rendering.display_gl_init import cleanup_widget
+        cleanup_widget(self)
 
     def _on_destroyed(self, *_args) -> None:
         """Ensure active transitions are stopped when the widget is destroyed."""
@@ -2138,7 +1031,7 @@ class DisplayWidget(QWidget):
                 self._ctrl_cursor_hint = None
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._self._ctrl_cursor_hint = None
+            self._ctrl_cursor_hint = None
         
         # Stop and clean up any active transition via TransitionController
         try:
@@ -2254,7 +1147,7 @@ class DisplayWidget(QWidget):
                 self._ctrl_cursor_hint = None
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._self._ctrl_cursor_hint = None
+            self._ctrl_cursor_hint = None
 
         # Reset global Ctrl state to prevent halo from reappearing
         try:
@@ -2406,266 +1299,54 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-    def _start_overlay_fades(self, force: bool = False) -> None:
-        """Kick off any pending overlay fade callbacks."""
+    def _start_overlay_fades(self) -> None:
+        """Delegates to rendering.display_overlays."""
+        from rendering.display_overlays import start_overlay_fades
+        start_overlay_fades(self)
 
-        if getattr(self, "_overlay_fade_started", False):
-            return
-        self._overlay_fade_started = True
+    def _run_spotify_secondary_fades(self) -> None:
+        """Delegates to rendering.display_overlays."""
+        from rendering.display_overlays import run_spotify_secondary_fades
+        run_spotify_secondary_fades(self)
 
-        timeout = getattr(self, "_overlay_fade_timeout", None)
-        if timeout is not None:
-            try:
-                timeout.stop()
-                timeout.deleteLater()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._overlay_fade_timeout = None
-
-        pending = getattr(self, "_overlay_fade_pending", {})
-        try:
-            starters = list(pending.values())
-            names = list(pending.keys())
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            starters = []
-            names = []
-        logger.debug(
-            "[OVERLAY_FADE] starting overlay fades (force=%s, overlays=%s)",
-            force,
-            sorted(names),
-        )
-        self._overlay_fade_pending = {}
-
-        # To reduce visible pops on startup when the event loop is still busy
-        # with GL/image initialisation, introduce a short warm-up delay for
-        # coordinated fades. The force path keeps immediate behaviour so a
-        # misbehaving overlay cannot block fades indefinitely.
-        warmup_delay_ms = 0 if force else 250
-
-        if warmup_delay_ms <= 0:
-            for starter in starters:
-                try:
-                    starter()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            # When the primary fades fire immediately (force path or no
-            # warm-up), still give Spotify widgets a brief second-wave delay
-            # so they do not appear before the main group.
-            try:
-                self._run_spotify_secondary_fades(base_delay_ms=150)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return
-
-        for starter in starters:
-            try:
-                QTimer.singleShot(warmup_delay_ms, starter)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    starter()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        # Schedule Spotify secondary fades to start a little after the
-        # coordinated primary warm-up, so the volume slider and visualiser
-        # card feel attached to the wave without blocking it.
-        try:
-            self._run_spotify_secondary_fades(base_delay_ms=warmup_delay_ms + 150)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-    def _run_spotify_secondary_fades(self, *, base_delay_ms: int) -> None:
-        """Start any queued Spotify second-wave fade callbacks."""
-
-        starters = getattr(self, "_spotify_secondary_fade_starters", None)
-        if not starters:
-            return
-        try:
-            queued = list(starters)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            queued = []
-        self._spotify_secondary_fade_starters = []
-
-        delay_ms = max(0, int(base_delay_ms))
-        for starter in queued:
-            try:
-                if delay_ms <= 0:
-                    starter()
-                else:
-                    QTimer.singleShot(delay_ms, starter)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    starter()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-    def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
-        """Register a Spotify second-wave fade to run after primary overlays.
-
-        When there is no primary overlay coordination active, or when the
-        primary group has already started, the starter is run with a small
-        delay so it still feels like a secondary pass without popping in
-        ahead of other widgets.
-        """
-
-        try:
-            expected = self._overlay_fade_expected
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            expected = set()
-
-        starters = getattr(self, "_spotify_secondary_fade_starters", None)
-        if not isinstance(starters, list):
-            starters = []
-            self._spotify_secondary_fade_starters = starters
-
-        # If no primary overlays are coordinated for this display, or the
-        # primary wave has already started, run this as a tiny second wave
-        # instead of waiting for a coordinator that will never fire.
-        if not expected or getattr(self, "_overlay_fade_started", False):
-            try:
-                QTimer.singleShot(150, starter)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    starter()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return
-
-        starters.append(starter)
+    def register_spotify_secondary_fade(self, starter) -> None:
+        """Delegates to rendering.display_overlays."""
+        from rendering.display_overlays import register_spotify_secondary_fade
+        register_spotify_secondary_fade(self, starter)
 
     def get_overlay_stage_counts(self) -> dict[str, int]:
         """Return snapshot of overlay readiness counts (for diagnostics/tests)."""
         return dict(self._overlay_stage_counts)
 
     def _ensure_ctrl_cursor_hint(self) -> None:
-        """Create the cursor halo widget if it doesn't exist."""
-        if self._ctrl_cursor_hint is not None:
-            return
-        self._ctrl_cursor_hint = CursorHaloWidget(self)
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import ensure_ctrl_cursor_hint
+        ensure_ctrl_cursor_hint(self)
 
     def _show_ctrl_cursor_hint(self, pos, mode: str = "none") -> None:
-        """Show/animate the cursor halo at the given position.
-        
-        Args:
-            pos: Position to center the halo on (local widget coordinates)
-            mode: "none" for reposition only, "fade_in" or "fade_out" for animation
-        """
-        self._ensure_ctrl_cursor_hint()
-        hint = self._ctrl_cursor_hint
-        if hint is None:
-            return
-
-        # Do not show the halo while the settings dialog is active.
-        try:
-            from rendering.multi_monitor_coordinator import get_coordinator
-
-            if get_coordinator().settings_dialog_active:
-                self._hide_ctrl_cursor_hint(immediate=True)
-                return
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        # Normalize incoming position to QPoint for consistency
-        try:
-            if isinstance(pos, QPoint):
-                local_point = QPoint(pos)
-            else:
-                local_point = QPoint(int(pos.x()), int(pos.y()))
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return
-        rect = self.rect()
-        context_menu_active = bool(getattr(self, "_context_menu_active", False))
-        halo_slack = float(max(0.0, getattr(self, "_halo_out_of_bounds_slack", 8.0)))
-
-        if mode != "fade_out":
-            if not rect.contains(local_point):
-                should_hide = (
-                    local_point.x() < rect.left() - halo_slack
-                    or local_point.y() < rect.top() - halo_slack
-                    or local_point.x() > rect.right() + halo_slack
-                    or local_point.y() > rect.bottom() + halo_slack
-                )
-                if should_hide:
-                    self._hide_ctrl_cursor_hint(immediate=True)
-                    return
-            if context_menu_active:
-                self._hide_ctrl_cursor_hint(immediate=True)
-                return
-            self._halo_last_local_pos = QPoint(local_point)
-            self._last_halo_activity_ts = time.monotonic()
-            self._reset_halo_inactivity_timer()
-            hint.move_to(local_point.x(), local_point.y())
-        else:
-            self._cancel_halo_inactivity_timer()
-
-        if mode == "fade_in":
-            # fade_in() handles show() internally
-            hint.fade_in()
-        elif mode == "fade_out":
-            hint.fade_out()
-        else:
-            # mode == "none" - just reposition, ensure visible without animation
-            if not hint.isVisible():
-                hint.setWindowOpacity(1.0)
-                hint.show()
-                hint.raise_()
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import show_ctrl_cursor_hint
+        show_ctrl_cursor_hint(self, pos, mode)
 
     def _hide_ctrl_cursor_hint(self, *, immediate: bool = False) -> None:
-        """Hide the cursor halo widget."""
-        hint = self._ctrl_cursor_hint
-        if hint is None:
-            return
-        self._cancel_halo_inactivity_timer()
-        try:
-            if immediate:
-                hint.cancel_animation()
-                hint.hide()
-            else:
-                hint.fade_out()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            hint.hide()
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import hide_ctrl_cursor_hint
+        hide_ctrl_cursor_hint(self, immediate=immediate)
 
     def _reset_halo_inactivity_timer(self) -> None:
-        """Restart the inactivity timer that hides the halo after inactivity."""
-        timeout_sec = float(max(0.5, getattr(self, "_halo_activity_timeout", 2.0)))
-        timeout_ms = int(timeout_sec * 1000)
-
-        timer = getattr(self, "_halo_inactivity_timer", None)
-        if timer is None:
-            timer = QTimer(self)
-            timer.setSingleShot(True)
-            timer.timeout.connect(self._on_halo_inactivity_timeout)
-            self._halo_inactivity_timer = timer
-
-        try:
-            timer.start(timeout_ms)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import reset_halo_inactivity_timer
+        reset_halo_inactivity_timer(self)
 
     def _cancel_halo_inactivity_timer(self) -> None:
-        timer = getattr(self, "_halo_inactivity_timer", None)
-        if timer is None:
-            return
-        try:
-            timer.stop()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import cancel_halo_inactivity_timer
+        cancel_halo_inactivity_timer(self)
 
     def _on_halo_inactivity_timeout(self) -> None:
-        """Hide the halo if there has been no local movement recently."""
-        now = time.monotonic()
-        last = float(getattr(self, "_last_halo_activity_ts", 0.0) or 0.0)
-        timeout_sec = float(max(0.5, getattr(self, "_halo_activity_timeout", 2.0)))
-        if last <= 0.0 or (now - last) >= timeout_sec:
-            self._hide_ctrl_cursor_hint(immediate=True)
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import on_halo_inactivity_timeout
+        on_halo_inactivity_timeout(self)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         try:
@@ -2686,9 +1367,9 @@ class DisplayWidget(QWidget):
         super().closeEvent(event)
 
     def _on_destroyed(self) -> None:
-        """Cleanup when widget is destroyed."""
-        # Widget cleanup handled by other methods
-        pass
+        """Delegates to rendering.display_gl_init."""
+        from rendering.display_gl_init import on_destroyed
+        on_destroyed(self)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""
@@ -2735,201 +1416,15 @@ class DisplayWidget(QWidget):
             return
         event.ignore()
     
-    def mousePressEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse press - exit on any click unless hard exit is enabled."""
-        # Phase 5: Use coordinator for global Ctrl state
-        ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
-        
-        # Phase E: Delegate right-click context menu to InputHandler if available
-        # This ensures effect invalidation is triggered consistently before menu popup
-        if event.button() == Qt.MouseButton.RightButton:
-            if self._is_hard_exit_enabled() or ctrl_mode_active:
-                if self._input_handler is not None:
-                    try:
-                        # InputHandler will trigger effect invalidation and emit context_menu_requested
-                        if self._input_handler.handle_mouse_press(event, self._coordinator.ctrl_held):
-                            event.accept()
-                            return
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                # Fallback: direct context menu show
-                self._show_context_menu(event.globalPosition().toPoint())
-                event.accept()
-                return
-            # Normal mode without Ctrl - fall through to exit
-        
-        if self._is_hard_exit_enabled() or ctrl_mode_active:
-            # Delegate widget click routing to InputHandler
-            handled = False
-            reddit_handled = False
-            
-            reddit_url = None
-            if self._input_handler is not None:
-                try:
-                    handled, reddit_handled, reddit_url = self._input_handler.route_widget_click(
-                        event,
-                        getattr(self, "spotify_volume_widget", None),
-                        getattr(self, "media_widget", None),
-                        getattr(self, "reddit_widget", None),
-                        getattr(self, "reddit2_widget", None),
-                        getattr(self, "gmail_widget", None),
-                        getattr(self, "imgur_widget", None),
-                    )
-                    logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",
-                               handled, reddit_handled, self.screen_index)
-                except Exception:
-                    logger.debug("[INPUT] Widget click routing failed", exc_info=True)
+    def mousePressEvent(self, event) -> None:
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import handle_mousePressEvent
+        handle_mousePressEvent(self, event)
 
-            if handled:
-                # Request exit after Reddit clicks
-                reddit_exit_on_click = getattr(self, "_reddit_exit_on_click", True)
-                logger.info("[REDDIT] Click routed: handled=%s reddit_handled=%s reddit_exit_on_click=%s screen=%s", 
-                            handled, reddit_handled, reddit_exit_on_click, self.screen_index)
-                if reddit_handled and reddit_exit_on_click:
-                    # Detect display configuration for Reddit link handling:
-                    # A) All displays covered + hard_exit: Exit immediately
-                    # B) All displays covered + Ctrl held: Exit immediately
-                    # C) MC mode (primary NOT covered): Stay open, bring browser to foreground
-                    #
-                    # System-agnostic: uses QGuiApplication.primaryScreen() which is the
-                    # OS-configured primary, not necessarily screen index 0.
-                    
-                    this_is_primary = False
-                    primary_is_covered = False
-                    try:
-                        from PySide6.QtGui import QGuiApplication
-                        primary_screen = QGuiApplication.primaryScreen()
-                        
-                        # Check if THIS widget is on the primary screen
-                        if self._screen is not None and primary_screen is not None:
-                            this_is_primary = (self._screen is primary_screen)
-                        
-                        # If THIS is primary, then primary is definitely covered
-                        if this_is_primary:
-                            primary_is_covered = True
-                        else:
-                            # Check if primary screen has a DisplayWidget registered
-                            if primary_screen is not None:
-                                primary_widget = self._coordinator.get_instance_for_screen(primary_screen)
-                                primary_is_covered = (primary_widget is not None)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception checking primary screen: %s", e)
-                        # Fallback: assume primary is NOT covered (MC mode behavior)
-                        # This is safer than assuming exit - user can always press Esc
-                        primary_is_covered = False
-                    
-                    logger.info("[REDDIT] Exit check: this_is_primary=%s primary_is_covered=%s exiting=%s screen=%s",
-                                this_is_primary, primary_is_covered, self._exiting, self.screen_index)
-                    
-                    if primary_is_covered:
-                        # Cases A & B: Primary is covered, user wants to leave screensaver
-                        logger.info("[REDDIT] Primary covered; requesting immediate exit")
-                        if not self._exiting:
-                            self._exiting = True
-                            if reddit_url:
-                                self._pending_reddit_url = reddit_url
-                            # Bring browser to foreground after windows start closing
-                            def _bring_browser_foreground():
-                                try:
-                                    from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                                    _try_bring_reddit_window_to_front()
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                            QTimer.singleShot(300, _bring_browser_foreground)
-                            self.exit_requested.emit()
-                    else:
-                        # Case C: MC mode - primary not covered, stay open
-                        # Delay browser foreground to give browser time to open the URL
-                        # and create a window with "reddit" in the title
-                        logger.info("[REDDIT] MC mode (primary not covered); staying open, will bring browser to foreground after delay")
-                        url_to_open = reddit_url
-                        if url_to_open:
-                            try:
-                                from PySide6.QtCore import QUrl
-                                from PySide6.QtGui import QDesktopServices
-                                if QDesktopServices.openUrl(QUrl(url_to_open)):
-                                    logger.info("[REDDIT] MC mode: opened %s immediately", url_to_open)
-                                else:
-                                    logger.warning("[REDDIT] MC mode: QDesktopServices rejected %s", url_to_open)
-                            except Exception:
-                                logger.debug("[REDDIT] MC mode immediate open failed; falling back", exc_info=True)
-                                url_to_open = None
-                        if not url_to_open:
-                            logger.info("[REDDIT] MC mode: no URL opened immediately; skipping foreground attempt")
-                        else:
-                            def _bring_browser_foreground_mc():
-                                try:
-                                    from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                                    _try_bring_reddit_window_to_front()
-                                    logger.debug("[REDDIT] MC mode: browser foreground attempted")
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                            QTimer.singleShot(300, _bring_browser_foreground_mc)
-                    
-                event.accept()
-                return
-
-            # In interaction mode, don't exit on unhandled clicks
-            event.accept()
-            return
-
-        logger.info(f"Mouse clicked at ({event.pos().x()}, {event.pos().y()}), requesting exit")
-        self._exiting = True
-        # Deferred Reddit URLs are now flushed centrally by DisplayManager after teardown.
-        self.exit_requested.emit()
-        event.accept()
-    
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        """Handle mouse move - exit if moved beyond threshold (unless hard exit)."""
-        # Don't exit while context menu is active
-        if self._context_menu_active:
-            event.accept()
-            return
-        
-        # Phase 5: Use coordinator for global Ctrl state
-        ctrl_mode_active = self._coordinator.ctrl_held
-        hard_exit = self._is_hard_exit_enabled()
-        if hard_exit or ctrl_mode_active:
-            # Show/update halo position
-            local_pos = event.pos()
-            hint = self._ctrl_cursor_hint
-            if hint is not None:
-                halo_hidden = not hint.isVisible()
-                if halo_hidden:
-                    self._coordinator.set_halo_owner(self)
-                    self._show_ctrl_cursor_hint(local_pos, mode="fade_in")
-                else:
-                    self._show_ctrl_cursor_hint(local_pos, mode="none")
-            
-            # Delegate volume drag to InputHandler
-            if self._input_handler is not None:
-                try:
-                    self._input_handler.route_volume_drag(
-                        event.pos(), getattr(self, "spotify_volume_widget", None)
-                    )
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            event.accept()
-            return
-
-        # Store initial position on first move
-        if self._initial_mouse_pos is None:
-            self._initial_mouse_pos = event.pos()
-            event.accept()
-            return
-        
-        # Calculate distance from initial position
-        dx = event.pos().x() - self._initial_mouse_pos.x()
-        dy = event.pos().y() - self._initial_mouse_pos.y()
-        distance = (dx * dx + dy * dy) ** 0.5
-        
-        # Exit if moved beyond threshold
-        if distance > self._mouse_move_threshold:
-            logger.info(f"Mouse moved {distance:.1f} pixels, requesting exit")
-            self._exiting = True
-            self.exit_requested.emit()
-        
-        event.accept()
+    def mouseMoveEvent(self, event) -> None:
+        """Delegates to rendering.display_input."""
+        from rendering.display_input import handle_mouseMoveEvent
+        handle_mouseMoveEvent(self, event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Handle mouse release; end Spotify volume drags in interaction mode."""
@@ -2966,317 +1461,45 @@ class DisplayWidget(QWidget):
         super().wheelEvent(event)
 
     def _show_context_menu(self, global_pos) -> None:
-        """Show the context menu at the given global position."""
-        try:
-            current_transition, random_enabled = self._refresh_transition_state_from_settings()
-            
-            hard_exit = self._is_hard_exit_enabled()
-            
-            # Get dimming state - use dot notation for settings
-            dimming_enabled = False
-            if self.settings_manager:
-                dimming_enabled = SettingsManager.to_bool(
-                    self.settings_manager.get("accessibility.dimming.enabled", False), False
-                )
-            
-            # Create menu if needed (lazy init for performance)
-            if self._context_menu is None:
-                current_transition, random_enabled = self._refresh_transition_state_from_settings()
-                self._context_menu = ScreensaverContextMenu(
-                    parent=self,
-                    current_transition=current_transition,
-                    random_enabled=random_enabled,
-                    dimming_enabled=dimming_enabled,
-                    hard_exit_enabled=hard_exit,
-                    is_mc_build=self._is_mc_build,
-                    always_on_top=self._always_on_top,
-                )
-                # Connect signals
-                self._context_menu.previous_requested.connect(self.previous_requested.emit)
-                self._context_menu.next_requested.connect(self.next_requested.emit)
-                self._context_menu.transition_selected.connect(self._on_context_transition_selected)
-                self._context_menu.settings_requested.connect(self.settings_requested.emit)
-                self._context_menu.dimming_toggled.connect(self._on_context_dimming_toggled)
-                self._context_menu.hard_exit_toggled.connect(self._on_context_hard_exit_toggled)
-                self._context_menu.always_on_top_toggled.connect(self._on_context_always_on_top_toggled)
-                self._context_menu.exit_requested.connect(self._on_context_exit_requested)
-                try:
-                    self._context_menu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_about_to_show"))
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    submenu = getattr(self._context_menu, "_transition_menu", None)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    submenu = None
-                try:
-                    connected_sub = bool(getattr(self, "_context_menu_sub_connected", False))
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    connected_sub = False
-                if submenu is not None and not connected_sub:
-                    try:
-                        submenu.aboutToShow.connect(lambda: self._invalidate_overlay_effects("menu_sub_about_to_show"))
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    try:
-                        submenu.aboutToHide.connect(lambda: self._schedule_effect_invalidation("menu_sub_after_hide"))
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    try:
-                        setattr(self, "_context_menu_sub_connected", True)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            else:
-                # Update state before showing
-                current_transition, random_enabled = self._refresh_transition_state_from_settings()
-                self._context_menu.update_transition_state(current_transition, random_enabled)
-                self._context_menu.update_dimming_state(dimming_enabled)
-                self._context_menu.update_hard_exit_state(hard_exit)
-                self._context_menu.update_always_on_top_state(self._always_on_top)
-            
-            try:
-                self._context_menu_active = True
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._hide_ctrl_cursor_hint(immediate=True)
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import show_context_menu
+        show_context_menu(self, global_pos)
 
-            try:
-                t0 = time.monotonic()
-                setattr(self, "_menu_open_ts", t0)
-                if win_diag_logger.isEnabledFor(logging.DEBUG):
-                    win_diag_logger.debug(
-                        "[MENU_OPEN] begin t=%.6f screen=%s pos=%s",
-                        t0,
-                        self.screen_index,
-                        global_pos,
-                    )
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                setattr(self, "_menu_open_ts", None)
-
-            try:
-                connected = getattr(self, "_context_menu_hide_connected", False)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                connected = False
-            if not connected:
-                try:
-                    def _on_menu_hide() -> None:
-                        try:
-                            self._context_menu_active = False
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        # Phase E: Notify InputHandler of menu close for consistent state
-                        try:
-                            if self._input_handler is not None:
-                                self._input_handler.set_context_menu_active(False)
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        try:
-                            self._invalidate_overlay_effects("menu_after_hide")
-                            self._schedule_effect_invalidation("menu_after_hide")
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        try:
-                            start = getattr(self, "_menu_open_ts", None)
-                            if start is not None and win_diag_logger.isEnabledFor(logging.DEBUG):
-                                t1 = time.monotonic()
-                                win_diag_logger.debug(
-                                    "[MENU_OPEN] end t=%.6f dt=%.3fms screen=%s",
-                                    t1,
-                                    (t1 - start) * 1000.0,
-                                    self.screen_index,
-                                )
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        # Restore halo after menu closes if still in hard_exit or Ctrl mode
-                        try:
-                            hard_exit = False
-                            if self.settings_manager:
-                                hard_exit = SettingsManager.to_bool(
-                                    self.settings_manager.get("input.hard_exit", False), False
-                                )
-                            if hard_exit or self._coordinator.ctrl_held:
-                                # Re-show halo at current cursor position
-                                global_pos = QCursor.pos()
-                                local_pos = self.mapFromGlobal(global_pos)
-                                if self.rect().contains(local_pos):
-                                    self._coordinator.set_halo_owner(self)
-                                    self._show_ctrl_cursor_hint(local_pos, mode="fade_in")
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-                    self._context_menu.aboutToHide.connect(_on_menu_hide)
-                    setattr(self, "_context_menu_hide_connected", True)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-            # Phase E: Notify InputHandler of menu open for consistent state
-            try:
-                if self._input_handler is not None:
-                    self._input_handler.set_context_menu_active(True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            try:
-                # Phase E: Broadcast effect invalidation to ALL displays
-                # Context menu on one display triggers Windows activation cascade
-                # that corrupts QGraphicsEffect caches on OTHER displays
-                from rendering.multi_monitor_coordinator import get_coordinator
-                try:
-                    self._invalidate_overlay_effects("menu_before_popup")
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
-                self._context_menu.popup(global_pos)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    self._context_menu.popup(QCursor.pos())
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        except Exception:
-            logger.debug("Failed to show context menu", exc_info=True)
-            self._context_menu_active = False
-    
     def _on_context_transition_selected(self, name: str) -> None:
-        """Handle transition selection from context menu."""
-        try:
-            if self.settings_manager:
-                trans_cfg = self.settings_manager.get("transitions", {})
-                if not isinstance(trans_cfg, dict):
-                    trans_cfg = {}
-                
-                # Handle 'Random' selection - sync with random_always checkbox
-                if name == "Random":
-                    trans_cfg["random_always"] = True
-                    # Keep current type as fallback
-                    logger.info("Context menu: random transitions enabled")
-                    self._transition_random_enabled = True
-                else:
-                    trans_cfg["type"] = name
-                    trans_cfg["random_always"] = False
-                    logger.info("Context menu: transition changed to %s", name)
-                    self._transition_random_enabled = False
-                    self._transition_fallback_type = name
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_context_transition_selected
+        on_context_transition_selected(self, name)
 
-                # Clear any cached random selections when toggling modes
-                try:
-                    self.settings_manager.remove("transitions.random_choice")
-                    self.settings_manager.remove("transitions.last_random_choice")
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Failed clearing cached random choices: %s", e)
-                
-                self.settings_manager.set("transitions", trans_cfg)
-                self.settings_manager.save()
-
-                if self._context_menu is not None:
-                    menu_name = "Random" if self._transition_random_enabled else self._transition_fallback_type
-                    self._context_menu.update_transition_state(menu_name, self._transition_random_enabled)
-        except Exception:
-            logger.debug("Failed to set transition from context menu", exc_info=True)
-    
     def _on_context_dimming_toggled(self, enabled: bool) -> None:
-        """Handle dimming toggle from context menu."""
-        try:
-            if self.settings_manager:
-                self.settings_manager.set("accessibility.dimming.enabled", enabled)
-                self.settings_manager.save()
-                logger.info("Context menu: dimming set to %s", enabled)
-            
-            # Update local GL compositor dimming
-            self._dimming_enabled = enabled
-            comp = getattr(self, "_gl_compositor", None)
-            if comp is not None and hasattr(comp, "set_dimming"):
-                comp.set_dimming(enabled, self._dimming_opacity)
-            
-            # Emit signal to sync dimming across ALL displays
-            self.dimming_changed.emit(enabled, self._dimming_opacity)
-        except Exception:
-            logger.debug("Failed to toggle dimming from context menu", exc_info=True)
-    
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_context_dimming_toggled
+        on_context_dimming_toggled(self, enabled)
+
     def _on_context_hard_exit_toggled(self, enabled: bool) -> None:
-        """Handle hard exit toggle from context menu."""
-        try:
-            if self.settings_manager:
-                self.settings_manager.set("input.hard_exit", enabled)
-                self.settings_manager.save()
-                logger.info("Context menu: hard exit mode set to %s", enabled)
-        except Exception:
-            logger.debug("Failed to toggle hard exit from context menu", exc_info=True)
-    
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_context_hard_exit_toggled
+        on_context_hard_exit_toggled(self, enabled)
+
     def _on_context_always_on_top_toggled(self, on_top: bool) -> None:
-        """Handle always on top toggle from context menu (MC mode only)."""
-        try:
-            self._always_on_top = on_top
-            
-            # Block updates during flag change to prevent flash
-            self.setUpdatesEnabled(False)
-            
-            # Update window flags without hiding
-            flags = self.windowFlags()
-            if on_top:
-                flags |= Qt.WindowType.WindowStaysOnTopHint
-            else:
-                flags &= ~Qt.WindowType.WindowStaysOnTopHint
-            
-            # Apply new flags - this requires re-showing the window
-            self.setWindowFlags(flags)
-            
-            # Restore geometry and show without flash
-            if hasattr(self, '_screen') and self._screen is not None:
-                self.setGeometry(self._screen.geometry())
-            
-            self.show()
-            
-            if on_top:
-                # Bring to front when enabling on-top
-                self.raise_()
-            else:
-                # Lower behind other windows when disabling on-top
-                self.lower()
-            
-            # Re-enable updates
-            self.setUpdatesEnabled(True)
-            
-            # Persist to settings
-            if self.settings_manager:
-                self.settings_manager.set("mc.always_on_top", on_top)
-                self.settings_manager.save()
-            
-            
-            logger.info("[MC] Context menu: always on top set to %s", on_top)
-        except Exception:
-            logger.debug("Failed to toggle always on top from context menu", exc_info=True)
-            # Ensure updates are re-enabled on error
-            try:
-                self.setUpdatesEnabled(True)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-    
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_context_always_on_top_toggled
+        on_context_always_on_top_toggled(self, on_top)
+
     def _on_context_exit_requested(self) -> None:
-        """Handle exit request from context menu."""
-        logger.info("Context menu: exit requested")
-        self._exiting = True
-        self.exit_requested.emit()
-    
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_context_exit_requested
+        on_context_exit_requested(self)
+
     def _on_input_exit_requested(self) -> None:
-        """Handle exit request from InputHandler (Phase E refactor)."""
-        self._exiting = True
-        self.exit_requested.emit()
-    
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_input_exit_requested
+        on_input_exit_requested(self)
+
     def _on_context_menu_requested(self, global_pos: QPoint) -> None:
-        """Handle context menu request from InputHandler (Phase E refactor).
-        
-        This method centralizes menu popup triggering through InputHandler,
-        ensuring consistent effect invalidation ordering.
-        """
-        try:
-            self._show_context_menu(global_pos)
-        except Exception:
-            logger.debug("[INPUT_HANDLER] Failed to show context menu", exc_info=True)
-    
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_context_menu_requested
+        on_context_menu_requested(self, global_pos)
+
     def focusOutEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         """Diagnostic: log once if we lose focus while still visible.
 
@@ -3299,124 +1522,14 @@ class DisplayWidget(QWidget):
         super().focusOutEvent(event)
 
     def _debug_window_state(self, label: str, *, extra: str = "") -> None:
-        if not win_diag_logger.isEnabledFor(logging.DEBUG):
-            return
-        try:
-            try:
-                hwnd = int(self.winId())
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                hwnd = 0
-            try:
-                active = bool(self.isActiveWindow())
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                active = False
-            try:
-                visible = bool(self.isVisible())
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                visible = False
-            try:
-                ws = int(self.windowState())
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                ws = -1
-            try:
-                upd = bool(self.updatesEnabled())
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                upd = False
-
-            win_diag_logger.debug(
-                "[WIN_STATE] %s screen=%s hwnd=%s visible=%s active=%s windowState=%s updatesEnabled=%s %s",
-                label,
-                getattr(self, "screen_index", "?"),
-                hex(hwnd) if hwnd else "?",
-                visible,
-                active,
-                ws,
-                upd,
-                extra,
-            )
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        """Delegates to rendering.display_overlays."""
+        from rendering.display_overlays import debug_window_state
+        debug_window_state(self, label, extra=extra)
 
     def _perform_activation_refresh(self, reason: str) -> None:
-        # Debounce: skip if called too recently (< 2 seconds)
-        try:
-            now = time.monotonic()
-            last_refresh = getattr(self, "_last_activation_refresh_ts", 0.0)
-            if now - last_refresh < 2.0:
-                logger.debug("[ACTIVATE_REFRESH] Debounced (%.2fs since last)", now - last_refresh)
-                return
-            self._last_activation_refresh_ts = now
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            self._pending_activation_refresh = False
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            self._base_fallback_paint_logged = False
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        if win_diag_logger.isEnabledFor(logging.DEBUG):
-            try:
-                win_diag_logger.debug(
-                    "[ACTIVATE_REFRESH] screen=%s reason=%s",
-                    getattr(self, "screen_index", "?"),
-                    reason,
-                )
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        comp = getattr(self, "_gl_compositor", None)
-        if comp is not None:
-            try:
-                comp.update()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            self.update()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            bars_gl = getattr(self, "_spotify_bars_overlay", None)
-            if bars_gl is not None:
-                try:
-                    bars_gl.update()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        for name in (
-            "clock_widget",
-            "clock2_widget",
-            "clock3_widget",
-            "weather_widget",
-            "media_widget",
-            "spotify_visualizer_widget",
-            "spotify_volume_widget",
-            "reddit_widget",
-            "reddit2_widget",
-        ):
-            w = getattr(self, name, None)
-            if w is None:
-                continue
-            try:
-                if w.isVisible():
-                    w.update()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        self._schedule_effect_invalidation(f"activate_refresh:{reason}")
+        """Delegates to rendering.display_overlays."""
+        from rendering.display_overlays import perform_activation_refresh
+        perform_activation_refresh(self, reason)
 
     def _schedule_effect_invalidation(self, reason: str) -> None:
         try:
@@ -3474,545 +1587,39 @@ class DisplayWidget(QWidget):
         super().changeEvent(event)
 
     def nativeEvent(self, eventType, message):  # type: ignore[override]
-        try:
-            if sys.platform != "win32":
-                return super().nativeEvent(eventType, message)
-
-            msg = self._extract_win_msg(message)
-            if msg is None:
-                return super().nativeEvent(eventType, message)
-
-            mid = int(getattr(msg, "message", 0) or 0)
-            
-            # DEBUG: Log WM_APPCOMMAND to verify it's being received
-            if mid == WM_APPCOMMAND:
-                logger.info("[DEBUG] WM_APPCOMMAND received in nativeEvent")
-                # For media keys, DON'T mark as handled - let Qt process normally
-                # Just dispatch for visual feedback but don't intercept
-                self._dispatch_appcommand_for_feedback(msg)
-                # Return False to let Qt and Windows handle it normally
-                return False, 0
-
-            if mid == WM_APPCOMMAND:
-                handled, result = self._handle_win_appcommand(msg)
-                if handled:
-                    return True, result
-
-            # Handle Raw Input for media key detection (non-blocking)
-            if mid == WM_INPUT and _RAW_INPUT_AVAILABLE:
-                try:
-                    hwnd = int(getattr(msg, "hwnd", 0) or 0)
-                    wparam = int(getattr(msg, "wParam", 0) or 0)
-                    lparam = int(getattr(msg, "lParam", 0) or 0)
-                    
-                    # CRITICAL: Check if input is from foreground (RIM_INPUT = 0)
-                    # Windows REQUIRES DefWindowProc for RIM_INPUT cleanup
-                    is_foreground = (wparam & 0xFF) == 0  # RIM_INPUT = 0
-                    
-                    raw_input = get_raw_input_instance()
-                    if not raw_input.is_registered():
-                        # Initialize raw input registration
-                        def on_media_key(command: str) -> None:
-                            """Callback when media key detected - trigger visualizer wake."""
-                            try:
-                                # Find Spotify visualizer and wake it
-                                for widget in self.findChildren(SpotifyVisualizerWidget):
-                                    if hasattr(widget, '_trigger_wake'):
-                                        widget._trigger_wake()
-                                        break
-                                # Also dispatch to media widget for UI feedback
-                                mw = getattr(self, "media_widget", None)
-                                if mw and hasattr(mw, "handle_transport_command"):
-                                    mw.handle_transport_command(command, source="media_key", execute=False)
-                            except Exception:
-                                pass
-                        
-                        raw_input.register(hwnd, on_media_key)
-                    
-                    # Process the raw input message (detect media keys)
-                    raw_input.process_wm_input(wparam, lparam)
-                    
-                    # CRITICAL: For RIM_INPUT (foreground), MUST call DefWindowProc
-                    # This allows Windows to clean up and pass the input to other apps
-                    if is_foreground and _USER32 is not None and hwnd:
-                        try:
-                            result = int(_USER32.DefWindowProcW(hwnd, WM_INPUT, wparam, lparam))
-                            return True, result  # Indicate we handled it (including cleanup)
-                        except Exception:
-                            pass
-                    
-                    # For RIM_INPUTSINK or if DefWindowProc fails, 
-                    # return False to let Qt handle it normally
-                    return False, 0
-                    
-                except Exception:
-                    pass  # Ignore raw input errors
-
-            if not win_diag_logger.isEnabledFor(logging.DEBUG):
-                return super().nativeEvent(eventType, message)
-
-            names = {
-                0x0006: "WM_ACTIVATE",
-                0x0086: "WM_NCACTIVATE",
-                0x0046: "WM_WINDOWPOSCHANGING",
-                0x0047: "WM_WINDOWPOSCHANGED",
-                0x007C: "WM_STYLECHANGING",
-                0x007D: "WM_STYLECHANGED",
-                0x0014: "WM_ERASEBKGND",
-                0x000B: "WM_SETREDRAW",
-                WM_APPCOMMAND: "WM_APPCOMMAND",
-            }
-
-            name = names.get(mid)
-            if name is not None:
-                try:
-                    hwnd = int(getattr(msg, "hwnd", 0) or 0)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    hwnd = 0
-                try:
-                    wparam = int(getattr(msg, "wParam", 0) or 0)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    wparam = 0
-                try:
-                    lparam = int(getattr(msg, "lParam", 0) or 0)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    lparam = 0
-
-                extra = f"msg={name} wParam={wparam} lParam={lparam} hwnd={hex(hwnd) if hwnd else '?'}"
-                try:
-                    for inst in DisplayWidget.get_all_instances():
-                        try:
-                            inst._debug_window_state("nativeEvent", extra=extra)
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    self._debug_window_state("nativeEvent", extra=extra)
-
-                if name == "WM_ACTIVATE":
-                    if wparam == 0:
-                        try:
-                            for inst in DisplayWidget.get_all_instances():
-                                try:
-                                    inst._pending_activation_refresh = True
-                                    inst._last_deactivate_ts = time.monotonic()
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                            try:
-                                self._pending_activation_refresh = True
-                                self._last_deactivate_ts = time.monotonic()
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    elif wparam == 1:
-                        now_ts = time.monotonic()
-                        try:
-                            for inst in DisplayWidget.get_all_instances():
-                                try:
-                                    if not getattr(inst, "_pending_activation_refresh", False):
-                                        continue
-                                    dt = now_ts - float(getattr(inst, "_last_deactivate_ts", 0.0) or 0.0)
-                                    if dt <= 3.0:
-                                        try:
-                                            QTimer.singleShot(0, lambda _inst=inst: _inst._perform_activation_refresh("wm_activate"))
-                                        except Exception as e:
-                                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                            inst._perform_activation_refresh("wm_activate")
-                                    else:
-                                        inst._pending_activation_refresh = False
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        return super().nativeEvent(eventType, message)
+        """Delegates to rendering.display_native_events."""
+        from rendering.display_native_events import handle_nativeEvent
+        return handle_nativeEvent(self, eventType, message)
 
     def _extract_win_msg(self, raw_message):
-        try:
-            msg_ptr = int(raw_message)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return None
-        if msg_ptr == 0:
-            return None
-        try:
-            return ctypes.cast(msg_ptr, ctypes.POINTER(wintypes.MSG)).contents
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return None
+        """Delegates to rendering.display_native_events."""
+        from rendering.display_native_events import extract_win_msg
+        return extract_win_msg(self, raw_message)
 
     def _handle_win_appcommand(self, msg) -> tuple[bool, int]:
-        try:
-            hwnd = int(getattr(msg, "hwnd", 0) or 0)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            hwnd = 0
-        try:
-            wparam = int(getattr(msg, "wParam", 0) or 0)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            wparam = 0
-        try:
-            lparam = int(getattr(msg, "lParam", 0) or 0)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            lparam = 0
-
-        command = (lparam >> 16) & 0xFFFF
-        command_name = _APPCOMMAND_NAMES.get(command, f"APPCOMMAND_{command:04x}")
-        device = lparam & 0xFFFF
-        window_mode = getattr(self, "_mc_window_flag_mode", None) or "standard"
-
-        target_logger = win_diag_logger if win_diag_logger.isEnabledFor(logging.DEBUG) else logger
-        target_logger.debug(
-            "[WIN_APPCOMMAND] mode=%s cmd=%s (%#06x) device=%#06x wParam=%s lParam=%#010x",
-            window_mode,
-            command_name,
-            command,
-            device,
-            wparam,
-            lparam,
-        )
-
-        # Always dispatch for visual feedback, but ALWAYS pass through to OS
-        # by calling DefWindowProcW. The media keys should never be blocked.
-        self._dispatch_appcommand(command, command_name)
-
-        # CRITICAL: Always call DefWindowProcW to ensure media keys pass through
-        # to the OS and other applications like Spotify
-        if _USER32 is not None and hwnd:
-            try:
-                result = int(_USER32.DefWindowProcW(hwnd, WM_APPCOMMAND, wparam, lparam))
-                return True, result
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                target_logger.debug("[WIN_APPCOMMAND] DefWindowProcW failed", exc_info=True)
-
-        return False, 0
+        """Delegates to rendering.display_native_events."""
+        from rendering.display_native_events import handle_win_appcommand
+        return handle_win_appcommand(self, msg)
 
     def _dispatch_appcommand_for_feedback(self, msg) -> None:
-        """Lightweight appcommand handler that only triggers visual feedback without blocking."""
-        try:
-            lparam = int(getattr(msg, "lParam", 0) or 0)
-            command = (lparam >> 16) & 0xFFFF
-            command_name = _APPCOMMAND_NAMES.get(command, f"APPCOMMAND_{command:04x}")
-            
-            # Just dispatch for visual feedback - don't block
-            self._dispatch_appcommand(command, command_name)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] _dispatch_appcommand_for_feedback error: %s", e)
+        """Delegates to rendering.display_native_events."""
+        from rendering.display_native_events import dispatch_appcommand_for_feedback
+        dispatch_appcommand_for_feedback(self, msg)
 
     def _dispatch_appcommand(self, command: int, command_name: str) -> bool:
-        media_widget = getattr(self, "media_widget", None)
-        if media_widget is None:
-            return False
-
-        mapping = {
-            0x0005: "next",  # APPCOMMAND_MEDIA_NEXTTRACK
-            0x0006: "prev",  # APPCOMMAND_MEDIA_PREVIOUS
-            0x0007: "play",  # treat stop as play/pause toggle for feedback
-            0x000E: "play",  # APPCOMMAND_MEDIA_PLAY_PAUSE
-            0x0008: "play",
-            0x0009: "play",
-        }
-        key = mapping.get(command)
-        if key is None:
-            return False
-
-        source = f"appcommand:{command_name}"
-        try:
-            return bool(
-                media_widget.handle_transport_command(
-                    key,
-                    source=source,
-                    execute=False,
-                )
-            )
-        except Exception:
-            logger.debug("[DISPLAY_WIDGET] Appcommand dispatch failed", exc_info=True)
-            return False
+        """Delegates to rendering.display_native_events."""
+        from rendering.display_native_events import dispatch_appcommand
+        return dispatch_appcommand(self, command, command_name)
 
     def eventFilter(self, watched, event):  # type: ignore[override]
-        """Global event filter to keep the Ctrl halo responsive over children."""
-        try:
-            coordinator = self._coordinator
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            coordinator = None
-
-        try:
-            settings_dialog_active = False
-            if coordinator is not None:
-                try:
-                    settings_dialog_active = bool(coordinator.settings_dialog_active)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    settings_dialog_active = False
-
-            if settings_dialog_active:
-                # Settings dialog suppresses halo/activity entirely.
-                try:
-                    owner = coordinator.halo_owner if coordinator is not None else None
-                    if owner is not None:
-                        owner._hide_ctrl_cursor_hint(immediate=True)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                return super().eventFilter(watched, event)
-
-            if event is not None and event.type() == QEvent.Type.KeyPress:
-                try:
-                    key_event = event  # QKeyEvent
-                    target = self._coordinator.focus_owner
-                    if target is None or not isinstance(target, DisplayWidget) or not target.isVisible():
-                        target = self
-                    if isinstance(target, DisplayWidget) and target.isVisible():
-                        if key_event.key() == Qt.Key.Key_Control:
-                            if target._input_handler is not None:
-                                try:
-                                    target._input_handler.handle_ctrl_press(self._coordinator)
-                                    event.accept()
-                                    return True
-                                except Exception:
-                                    logger.debug("[KEY] Ctrl press delegation failed", exc_info=True)
-                            event.accept()
-                            return True
-                        if target._input_handler is not None:
-                            try:
-                                if target._input_handler.handle_key_press(key_event):
-                                    if target._input_handler.is_exiting():
-                                        target._exiting = True
-                                    event.accept()
-                                    return True
-                            except Exception:
-                                logger.debug("[KEY] Key press delegation failed", exc_info=True)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-            if event is not None and event.type() == QEvent.Type.KeyRelease:
-                try:
-                    key_event = event  # QKeyEvent
-                    if key_event.key() == Qt.Key.Key_Control:
-                        target = self._coordinator.focus_owner
-                        if target is None or not isinstance(target, DisplayWidget) or not target.isVisible():
-                            target = self
-                        if isinstance(target, DisplayWidget) and target.isVisible():
-                            if target._input_handler is not None:
-                                try:
-                                    target._input_handler.handle_ctrl_release(self._coordinator)
-                                    event.accept()
-                                    return True
-                                except Exception:
-                                    logger.debug("[KEY] Ctrl release delegation failed", exc_info=True)
-                            event.accept()
-                            return True
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-            if event is not None and event.type() == QEvent.Type.MouseMove:
-                hard_exit = False
-                try:
-                    hard_exit = self._is_hard_exit_enabled()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    hard_exit = False
-
-                # Phase 5: Use coordinator for global Ctrl state and halo ownership
-                ctrl_held = bool(self._coordinator.ctrl_held or getattr(DisplayWidget, "_global_ctrl_held", False))
-                if ctrl_held or hard_exit:
-                    # Use global cursor position so we track even when the
-                    # event originates from a child widget. Resolve the
-                    # DisplayWidget that owns the halo based on the cursor's
-                    # current QScreen to behave correctly across mixed-DPI
-                    # multi-monitor layouts.
-                    global_pos = QCursor.pos()
-
-                    from PySide6.QtGui import QGuiApplication
-
-                    cursor_screen = None
-                    try:
-                        cursor_screen = QGuiApplication.screenAt(global_pos)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        cursor_screen = None
-
-                    owner = self._coordinator.halo_owner
-                    if owner is None:
-                        owner = getattr(DisplayWidget, "_halo_owner", None)
-
-                    # If the cursor moved to a different screen, migrate the
-                    # halo owner to the DisplayWidget bound to that screen.
-                    if cursor_screen is not None:
-                        screen_changed = (
-                            owner is None
-                            or getattr(owner, "_screen", None) is not cursor_screen
-                        )
-                        if screen_changed:
-                            # Phase 5: Use coordinator for instance lookup
-                            new_owner = self._coordinator.get_instance_for_screen(cursor_screen)
-                            
-                            # Fallback to iteration only if cache miss (shouldn't happen)
-                            if new_owner is None:
-                                try:
-                                    widgets = QApplication.topLevelWidgets()
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                    widgets = []
-
-                                for w in widgets:
-                                    try:
-                                        if not isinstance(w, DisplayWidget):
-                                            continue
-                                        if getattr(w, "_screen", None) is cursor_screen:
-                                            new_owner = w
-                                            # Register with coordinator for future lookups
-                                            self._coordinator.register_instance(w, cursor_screen)
-                                            break
-                                    except Exception as e:
-                                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                        continue
-
-                            if new_owner is None:
-                                new_owner = owner or self
-
-                            if owner is not None and owner is not new_owner:
-                                try:
-                                    hint = getattr(owner, "_ctrl_cursor_hint", None)
-                                    if hint is not None:
-                                        try:
-                                            hint.cancel_animation()
-                                        except Exception as e:
-                                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                        hint.hide()
-                                        try:
-                                            hint.setOpacity(0.0)
-                                        except Exception as e:
-                                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                owner._ctrl_held = False
-
-                            # Phase 5: Use coordinator for halo ownership
-                            self._coordinator.set_halo_owner(new_owner)
-                            try:
-                                DisplayWidget._halo_owner = new_owner
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                            owner = new_owner
-
-                    if owner is None:
-                        owner = self
-
-                    try:
-                        local_pos = owner.mapFromGlobal(global_pos)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        try:
-                            local_pos = owner.rect().center()
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                            local_pos = None
-
-                    if local_pos is not None:
-                        try:
-                            # In hard-exit mode the halo should always be
-                            # visible while the cursor is over an active
-                            # DisplayWidget, without requiring Ctrl to be
-                            # held. On the first move we trigger a fade-in;
-                            # subsequent moves just reposition the halo.
-                            #
-                            # IMPORTANT: Check hard_exit on the OWNER widget, not self,
-                            # because multiple DisplayWidgets install eventFilters and
-                            # self might not be the widget under the cursor.
-                            owner_hard_exit = False
-                            try:
-                                owner_hard_exit = owner._is_hard_exit_enabled()
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                owner_hard_exit = hard_exit  # fallback to self's value
-                            
-                            hint = getattr(owner, "_ctrl_cursor_hint", None)
-                            halo_hidden = hint is None or not hint.isVisible()
-                            
-                            # In hard exit mode, always show halo on mouse move
-                            # Phase 5: Use coordinator for halo ownership
-                            if owner_hard_exit:
-                                if self._coordinator.halo_owner is None or halo_hidden:
-                                    # Fade in if halo owner not set OR if halo is hidden
-                                    self._coordinator.set_halo_owner(owner)
-                                    owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
-                                else:
-                                    # Just reposition
-                                    owner._show_ctrl_cursor_hint(local_pos, mode="none")
-                            elif ctrl_held:
-                                # Ctrl mode - show/reposition halo
-                                # If halo is hidden (e.g., after settings dialog), fade it in
-                                if halo_hidden:
-                                    self._coordinator.set_halo_owner(owner)
-                                    try:
-                                        DisplayWidget._halo_owner = owner
-                                    except Exception as e:
-                                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                    owner._show_ctrl_cursor_hint(local_pos, mode="fade_in")
-                                else:
-                                    owner._show_ctrl_cursor_hint(local_pos, mode="none")
-
-                            # Forward halo hover position to the Reddit
-                            # widget (if present) so it can manage its own
-                            # delayed tooltips over post titles.
-                            try:
-                                rw = getattr(owner, "reddit_widget", None)
-                                if rw is not None and rw.isVisible() and hasattr(rw, "handle_hover"):
-                                    try:
-                                        local_rw_pos = rw.mapFromGlobal(global_pos)
-                                    except Exception as e:
-                                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                        local_rw_pos = None
-                                    if local_rw_pos is not None:
-                                        rw.handle_hover(local_rw_pos, global_pos)
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        except MemoryError:
-            logger.error("[DISPLAY_WIDGET] eventFilter MemoryError; resetting halo/focus", exc_info=True)
-            self._recover_from_event_filter_memory_error(self._coordinator)
-            return False
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        return super().eventFilter(watched, event)
+        """Delegates to rendering.display_native_events."""
+        from rendering.display_native_events import handle_eventFilter
+        return handle_eventFilter(self, watched, event)
 
     def _recover_from_event_filter_memory_error(self, coordinator: Optional["MultiMonitorCoordinator"]) -> None:
-        """Best-effort recovery when eventFilter runs out of memory."""
-        try:
-            hint = getattr(self, "_ctrl_cursor_hint", None)
-            if hint is not None:
-                try:
-                    hint.cancel_animation()
-                except Exception:
-                    pass
-                hint.hide()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        if coordinator is None:
-            return
-
-        try:
-            coordinator.set_halo_owner(None)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            coordinator.release_focus(self)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        """Delegates to rendering.display_native_events."""
+        from rendering.display_native_events import recover_from_event_filter_memory_error
+        recover_from_event_filter_memory_error(self, coordinator)
 
     def get_screen_info(self) -> dict:
         """Get information about this display."""

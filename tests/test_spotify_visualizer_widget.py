@@ -205,6 +205,9 @@ def test_spotify_visualizer_emits_perf_metrics(qt_app, qtbot, monkeypatch, caplo
     qtbot.addWidget(widget)
 
     monkeypatch.setattr(vis_mod, "is_perf_metrics_enabled", lambda: True)
+    # Also patch the extracted tick_helpers module where log_perf_snapshot now lives
+    import widgets.spotify_visualizer.tick_helpers as _th_mod
+    monkeypatch.setattr(_th_mod, "is_perf_metrics_enabled", lambda: True)
 
     widget._perf_tick_start_ts = 0.0  # type: ignore[attr-defined]
     widget._perf_tick_last_ts = 1.0  # type: ignore[attr-defined]

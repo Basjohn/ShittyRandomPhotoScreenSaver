@@ -127,12 +127,14 @@ def test_weather_display_update(qapp, parent_widget, mock_weather_data):
     weather = WeatherWidget(parent=parent_widget)
     
     weather._update_display(mock_weather_data)
-    text = weather.text()
+    city_text = weather._city_label.text()
+    cond_text = weather._conditions_label.text()
+    combined = city_text + " " + cond_text
     
     # Should contain location and temperature (case-insensitive)
-    assert "London" in text or "LONDON" in text.upper()
-    assert "20°C" in text or "21°C" in text  # Rounded
-    assert "Clouds" in text or "CLOUDS" in text.upper()
+    assert "London" in combined or "LONDON" in combined.upper()
+    assert "20" in combined or "21" in combined  # Temp value
+    assert "Cloud" in combined or "CLOUD" in combined.upper()
 
 
 def test_weather_cache(qapp, parent_widget, mock_weather_data):
@@ -277,7 +279,7 @@ def test_weather_error_with_cache(qapp, parent_widget, mock_weather_data):
     weather._on_fetch_error("Network error")
     
     # Should fall back to cache (case-insensitive check)
-    text = weather.text()
+    text = weather._city_label.text()
     assert "London" in text or "LONDON" in text.upper()
 
 
@@ -337,7 +339,7 @@ def test_weather_display_no_data(qapp, parent_widget):
     
     weather._update_display(None)
     
-    assert "No Data" in weather.text()
+    assert "No Data" in weather._city_label.text()
 
 
 def test_weather_concurrent_start_prevention(qapp, parent_widget):

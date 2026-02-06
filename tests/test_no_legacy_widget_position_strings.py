@@ -26,7 +26,31 @@ def test_no_widgetposition_prefixes_outside_tests() -> None:
         except UnicodeDecodeError:
             continue
 
-        if "WidgetPosition." in text:
+        # Only flag legacy STRING LITERALS like "WidgetPosition.TOP_LEFT" in quotes,
+        # not legitimate enum references like WidgetPosition.TOP_RIGHT in code.
+        # Also exclude normalization.py which legitimately handles legacy conversion.
+        if "normalization" in rel.name:
+            continue
+        in_docstring = False
+        found = False
+        for line in text.splitlines():
+            stripped = line.strip()
+            # Track multi-line docstrings
+            for delim in ('"""', "'''"):
+                count = stripped.count(delim)
+                if count == 1:
+                    in_docstring = not in_docstring
+                # count >= 2 means open+close on same line (no state change)
+            if in_docstring:
+                continue
+            # Skip comments
+            if stripped.startswith("#"):
+                continue
+            # Check for quoted legacy strings: "WidgetPosition." or 'WidgetPosition.'
+            if '"WidgetPosition.' in line or "'WidgetPosition." in line:
+                found = True
+                break
+        if found:
             violations.append(rel)
 
     assert not violations, (

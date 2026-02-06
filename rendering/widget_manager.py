@@ -5,12 +5,11 @@ Manages overlay widget lifecycle, positioning, visibility, and Z-order.
 """
 from __future__ import annotations
 
-import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
@@ -35,7 +34,6 @@ if TYPE_CHECKING:
 apply_widget_shadow = _apply_widget_shadow
 
 logger = get_logger(__name__)
-win_diag_logger = logging.getLogger("win_diag")
 
 
 class WidgetManager:
@@ -78,6 +76,10 @@ class WidgetManager:
         # Rate limiting for raise operations
         self._last_raise_time: float = 0.0
         self._pending_raise: bool = False
+        self._raise_timer: Optional[QTimer] = None
+        
+        # Fade callbacks
+        self._fade_callbacks: Dict[str, Callable] = {}
         
         # Fade coordination - centralized via FadeCoordinator
         self._fade_coordinator: FadeCoordinator = FadeCoordinator(
@@ -296,6 +298,14 @@ class WidgetManager:
                     self._raise_timer = QTimer()
                     self._raise_timer.setSingleShot(True)
                     self._raise_timer.timeout.connect(self._do_deferred_raise)
+                    if self._resource_manager:
+                        try:
+                            self._resource_manager.register_qt(
+                                self._raise_timer,
+                                description="WidgetManager raise rate-limit timer",
+                            )
+                        except Exception:
+                            pass
                 self._raise_timer.start(remaining_ms)
             return
         
@@ -1139,272 +1149,24 @@ class WidgetManager:
     # =========================================================================
 
     def invalidate_overlay_effects(self, reason: str) -> None:
-        """Invalidate and optionally recreate widget QGraphicsEffects.
-        
-        Phase E Context:
-            This method centralizes effect cache-busting to prevent Qt's internal
-            cached pixmap/texture backing from becoming corrupt during rapid
-            focus/activation + popup menu sequencing across multi-monitor windows.
-        
-        Args:
-            reason: Identifier for the trigger (e.g., "menu_about_to_show",
-                    "menu_before_popup", "focus_in"). Menu-related reasons
-                    trigger stronger invalidation with effect recreation.
-        """
-        screen_idx = "?"
-        try:
-            screen_idx = getattr(self._parent, "screen_index", "?")
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        
-        if win_diag_logger.isEnabledFor(logging.DEBUG):
-            # Phase E instrumentation: log effect state before invalidation
-            effect_states = []
-            for name, widget in self._widgets.items():
-                if widget is None:
-                    continue
-                try:
-                    eff = widget.graphicsEffect()
-                    if eff is not None:
-                        eff_type = type(eff).__name__
-                        eff_id = id(eff)
-                        enabled = eff.isEnabled() if hasattr(eff, 'isEnabled') else '?'
-                        effect_states.append(f"{name}:{eff_type}@{eff_id:#x}(en={enabled})")
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            win_diag_logger.debug(
-                "[EFFECT_INVALIDATE] screen=%s reason=%s widgets=%d effects=[%s]",
-                screen_idx, reason, len(self._widgets), ", ".join(effect_states) if effect_states else "none",
-            )
-
-        # Menu-related triggers warrant stronger invalidation (effect recreation)
-        try:
-            strong = "menu" in str(reason)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            strong = False
-
-        refresh_effects = False
-        if strong:
-            # Toggle-based refresh: recreate effects on every other menu
-            # invalidation to bust Qt caches without excessive churn.
-            try:
-                flip = bool(getattr(self, "_effect_refresh_flip", False))
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                flip = False
-            flip = not flip
-            try:
-                setattr(self, "_effect_refresh_flip", flip)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            refresh_effects = flip
-
-        seen: set[int] = set()
-        for name, widget in self._widgets.items():
-            if widget is None:
-                continue
-            try:
-                seen.add(id(widget))
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            self._invalidate_widget_effect(widget, name, refresh_effects)
-
-        for attr_name in (
-            "clock_widget",
-            "clock2_widget",
-            "clock3_widget",
-            "weather_widget",
-            "media_widget",
-            "spotify_visualizer_widget",
-            "spotify_volume_widget",
-            "reddit_widget",
-            "reddit2_widget",
-        ):
-            try:
-                widget = getattr(self._parent, attr_name, None)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                widget = None
-            if widget is None:
-                continue
-            try:
-                if id(widget) in seen:
-                    continue
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            self._invalidate_widget_effect(widget, attr_name, refresh_effects)
+        """Delegates to rendering.widget_effects."""
+        from rendering.widget_effects import invalidate_overlay_effects
+        invalidate_overlay_effects(self, reason)
 
     def _invalidate_widget_effect(self, widget: QWidget, name: str, refresh: bool) -> None:
-        """Invalidate a single widget's graphics effect.
-        
-        Args:
-            widget: The widget to invalidate
-            name: Widget name for logging
-            refresh: If True, recreate the effect instead of just toggling
-        """
-        try:
-            eff = widget.graphicsEffect()
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            eff = None
-
-        if isinstance(eff, (QGraphicsDropShadowEffect, QGraphicsOpacityEffect)):
-            if refresh:
-                # Skip recreation if widget is mid-animation (has active fades)
-                try:
-                    anim = getattr(widget, "_shadowfade_anim", None)
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                    anim = None
-                try:
-                    shadow_anim = getattr(widget, "_shadowfade_shadow_anim", None)
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                    shadow_anim = None
-
-                if anim is None and shadow_anim is None:
-                    eff = self._recreate_effect(widget, eff)
-
-            # Toggle enable state to force Qt repaint
-            try:
-                eff.setEnabled(False)
-                eff.setEnabled(True)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-            # Force property refresh for drop shadows
-            if isinstance(eff, QGraphicsDropShadowEffect):
-                try:
-                    eff.setBlurRadius(eff.blurRadius())
-                    eff.setOffset(eff.offset())
-                    eff.setColor(eff.color())
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        # Request widget repaint
-        try:
-            if widget.isVisible():
-                widget.update()
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        """Delegates to rendering.widget_effects."""
+        from rendering.widget_effects import _invalidate_widget_effect
+        _invalidate_widget_effect(widget, name, refresh)
 
     def _recreate_effect(self, widget: QWidget, old_eff: Any) -> Any:
-        """Recreate a QGraphicsEffect to bust Qt's internal cache.
-        
-        Args:
-            widget: The widget owning the effect
-            old_eff: The existing effect to replace
-            
-        Returns:
-            The new effect (or the old one if recreation failed)
-        """
-        if isinstance(old_eff, QGraphicsDropShadowEffect):
-            try:
-                blur = old_eff.blurRadius()
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                blur = None
-            try:
-                offset = old_eff.offset()
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                offset = None
-            try:
-                color = old_eff.color()
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                color = None
-
-            try:
-                widget.setGraphicsEffect(None)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-            try:
-                new_eff = QGraphicsDropShadowEffect(widget)
-                if blur is not None:
-                    new_eff.setBlurRadius(blur)
-                if offset is not None:
-                    new_eff.setOffset(offset)
-                if color is not None:
-                    new_eff.setColor(color)
-                widget.setGraphicsEffect(new_eff)
-                return new_eff
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                try:
-                    return widget.graphicsEffect()
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                    return old_eff
-
-        elif isinstance(old_eff, QGraphicsOpacityEffect):
-            try:
-                opacity = old_eff.opacity()
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                opacity = None
-
-            try:
-                widget.setGraphicsEffect(None)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-            try:
-                new_eff = QGraphicsOpacityEffect(widget)
-                if opacity is not None:
-                    new_eff.setOpacity(opacity)
-                widget.setGraphicsEffect(new_eff)
-                return new_eff
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                try:
-                    return widget.graphicsEffect()
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                    return old_eff
-
-        return old_eff
+        """Delegates to rendering.widget_effects."""
+        from rendering.widget_effects import _recreate_effect
+        return _recreate_effect(widget, old_eff)
 
     def schedule_effect_invalidation(self, reason: str, delay_ms: int = 16) -> None:
-        """Schedule a deferred effect invalidation.
-        
-        Useful when invalidation should happen after Qt event processing settles.
-        
-        Args:
-            reason: The invalidation reason
-            delay_ms: Delay in milliseconds before invalidation runs
-        """
-        try:
-            pending = getattr(self, "_pending_effect_invalidation", False)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            pending = False
-
-        if pending:
-            return
-
-        try:
-            setattr(self, "_pending_effect_invalidation", True)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        def _run() -> None:
-            try:
-                self.invalidate_overlay_effects(reason)
-            finally:
-                try:
-                    setattr(self, "_pending_effect_invalidation", False)
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        try:
-            QTimer.singleShot(max(0, delay_ms), _run)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            _run()
+        """Delegates to rendering.widget_effects."""
+        from rendering.widget_effects import schedule_effect_invalidation
+        schedule_effect_invalidation(self, reason, delay_ms)
 
     # =========================================================================
     # Overlay Fade Coordination
@@ -1567,354 +1329,9 @@ class WidgetManager:
         screen_index: int,
         thread_manager: Optional["ThreadManager"] = None,
     ) -> dict:
-        """
-        Set up all overlay widgets based on settings using the factory registry.
-        
-        This is the main entry point for widget creation, replacing the
-        monolithic _setup_widgets method in DisplayWidget.
-        
-        Phase 2 Refactor (Jan 2026): Now delegates to WidgetFactoryRegistry
-        for widget creation instead of inline create_*_widget methods.
-        
-        Args:
-            settings_manager: SettingsManager instance
-            screen_index: Screen index for monitor selection
-            thread_manager: Optional ThreadManager for async operations
-            
-        Returns:
-            Dict of created widgets keyed by name
-        """
-        if not settings_manager:
-            logger.warning("No settings_manager provided - widgets will not be created")
-            return {}
-
-        self._attach_settings_manager(settings_manager)
-        
-        # Initialize factory registry if not already done
-        if self._factory_registry is None:
-            self.set_factory_registry(settings_manager, thread_manager)
-        else:
-            try:
-                self._factory_registry.set_thread_manager(thread_manager)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Failed to update factory registry thread manager: %s", e)
-
-        logger.debug("Setting up overlay widgets for screen %d via factory registry", screen_index)
-
-        widgets_config = settings_manager.get('widgets', {})
-        if not isinstance(widgets_config, dict):
-            widgets_config = {}
-
-        base_clock_settings = widgets_config.get('clock', {}) if isinstance(widgets_config, dict) else {}
-        base_reddit_settings = widgets_config.get('reddit', {}) if isinstance(widgets_config, dict) else {}
-        shadows_config = widgets_config.get('shadows', {}) if isinstance(widgets_config, dict) else {}
-
-        # Reset fade coordination
-        self.reset_fade_coordination()
-
-        created: Dict[str, QWidget] = {}
-
-        # Helper to check monitor selection
-        def _show_on_this_monitor(monitor_sel) -> bool:
-            try:
-                return (monitor_sel == 'ALL') or (int(monitor_sel) == (screen_index + 1))
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                return True
-
-        # Get factory instances
-        clock_factory = self._factory_registry.get_factory("clock")
-        weather_factory = self._factory_registry.get_factory("weather")
-        media_factory = self._factory_registry.get_factory("media")
-        reddit_factory = self._factory_registry.get_factory("reddit")
-
-        # Helper to (re)register widgets created in prior sessions (settings toggled off/on).
-        def _reuse_existing_widget(attr_name: str, registry_name: str) -> Optional[QWidget]:
-            parent = self._parent
-            if parent is None:
-                return None
-
-            try:
-                existing = getattr(parent, attr_name, None)
-            except Exception as exc:
-                logger.debug("[WIDGET_MANAGER] Failed to read %s for reuse: %s", attr_name, exc)
-                existing = None
-
-            if existing is None:
-                return None
-
-            logger.debug("[WIDGET_MANAGER] Reusing existing %s for %s", attr_name, registry_name)
-            self.register_widget(registry_name, existing)
-            self._bind_parent_attribute(attr_name, existing)
-            created[attr_name] = existing
-            return existing
-
-        def _ensure_thread_manager(widget: QWidget, widget_name: str) -> None:
-            """Ensure widget has ThreadManager injected, with logging for diagnostics."""
-            if widget is None or not hasattr(widget, "set_thread_manager"):
-                return
-            parent_tm = getattr(self._parent, "_thread_manager", None)
-            if parent_tm is None:
-                logger.debug("[WIDGET_MANAGER] No parent ThreadManager available for %s", widget_name)
-                return
-            try:
-                current = getattr(widget, "_thread_manager", None)
-            except Exception:
-                current = None
-            if current is parent_tm and current is not None:
-                logger.debug("[WIDGET_MANAGER] %s already has correct ThreadManager", widget_name)
-                return
-            try:
-                widget.set_thread_manager(parent_tm)
-                logger.info("[WIDGET_MANAGER] ThreadManager injected into %s (was: %s)", widget_name, current)
-            except Exception as exc:
-                logger.warning("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", widget_name, exc)
-
-        # Create clock widgets via factory
-        for settings_key, attr_name, default_pos, default_size in [
-            ('clock', 'clock_widget', 'Top Right', 48),
-            ('clock2', 'clock2_widget', 'Bottom Right', 32),
-            ('clock3', 'clock3_widget', 'Bottom Left', 32),
-        ]:
-            clock_settings = widgets_config.get(settings_key, {})
-            monitor_sel = clock_settings.get('monitor', 'ALL')
-            show_on_this = _show_on_this_monitor(monitor_sel)
-            logger.debug(f"[WIDGET_MANAGER] Clock {settings_key}: monitor_sel={monitor_sel}, screen_index={screen_index}, show_on_this={show_on_this}")
-            if not show_on_this:
-                logger.debug(f"[WIDGET_MANAGER] Clock {settings_key}: SKIPPING - not showing on this monitor")
-                continue
-            
-            # Add expected overlay for fade coordination
-            if SettingsManager.to_bool(clock_settings.get('enabled', False), False):
-                self.add_expected_overlay(settings_key)
-            
-            # Inject defaults for factory
-            clock_settings['_default_position'] = default_pos
-            clock_settings['_default_font_size'] = default_size
-            
-            widget = _reuse_existing_widget(attr_name, settings_key)
-            if widget is None and clock_factory:
-                widget = clock_factory.create(
-                    self._parent, clock_settings,
-                    settings_key=settings_key,
-                    base_clock_settings=base_clock_settings if settings_key != 'clock' else None,
-                    shadows_config=shadows_config,
-                    overlay_name=settings_key,
-                )
-                if widget:
-                    self.register_widget(settings_key, widget)
-                    created[attr_name] = widget
-                    self._bind_parent_attribute(attr_name, widget)
-
-            if widget is not None:
-                _ensure_thread_manager(widget, settings_key)
-
-        # Create weather widget via factory
-        weather_settings = widgets_config.get('weather', {})
-        monitor_sel = weather_settings.get('monitor', 'ALL')
-        if _show_on_this_monitor(monitor_sel):
-            if SettingsManager.to_bool(weather_settings.get('enabled', False), False):
-                self.add_expected_overlay("weather")
-            
-            widget = _reuse_existing_widget('weather_widget', 'weather')
-            if widget is None and weather_factory:
-                widget = weather_factory.create(
-                    self._parent, weather_settings,
-                    shadows_config=shadows_config,
-                )
-                if widget:
-                    self.register_widget("weather", widget)
-                    created['weather_widget'] = widget
-                    self._bind_parent_attribute('weather_widget', widget)
-
-            if widget is not None:
-                _ensure_thread_manager(widget, 'weather')
-
-        # Create media widget via factory
-        media_settings = widgets_config.get('media', {})
-        monitor_sel = media_settings.get('monitor', 'ALL')
-        if _show_on_this_monitor(monitor_sel):
-            if SettingsManager.to_bool(media_settings.get('enabled', False), False):
-                self.add_expected_overlay("media")
-            
-            media_widget = _reuse_existing_widget('media_widget', 'media')
-            if media_widget is None and media_factory:
-                media_widget = media_factory.create(
-                    self._parent, media_settings,
-                    shadows_config=shadows_config,
-                )
-                if media_widget:
-                    self.register_widget("media", media_widget)
-                    created['media_widget'] = media_widget
-                    self._bind_parent_attribute('media_widget', media_widget)
-
-            if media_widget is not None:
-                _ensure_thread_manager(media_widget, 'media')
-
-        # Create reddit widgets via factory (reddit2 inherits styling from reddit1)
-        for settings_key, attr_name in [('reddit', 'reddit_widget'), ('reddit2', 'reddit2_widget')]:
-            reddit_settings = widgets_config.get(settings_key, {})
-            monitor_sel = reddit_settings.get('monitor', 'ALL')
-            if not _show_on_this_monitor(monitor_sel):
-                continue
-            
-            if SettingsManager.to_bool(reddit_settings.get('enabled', False), False):
-                self.add_expected_overlay(settings_key)
-            
-            widget = _reuse_existing_widget(attr_name, settings_key)
-            if widget is None and reddit_factory:
-                widget = reddit_factory.create(
-                    self._parent, reddit_settings,
-                    settings_key=settings_key,
-                    base_reddit_settings=base_reddit_settings if settings_key == 'reddit2' else None,
-                    shadows_config=shadows_config,
-                )
-                if widget:
-                    self.register_widget(settings_key, widget)
-                    created[attr_name] = widget
-                    self._bind_parent_attribute(attr_name, widget)
-
-            if widget is not None:
-                _ensure_thread_manager(widget, settings_key)
-
-        # Create Imgur widget via factory
-        # Gated by SRPSS_ENABLE_DEV for experimental/broken features
-        import os
-        dev_features_enabled = os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
-        
-        if dev_features_enabled:
-            imgur_factory = self._factory_registry.get_factory("imgur")
-            imgur_settings = widgets_config.get('imgur', {})
-            monitor_sel = imgur_settings.get('monitor', 'ALL')
-            if _show_on_this_monitor(monitor_sel):
-                if SettingsManager.to_bool(imgur_settings.get('enabled', False), False):
-                    self.add_expected_overlay("imgur")
-                
-                widget = _reuse_existing_widget('imgur_widget', 'imgur')
-                if widget is None and imgur_factory:
-                    widget = imgur_factory.create(
-                        self._parent, imgur_settings,
-                    )
-                    if widget:
-                        self.register_widget("imgur", widget)
-                        created['imgur_widget'] = widget
-                        self._bind_parent_attribute('imgur_widget', widget)
-
-                if widget is not None:
-                    _ensure_thread_manager(widget, 'imgur')
-
-        # Gmail widget archived - see archive/gmail_feature/
-
-        # Create Spotify widgets (require media widget) - still use direct methods
-        # as they have complex media widget anchoring logic
-        media_widget = created.get('media_widget')
-        if media_widget:
-            # Spotify volume widget
-            vol_widget = self.create_spotify_volume_widget(
-                widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-            )
-            if vol_widget:
-                created['spotify_volume_widget'] = vol_widget
-                self._register_spotify_secondary_fade(vol_widget)
-            
-            # Spotify visualizer widget
-            vis_widget = self.create_spotify_visualizer_widget(
-                widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-            )
-            if vis_widget:
-                created['spotify_visualizer_widget'] = vis_widget
-                self._register_spotify_secondary_fade(vis_widget)
-
-            self._queue_spotify_visibility_sync(media_widget)
-
-        # NOW start all widgets - this ensures fade sync has complete expected overlay set
-        # All widgets are created and their expected overlays are registered before any
-        # widget calls request_overlay_fade_sync(), so they will all wait for each other.
-        state = self._fade_coordinator.describe()
-        logger.debug("[FADE_SYNC] Starting %d widgets with expected overlays: %s",
-                     len(created), sorted(state['participants']))
-        
-        for attr_name, widget in created.items():
-            if widget is None:
-                continue
-
-            started = False
-            # Prefer lifecycle-aware initialization/activation when available
-            # Check if widget is already active or initialized (reused from previous session)
-            is_already_active = (
-                hasattr(widget, "is_lifecycle_active") and 
-                callable(getattr(widget, "is_lifecycle_active")) and
-                widget.is_lifecycle_active()
-            )
-            is_already_initialized = (
-                hasattr(widget, "is_lifecycle_initialized") and 
-                callable(getattr(widget, "is_lifecycle_initialized")) and
-                widget.is_lifecycle_initialized()
-            )
-            
-            if is_already_active:
-                logger.debug("[LIFECYCLE] %s already active, skipping init/activate", attr_name)
-                started = True
-            elif is_already_initialized:
-                # Already initialized but not active - just activate, don't re-initialize
-                logger.debug("[LIFECYCLE] %s already initialized, skipping init", attr_name)
-                if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
-                    try:
-                        activated = widget.activate()
-                        started = started or bool(activated)
-                        logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
-                    except Exception as e:
-                        logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
-            else:
-                # New widget in CREATED state - need to initialize then activate
-                if hasattr(widget, "initialize") and callable(getattr(widget, "initialize")):
-                    try:
-                        # Double-check state to avoid warnings from reused widgets
-                        if hasattr(widget, "is_lifecycle_active") and callable(getattr(widget, "is_lifecycle_active")):
-                            if widget.is_lifecycle_active():
-                                logger.debug("[LIFECYCLE] %s already active (late check), skipping init/activate", attr_name)
-                                started = True
-                                continue
-                        if hasattr(widget, "is_lifecycle_initialized") and callable(getattr(widget, "is_lifecycle_initialized")):
-                            if widget.is_lifecycle_initialized():
-                                logger.debug("[LIFECYCLE] %s already initialized (late check), skipping init", attr_name)
-                                if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
-                                    try:
-                                        activated = widget.activate()
-                                        started = started or bool(activated)
-                                        logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
-                                    except Exception as e:
-                                        logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
-                                continue
-                        initialized = widget.initialize()
-                        logger.debug(f"[LIFECYCLE] {attr_name} initialize() returned {initialized}")
-                        if initialized and hasattr(widget, "activate") and callable(getattr(widget, "activate")):
-                            activated = widget.activate()
-                            started = started or bool(activated)
-                            logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
-                    except Exception as e:
-                        logger.debug("[LIFECYCLE] Failed to init/activate %s: %s", attr_name, e)
-
-            if not started and hasattr(widget, 'start') and callable(getattr(widget, 'start')):
-                try:
-                    widget.start()
-                except Exception as e:
-                    logger.debug("Failed to start %s: %s", attr_name, e)
-        
-        # CRITICAL: Raise widgets AFTER start() so fade coordination completes first
-        # This prevents widgets appearing before compositor is ready
-        for attr_name, widget in created.items():
-            if widget is not None:
-                try:
-                    widget.raise_()
-                    # Handle clock timezone labels
-                    if hasattr(widget, '_tz_label') and widget._tz_label:
-                        widget._tz_label.raise_()
-                except Exception as e:
-                    logger.debug("Failed to raise %s: %s", attr_name, e)
-
-        logger.info(f"Widget setup complete: {len(created)} widgets created and started via factories for screen {screen_index}")
-        return created
+        """Delegates to rendering.widget_setup_all."""
+        from rendering.widget_setup_all import setup_all_widgets
+        return setup_all_widgets(self, settings_manager, screen_index, thread_manager)
 
     def create_spotify_volume_widget(
         self,
@@ -1924,89 +1341,11 @@ class WidgetManager:
         thread_manager: Optional["ThreadManager"] = None,
         media_widget: Optional[MediaWidget] = None,
     ) -> Optional[SpotifyVolumeWidget]:
-        """Create and configure a Spotify volume widget."""
-        if media_widget is None:
-            return None
-        
-        media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
-        media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
-        spotify_volume_enabled = SettingsManager.to_bool(media_model.spotify_volume_enabled, True)
-        
-        media_monitor_sel = media_model.monitor
-        try:
-            show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            show_on_this = False
-        
-        if not (spotify_volume_enabled and show_on_this):
-            return None
-        
-        try:
-            vol = SpotifyVolumeWidget(self._parent)
-            
-            if thread_manager is not None and hasattr(vol, "set_thread_manager"):
-                try:
-                    vol.set_thread_manager(thread_manager)
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            try:
-                vol.set_shadow_config(shadows_config)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Set anchor to media widget for visibility gating
-            try:
-                if hasattr(vol, "set_anchor_media_widget"):
-                    vol.set_anchor_media_widget(media_widget)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Inherit media card background and border colours
-            bg_color_data = media_model.bg_color
-            bg_qcolor = parse_color_to_qcolor(bg_color_data)
-            border_color_data = media_model.border_color
-            border_opacity = media_model.border_opacity
-            try:
-                bo = float(border_opacity)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                bo = 0.8
-            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-            
-            try:
-                from PySide6.QtGui import QColor as _QColor
-                fill_color_data = media_model.spotify_volume_fill_color or [255, 255, 255, 230]
-                try:
-                    fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
-                    fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
-                    fill_color = _QColor(fr, fg, fb, fa)
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                    fill_color = _QColor(255, 255, 255, 230)
-                
-                if hasattr(vol, "set_colors"):
-                    vol.set_colors(track_bg=bg_qcolor, track_border=border_qcolor, fill=fill_color)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            self.register_widget("spotify_volume", vol)
-            # Add to expected overlays so it participates in coordinated fade
-            self.add_expected_overlay("spotify_volume")
-            self._bind_parent_attribute("spotify_volume_widget", vol)
-            if is_perf_metrics_enabled():
-                logger.info(
-                    "[SPOTIFY_VOL] Created volume widget (screen=%s, monitor=%s)",
-                    screen_index,
-                    media_monitor_sel,
-                )
-            # Note: start() and raise_() will be called in setup_all_widgets() loop
-            logger.debug("Spotify volume widget created, will start with coordinated fade")
-            return vol
-        except Exception as e:
-            logger.error("Failed to create Spotify volume widget: %s", e, exc_info=True)
-            return None
+        """Delegates to rendering.spotify_widget_creators."""
+        from rendering.spotify_widget_creators import create_spotify_volume_widget
+        return create_spotify_volume_widget(
+            self, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
+        )
 
     def create_spotify_visualizer_widget(
         self,
@@ -2016,177 +1355,8 @@ class WidgetManager:
         thread_manager: Optional["ThreadManager"] = None,
         media_widget: Optional[MediaWidget] = None,
     ) -> Optional[SpotifyVisualizerWidget]:
-        """Create and configure a Spotify visualizer widget."""
-        if media_widget is None:
-            return None
-        
-        media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
-        spotify_vis_settings = widgets_config.get('spotify_visualizer', {}) if isinstance(widgets_config, dict) else {}
-        model = SpotifyVisualizerSettings.from_mapping(spotify_vis_settings if isinstance(spotify_vis_settings, Mapping) else {})
-        spotify_vis_enabled = SettingsManager.to_bool(model.enabled, False)
-        
-        media_monitor_sel = media_settings.get('monitor', 'ALL')
-        try:
-            show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            show_on_this = False
-        
-        if not (spotify_vis_enabled and show_on_this):
-            return None
-        
-        self.add_expected_overlay("spotify_visualizer")
-
-        try:
-            bar_count = int(model.bar_count)
-            vis = SpotifyVisualizerWidget(self._parent, bar_count=bar_count)
-
-            self._log_spotify_vis_config("create", spotify_vis_settings)
-            if is_perf_metrics_enabled():
-                logger.info(
-                    "[SPOTIFY_VIS] Created visualizer widget (screen=%s, bar_count=%s, monitor=%s)",
-                    screen_index,
-                    bar_count,
-                    media_monitor_sel,
-                )
-            
-            # Preferred audio block size (0=auto)
-            try:
-                block_size = int(model.audio_block_size or 0)
-                if hasattr(vis, 'set_audio_block_size'):
-                    vis.set_audio_block_size(block_size)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # ThreadManager for animation tick scheduling
-            if thread_manager is not None and hasattr(vis, 'set_thread_manager'):
-                try:
-                    vis.set_thread_manager(thread_manager)
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Anchor geometry to media widget
-            try:
-                vis.set_anchor_media_widget(media_widget)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Card style inheritance from media widget
-            bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
-            bg_qcolor = parse_color_to_qcolor(bg_color_data)
-            try:
-                bg_opacity = float(media_settings.get('bg_opacity', 0.9))
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                bg_opacity = 0.9
-            border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
-            border_opacity = media_settings.get('border_opacity', 0.8)
-            try:
-                bo = float(border_opacity)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                bo = 0.8
-            border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-            show_background = SettingsManager.to_bool(media_settings.get('show_background', True), True)
-            
-            try:
-                vis.set_bar_style(
-                    bg_color=bg_qcolor,
-                    bg_opacity=bg_opacity,
-                    border_color=border_qcolor,
-                    border_width=2,
-                    show_background=show_background,
-                )
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Per-bar colours
-            from PySide6.QtGui import QColor as _QColor
-            try:
-                fill_color_data = spotify_vis_settings.get('bar_fill_color', [255, 255, 255, 230])
-                fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
-                fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
-                bar_fill_qcolor = _QColor(fr, fg, fb, fa)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                bar_fill_qcolor = _QColor(255, 255, 255, 230)
-            
-            try:
-                bar_border_color_data = spotify_vis_settings.get('bar_border_color', [255, 255, 255, 230])
-                br_r, br_g, br_b = bar_border_color_data[0], bar_border_color_data[1], bar_border_color_data[2]
-                base_alpha = bar_border_color_data[3] if len(bar_border_color_data) > 3 else 230
-                try:
-                    bar_bo = float(spotify_vis_settings.get('bar_border_opacity', 0.85))
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                    bar_bo = 0.85
-                bar_bo = max(0.0, min(1.0, bar_bo))
-                br_a = int(bar_bo * base_alpha)
-                bar_border_qcolor = _QColor(br_r, br_g, br_b, br_a)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                bar_border_qcolor = _QColor(255, 255, 255, 230)
-            
-            try:
-                vis.set_bar_colors(bar_fill_qcolor, bar_border_qcolor)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Ghosting configuration
-            try:
-                ghost_enabled = SettingsManager.to_bool(model.ghosting_enabled, True)
-                ghost_alpha = float(model.ghost_alpha)
-                ghost_decay = max(0.0, float(model.ghost_decay))
-                if hasattr(vis, 'set_ghost_config'):
-                    vis.set_ghost_config(ghost_enabled, ghost_alpha, ghost_decay)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Sensitivity configuration
-            try:
-                recommended = SettingsManager.to_bool(model.adaptive_sensitivity, True)
-                sens = max(0.25, min(2.5, float(model.sensitivity)))
-                if hasattr(vis, 'set_sensitivity_config'):
-                    vis.set_sensitivity_config(recommended, sens)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-            # Visualization mode (only spectrum supported)
-            try:
-                if hasattr(vis, 'set_visualization_mode'):
-                    from widgets.spotify_visualizer_widget import VisualizerMode
-                    vis.set_visualization_mode(VisualizerMode.SPECTRUM)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-            # Noise floor configuration
-            try:
-                dynamic_floor = SettingsManager.to_bool(model.dynamic_floor, True)
-                manual_floor = float(model.manual_floor)
-                if hasattr(vis, 'set_floor_config'):
-                    vis.set_floor_config(dynamic_floor, manual_floor)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-            # Shadow config
-            try:
-                vis.set_shadow_config(shadows_config)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            # Wire media state into visualizer
-            try:
-                if not getattr(vis, "_srpss_media_connected", False):
-                    media_widget.media_updated.connect(vis.handle_media_update)
-                    setattr(vis, "_srpss_media_connected", True)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            
-            self.register_widget("spotify_visualizer", vis)
-            # Note: start() and raise_() will be called in setup_all_widgets() loop
-            logger.debug("Spotify visualizer widget created: %d bars, will start with coordinated fade", bar_count)
-            self._bind_parent_attribute("spotify_visualizer_widget", vis)
-            return vis
-        except Exception as e:
-            logger.error("Failed to create Spotify visualizer widget: %s", e, exc_info=True)
-            return None
+        """Delegates to rendering.spotify_widget_creators."""
+        from rendering.spotify_widget_creators import create_spotify_visualizer_widget
+        return create_spotify_visualizer_widget(
+            self, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
+        )

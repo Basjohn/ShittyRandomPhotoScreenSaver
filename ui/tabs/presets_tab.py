@@ -16,7 +16,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 
 from core.logging.logger import get_logger
-from core.presets import (
+from core.settings.presets import (
     PRESET_DEFINITIONS,
     get_ordered_presets,
     get_preset_by_index,

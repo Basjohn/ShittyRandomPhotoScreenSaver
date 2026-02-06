@@ -22,32 +22,32 @@ from PySide6.QtWidgets import QWidget
 class TestSettingsIntegration:
     """Test settings initialization, validation, and persistence."""
     
-    def test_settings_manager_initialization(self):
+    def test_settings_manager_initialization(self, tmp_path):
         """SettingsManager should initialize properly."""
         from core.settings.settings_manager import SettingsManager
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         
         # Should be initialized
         assert sm is not None
         assert hasattr(sm, 'get')
         assert hasattr(sm, 'set')
     
-    def test_settings_defaults_loaded(self):
+    def test_settings_defaults_loaded(self, tmp_path):
         """Default settings should be loaded on initialization."""
         from core.settings.settings_manager import SettingsManager
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         
         # Check a few key defaults
         assert sm.get("timing.interval") is not None
         assert sm.get("display.mode") is not None
     
-    def test_settings_validate_and_repair_exists(self):
+    def test_settings_validate_and_repair_exists(self, tmp_path):
         """validate_and_repair method should exist."""
         from core.settings.settings_manager import SettingsManager
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         
         # Method should exist
         assert hasattr(sm, 'validate_and_repair')
@@ -56,11 +56,11 @@ class TestSettingsIntegration:
         repairs = sm.validate_and_repair()
         assert isinstance(repairs, dict)
     
-    def test_settings_type_coercion(self):
+    def test_settings_type_coercion(self, tmp_path):
         """Settings should properly coerce types."""
         from core.settings.settings_manager import SettingsManager
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         
         # to_bool should handle various inputs
         assert sm.to_bool(True, False) is True
@@ -79,7 +79,7 @@ class TestWidgetLifecycleIntegration:
     """Test widget creation, initialization, and cleanup."""
     
     @pytest.mark.qt
-    def test_widget_manager_creates_widgets(self, qt_app):
+    def test_widget_manager_creates_widgets(self, qt_app, tmp_path):
         """WidgetManager should create widgets based on settings."""
         from rendering.widget_manager import WidgetManager
         from core.settings.settings_manager import SettingsManager
@@ -87,7 +87,7 @@ class TestWidgetLifecycleIntegration:
         parent = QWidget()
         parent.resize(1920, 1080)
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         wm = WidgetManager(parent, sm)
         
         # Should have been initialized
@@ -96,7 +96,7 @@ class TestWidgetLifecycleIntegration:
         parent.deleteLater()
     
     @pytest.mark.qt
-    def test_widget_manager_cleanup(self, qt_app):
+    def test_widget_manager_cleanup(self, qt_app, tmp_path):
         """WidgetManager cleanup should not raise."""
         from rendering.widget_manager import WidgetManager
         from core.settings.settings_manager import SettingsManager
@@ -104,7 +104,7 @@ class TestWidgetLifecycleIntegration:
         parent = QWidget()
         parent.resize(1920, 1080)
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         wm = WidgetManager(parent, sm)
         
         # Cleanup should not raise
@@ -223,25 +223,25 @@ class TestResourceManagerIntegration:
 class TestBuildVariantParity:
     """Test MC vs normal build feature parity."""
     
-    def test_mc_build_detection_via_settings(self):
+    def test_mc_build_detection_via_settings(self, tmp_path):
         """MC build detection should work via settings."""
         from core.settings.settings_manager import SettingsManager
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         
-        # MC detection is done via organization name in QSettings
-        org = sm._settings.organizationName()
-        assert org is not None
+        # MC detection is done via argv / settings flag, not org name
+        # Settings manager should be functional
+        assert sm._settings is not None
     
-    def test_settings_organization_name(self):
-        """Settings should have organization name set."""
+    def test_settings_store_functional(self, tmp_path):
+        """Settings store should be functional (JsonSettingsStore)."""
         from core.settings.settings_manager import SettingsManager
         
-        sm = SettingsManager()
+        sm = SettingsManager(storage_base_dir=tmp_path)
         
-        # Organization name should be set
-        org = sm._settings.organizationName()
-        assert isinstance(org, str)
+        # Should be able to get/set values
+        sm.set('_test_key', 'test_value')
+        assert sm.get('_test_key') == 'test_value'
 
 
 # =============================================================================

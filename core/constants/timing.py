@@ -111,16 +111,6 @@ PERF_SNAPSHOT_INTERVAL_S = 5.0
 """Interval between periodic PERF snapshots."""
 
 # =============================================================================
-# Eco Mode
-# =============================================================================
-
-ECO_MODE_ACTIVATION_DELAY_MS = 500
-"""Delay before activating eco mode after window occlusion."""
-
-ECO_MODE_DEACTIVATION_DELAY_MS = 100
-"""Delay before deactivating eco mode after window visibility."""
-
-# =============================================================================
 # Thread and Process Management
 # =============================================================================
 
@@ -171,9 +161,6 @@ __all__ = [
     "PERF_SPIKE_THRESHOLD_MS",
     "PERF_SPIKE_LOG_COOLDOWN_S",
     "PERF_SNAPSHOT_INTERVAL_S",
-    # Eco mode
-    "ECO_MODE_ACTIVATION_DELAY_MS",
-    "ECO_MODE_DEACTIVATION_DELAY_MS",
     # Thread/process management
     "THREAD_JOIN_TIMEOUT_S",
     "PROCESS_GRACEFUL_SHUTDOWN_TIMEOUT_S",

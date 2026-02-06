@@ -167,7 +167,7 @@ class AdaptiveTimerStrategy:
     def start(self) -> bool:
         """Start adaptive timer (creates thread if not exists, wakes if sleeping)."""
         # Check if already running in any capacity
-        if self._task_future is not None and not self._task_future.done():
+        if self._task_future is not None:
             # Timer thread exists - just wake it
             current = self._state.load()
             if current != TimerState.RUNNING:
@@ -206,7 +206,7 @@ class AdaptiveTimerStrategy:
             )
             # Store task_id to track if thread is running
             self._task_id = task_id
-            self._task_future = None
+            self._task_future = task_id  # Truthy sentinel so is_active() works
             
             # Register with ResourceManager
             if self._resource_manager is not None:
@@ -274,9 +274,10 @@ class AdaptiveTimerStrategy:
         
         # Normal wait with timeout
         if self._task_future is not None:
+            # Wait for timer loop thread to exit via stop_event
             try:
                 max_wait = max(1.0, 2 * self._config.min_frame_time_ms / 1000.0)
-                self._task_future.result(timeout=max_wait)
+                self._stop_event.wait(timeout=max_wait)
             except Exception:
                 pass
             self._task_future = None

@@ -1198,6 +1198,8 @@ class WeatherWidget(BaseOverlayWidget):
         Args:
             data: Weather data from API
         """
+        if not Shiboken.isValid(self):
+            return
         # Cache data
         self._cached_data = data
         self._cache_time = datetime.now()
@@ -1239,6 +1241,8 @@ class WeatherWidget(BaseOverlayWidget):
         Args:
             error: Error message
         """
+        if not Shiboken.isValid(self):
+            return
         # Try to use cached data if available
         if self._cached_data:
             logger.warning(f"Fetch failed, using cached data: {error}")
@@ -1311,6 +1315,7 @@ class WeatherWidget(BaseOverlayWidget):
         timer.timeout.connect(self._on_retry_timeout)
         timer.start(delay_ms)
         self._retry_timer = timer
+        self._register_resource(timer, "weather retry timer")
 
     def _on_retry_timeout(self) -> None:
         self._retry_timer = None
@@ -1374,6 +1379,8 @@ class WeatherWidget(BaseOverlayWidget):
     
     def _update_display(self, data: Optional[Dict[str, Any]]) -> None:
         """Update widget display with weather data using new layout."""
+        if not Shiboken.isValid(self):
+            return
         if not data:
             self._city_label.setText("Weather: No Data")
             self._conditions_label.setText("")
@@ -1539,7 +1546,6 @@ class WeatherWidget(BaseOverlayWidget):
             logger.exception(f"Error updating weather display: {e}")
             # Check if Qt objects are still valid before accessing them
             try:
-                import Shiboken
                 if Shiboken.isValid(self._city_label):
                     self._city_label.setText("Weather: Error")
                 if Shiboken.isValid(self._conditions_label):
