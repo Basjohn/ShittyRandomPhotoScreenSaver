@@ -56,7 +56,19 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Media | core/media/media_controller.py | MediaController | GSMTC media state |
 | Media | core/media/spotify_volume.py | SpotifyVolumeController | pycaw volume control |
 | Eco Mode | core/eco_mode.py | EcoModeManager | MC build resource conservation |
-| Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting |
+| Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
+
+## RSS Image Source (`sources/rss/`)
+
+| Module | File | Key Classes | Purpose |
+|--------|------|-------------|---------|
+| Constants | sources/rss/constants.py | DEFAULT_RSS_FEEDS, SOURCE_PRIORITY | Feed URLs, priorities, rate limits, cache settings |
+| Cache | sources/rss/cache.py | RSSCache | Disk cache, startup loading, LRU eviction, ResourceManager |
+| Parser | sources/rss/parser.py | RSSParser, ParsedEntry | Stateless feed parsing (RSS/Flickr/Reddit), no network I/O |
+| Downloader | sources/rss/downloader.py | RSSDownloader | Network I/O, atomic write, domain rate limiting, shutdown-aware |
+| Health | sources/rss/health.py | FeedHealthTracker | Persistent feed health, exponential backoff |
+| Coordinator | sources/rss/coordinator.py | RSSCoordinator, RSSState | State machine, dynamic budget, orchestration |
+| Facade | sources/rss_source.py | RSSSource | Thin backward-compat wrapper around RSSCoordinator |
 
 ## Process Workers
 

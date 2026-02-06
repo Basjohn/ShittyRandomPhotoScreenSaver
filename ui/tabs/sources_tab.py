@@ -173,13 +173,16 @@ class SourcesTab(QWidget):
         self.clear_rss_cache_btn = QPushButton("Clear Cache")
         self.clear_rss_cache_btn.clicked.connect(self._on_clear_rss_cache_clicked)
         self.just_make_it_work_btn = QPushButton("Just Make It Work")
-        self.just_make_it_work_btn.setToolTip("This will clean the section and add working shit to it.")
+        self.just_make_it_work_btn.setToolTip("Reset to robust default feeds (Flickr, Wikimedia, Bing, NASA)")
         self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
         self.remove_rss_btn = QPushButton("Remove Selected")
         self.remove_rss_btn.clicked.connect(self._remove_rss)
+        self.remove_all_rss_btn = QPushButton("Remove All")
+        self.remove_all_rss_btn.clicked.connect(self._remove_all_rss)
         rss_buttons.addWidget(self.clear_rss_cache_btn)
         rss_buttons.addWidget(self.just_make_it_work_btn)
         rss_buttons.addWidget(self.remove_rss_btn)
+        rss_buttons.addWidget(self.remove_all_rss_btn)
         rss_buttons.addStretch()
         rss_layout.addLayout(rss_buttons)
         
@@ -371,6 +374,30 @@ class SourcesTab(QWidget):
                 self.sources_changed.emit()
                 logger.info(f"Removed RSS feed: {url}")
     
+    def _remove_all_rss(self) -> None:
+        """Remove all RSS feed sources."""
+        if self.rss_list.count() == 0:
+            return
+        
+        # Confirm with user using styled popup
+        from ui.styled_popup import StyledPopup
+        confirmed = StyledPopup.question(
+            self,
+            "Remove All Feeds",
+            f"Remove all {self.rss_list.count()} RSS feeds?",
+            yes_text="Yes",
+            no_text="No",
+            default_to_yes=False
+        )
+        
+        if confirmed:
+            self._settings.set('sources.rss_feeds', [])
+            self._settings.save()
+            self.rss_list.clear()
+            self._update_ratio_control_state()
+            self.sources_changed.emit()
+            logger.info("Removed all RSS feeds")
+    
     def _on_rss_save_toggled(self, state: int) -> None:
         """Handle RSS save-to-disk checkbox toggle."""
         enabled = state == 2  # Qt.CheckState.Checked
@@ -500,30 +527,22 @@ class SourcesTab(QWidget):
         """Reset RSS feeds to a curated, known-good set.
 
         This clears the on-disk RSS cache, wipes the current RSS feed
-        list, and replaces it with a curated set of image feeds.
+        list, and replaces it with the robust default feeds from RSSSource.
         
-        Feed order is important:
-        1. Non-Reddit sources first (NASA, Bing) - no rate limits
-        2. Reddit sources last - aggressive rate limiting requires delays
+        Uses DEFAULT_RSS_FEEDS from sources/rss_source.py:
+        - Flickr (7 feeds): No rate limits, diverse content
+        - Wikimedia (2 feeds): High quality, curated
+        - Bing: Daily wallpapers
+        - NASA: Space/science imagery
+        
+        NO Reddit feeds (cross-process rate limit issues with MC build).
+        Users can manually add Reddit feeds if desired.
         """
         self._clear_rss_cache()
 
-        # Non-Reddit sources first (no rate limiting, faster cache building)
-        # Then Reddit sources (rate limited, processed with delays)
-        curated_feeds = [
-            # === NON-REDDIT SOURCES (processed first, no rate limits) ===
-            "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",  # Bing daily (high quality)
-            "https://www.nasa.gov/feeds/iotd-feed",  # NASA Image of the Day
-            # === REDDIT SOURCES (processed last with staggered delays) ===
-            "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25",
-        ]
+        # Import DEFAULT_RSS_FEEDS from modular RSS package
+        from sources.rss.constants import DEFAULT_RSS_FEEDS
+        curated_feeds = list(DEFAULT_RSS_FEEDS.values())
 
         self._settings.set('sources.rss_feeds', curated_feeds)
         self._settings.save()

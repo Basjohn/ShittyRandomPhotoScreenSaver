@@ -119,6 +119,23 @@ Optional UI warmup: after a prefetch batch, convert the first cached `QImage` to
 
 Optional compute pre-scale: after prefetch, a compute-pool task may scale the first cached `QImage` to the primary display size and store it under a `"path|scaled:WxH"` cache key. This is a safe, removable optimization to reduce per-frame scaling cost without visual changes.
 
+## RSS Image Source Architecture
+
+The RSS system is split into focused modules under `sources/rss/`:
+
+- **constants.py**: Feed URLs, priorities, rate limits, cache settings (single source of truth).
+- **cache.py** (`RSSCache`): Disk cache with ResourceManager integration, startup loading, LRU eviction, image header validation.
+- **parser.py** (`RSSParser`): Stateless feed parsing — detects RSS/Atom vs Flickr JSON vs Reddit JSON, extracts image URLs and metadata into `ParsedEntry` objects. No network I/O.
+- **downloader.py** (`RSSDownloader`): All network I/O — RSS fetch (feedparser), JSON fetch (requests), image download with atomic write (temp→rename). Domain-based rate limiting, Reddit rate limiter coordination, shutdown-aware with interruptible waits.
+- **health.py** (`FeedHealthTracker`): Persistent feed health tracking with exponential backoff, auto-reset after 24h.
+- **coordinator.py** (`RSSCoordinator`): State machine (IDLE→LOADING→LOADED→ERROR), dynamic download budget (target 50 total images), orchestrates cache+parser+downloader+health. Provides `load_async()` (ThreadManager IO pool) and `load_sync()` APIs.
+
+**Key design decisions:**
+- No `time.sleep()` in coordinator or parser — interruptible waits live only in downloader.
+- Dynamic budget: `new_needed = max(0, TARGET_TOTAL_IMAGES - cached_count)`, distributed across feeds with per-feed cap of 3.
+- Sequential single-threaded feed processing — no locks needed for rate limiting state.
+- `sources/rss_source.py` retained as thin facade re-exporting constants and wrapping `RSSCoordinator` for backward compatibility.
+
 ## Caching and Prefetch
 - `ImageCache`: LRU with RLock, stores `QImage` or `QPixmap`, memory-bound by `max_memory_mb` and `max_items`.
 - `ImagePrefetcher`: uses ThreadManager IO pool to decode file paths into `QImage`, tracks inflight under lock, and populates cache.
@@ -280,9 +297,10 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
   - `sources.rss_save_to_disk` (bool): when true, new RSS images are mirrored into `sources.rss_save_directory` in addition to the temp cache.
   - `sources.rss_save_directory` (str): absolute path for permanent RSS copies.
   - `sources.rss_rotating_cache_size` (int, default 20): max RSS images to keep between sessions; controls initial load cap.
-  - `sources.rss_background_cap` (int, default 30): global cap on queued RSS/JSON images at runtime; enforced on initial load, async load, and background refresh.
+  - `sources.rss_background_cap` (int, default 35): global cap on queued RSS/JSON images at runtime; enforced on initial load, async load, and background refresh. Increased from 30 to 35 (Feb 2026).
   - `sources.rss_refresh_minutes` (int, default 10): background RSS refresh interval in minutes, clamped to at least 1 minute.
   - `sources.rss_stale_minutes` (int, default 30): TTL for RSS images; dynamically adjusted based on transition interval (5-15 min). Stale entries are only removed when a refresh successfully adds replacements.
+  - **RSS Rate Limiting** (Feb 2026): `RSSSource` implements domain-based rate limiting (15 requests/minute per domain) to prevent overwhelming any single source. Feed health is persisted to `%TEMP%/srpss_feed_health.json` across restarts, maintaining exponential backoff for failed feeds. Default feeds now include Flickr (7 feeds), Wikimedia (2 feeds), Bing, and NASA. **Reddit feeds removed from defaults** due to cross-process rate limit coordination issues (MC build + screensaver = separate `RedditRateLimiter` instances = unsafe). Users can manually add Reddit feeds; rate limiter remains active for user-added feeds.
  - Widgets:
   - `widgets.clock.*` (Clock 1): monitor ('ALL'|1|2|3), position, font, colour, timezone, background options, analogue-only controls (`show_numerals`, `analog_face_shadow`, and the new `analog_shadow_intense` toggle that doubles drop-shadow opacity/size for dramatic analogue lighting on large displays). **Visual Offset Alignment**: Analogue clocks without backgrounds use `_compute_analog_visual_offset()` to calculate precise offset from widget bounds to visual content (XII numeral or clock face edge), ensuring correct margin alignment with other widgets across all scenarios (with/without background, numerals, timezone).
   - `widgets.clock2.*`, `widgets.clock3.*` (Clock 2/3): same schema as Clock 1 with independent per-monitor/timezone configuration.
