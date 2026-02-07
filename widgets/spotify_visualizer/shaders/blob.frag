@@ -15,26 +15,32 @@ uniform float u_overall_energy;
 
 // Blob configuration
 uniform vec4 u_blob_color;
+uniform vec4 u_blob_glow_color;
+uniform vec4 u_blob_edge_color;
 uniform float u_blob_pulse;
+uniform float u_blob_width;  // (legacy, no longer used in shader — card width is widget-level)
+uniform float u_blob_size;   // 0.3..2.0  relative blob scale (default 1.0)
+uniform float u_blob_glow_intensity;  // 0..1  glow size/strength (default 0.5)
+uniform int u_blob_reactive_glow;  // 0 = static glow, 1 = energy-reactive
 
 // 2D SDF organic blob with audio-reactive deformation
 float blob_sdf(vec2 p, float time) {
-    float r = 0.28;
-    // Bass pulse — breathe the radius
-    r += u_bass_energy * 0.06 * u_blob_pulse;
+    float r = 0.28 * clamp(u_blob_size, 0.3, 2.0);
+    // Bass pulse — breathe the radius (+40% reactivity)
+    r += u_bass_energy * 0.084 * u_blob_pulse;
 
     float angle = atan(p.y, p.x);
     float dist = length(p);
 
-    // Organic deformation: layered sine waves driven by energy bands
+    // Organic deformation: layered sine waves driven by energy bands (+40%)
     float deform = 0.0;
-    deform += sin(angle * 3.0 + time * 1.5) * 0.04 * (0.3 + u_mid_energy * 0.7);
-    deform += sin(angle * 5.0 - time * 2.3) * 0.025 * (0.2 + u_mid_energy * 0.8);
-    deform += sin(angle * 7.0 + time * 3.1) * 0.015 * (0.1 + u_high_energy * 0.9);
-    deform += sin(angle * 11.0 - time * 4.7) * 0.008 * u_high_energy;
+    deform += sin(angle * 3.0 + time * 1.5) * 0.056 * (0.3 + u_mid_energy * 0.7);
+    deform += sin(angle * 5.0 - time * 2.3) * 0.035 * (0.2 + u_mid_energy * 0.8);
+    deform += sin(angle * 7.0 + time * 3.1) * 0.021 * (0.1 + u_high_energy * 0.9);
+    deform += sin(angle * 11.0 - time * 4.7) * 0.011 * u_high_energy;
 
-    // Overall energy wobble
-    deform += sin(angle * 2.0 + time * 0.8) * 0.02 * u_overall_energy;
+    // Overall energy wobble (+40%)
+    deform += sin(angle * 2.0 + time * 0.8) * 0.028 * u_overall_energy;
 
     return dist - r - deform;
 }
@@ -54,7 +60,6 @@ void main() {
     float fb_height = height * dpr;
     vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
 
-    // Margins matching the card inset
     float margin_x = 8.0;
     float margin_y = 6.0;
 
@@ -85,17 +90,29 @@ void main() {
     // Inner fill
     float fill_alpha = 1.0 - smoothstep(-0.02, 0.0, d);
 
-    // Edge highlight
+    // Edge highlight (respects edge colour alpha channel)
     float edge_alpha = 1.0 - smoothstep(0.0, 0.008, abs(d));
-    edge_alpha *= 0.8;
+    edge_alpha *= 0.8 * u_blob_edge_color.a;
 
     // Outer glow
-    float glow_sigma = 12.0 + u_overall_energy * 8.0;
-    float d_px = d * inner_height;  // distance in pixels
+    // Reactive: dramatic range from barely visible (silence) to intense (loud)
+    // Static: fixed moderate glow
+    float glow_sigma;
+    float glow_strength;
+    float gi = clamp(u_blob_glow_intensity, 0.0, 1.0);
+    if (u_blob_reactive_glow == 1) {
+        float e = u_overall_energy;
+        glow_sigma = (3.0 + gi * 20.0) + e * e * (20.0 + gi * 30.0);
+        glow_strength = (0.05 + gi * 0.35) + e * (0.3 + gi * 0.5);
+    } else {
+        glow_sigma = 4.0 + gi * 25.0;
+        glow_strength = 0.15 + gi * 0.6;
+    }
+    float d_px = d * inner_height;
     float glow_alpha = 0.0;
     if (d > 0.0 && glow_sigma > 0.0) {
         glow_alpha = exp(-(d_px * d_px) / (2.0 * glow_sigma * glow_sigma));
-        glow_alpha *= 0.5;
+        glow_alpha *= glow_strength;
     }
 
     float total_alpha = max(fill_alpha, max(edge_alpha, glow_alpha));
@@ -103,25 +120,25 @@ void main() {
         discard;
     }
 
-    // Colour blending
+    // Colour blending using configurable colours
     vec3 blob_rgb = u_blob_color.rgb;
-    // Bright core
-    vec3 core_rgb = mix(blob_rgb, vec3(1.0), 0.6);
-    // Edge uses blob colour with slight brightening
-    vec3 edge_rgb = mix(blob_rgb, vec3(1.0), 0.3);
+    vec3 edge_rgb = u_blob_edge_color.rgb;
+    vec3 glow_rgb = u_blob_glow_color.rgb;
+    // Bright core: blend fill toward white
+    vec3 core_rgb = mix(blob_rgb, vec3(1.0), 0.55);
 
     vec3 final_rgb;
     if (d < -0.02) {
-        // Deep inside: core colour with slight energy-reactive brightening
+        // Deep inside: core colour with energy-reactive brightening
         float depth = clamp(-d / 0.15, 0.0, 1.0);
         final_rgb = mix(blob_rgb, core_rgb, depth * (0.3 + u_overall_energy * 0.4));
     } else if (d < 0.0) {
-        // Near edge: transition from fill to edge highlight
+        // Near edge: transition from fill to edge highlight colour
         float t = 1.0 - clamp(-d / 0.02, 0.0, 1.0);
         final_rgb = mix(blob_rgb, edge_rgb, t);
     } else {
         // Outside: glow colour
-        final_rgb = blob_rgb;
+        final_rgb = glow_rgb;
     }
 
     fragColor = vec4(final_rgb, total_alpha * u_fade);

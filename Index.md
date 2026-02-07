@@ -256,10 +256,10 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Shader | File | Uniforms | Purpose |
 |--------|------|----------|---------|
 | Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha | Classic segmented bar analyzer (extracted verbatim from inline GLSL) |
-| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_glow_*, u_reactive_glow | Catmull-Rom spline waveform with SDF glow |
+| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color} | Catmull-Rom spline waveform with separate line/glow colors and multi-line mode (up to 3) |
 | Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity | Volumetric ray-marched starfield (Star Nest derivative) |
 | Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse | 2D SDF organic metaball with audio-reactive deformation |
-| Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_* | Parametric double-helix with depth shading and user-controllable glow |
+| Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
 
 ## Weather System
 

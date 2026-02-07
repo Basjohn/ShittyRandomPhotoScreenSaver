@@ -175,6 +175,15 @@ class _SpotifyBeatEngine(QObject):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start audio worker in shared engine", exc_info=True)
 
+    def force_stop(self) -> None:
+        """Unconditionally stop the audio worker regardless of ref count.
+        
+        Called during application shutdown to ensure audio capture threads
+        are terminated and the process can exit cleanly.
+        """
+        self._ref_count = 0
+        self._stop_worker()
+
     def _stop_worker(self) -> None:
         try:
             self._audio_worker.stop()

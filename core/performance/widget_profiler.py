@@ -184,7 +184,7 @@ def _record_sample(
     # Suppress widget perf logging when engine is not running (e.g., settings dialog open)
     # Check if we're in a screensaver context by looking for active engine state
     try:
-        from engine.screensaver import ScreensaverEngine
+        from engine.screensaver_engine import ScreensaverEngine
         if not ScreensaverEngine._is_engine_running():
             return
     except (ImportError, AttributeError):

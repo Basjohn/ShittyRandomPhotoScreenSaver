@@ -178,6 +178,16 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
         # Stop any pending image loads
         engine._loading_in_progress = False
 
+        # Force-stop shared beat engine audio worker to release audio threads
+        if exit_app:
+            try:
+                from widgets.spotify_visualizer.beat_engine import _global_beat_engine
+                if _global_beat_engine is not None:
+                    _global_beat_engine.force_stop()
+                    logger.info("Shared beat engine audio worker force-stopped")
+            except Exception as e:
+                logger.debug("Beat engine force-stop failed: %s", e)
+
         # Shutdown ProcessSupervisor and all workers
         if exit_app and engine._process_supervisor:
             logger.info("Shutting down ProcessSupervisor...")
@@ -191,9 +201,11 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
         if exit_app and engine.thread_manager:
             logger.info("Shutting down ThreadManager...")
             try:
-                # Use wait=False to avoid hanging on stuck threads
-                # Threads will exit on their own when they check _stop_event
-                engine.thread_manager.shutdown(wait=False)
+                # wait=True so non-daemon pool threads are joined.
+                # Active tasks were already cancelled above so this should
+                # complete quickly. Stuck threads would be killed by OS on
+                # process exit anyway, but joining avoids lingering processes.
+                engine.thread_manager.shutdown(wait=True)
                 logger.info("ThreadManager shutdown complete")
             except Exception as e:
                 logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)

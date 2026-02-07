@@ -81,16 +81,37 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._glow_enabled: bool = True
         self._glow_intensity: float = 0.5
         self._glow_color: QColor = QColor(0, 200, 255, 230)
+        self._line_color: QColor = QColor(255, 255, 255, 255)
         self._reactive_glow: bool = True
+        self._osc_sensitivity: float = 3.0
+        self._osc_smoothing: float = 0.7
+
+        # Oscilloscope multi-line
+        self._osc_line_count: int = 1
+        self._osc_line2_color: QColor = QColor(255, 120, 50, 230)
+        self._osc_line2_glow_color: QColor = QColor(255, 120, 50, 180)
+        self._osc_line3_color: QColor = QColor(50, 255, 120, 230)
+        self._osc_line3_glow_color: QColor = QColor(50, 255, 120, 180)
 
         # Starfield settings
         self._star_density: float = 1.0
         self._travel_speed: float = 0.5
         self._star_reactivity: float = 1.0
+        self._starfield_travel_time: float = 0.0  # CPU-accumulated travel (monotonic, never reverses)
+        self._nebula_tint1: QColor = QColor(20, 40, 120)   # first nebula colour
+        self._nebula_tint2: QColor = QColor(80, 20, 100)    # second nebula colour
+        self._nebula_cycle_speed: float = 0.3               # colour cycle speed (0..1)
 
         # Blob settings
         self._blob_color: QColor = QColor(0, 180, 255, 230)
+        self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
+        self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
         self._blob_pulse: float = 1.0
+        self._blob_width: float = 1.0
+        self._blob_size: float = 1.0
+        self._blob_glow_intensity: float = 0.5
+        self._blob_reactive_glow: bool = True
+        self._osc_speed: float = 1.0
 
         # Helix settings
         self._helix_turns: int = 4
@@ -98,6 +119,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._helix_speed: float = 1.0
         self._helix_glow_enabled: bool = True
         self._helix_glow_intensity: float = 0.5
+        self._helix_glow_color: QColor = QColor(0, 200, 255, 180)
+        self._helix_reactive_glow: bool = True
 
         # Ghosting configuration – whether trailing segments are drawn and
         # how strong they appear relative to the main bar border colour. The
@@ -166,16 +189,36 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         glow_intensity: float = 0.5,
         glow_color: QColor | None = None,
         reactive_glow: bool = True,
+        osc_sensitivity: float = 3.0,
+        osc_smoothing: float = 0.7,
         star_density: float = 1.0,
         travel_speed: float = 0.5,
         star_reactivity: float = 1.0,
+        nebula_tint1: QColor | None = None,
+        nebula_tint2: QColor | None = None,
+        nebula_cycle_speed: float = 0.3,
         blob_color: QColor | None = None,
+        blob_glow_color: QColor | None = None,
+        blob_edge_color: QColor | None = None,
         blob_pulse: float = 1.0,
+        blob_width: float = 1.0,
+        blob_size: float = 1.0,
+        blob_glow_intensity: float = 0.5,
+        blob_reactive_glow: bool = True,
+        osc_speed: float = 1.0,
         helix_turns: int = 4,
         helix_double: bool = True,
         helix_speed: float = 1.0,
         helix_glow_enabled: bool = True,
         helix_glow_intensity: float = 0.5,
+        helix_glow_color: QColor | None = None,
+        helix_reactive_glow: bool = True,
+        line_color: QColor | None = None,
+        osc_line_count: int = 1,
+        osc_line2_color: QColor | None = None,
+        osc_line2_glow_color: QColor | None = None,
+        osc_line3_color: QColor | None = None,
+        osc_line3_glow_color: QColor | None = None,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -204,11 +247,28 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             dt = now_ts - self._last_time_ts
             if 0.0 < dt < 1.0:  # sanity clamp
                 self._accumulated_time += dt
+                # Starfield: integrate speed*dt so travel is monotonic (never reverses)
+                if self._vis_mode == 'starfield' and energy_bands is not None:
+                    bass = getattr(energy_bands, 'bass', 0.0)
+                    base_spd = max(0.08, self._travel_speed)
+                    spd = base_spd + bass * self._star_reactivity * 0.4
+                    self._starfield_travel_time += dt * spd
         self._last_time_ts = now_ts
 
-        # Store waveform data (oscilloscope)
+        # Store waveform data (oscilloscope) with temporal smoothing via osc_speed
         if waveform is not None:
-            self._waveform = list(waveform)
+            new_wf = list(waveform)
+            speed = self._osc_speed
+            if speed < 0.99 and len(self._waveform) == len(new_wf) and len(new_wf) > 0:
+                # Blend: low speed = slow change, high speed = instant update
+                # alpha = speed^2 makes low values feel genuinely slow
+                alpha = speed * speed
+                self._waveform = [
+                    old * (1.0 - alpha) + new * alpha
+                    for old, new in zip(self._waveform, new_wf)
+                ]
+            else:
+                self._waveform = new_wf
             self._waveform_count = len(self._waveform)
 
         # Store energy bands (starfield / blob / helix)
@@ -220,17 +280,46 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._glow_intensity = max(0.0, float(glow_intensity))
         if glow_color is not None:
             self._glow_color = QColor(glow_color)
+        if line_color is not None:
+            self._line_color = QColor(line_color)
         self._reactive_glow = bool(reactive_glow)
+        self._osc_sensitivity = max(0.5, min(10.0, float(osc_sensitivity)))
+        self._osc_smoothing = max(0.0, min(1.0, float(osc_smoothing)))
+
+        # Multi-line oscilloscope
+        self._osc_line_count = max(1, min(3, int(osc_line_count)))
+        if osc_line2_color is not None:
+            self._osc_line2_color = QColor(osc_line2_color)
+        if osc_line2_glow_color is not None:
+            self._osc_line2_glow_color = QColor(osc_line2_glow_color)
+        if osc_line3_color is not None:
+            self._osc_line3_color = QColor(osc_line3_color)
+        if osc_line3_glow_color is not None:
+            self._osc_line3_glow_color = QColor(osc_line3_glow_color)
 
         # Starfield settings
         self._star_density = max(0.1, float(star_density))
         self._travel_speed = max(0.0, float(travel_speed))
         self._star_reactivity = max(0.0, float(star_reactivity))
+        if nebula_tint1 is not None:
+            self._nebula_tint1 = QColor(nebula_tint1) if not isinstance(nebula_tint1, QColor) else nebula_tint1
+        if nebula_tint2 is not None:
+            self._nebula_tint2 = QColor(nebula_tint2) if not isinstance(nebula_tint2, QColor) else nebula_tint2
+        self._nebula_cycle_speed = max(0.0, min(1.0, float(nebula_cycle_speed)))
 
         # Blob settings
         if blob_color is not None:
             self._blob_color = QColor(blob_color)
+        if blob_glow_color is not None:
+            self._blob_glow_color = QColor(blob_glow_color)
+        if blob_edge_color is not None:
+            self._blob_edge_color = QColor(blob_edge_color)
         self._blob_pulse = max(0.0, float(blob_pulse))
+        self._blob_width = max(0.1, min(1.0, float(blob_width)))
+        self._blob_size = max(0.3, min(2.0, float(blob_size)))
+        self._blob_glow_intensity = max(0.0, min(1.0, float(blob_glow_intensity)))
+        self._blob_reactive_glow = bool(blob_reactive_glow)
+        self._osc_speed = max(0.01, min(1.0, float(osc_speed)))
 
         # Helix settings
         self._helix_turns = max(2, int(helix_turns))
@@ -238,6 +327,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._helix_speed = max(0.0, float(helix_speed))
         self._helix_glow_enabled = bool(helix_glow_enabled)
         self._helix_glow_intensity = max(0.0, float(helix_glow_intensity))
+        if helix_glow_color is not None:
+            self._helix_glow_color = QColor(helix_glow_color)
+        self._helix_reactive_glow = bool(helix_reactive_glow)
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -618,10 +710,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_waveform", "u_waveform_count",
                     "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
                     "u_glow_enabled", "u_glow_intensity", "u_glow_color", "u_reactive_glow",
+                    "u_sensitivity", "u_smoothing",
                     "u_star_density", "u_travel_speed", "u_star_reactivity",
-                    "u_blob_color", "u_blob_pulse",
+                    "u_travel_time", "u_nebula_tint1", "u_nebula_tint2", "u_nebula_cycle_speed",
+                    "u_blob_color", "u_blob_glow_color", "u_blob_edge_color",
+                    "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_reactive_glow",
+                    "u_osc_speed",
                     "u_helix_turns", "u_helix_double", "u_helix_speed",
                     "u_helix_glow_enabled", "u_helix_glow_intensity",
+                    "u_helix_glow_color", "u_helix_reactive_glow",
+                    "u_line_color", "u_line_count",
+                    "u_line2_color", "u_line2_glow_color",
+                    "u_line3_color", "u_line3_glow_color",
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
 
@@ -880,6 +980,34 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_reactive_glow", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._reactive_glow else 0)
+                loc = u.get("u_sensitivity", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._osc_sensitivity))
+                loc = u.get("u_smoothing", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._osc_smoothing))
+
+                # Line colour (separate from glow)
+                loc = u.get("u_line_color", -1)
+                if loc >= 0:
+                    lc = self._line_color
+                    _gl.glUniform4f(loc, float(lc.redF()), float(lc.greenF()),
+                                    float(lc.blueF()), float(lc.alphaF()))
+
+                # Multi-line uniforms
+                loc = u.get("u_line_count", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, self._osc_line_count)
+                for uname, qc in (
+                    ("u_line2_color", self._osc_line2_color),
+                    ("u_line2_glow_color", self._osc_line2_glow_color),
+                    ("u_line3_color", self._osc_line3_color),
+                    ("u_line3_glow_color", self._osc_line3_glow_color),
+                ):
+                    loc = u.get(uname, -1)
+                    if loc >= 0:
+                        _gl.glUniform4f(loc, float(qc.redF()), float(qc.greenF()),
+                                        float(qc.blueF()), float(qc.alphaF()))
 
             # --- Energy band uniforms (oscilloscope, starfield, blob, helix) ---
             if mode in ('oscilloscope', 'starfield', 'blob', 'helix'):
@@ -908,6 +1036,20 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_star_reactivity", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._star_reactivity))
+                loc = u.get("u_travel_time", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._starfield_travel_time))
+                loc = u.get("u_nebula_tint1", -1)
+                if loc >= 0:
+                    nt1 = self._nebula_tint1
+                    _gl.glUniform3f(loc, float(nt1.redF()), float(nt1.greenF()), float(nt1.blueF()))
+                loc = u.get("u_nebula_tint2", -1)
+                if loc >= 0:
+                    nt2 = self._nebula_tint2
+                    _gl.glUniform3f(loc, float(nt2.redF()), float(nt2.greenF()), float(nt2.blueF()))
+                loc = u.get("u_nebula_cycle_speed", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._nebula_cycle_speed))
 
             # --- Blob uniforms ---
             if mode == 'blob':
@@ -916,9 +1058,37 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     bc = self._blob_color
                     _gl.glUniform4f(loc, float(bc.redF()), float(bc.greenF()),
                                     float(bc.blueF()), float(bc.alphaF()))
+                loc = u.get("u_blob_glow_color", -1)
+                if loc >= 0:
+                    bgc = self._blob_glow_color
+                    _gl.glUniform4f(loc, float(bgc.redF()), float(bgc.greenF()),
+                                    float(bgc.blueF()), float(bgc.alphaF()))
+                loc = u.get("u_blob_edge_color", -1)
+                if loc >= 0:
+                    bec = self._blob_edge_color
+                    _gl.glUniform4f(loc, float(bec.redF()), float(bec.greenF()),
+                                    float(bec.blueF()), float(bec.alphaF()))
                 loc = u.get("u_blob_pulse", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_pulse))
+                loc = u.get("u_blob_width", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_width))
+                loc = u.get("u_blob_size", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_size))
+                loc = u.get("u_blob_glow_intensity", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_glow_intensity))
+                loc = u.get("u_blob_reactive_glow", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._blob_reactive_glow else 0)
+
+            # --- Oscilloscope speed ---
+            if mode == 'oscilloscope':
+                loc = u.get("u_osc_speed", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._osc_speed))
 
             # --- Helix uniforms ---
             if mode == 'helix':
@@ -937,6 +1107,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_helix_glow_intensity", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._helix_glow_intensity))
+                loc = u.get("u_helix_glow_color", -1)
+                if loc >= 0:
+                    hgc = self._helix_glow_color
+                    _gl.glUniform4f(loc, float(hgc.redF()), float(hgc.greenF()),
+                                    float(hgc.blueF()), float(hgc.alphaF()))
+                loc = u.get("u_helix_reactive_glow", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._helix_reactive_glow else 0)
 
             # --- Draw ---
             _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)

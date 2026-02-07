@@ -225,33 +225,7 @@ def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:
         matte_top.setAlpha(min(255, int(base_color.alpha() * 0.95) + 30))
         matte_bottom.setAlpha(min(255, int(base_color.alpha() * 0.85)))
 
-        # 3D slab effect: filled darker border 4px right/4px down, with light shadow
-        if widget._slab_effect_enabled:
-            shadow_offset_x = 4
-            shadow_offset_y = 4
-            slab_rect = row_rect.adjusted(shadow_offset_x, shadow_offset_y, shadow_offset_x, shadow_offset_y)
-
-            slab_matte_top = QColor(matte_top).darker(115)
-            slab_matte_bottom = QColor(matte_bottom).darker(115)
-
-            shadow_color = QColor(0, 0, 0, 40)
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(shadow_color)
-            shadow_rect = slab_rect.adjusted(-2, -2, 2, 2)
-            painter.drawRoundedRect(shadow_rect, widget._controls_row_radius + 1, widget._controls_row_radius + 1)
-
-            slab_gradient = QLinearGradient(slab_rect.topLeft(), slab_rect.bottomLeft())
-            slab_gradient.setColorAt(0.0, slab_matte_top)
-            slab_gradient.setColorAt(1.0, slab_matte_bottom)
-            painter.setBrush(slab_gradient)
-            painter.drawRoundedRect(slab_rect, widget._controls_row_radius, widget._controls_row_radius)
-
-            slab_outline = QColor(255, 255, 255, widget._controls_row_outline_alpha).darker(110)
-            painter.setPen(slab_outline)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRoundedRect(slab_rect, widget._controls_row_radius, widget._controls_row_radius)
-
-        # Main gradient fill (drawn on top of shadow)
+        # Main gradient fill
         gradient = QLinearGradient(row_rect.topLeft(), row_rect.bottomLeft())
         gradient.setColorAt(0.0, matte_top)
         gradient.setColorAt(1.0, matte_bottom)

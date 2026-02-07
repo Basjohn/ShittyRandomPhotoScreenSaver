@@ -592,6 +592,101 @@ class WidgetsTab(QWidget):
             self._spotify_vis_border_color = color
             self._save_settings()
 
+    def _choose_osc_line_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_osc_line_color', QColor(255, 255, 255, 255)),
+            self, "Choose Oscilloscope Line Color")
+        if color is not None:
+            self._osc_line_color = color
+            self._save_settings()
+
+    def _choose_osc_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_osc_glow_color', QColor(0, 200, 255, 230)),
+            self, "Choose Oscilloscope Glow Color")
+        if color is not None:
+            self._osc_glow_color = color
+            self._save_settings()
+
+    def _choose_osc_line2_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_osc_line2_color', QColor(255, 120, 50, 230)),
+            self, "Choose Line 2 Color")
+        if color is not None:
+            self._osc_line2_color = color
+            self._save_settings()
+
+    def _choose_osc_line2_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_osc_line2_glow_color', QColor(255, 120, 50, 180)),
+            self, "Choose Line 2 Glow Color")
+        if color is not None:
+            self._osc_line2_glow_color = color
+            self._save_settings()
+
+    def _choose_osc_line3_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_osc_line3_color', QColor(50, 255, 120, 230)),
+            self, "Choose Line 3 Color")
+        if color is not None:
+            self._osc_line3_color = color
+            self._save_settings()
+
+    def _choose_osc_line3_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_osc_line3_glow_color', QColor(50, 255, 120, 180)),
+            self, "Choose Line 3 Glow Color")
+        if color is not None:
+            self._osc_line3_glow_color = color
+            self._save_settings()
+
+    def _choose_blob_fill_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_blob_color', QColor(0, 180, 255, 230)),
+            self, "Choose Blob Fill Color")
+        if color is not None:
+            self._blob_color = color
+            self._save_settings()
+
+    def _choose_blob_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_blob_glow_color', QColor(0, 140, 255, 180)),
+            self, "Choose Blob Glow Color")
+        if color is not None:
+            self._blob_glow_color = color
+            self._save_settings()
+
+    def _choose_blob_edge_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_blob_edge_color', QColor(100, 220, 255, 230)),
+            self, "Choose Blob Edge Color")
+        if color is not None:
+            self._blob_edge_color = color
+            self._save_settings()
+
+    def _choose_helix_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_helix_glow_color', QColor(0, 200, 255, 180)),
+            self, "Choose Helix Glow Color")
+        if color is not None:
+            self._helix_glow_color = color
+
+    def _choose_nebula_tint1(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_nebula_tint1', QColor(20, 40, 120)),
+            self, "Choose Nebula Tint 1")
+        if color is not None:
+            self._nebula_tint1 = color
+            self._save_settings()
+
+    def _choose_nebula_tint2(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_nebula_tint2', QColor(80, 20, 100)),
+            self, "Choose Nebula Tint 2")
+        if color is not None:
+            self._nebula_tint2 = color
+            self._save_settings()
+
     def _choose_reddit_color(self) -> None:
         """Choose Reddit text color."""
         color = StyledColorPicker.get_color(self._reddit_color, self, "Choose Reddit Color")

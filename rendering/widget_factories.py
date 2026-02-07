@@ -470,11 +470,6 @@ class MediaWidgetFactory(WidgetFactory):
             if hasattr(widget, 'set_show_header_frame'):
                 widget.set_show_header_frame(show_header)
             
-            # Slab effect
-            slab_effect = SettingsManager.to_bool(model.slab_effect_enabled, False)
-            if hasattr(widget, 'set_slab_effect_enabled'):
-                widget.set_slab_effect_enabled(slab_effect)
-            
             # Shadow config
             if shadows_config:
                 try:

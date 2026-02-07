@@ -214,7 +214,6 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_row_shadow_alpha: int = 60
         self._controls_row_outline_alpha: int = 65
         self._controls_layout_cache: Optional[dict[str, object]] = None
-        self._slab_effect_enabled: bool = False  # Slab Effect - Experimental
         self._last_display_update_ts: float = 0.0
         self._skipped_identity_updates: int = 0
         self._max_identity_skip: int = 4
@@ -633,10 +632,6 @@ class MediaWidget(BaseOverlayWidget):
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
                 self._safe_update()
 
-    def set_slab_effect_enabled(self, enabled: bool) -> None:
-        """Enable or disable the 3D slab effect on the controls row."""
-        self._slab_effect_enabled = bool(enabled)
-        self._safe_update()
 
     def _invalidate_controls_layout(self) -> None:
         """Clear cached transport controls geometry."""

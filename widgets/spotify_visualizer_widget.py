@@ -95,16 +95,33 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_glow_enabled: bool = True
         self._osc_glow_intensity: float = 0.5
         self._osc_glow_color: QColor = QColor(0, 200, 255, 230)
+        self._osc_line_color: QColor = QColor(255, 255, 255, 255)
         self._osc_reactive_glow: bool = True
+        self._osc_sensitivity: float = 3.0
+        self._osc_smoothing: float = 0.7
+        self._osc_line_count: int = 1
+        self._osc_line2_color: QColor = QColor(255, 120, 50, 230)
+        self._osc_line2_glow_color: QColor = QColor(255, 120, 50, 180)
+        self._osc_line3_color: QColor = QColor(50, 255, 120, 230)
+        self._osc_line3_glow_color: QColor = QColor(50, 255, 120, 180)
 
         # Starfield settings
         self._star_density: float = 1.0
         self._star_travel_speed: float = 0.5
         self._star_reactivity: float = 1.0
+        self._nebula_tint1: QColor = QColor(20, 40, 120)
+        self._nebula_tint2: QColor = QColor(80, 20, 100)
+        self._nebula_cycle_speed: float = 0.3
 
         # Blob settings
         self._blob_color: QColor = QColor(0, 180, 255, 230)
+        self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
+        self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
         self._blob_pulse: float = 1.0
+        self._blob_width: float = 1.0
+        self._blob_size: float = 1.0
+        self._blob_glow_intensity: float = 0.5
+        self._blob_reactive_glow: bool = True
 
         # Helix settings
         self._helix_turns: int = 4
@@ -114,12 +131,16 @@ class SpotifyVisualizerWidget(QWidget):
         # Helix glow settings
         self._helix_glow_enabled: bool = True
         self._helix_glow_intensity: float = 0.5
+        self._helix_glow_color: QColor = QColor(0, 200, 255, 180)
+        self._helix_reactive_glow: bool = True
 
         # Card height expansion (per-mode growth factors, user-customizable)
         self._base_height: int = 80
+        self._spectrum_growth: float = 1.0
         self._starfield_growth: float = 2.0
         self._blob_growth: float = 2.5
         self._helix_growth: float = 2.0
+        self._osc_speed: float = 1.0
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -357,6 +378,32 @@ class SpotifyVisualizerWidget(QWidget):
                 self._osc_glow_color = QColor(*c)
         if 'osc_reactive_glow' in kwargs:
             self._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
+        if 'osc_sensitivity' in kwargs:
+            self._osc_sensitivity = max(0.5, min(10.0, float(kwargs['osc_sensitivity'])))
+        if 'osc_smoothing' in kwargs:
+            self._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
+        if 'osc_line_color' in kwargs:
+            c = kwargs['osc_line_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._osc_line_color = QColor(*c)
+        if 'osc_line_count' in kwargs:
+            self._osc_line_count = max(1, min(3, int(kwargs['osc_line_count'])))
+        if 'osc_line2_color' in kwargs:
+            c = kwargs['osc_line2_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._osc_line2_color = QColor(*c)
+        if 'osc_line2_glow_color' in kwargs:
+            c = kwargs['osc_line2_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._osc_line2_glow_color = QColor(*c)
+        if 'osc_line3_color' in kwargs:
+            c = kwargs['osc_line3_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._osc_line3_color = QColor(*c)
+        if 'osc_line3_glow_color' in kwargs:
+            c = kwargs['osc_line3_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._osc_line3_glow_color = QColor(*c)
 
         # Starfield
         if 'star_travel_speed' in kwargs:
@@ -365,14 +412,40 @@ class SpotifyVisualizerWidget(QWidget):
             self._star_reactivity = max(0.0, float(kwargs['star_reactivity']))
         if 'star_density' in kwargs:
             self._star_density = max(0.1, float(kwargs['star_density']))
+        if 'nebula_tint1' in kwargs:
+            c = kwargs['nebula_tint1']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._nebula_tint1 = QColor(c[0], c[1], c[2])
+        if 'nebula_tint2' in kwargs:
+            c = kwargs['nebula_tint2']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._nebula_tint2 = QColor(c[0], c[1], c[2])
+        if 'nebula_cycle_speed' in kwargs:
+            self._nebula_cycle_speed = max(0.0, min(1.0, float(kwargs['nebula_cycle_speed'])))
 
         # Blob
         if 'blob_color' in kwargs:
             c = kwargs['blob_color']
             if isinstance(c, (list, tuple)) and len(c) >= 3:
                 self._blob_color = QColor(*c)
+        if 'blob_glow_color' in kwargs:
+            c = kwargs['blob_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._blob_glow_color = QColor(*c)
+        if 'blob_edge_color' in kwargs:
+            c = kwargs['blob_edge_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._blob_edge_color = QColor(*c)
         if 'blob_pulse' in kwargs:
             self._blob_pulse = max(0.0, float(kwargs['blob_pulse']))
+        if 'blob_width' in kwargs:
+            self._blob_width = max(0.1, min(1.0, float(kwargs['blob_width'])))
+        if 'blob_size' in kwargs:
+            self._blob_size = max(0.3, min(2.0, float(kwargs['blob_size'])))
+        if 'blob_glow_intensity' in kwargs:
+            self._blob_glow_intensity = max(0.0, min(1.0, float(kwargs['blob_glow_intensity'])))
+        if 'blob_reactive_glow' in kwargs:
+            self._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
 
         # Helix
         if 'helix_turns' in kwargs:
@@ -387,14 +460,24 @@ class SpotifyVisualizerWidget(QWidget):
             self._helix_glow_enabled = bool(kwargs['helix_glow_enabled'])
         if 'helix_glow_intensity' in kwargs:
             self._helix_glow_intensity = max(0.0, float(kwargs['helix_glow_intensity']))
+        if 'helix_glow_color' in kwargs:
+            c = kwargs['helix_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._helix_glow_color = QColor(*c)
+        if 'helix_reactive_glow' in kwargs:
+            self._helix_reactive_glow = bool(kwargs['helix_reactive_glow'])
 
         # Height growth factors
+        if 'spectrum_growth' in kwargs:
+            self._spectrum_growth = max(0.5, min(5.0, float(kwargs['spectrum_growth'])))
         if 'starfield_growth' in kwargs:
             self._starfield_growth = max(0.5, min(5.0, float(kwargs['starfield_growth'])))
         if 'blob_growth' in kwargs:
             self._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
         if 'helix_growth' in kwargs:
             self._helix_growth = max(0.5, min(5.0, float(kwargs['helix_growth'])))
+        if 'osc_speed' in kwargs:
+            self._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
 
         # Update widget height if mode changed
         self._apply_preferred_height()
@@ -406,6 +489,7 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.card_height import preferred_height
         mode = self._vis_mode_str
         growth = {
+            'spectrum': self._spectrum_growth,
             'starfield': self._starfield_growth,
             'blob': self._blob_growth,
             'helix': self._helix_growth,
@@ -421,7 +505,11 @@ class SpotifyVisualizerWidget(QWidget):
         minimum height from the growth factor.
         """
         mode = self._vis_mode_str
-        if mode in ('spectrum', 'oscilloscope'):
+        growth = {
+            'spectrum': self._spectrum_growth,
+            'oscilloscope': 1.0,
+        }.get(mode)
+        if growth is not None and growth <= 1.0:
             # Let the positioning system determine height
             self.setMinimumHeight(0)
             self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
@@ -1299,16 +1387,36 @@ class SpotifyVisualizerWidget(QWidget):
                     extra['glow_intensity'] = self._osc_glow_intensity
                     extra['glow_color'] = self._osc_glow_color
                     extra['reactive_glow'] = self._osc_reactive_glow
+                    extra['osc_sensitivity'] = self._osc_sensitivity
+                    extra['osc_smoothing'] = self._osc_smoothing
                     extra['star_density'] = self._star_density
                     extra['travel_speed'] = self._star_travel_speed
                     extra['star_reactivity'] = self._star_reactivity
+                    extra['nebula_tint1'] = self._nebula_tint1
+                    extra['nebula_tint2'] = self._nebula_tint2
+                    extra['nebula_cycle_speed'] = self._nebula_cycle_speed
                     extra['blob_color'] = self._blob_color
+                    extra['blob_glow_color'] = self._blob_glow_color
+                    extra['blob_edge_color'] = self._blob_edge_color
                     extra['blob_pulse'] = self._blob_pulse
+                    extra['blob_width'] = self._blob_width
+                    extra['blob_size'] = self._blob_size
+                    extra['blob_glow_intensity'] = self._blob_glow_intensity
+                    extra['blob_reactive_glow'] = self._blob_reactive_glow
+                    extra['osc_speed'] = self._osc_speed
                     extra['helix_turns'] = self._helix_turns
                     extra['helix_double'] = self._helix_double
                     extra['helix_speed'] = self._helix_speed
                     extra['helix_glow_enabled'] = self._helix_glow_enabled
                     extra['helix_glow_intensity'] = self._helix_glow_intensity
+                    extra['helix_glow_color'] = self._helix_glow_color
+                    extra['helix_reactive_glow'] = self._helix_reactive_glow
+                    extra['line_color'] = self._osc_line_color
+                    extra['osc_line_count'] = self._osc_line_count
+                    extra['osc_line2_color'] = self._osc_line2_color
+                    extra['osc_line2_glow_color'] = self._osc_line2_glow_color
+                    extra['osc_line3_color'] = self._osc_line3_color
+                    extra['osc_line3_glow_color'] = self._osc_line3_glow_color
 
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),

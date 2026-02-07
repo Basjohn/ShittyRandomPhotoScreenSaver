@@ -24,6 +24,30 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _qcolor_to_list(qc, fallback: list) -> list:
+    """Convert a QColor to an RGBA list, or return fallback."""
+    if qc is None:
+        return list(fallback)
+    try:
+        return [qc.red(), qc.green(), qc.blue(), qc.alpha()]
+    except Exception:
+        return list(fallback)
+
+
+def _update_osc_multi_line_visibility(tab) -> None:
+    """Show/hide multi-line sub-controls based on checkbox and line count."""
+    enabled = getattr(tab, 'osc_multi_line', None) and tab.osc_multi_line.isChecked()
+    container = getattr(tab, '_osc_multi_container', None)
+    if container is not None:
+        container.setVisible(bool(enabled))
+    # Line 3 controls only visible when count == 3
+    line_count = getattr(tab, 'osc_line_count', None)
+    show_l3 = enabled and line_count is not None and line_count.value() >= 3
+    for w in (getattr(tab, '_osc_line3_label', None), getattr(tab, '_osc_l3_row_widget', None)):
+        if w is not None:
+            w.setVisible(bool(show_l3))
+
+
 def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """Build media + spotify visualizer section UI.
 
@@ -232,16 +256,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_controls.stateChanged.connect(tab._save_settings)
     media_layout.addWidget(tab.media_show_controls)
 
-    tab.media_slab_effect = QCheckBox("Slab Effect - Experimental")
-    tab.media_slab_effect.setChecked(
-        tab._default_bool('media', 'slab_effect_enabled', True)
-    )
-    tab.media_slab_effect.setToolTip(
-        "Adds a 3D depth effect to the transport controls row with a subtle shadow."
-    )
-    tab.media_slab_effect.stateChanged.connect(tab._save_settings)
-    media_layout.addWidget(tab.media_slab_effect)
-
     tab.media_spotify_volume_enabled = QCheckBox("Enable Spotify Volume Slider")
     tab.media_spotify_volume_enabled.setToolTip(
         "Show a slim vertical volume slider next to the Spotify card when Core Audio/pycaw is available. "
@@ -287,7 +301,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.spotify_vis_type_combo.addItem("Oscilloscope", "oscilloscope")
     tab.spotify_vis_type_combo.addItem("Starfield", "starfield")
     tab.spotify_vis_type_combo.addItem("Blob", "blob")
-    tab.spotify_vis_type_combo.addItem("Helix / DNA", "helix")
+
     default_mode = tab._default_str('spotify_visualizer', 'mode', 'spectrum')
     mode_idx = tab.spotify_vis_type_combo.findData(default_mode)
     if mode_idx >= 0:
@@ -484,6 +498,26 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_ghost_decay_row.addWidget(tab.spotify_vis_ghost_decay_label)
     spectrum_layout.addLayout(spotify_vis_ghost_decay_row)
 
+    # Spectrum card height growth slider (1.0 .. 3.0)
+    spectrum_growth_row = QHBoxLayout()
+    spectrum_growth_row.addWidget(QLabel("Card Height:"))
+    tab.spectrum_growth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_growth.setMinimum(100)
+    tab.spectrum_growth.setMaximum(300)
+    spectrum_growth_val = int(tab._default_float('spotify_visualizer', 'spectrum_growth', 1.0) * 100)
+    tab.spectrum_growth.setValue(max(100, min(300, spectrum_growth_val)))
+    tab.spectrum_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_growth.setTickInterval(25)
+    tab.spectrum_growth.setToolTip("Height multiplier for the spectrum card. 100% = current default height.")
+    tab.spectrum_growth.valueChanged.connect(tab._save_settings)
+    spectrum_growth_row.addWidget(tab.spectrum_growth)
+    tab.spectrum_growth_label = QLabel(f"{spectrum_growth_val}%")
+    tab.spectrum_growth.valueChanged.connect(
+        lambda v: tab.spectrum_growth_label.setText(f"{v}%")
+    )
+    spectrum_growth_row.addWidget(tab.spectrum_growth_label)
+    spectrum_layout.addLayout(spectrum_growth_row)
+
     spotify_vis_layout.addWidget(tab._spectrum_settings_container)
 
     # ==========================================
@@ -522,6 +556,144 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.osc_reactive_glow.setToolTip("Glow intensity pulses with bass energy.")
     tab.osc_reactive_glow.stateChanged.connect(tab._save_settings)
     osc_layout.addWidget(tab.osc_reactive_glow)
+
+    # Sensitivity slider (0.5x .. 10.0x, default 3.0x)
+    osc_sens_row = QHBoxLayout()
+    osc_sens_row.addWidget(QLabel("Sensitivity:"))
+    tab.osc_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_sensitivity.setMinimum(5)
+    tab.osc_sensitivity.setMaximum(100)
+    osc_sens_val = int(tab._default_float('spotify_visualizer', 'osc_sensitivity', 3.0) * 10)
+    tab.osc_sensitivity.setValue(max(5, min(100, osc_sens_val)))
+    tab.osc_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_sensitivity.setTickInterval(10)
+    tab.osc_sensitivity.valueChanged.connect(tab._save_settings)
+    osc_sens_row.addWidget(tab.osc_sensitivity)
+    tab.osc_sensitivity_label = QLabel(f"{osc_sens_val / 10.0:.1f}x")
+    tab.osc_sensitivity.valueChanged.connect(
+        lambda v: tab.osc_sensitivity_label.setText(f"{v / 10.0:.1f}x")
+    )
+    osc_sens_row.addWidget(tab.osc_sensitivity_label)
+    osc_layout.addLayout(osc_sens_row)
+
+    # Smoothing slider (0% = jagged, 100% = smooth curves)
+    osc_smooth_row = QHBoxLayout()
+    osc_smooth_row.addWidget(QLabel("Smoothing:"))
+    tab.osc_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_smoothing.setMinimum(0)
+    tab.osc_smoothing.setMaximum(100)
+    osc_smooth_val = int(tab._default_float('spotify_visualizer', 'osc_smoothing', 0.7) * 100)
+    tab.osc_smoothing.setValue(max(0, min(100, osc_smooth_val)))
+    tab.osc_smoothing.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_smoothing.setTickInterval(10)
+    tab.osc_smoothing.valueChanged.connect(tab._save_settings)
+    osc_smooth_row.addWidget(tab.osc_smoothing)
+    tab.osc_smoothing_label = QLabel(f"{osc_smooth_val}%")
+    tab.osc_smoothing.valueChanged.connect(
+        lambda v: tab.osc_smoothing_label.setText(f"{v}%")
+    )
+    osc_smooth_row.addWidget(tab.osc_smoothing_label)
+    osc_layout.addLayout(osc_smooth_row)
+
+    # Speed slider (10% = slow waveform changes, 100% = real-time)
+    osc_speed_row = QHBoxLayout()
+    osc_speed_row.addWidget(QLabel("Speed:"))
+    tab.osc_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_speed.setMinimum(1)
+    tab.osc_speed.setMaximum(100)
+    osc_speed_val = int(tab._default_float('spotify_visualizer', 'osc_speed', 1.0) * 100)
+    tab.osc_speed.setValue(max(1, min(100, osc_speed_val)))
+    tab.osc_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_speed.setTickInterval(10)
+    tab.osc_speed.setToolTip("Controls how quickly the waveform updates. 100% = real-time, lower = smoother/slower transitions.")
+    tab.osc_speed.valueChanged.connect(tab._save_settings)
+    osc_speed_row.addWidget(tab.osc_speed)
+    tab.osc_speed_label = QLabel(f"{osc_speed_val}%")
+    tab.osc_speed.valueChanged.connect(
+        lambda v: tab.osc_speed_label.setText(f"{v}%")
+    )
+    osc_speed_row.addWidget(tab.osc_speed_label)
+    osc_layout.addLayout(osc_speed_row)
+
+    # Line colour picker (separate from glow)
+    osc_line_color_row = QHBoxLayout()
+    osc_line_color_row.addWidget(QLabel("Line Color:"))
+    tab.osc_line_color_btn = QPushButton("Choose Color...")
+    tab.osc_line_color_btn.clicked.connect(tab._choose_osc_line_color)
+    osc_line_color_row.addWidget(tab.osc_line_color_btn)
+    osc_line_color_row.addStretch()
+    osc_layout.addLayout(osc_line_color_row)
+
+    # Glow colour picker
+    osc_glow_color_row = QHBoxLayout()
+    osc_glow_color_row.addWidget(QLabel("Glow Color:"))
+    tab.osc_glow_color_btn = QPushButton("Choose Color...")
+    tab.osc_glow_color_btn.clicked.connect(tab._choose_osc_glow_color)
+    osc_glow_color_row.addWidget(tab.osc_glow_color_btn)
+    osc_glow_color_row.addStretch()
+    osc_layout.addLayout(osc_glow_color_row)
+
+    # Multi-line mode
+    tab.osc_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
+    tab.osc_multi_line.setChecked(tab._default_int('spotify_visualizer', 'osc_line_count', 1) > 1)
+    tab.osc_multi_line.setToolTip("Enable additional waveform lines with different oscillation distributions.")
+    tab.osc_multi_line.stateChanged.connect(tab._save_settings)
+    tab.osc_multi_line.stateChanged.connect(lambda: _update_osc_multi_line_visibility(tab))
+    osc_layout.addWidget(tab.osc_multi_line)
+
+    # Multi-line sub-container (shown only when multi-line enabled)
+    tab._osc_multi_container = QWidget()
+    ml_layout = QVBoxLayout(tab._osc_multi_container)
+    ml_layout.setContentsMargins(16, 0, 0, 0)
+
+    # Line count spinner
+    osc_line_count_row = QHBoxLayout()
+    osc_line_count_row.addWidget(QLabel("Line Count:"))
+    tab.osc_line_count = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_line_count.setMinimum(2)
+    tab.osc_line_count.setMaximum(3)
+    tab.osc_line_count.setValue(max(2, tab._default_int('spotify_visualizer', 'osc_line_count', 1)))
+    tab.osc_line_count.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_line_count.setTickInterval(1)
+    tab.osc_line_count.valueChanged.connect(tab._save_settings)
+    tab.osc_line_count.valueChanged.connect(lambda: _update_osc_multi_line_visibility(tab))
+    osc_line_count_row.addWidget(tab.osc_line_count)
+    tab.osc_line_count_label = QLabel(str(max(2, tab._default_int('spotify_visualizer', 'osc_line_count', 1))))
+    tab.osc_line_count.valueChanged.connect(
+        lambda v: tab.osc_line_count_label.setText(str(v))
+    )
+    osc_line_count_row.addWidget(tab.osc_line_count_label)
+    ml_layout.addLayout(osc_line_count_row)
+
+    # Line 2 colours
+    ml_layout.addWidget(QLabel("Line 2:"))
+    osc_l2_row = QHBoxLayout()
+    tab.osc_line2_color_btn = QPushButton("Line Color...")
+    tab.osc_line2_color_btn.clicked.connect(tab._choose_osc_line2_color)
+    osc_l2_row.addWidget(tab.osc_line2_color_btn)
+    tab.osc_line2_glow_btn = QPushButton("Glow Color...")
+    tab.osc_line2_glow_btn.clicked.connect(tab._choose_osc_line2_glow_color)
+    osc_l2_row.addWidget(tab.osc_line2_glow_btn)
+    osc_l2_row.addStretch()
+    ml_layout.addLayout(osc_l2_row)
+
+    # Line 3 colours (only visible when line_count == 3)
+    tab._osc_line3_label = QLabel("Line 3:")
+    ml_layout.addWidget(tab._osc_line3_label)
+    tab._osc_l3_row_widget = QWidget()
+    osc_l3_row = QHBoxLayout(tab._osc_l3_row_widget)
+    osc_l3_row.setContentsMargins(0, 0, 0, 0)
+    tab.osc_line3_color_btn = QPushButton("Line Color...")
+    tab.osc_line3_color_btn.clicked.connect(tab._choose_osc_line3_color)
+    osc_l3_row.addWidget(tab.osc_line3_color_btn)
+    tab.osc_line3_glow_btn = QPushButton("Glow Color...")
+    tab.osc_line3_glow_btn.clicked.connect(tab._choose_osc_line3_glow_color)
+    osc_l3_row.addWidget(tab.osc_line3_glow_btn)
+    osc_l3_row.addStretch()
+    ml_layout.addWidget(tab._osc_l3_row_widget)
+
+    osc_layout.addWidget(tab._osc_multi_container)
+    _update_osc_multi_line_visibility(tab)
 
     spotify_vis_layout.addWidget(tab._osc_settings_container)
 
@@ -568,6 +740,39 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     star_react_row.addWidget(tab.star_reactivity_label)
     star_layout.addLayout(star_react_row)
 
+    # Nebula tint colour pickers
+    nebula_tint_row = QHBoxLayout()
+    nebula_tint_row.addWidget(QLabel("Nebula Tint 1:"))
+    tab.nebula_tint1_btn = QPushButton("Choose Color...")
+    tab.nebula_tint1_btn.clicked.connect(tab._choose_nebula_tint1)
+    nebula_tint_row.addWidget(tab.nebula_tint1_btn)
+    nebula_tint_row.addWidget(QLabel("Tint 2:"))
+    tab.nebula_tint2_btn = QPushButton("Choose Color...")
+    tab.nebula_tint2_btn.clicked.connect(tab._choose_nebula_tint2)
+    nebula_tint_row.addWidget(tab.nebula_tint2_btn)
+    nebula_tint_row.addStretch()
+    star_layout.addLayout(nebula_tint_row)
+
+    # Nebula colour cycle speed
+    nebula_speed_row = QHBoxLayout()
+    nebula_speed_row.addWidget(QLabel("Nebula Cycle:"))
+    tab.nebula_cycle_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.nebula_cycle_speed.setMinimum(0)
+    tab.nebula_cycle_speed.setMaximum(100)
+    nebula_spd_val = int(tab._default_float('spotify_visualizer', 'nebula_cycle_speed', 0.3) * 100)
+    tab.nebula_cycle_speed.setValue(nebula_spd_val)
+    tab.nebula_cycle_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.nebula_cycle_speed.setTickInterval(10)
+    tab.nebula_cycle_speed.setToolTip("Speed at which nebula colours cycle between Tint 1 and Tint 2. 0 = static.")
+    tab.nebula_cycle_speed.valueChanged.connect(tab._save_settings)
+    nebula_speed_row.addWidget(tab.nebula_cycle_speed)
+    tab.nebula_cycle_speed_label = QLabel(f"{nebula_spd_val}%")
+    tab.nebula_cycle_speed.valueChanged.connect(
+        lambda v: tab.nebula_cycle_speed_label.setText(f"{v}%")
+    )
+    nebula_speed_row.addWidget(tab.nebula_cycle_speed_label)
+    star_layout.addLayout(nebula_speed_row)
+
     spotify_vis_layout.addWidget(tab._starfield_settings_container)
 
     # ==========================================
@@ -594,6 +799,96 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     blob_pulse_row.addWidget(tab.blob_pulse_label)
     blob_layout.addLayout(blob_pulse_row)
+
+    tab.blob_reactive_glow = QCheckBox("Reactive Glow")
+    tab.blob_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'blob_reactive_glow', True))
+    tab.blob_reactive_glow.setToolTip("Outer glow pulses with audio energy.")
+    tab.blob_reactive_glow.stateChanged.connect(tab._save_settings)
+    blob_layout.addWidget(tab.blob_reactive_glow)
+
+    # Blob colour pickers
+    blob_fill_color_row = QHBoxLayout()
+    blob_fill_color_row.addWidget(QLabel("Fill Color:"))
+    tab.blob_fill_color_btn = QPushButton("Choose Color...")
+    tab.blob_fill_color_btn.clicked.connect(tab._choose_blob_fill_color)
+    blob_fill_color_row.addWidget(tab.blob_fill_color_btn)
+    blob_fill_color_row.addStretch()
+    blob_layout.addLayout(blob_fill_color_row)
+
+    blob_edge_color_row = QHBoxLayout()
+    blob_edge_color_row.addWidget(QLabel("Edge Color:"))
+    tab.blob_edge_color_btn = QPushButton("Choose Color...")
+    tab.blob_edge_color_btn.clicked.connect(tab._choose_blob_edge_color)
+    blob_edge_color_row.addWidget(tab.blob_edge_color_btn)
+    blob_edge_color_row.addStretch()
+    blob_layout.addLayout(blob_edge_color_row)
+
+    blob_glow_color_row = QHBoxLayout()
+    blob_glow_color_row.addWidget(QLabel("Glow Color:"))
+    tab.blob_glow_color_btn = QPushButton("Choose Color...")
+    tab.blob_glow_color_btn.clicked.connect(tab._choose_blob_glow_color)
+    blob_glow_color_row.addWidget(tab.blob_glow_color_btn)
+    blob_glow_color_row.addStretch()
+    blob_layout.addLayout(blob_glow_color_row)
+
+    # Blob card width slider (0.3 .. 1.0)
+    blob_width_row = QHBoxLayout()
+    blob_width_row.addWidget(QLabel("Card Width:"))
+    tab.blob_width = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_width.setMinimum(30)
+    tab.blob_width.setMaximum(100)
+    blob_width_val = int(tab._default_float('spotify_visualizer', 'blob_width', 1.0) * 100)
+    tab.blob_width.setValue(blob_width_val)
+    tab.blob_width.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_width.setTickInterval(10)
+    tab.blob_width.valueChanged.connect(tab._save_settings)
+    blob_width_row.addWidget(tab.blob_width)
+    tab.blob_width_label = QLabel(f"{blob_width_val}%")
+    tab.blob_width.valueChanged.connect(
+        lambda v: tab.blob_width_label.setText(f"{v}%")
+    )
+    blob_width_row.addWidget(tab.blob_width_label)
+    blob_layout.addLayout(blob_width_row)
+
+    # Blob size slider (0.3 .. 2.0)
+    blob_size_row = QHBoxLayout()
+    blob_size_row.addWidget(QLabel("Blob Size:"))
+    tab.blob_size = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_size.setMinimum(30)
+    tab.blob_size.setMaximum(200)
+    blob_size_val = int(tab._default_float('spotify_visualizer', 'blob_size', 1.0) * 100)
+    tab.blob_size.setValue(blob_size_val)
+    tab.blob_size.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_size.setTickInterval(20)
+    tab.blob_size.setToolTip("Scale of the blob relative to the card. 100% = default.")
+    tab.blob_size.valueChanged.connect(tab._save_settings)
+    blob_size_row.addWidget(tab.blob_size)
+    tab.blob_size_label = QLabel(f"{blob_size_val}%")
+    tab.blob_size.valueChanged.connect(
+        lambda v: tab.blob_size_label.setText(f"{v}%")
+    )
+    blob_size_row.addWidget(tab.blob_size_label)
+    blob_layout.addLayout(blob_size_row)
+
+    # Blob glow intensity slider (0 .. 100)
+    blob_gi_row = QHBoxLayout()
+    blob_gi_row.addWidget(QLabel("Glow Intensity:"))
+    tab.blob_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_glow_intensity.setMinimum(0)
+    tab.blob_glow_intensity.setMaximum(100)
+    blob_gi_val = int(tab._default_float('spotify_visualizer', 'blob_glow_intensity', 0.5) * 100)
+    tab.blob_glow_intensity.setValue(blob_gi_val)
+    tab.blob_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_glow_intensity.setTickInterval(10)
+    tab.blob_glow_intensity.setToolTip("Controls the size and brightness of the glow around the blob.")
+    tab.blob_glow_intensity.valueChanged.connect(tab._save_settings)
+    blob_gi_row.addWidget(tab.blob_glow_intensity)
+    tab.blob_glow_intensity_label = QLabel(f"{blob_gi_val}%")
+    tab.blob_glow_intensity.valueChanged.connect(
+        lambda v: tab.blob_glow_intensity_label.setText(f"{v}%")
+    )
+    blob_gi_row.addWidget(tab.blob_glow_intensity_label)
+    blob_layout.addLayout(blob_gi_row)
 
     spotify_vis_layout.addWidget(tab._blob_settings_container)
 
@@ -662,6 +957,20 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     helix_glow_row.addWidget(tab.helix_glow_intensity_label)
     helix_layout.addLayout(helix_glow_row)
+
+    helix_glow_color_row = QHBoxLayout()
+    helix_glow_color_row.addWidget(QLabel("Glow Color:"))
+    tab.helix_glow_color_btn = QPushButton("Choose Color...")
+    tab.helix_glow_color_btn.clicked.connect(tab._choose_helix_glow_color)
+    helix_glow_color_row.addWidget(tab.helix_glow_color_btn)
+    helix_glow_color_row.addStretch()
+    helix_layout.addLayout(helix_glow_color_row)
+
+    tab.helix_reactive_glow = QCheckBox("Reactive Glow")
+    tab.helix_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'helix_reactive_glow', True))
+    tab.helix_reactive_glow.setToolTip("Glow intensity pulses with audio energy.")
+    tab.helix_reactive_glow.stateChanged.connect(tab._save_settings)
+    helix_layout.addWidget(tab.helix_reactive_glow)
 
     helix_growth_row = QHBoxLayout()
     helix_growth_row.addWidget(QLabel("Card Height:"))
@@ -758,7 +1067,6 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.media_rounded_artwork.setChecked(tab._config_bool('media', media_config, 'rounded_artwork_border', True))
     tab.media_show_header_frame.setChecked(tab._config_bool('media', media_config, 'show_header_frame', True))
     tab.media_show_controls.setChecked(tab._config_bool('media', media_config, 'show_controls', True))
-    tab.media_slab_effect.setChecked(tab._config_bool('media', media_config, 'slab_effect_enabled', False))
     tab.media_spotify_volume_enabled.setChecked(
         tab._config_bool('media', media_config, 'spotify_volume_enabled', True)
     )
@@ -862,6 +1170,54 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.osc_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_reactive_glow', True)
         )
+    if hasattr(tab, 'osc_sensitivity'):
+        osc_sens_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_sensitivity', 3.0) * 10)
+        tab.osc_sensitivity.setValue(max(5, min(100, osc_sens_val)))
+        tab.osc_sensitivity_label.setText(f"{osc_sens_val / 10.0:.1f}x")
+    if hasattr(tab, 'osc_smoothing'):
+        osc_smooth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_smoothing', 0.7) * 100)
+        tab.osc_smoothing.setValue(max(0, min(100, osc_smooth_val)))
+        tab.osc_smoothing_label.setText(f"{osc_smooth_val}%")
+    if hasattr(tab, 'osc_speed'):
+        osc_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_speed', 1.0) * 100)
+        tab.osc_speed.setValue(max(10, min(100, osc_speed_val)))
+        tab.osc_speed_label.setText(f"{osc_speed_val}%")
+    if hasattr(tab, 'spectrum_growth'):
+        spectrum_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_growth', 1.0) * 100)
+        tab.spectrum_growth.setValue(max(100, min(300, spectrum_growth_val)))
+        tab.spectrum_growth_label.setText(f"{spectrum_growth_val}%")
+
+    # Oscilloscope colours
+    osc_line_color_data = spotify_vis_config.get('osc_line_color', [255, 255, 255, 255])
+    try:
+        tab._osc_line_color = QColor(*osc_line_color_data)
+    except Exception:
+        tab._osc_line_color = QColor(255, 255, 255, 255)
+    osc_glow_color_data = spotify_vis_config.get('osc_glow_color', [0, 200, 255, 230])
+    try:
+        tab._osc_glow_color = QColor(*osc_glow_color_data)
+    except Exception:
+        tab._osc_glow_color = QColor(0, 200, 255, 230)
+
+    # Multi-line
+    osc_line_count = int(spotify_vis_config.get('osc_line_count', 1))
+    if hasattr(tab, 'osc_multi_line'):
+        tab.osc_multi_line.setChecked(osc_line_count > 1)
+    if hasattr(tab, 'osc_line_count'):
+        tab.osc_line_count.setValue(max(2, min(3, osc_line_count)))
+        tab.osc_line_count_label.setText(str(max(2, min(3, osc_line_count))))
+    for attr, key, fallback in (
+        ('_osc_line2_color', 'osc_line2_color', [255, 120, 50, 230]),
+        ('_osc_line2_glow_color', 'osc_line2_glow_color', [255, 120, 50, 180]),
+        ('_osc_line3_color', 'osc_line3_color', [50, 255, 120, 230]),
+        ('_osc_line3_glow_color', 'osc_line3_glow_color', [50, 255, 120, 180]),
+    ):
+        data = spotify_vis_config.get(key, fallback)
+        try:
+            setattr(tab, attr, QColor(*data))
+        except Exception:
+            setattr(tab, attr, QColor(*fallback))
+    _update_osc_multi_line_visibility(tab)
 
     # Per-mode settings: Starfield
     if hasattr(tab, 'star_travel_speed'):
@@ -876,12 +1232,52 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         star_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'starfield_growth', 2.0) * 100)
         tab.starfield_growth.setValue(max(100, min(400, star_growth_val)))
         tab.starfield_growth_label.setText(f"{star_growth_val / 100.0:.1f}x")
+    # Nebula tint colours
+    for attr, key, fallback in (
+        ('_nebula_tint1', 'nebula_tint1', [20, 40, 120]),
+        ('_nebula_tint2', 'nebula_tint2', [80, 20, 100]),
+    ):
+        c = spotify_vis_config.get(key, fallback) if spotify_vis_config else fallback
+        if isinstance(c, (list, tuple)) and len(c) >= 3:
+            setattr(tab, attr, QColor(*c))
+        else:
+            setattr(tab, attr, QColor(*fallback))
+    if hasattr(tab, 'nebula_cycle_speed'):
+        ncs_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'nebula_cycle_speed', 0.3) * 100)
+        tab.nebula_cycle_speed.setValue(max(0, min(100, ncs_val)))
+        tab.nebula_cycle_speed_label.setText(f"{ncs_val}%")
 
     # Per-mode settings: Blob
     if hasattr(tab, 'blob_pulse'):
         blob_pulse_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_pulse', 1.0) * 100)
         tab.blob_pulse.setValue(max(0, min(200, blob_pulse_val)))
         tab.blob_pulse_label.setText(f"{blob_pulse_val / 100.0:.2f}x")
+    for attr, key, fallback in (
+        ('_blob_color', 'blob_color', [0, 180, 255, 230]),
+        ('_blob_glow_color', 'blob_glow_color', [0, 140, 255, 180]),
+        ('_blob_edge_color', 'blob_edge_color', [100, 220, 255, 230]),
+    ):
+        data = spotify_vis_config.get(key, fallback)
+        try:
+            setattr(tab, attr, QColor(*data))
+        except Exception:
+            setattr(tab, attr, QColor(*fallback))
+    if hasattr(tab, 'blob_width'):
+        blob_width_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_width', 1.0) * 100)
+        tab.blob_width.setValue(max(30, min(100, blob_width_val)))
+        tab.blob_width_label.setText(f"{blob_width_val}%")
+    if hasattr(tab, 'blob_size'):
+        blob_size_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_size', 1.0) * 100)
+        tab.blob_size.setValue(max(30, min(200, blob_size_val)))
+        tab.blob_size_label.setText(f"{blob_size_val}%")
+    if hasattr(tab, 'blob_glow_intensity'):
+        blob_gi_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_glow_intensity', 0.5) * 100)
+        tab.blob_glow_intensity.setValue(max(0, min(100, blob_gi_val)))
+        tab.blob_glow_intensity_label.setText(f"{blob_gi_val}%")
+    if hasattr(tab, 'blob_reactive_glow'):
+        tab.blob_reactive_glow.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'blob_reactive_glow', True)
+        )
     if hasattr(tab, 'blob_growth'):
         blob_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_growth', 2.5) * 100)
         tab.blob_growth.setValue(max(100, min(400, blob_growth_val)))
@@ -908,6 +1304,15 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         helix_glow_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_glow_intensity', 0.5) * 100)
         tab.helix_glow_intensity.setValue(max(0, min(100, helix_glow_val)))
         tab.helix_glow_intensity_label.setText(f"{helix_glow_val}%")
+    helix_glow_color_data = spotify_vis_config.get('helix_glow_color', [0, 200, 255, 180])
+    try:
+        tab._helix_glow_color = QColor(*helix_glow_color_data)
+    except Exception:
+        tab._helix_glow_color = QColor(0, 200, 255, 180)
+    if hasattr(tab, 'helix_reactive_glow'):
+        tab.helix_reactive_glow.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'helix_reactive_glow', True)
+        )
     if hasattr(tab, 'helix_growth'):
         helix_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_growth', 2.0) * 100)
         tab.helix_growth.setValue(max(100, min(400, helix_growth_val)))
@@ -959,7 +1364,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'rounded_artwork_border': tab.media_rounded_artwork.isChecked(),
         'show_header_frame': tab.media_show_header_frame.isChecked(),
         'show_controls': tab.media_show_controls.isChecked(),
-        'slab_effect_enabled': tab.media_slab_effect.isChecked(),
         'spotify_volume_enabled': tab.media_spotify_volume_enabled.isChecked(),
     }
     mmon_text = tab.media_monitor_combo.currentText()
@@ -995,17 +1399,40 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_glow_enabled': getattr(tab, 'osc_glow_enabled', None) and tab.osc_glow_enabled.isChecked(),
         'osc_glow_intensity': (getattr(tab, 'osc_glow_intensity', None) and tab.osc_glow_intensity.value() or 50) / 100.0,
         'osc_reactive_glow': getattr(tab, 'osc_reactive_glow', None) and tab.osc_reactive_glow.isChecked(),
+        'osc_sensitivity': (getattr(tab, 'osc_sensitivity', None) and tab.osc_sensitivity.value() or 30) / 10.0,
+        'osc_smoothing': (getattr(tab, 'osc_smoothing', None) and tab.osc_smoothing.value() or 70) / 100.0,
+        'osc_line_color': _qcolor_to_list(getattr(tab, '_osc_line_color', None), [255, 255, 255, 255]),
+        'osc_glow_color': _qcolor_to_list(getattr(tab, '_osc_glow_color', None), [0, 200, 255, 230]),
+        'osc_line_count': (getattr(tab, 'osc_line_count', None).value() if getattr(tab, 'osc_multi_line', None) and tab.osc_multi_line.isChecked() else 1),
+        'osc_line2_color': _qcolor_to_list(getattr(tab, '_osc_line2_color', None), [255, 120, 50, 230]),
+        'osc_line2_glow_color': _qcolor_to_list(getattr(tab, '_osc_line2_glow_color', None), [255, 120, 50, 180]),
+        'osc_line3_color': _qcolor_to_list(getattr(tab, '_osc_line3_color', None), [50, 255, 120, 230]),
+        'osc_line3_glow_color': _qcolor_to_list(getattr(tab, '_osc_line3_glow_color', None), [50, 255, 120, 180]),
         'star_travel_speed': (getattr(tab, 'star_travel_speed', None) and tab.star_travel_speed.value() or 50) / 100.0,
         'star_reactivity': (getattr(tab, 'star_reactivity', None) and tab.star_reactivity.value() or 100) / 100.0,
+        'nebula_tint1': _qcolor_to_list(getattr(tab, '_nebula_tint1', None), [20, 40, 120]),
+        'nebula_tint2': _qcolor_to_list(getattr(tab, '_nebula_tint2', None), [80, 20, 100]),
+        'nebula_cycle_speed': (getattr(tab, 'nebula_cycle_speed', None) and tab.nebula_cycle_speed.value() or 30) / 100.0,
         'blob_pulse': (getattr(tab, 'blob_pulse', None) and tab.blob_pulse.value() or 100) / 100.0,
+        'blob_color': _qcolor_to_list(getattr(tab, '_blob_color', None), [0, 180, 255, 230]),
+        'blob_glow_color': _qcolor_to_list(getattr(tab, '_blob_glow_color', None), [0, 140, 255, 180]),
+        'blob_edge_color': _qcolor_to_list(getattr(tab, '_blob_edge_color', None), [100, 220, 255, 230]),
+        'blob_width': (getattr(tab, 'blob_width', None) and tab.blob_width.value() or 100) / 100.0,
+        'blob_size': (getattr(tab, 'blob_size', None) and tab.blob_size.value() or 100) / 100.0,
+        'blob_glow_intensity': (getattr(tab, 'blob_glow_intensity', None) and tab.blob_glow_intensity.value() or 50) / 100.0,
+        'blob_reactive_glow': getattr(tab, 'blob_reactive_glow', None) and tab.blob_reactive_glow.isChecked(),
         'helix_turns': getattr(tab, 'helix_turns', None) and tab.helix_turns.value() or 4,
         'helix_double': getattr(tab, 'helix_double', None) and tab.helix_double.isChecked(),
         'helix_speed': (getattr(tab, 'helix_speed', None) and tab.helix_speed.value() or 100) / 100.0,
         'helix_glow_enabled': getattr(tab, 'helix_glow_enabled', None) and tab.helix_glow_enabled.isChecked(),
         'helix_glow_intensity': (getattr(tab, 'helix_glow_intensity', None) and tab.helix_glow_intensity.value() or 50) / 100.0,
+        'helix_glow_color': _qcolor_to_list(getattr(tab, '_helix_glow_color', None), [0, 200, 255, 180]),
+        'helix_reactive_glow': getattr(tab, 'helix_reactive_glow', None) and tab.helix_reactive_glow.isChecked(),
+        'spectrum_growth': (getattr(tab, 'spectrum_growth', None) and tab.spectrum_growth.value() or 100) / 100.0,
         'starfield_growth': (getattr(tab, 'starfield_growth', None) and tab.starfield_growth.value() or 200) / 100.0,
         'blob_growth': (getattr(tab, 'blob_growth', None) and tab.blob_growth.value() or 250) / 100.0,
         'helix_growth': (getattr(tab, 'helix_growth', None) and tab.helix_growth.value() or 200) / 100.0,
+        'osc_speed': (getattr(tab, 'osc_speed', None) and tab.osc_speed.value() or 100) / 100.0,
     }
 
     tab._update_spotify_vis_sensitivity_enabled_state()

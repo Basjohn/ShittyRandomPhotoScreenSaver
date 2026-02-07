@@ -172,39 +172,27 @@ float getSwirlOrderKey(vec2 cellUV, float swirlTurns, float seed, int swirlOrder
     float rand = hash1(cellUV * 100.0 + seed);
     
     if (swirlOrder == 1) {
-        // Center Outward: true sequential spiral from center to edges
-        // Each particle appears one at a time in a continuous clockwise spiral.
-        // 
-        // The key insight: for a true Archimedean spiral r = a*θ, the arc length
-        // from the origin is proportional to θ². We use this to create ordering
-        // where particles at the same "spiral distance" from center appear together.
-        //
-        // Convert to polar spiral coordinates:
-        // - theta gives angular position (0 to 2π mapped to 0 to 1)
-        // - r gives radial distance from center
-        //
-        // For clockwise spiral growth, we want:
-        // - Center particles first (low r)
-        // - At each radius band, particles appear in clockwise order
-        // - Smooth transition between radius bands (no grid artifacts)
+        // Center Outward: predominantly radial with a gentle spiral hint.
+        // Use radius as the dominant ordering axis so inner pixels always
+        // appear before outer ones, with a mild angular twist for visual
+        // interest and heavy spatial noise to obliterate the grid pattern.
         
-        // Clockwise angle (flip direction)
-        float cwAngle = 1.0 - thetaNorm;
+        float cwAngle = 1.0 - thetaNorm;  // Clockwise 0..1
         
-        // Number of spiral turns from center to edge
-        float spiralTurns = 4.0;
+        // Radius is the main ordering term (~80%), gentle spiral hint (~20%)
+        float spiralHint = cwAngle * 0.18;
+        float order = rNorm * 0.75 + spiralHint;
         
-        // Calculate position along the spiral using Archimedean formula
-        // For r = k*θ, solving for θ gives θ = r/k
-        // We add the angular position to create the spiral effect
-        float spiralTheta = rNorm * spiralTurns + cwAngle;
+        // Heavy multi-frequency spatial noise to break rectangular grid
+        float n1 = hash1(cellUV * 7.3 + seed * 1.7);
+        float n2 = hash1(cellUV * 13.1 + seed * 3.1);
+        float n3 = hash1(cellUV * 29.7 + seed * 0.3);
+        float spatialNoise = (rand - 0.5) * 0.06
+                           + (n1 - 0.5) * 0.05
+                           + (n2 - 0.5) * 0.03
+                           + n3 * 0.015;
         
-        // The order key is simply the spiral theta normalized
-        // This gives a continuous ordering from center outward in a spiral
-        float order = spiralTheta / (spiralTurns + 1.0);
-        
-        // Tiny random jitter to break up any remaining patterns
-        return clamp(order, 0.0, 0.95) + rand * 0.003;
+        return clamp(order + spatialNoise, 0.0, 0.93);
     }
     
     if (swirlOrder == 2) {
@@ -254,7 +242,10 @@ vec2 getSpawnPos(vec2 targetUV, int dir, int mode, float seed, float swirlStreng
         
         float angle;
         if (swirlOrder == 1) {
-            angle = baseAngle;
+            // Center Outward: spawn slightly inward along radial direction
+            // with angular spread to avoid grid-aligned spawn lines
+            float spiralOffset = swirlStrength * r * 0.8;
+            angle = baseAngle - spiralOffset + (rand1.x - 0.5) * 0.7;
         } else {
             // Add random angular offset to break grid pattern
             float randomAngle = (rand1.x - 0.5) * PI * 0.6;
@@ -266,10 +257,10 @@ vec2 getSpawnPos(vec2 targetUV, int dir, int mode, float seed, float swirlStreng
         }
         
         if (swirlOrder == 1) {
-            // Center Outward: spawn FROM center, fly TO target (outward)
-            // Spawn near center with slight offset for visual interest
-            float spawnDist = 0.02 + rand1.y * 0.05;
-            return center + vec2(cos(angle), sin(angle)) * spawnDist;
+            // Center Outward: spawn from slightly closer to center along
+            // the spiral path, so particles visually flow outward.
+            float spawnR = max(0.0, r - 0.12 - rand1.y * 0.08);
+            return center + vec2(cos(angle), sin(angle)) * spawnR;
         } else {
             // Edges Inward or Typical: spawn FROM edges, fly TO target
             float spawnDist = 0.55 + rand1.y * 0.08;
@@ -380,6 +371,7 @@ float getPixelArrivalTime(vec2 pixelUV, int mode, int dir, float swirlTurns, flo
         orderKey = getOrderKey(pixelUV, dir, seed * 0.01);  // Reduce randomness for smoother blend
     }
     
+    orderKey = clamp(orderKey, 0.0, 0.92);
     float spawnTime = orderKey * SPAWN_SPREAD;
     return spawnTime + FLIGHT_TIME;  // When particle arrives at this location
 }
@@ -429,6 +421,10 @@ void main() {
     float bgBlendStart = pixelArrival;
     float bgBlendDuration = (mode == 2) ? 0.05 : 0.10;  // Shorter blend for Converge
     float bgBlendEnd = min(pixelArrival + bgBlendDuration, FINAL_BLEND_START);
+    // CRITICAL: Ensure bgBlendEnd > bgBlendStart to prevent smoothstep undefined
+    // behaviour (inverted edges → GPU returns 1.0 → new image leaks at t=0).
+    bgBlendStart = min(bgBlendStart, FINAL_BLEND_START - 0.02);
+    bgBlendEnd = max(bgBlendEnd, bgBlendStart + 0.01);
     float bgBlend = smoothstep(bgBlendStart, bgBlendEnd, t);
     vec3 finalColor = mix(oldColor.rgb, newColor.rgb, bgBlend);
     float coverage = 0.0;

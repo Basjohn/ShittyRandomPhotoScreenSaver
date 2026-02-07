@@ -741,8 +741,18 @@ class WidgetManager:
             
             gap = 20
             height = max(vis_widget.height(), vis_widget.minimumHeight())
-            width = media_geom.width()
+            full_width = media_geom.width()
+            width = full_width
             x = media_geom.left()
+
+            # Blob mode: apply card width factor and centre the narrower card
+            vis_mode = getattr(vis_widget, '_vis_mode_str', 'spectrum')
+            if vis_mode == 'blob':
+                blob_w = getattr(vis_widget, '_blob_width', 1.0)
+                blob_w = max(0.1, min(1.0, float(blob_w)))
+                if blob_w < 1.0:
+                    width = max(40, int(full_width * blob_w))
+                    x = media_geom.left() + (full_width - width) // 2
             
             # Determine if we should place the visualizer BELOW or ABOVE the media widget.
             # If media is at the TOP of the screen, visualizer should be BELOW.
