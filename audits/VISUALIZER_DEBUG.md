@@ -1,15 +1,15 @@
 # Spotify Visualizer Debug Notes
 
-> **Last updated**: Feb 2026 (post M-4 refactor)  
-> **Scope**: Audio capture, FFT pipeline, bar computation, smoothing, playback gating, volume overlay
+> **Last updated**: Feb 2026  
+> **Scope**: All 5 visualizer modes, audio capture, FFT pipeline, bar computation, smoothing, playback gating, volume overlay
 
-This document captures the current, tested behaviour for the Spotify bar visualizer. It intentionally avoids Spotify-version-specific assumptions — we only consume loopback audio + GSMTC metadata.
+This document captures the current, tested behaviour for the Spotify visualizer system. We only consume loopback audio + GSMTC metadata — no Spotify-version-specific assumptions.
 
 ---
 
-## 1. Architecture (Post-Refactor)
+## 1. Architecture
 
-```python
+```
 SpotifyVisualizerWidget (widgets/spotify_visualizer_widget.py)
  └─ Shared _SpotifyBeatEngine (singleton per process)
      │  Location: widgets/spotify_visualizer/beat_engine.py
@@ -25,13 +25,18 @@ SpotifyVisualizerWidget (widgets/spotify_visualizer_widget.py)
      ├─ ThreadManager (COMPUTE pool) for FFT + smoothing scheduling
      └─ Anti-flicker: segment hysteresis + min-change thresholds
 
+Shared data from BeatEngine:
+ ├─ get_smoothed_bars()   → List[float]      (pre-smoothed for UI)
+ ├─ get_waveform()        → List[float] (256) (raw samples for oscilloscope)
+ └─ get_energy_bands()    → EnergyBands       (bass/mid/high/overall for all modes)
+
 Tick helpers: widgets/spotify_visualizer/tick_helpers.py
  ├─ get_transition_context()  — transition metrics from parent DisplayWidget
  ├─ apply_visual_smoothing()  — per-frame EMA (rise ~55ms, decay ~145ms)
- ├─ compute_bar_geometry()    — cached bar rect calculation
- └─ update_perf_metrics()     — PERF window aggregation
+ ├─ rebuild_geometry_cache()  — cached bar rect calculation (dynamic segments)
+ └─ log_perf_snapshot()       — PERF window aggregation
 
-GPU overlay: rendered by GLCompositorWidget via overlay paint path
+GPU overlay: SpotifyBarsGLOverlay renders via per-mode GLSL shaders
 CPU fallback: QPainter bar drawing in SpotifyVisualizerWidget.paintEvent()
 ```
 
@@ -43,7 +48,11 @@ CPU fallback: QPainter bar drawing in SpotifyVisualizerWidget.paintEvent()
 | Beat Engine | `widgets/spotify_visualizer/beat_engine.py` | Singleton engine, smoothing, playback gating |
 | Audio Worker | `widgets/spotify_visualizer/audio_worker.py` | Loopback capture, FFT scheduling |
 | Bar Computation | `widgets/spotify_visualizer/bar_computation.py` | `_fft_to_bars()` DSP pipeline |
+| Energy Bands | `widgets/spotify_visualizer/energy_bands.py` | Bass/mid/high/overall extraction from FFT bars |
+| Card Height | `widgets/spotify_visualizer/card_height.py` | Per-mode card height expansion (growth factors) |
 | Tick Helpers | `widgets/spotify_visualizer/tick_helpers.py` | Visual smoothing, geometry cache, perf metrics |
+| Shader Loader | `widgets/spotify_visualizer/shaders/__init__.py` | GLSL source loading for multi-shader architecture |
+| GL Overlay | `widgets/spotify_bars_gl_overlay.py` | QOpenGLWidget, shader compilation, uniform dispatch |
 | Audio Capture | `utils/audio_capture.py` | WASAPI loopback interface |
 | FFT Worker | `core/process/workers/fft_worker.py` | Out-of-process FFT computation |
 
@@ -53,26 +62,157 @@ CPU fallback: QPainter bar drawing in SpotifyVisualizerWidget.paintEvent()
 2. **FFT → bar conversion** lives in `bar_computation.py` (`_fft_to_bars()`, `process_via_fft_worker()`).
 3. **Smoothing** has two layers:
    - COMPUTE-thread smoothing in beat engine (`_smoothed_bars`, tau ~120ms, hysteresis 8%, min-change 5%).
-   - Per-frame EMA in tick helpers (`_apply_visual_smoothing`, rise ~55ms, decay ~145ms).
+   - Per-frame EMA in tick helpers (`apply_visual_smoothing`, rise ~55ms, decay ~145ms).
 4. **Thread safety**: No raw `QTimer`s. All recurring work through `ThreadManager`. Lock-free `TripleBuffer` for audio/bar transfer.
 5. **Playback gating**: FFT halted when Spotify is not playing; 1-bar floor (0.08) for visual continuity.
+6. **Multi-shader**: All 5 GLSL programs compiled at `initializeGL()`; `paintGL()` dispatches to active mode.
+7. **Dynamic segments**: Spectrum segment count adapts to card height (~4px/segment + 1px gap, 8–64 range).
 
 ---
 
-## 2. `_fft_to_bars` Pipeline (bar_computation.py)
+## 2. Visualizer Modes
+
+### 2.1 Spectrum
+
+**Shader**: `widgets/spotify_visualizer/shaders/spectrum.frag`
+
+Classic segmented bar analyzer with per-bar ghost peak trails.
+
+**Key uniforms:**
+- `u_bars[64]`, `u_peaks[64]` — bar magnitudes and peak envelope (scaled ×0.55 on upload)
+- `u_bar_count`, `u_segments` — bar/segment counts (segments now dynamic based on card height)
+- `u_fill_color`, `u_border_color` — bar body and outline colours
+- `u_ghost_alpha` — opacity for trailing ghost segments (0.0–1.0)
+
+**Behaviour:**
+- Bars are boosted ×1.2 before segment mapping; always at least 1 active segment
+- Ghost segments drawn above active height using decaying peak envelope with vertical alpha falloff
+- Segment count dynamically scales with card height: `inner_h // 5` (4px segment + 1px gap), clamped 8–64
+- CPU fallback uses QPainter with cached geometry (same layout math)
+
+### 2.2 Oscilloscope
+
+**Shader**: `widgets/spotify_visualizer/shaders/oscilloscope.frag`
+
+Catmull-Rom spline waveform with per-band energy-reactive glow and up to 3 lines.
+
+**Key uniforms:**
+- `u_waveform[256]`, `u_waveform_count` — raw waveform buffer (temporally smoothed CPU-side)
+- `u_line_color`, `u_glow_color` — primary line appearance
+- `u_glow_enabled`, `u_glow_intensity`, `u_reactive_glow` — glow control
+- `u_sensitivity` (default 3.0), `u_smoothing` (0–1) — waveform processing
+- `u_line_count` (1–3), `u_line{2,3}_color`, `u_line{2,3}_glow_color` — multi-line
+- `u_osc_line_dim` — optional half-strength dimming on lines 2/3
+- `u_bass_energy`, `u_mid_energy`, `u_high_energy`, `u_overall_energy` — per-band energy
+
+**Waveform pipeline:**
+1. `get_waveform_sample(idx)` — modular wrap for circular buffer safety
+2. `smoothed_sample(center)` — Gaussian kernel (half-width 1–12 taps based on `u_smoothing`)
+3. `catmull_rom()` — sub-sample interpolation between smoothed taps
+4. `sample_waveform(nx, offset)` — full pipeline with manual tanh soft-saturation
+
+**Multi-line per-band energy:**
+- Single-line mode: line 1 uses `u_overall_energy`
+- Multi-line mode: line 1 = bass, line 2 = mid (vocals), line 3 = high (cymbals)
+- Each line's amplitude and glow reactive to its own band energy
+- CPU-side smoothed bands (`_osc_smoothed_bass/mid/high`) prevent glow flicker
+
+### 2.3 Blob
+
+**Shader**: `widgets/spotify_visualizer/shaders/blob.frag`
+
+2D SDF organic metaball with audio-reactive deformation and configurable glow.
+
+**Key uniforms:**
+- `u_bass_energy`, `u_mid_energy`, `u_high_energy`, `u_overall_energy` — energy bands
+- `u_blob_color`, `u_blob_glow_color`, `u_blob_edge_color`, `u_blob_outline_color` — colours
+- `u_blob_pulse` (0–2) — bass pulse intensity multiplier
+- `u_blob_size` (0.3–2.0) — relative blob scale
+- `u_blob_glow_intensity` (0–1) — glow size/strength
+- `u_blob_reactive_glow` (0/1) — static vs energy-reactive glow
+- `u_blob_smoothed_energy` — CPU-smoothed overall energy (prevents glow flicker)
+
+**SDF deformation layers:**
+1. **Bass pulse**: `r += bass * 0.097 * pulse` (+15% drum reactivity vs original 0.084)
+2. **Dip contraction**: `r -= (1-smoothed_energy) * 0.010 * pulse` (subtle shrink on silence)
+3. **Mid/high deformation**: 4 layered sine waves at angular frequencies 3/5/7/11
+4. **Overall energy wobble**: slow angular freq 2 sine wave
+5. **Vocal-reactive wobble**: 2 additional smooth low-freq layers driven by `u_mid_energy`
+
+**CPU-side smoothing** (in `spotify_bars_gl_overlay.py`):
+- `_blob_smoothed_energy`: fast rise (~50ms tau), slow decay (~300ms tau)
+- Prevents glow flickering and ensures shrink contraction is smooth
+
+**Card height**: Default growth factor 2.5× (configurable via `card_height.py`)
+
+### 2.4 Starfield (dev-gated: `SRPSS_ENABLE_DEV=true`)
+
+**Shader**: `widgets/spotify_visualizer/shaders/starfield.frag`
+
+Point-star starfield with nebula background and audio-reactive travel/glow.
+
+**Key uniforms:**
+- `u_star_density` — grid density multiplier
+- `u_travel_speed` — base forward-travel speed
+- `u_star_reactivity` — energy-to-glow multiplier
+- `u_travel_time` — CPU-accumulated monotonic travel (never reverses)
+- `u_nebula_tint1`, `u_nebula_tint2` — nebula background colours
+- `u_nebula_cycle_speed` — tint crossfade rate
+- `u_bass_energy`, `u_mid_energy`, `u_overall_energy`
+
+**Key features:**
+- 5 depth layers with perspective scaling and fade
+- ~10% of stars are "big" with diffraction spikes
+- Nebula background uses 5-octave FBM value noise
+- Travel gated on `overall_energy` so stars stop when music is silent
+- Bass energy boosts travel speed via `bass * reactivity * 0.4`
+
+**Card height**: Default growth factor 2.0×
+
+### 2.5 Helix
+
+**Shader**: `widgets/spotify_visualizer/shaders/helix.frag`
+
+Parametric 3D DNA double-helix with Blinn-Phong tube shading.
+
+**Key uniforms:**
+- `u_helix_turns` (min 2) — number of helix turns across card
+- `u_helix_double` (0/1) — single or double helix with rungs
+- `u_helix_speed` — base rotation speed
+- `u_helix_glow_enabled`, `u_helix_glow_intensity`, `u_helix_glow_color` — glow
+- `u_helix_reactive_glow` (0/1) — energy-reactive glow sigma
+- `u_fill_color`, `u_border_color` — strand colours (strand A / strand B)
+- `u_bass_energy`, `u_mid_energy`, `u_high_energy`, `u_overall_energy`
+
+**Audio reactivity:**
+- Bass drives rotation speed (`speed * 1.2 + bass * 1.5`) and coil amplitude
+- Mid energy widens tube radius
+- High energy widens rung half-width
+- Overall energy boosts brightness
+
+**Rendering layers (depth-sorted):**
+1. Back strand (double-helix only) — Blinn-Phong shaded tube
+2. Rungs/base pairs (double-helix only) — two-tone, depth-shaded
+3. Front strand — always drawn on top
+4. Glow halo — Gaussian falloff around closest strand when nothing else hit
+
+**Card height**: Default growth factor 2.0×
+
+---
+
+## 3. `_fft_to_bars` Pipeline (bar_computation.py)
 
 1. **FFT normalisation**: `log1p` + power curve. Low-resolution detection via `resolution_boost` adapts when Windows drops loopback block size.
 2. **Logarithmic band edges**: Cached (`_band_edges`). RMS per band → `freq_values`.
 3. **Energy buckets**: `raw_bass = mean(freq_values[:4])`, `raw_mid = mean(freq_values[4:10])`, `raw_treble = mean(freq_values[10:])`.
-4. **Adaptive sensitivity**: Pins to ~0.285× multiplier. Auto-dampens on low-res, lifts on high-res. Dynamic floor with drop relief prevents bars vanishing on bass collapse.
-5. **Gradient + template**: `(1 - dist)^2 * 0.82 + 0.18` base gradient. Ridge template (±3) stretched to bar_count, scaled 0.45–1.0.
-6. **Low-res sculpting** (when `resolution_boost > 1.05`): Enforces target_map with drop-aware damping.
-7. **Hold + drop logic**: Holds short segments during large drops. `drop_gain` boosted for low-res paths.
-8. **Normalization**: `_running_peak` + `target_peak` gently compresses when peaks drift >1.18. No global peak normalization.
+4. **Adaptive sensitivity**: Pins to ~0.285× multiplier. Auto-dampens on low-res, lifts on high-res.
+5. **Gradient + template**: `(1 - dist)^2 * 0.82 + 0.18` base gradient. Ridge template stretched to bar_count.
+6. **Hold + drop logic**: Holds short segments during large drops.
+7. **Normalization**: `_running_peak` + `target_peak` gently compresses when peaks drift >1.18.
 
 ---
 
-## 3. Playback Gating
+## 4. Playback Gating
 
 - **State detection**: `_SpotifyBeatEngine.set_playback_state()` from `handle_media_update()`.
 - **FFT gating**: `tick()` checks `_is_spotify_playing`; skips FFT scheduling when False.
@@ -81,55 +221,57 @@ CPU fallback: QPainter bar drawing in SpotifyVisualizerWidget.paintEvent()
 
 ---
 
-## 4. Settings & Styling
+## 5. Settings & Styling
 
 - All keys under `widgets.spotify_visualizer.*` via `SettingsManager`.
-- Defaults: `bar_fill_color = [255,255,255,230]`, `bar_border_color = [255,255,255,255]`.
 - Runtime hydration via `rendering/widget_manager.py`: `set_bar_style`, `set_bar_colors`, `set_ghost_config`.
 - Widget follows `Docs/10_WIDGET_GUIDELINES.md` for card styling and overlay integration.
+- Settings UI shows only the active mode's controls (conditional visibility).
 
 ---
 
-## 5. Logging + Diagnostics
+## 6. Logging + Diagnostics
 
 | Log | Purpose |
 |-----|---------|
-| `logs/screensaver_spotify_vis.log` | Bar dumps every ~30 frames, PERF snapshots (dt_min, dt_max, avg_fps) |
+| `logs/screensaver_spotify_vis.log` | Bar dumps, PERF snapshots (dt_min, dt_max, avg_fps) |
 | `logs/screensaver_spotify_vol.log` | Spotify volume overlay diagnostics |
 | `logs/screensaver_perf.log` | Aggregated PERF metrics (set `SRPSS_PERF_METRICS=1`) |
 
 ---
 
-## 6. Regression Harness
+## 7. Regression Harness
 
 `tests/test_visualizer_distribution.py` encodes "known good" behaviour:
 
-1. **REALISTIC REACTIVITY (synthetic)**: 60 FPS / 4s sinusoid with valley/micro drops. PASS criteria: centre ≥ 0.82 peak, avg drop ≥ 0.07, ridge ratios, edge range ≥ 20%, spike ratio ≤ 12%.
-2. **LOG SNAPSHOT**: Replays recent frames from `screensaver_spotify_vis.log` (360 frames default).
+1. **REALISTIC REACTIVITY (synthetic)**: 60 FPS / 4s sinusoid with valley/micro drops.
+2. **LOG SNAPSHOT**: Replays recent frames from `screensaver_spotify_vis.log`.
 
 Additional tests:
 - `tests/test_visualizer_playback_gating.py` — playback state gating, CPU savings
 - `tests/test_spotify_visualizer_widget.py` — unit tests for widget lifecycle
+- `tests/test_visualizer_modes.py` — per-mode basics (creation, attributes, segments)
 
 **Rule**: Do not tweak `_fft_to_bars` without running the distribution harness. If harness fails but live looks correct, adjust test thresholds, not runtime code.
 
 ---
 
-## 7. Known Limits
+## 8. Known Limits
 
-1. **dt spikes**: PERF logs show `dt_max_ms` ≈70–100 ms during heavy transitions. Visual smoothing hides most; frame interpolation is a future lever.
-2. **Edge pops on ultra-low resolution**: When Windows drops to 256-sample block size, drop accumulator clamps harder. Low-res `target_map` + `drop_gain` boost mitigates.
-3. **Audio worker fallback**: If beat engine fails, widget falls back to inline FFT. Monitor `[SPOTIFY_VIS] compute task callback failed` for ThreadManager saturation.
-
----
-
-## 8. How to Validate After Changes
-
-1. Run `python main.py --debug` with Spotify playing for ≥10s.
-2. Inspect `logs/screensaver_spotify_vis.log` — ridge should peak at bars 4/10, bars 5/9 trimmed, centre valley visible during drops.
-3. Run `python -m pytest tests/test_visualizer_distribution.py tests/test_visualizer_playback_gating.py -v`.
-4. Optional: `python -m pytest tests/test_spotify_visualizer_widget.py -v`.
+1. **dt spikes**: PERF logs show `dt_max_ms` ≈70–100 ms during heavy transitions. Visual smoothing hides most.
+2. **Edge pops on ultra-low resolution**: When Windows drops to 256-sample block size, low-res mitigations apply.
+3. **Audio worker fallback**: If beat engine fails, widget falls back to inline FFT. Monitor `[SPOTIFY_VIS] compute task callback failed`.
+4. **Starfield dev-gated**: Visual quality and performance still being tuned.
 
 ---
 
-*Living document. Update when bar-shaping, smoothing, module structure, or regression thresholds change.*
+## 9. How to Validate After Changes
+
+1. Run `$env:SRPSS_PERF_METRICS='1'; python main.py --debug` with Spotify playing for ≥10s.
+2. Inspect `logs/screensaver_spotify_vis.log` — check bar distribution and PERF snapshots.
+3. Run `python -m pytest tests/test_visualizer_distribution.py tests/test_visualizer_playback_gating.py tests/test_visualizer_modes.py -v`.
+4. For blob/helix/starfield: visually confirm smooth reactivity, no flicker, correct card expansion.
+
+---
+
+*Living document. Update when bar-shaping, smoothing, shader uniforms, module structure, or regression thresholds change.*

@@ -297,9 +297,12 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     vis_type_row.addWidget(QLabel("Visualizer Type:"))
     tab.spotify_vis_type_combo = QComboBox()
     tab.spotify_vis_type_combo.setMinimumWidth(160)
+    import os as _os
+    _dev_features = _os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
     tab.spotify_vis_type_combo.addItem("Spectrum", "spectrum")
     tab.spotify_vis_type_combo.addItem("Oscilloscope", "oscilloscope")
-    tab.spotify_vis_type_combo.addItem("Starfield", "starfield")
+    if _dev_features:
+        tab.spotify_vis_type_combo.addItem("Starfield", "starfield")
     tab.spotify_vis_type_combo.addItem("Blob", "blob")
 
     default_mode = tab._default_str('spotify_visualizer', 'mode', 'spectrum')
@@ -615,6 +618,12 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     osc_speed_row.addWidget(tab.osc_speed_label)
     osc_layout.addLayout(osc_speed_row)
 
+    tab.osc_line_dim = QCheckBox("Dim Lines 2/3 Glow")
+    tab.osc_line_dim.setChecked(tab._default_bool('spotify_visualizer', 'osc_line_dim', False))
+    tab.osc_line_dim.setToolTip("When enabled, lines 2 and 3 have slightly reduced glow to let the primary line stand out.")
+    tab.osc_line_dim.stateChanged.connect(tab._save_settings)
+    osc_layout.addWidget(tab.osc_line_dim)
+
     # Line colour picker (separate from glow)
     osc_line_color_row = QHBoxLayout()
     osc_line_color_row.addWidget(QLabel("Line Color:"))
@@ -830,6 +839,14 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     blob_glow_color_row.addWidget(tab.blob_glow_color_btn)
     blob_glow_color_row.addStretch()
     blob_layout.addLayout(blob_glow_color_row)
+
+    blob_outline_color_row = QHBoxLayout()
+    blob_outline_color_row.addWidget(QLabel("Outline Color:"))
+    tab.blob_outline_color_btn = QPushButton("Choose Color...")
+    tab.blob_outline_color_btn.clicked.connect(tab._choose_blob_outline_color)
+    blob_outline_color_row.addWidget(tab.blob_outline_color_btn)
+    blob_outline_color_row.addStretch()
+    blob_layout.addLayout(blob_outline_color_row)
 
     # Blob card width slider (0.3 .. 1.0)
     blob_width_row = QHBoxLayout()
@@ -1182,6 +1199,8 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         osc_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_speed', 1.0) * 100)
         tab.osc_speed.setValue(max(10, min(100, osc_speed_val)))
         tab.osc_speed_label.setText(f"{osc_speed_val}%")
+    if hasattr(tab, 'osc_line_dim'):
+        tab.osc_line_dim.setChecked(bool(spotify_vis_config.get('osc_line_dim', False)))
     if hasattr(tab, 'spectrum_growth'):
         spectrum_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_growth', 1.0) * 100)
         tab.spectrum_growth.setValue(max(100, min(300, spectrum_growth_val)))
@@ -1256,6 +1275,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         ('_blob_color', 'blob_color', [0, 180, 255, 230]),
         ('_blob_glow_color', 'blob_glow_color', [0, 140, 255, 180]),
         ('_blob_edge_color', 'blob_edge_color', [100, 220, 255, 230]),
+        ('_blob_outline_color', 'blob_outline_color', [0, 0, 0, 0]),
     ):
         data = spotify_vis_config.get(key, fallback)
         try:
@@ -1417,6 +1437,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_color': _qcolor_to_list(getattr(tab, '_blob_color', None), [0, 180, 255, 230]),
         'blob_glow_color': _qcolor_to_list(getattr(tab, '_blob_glow_color', None), [0, 140, 255, 180]),
         'blob_edge_color': _qcolor_to_list(getattr(tab, '_blob_edge_color', None), [100, 220, 255, 230]),
+        'blob_outline_color': _qcolor_to_list(getattr(tab, '_blob_outline_color', None), [0, 0, 0, 0]),
         'blob_width': (getattr(tab, 'blob_width', None) and tab.blob_width.value() or 100) / 100.0,
         'blob_size': (getattr(tab, 'blob_size', None) and tab.blob_size.value() or 100) / 100.0,
         'blob_glow_intensity': (getattr(tab, 'blob_glow_intensity', None) and tab.blob_glow_intensity.value() or 50) / 100.0,
@@ -1433,6 +1454,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_growth': (getattr(tab, 'blob_growth', None) and tab.blob_growth.value() or 250) / 100.0,
         'helix_growth': (getattr(tab, 'helix_growth', None) and tab.helix_growth.value() or 200) / 100.0,
         'osc_speed': (getattr(tab, 'osc_speed', None) and tab.osc_speed.value() or 100) / 100.0,
+        'osc_line_dim': getattr(tab, 'osc_line_dim', None) and tab.osc_line_dim.isChecked(),
     }
 
     tab._update_spotify_vis_sensitivity_enabled_state()

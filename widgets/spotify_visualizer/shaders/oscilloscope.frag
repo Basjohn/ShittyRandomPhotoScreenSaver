@@ -37,6 +37,9 @@ uniform vec4 u_line2_glow_color;
 uniform vec4 u_line3_color;
 uniform vec4 u_line3_glow_color;
 
+// Optional line 2/3 glow dimming (0 = equal glow, 1 = half-strength dim)
+uniform int u_osc_line_dim;
+
 float get_waveform_sample(int idx) {
     // Modular wrap so offset lines read valid circular-buffer data
     int n = max(u_waveform_count, 1);
@@ -188,12 +191,13 @@ void main() {
     int lines = clamp(u_line_count, 1, 3);
 
     // Per-line energy: single mode uses overall, multi-line splits by band
-    float e1 = (lines == 1) ? u_overall_energy : u_bass_energy;
-    float e2_band = u_mid_energy;
-    float e3_band = u_high_energy;
+    // Bass boosted 15% for kick/drum punch, mids/highs boosted 15% for vocal response
+    float e1 = (lines == 1) ? u_overall_energy : u_bass_energy * 1.15;
+    float e2_band = u_mid_energy * 1.15;
+    float e3_band = u_high_energy * 1.15;
 
     // Primary line — bass-reactive in multi-line, overall in single
-    float amp1 = amplitude * (1.0 + e1 * 0.15);
+    float amp1 = amplitude * (1.0 + e1 * 0.13);
     float w1 = sample_waveform(nx, 0);
     vec4 c1 = eval_line(ny, inner_height, w1, amp1,
                         u_line_color, u_glow_color, glow_sigma_base, e1);
@@ -205,26 +209,28 @@ void main() {
         // Line 2: mid-frequency reactive — responds to vocals, guitars, keys
         int wf_count = max(u_waveform_count, 2);
         int offset2 = max(1, wf_count / 3);
-        float amp2 = amplitude * (0.88 + e2_band * 0.2);
+        float amp2 = amplitude * (0.88 + e2_band * 0.22);
         float w2 = sample_waveform(nx, offset2);
+        float sigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
         vec4 c2 = eval_line(ny, inner_height, w2, amp2,
                             u_line2_color, u_line2_glow_color,
-                            glow_sigma_base * 0.85, e2_band);
-        final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a * 0.7;
-        final_a = max(final_a, c2.a * 0.7);
+                            sigma2, e2_band);
+        final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
+        final_a = max(final_a, c2.a);
     }
 
     if (lines >= 3) {
         // Line 3: high-frequency reactive — responds to hi-hats, cymbals, sibilance
         int wf_count = max(u_waveform_count, 2);
         int offset3 = max(1, wf_count * 2 / 3);
-        float amp3 = amplitude * (0.72 + e3_band * 0.25);
+        float amp3 = amplitude * (0.75 + e3_band * 0.28);
         float w3 = sample_waveform(nx, offset3);
+        float sigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
         vec4 c3 = eval_line(ny, inner_height, w3, amp3,
                             u_line3_color, u_line3_glow_color,
-                            glow_sigma_base * 0.7, e3_band);
-        final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a * 0.6;
-        final_a = max(final_a, c3.a * 0.6);
+                            sigma3, e3_band);
+        final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;
+        final_a = max(final_a, c3.a);
     }
 
     if (final_a <= 0.001) {

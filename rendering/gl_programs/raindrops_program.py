@@ -52,6 +52,7 @@ uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_resolution;
 uniform int u_ripple_count;  // 1-8, default 3
+uniform float u_ripple_seed;  // per-transition random seed for position variety
 
 float hash1(float n) {
     return fract(sin(n) * 43758.5453123);
@@ -84,12 +85,13 @@ void main() {
             timeOffset = 0.0;
         } else {
             float fi = float(i);
+            float seed = u_ripple_seed;
             center = vec2(
-                0.15 + hash1(fi * 73.0 + 7.0) * 0.7,
-                0.15 + hash1(fi * 91.0 + 13.0) * 0.7
+                0.15 + hash1(fi * 73.0 + 7.0 + seed * 127.1) * 0.7,
+                0.15 + hash1(fi * 91.0 + 13.0 + seed * 311.7) * 0.7
             );
             // Stagger start times so ripples don't all fire at once.
-            timeOffset = hash1(fi * 37.0 + 3.0) * 0.25;
+            timeOffset = hash1(fi * 37.0 + 3.0 + seed * 59.3) * 0.25;
         }
 
         vec2 centered = uv - center;
@@ -153,6 +155,7 @@ void main() {
             "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
             "u_ripple_count": gl.glGetUniformLocation(program, "u_ripple_count"),
+            "u_ripple_seed": gl.glGetUniformLocation(program, "u_ripple_seed"),
         }
 
     def render(
@@ -187,6 +190,10 @@ void main() {
 
             if uniforms.get("u_ripple_count", -1) != -1:
                 gl.glUniform1i(uniforms["u_ripple_count"], ripple_count)
+
+            if uniforms.get("u_ripple_seed", -1) != -1:
+                seed = float(getattr(state, "ripple_seed", 0.0))
+                gl.glUniform1f(uniforms["u_ripple_seed"], seed)
 
             if uniforms.get("uOldTex", -1) != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)

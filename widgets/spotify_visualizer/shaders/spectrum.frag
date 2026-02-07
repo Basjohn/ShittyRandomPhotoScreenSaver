@@ -13,6 +13,7 @@ uniform vec4 u_border_color;
 uniform float u_fade;
 uniform int u_playing;
 uniform float u_ghost_alpha;
+uniform float u_bar_height_scale;  // visual boost for taller cards (1.0 = default height)
 
 void main() {
     if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
@@ -146,9 +147,14 @@ void main() {
         discard;
     }
 
-    float boosted = value * 1.2;
-    if (boosted > 1.0) {
-        boosted = 1.0;
+    // Apply height-aware visual boost: the CPU scales bars by 0.55 to prevent
+    // pinning at normal volume.  When the card grows beyond its default height,
+    // u_bar_height_scale > 1.0 stretches bars to fill the extra space while
+    // keeping the anti-pinning behaviour at default card size.
+    float height_scale = max(1.0, u_bar_height_scale);
+    float boosted = value * 1.2 * height_scale;
+    if (boosted > 0.95) {
+        boosted = 0.95;
     }
     int active_segments = int(round(boosted * float(u_segments)));
     if (active_segments <= 0) {
@@ -171,9 +177,9 @@ void main() {
         // Map the peak/value difference into extra segments above the
         // current active height. Even a modest drop produces at least one
         // ghost segment when there is vertical room.
-        float boosted_delta = delta * 1.2;
-        if (boosted_delta > 1.0) {
-            boosted_delta = 1.0;
+        float boosted_delta = delta * 1.2 * height_scale;
+        if (boosted_delta > 0.95) {
+            boosted_delta = 0.95;
         }
         int extra_segments = int(ceil(boosted_delta * float(u_segments)));
         if (extra_segments <= 0 && delta > 0.01 && active_segments < u_segments) {

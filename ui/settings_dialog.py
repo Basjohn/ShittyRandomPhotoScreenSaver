@@ -1236,8 +1236,15 @@ class SettingsDialog(QDialog):
     
     def showEvent(self, event):
         super().showEvent(event)
+        # Reset cached width so images rescale on every show
         try:
-            self._update_about_header_images()
+            self._about_last_card_width = 0
+        except Exception:
+            pass
+        # Defer image scaling until after Qt processes layout geometry
+        try:
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, self._update_about_header_images)
         except Exception as e:
             logger.debug("[SETTINGS] Exception suppressed: %s", e)
     

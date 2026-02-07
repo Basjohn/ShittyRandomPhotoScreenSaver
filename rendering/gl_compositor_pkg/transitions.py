@@ -145,10 +145,12 @@ def start_raindrops(
         if widget._handle_no_old_image(new_pixmap, on_finished, "raindrops"):
             return None
 
+    import random as _rng
     widget._clear_all_transitions()
     widget._raindrops = RaindropsState(
         old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
         ripple_count=max(1, min(8, int(ripple_count))),
+        ripple_seed=_rng.random() * 1000.0,
     )
     widget._pre_upload_textures(widget._prepare_raindrops_textures)
     widget._profiler.start("raindrops")

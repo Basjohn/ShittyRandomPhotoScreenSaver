@@ -664,6 +664,14 @@ class WidgetsTab(QWidget):
             self._blob_edge_color = color
             self._save_settings()
 
+    def _choose_blob_outline_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_blob_outline_color', QColor(0, 0, 0, 0)),
+            self, "Choose Blob Outline Color")
+        if color is not None:
+            self._blob_outline_color = color
+            self._save_settings()
+
     def _choose_helix_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
             getattr(self, '_helix_glow_color', QColor(0, 200, 255, 180)),

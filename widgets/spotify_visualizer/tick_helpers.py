@@ -134,7 +134,10 @@ def rebuild_geometry_cache(widget: Any, rect: QRect) -> None:
     """Recompute cached bar/segment layout for the current geometry."""
 
     count = widget._bar_count
-    segments = max(1, getattr(widget, "_bar_segments", 16))
+    if hasattr(widget, '_dynamic_bar_segments'):
+        segments = max(1, widget._dynamic_bar_segments())
+    else:
+        segments = max(1, getattr(widget, "_bar_segments_base", 18))
     if rect.width() <= 0 or rect.height() <= 0 or count <= 0:
         widget._geom_cache_rect = QRect()
         widget._geom_cache_bar_count = count

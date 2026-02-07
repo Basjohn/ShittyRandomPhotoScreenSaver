@@ -19,7 +19,7 @@ class SettingsManager(QObject):
     
     # Signal emitted when settings change
     settings_changed = Signal(str, object)  # key, new_value
-    _STRUCTURED_ROOTS = frozenset({"widgets", "transitions"})
+    _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
     _MISSING = object()
     
     def __init__(

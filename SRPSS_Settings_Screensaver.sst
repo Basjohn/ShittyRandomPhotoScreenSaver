@@ -1,0 +1,615 @@
+{
+  "application": "Screensaver",
+  "metadata": {
+    "legacy_profile": "Screensaver",
+    "migrated_at": "2026-01-29T19:19:35.520732Z",
+    "migrated_from": "qsettings",
+    "profile": "Screensaver",
+    "version": 2
+  },
+  "profile": "Screensaver",
+  "settings_version": 2,
+  "snapshot": {
+    "accessibility": {
+      "dimming.enabled": false,
+      "dimming.opacity": 30,
+      "pixel_shift.enabled": true,
+      "pixel_shift.rate": 1
+    },
+    "display": {
+      "gl_depth_bits": 24,
+      "gl_stencil_bits": 8,
+      "hw_accel": true,
+      "mode": "fill",
+      "prefer_triple_buffer": true,
+      "render_backend_mode": "opengl",
+      "same_image_all_monitors": false,
+      "sharpen_downscale": false,
+      "show_on_monitors": "ALL",
+      "use_lanczos": false
+    },
+    "input": {
+      "hard_exit": true
+    },
+    "queue": {
+      "shuffle": true
+    },
+    "sources": {
+      "folders": [
+        "C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET"
+      ],
+      "local_ratio": 94,
+      "mode": "folders",
+      "rss_background_cap": 30,
+      "rss_feeds": [
+        "https://www.nasa.gov/feeds/iotd-feed",
+        "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=rss&language=en",
+        "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=motd&feedformat=rss&language=en",
+        "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
+        "https://www.flickr.com/services/feeds/photos_public.gne?format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=landscape,nature&format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=mountains,peaks&format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=ocean,sea&format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=space,astronomy,nebula&format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=cityscape,urban,skyline&format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=night,nightscape,longexposure&format=json&nojsoncallback=1"
+      ],
+      "rss_refresh_minutes": 10,
+      "rss_rotating_cache_size": 20,
+      "rss_save_directory": "",
+      "rss_save_to_disk": false,
+      "rss_stale_minutes": 30
+    },
+    "timing": {
+      "interval": 45
+    },
+    "transitions": {
+      "blinds": {
+        "feather": 2
+      },
+      "block_flip": {
+        "cols": 24,
+        "direction": "Random",
+        "rows": 12
+      },
+      "blockspin": {
+        "direction": "Random"
+      },
+      "crumble": {
+        "crack_complexity": 1.5,
+        "piece_count": 20,
+        "weighting": "Random Choice"
+      },
+      "diffuse": {
+        "block_size": 8,
+        "shape": "Random"
+      },
+      "direction": "Random",
+      "duration_ms": 7200,
+      "durations": {
+        "3D Block Spins": 9000,
+        "Blinds": 4000,
+        "Block Puzzle Flip": 5000,
+        "Crossfade": 5000,
+        "Crumble": 12000,
+        "Diffuse": 5500,
+        "Particle": 12000,
+        "Peel": 3000,
+        "Ripple": 7200,
+        "Slide": 5000,
+        "Warp Dissolve": 6000,
+        "Wipe": 4000
+      },
+      "easing": "Auto",
+      "particle": {
+        "direction": "Random Placement",
+        "gloss_size": 72.0,
+        "light_direction": 0,
+        "mode": "Swirl",
+        "overlap": 4.0,
+        "particle_radius": 7.0,
+        "swirl_order": 1,
+        "swirl_strength": 1.0,
+        "swirl_turns": 3.0,
+        "texture_mapping": true,
+        "trail_length": 0.15,
+        "trail_strength": 0.6,
+        "use_3d_shading": true,
+        "wobble": true
+      },
+      "peel": {
+        "direction": "Random"
+      },
+      "pool": {
+        "3D Block Spins": true,
+        "Blinds": true,
+        "Block Puzzle Flip": true,
+        "Crossfade": true,
+        "Crumble": true,
+        "Diffuse": true,
+        "Particle": true,
+        "Peel": false,
+        "Ripple": true,
+        "Slide": true,
+        "Warp Dissolve": true,
+        "Wipe": true
+      },
+      "random_always": false,
+      "ripple": {
+        "ripple_count": 1
+      },
+      "slide": {
+        "direction": "Bottom to Top"
+      },
+      "type": "Ripple",
+      "wipe": {
+        "direction": "Diagonal TL-BR"
+      }
+    },
+    "ui": {
+      "dialog_geometry": {
+        "height": 791,
+        "width": 1392,
+        "x": 166,
+        "y": 76
+      },
+      "dialog_geometry.height": 700,
+      "dialog_geometry.width": 1280,
+      "dialog_geometry.x": 203,
+      "dialog_geometry.y": 60,
+      "last_tab_index": 6,
+      "last_tab_scroll": {
+        "display": 0,
+        "presets": 0,
+        "sources": 0,
+        "transitions": 0,
+        "widgets": 528
+      },
+      "last_tab_scroll.accessibility": 0,
+      "last_tab_scroll.display": 0,
+      "last_tab_scroll.presets": 0,
+      "last_tab_scroll.sources": 0,
+      "last_tab_scroll.transitions": 0,
+      "last_tab_scroll.widgets": 0,
+      "tab_state": {
+        "widgets": {
+          "view_state": {
+            "scroll": 528,
+            "subtab": 2
+          }
+        }
+      },
+      "tab_state.widgets.view_state.scroll": 0,
+      "tab_state.widgets.view_state.subtab": 0
+    },
+    "widgets": {
+      "clock": {
+        "analog_face_shadow": true,
+        "analog_shadow_intense": true,
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "digital_shadow_intense": false,
+        "display_mode": "analog",
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 60,
+        "format": "24h",
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Top Right",
+        "shared_tick": true,
+        "show_background": true,
+        "show_numerals": true,
+        "show_seconds": true,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "clock2": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 30,
+        "monitor": 2,
+        "position": "Bottom Right",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "clock3": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Bottom Left",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "imgur": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "click_opens_browser": true,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "custom_tag": "",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 11,
+        "grid_columns": 4,
+        "grid_rows": 2,
+        "header_font_size": 14,
+        "image_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "image_border_enabled": true,
+        "image_border_radius": 4,
+        "image_border_width": 2,
+        "image_spacing": 4,
+        "intense_shadow": true,
+        "layout_mode": "hybrid",
+        "margin": 30,
+        "monitor": 2,
+        "position": "Top Right",
+        "show_background": true,
+        "show_header": true,
+        "tag": "most_viral",
+        "update_interval": 600
+      },
+      "media": {
+        "artwork_size": 200,
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 20,
+        "intense_shadow": true,
+        "margin": 30,
+        "monitor": 2,
+        "position": "Bottom Left",
+        "rounded_artwork_border": true,
+        "show_background": true,
+        "show_controls": true,
+        "show_header_frame": true,
+        "spotify_volume_enabled": true,
+        "spotify_volume_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ]
+      },
+      "reddit": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "exit_on_click": true,
+        "font_family": "Segoe UI",
+        "font_size": 14,
+        "intense_shadow": true,
+        "limit": 20,
+        "margin": 30,
+        "monitor": 2,
+        "position": "Bottom Center",
+        "show_background": true,
+        "show_separators": true,
+        "subreddit": "All"
+      },
+      "reddit2": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "intense_shadow": true,
+        "limit": 20,
+        "monitor": 2,
+        "position": "Bottom Right",
+        "show_background": true,
+        "subreddit": "Games"
+      },
+      "shadows": {
+        "blur_radius": 18,
+        "color": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "enabled": true,
+        "frame_opacity": 0.77,
+        "offset": [
+          4,
+          4
+        ],
+        "text_opacity": 0.33
+      },
+      "spotify_visualizer": {
+        "adaptive_sensitivity": true,
+        "audio_block_size": 512,
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_count": 21,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "blob_color": [
+          0,
+          105,
+          243,
+          230
+        ],
+        "blob_edge_color": [
+          89,
+          175,
+          255,
+          255
+        ],
+        "blob_glow_color": [
+          0,
+          196,
+          255,
+          180
+        ],
+        "blob_glow_intensity": 0.6,
+        "blob_growth": 3.99,
+        "blob_outline_color": [
+          0,
+          111,
+          255,
+          255
+        ],
+        "blob_pulse": 1.75,
+        "blob_reactive_glow": true,
+        "blob_size": 0.5,
+        "blob_width": 0.9,
+        "dynamic_floor": true,
+        "dynamic_range_enabled": true,
+        "enabled": true,
+        "ghost_alpha": 0.34,
+        "ghost_decay": 0.35,
+        "ghosting_enabled": true,
+        "helix_double": true,
+        "helix_glow_color": [
+          0,
+          200,
+          255,
+          180
+        ],
+        "helix_glow_enabled": true,
+        "helix_glow_intensity": 0.5,
+        "helix_growth": 2.5,
+        "helix_reactive_glow": false,
+        "helix_speed": 1.0,
+        "helix_turns": 6,
+        "manual_floor": 2.1,
+        "mode": "blob",
+        "monitor": "ALL",
+        "nebula_cycle_speed": 0.59,
+        "nebula_tint1": [
+          27,
+          116,
+          194,
+          255
+        ],
+        "nebula_tint2": [
+          80,
+          20,
+          100,
+          255
+        ],
+        "osc_glow_color": [
+          0,
+          200,
+          255,
+          255
+        ],
+        "osc_glow_enabled": true,
+        "osc_glow_intensity": 0.3,
+        "osc_line2_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "osc_line2_glow_color": [
+          2,
+          166,
+          255,
+          255
+        ],
+        "osc_line3_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "osc_line3_glow_color": [
+          0,
+          238,
+          179,
+          255
+        ],
+        "osc_line_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "osc_line_count": 3,
+        "osc_line_dim": true,
+        "osc_reactive_glow": true,
+        "osc_sensitivity": 7.5,
+        "osc_smoothing": 0.9,
+        "osc_speed": 0.35,
+        "sensitivity": 1.0,
+        "software_visualizer_enabled": false,
+        "spectrum_growth": 1.5,
+        "star_density": 1.0,
+        "star_reactivity": 1.95,
+        "star_travel_speed": 0.93,
+        "starfield_growth": 3.01
+      },
+      "weather": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "detail_icon_size": 16,
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 24,
+        "icon_alignment": "RIGHT",
+        "icon_size": 96,
+        "intense_shadow": true,
+        "location": "Sandton",
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Top Left",
+        "show_background": true,
+        "show_condition_icon": true,
+        "show_details_row": true,
+        "show_forecast": true
+      }
+    },
+    "workers": {
+      "fft.enabled": true,
+      "image.enabled": true,
+      "max_workers": "auto",
+      "rss.enabled": true,
+      "transition.enabled": true
+    }
+  },
+  "snapshot_version": 2
+}

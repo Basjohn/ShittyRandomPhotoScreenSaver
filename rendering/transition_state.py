@@ -131,6 +131,7 @@ class WarpState(TransitionStateBase):
 class RaindropsState(TransitionStateBase):
     """State for a compositor-driven raindrops/ripple transition."""
     ripple_count: int = 3
+    ripple_seed: float = 0.0  # per-transition random seed for position variety
 
 
 @dataclass

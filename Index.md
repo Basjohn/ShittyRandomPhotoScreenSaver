@@ -25,7 +25,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | SRPSS_PERF_METRICS | false | Enable performance metrics logging to screensaver_perf.log |
-| SRPSS_ENABLE_DEV | false | Enable experimental/broken features (e.g., Imgur widget) |
+| SRPSS_ENABLE_DEV | false | Enable experimental/broken features (e.g., Imgur widget, Starfield visualizer) |
 
 ## Core Managers
 
@@ -51,7 +51,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Frame Budget | core/performance/frame_budget.py | FrameBudget, GCController | Frame time allocation |
 | Settings | core/settings/defaults.py | get_default_settings() | Canonical defaults |
 | Settings | core/settings/models.py | DisplaySettings, TransitionSettings | Type-safe dataclass models |
-| Settings | core/settings/json_store.py | JsonSettingsStore | JSON persistence layer |
+| Settings | core/settings/json_store.py | JsonSettingsStore | JSON persistence layer (structured roots: widgets, transitions, custom_preset_backup, ui) |
 | Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
 | Media | core/media/media_controller.py | MediaController | GSMTC media state |
 | Media | core/media/spotify_volume.py | SpotifyVolumeController | pycaw volume control |
@@ -198,7 +198,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Blinds | - | 	ransitions/gl_compositor_blinds_transition.py | GL only |
 | Peel | - | 	ransitions/gl_compositor_peel_transition.py | GL only |
 | Block Spin | - | 	ransitions/gl_compositor_blockspin_transition.py | GL only, 3D, 6 directions incl. diagonals |
-| Raindrops | - | 	ransitions/gl_compositor_raindrops_transition.py | GL only (Ripple), configurable ripple count 1-8 |
+| Raindrops | - | transitions/gl_compositor_raindrops_transition.py | GL only (Ripple), configurable ripple count 1-8, per-transition random seed for position variety |
 | Warp | - | 	ransitions/gl_compositor_warp_transition.py | GL only |
 | Crumble | - | 	ransitions/gl_compositor_crumble_transition.py | GL only |
 | Particle | - | 	ransitions/gl_compositor_particle_transition.py | GL only |
@@ -255,10 +255,10 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 
 | Shader | File | Uniforms | Purpose |
 |--------|------|----------|---------|
-| Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha | Classic segmented bar analyzer (extracted verbatim from inline GLSL) |
-| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color} | Catmull-Rom spline waveform with separate line/glow colors and multi-line mode (up to 3) |
-| Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity | Volumetric ray-marched starfield (Star Nest derivative) |
-| Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse | 2D SDF organic metaball with audio-reactive deformation |
+| Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha | Classic segmented bar analyzer with dynamic segment count based on card height |
+| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy | Catmull-Rom spline waveform with per-band energy, equalized multi-line glow (3 lines: bass/mid/high) |
+| Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity, u_travel_time, u_nebula_tint{1,2} | Point-star starfield with nebula background, CPU-accumulated monotonic travel (dev-gated) |
+| Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy | 2D SDF organic metaball with +15% drum reactivity, vocal wobble, dip contraction, CPU-smoothed glow |
 | Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
 
 ## Weather System
@@ -391,7 +391,7 @@ value = settings.get("display.mode", "fill")
 | audits/AUDIT_THREADING.md | time.sleep, raw QTimer, untracked deleteLater sites |
 | audits/AUDIT_DEAD_CODE.md | Dead/retired modules to clean up |
 | audits/AUDIT_THREADING_RACE_CONDITIONS_2026_02.md | Widget Shiboken guard audit, ThreadPoolExecutor fix |
-| audits/VISUALIZER_DEBUG.md | Spotify visualizer debugging checklist |
+| audits/VISUALIZER_DEBUG.md | All 5 visualizer modes: architecture, uniforms, debugging |
 
 ## Test Organization
 

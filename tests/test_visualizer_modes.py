@@ -99,11 +99,14 @@ class TestVisualizerWidgetBasics:
         assert widget._bar_count > 0
 
     def test_widget_has_bar_segments(self, qt_app):
-        """Verify widget has bar_segments attribute."""
+        """Verify widget has dynamic bar segments."""
         from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
         widget = SpotifyVisualizerWidget(bar_count=15)
-        assert hasattr(widget, "_bar_segments")
-        assert widget._bar_segments > 0
+        assert hasattr(widget, "_bar_segments_base")
+        assert widget._bar_segments_base > 0
+        assert hasattr(widget, "_dynamic_bar_segments")
+        segs = widget._dynamic_bar_segments()
+        assert 8 <= segs <= 64
 
     def test_widget_has_display_bars(self, qt_app):
         """Verify widget has display_bars list."""

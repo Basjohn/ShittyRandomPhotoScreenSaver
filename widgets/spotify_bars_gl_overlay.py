@@ -106,12 +106,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_color: QColor = QColor(0, 180, 255, 230)
         self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
         self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
+        self._blob_outline_color: QColor = QColor(0, 0, 0, 0)  # dark band between fill and glow
         self._blob_pulse: float = 1.0
         self._blob_width: float = 1.0
         self._blob_size: float = 1.0
         self._blob_glow_intensity: float = 0.5
         self._blob_reactive_glow: bool = True
+        self._blob_smoothed_energy: float = 0.0  # CPU-side smoothed energy for glow decay
         self._osc_speed: float = 1.0
+        self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
+        self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
+        self._osc_smoothed_mid: float = 0.0
+        self._osc_smoothed_high: float = 0.0
 
         # Helix settings
         self._helix_turns: int = 4
@@ -200,12 +206,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_color: QColor | None = None,
         blob_glow_color: QColor | None = None,
         blob_edge_color: QColor | None = None,
+        blob_outline_color: QColor | None = None,
         blob_pulse: float = 1.0,
         blob_width: float = 1.0,
         blob_size: float = 1.0,
         blob_glow_intensity: float = 0.5,
         blob_reactive_glow: bool = True,
         osc_speed: float = 1.0,
+        osc_line_dim: bool = False,
         helix_turns: int = 4,
         helix_double: bool = True,
         helix_speed: float = 1.0,
@@ -257,6 +265,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     base_spd = self._travel_speed * activity
                     spd = base_spd + bass * self._star_reactivity * 0.4
                     self._starfield_travel_time += dt * spd
+                # Blob: smooth overall energy to reduce glow flickering
+                if self._vis_mode == 'blob' and energy_bands is not None:
+                    raw_e = getattr(energy_bands, 'overall', 0.0)
+                    prev = self._blob_smoothed_energy
+                    # Fast rise (~50ms tau), slow decay (~300ms tau)
+                    alpha = min(1.0, dt / 0.05) if raw_e > prev else min(1.0, dt / 0.30)
+                    self._blob_smoothed_energy = prev + (raw_e - prev) * alpha
+                # Oscilloscope: smooth per-band energy for glow anti-flicker
+                if self._vis_mode == 'oscilloscope' and energy_bands is not None:
+                    for attr, band in (
+                        ('_osc_smoothed_bass', 'bass'),
+                        ('_osc_smoothed_mid', 'mid'),
+                        ('_osc_smoothed_high', 'high'),
+                    ):
+                        raw_e = getattr(energy_bands, band, 0.0)
+                        prev = getattr(self, attr)
+                        a = min(1.0, dt / 0.06) if raw_e > prev else min(1.0, dt / 0.25)
+                        setattr(self, attr, prev + (raw_e - prev) * a)
         self._last_time_ts = now_ts
 
         # Store waveform data (oscilloscope) with temporal smoothing via osc_speed
@@ -318,12 +344,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_glow_color = QColor(blob_glow_color)
         if blob_edge_color is not None:
             self._blob_edge_color = QColor(blob_edge_color)
+        if blob_outline_color is not None:
+            self._blob_outline_color = QColor(blob_outline_color)
         self._blob_pulse = max(0.0, float(blob_pulse))
         self._blob_width = max(0.1, min(1.0, float(blob_width)))
         self._blob_size = max(0.3, min(2.0, float(blob_size)))
         self._blob_glow_intensity = max(0.0, min(1.0, float(blob_glow_intensity)))
         self._blob_reactive_glow = bool(blob_reactive_glow)
         self._osc_speed = max(0.01, min(1.0, float(osc_speed)))
+        self._osc_line_dim = bool(osc_line_dim)
 
         # Helix settings
         self._helix_turns = max(2, int(helix_turns))
@@ -709,7 +738,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 uniforms = {}
                 for uname in (
                     "u_resolution", "u_dpr", "u_fade", "u_time",
-                    "u_bar_count", "u_segments", "u_bars", "u_peaks",
+                    "u_bar_count", "u_segments", "u_bar_height_scale", "u_bars", "u_peaks",
                     "u_fill_color", "u_border_color", "u_playing", "u_ghost_alpha",
                     "u_waveform", "u_waveform_count",
                     "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
@@ -717,9 +746,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_sensitivity", "u_smoothing",
                     "u_star_density", "u_travel_speed", "u_star_reactivity",
                     "u_travel_time", "u_nebula_tint1", "u_nebula_tint2", "u_nebula_cycle_speed",
-                    "u_blob_color", "u_blob_glow_color", "u_blob_edge_color",
-                    "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_reactive_glow",
-                    "u_osc_speed",
+                    "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
+                    "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity",
+                    "u_blob_reactive_glow", "u_blob_smoothed_energy",
+                    "u_osc_speed", "u_osc_line_dim",
                     "u_helix_turns", "u_helix_double", "u_helix_speed",
                     "u_helix_glow_enabled", "u_helix_glow_intensity",
                     "u_helix_glow_color", "u_helix_reactive_glow",
@@ -893,6 +923,17 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 if loc >= 0:
                     _gl.glUniform1i(loc, segments)
 
+                # Visual height boost: when the card is taller than the default
+                # 80px spectrum height, scale bar values so they fill more of
+                # the card.  The 0.55 audio scaling is preserved on the CPU
+                # side; this only affects the shader's visual mapping.
+                loc = u.get("u_bar_height_scale", -1)
+                if loc >= 0:
+                    _SPECTRUM_BASE_HEIGHT = 80.0
+                    cur_h = max(1.0, float(rect.height()))
+                    height_scale = max(1.0, cur_h / _SPECTRUM_BASE_HEIGHT)
+                    _gl.glUniform1f(loc, float(height_scale))
+
                 bars = list(self._bars)
                 if not bars:
                     _gl.glBindVertexArray(0)
@@ -918,8 +959,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 if loc >= 0:
                     buf = self._bars_buffer
                     buf.fill(0.0)
+                    # Scale bars ~55% so vocals/drums (bars 1/2) don't pin at top
+                    # at normal volume. Calibrated to match ideal state at ~55% mixer.
                     for i in range(min(len(bars), 64)):
-                        buf[i] = float(bars[i])
+                        buf[i] = float(bars[i]) * 0.55
                     _gl.glUniform1fv(loc, 64, buf)
 
                 loc = u.get("u_peaks", -1)
@@ -928,7 +971,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     buf_peaks.fill(0.0)
                     peaks = self._peaks
                     for i in range(min(len(peaks), 64)):
-                        buf_peaks[i] = float(peaks[i])
+                        buf_peaks[i] = float(peaks[i]) * 0.55
                     _gl.glUniform1fv(loc, 64, buf_peaks)
 
                 loc = u.get("u_playing", -1)
@@ -1019,15 +1062,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_overall_energy", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(eb.overall))
+                # Oscilloscope uses CPU-smoothed bands for glow anti-flicker
+                if mode == 'oscilloscope':
+                    bass_val = self._osc_smoothed_bass
+                    mid_val = self._osc_smoothed_mid
+                    high_val = self._osc_smoothed_high
+                else:
+                    bass_val = eb.bass
+                    mid_val = eb.mid
+                    high_val = eb.high
                 loc = u.get("u_bass_energy", -1)
                 if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.bass))
+                    _gl.glUniform1f(loc, float(bass_val))
                 loc = u.get("u_mid_energy", -1)
                 if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.mid))
+                    _gl.glUniform1f(loc, float(mid_val))
                 loc = u.get("u_high_energy", -1)
                 if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.high))
+                    _gl.glUniform1f(loc, float(high_val))
 
             # --- Starfield uniforms ---
             if mode == 'starfield':
@@ -1087,12 +1139,23 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_blob_reactive_glow", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._blob_reactive_glow else 0)
+                loc = u.get("u_blob_outline_color", -1)
+                if loc >= 0:
+                    boc = self._blob_outline_color
+                    _gl.glUniform4f(loc, float(boc.redF()), float(boc.greenF()),
+                                    float(boc.blueF()), float(boc.alphaF()))
+                loc = u.get("u_blob_smoothed_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_smoothed_energy))
 
-            # --- Oscilloscope speed ---
+            # --- Oscilloscope uniforms ---
             if mode == 'oscilloscope':
                 loc = u.get("u_osc_speed", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._osc_speed))
+                loc = u.get("u_osc_line_dim", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._osc_line_dim else 0)
 
             # --- Helix uniforms ---
             if mode == 'helix':
@@ -1193,6 +1256,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     continue
                 if value > 1.0:
                     value = 1.0
+                # Height-aware visual boost (mirrors shader u_bar_height_scale)
+                _BASE_H = 80.0
+                h_scale = max(1.0, float(rect.height()) / _BASE_H)
+                value = min(0.95, value * h_scale)
                 active = int(round(value * segments))
                 if active <= 0:
                     if self._playing and value > 0.0:

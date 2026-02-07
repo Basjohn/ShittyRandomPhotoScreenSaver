@@ -82,7 +82,7 @@ class SpotifyVisualizerWidget(QWidget):
         # Bar styling
         self._bar_fill_color = QColor(200, 200, 200, 230)
         self._bar_border_color = QColor(255, 255, 255, 255)
-        self._bar_segments: int = 18
+        self._bar_segments_base: int = 18
         self._ghosting_enabled: bool = True
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
@@ -117,6 +117,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_color: QColor = QColor(0, 180, 255, 230)
         self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
         self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
+        self._blob_outline_color: QColor = QColor(0, 0, 0, 0)
         self._blob_pulse: float = 1.0
         self._blob_width: float = 1.0
         self._blob_size: float = 1.0
@@ -141,6 +142,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_growth: float = 2.5
         self._helix_growth: float = 2.0
         self._osc_speed: float = 1.0
+        self._osc_line_dim: bool = False
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -219,7 +221,7 @@ class SpotifyVisualizerWidget(QWidget):
         # change.
         self._geom_cache_rect: Optional[QRect] = None
         self._geom_cache_bar_count: int = self._bar_count
-        self._geom_cache_segments: int = self._bar_segments
+        self._geom_cache_segments: int = self._bar_segments_base
         self._geom_bar_x: List[int] = []
         self._geom_seg_y: List[int] = []
         self._geom_bar_width: int = 0
@@ -436,6 +438,10 @@ class SpotifyVisualizerWidget(QWidget):
             c = kwargs['blob_edge_color']
             if isinstance(c, (list, tuple)) and len(c) >= 3:
                 self._blob_edge_color = QColor(*c)
+        if 'blob_outline_color' in kwargs:
+            c = kwargs['blob_outline_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._blob_outline_color = QColor(*c)
         if 'blob_pulse' in kwargs:
             self._blob_pulse = max(0.0, float(kwargs['blob_pulse']))
         if 'blob_width' in kwargs:
@@ -478,6 +484,8 @@ class SpotifyVisualizerWidget(QWidget):
             self._helix_growth = max(0.5, min(5.0, float(kwargs['helix_growth'])))
         if 'osc_speed' in kwargs:
             self._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
+        if 'osc_line_dim' in kwargs:
+            self._osc_line_dim = bool(kwargs['osc_line_dim'])
 
         # Update widget height if mode changed
         self._apply_preferred_height()
@@ -1172,6 +1180,27 @@ class SpotifyVisualizerWidget(QWidget):
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         return 0.0
 
+    def _dynamic_bar_segments(self) -> int:
+        """Compute segment count based on current widget height.
+
+        Targets ~4px per segment + 1px gap so taller cards gain more segments
+        (better gradient resolution) while shorter cards stay clean.  Clamps
+        between 8 and 64 (GLSL uniform array limit).
+        """
+        try:
+            h = self.height()
+        except Exception:
+            return max(8, self._bar_segments_base)
+        if h <= 0:
+            return max(8, self._bar_segments_base)
+        margin_y = 6
+        inner_h = h - margin_y * 2
+        if inner_h <= 0:
+            return 8
+        seg_slot = 5  # 4px segment + 1px gap
+        segs = max(8, min(64, inner_h // seg_slot))
+        return segs
+
     def _rebuild_geometry_cache(self, rect: QRect) -> None:
         """Delegates to widgets.spotify_visualizer.tick_helpers."""
         from widgets.spotify_visualizer.tick_helpers import rebuild_geometry_cache
@@ -1398,12 +1427,14 @@ class SpotifyVisualizerWidget(QWidget):
                     extra['blob_color'] = self._blob_color
                     extra['blob_glow_color'] = self._blob_glow_color
                     extra['blob_edge_color'] = self._blob_edge_color
+                    extra['blob_outline_color'] = self._blob_outline_color
                     extra['blob_pulse'] = self._blob_pulse
                     extra['blob_width'] = self._blob_width
                     extra['blob_size'] = self._blob_size
                     extra['blob_glow_intensity'] = self._blob_glow_intensity
                     extra['blob_reactive_glow'] = self._blob_reactive_glow
                     extra['osc_speed'] = self._osc_speed
+                    extra['osc_line_dim'] = self._osc_line_dim
                     extra['helix_turns'] = self._helix_turns
                     extra['helix_double'] = self._helix_double
                     extra['helix_speed'] = self._helix_speed
@@ -1421,7 +1452,7 @@ class SpotifyVisualizerWidget(QWidget):
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),
                     bar_count=self._bar_count,
-                    segments=self._bar_segments,
+                    segments=self._dynamic_bar_segments(),
                     fill_color=self._bar_fill_color,
                     border_color=self._bar_border_color,
                     fade=fade,
@@ -1547,7 +1578,7 @@ class SpotifyVisualizerWidget(QWidget):
             # the bar geometry only. Use a cached layout to avoid recomputing
             # per-frame integer geometry.
 
-            segments = max(1, getattr(self, "_bar_segments", 16))
+            segments = max(1, self._dynamic_bar_segments())
             if (
                 self._geom_cache_rect is None
                 or self._geom_cache_rect.width() != rect.width()

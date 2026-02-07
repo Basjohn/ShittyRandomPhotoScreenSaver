@@ -62,9 +62,13 @@ Transitions run on the GL compositor when hardware acceleration is available. So
   - Top posts from configured subreddits with 4-, 10-, or 20-item layouts
   - Click-through behavior gated by interaction mode (Ctrl/Hard Exit)
   - Shared styling via widget factories
-- **Spotify Visualizer**:
-  - Real-time WASAPI loopback audio visualization with GL bars + software fallback
-  - Ghost trails, adaptive sensitivity, and synchronized fade-in with the media card
+- **Spotify Visualizer** (5 modes):
+  - **Spectrum**: Segmented bar analyzer with ghost peak trails, dynamic segment count scaling with card height
+  - **Oscilloscope**: Catmull-Rom spline waveform, up to 3 frequency-band-reactive lines with glow
+  - **Blob**: 2D SDF organic metaball with drum-reactive pulse, vocal wobble, energy-reactive glow
+  - **Starfield**: Point-star field with nebula background, audio-reactive travel (dev-gated)
+  - **Helix**: 3D DNA double-helix with Blinn-Phong tube shading and energy-reactive rotation
+  - All modes: WASAPI loopback audio, GL rendering + software fallback, synchronized fade-in
   - Volume slider control and pixel-shift aware positioning
 
 ### 6. Configuration GUI

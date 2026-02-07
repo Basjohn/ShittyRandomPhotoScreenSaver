@@ -277,6 +277,7 @@ def create_spotify_visualizer_widget(
                     blob_color=model.blob_color,
                     blob_glow_color=model.blob_glow_color,
                     blob_edge_color=model.blob_edge_color,
+                    blob_outline_color=model.blob_outline_color,
                     blob_pulse=model.blob_pulse,
                     blob_width=model.blob_width,
                     blob_size=model.blob_size,
@@ -300,6 +301,7 @@ def create_spotify_visualizer_widget(
                     blob_growth=model.blob_growth,
                     helix_growth=model.helix_growth,
                     osc_speed=model.osc_speed,
+                    osc_line_dim=model.osc_line_dim,
                 )
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)

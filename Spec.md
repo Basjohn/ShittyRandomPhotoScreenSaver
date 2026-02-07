@@ -40,7 +40,7 @@ Single source of truth for architecture and key decisions.
 - GLStateManager (`rendering/gl_state_manager.py`) provides centralized GL context state management with validated state transitions (UNINITIALIZED→INITIALIZING→READY/ERROR→DESTROYING→DESTROYED), thread-safe access, callbacks, and recovery tracking. Integrated into GLCompositorWidget and SpotifyBarsGLOverlay.
 - TransitionStateManager (extracted from GLCompositor) manages per-transition state with change notifications.
 - BeatEngine (extracted from SpotifyVisualizerWidget) handles FFT processing and bar smoothing on COMPUTE pool.
-- **Multi-Visualizer Architecture**: SpotifyBarsGLOverlay compiles all 5 GLSL shader programs (spectrum, oscilloscope, starfield, blob, helix) at `initializeGL()` and switches between them in `paintGL()` based on `_vis_mode`. Shaders are loaded from external `.frag` files via `widgets/spotify_visualizer/shaders/__init__.py`. Each mode has its own uniform set dispatched in `_render_with_shader()`. The spectrum shader was extracted verbatim from the original inline GLSL — no math changes. Beat engine provides waveform (256 samples) and energy bands (bass/mid/high/overall) for non-spectrum modes. Card height expansion for blob/starfield/helix is handled by `widgets/spotify_visualizer/card_height.py` with user-configurable growth factors. Settings UI uses conditional visibility — only the active mode's controls are shown.
+- **Multi-Visualizer Architecture**: SpotifyBarsGLOverlay compiles all 5 GLSL shader programs (spectrum, oscilloscope, starfield, blob, helix) at `initializeGL()` and switches between them in `paintGL()` based on `_vis_mode`. Shaders are loaded from external `.frag` files via `widgets/spotify_visualizer/shaders/__init__.py`. Each mode has its own uniform set dispatched in `_render_with_shader()`. Spectrum uses dynamic segment count based on card height (`_dynamic_bar_segments()`: ~4px/seg + 1px gap, 8–64 range). Blob features +15% drum reactivity, vocal-driven wobble (smooth mid-energy deformation), and subtle dip contraction with CPU-smoothed energy. Beat engine provides waveform (256 samples) and energy bands (bass/mid/high/overall) for non-spectrum modes. Card height expansion for blob/starfield/helix is handled by `widgets/spotify_visualizer/card_height.py` with user-configurable growth factors. Settings UI uses conditional visibility — only the active mode's controls are shown.
 - **UI Thread Discipline**: Any new diagnostics or telemetry (tray icons, overlays, animations) must avoid blocking the UI thread. All polling belongs on ThreadManager pools with `invoke_in_ui_thread()` postings; even 100 ms sync calls (e.g. `psutil.cpu_percent(0.1)`) will surface as 100–160 ms dt spikes in transitions.
 
 ## Phase E Status: Context Menu / Effect Cache Corruption ✅ MITIGATED
@@ -68,6 +68,10 @@ Single source of truth for architecture and key decisions.
    - **Gate Location**: `rendering/widget_manager.py` line ~1783
    - **Future**: May be restored if Imgur reopens their API or if Selenium/Playwright implementation is added for JS rendering.
    - **Alternative**: Consider Unsplash, Pexels, or Flickr as replacement image sources (all have free APIs or scrapable HTML).
+2. **Starfield Visualizer** (`widgets/spotify_visualizer/shaders/starfield.frag`)
+   - **Reason**: Experimental shader mode, not yet production-ready. Visual quality and performance still being tuned.
+   - **Gate Location**: `ui/tabs/widgets_tab_media.py` — visualizer type combo only shows "Starfield" when dev flag is set.
+   - **Future**: Ungated once visual quality and performance are validated.
 
 **Implementation Pattern**:
 ```python
