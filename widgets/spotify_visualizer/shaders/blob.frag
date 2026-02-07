@@ -27,12 +27,12 @@ uniform float u_blob_smoothed_energy;  // CPU-side smoothed energy (reduces flic
 
 // 2D SDF organic blob with audio-reactive deformation
 float blob_sdf(vec2 p, float time) {
-    float r = 0.28 * clamp(u_blob_size, 0.3, 2.0);
+    float r = 0.40 * clamp(u_blob_size, 0.1, 2.5);
     // Bass pulse — breathe the radius (+15% drum reactivity: 0.084 → 0.097)
-    r += u_bass_energy * 0.097 * u_blob_pulse;
+    r += u_bass_energy * 0.077 * u_blob_pulse;
     // Subtle contraction on energy dips (~10% of pulse range, smoothed to avoid flicker)
     float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
-    r -= (1.0 - se) * 0.010 * u_blob_pulse;
+    r -= (1.0 - se) * 0.053 * u_blob_pulse;
 
     float angle = atan(p.y, p.x);
     float dist = length(p);
@@ -45,13 +45,13 @@ float blob_sdf(vec2 p, float time) {
     deform += sin(angle * 11.0 - time * 4.7) * 0.013 * u_high_energy;
 
     // Overall energy wobble
-    deform += sin(angle * 2.0 + time * 0.8) * 0.034 * u_overall_energy;
+    deform += sin(angle * 1.0 + time * 0.2) * 0.020 * u_overall_energy;
 
     // Vocal-reactive wobble: smooth low-frequency shape change driven by mid (vocal) energy
     // Uses slow angular frequencies and time evolution to preserve organic smoothness
     float vocal = clamp(u_mid_energy, 0.0, 1.0);
-    deform += sin(angle * 2.0 + time * 0.7) * 0.038 * vocal;
-    deform += sin(angle * 4.0 - time * 1.1) * 0.022 * vocal * vocal;
+    deform += sin(angle * 2.0 + time * 0.9) * 0.080 * vocal;
+    deform += sin(angle * 4.0 - time * 1.1) * 0.050 * vocal * vocal;
 
     return dist - r - deform;
 }
@@ -117,8 +117,8 @@ void main() {
         // Use CPU-smoothed energy to prevent glow flickering
         float e = u_blob_smoothed_energy;
         // Low base (barely visible at silence) → dramatic at full energy
-        glow_sigma = (1.5 + gi * 6.0) + e * e * (25.0 + gi * 45.0);
-        glow_strength = (0.02 + gi * 0.08) + e * (0.45 + gi * 0.8);
+        glow_sigma = (1.5 + gi * 5.0) + e * e * (20.0 + gi * 40.0);
+        glow_strength = (0.02 + gi * 0.08) + e * (0.40 + gi * 0.8);
     } else {
         glow_sigma = 4.0 + gi * 25.0;
         glow_strength = 0.15 + gi * 0.6;
