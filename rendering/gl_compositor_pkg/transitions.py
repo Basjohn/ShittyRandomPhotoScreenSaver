@@ -371,7 +371,7 @@ def start_diffuse(
             return None
 
     # Map shape name to integer for GLSL shader
-    shape_mode = {"membrane": 1, "lines": 2, "diamonds": 3, "amorph": 4}.get(
+    shape_mode = {"membrane": 1, "lines": 2, "diamonds": 3, "amorph": 4, "random": 5}.get(
         (shape or "").strip().lower(), 0
     )
 

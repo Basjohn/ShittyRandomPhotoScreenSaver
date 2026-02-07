@@ -415,12 +415,15 @@ vec2 uv_front = vec2(vUv.x, 1.0 - vUv.y);
 // UVs to keep the new image upright.
 vec2 uv_back;
 if (u_axisMode == 0) {
-    uv_back = vec2(1.0 - vUv.x, 1.0 - vUv.y);  // horizontal spin
+    uv_back = vec2(1.0 - vUv.x, 1.0 - vUv.y);  // horizontal spin (Y-axis)
 } else if (u_axisMode == 1) {
-    uv_back = vec2(vUv.x, vUv.y);              // vertical spin
+    uv_back = vec2(vUv.x, vUv.y);               // vertical spin (X-axis)
+} else if (u_axisMode == 2) {
+    // Diagonal TL->BR: rotation (x,y,z)->(-y,-x,-z) swaps and negates x,y
+    uv_back = vec2(1.0 - vUv.y, vUv.x);
 } else {
-    // Diagonal spins: mirror both axes like horizontal
-    uv_back = vec2(1.0 - vUv.x, 1.0 - vUv.y);
+    // Diagonal TR->BL: rotation (x,y,z)->(y,x,-z) swaps x,y
+    uv_back = vec2(vUv.y, 1.0 - vUv.x);
 }
 
 vec3 n = normalize(vNormal);

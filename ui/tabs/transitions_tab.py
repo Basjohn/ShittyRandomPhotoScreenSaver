@@ -208,6 +208,21 @@ class TransitionsTab(QWidget):
         grid_row.addWidget(self.grid_cols_spin)
         grid_row.addStretch()
         flip_layout.addLayout(grid_row)
+
+        flip_dir_row = QHBoxLayout()
+        flip_dir_row.addWidget(QLabel("Direction:"))
+        self.blockflip_direction_combo = QComboBox()
+        self.blockflip_direction_combo.addItems([
+            "Left to Right",
+            "Right to Left",
+            "Top to Bottom",
+            "Bottom to Top",
+            "Random",
+        ])
+        self.blockflip_direction_combo.currentTextChanged.connect(self._save_settings)
+        flip_dir_row.addWidget(self.blockflip_direction_combo)
+        flip_dir_row.addStretch()
+        flip_layout.addLayout(flip_dir_row)
         
         layout.addWidget(self.flip_group)
 
@@ -252,7 +267,7 @@ class TransitionsTab(QWidget):
         shape_row = QHBoxLayout()
         shape_row.addWidget(QLabel("Shape:"))
         self.diffuse_shape_combo = QComboBox()
-        self.diffuse_shape_combo.addItems(["Rectangle", "Membrane", "Lines", "Diamonds", "Amorph"])
+        self.diffuse_shape_combo.addItems(["Rectangle", "Membrane", "Lines", "Diamonds", "Amorph", "Random"])
         self.diffuse_shape_combo.currentTextChanged.connect(self._save_settings)
         shape_row.addWidget(self.diffuse_shape_combo)
         shape_row.addStretch()
@@ -538,6 +553,7 @@ class TransitionsTab(QWidget):
             getattr(self, 'easing_combo', None),
             getattr(self, 'grid_rows_spin', None),
             getattr(self, 'grid_cols_spin', None),
+            getattr(self, 'blockflip_direction_combo', None),
             getattr(self, 'blockspin_direction_combo', None),
             getattr(self, 'block_size_spin', None),
             getattr(self, 'diffuse_shape_combo', None),
@@ -623,6 +639,14 @@ class TransitionsTab(QWidget):
             block_flip = transitions_config.get('block_flip', {})
             self.grid_rows_spin.setValue(block_flip.get('rows', canonical_block_flip.get('rows', 12)))
             self.grid_cols_spin.setValue(block_flip.get('cols', canonical_block_flip.get('cols', 24)))
+            blockflip_dir = block_flip.get('direction', 'Random') or 'Random'
+            try:
+                idx = self.blockflip_direction_combo.findText(blockflip_dir)
+                if idx < 0:
+                    idx = self.blockflip_direction_combo.findText("Random")
+                self.blockflip_direction_combo.setCurrentIndex(max(0, idx))
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
             # Load 3D Block Spins settings
             try:
@@ -910,7 +934,8 @@ class TransitionsTab(QWidget):
             'random_always': self.random_checkbox.isChecked(),
             'block_flip': {
                 'rows': self.grid_rows_spin.value(),
-                'cols': self.grid_cols_spin.value()
+                'cols': self.grid_cols_spin.value(),
+                'direction': self.blockflip_direction_combo.currentText(),
             },
             'diffuse': {
                 'block_size': self.block_size_spin.value(),

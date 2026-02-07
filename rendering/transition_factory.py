@@ -427,9 +427,13 @@ class TransitionFactory:
         rows = self._safe_int(block_flip_settings.get('rows', 4), 4)
         cols = self._safe_int(block_flip_settings.get('cols', 6), 6)
         
-        # Get direction from slide settings
-        slide_cfg = settings.get('slide', {}) if isinstance(settings.get('slide', {}), dict) else {}
-        direction = self._get_slide_direction(settings, slide_cfg, 'slide')
+        # Get direction from block_flip config (cardinal directions only)
+        dir_str = block_flip_settings.get('direction', 'Random') or 'Random'
+        if dir_str == 'Random':
+            cardinal = [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]
+            direction = random.choice(cardinal)
+        else:
+            direction = SLIDE_DIRECTION_MAP.get(dir_str, SlideDirection.LEFT)
         
         if use_compositor:
             return GLCompositorBlockFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=direction)

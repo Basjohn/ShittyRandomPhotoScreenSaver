@@ -12,6 +12,7 @@ from core.logging.logger import get_logger, get_throttled_logger, is_perf_metric
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
+from widgets.spotify_visualizer.energy_bands import EnergyBands
 
 
 logger = get_logger(__name__)
@@ -62,8 +63,41 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._fade: float = 0.0
         self._playing: bool = False
         
-        # Visualization mode: only 'spectrum' supported
+        # Active visualization mode
         self._vis_mode: str = 'spectrum'
+
+        # Accumulated time for animated visualizers (seconds)
+        self._accumulated_time: float = 0.0
+        self._last_time_ts: float = 0.0
+
+        # Waveform data for oscilloscope (256 samples, -1..1)
+        self._waveform: List[float] = []
+        self._waveform_count: int = 0
+
+        # Energy bands for starfield / blob / helix
+        self._energy_bands: EnergyBands = EnergyBands()
+
+        # Oscilloscope glow settings
+        self._glow_enabled: bool = True
+        self._glow_intensity: float = 0.5
+        self._glow_color: QColor = QColor(0, 200, 255, 230)
+        self._reactive_glow: bool = True
+
+        # Starfield settings
+        self._star_density: float = 1.0
+        self._travel_speed: float = 0.5
+        self._star_reactivity: float = 1.0
+
+        # Blob settings
+        self._blob_color: QColor = QColor(0, 180, 255, 230)
+        self._blob_pulse: float = 1.0
+
+        # Helix settings
+        self._helix_turns: int = 4
+        self._helix_double: bool = True
+        self._helix_speed: float = 1.0
+        self._helix_glow_enabled: bool = True
+        self._helix_glow_intensity: float = 0.5
 
         # Ghosting configuration – whether trailing segments are drawn and
         # how strong they appear relative to the main bar border colour. The
@@ -81,27 +115,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # roughly a second after a strong drop.
         self._peak_decay_per_sec: float = 0.4
 
-        # Minimal GL state for a fullscreen quad shader. If initialisation
-        # fails at any point we fall back to the legacy QPainter-on-GL path.
-        self._gl_program = None
+        # Multi-shader GL state. Each vis_mode has its own compiled program
+        # stored in _gl_programs[mode]. The shared VAO/VBO is reused across
+        # all modes (they all render a single fullscreen quad).
+        from typing import Dict as _Dict, Any as _Any
+        self._gl_programs: _Dict[str, _Any] = {}  # mode -> program id
+        self._gl_uniforms: _Dict[str, _Dict[str, _Any]] = {}  # mode -> {name: loc}
         self._gl_vao = None
         self._gl_vbo = None
         # ResourceManager resource IDs for GL handles (for cleanup tracking)
-        self._gl_program_rid = None
+        self._gl_program_rids: _Dict[str, _Any] = {}
         self._gl_vao_rid = None
         self._gl_vbo_rid = None
-        self._u_resolution = None
-        self._u_bar_count = None
-        self._u_segments = None
-        self._u_bars = None
-        self._u_peaks = None
-        self._u_fill_color = None
-        self._u_border_color = None
-        self._u_fade = None
-        self._u_playing = None
-        self._u_ghost_alpha = None
+        # Legacy single-program aliases for backward compat with ResourceManager
+        self._gl_program = None
+        self._gl_program_rid = None
         self._gl_disabled: bool = False
-        # Note: _gl_initialized flag removed - use self._gl_state.is_ready() instead
         self._debug_bars_logged: bool = False
         self._debug_paint_logged: bool = False
         
@@ -131,14 +160,28 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ghost_alpha: float = 0.4,
         ghost_decay: float = -1.0,
         vis_mode: str = "spectrum",
+        waveform: Sequence[float] | None = None,
+        energy_bands: EnergyBands | None = None,
+        glow_enabled: bool = True,
+        glow_intensity: float = 0.5,
+        glow_color: QColor | None = None,
+        reactive_glow: bool = True,
+        star_density: float = 1.0,
+        travel_speed: float = 0.5,
+        star_reactivity: float = 1.0,
+        blob_color: QColor | None = None,
+        blob_pulse: float = 1.0,
+        helix_turns: int = 4,
+        helix_double: bool = True,
+        helix_speed: float = 1.0,
+        helix_glow_enabled: bool = True,
+        helix_glow_intensity: float = 0.5,
     ) -> None:
         """Update overlay bar state and geometry.
 
         ``rect`` is specified in the parent ``DisplayWidget`` coordinate space
         and should usually be the geometry of the associated
         ``SpotifyVisualizerWidget``.
-        
-        ``vis_mode`` is kept for compatibility but only 'spectrum' is supported.
         """
 
         if not visible:
@@ -150,8 +193,51 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self.update()  # Trigger repaint to clear the bars
             return
 
-        # Only spectrum mode is supported
-        self._vis_mode = 'spectrum'
+        # Set active visualizer mode
+        self._vis_mode = vis_mode if vis_mode in (
+            'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix'
+        ) else 'spectrum'
+
+        # Update accumulated time for animated modes
+        now_ts = time.time()
+        if self._last_time_ts > 0.0:
+            dt = now_ts - self._last_time_ts
+            if 0.0 < dt < 1.0:  # sanity clamp
+                self._accumulated_time += dt
+        self._last_time_ts = now_ts
+
+        # Store waveform data (oscilloscope)
+        if waveform is not None:
+            self._waveform = list(waveform)
+            self._waveform_count = len(self._waveform)
+
+        # Store energy bands (starfield / blob / helix)
+        if energy_bands is not None:
+            self._energy_bands = energy_bands
+
+        # Oscilloscope glow settings
+        self._glow_enabled = bool(glow_enabled)
+        self._glow_intensity = max(0.0, float(glow_intensity))
+        if glow_color is not None:
+            self._glow_color = QColor(glow_color)
+        self._reactive_glow = bool(reactive_glow)
+
+        # Starfield settings
+        self._star_density = max(0.1, float(star_density))
+        self._travel_speed = max(0.0, float(travel_speed))
+        self._star_reactivity = max(0.0, float(star_reactivity))
+
+        # Blob settings
+        if blob_color is not None:
+            self._blob_color = QColor(blob_color)
+        self._blob_pulse = max(0.0, float(blob_pulse))
+
+        # Helix settings
+        self._helix_turns = max(2, int(helix_turns))
+        self._helix_double = bool(helix_double)
+        self._helix_speed = max(0.0, float(helix_speed))
+        self._helix_glow_enabled = bool(helix_glow_enabled)
+        self._helix_glow_intensity = max(0.0, float(helix_glow_intensity))
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -473,321 +559,95 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     # ------------------------------------------------------------------
 
     def _init_gl_pipeline(self) -> None:
-        if self._gl_disabled or self._gl_program is not None:
+        if self._gl_disabled or self._gl_programs:
             return
 
-        from OpenGL import GL as _gl  # local alias to avoid surprises during import
+        from OpenGL import GL as _gl
+        from widgets.spotify_visualizer.shaders import (
+            SHARED_VERTEX_SHADER,
+            load_all_fragment_shaders,
+        )
 
-        vs_source = """#version 330 core
-layout(location = 0) in vec2 a_pos;
-out vec2 v_uv;
-void main() {
-    v_uv = a_pos * 0.5 + 0.5;
-    gl_Position = vec4(a_pos, 0.0, 1.0);
-}
-"""
+        # Load all fragment shader sources from external files
+        frag_sources = load_all_fragment_shaders()
+        if not frag_sources:
+            raise RuntimeError("No visualizer shaders could be loaded")
 
-        fs_source = """#version 330 core
-in vec2 v_uv;
-out vec4 fragColor;
+        vs_source = SHARED_VERTEX_SHADER
 
-uniform vec2 u_resolution;   // logical size in QWidget coordinates
-uniform float u_dpr;         // device pixel ratio of the backing FBO
-uniform int u_bar_count;
-uniform int u_segments;
-uniform float u_bars[64];
-uniform float u_peaks[64];
-uniform vec4 u_fill_color;
-uniform vec4 u_border_color;
-uniform float u_fade;
-uniform int u_playing;
-uniform float u_ghost_alpha;
-
-void main() {
-    if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
-        discard;
-    }
-
-    float width = u_resolution.x;
-    float height = u_resolution.y;
-    if (width <= 0.0 || height <= 0.0) {
-        discard;
-    }
-
-    // Derive logical fragment coordinates from the physical framebuffer
-    // position. QOpenGLWidget renders into a device-pixel-scaled FBO, so we
-    // map gl_FragCoord (physical) back into QWidget logical space using the
-    // current device pixel ratio.
-    float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
-    float fb_height = height * dpr;
-    vec2 fragCoord = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
-
-    // ========== SPECTRUM MODE ==========
-    float margin_x = 8.0;
-    float margin_y = 6.0;
-    float gap = 2.0;
-    float seg_gap = 1.0;
-    float bars_inset = 5.0;
-
-    // Match QWidget geometry: inner rect is rect.adjusted(margin_x, margin_y,
-    // -margin_x, -margin_y). For a logical rect starting at (0, 0) this
-    // gives width = W - 2*margin_x and height = H - 2*margin_y.
-    float inner_left = margin_x;
-    float inner_top = margin_y;
-    float inner_width = width - margin_x * 2.0;
-    float inner_height = height - margin_y * 2.0;
-    float inner_right = inner_left + inner_width;
-    float inner_bottom = inner_top + inner_height;
-
-    if (inner_width <= 0.0 || inner_height <= 0.0) {
-        discard;
-    }
-
-    // Discard anything outside the bar field vertically so we don't fill
-    // the entire card when active_segments is high.
-    if (fragCoord.y < inner_top || fragCoord.y > inner_bottom) {
-        discard;
-    }
-
-    float bar_region_width = inner_width - (bars_inset * 2.0);
-    if (bar_region_width <= 0.0) {
-        discard;
-    }
-
-    int bar_count_int = max(u_bar_count, 1);
-    float bar_count = float(bar_count_int);
-    float total_gap = gap * float(bar_count_int - 1);
-    float usable_width = bar_region_width - total_gap;
-    if (usable_width <= 0.0) {
-        discard;
-    }
-
-    float bar_width = floor(usable_width / bar_count);
-    if (bar_width < 1.0) {
-        discard;
-    }
-
-    float span = bar_width * bar_count + total_gap;
-    float remaining = max(0.0, bar_region_width - span);
-    float bars_left = inner_left + bars_inset + floor(remaining * 0.5);
-
-    float x_rel = fragCoord.x - bars_left;
-    if (x_rel < 0.0) {
-        discard;
-    }
-    if (x_rel >= span) {
-        discard;
-    }
-
-    float step_x = bar_width + gap;
-    int bar_index = int(floor(x_rel / step_x));
-    if (bar_index < 0 || bar_index >= u_bar_count) {
-        discard;
-    }
-
-    // Local X coordinate within the bar; discard the explicit gap region.
-    // Use a half-open range [0, bar_width) so that we never classify the
-    // gap pixel as part of the bar due to floating-point rounding.
-    float bar_local_x = x_rel - float(bar_index) * step_x;
-    if (bar_local_x < 0.0 || bar_local_x >= bar_width) {
-        discard;
-    }
-
-    float value = u_bars[bar_index];
-    if (value < 0.0) {
-        value = 0.0;
-    }
-    if (value > 1.0) {
-        value = 1.0;
-    }
-
-    float peak = u_peaks[bar_index];
-    if (peak < 0.0) {
-        peak = 0.0;
-    }
-    if (peak > 1.0) {
-        peak = 1.0;
-    }
-
-    float total_seg_gap = seg_gap * float(u_segments - 1);
-    float seg_height = (inner_height - total_seg_gap) / float(u_segments);
-    seg_height = floor(seg_height);
-    if (seg_height < 1.0) {
-        discard;
-    }
-
-    float base_bottom = inner_bottom;
-    float step_y = seg_height + seg_gap;
-    float y_rel = base_bottom - fragCoord.y;
-    if (y_rel < 0.0) {
-        discard;
-    }
-
-    int seg_index = int(floor(y_rel / step_y));
-    if (seg_index < 0) {
-        discard;
-    }
-
-    // Local Y coordinate within the segment; discard the vertical gap
-    // region using a half-open range [0, seg_height).
-    float seg_local_y = y_rel - float(seg_index) * step_y;
-    if (seg_local_y < 0.0 || seg_local_y >= seg_height) {
-        discard;
-    }
-
-    float boosted = value * 1.2;
-    if (boosted > 1.0) {
-        boosted = 1.0;
-    }
-    int active_segments = int(round(boosted * float(u_segments)));
-    if (active_segments <= 0) {
-        // Always keep at least one active segment so the visualiser has
-        // a visible baseline even when audio energy is near zero or the
-        // player is paused.
-        active_segments = 1;
-    }
-
-    // Determine whether this fragment belongs to the main bar body
-    // or to a trailing ghost segment derived from the decaying peak.
-    int peak_segments = active_segments;
-    bool is_ghost_frag = false;
-    if (peak > value) {
-        float delta = peak - value;
-        if (delta < 0.0) {
-            delta = 0.0;
-        }
-
-        // Map the peak/value difference into extra segments above the
-        // current active height. Even a modest drop produces at least one
-        // ghost segment when there is vertical room.
-        float boosted_delta = delta * 1.2;
-        if (boosted_delta > 1.0) {
-            boosted_delta = 1.0;
-        }
-        int extra_segments = int(ceil(boosted_delta * float(u_segments)));
-        if (extra_segments <= 0 && delta > 0.01 && active_segments < u_segments) {
-            extra_segments = 1;
-        }
-
-        peak_segments = active_segments + extra_segments;
-        if (peak_segments > u_segments) {
-            peak_segments = u_segments;
-        }
-        if (peak_segments > active_segments && seg_index >= active_segments && seg_index < peak_segments) {
-            is_ghost_frag = true;
-        }
-    }
-
-    bool is_bar_frag = (active_segments > 0) && (seg_index < active_segments);
-    if (!is_bar_frag && !is_ghost_frag) {
-        discard;
-    }
-
-    // Draw a bar segment using the configured fill/border colours. Visual
-    // segmentation between blocks/segments is still provided by the explicit
-    // horizontal/vertical gaps; border detection operates in integer-like
-    // local coordinates to remain stable across resolutions/DPI.
-
-    float bw_px = floor(bar_width);
-    float sh_px = floor(seg_height);
-    float bx = floor(bar_local_x);
-    float by = floor(seg_local_y);
-
-    bool on_border = false;
-    if (is_bar_frag) {
-        if (bw_px <= 2.0 || sh_px <= 2.0) {
-            on_border = true;
-        } else {
-            if (bx <= 0.0 || bx >= bw_px - 1.0 || by <= 0.0 || by >= sh_px - 1.0) {
-                on_border = true;
-            }
-        }
-    }
-
-    vec4 fill = u_fill_color;
-    vec4 border = u_border_color;
-    fill.a *= u_fade;
-    border.a *= u_fade;
-
-    if (is_ghost_frag) {
-        // Ghost bars use the bright border colour with an additional alpha
-        // falloff along the trail so newer ghost segments just above the
-        // live bar remain stronger while the oldest/highest segments fade
-        // out more quickly.
-        float ghost_alpha = clamp(u_ghost_alpha, 0.0, 1.0);
-        if (ghost_alpha <= 0.0) {
-            discard;
-        }
-
-        // Normalise the distance of this ghost segment above the active bar
-        // into [0, 1], where 0.0 sits directly above the bar and 1.0 is the
-        // top-most ghost segment.
-        float ghost_factor = 1.0;
-        if (peak_segments > active_segments) {
-            float ghost_idx = float(seg_index - active_segments);
-            float ghost_len = float(max(1, peak_segments - active_segments));
-            float t = 0.0;
-            if (ghost_len > 1.0) {
-                t = clamp(ghost_idx / (ghost_len - 1.0), 0.0, 1.0);
-            }
-            // Fade from full strength near the bar to a softer outline at
-            // the very top of the trail.
-            float start = 1.0;
-            float end = 0.25;
-            ghost_factor = mix(start, end, t);
-        }
-
-        vec4 ghost = border;
-        ghost.a *= ghost_alpha * ghost_factor;
-        fragColor = ghost;
-    } else {
-        fragColor = on_border ? border : fill;
-    }
-}
-"""
-
-        prog = _gl.glCreateProgram()
+        # Compile the shared vertex shader once
         vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
-        fs = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
-
         _gl.glShaderSource(vs, vs_source)
         _gl.glCompileShader(vs)
-        status = _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS)
-        if not status:
-            raise RuntimeError("SpotifyBarsGLOverlay vertex shader compile failed")
+        if not _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
+            info = _gl.glGetShaderInfoLog(vs)
+            raise RuntimeError(f"Vertex shader compile failed: {info}")
 
-        _gl.glShaderSource(fs, fs_source)
-        _gl.glCompileShader(fs)
-        status = _gl.glGetShaderiv(fs, _gl.GL_COMPILE_STATUS)
-        if not status:
-            raise RuntimeError("SpotifyBarsGLOverlay fragment shader compile failed")
+        # Compile each mode's fragment shader into its own program
+        for mode, fs_source in frag_sources.items():
+            try:
+                fs = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
+                _gl.glShaderSource(fs, fs_source)
+                _gl.glCompileShader(fs)
+                if not _gl.glGetShaderiv(fs, _gl.GL_COMPILE_STATUS):
+                    info = _gl.glGetShaderInfoLog(fs)
+                    logger.warning("[SPOTIFY_VIS] %s frag shader compile failed: %s", mode, info)
+                    _gl.glDeleteShader(fs)
+                    continue
 
-        _gl.glAttachShader(prog, vs)
-        _gl.glAttachShader(prog, fs)
-        _gl.glLinkProgram(prog)
-        link_ok = _gl.glGetProgramiv(prog, _gl.GL_LINK_STATUS)
-        if not link_ok:
-            raise RuntimeError("SpotifyBarsGLOverlay program link failed")
+                prog = _gl.glCreateProgram()
+                _gl.glAttachShader(prog, vs)
+                _gl.glAttachShader(prog, fs)
+                _gl.glLinkProgram(prog)
+                _gl.glDeleteShader(fs)
+
+                if not _gl.glGetProgramiv(prog, _gl.GL_LINK_STATUS):
+                    info = _gl.glGetProgramInfoLog(prog)
+                    logger.warning("[SPOTIFY_VIS] %s program link failed: %s", mode, info)
+                    _gl.glDeleteProgram(prog)
+                    continue
+
+                # Query all uniform locations for this program.
+                # glGetUniformLocation returns -1 for uniforms not in the shader,
+                # which is harmless — the set call is simply a no-op.
+                uniforms = {}
+                for uname in (
+                    "u_resolution", "u_dpr", "u_fade", "u_time",
+                    "u_bar_count", "u_segments", "u_bars", "u_peaks",
+                    "u_fill_color", "u_border_color", "u_playing", "u_ghost_alpha",
+                    "u_waveform", "u_waveform_count",
+                    "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
+                    "u_glow_enabled", "u_glow_intensity", "u_glow_color", "u_reactive_glow",
+                    "u_star_density", "u_travel_speed", "u_star_reactivity",
+                    "u_blob_color", "u_blob_pulse",
+                    "u_helix_turns", "u_helix_double", "u_helix_speed",
+                    "u_helix_glow_enabled", "u_helix_glow_intensity",
+                ):
+                    uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
+
+                self._gl_programs[mode] = prog
+                self._gl_uniforms[mode] = uniforms
+                logger.debug("[SPOTIFY_VIS] Compiled shader program: %s", mode)
+
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to compile %s shader", mode, exc_info=True)
 
         _gl.glDeleteShader(vs)
-        _gl.glDeleteShader(fs)
 
+        if not self._gl_programs:
+            raise RuntimeError("No visualizer shader programs compiled successfully")
+
+        # Legacy alias for backward compat checks
+        self._gl_program = next(iter(self._gl_programs.values()))
+
+        # Create shared VAO/VBO (fullscreen quad, reused by all modes)
         vao = _gl.glGenVertexArrays(1)
         vbo = _gl.glGenBuffers(1)
 
         _gl.glBindVertexArray(vao)
         _gl.glBindBuffer(_gl.GL_ARRAY_BUFFER, vbo)
         vertices = np.array(
-            [
-                -1.0,
-                -1.0,
-                1.0,
-                -1.0,
-                -1.0,
-                1.0,
-                1.0,
-                1.0,
-            ],
+            [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0],
             dtype="float32",
         )
         _gl.glBufferData(
@@ -800,17 +660,18 @@ void main() {
         _gl.glVertexAttribPointer(0, 2, _gl.GL_FLOAT, False, 0, None)
         _gl.glBindVertexArray(0)
 
-        self._gl_program = prog
         self._gl_vao = vao
         self._gl_vbo = vbo
-        
+
         # Register GL handles with ResourceManager for VRAM leak prevention
         try:
             from core.resources.manager import ResourceManager
             rm = ResourceManager()
-            self._gl_program_rid = rm.register_gl_program(
-                prog, description="SpotifyBarsGLOverlay shader program"
-            )
+            for mode, prog in self._gl_programs.items():
+                rid = rm.register_gl_program(
+                    prog, description=f"SpotifyBarsGLOverlay {mode} shader"
+                )
+                self._gl_program_rids[mode] = rid
             self._gl_vao_rid = rm.register_gl_vao(
                 vao, description="SpotifyBarsGLOverlay VAO"
             )
@@ -820,28 +681,43 @@ void main() {
             logger.debug("[SPOTIFY_VIS] GL handles registered with ResourceManager")
         except Exception as e:
             logger.debug(f"[SPOTIFY_VIS] Failed to register GL handles: {e}")
-            self._gl_program_rid = None
             self._gl_vao_rid = None
             self._gl_vbo_rid = None
-        
-        self._u_resolution = _gl.glGetUniformLocation(prog, "u_resolution")
-        self._u_bar_count = _gl.glGetUniformLocation(prog, "u_bar_count")
-        self._u_segments = _gl.glGetUniformLocation(prog, "u_segments")
-        self._u_bars = _gl.glGetUniformLocation(prog, "u_bars")
-        self._u_peaks = _gl.glGetUniformLocation(prog, "u_peaks")
-        self._u_fill_color = _gl.glGetUniformLocation(prog, "u_fill_color")
-        self._u_border_color = _gl.glGetUniformLocation(prog, "u_border_color")
-        self._u_fade = _gl.glGetUniformLocation(prog, "u_fade")
-        self._u_playing = _gl.glGetUniformLocation(prog, "u_playing")
-        self._u_ghost_alpha = _gl.glGetUniformLocation(prog, "u_ghost_alpha")
-        self._u_dpr = _gl.glGetUniformLocation(prog, "u_dpr")
+
+        logger.info(
+            "[SPOTIFY_VIS] Multi-shader pipeline ready: %s",
+            ", ".join(sorted(self._gl_programs.keys())),
+        )
+
+    def _get_dpr(self) -> float:
+        """Resolve device pixel ratio for the backing FBO."""
+        dpr = 1.0
+        try:
+            win = self.windowHandle()
+        except Exception:
+            win = None
+        if win is not None:
+            try:
+                dpr = float(win.devicePixelRatio())
+            except Exception:
+                dpr = 1.0
+        else:
+            try:
+                dpr = float(self.devicePixelRatioF())
+            except Exception:
+                dpr = 1.0
+        if dpr <= 0.0:
+            dpr = 1.0
+        if dpr > 4.0:
+            dpr = 4.0
+        return dpr
 
     def _render_with_shader(self, rect: QRect, fade: float) -> bool:
         if self._gl_disabled:
             return False
 
         try:
-            if self._gl_program is None or self._gl_vao is None:
+            if not self._gl_programs or self._gl_vao is None:
                 self._init_gl_pipeline()
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
@@ -849,17 +725,29 @@ void main() {
             logger.debug("[SPOTIFY_VIS] GL pipeline unavailable, falling back to QPainter", exc_info=True)
             return False
 
-        if self._gl_program is None or self._gl_vao is None:
+        if not self._gl_programs or self._gl_vao is None:
             return False
 
-        try:
-            count = int(self._bar_count)
-            segments = int(self._segments)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        mode = self._vis_mode
+        prog = self._gl_programs.get(mode)
+        if prog is None:
+            # Fall back to spectrum if the requested mode wasn't compiled
+            prog = self._gl_programs.get('spectrum')
+            mode = 'spectrum'
+        if prog is None:
             return False
-        if count <= 0 or segments <= 0:
-            return False
+
+        u = self._gl_uniforms.get(mode, {})
+
+        # For spectrum mode, bar data is required
+        if mode == 'spectrum':
+            try:
+                count = int(self._bar_count)
+                segments = int(self._segments)
+            except Exception:
+                return False
+            if count <= 0 or segments <= 0:
+                return False
 
         width = rect.width()
         height = rect.height()
@@ -869,140 +757,193 @@ void main() {
         try:
             from OpenGL import GL as _gl
 
-            _gl.glUseProgram(self._gl_program)
+            _gl.glUseProgram(prog)
             _gl.glBindVertexArray(self._gl_vao)
 
-            if self._u_resolution is not None:
-                _gl.glUniform2f(self._u_resolution, float(width), float(height))
-            if self._u_bar_count is not None:
-                _gl.glUniform1i(self._u_bar_count, min(count, 64))
-            if self._u_segments is not None:
-                _gl.glUniform1i(self._u_segments, segments)
+            # --- Common uniforms (all modes) ---
+            loc = u.get("u_resolution", -1)
+            if loc >= 0:
+                _gl.glUniform2f(loc, float(width), float(height))
 
-            if getattr(self, "_u_dpr", None) is not None:
-                try:
-                    # Prefer the window's devicePixelRatio when available; fall
-                    # back to the widget's own logical DPR. Clamp to a sane
-                    # range so that bad values do not explode geometry.
-                    dpr = 1.0
+            loc = u.get("u_dpr", -1)
+            if loc >= 0:
+                _gl.glUniform1f(loc, self._get_dpr())
+
+            loc = u.get("u_fade", -1)
+            if loc >= 0:
+                _gl.glUniform1f(loc, float(max(0.0, min(1.0, fade))))
+
+            loc = u.get("u_time", -1)
+            if loc >= 0:
+                _gl.glUniform1f(loc, float(self._accumulated_time))
+
+            # --- Spectrum-specific uniforms ---
+            if mode == 'spectrum':
+                count = int(self._bar_count)
+                segments = int(self._segments)
+
+                loc = u.get("u_bar_count", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, min(count, 64))
+                loc = u.get("u_segments", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, segments)
+
+                bars = list(self._bars)
+                if not bars:
+                    _gl.glBindVertexArray(0)
+                    _gl.glUseProgram(0)
+                    return False
+                if len(bars) < 64:
+                    bars = bars + [0.0] * (64 - len(bars))
+                else:
+                    bars = bars[:64]
+
+                if not self._debug_bars_logged:
                     try:
-                        win = self.windowHandle()  # type: ignore[attr-defined]
-                    except Exception as e:
-                        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                        win = None
-                    if win is not None:
-                        try:
-                            dpr = float(win.devicePixelRatio())
-                        except Exception as e:
-                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                            dpr = 1.0
-                    else:
-                        try:
-                            dpr = float(self.devicePixelRatioF())
-                        except Exception as e:
-                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                            dpr = 1.0
-                    if dpr <= 0.0:
-                        dpr = 1.0
-                    if dpr > 4.0:
-                        dpr = 4.0
-                    _gl.glUniform1f(self._u_dpr, dpr)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                    _gl.glUniform1f(self._u_dpr, 1.0)
-
-            bars = list(self._bars)
-            if not bars:
-                _gl.glBindVertexArray(0)
-                return False
-            if len(bars) < 64:
-                bars = bars + [0.0] * (64 - len(bars))
-            else:
-                bars = bars[:64]
-
-            if not getattr(self, "_debug_bars_logged", False):
-                try:
-                    if count > 0:
-                        sample = bars[:count]
-                        mn = min(sample)
-                        mx = max(sample)
-                    else:
-                        mn = 0.0
-                        mx = 0.0
-                    logger.debug(
-                        "[SPOTIFY_VIS] Shader bars snapshot: count=%d, min=%.4f, max=%.4f",
-                        count,
-                        mn,
-                        mx,
-                    )
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                try:
+                        sample = bars[:count] if count > 0 else [0.0]
+                        logger.debug(
+                            "[SPOTIFY_VIS] Shader bars snapshot: count=%d, min=%.4f, max=%.4f",
+                            count, min(sample), max(sample),
+                        )
+                    except Exception:
+                        pass
                     self._debug_bars_logged = True
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
-            if self._u_bars is not None:
-                # Use pre-allocated buffer to avoid per-frame allocation
-                buf = self._bars_buffer
-                buf.fill(0.0)
-                n_bars = min(len(bars), 64)
-                for i in range(n_bars):
-                    buf[i] = float(bars[i])
-                _gl.glUniform1fv(self._u_bars, 64, buf)
+                loc = u.get("u_bars", -1)
+                if loc >= 0:
+                    buf = self._bars_buffer
+                    buf.fill(0.0)
+                    for i in range(min(len(bars), 64)):
+                        buf[i] = float(bars[i])
+                    _gl.glUniform1fv(loc, 64, buf)
 
-            if self._u_peaks is not None:
-                # Use pre-allocated buffer to avoid per-frame allocation
-                buf_peaks = self._peaks_buffer
-                buf_peaks.fill(0.0)
-                peaks = self._peaks
-                n_peaks = min(len(peaks), 64)
-                for i in range(n_peaks):
-                    buf_peaks[i] = float(peaks[i])
-                _gl.glUniform1fv(self._u_peaks, 64, buf_peaks)
+                loc = u.get("u_peaks", -1)
+                if loc >= 0:
+                    buf_peaks = self._peaks_buffer
+                    buf_peaks.fill(0.0)
+                    peaks = self._peaks
+                    for i in range(min(len(peaks), 64)):
+                        buf_peaks[i] = float(peaks[i])
+                    _gl.glUniform1fv(loc, 64, buf_peaks)
 
-            fill = QColor(self._fill_color)
-            if self._u_fill_color is not None:
-                _gl.glUniform4f(
-                    self._u_fill_color,
-                    float(fill.redF()),
-                    float(fill.greenF()),
-                    float(fill.blueF()),
-                    float(fill.alphaF()),
-                )
+                loc = u.get("u_playing", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._playing else 0)
 
-            border = QColor(self._border_color)
-            if self._u_border_color is not None:
-                _gl.glUniform4f(
-                    self._u_border_color,
-                    float(border.redF()),
-                    float(border.greenF()),
-                    float(border.blueF()),
-                    float(border.alphaF()),
-                )
-            if self._u_fade is not None:
-                _gl.glUniform1f(self._u_fade, float(max(0.0, min(1.0, fade))))
+                loc = u.get("u_ghost_alpha", -1)
+                if loc >= 0:
+                    try:
+                        ga = float(self._ghost_alpha if self._ghosting_enabled else 0.0)
+                    except Exception:
+                        ga = 0.0
+                    _gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
 
-            if self._u_playing is not None:
-                _gl.glUniform1i(self._u_playing, 1 if self._playing else 0)
+            # --- Fill / border colours (spectrum + helix) ---
+            if mode in ('spectrum', 'helix'):
+                fill = QColor(self._fill_color)
+                loc = u.get("u_fill_color", -1)
+                if loc >= 0:
+                    _gl.glUniform4f(loc, float(fill.redF()), float(fill.greenF()),
+                                    float(fill.blueF()), float(fill.alphaF()))
+                border = QColor(self._border_color)
+                loc = u.get("u_border_color", -1)
+                if loc >= 0:
+                    _gl.glUniform4f(loc, float(border.redF()), float(border.greenF()),
+                                    float(border.blueF()), float(border.alphaF()))
 
-            if self._u_ghost_alpha is not None:
-                try:
-                    ga = float(self._ghost_alpha if self._ghosting_enabled else 0.0)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                    ga = 0.0
-                if ga < 0.0:
-                    ga = 0.0
-                if ga > 1.0:
-                    ga = 1.0
-                _gl.glUniform1f(self._u_ghost_alpha, ga)
+            # --- Oscilloscope uniforms ---
+            if mode == 'oscilloscope':
+                wf = self._waveform
+                wf_count = min(len(wf), 256) if wf else 0
+                loc = u.get("u_waveform_count", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, max(wf_count, 2))
+                loc = u.get("u_waveform", -1)
+                if loc >= 0 and wf_count > 0:
+                    wf_buf = np.zeros(256, dtype="float32")
+                    for i in range(wf_count):
+                        wf_buf[i] = float(wf[i])
+                    _gl.glUniform1fv(loc, 256, wf_buf)
 
+                loc = u.get("u_glow_enabled", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._glow_enabled else 0)
+                loc = u.get("u_glow_intensity", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._glow_intensity))
+                loc = u.get("u_glow_color", -1)
+                if loc >= 0:
+                    gc = self._glow_color
+                    _gl.glUniform4f(loc, float(gc.redF()), float(gc.greenF()),
+                                    float(gc.blueF()), float(gc.alphaF()))
+                loc = u.get("u_reactive_glow", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._reactive_glow else 0)
+
+            # --- Energy band uniforms (oscilloscope, starfield, blob, helix) ---
+            if mode in ('oscilloscope', 'starfield', 'blob', 'helix'):
+                eb = self._energy_bands
+                loc = u.get("u_overall_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.overall))
+                loc = u.get("u_bass_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.bass))
+                loc = u.get("u_mid_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.mid))
+                loc = u.get("u_high_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.high))
+
+            # --- Starfield uniforms ---
+            if mode == 'starfield':
+                loc = u.get("u_star_density", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._star_density))
+                loc = u.get("u_travel_speed", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._travel_speed))
+                loc = u.get("u_star_reactivity", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._star_reactivity))
+
+            # --- Blob uniforms ---
+            if mode == 'blob':
+                loc = u.get("u_blob_color", -1)
+                if loc >= 0:
+                    bc = self._blob_color
+                    _gl.glUniform4f(loc, float(bc.redF()), float(bc.greenF()),
+                                    float(bc.blueF()), float(bc.alphaF()))
+                loc = u.get("u_blob_pulse", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_pulse))
+
+            # --- Helix uniforms ---
+            if mode == 'helix':
+                loc = u.get("u_helix_turns", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, int(self._helix_turns))
+                loc = u.get("u_helix_double", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._helix_double else 0)
+                loc = u.get("u_helix_speed", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._helix_speed))
+                loc = u.get("u_helix_glow_enabled", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._helix_glow_enabled else 0)
+                loc = u.get("u_helix_glow_intensity", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._helix_glow_intensity))
+
+            # --- Draw ---
             _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)
             _gl.glBindVertexArray(0)
             _gl.glUseProgram(0)
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Shader-based bar rendering failed", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Shader-based rendering failed (mode=%s)", mode, exc_info=True)
             return False
 
         return True

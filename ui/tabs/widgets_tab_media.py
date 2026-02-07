@@ -278,6 +278,38 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_enable_row.addWidget(tab.spotify_vis_software_enabled)
     spotify_vis_layout.addLayout(spotify_vis_enable_row)
 
+    # --- Visualizer Type Selector ---
+    vis_type_row = QHBoxLayout()
+    vis_type_row.addWidget(QLabel("Visualizer Type:"))
+    tab.spotify_vis_type_combo = QComboBox()
+    tab.spotify_vis_type_combo.setMinimumWidth(160)
+    tab.spotify_vis_type_combo.addItem("Spectrum", "spectrum")
+    tab.spotify_vis_type_combo.addItem("Oscilloscope", "oscilloscope")
+    tab.spotify_vis_type_combo.addItem("Starfield", "starfield")
+    tab.spotify_vis_type_combo.addItem("Blob", "blob")
+    tab.spotify_vis_type_combo.addItem("Helix / DNA", "helix")
+    default_mode = tab._default_str('spotify_visualizer', 'mode', 'spectrum')
+    mode_idx = tab.spotify_vis_type_combo.findData(default_mode)
+    if mode_idx >= 0:
+        tab.spotify_vis_type_combo.setCurrentIndex(mode_idx)
+    tab.spotify_vis_type_combo.setToolTip(
+        "Select the visualization style. Spectrum is the classic segmented bar display."
+    )
+    tab.spotify_vis_type_combo.currentIndexChanged.connect(tab._save_settings)
+    tab.spotify_vis_type_combo.currentIndexChanged.connect(
+        lambda _: tab._update_vis_mode_sections()
+    )
+    vis_type_row.addWidget(tab.spotify_vis_type_combo)
+    vis_type_row.addStretch()
+    spotify_vis_layout.addLayout(vis_type_row)
+
+    # ==========================================
+    # Spectrum-only settings container
+    # ==========================================
+    tab._spectrum_settings_container = QWidget()
+    spectrum_layout = QVBoxLayout(tab._spectrum_settings_container)
+    spectrum_layout.setContentsMargins(0, 0, 0, 0)
+
     spotify_vis_bar_row = QHBoxLayout()
     spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))
     tab.spotify_vis_bar_count = QSpinBox()
@@ -289,7 +321,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_bar_row.addWidget(tab.spotify_vis_bar_count)
     spotify_vis_bar_row.addWidget(QLabel("bars"))
     spotify_vis_bar_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_bar_row)
+    spectrum_layout.addLayout(spotify_vis_bar_row)
 
     spotify_vis_block_row = QHBoxLayout()
     spotify_vis_block_row.addWidget(QLabel("Audio Block Size:"))
@@ -306,7 +338,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     if block_idx >= 0:
         tab.spotify_vis_block_size.setCurrentIndex(block_idx)
     spotify_vis_block_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_block_row)
+    spectrum_layout.addLayout(spotify_vis_block_row)
 
     spotify_vis_fill_row = QHBoxLayout()
     spotify_vis_fill_row.addWidget(QLabel("Bar Fill Color:"))
@@ -314,7 +346,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.spotify_vis_fill_color_btn.clicked.connect(tab._choose_spotify_vis_fill_color)
     spotify_vis_fill_row.addWidget(tab.spotify_vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_fill_row)
+    spectrum_layout.addLayout(spotify_vis_fill_row)
 
     spotify_vis_border_color_row = QHBoxLayout()
     spotify_vis_border_color_row.addWidget(QLabel("Bar Border Color:"))
@@ -322,7 +354,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.spotify_vis_border_color_btn.clicked.connect(tab._choose_spotify_vis_border_color)
     spotify_vis_border_color_row.addWidget(tab.spotify_vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_border_color_row)
+    spectrum_layout.addLayout(spotify_vis_border_color_row)
 
     spotify_vis_border_opacity_row = QHBoxLayout()
     spotify_vis_border_opacity_row.addWidget(QLabel("Bar Border Opacity:"))
@@ -342,7 +374,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.spotify_vis_border_opacity_label.setText(f"{v}%")
     )
     spotify_vis_border_opacity_row.addWidget(tab.spotify_vis_border_opacity_label)
-    spotify_vis_layout.addLayout(spotify_vis_border_opacity_row)
+    spectrum_layout.addLayout(spotify_vis_border_opacity_row)
 
     tab.spotify_vis_recommended = QCheckBox("Adaptive")
     tab.spotify_vis_recommended.setChecked(
@@ -353,7 +385,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     tab.spotify_vis_recommended.stateChanged.connect(tab._save_settings)
     tab.spotify_vis_recommended.stateChanged.connect(lambda _: tab._update_spotify_vis_sensitivity_enabled_state())
-    spotify_vis_layout.addWidget(tab.spotify_vis_recommended)
+    spectrum_layout.addWidget(tab.spotify_vis_recommended)
 
     spotify_vis_sensitivity_slider_row = QHBoxLayout()
     spotify_vis_sensitivity_slider_row.addWidget(QLabel("Sensitivity:"))
@@ -371,7 +403,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.spotify_vis_sensitivity_label.setText(f"{v / 100.0:.2f}x")
     )
     spotify_vis_sensitivity_slider_row.addWidget(tab.spotify_vis_sensitivity_label)
-    spotify_vis_layout.addLayout(spotify_vis_sensitivity_slider_row)
+    spectrum_layout.addLayout(spotify_vis_sensitivity_slider_row)
 
     tab.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
     tab.spotify_vis_dynamic_floor.setChecked(
@@ -385,7 +417,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.spotify_vis_dynamic_floor.stateChanged.connect(
         lambda _: tab._update_spotify_vis_floor_enabled_state()
     )
-    spotify_vis_layout.addWidget(tab.spotify_vis_dynamic_floor)
+    spectrum_layout.addWidget(tab.spotify_vis_dynamic_floor)
 
     spotify_vis_manual_floor_row = QHBoxLayout()
     spotify_vis_manual_floor_row.addWidget(QLabel("Manual Floor:"))
@@ -403,7 +435,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.spotify_vis_manual_floor_label.setText(f"{v / 100.0:.2f}")
     )
     spotify_vis_manual_floor_row.addWidget(tab.spotify_vis_manual_floor_label)
-    spotify_vis_layout.addLayout(spotify_vis_manual_floor_row)
+    spectrum_layout.addLayout(spotify_vis_manual_floor_row)
 
     # Ghosting controls
     tab.spotify_vis_ghost_enabled = QCheckBox("Enable Ghosting")
@@ -414,7 +446,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "When enabled, the visualizer draws trailing ghost bars above the current height."
     )
     tab.spotify_vis_ghost_enabled.stateChanged.connect(tab._save_settings)
-    spotify_vis_layout.addWidget(tab.spotify_vis_ghost_enabled)
+    spectrum_layout.addWidget(tab.spotify_vis_ghost_enabled)
 
     spotify_vis_ghost_opacity_row = QHBoxLayout()
     spotify_vis_ghost_opacity_row.addWidget(QLabel("Ghost Opacity:"))
@@ -432,7 +464,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.spotify_vis_ghost_opacity_label.setText(f"{v}%")
     )
     spotify_vis_ghost_opacity_row.addWidget(tab.spotify_vis_ghost_opacity_label)
-    spotify_vis_layout.addLayout(spotify_vis_ghost_opacity_row)
+    spectrum_layout.addLayout(spotify_vis_ghost_opacity_row)
 
     spotify_vis_ghost_decay_row = QHBoxLayout()
     spotify_vis_ghost_decay_row.addWidget(QLabel("Ghost Decay Speed:"))
@@ -450,7 +482,248 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.spotify_vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
     )
     spotify_vis_ghost_decay_row.addWidget(tab.spotify_vis_ghost_decay_label)
-    spotify_vis_layout.addLayout(spotify_vis_ghost_decay_row)
+    spectrum_layout.addLayout(spotify_vis_ghost_decay_row)
+
+    spotify_vis_layout.addWidget(tab._spectrum_settings_container)
+
+    # ==========================================
+    # Oscilloscope settings container
+    # ==========================================
+    tab._osc_settings_container = QWidget()
+    osc_layout = QVBoxLayout(tab._osc_settings_container)
+    osc_layout.setContentsMargins(0, 0, 0, 0)
+
+    tab.osc_glow_enabled = QCheckBox("Enable Glow")
+    tab.osc_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_glow_enabled', True))
+    tab.osc_glow_enabled.setToolTip("Draw a soft glow halo around the waveform line.")
+    tab.osc_glow_enabled.stateChanged.connect(tab._save_settings)
+    osc_layout.addWidget(tab.osc_glow_enabled)
+
+    osc_glow_row = QHBoxLayout()
+    osc_glow_row.addWidget(QLabel("Glow Intensity:"))
+    tab.osc_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_glow_intensity.setMinimum(0)
+    tab.osc_glow_intensity.setMaximum(100)
+    osc_glow_val = int(tab._default_float('spotify_visualizer', 'osc_glow_intensity', 0.5) * 100)
+    tab.osc_glow_intensity.setValue(osc_glow_val)
+    tab.osc_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_glow_intensity.setTickInterval(10)
+    tab.osc_glow_intensity.valueChanged.connect(tab._save_settings)
+    osc_glow_row.addWidget(tab.osc_glow_intensity)
+    tab.osc_glow_intensity_label = QLabel(f"{osc_glow_val}%")
+    tab.osc_glow_intensity.valueChanged.connect(
+        lambda v: tab.osc_glow_intensity_label.setText(f"{v}%")
+    )
+    osc_glow_row.addWidget(tab.osc_glow_intensity_label)
+    osc_layout.addLayout(osc_glow_row)
+
+    tab.osc_reactive_glow = QCheckBox("Reactive Glow (bass-driven)")
+    tab.osc_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'osc_reactive_glow', True))
+    tab.osc_reactive_glow.setToolTip("Glow intensity pulses with bass energy.")
+    tab.osc_reactive_glow.stateChanged.connect(tab._save_settings)
+    osc_layout.addWidget(tab.osc_reactive_glow)
+
+    spotify_vis_layout.addWidget(tab._osc_settings_container)
+
+    # ==========================================
+    # Starfield settings container
+    # ==========================================
+    tab._starfield_settings_container = QWidget()
+    star_layout = QVBoxLayout(tab._starfield_settings_container)
+    star_layout.setContentsMargins(0, 0, 0, 0)
+
+    star_speed_row = QHBoxLayout()
+    star_speed_row.addWidget(QLabel("Travel Speed:"))
+    tab.star_travel_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.star_travel_speed.setMinimum(0)
+    tab.star_travel_speed.setMaximum(100)
+    star_speed_val = int(tab._default_float('spotify_visualizer', 'star_travel_speed', 0.5) * 100)
+    tab.star_travel_speed.setValue(star_speed_val)
+    tab.star_travel_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.star_travel_speed.setTickInterval(10)
+    tab.star_travel_speed.valueChanged.connect(tab._save_settings)
+    star_speed_row.addWidget(tab.star_travel_speed)
+    tab.star_travel_speed_label = QLabel(f"{star_speed_val / 100.0:.2f}")
+    tab.star_travel_speed.valueChanged.connect(
+        lambda v: tab.star_travel_speed_label.setText(f"{v / 100.0:.2f}")
+    )
+    star_speed_row.addWidget(tab.star_travel_speed_label)
+    star_layout.addLayout(star_speed_row)
+
+    star_react_row = QHBoxLayout()
+    star_react_row.addWidget(QLabel("Bass Reactivity:"))
+    tab.star_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.star_reactivity.setMinimum(0)
+    tab.star_reactivity.setMaximum(200)
+    star_react_val = int(tab._default_float('spotify_visualizer', 'star_reactivity', 1.0) * 100)
+    tab.star_reactivity.setValue(star_react_val)
+    tab.star_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.star_reactivity.setTickInterval(25)
+    tab.star_reactivity.valueChanged.connect(tab._save_settings)
+    star_react_row.addWidget(tab.star_reactivity)
+    tab.star_reactivity_label = QLabel(f"{star_react_val / 100.0:.2f}x")
+    tab.star_reactivity.valueChanged.connect(
+        lambda v: tab.star_reactivity_label.setText(f"{v / 100.0:.2f}x")
+    )
+    star_react_row.addWidget(tab.star_reactivity_label)
+    star_layout.addLayout(star_react_row)
+
+    spotify_vis_layout.addWidget(tab._starfield_settings_container)
+
+    # ==========================================
+    # Blob settings container
+    # ==========================================
+    tab._blob_settings_container = QWidget()
+    blob_layout = QVBoxLayout(tab._blob_settings_container)
+    blob_layout.setContentsMargins(0, 0, 0, 0)
+
+    blob_pulse_row = QHBoxLayout()
+    blob_pulse_row.addWidget(QLabel("Pulse Intensity:"))
+    tab.blob_pulse = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_pulse.setMinimum(0)
+    tab.blob_pulse.setMaximum(200)
+    blob_pulse_val = int(tab._default_float('spotify_visualizer', 'blob_pulse', 1.0) * 100)
+    tab.blob_pulse.setValue(blob_pulse_val)
+    tab.blob_pulse.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_pulse.setTickInterval(25)
+    tab.blob_pulse.valueChanged.connect(tab._save_settings)
+    blob_pulse_row.addWidget(tab.blob_pulse)
+    tab.blob_pulse_label = QLabel(f"{blob_pulse_val / 100.0:.2f}x")
+    tab.blob_pulse.valueChanged.connect(
+        lambda v: tab.blob_pulse_label.setText(f"{v / 100.0:.2f}x")
+    )
+    blob_pulse_row.addWidget(tab.blob_pulse_label)
+    blob_layout.addLayout(blob_pulse_row)
+
+    spotify_vis_layout.addWidget(tab._blob_settings_container)
+
+    # ==========================================
+    # Helix settings container
+    # ==========================================
+    tab._helix_settings_container = QWidget()
+    helix_layout = QVBoxLayout(tab._helix_settings_container)
+    helix_layout.setContentsMargins(0, 0, 0, 0)
+
+    helix_turns_row = QHBoxLayout()
+    helix_turns_row.addWidget(QLabel("Turns:"))
+    tab.helix_turns = QSpinBox()
+    tab.helix_turns.setRange(2, 12)
+    tab.helix_turns.setValue(tab._default_int('spotify_visualizer', 'helix_turns', 4))
+    tab.helix_turns.setToolTip("Number of helix turns visible across the card width.")
+    tab.helix_turns.valueChanged.connect(tab._save_settings)
+    helix_turns_row.addWidget(tab.helix_turns)
+    helix_turns_row.addStretch()
+    helix_layout.addLayout(helix_turns_row)
+
+    tab.helix_double = QCheckBox("Double Helix (DNA)")
+    tab.helix_double.setChecked(tab._default_bool('spotify_visualizer', 'helix_double', True))
+    tab.helix_double.setToolTip("Show a second strand and cross-rungs for a DNA-like appearance.")
+    tab.helix_double.stateChanged.connect(tab._save_settings)
+    helix_layout.addWidget(tab.helix_double)
+
+    helix_speed_row = QHBoxLayout()
+    helix_speed_row.addWidget(QLabel("Rotation Speed:"))
+    tab.helix_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.helix_speed.setMinimum(0)
+    tab.helix_speed.setMaximum(200)
+    helix_speed_val = int(tab._default_float('spotify_visualizer', 'helix_speed', 1.0) * 100)
+    tab.helix_speed.setValue(helix_speed_val)
+    tab.helix_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.helix_speed.setTickInterval(25)
+    tab.helix_speed.valueChanged.connect(tab._save_settings)
+    helix_speed_row.addWidget(tab.helix_speed)
+    tab.helix_speed_label = QLabel(f"{helix_speed_val / 100.0:.2f}x")
+    tab.helix_speed.valueChanged.connect(
+        lambda v: tab.helix_speed_label.setText(f"{v / 100.0:.2f}x")
+    )
+    helix_speed_row.addWidget(tab.helix_speed_label)
+    helix_layout.addLayout(helix_speed_row)
+
+    tab.helix_glow_enabled = QCheckBox("Enable Glow")
+    tab.helix_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'helix_glow_enabled', True))
+    tab.helix_glow_enabled.setToolTip("Draw a soft glow halo around the helix strands.")
+    tab.helix_glow_enabled.stateChanged.connect(tab._save_settings)
+    helix_layout.addWidget(tab.helix_glow_enabled)
+
+    helix_glow_row = QHBoxLayout()
+    helix_glow_row.addWidget(QLabel("Glow Intensity:"))
+    tab.helix_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.helix_glow_intensity.setMinimum(0)
+    tab.helix_glow_intensity.setMaximum(100)
+    helix_glow_val = int(tab._default_float('spotify_visualizer', 'helix_glow_intensity', 0.5) * 100)
+    tab.helix_glow_intensity.setValue(helix_glow_val)
+    tab.helix_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.helix_glow_intensity.setTickInterval(10)
+    tab.helix_glow_intensity.valueChanged.connect(tab._save_settings)
+    helix_glow_row.addWidget(tab.helix_glow_intensity)
+    tab.helix_glow_intensity_label = QLabel(f"{helix_glow_val}%")
+    tab.helix_glow_intensity.valueChanged.connect(
+        lambda v: tab.helix_glow_intensity_label.setText(f"{v}%")
+    )
+    helix_glow_row.addWidget(tab.helix_glow_intensity_label)
+    helix_layout.addLayout(helix_glow_row)
+
+    helix_growth_row = QHBoxLayout()
+    helix_growth_row.addWidget(QLabel("Card Height:"))
+    tab.helix_growth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.helix_growth.setMinimum(100)
+    tab.helix_growth.setMaximum(400)
+    helix_growth_val = int(tab._default_float('spotify_visualizer', 'helix_growth', 2.0) * 100)
+    tab.helix_growth.setValue(helix_growth_val)
+    tab.helix_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.helix_growth.setTickInterval(50)
+    tab.helix_growth.valueChanged.connect(tab._save_settings)
+    helix_growth_row.addWidget(tab.helix_growth)
+    tab.helix_growth_label = QLabel(f"{helix_growth_val / 100.0:.1f}x")
+    tab.helix_growth.valueChanged.connect(
+        lambda v: tab.helix_growth_label.setText(f"{v / 100.0:.1f}x")
+    )
+    helix_growth_row.addWidget(tab.helix_growth_label)
+    helix_layout.addLayout(helix_growth_row)
+
+    spotify_vis_layout.addWidget(tab._helix_settings_container)
+
+    # Add card height growth sliders to starfield and blob containers
+    # --- Starfield height growth ---
+    star_growth_row = QHBoxLayout()
+    star_growth_row.addWidget(QLabel("Card Height:"))
+    tab.starfield_growth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.starfield_growth.setMinimum(100)
+    tab.starfield_growth.setMaximum(400)
+    star_growth_val = int(tab._default_float('spotify_visualizer', 'starfield_growth', 2.0) * 100)
+    tab.starfield_growth.setValue(star_growth_val)
+    tab.starfield_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.starfield_growth.setTickInterval(50)
+    tab.starfield_growth.valueChanged.connect(tab._save_settings)
+    star_growth_row.addWidget(tab.starfield_growth)
+    tab.starfield_growth_label = QLabel(f"{star_growth_val / 100.0:.1f}x")
+    tab.starfield_growth.valueChanged.connect(
+        lambda v: tab.starfield_growth_label.setText(f"{v / 100.0:.1f}x")
+    )
+    star_growth_row.addWidget(tab.starfield_growth_label)
+    star_layout.addLayout(star_growth_row)
+
+    # --- Blob height growth ---
+    blob_growth_row = QHBoxLayout()
+    blob_growth_row.addWidget(QLabel("Card Height:"))
+    tab.blob_growth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_growth.setMinimum(100)
+    tab.blob_growth.setMaximum(400)
+    blob_growth_val = int(tab._default_float('spotify_visualizer', 'blob_growth', 2.5) * 100)
+    tab.blob_growth.setValue(blob_growth_val)
+    tab.blob_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_growth.setTickInterval(50)
+    tab.blob_growth.valueChanged.connect(tab._save_settings)
+    blob_growth_row.addWidget(tab.blob_growth)
+    tab.blob_growth_label = QLabel(f"{blob_growth_val / 100.0:.1f}x")
+    tab.blob_growth.valueChanged.connect(
+        lambda v: tab.blob_growth_label.setText(f"{v / 100.0:.1f}x")
+    )
+    blob_growth_row.addWidget(tab.blob_growth_label)
+    blob_layout.addLayout(blob_growth_row)
+
+    # Initial visibility
+    tab._update_vis_mode_sections()
 
     # Container for both groups
     container = QWidget()
@@ -570,6 +843,79 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.spotify_vis_border_opacity.setValue(border_opacity_pct)
     tab.spotify_vis_border_opacity_label.setText(f"{border_opacity_pct}%")
 
+    # Visualizer mode combobox
+    saved_mode = tab._config_str('spotify_visualizer', spotify_vis_config, 'mode', 'spectrum')
+    mode_idx = tab.spotify_vis_type_combo.findData(saved_mode)
+    if mode_idx >= 0:
+        tab.spotify_vis_type_combo.setCurrentIndex(mode_idx)
+
+    # Per-mode settings: Oscilloscope
+    if hasattr(tab, 'osc_glow_enabled'):
+        tab.osc_glow_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_glow_enabled', True)
+        )
+    if hasattr(tab, 'osc_glow_intensity'):
+        osc_glow_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_glow_intensity', 0.5) * 100)
+        tab.osc_glow_intensity.setValue(max(0, min(100, osc_glow_val)))
+        tab.osc_glow_intensity_label.setText(f"{osc_glow_val}%")
+    if hasattr(tab, 'osc_reactive_glow'):
+        tab.osc_reactive_glow.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_reactive_glow', True)
+        )
+
+    # Per-mode settings: Starfield
+    if hasattr(tab, 'star_travel_speed'):
+        star_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'star_travel_speed', 0.5) * 100)
+        tab.star_travel_speed.setValue(max(0, min(200, star_speed_val)))
+        tab.star_travel_speed_label.setText(f"{star_speed_val / 100.0:.2f}x")
+    if hasattr(tab, 'star_reactivity'):
+        star_react_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'star_reactivity', 1.0) * 100)
+        tab.star_reactivity.setValue(max(0, min(200, star_react_val)))
+        tab.star_reactivity_label.setText(f"{star_react_val / 100.0:.2f}x")
+    if hasattr(tab, 'starfield_growth'):
+        star_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'starfield_growth', 2.0) * 100)
+        tab.starfield_growth.setValue(max(100, min(400, star_growth_val)))
+        tab.starfield_growth_label.setText(f"{star_growth_val / 100.0:.1f}x")
+
+    # Per-mode settings: Blob
+    if hasattr(tab, 'blob_pulse'):
+        blob_pulse_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_pulse', 1.0) * 100)
+        tab.blob_pulse.setValue(max(0, min(200, blob_pulse_val)))
+        tab.blob_pulse_label.setText(f"{blob_pulse_val / 100.0:.2f}x")
+    if hasattr(tab, 'blob_growth'):
+        blob_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_growth', 2.5) * 100)
+        tab.blob_growth.setValue(max(100, min(400, blob_growth_val)))
+        tab.blob_growth_label.setText(f"{blob_growth_val / 100.0:.1f}x")
+
+    # Per-mode settings: Helix
+    if hasattr(tab, 'helix_turns'):
+        tab.helix_turns.setValue(
+            tab._config_int('spotify_visualizer', spotify_vis_config, 'helix_turns', 4)
+        )
+    if hasattr(tab, 'helix_double'):
+        tab.helix_double.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'helix_double', True)
+        )
+    if hasattr(tab, 'helix_speed'):
+        helix_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_speed', 1.0) * 100)
+        tab.helix_speed.setValue(max(0, min(200, helix_speed_val)))
+        tab.helix_speed_label.setText(f"{helix_speed_val / 100.0:.2f}x")
+    if hasattr(tab, 'helix_glow_enabled'):
+        tab.helix_glow_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'helix_glow_enabled', True)
+        )
+    if hasattr(tab, 'helix_glow_intensity'):
+        helix_glow_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_glow_intensity', 0.5) * 100)
+        tab.helix_glow_intensity.setValue(max(0, min(100, helix_glow_val)))
+        tab.helix_glow_intensity_label.setText(f"{helix_glow_val}%")
+    if hasattr(tab, 'helix_growth'):
+        helix_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_growth', 2.0) * 100)
+        tab.helix_growth.setValue(max(100, min(400, helix_growth_val)))
+        tab.helix_growth_label.setText(f"{helix_growth_val / 100.0:.1f}x")
+
+    # Update per-mode section visibility
+    tab._update_vis_mode_sections()
+
     # Ghosting
     tab.spotify_vis_ghost_enabled.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'ghosting_enabled', True)
@@ -621,7 +967,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
 
     spotify_vis_config = {
         'enabled': tab.spotify_vis_enabled.isChecked(),
-        'mode': 'spectrum',
+        'mode': getattr(tab, 'spotify_vis_type_combo', None) and tab.spotify_vis_type_combo.currentData() or 'spectrum',
         'bar_count': tab.spotify_vis_bar_count.value(),
         'software_visualizer_enabled': tab.spotify_vis_software_enabled.isChecked(),
         'adaptive_sensitivity': tab.spotify_vis_recommended.isChecked(),
@@ -646,6 +992,20 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'dynamic_floor': tab.spotify_vis_dynamic_floor.isChecked(),
         'dynamic_range_enabled': tab.spotify_vis_dynamic_floor.isChecked(),
         'manual_floor': max(0.12, min(4.0, tab.spotify_vis_manual_floor.value() / 100.0)),
+        'osc_glow_enabled': getattr(tab, 'osc_glow_enabled', None) and tab.osc_glow_enabled.isChecked(),
+        'osc_glow_intensity': (getattr(tab, 'osc_glow_intensity', None) and tab.osc_glow_intensity.value() or 50) / 100.0,
+        'osc_reactive_glow': getattr(tab, 'osc_reactive_glow', None) and tab.osc_reactive_glow.isChecked(),
+        'star_travel_speed': (getattr(tab, 'star_travel_speed', None) and tab.star_travel_speed.value() or 50) / 100.0,
+        'star_reactivity': (getattr(tab, 'star_reactivity', None) and tab.star_reactivity.value() or 100) / 100.0,
+        'blob_pulse': (getattr(tab, 'blob_pulse', None) and tab.blob_pulse.value() or 100) / 100.0,
+        'helix_turns': getattr(tab, 'helix_turns', None) and tab.helix_turns.value() or 4,
+        'helix_double': getattr(tab, 'helix_double', None) and tab.helix_double.isChecked(),
+        'helix_speed': (getattr(tab, 'helix_speed', None) and tab.helix_speed.value() or 100) / 100.0,
+        'helix_glow_enabled': getattr(tab, 'helix_glow_enabled', None) and tab.helix_glow_enabled.isChecked(),
+        'helix_glow_intensity': (getattr(tab, 'helix_glow_intensity', None) and tab.helix_glow_intensity.value() or 50) / 100.0,
+        'starfield_growth': (getattr(tab, 'starfield_growth', None) and tab.starfield_growth.value() or 200) / 100.0,
+        'blob_growth': (getattr(tab, 'blob_growth', None) and tab.blob_growth.value() or 250) / 100.0,
+        'helix_growth': (getattr(tab, 'helix_growth', None) and tab.helix_growth.value() or 200) / 100.0,
     }
 
     tab._update_spotify_vis_sensitivity_enabled_state()

@@ -15,11 +15,17 @@ import math
 
 from PySide6.QtCore import QObject
 
+try:
+    import numpy as np
+except ImportError:
+    np = None  # type: ignore[assignment]
+
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
+from widgets.spotify_visualizer.energy_bands import EnergyBands, extract_energy_bands
 
 
 logger = get_logger(__name__)
@@ -43,6 +49,13 @@ class _SpotifyBeatEngine(QObject):
         self._ref_count: int = 0
         self._latest_bars: Optional[List[float]] = None
         self._last_audio_ts: float = 0.0
+
+        # Waveform buffer for oscilloscope visualizer (last 256 raw samples)
+        self._waveform: List[float] = [0.0] * 256
+        self._waveform_count: int = 256
+
+        # Energy bands for starfield / blob / helix
+        self._energy_bands: EnergyBands = EnergyBands()
         
         # Smoothing state (moved from widget to reduce UI thread work)
         self._smoothed_bars: List[float] = [0.0] * self._bar_count
@@ -229,7 +242,10 @@ class _SpotifyBeatEngine(QObject):
                     nxt = 0.0
                 smoothed.append(nxt)
             
-            return {'raw': raw_bars, 'smoothed': smoothed, 'ts': now_ts}
+            # Extract energy bands from smoothed bars
+            energy = extract_energy_bands(smoothed)
+            return {'raw': raw_bars, 'smoothed': smoothed, 'ts': now_ts,
+                    'energy': energy}
 
         def _on_result(result) -> None:
             try:
@@ -247,6 +263,9 @@ class _SpotifyBeatEngine(QObject):
                 if isinstance(smoothed_bars, list):
                     self._smoothed_bars = smoothed_bars
                     self._last_smooth_ts = ts
+                energy = data.get('energy')
+                if isinstance(energy, EnergyBands):
+                    self._energy_bands = energy
                 try:
                     self._last_audio_ts = time.time()
                 except Exception as e:
@@ -274,7 +293,20 @@ class _SpotifyBeatEngine(QObject):
                     self._last_audio_ts = now_ts
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                
+
+                # Extract waveform for oscilloscope (last 256 samples)
+                try:
+                    if np is not None and hasattr(samples, '__len__'):
+                        arr = np.asarray(samples, dtype='float32').ravel()
+                        n = len(arr)
+                        if n >= 256:
+                            self._waveform = arr[-256:].tolist()
+                        elif n > 0:
+                            pad = [0.0] * (256 - n)
+                            self._waveform = arr.tolist() + pad
+                except Exception:
+                    pass
+            
                 if not self._is_spotify_playing:
                     if self._latest_bars is None or len(self._latest_bars) != self._bar_count:
                         self._latest_bars = [0.0] * self._bar_count
@@ -314,6 +346,14 @@ class _SpotifyBeatEngine(QObject):
     def get_smoothed_bars(self) -> List[float]:
         """Get pre-smoothed bars for UI display."""
         return list(self._smoothed_bars)
+
+    def get_waveform(self) -> List[float]:
+        """Get the last 256 raw waveform samples for oscilloscope."""
+        return list(self._waveform)
+
+    def get_energy_bands(self) -> EnergyBands:
+        """Get the latest frequency-band energy snapshot."""
+        return self._energy_bands
 
     def wake(self) -> None:
         """Force wake after pause detection - restart audio capture if unhealthy."""

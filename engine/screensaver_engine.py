@@ -342,8 +342,9 @@ class ScreensaverEngine(QObject):
             self.thread_manager = ThreadManager()
             logger.debug("ThreadManager initialized")
             
-            # Settings manager
-            self.settings_manager = SettingsManager()
+            # Settings manager (skip if pre-assigned, e.g. by tests)
+            if self.settings_manager is None:
+                self.settings_manager = SettingsManager()
             logger.debug("SettingsManager initialized")
             
             # Bridge SettingsManager Qt Signal to EventSystem
@@ -496,21 +497,44 @@ class ScreensaverEngine(QObject):
                 count = self.image_queue.add_images(local_images)
                 logger.info(f"Queue initialized with {count} local images")
             
-            # Load RSS images asynchronously (don't block startup)
-            # warm_cache() + pre-load both happen on the IO pool thread
-            if self.rss_coordinator:
-                self._load_rss_images_async()
-            
-            # If we have no local images and no RSS sources, fail
+            # If we have no local images and no RSS sources at all, fail
             if not local_images and not self.rss_coordinator:
                 logger.error("No images found from any source")
                 self.error_occurred.emit("No images found")
                 return False
-            
-            # If we only have RSS sources and no local images, we need to wait
-            # for at least some RSS images before we can start
-            if not local_images and self.rss_coordinator:
-                logger.info("No local images - waiting for RSS images to load...")
+
+            # When RSS feeds exist, warm the disk cache first so cached
+            # images are available immediately without network I/O.
+            if self.rss_coordinator:
+                try:
+                    cached_count = self.rss_coordinator.warm_cache()
+                    if cached_count > 0:
+                        cached_imgs = self.rss_coordinator.get_cached_images()
+                        if cached_imgs:
+                            import random as _rnd
+                            cap = 35
+                            try:
+                                if self.settings_manager:
+                                    cap = int(self.settings_manager.get(
+                                        'sources.rss_rotating_cache_size', 20))
+                            except Exception:
+                                pass
+                            if len(cached_imgs) > cap:
+                                _rnd.shuffle(cached_imgs)
+                                cached_imgs = cached_imgs[:cap]
+                            n = self.image_queue.add_images(cached_imgs)
+                            logger.info(f"Pre-loaded {n} cached RSS images from disk (of {cached_count} in cache)")
+                except Exception as exc:
+                    logger.debug("[ENGINE] RSS cache warm failed: %s", exc)
+
+            # Start async RSS loading for fresh images (non-blocking)
+            if self.rss_coordinator:
+                self._load_rss_images_async()
+
+            # If we still have zero images after cache pre-load AND no local
+            # images, do a short sync load as last resort.
+            if self.image_queue.total_images() == 0 and self.rss_coordinator:
+                logger.info("No cached or local images - waiting for RSS images to load...")
                 self._load_rss_images_sync()
                 if self.image_queue.total_images() == 0:
                     logger.error("No images found from RSS sources")

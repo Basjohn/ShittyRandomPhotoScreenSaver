@@ -384,6 +384,7 @@ def push_spotify_visualizer_frame(
     ghost_alpha=0.4,
     ghost_decay=-1.0,
     vis_mode="spectrum",
+    **extra_kwargs,
 ):
     vis = getattr(widget, "spotify_visualizer_widget", None)
     if vis is None:
@@ -451,6 +452,7 @@ def push_spotify_visualizer_frame(
             ghost_alpha=ghost_alpha,
             ghost_decay=ghost_decay,
             vis_mode=vis_mode,
+            **extra_kwargs,
         )
         pixel_shift_manager = getattr(widget, "_pixel_shift_manager", None)
         if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):

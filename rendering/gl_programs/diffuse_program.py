@@ -174,49 +174,85 @@ void main() {
         lineMask = 1.0 - lineMask;
         blockMix = lineMask;
 
-    } else if (u_shapeMode == 3) {
-        // Diamonds mode: diamond-shaped reveal expanding from block center.
-        vec2 centered = cellFrac - 0.5;
-        float diamondDist = abs(centered.x) + abs(centered.y);  // L1 norm
-        float maxDiamond = 1.0;
-        float diamondR = shapeProgress * maxDiamond * 1.1;
-        float diamondFeather = 0.08;
-        float diamondMask = 1.0 - smoothstep(diamondR - diamondFeather, diamondR + diamondFeather, diamondDist);
-        blockMix = diamondMask;
+    } else if (u_shapeMode == 3 || (u_shapeMode == 5 && mod(cellIndex, 3.0) < 1.0)) {
+        // Diamonds mode: cross-block diamond sampling to avoid square edges.
+        float totalMask = 0.0;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                vec2 nCell = cell + vec2(float(dx), float(dy));
+                if (nCell.x < 0.0 || nCell.x >= cols ||
+                    nCell.y < 0.0 || nCell.y >= rows) continue;
+                float nIdx = nCell.y * cols + nCell.x;
+                float nRnd = hash1(nIdx * 37.0 + 13.0);
+                float nThresh = min(pow(nRnd, 1.35), 1.0 - width);
+                float nProg = 0.0;
+                if (t > nThresh) {
+                    nProg = clamp((t - nThresh) / max(1e-4, 1.0 - nThresh), 0.0, 1.0);
+                }
+                if (nProg <= 0.0) continue;
+                vec2 nCenter = (nCell + vec2(0.5)) / grid;
+                vec2 toC = uv - nCenter;
+                float dDist = (abs(toC.x) + abs(toC.y)) * min(cols, rows);
+                float dR = nProg * 1.15;
+                float dFeather = 0.12;
+                float dMask = 1.0 - smoothstep(dR - dFeather, dR + dFeather, dDist);
+                totalMask = max(totalMask, dMask);
+            }
+        }
+        blockMix = totalMask;
 
-    } else if (u_shapeMode == 4) {
-        // Amorph mode: semi-random oval shapes, like tiny crumble pieces.
-        // Each block gets a random ellipse orientation and eccentricity.
-        float angle = hash1(cellIndex * 67.0 + 11.0) * 3.14159;
-        float eccX = 0.6 + hash1(cellIndex * 89.0 + 31.0) * 0.8;
-        float eccY = 0.6 + hash1(cellIndex * 97.0 + 41.0) * 0.8;
-        vec2 centered = cellFrac - 0.5;
-        // Rotate local coords by per-block angle
-        float cs = cos(angle);
-        float sn = sin(angle);
-        vec2 rotated = vec2(
-            centered.x * cs - centered.y * sn,
-            centered.x * sn + centered.y * cs
-        );
-        // Elliptical distance with per-block eccentricity
-        float ovalDist = length(rotated * vec2(eccX, eccY));
-        // Add organic noise to the edge
-        float noise = hash2(cell + rotated * 3.0) * 0.15;
-        ovalDist += noise;
-        float ovalR = shapeProgress * 0.75;
-        float ovalFeather = 0.06;
-        float ovalMask = 1.0 - smoothstep(ovalR - ovalFeather, ovalR + ovalFeather, ovalDist);
-        blockMix = ovalMask;
+    } else if (u_shapeMode == 4 || (u_shapeMode == 5 && mod(cellIndex, 3.0) >= 2.0)) {
+        // Amorph mode: cross-block oval sampling to avoid square edges.
+        float totalMask = 0.0;
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                vec2 nCell = cell + vec2(float(dx), float(dy));
+                if (nCell.x < 0.0 || nCell.x >= cols ||
+                    nCell.y < 0.0 || nCell.y >= rows) continue;
+                float nIdx = nCell.y * cols + nCell.x;
+                float nRnd = hash1(nIdx * 37.0 + 13.0);
+                float nThresh = min(pow(nRnd, 1.35), 1.0 - width);
+                float nProg = 0.0;
+                if (t > nThresh) {
+                    nProg = clamp((t - nThresh) / max(1e-4, 1.0 - nThresh), 0.0, 1.0);
+                }
+                if (nProg <= 0.0) continue;
+                vec2 nCenter = (nCell + vec2(0.5)) / grid;
+                float nAngle = hash1(nIdx * 67.0 + 11.0) * 3.14159;
+                float eccX = 0.6 + hash1(nIdx * 89.0 + 31.0) * 0.8;
+                float eccY = 0.6 + hash1(nIdx * 97.0 + 41.0) * 0.8;
+                vec2 toC = uv - nCenter;
+                float cs2 = cos(nAngle); float sn2 = sin(nAngle);
+                vec2 rot = vec2(toC.x * cs2 - toC.y * sn2,
+                                toC.x * sn2 + toC.y * cs2);
+                float oDist = length(rot * vec2(eccX, eccY) * min(cols, rows));
+                float noise = hash2(nCell + rot * 3.0) * 0.12;
+                oDist += noise;
+                float oR = nProg * 0.9;
+                float oFeather = 0.1;
+                float oMask = 1.0 - smoothstep(oR - oFeather, oR + oFeather, oDist);
+                totalMask = max(totalMask, oMask);
+            }
+        }
+        blockMix = totalMask;
+
+    } else if (u_shapeMode == 5) {
+        // Random fallback bucket (lines) for remaining cells
+        float lineDir = hash1(cellIndex * 71.0 + 3.0);
+        float linePos = lineDir > 0.5 ? cellFrac.x : cellFrac.y;
+        float sweepDir = hash1(cellIndex * 43.0 + 17.0);
+        if (sweepDir > 0.5) linePos = 1.0 - linePos;
+        float lineEdge = shapeProgress * 1.15;
+        float lineMask = 1.0 - smoothstep(lineEdge - 0.12, lineEdge, linePos);
+        blockMix = lineMask;
     }
 
     // Global tail for clean landing.
     float tail;
     if (u_shapeMode == 1) {
-        // Membrane: late tail for full coverage
         tail = smoothstep(0.92, 1.0, t);
-    } else if (u_shapeMode == 4) {
-        // Amorph: slightly earlier tail due to irregular shapes
-        tail = smoothstep(0.90, 1.0, t);
+    } else if (u_shapeMode == 4 || u_shapeMode == 5) {
+        tail = smoothstep(0.88, 1.0, t);
     } else {
         tail = smoothstep(0.96, 1.0, t);
     }

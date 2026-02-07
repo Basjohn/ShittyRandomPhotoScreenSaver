@@ -34,7 +34,11 @@ except Exception as e:
 
 class VisualizerMode(Enum):
     """Visualization display modes for the Spotify visualizer."""
-    SPECTRUM = auto()  # Classic bar spectrum analyzer (only supported mode)
+    SPECTRUM = auto()       # Classic segmented bar analyzer
+    OSCILLOSCOPE = auto()   # Audio waveform spline with glow
+    STARFIELD = auto()      # Audio-reactive traveling starfield
+    BLOB = auto()           # Organic reactive metaball
+    HELIX = auto()          # DNA / double-helix spiral
 
 
 @dataclass

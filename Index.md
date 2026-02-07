@@ -244,9 +244,22 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 |--------|------|-------------|---------|
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
 | Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode, _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
-| Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing |
+| Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, process_via_fft_worker, get_zero_bars | DSP/FFT bar computation pipeline (extracted from audio_worker) |
+| Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
+| Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for blob/starfield/helix modes |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
+| Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | SHARED_VERTEX_SHADER, load_fragment_shader, load_all_fragment_shaders | GLSL shader source loading for multi-shader architecture |
+
+### Visualizer Shaders
+
+| Shader | File | Uniforms | Purpose |
+|--------|------|----------|---------|
+| Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha | Classic segmented bar analyzer (extracted verbatim from inline GLSL) |
+| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_glow_*, u_reactive_glow | Catmull-Rom spline waveform with SDF glow |
+| Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity | Volumetric ray-marched starfield (Star Nest derivative) |
+| Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse | 2D SDF organic metaball with audio-reactive deformation |
+| Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_* | Parametric double-helix with depth shading and user-controllable glow |
 
 ## Weather System
 

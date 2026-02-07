@@ -87,7 +87,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Failed to configure compositor geometry/visibility (block spins)",
                 exc_info=True,
@@ -99,7 +99,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm block spins textures", exc_info=True)
 
         # Drive via shared AnimationManager.
@@ -139,7 +139,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current block spins transition", exc_info=True)
 
         self._animation_id = None
@@ -155,7 +155,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
                 # Ensure compositor is no longer animating; do not force snap
                 # here, as DisplayWidget will already have updated its base.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup block spins compositor", exc_info=True)
             self._compositor = None
 

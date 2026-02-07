@@ -39,6 +39,25 @@ def ensure_shared_feedback_timer(cls: type) -> None:
             logger.debug("[PERF] Started shared feedback timer")
 
 
+def cleanup_shared_feedback_timer(cls: type) -> None:
+    """Destroy the shared feedback timer when the last instance is gone."""
+    timer = cls._shared_feedback_timer
+    if timer is None:
+        return
+    # Only destroy if no live instances remain
+    live = sum(1 for inst in list(cls._instances) if Shiboken.isValid(inst))
+    if live > 0:
+        return
+    try:
+        timer.stop()
+        timer.deleteLater()
+    except RuntimeError:
+        pass
+    cls._shared_feedback_timer = None
+    if is_perf_metrics_enabled():
+        logger.debug("[PERF] Destroyed shared feedback timer (no instances)")
+
+
 def maybe_stop_shared_feedback_timer(cls: type) -> None:
     """Stop timer if no active feedback."""
     timer = cls._shared_feedback_timer

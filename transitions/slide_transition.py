@@ -208,39 +208,10 @@ class SlideTransition(BaseTransition):
         self._new_animation = None
 
         # Delete labels
-        if self._old_label:
-            if self._resource_manager and hasattr(self._old_label, "_resource_id"):
-                try:
-                    self._resource_manager.unregister(self._old_label._resource_id, force=True)  # type: ignore[attr-defined]
-                except Exception as e:
-                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
-                    try:
-                        self._old_label.deleteLater()
-                    except RuntimeError:
-                        pass
-            else:
-                try:
-                    self._old_label.deleteLater()
-                except RuntimeError:
-                    pass
-            self._old_label = None
-        
-        if self._new_label:
-            if self._resource_manager and hasattr(self._new_label, "_resource_id"):
-                try:
-                    self._resource_manager.unregister(self._new_label._resource_id, force=True)  # type: ignore[attr-defined]
-                except Exception as e:
-                    logger.debug("[TRANSITION] Exception suppressed: %s", e)
-                    try:
-                        self._new_label.deleteLater()
-                    except RuntimeError:
-                        pass
-            else:
-                try:
-                    self._new_label.deleteLater()
-                except RuntimeError:
-                    pass
-            self._new_label = None
+        self._dispose_label(self._old_label)
+        self._old_label = None
+        self._dispose_label(self._new_label)
+        self._new_label = None
 
         self._widget = None
         self._finished_count = 0
@@ -248,6 +219,21 @@ class SlideTransition(BaseTransition):
         if self._state not in [TransitionState.FINISHED, TransitionState.CANCELLED]:
             self._set_state(TransitionState.IDLE)
     
+    def _dispose_label(self, label) -> None:
+        """Safely dispose a transition label via ResourceManager or deleteLater."""
+        if label is None:
+            return
+        if self._resource_manager and hasattr(label, "_resource_id"):
+            try:
+                self._resource_manager.unregister(label._resource_id, force=True)  # type: ignore[attr-defined]
+                return
+            except Exception as e:
+                logger.debug("[TRANSITION] Exception suppressed: %s", e)
+        try:
+            label.deleteLater()
+        except RuntimeError:
+            pass
+
     def _calculate_positions(self, width: int, height: int) -> tuple:
         """
         Calculate start and end positions for both images.
@@ -342,18 +328,10 @@ class SlideTransition(BaseTransition):
         self._emit_progress(1.0)
         self.finished.emit()
         # Clean up labels
-        if self._old_label:
-            try:
-                self._old_label.deleteLater()
-            except RuntimeError:
-                pass
-            self._old_label = None
-        if self._new_label:
-            try:
-                self._new_label.deleteLater()
-            except RuntimeError:
-                pass
-            self._new_label = None
+        self._dispose_label(self._old_label)
+        self._old_label = None
+        self._dispose_label(self._new_label)
+        self._new_label = None
         self._widget = None
     
     def _resolve_easing(self) -> EasingCurve:

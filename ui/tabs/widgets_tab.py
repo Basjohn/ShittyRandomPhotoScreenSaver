@@ -709,6 +709,24 @@ class WidgetsTab(QWidget):
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
 
+    def _update_vis_mode_sections(self) -> None:
+        """Show/hide per-mode settings containers based on selected visualizer type."""
+        try:
+            mode = self.spotify_vis_type_combo.currentData() or 'spectrum'
+        except Exception:
+            mode = 'spectrum'
+
+        containers = {
+            'spectrum': getattr(self, '_spectrum_settings_container', None),
+            'oscilloscope': getattr(self, '_osc_settings_container', None),
+            'starfield': getattr(self, '_starfield_settings_container', None),
+            'blob': getattr(self, '_blob_settings_container', None),
+            'helix': getattr(self, '_helix_settings_container', None),
+        }
+        for m, container in containers.items():
+            if container is not None:
+                container.setVisible(m == mode)
+
     def _update_spotify_vis_sensitivity_enabled_state(self) -> None:
         try:
             recommended = self.spotify_vis_recommended.isChecked()
@@ -891,6 +909,21 @@ class WidgetsTab(QWidget):
             'enabled': getattr(self, 'spotify_vis_enabled', None) and self.spotify_vis_enabled.isChecked(),
             'monitor': getattr(self, 'spotify_vis_monitor_combo', None) and self.spotify_vis_monitor_combo.currentText() or 'ALL',
             'bar_count': getattr(self, 'spotify_vis_bar_count', None) and self.spotify_vis_bar_count.value() or 16,
+            'mode': getattr(self, 'spotify_vis_type_combo', None) and self.spotify_vis_type_combo.currentData() or 'spectrum',
+            'osc_glow_enabled': getattr(self, 'osc_glow_enabled', None) and self.osc_glow_enabled.isChecked(),
+            'osc_glow_intensity': (getattr(self, 'osc_glow_intensity', None) and self.osc_glow_intensity.value() or 50) / 100.0,
+            'osc_reactive_glow': getattr(self, 'osc_reactive_glow', None) and self.osc_reactive_glow.isChecked(),
+            'star_travel_speed': (getattr(self, 'star_travel_speed', None) and self.star_travel_speed.value() or 50) / 100.0,
+            'star_reactivity': (getattr(self, 'star_reactivity', None) and self.star_reactivity.value() or 100) / 100.0,
+            'blob_pulse': (getattr(self, 'blob_pulse', None) and self.blob_pulse.value() or 100) / 100.0,
+            'helix_turns': getattr(self, 'helix_turns', None) and self.helix_turns.value() or 4,
+            'helix_double': getattr(self, 'helix_double', None) and self.helix_double.isChecked(),
+            'helix_speed': (getattr(self, 'helix_speed', None) and self.helix_speed.value() or 100) / 100.0,
+            'helix_glow_enabled': getattr(self, 'helix_glow_enabled', None) and self.helix_glow_enabled.isChecked(),
+            'helix_glow_intensity': (getattr(self, 'helix_glow_intensity', None) and self.helix_glow_intensity.value() or 50) / 100.0,
+            'starfield_growth': (getattr(self, 'starfield_growth', None) and self.starfield_growth.value() or 200) / 100.0,
+            'blob_growth': (getattr(self, 'blob_growth', None) and self.blob_growth.value() or 250) / 100.0,
+            'helix_growth': (getattr(self, 'helix_growth', None) and self.helix_growth.value() or 200) / 100.0,
         }
         
         return config

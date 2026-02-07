@@ -250,12 +250,27 @@ class RSSDownloader:
                         f.write(chunk)
                         downloaded += len(chunk)
 
-            # Atomic replace (os.replace works on Windows even if dest exists)
-            try:
-                os.replace(str(temp_file), str(cache_file))
-            except Exception as e:
-                logger.error(f"[RSS_DL] Rename failed: {e}")
+            # Atomic replace with retry for Windows WinError 32 (handle held
+            # briefly by antivirus / filesystem journal after close).
+            renamed = False
+            for attempt in range(4):
+                # Re-check: another thread may have finished the same download
+                if cache_file.exists():
+                    self._safe_unlink(temp_file)
+                    return cache_file
+                try:
+                    os.replace(str(temp_file), str(cache_file))
+                    renamed = True
+                    break
+                except OSError:
+                    if attempt < 3:
+                        time.sleep(0.05 * (attempt + 1))
+            if not renamed:
+                logger.warning("[RSS_DL] Rename failed after retries: %s -> %s", temp_file.name, cache_file.name)
                 self._safe_unlink(temp_file)
+                # Final race check — file may now exist from another thread
+                if cache_file.exists():
+                    return cache_file
                 return None
 
             logger.debug(f"[RSS_DL] Downloaded {cache_file.name} ({downloaded} bytes)")

@@ -134,6 +134,8 @@ class ClockWidget(BaseOverlayWidget):
         self._cached_clock_face: Optional["QPixmap"] = None
         self._cached_clock_face_size: Optional[tuple[int, int]] = None
         self._clock_face_cache_invalidated: bool = True
+        self._analog_frame_buffer: Optional["QPixmap"] = None
+        self._analog_frame_buffer_size: Optional[tuple[int, int]] = None
         
         # Setup widget
         self._setup_ui()
@@ -1105,11 +1107,16 @@ class ClockWidget(BaseOverlayWidget):
             self._cached_clock_face_size != current_size):
             self._regenerate_clock_face_cache(current_size[0], current_size[1])
 
-        # Create a fresh frame buffer each paint to prevent hand accumulation
-        # on transparent backgrounds. We composite: cached face + fresh hands.
+        # Reuse frame buffer to avoid QPixmap allocation every second.
+        # Only reallocate when widget size changes.
         dpr = self.devicePixelRatioF()
-        frame_buffer = QPixmap(int(self.width() * dpr), int(self.height() * dpr))
-        frame_buffer.setDevicePixelRatio(dpr)
+        fb_size = (int(self.width() * dpr), int(self.height() * dpr))
+        if (self._analog_frame_buffer is None or
+                self._analog_frame_buffer_size != fb_size):
+            self._analog_frame_buffer = QPixmap(fb_size[0], fb_size[1])
+            self._analog_frame_buffer.setDevicePixelRatio(dpr)
+            self._analog_frame_buffer_size = fb_size
+        frame_buffer = self._analog_frame_buffer
         frame_buffer.fill(Qt.GlobalColor.transparent)
         
         # Draw into frame buffer

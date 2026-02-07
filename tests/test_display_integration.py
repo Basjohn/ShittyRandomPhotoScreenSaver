@@ -528,9 +528,19 @@ class TestScreensaverEngineIntegration:
             img = QImage(QSize(100, 100), QImage.Format.Format_RGB32)
             img.fill(QColor(i * 80, 100, 200))
             img.save(str(img_dir / f"test_{i}.png"))
+        # Use isolated settings to avoid polluting production config
+        isolated_settings = SettingsManager(
+            organization="Test",
+            application=f"EngineTest_{uuid.uuid4().hex}",
+            storage_base_dir=tmp_path / "settings",
+        )
+        isolated_settings.set("sources.folders", [str(img_dir)])
+        # Prevent fullscreen display creation in tests — avoids desktop freeze
+        isolated_settings.set("display.show_on_monitors", "NONE")
+        isolated_settings.save()
         eng = ScreensaverEngine()
+        eng.settings_manager = isolated_settings
         eng.initialize()
-        eng.settings_manager.set("sources.folders", [str(img_dir)])
         yield eng
         eng.cleanup()
 

@@ -257,11 +257,29 @@ def create_spotify_visualizer_widget(
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
-        # Visualization mode (only spectrum supported)
+        # Visualization mode + per-mode settings
         try:
-            if hasattr(vis, 'set_visualization_mode'):
-                from widgets.spotify_visualizer_widget import VisualizerMode
-                vis.set_visualization_mode(VisualizerMode.SPECTRUM)
+            if hasattr(vis, 'apply_vis_mode_config'):
+                vis.apply_vis_mode_config(
+                    mode=str(model.mode),
+                    osc_glow_enabled=model.osc_glow_enabled,
+                    osc_glow_intensity=model.osc_glow_intensity,
+                    osc_glow_color=model.osc_glow_color,
+                    osc_reactive_glow=model.osc_reactive_glow,
+                    star_density=model.star_density,
+                    star_travel_speed=model.star_travel_speed,
+                    star_reactivity=model.star_reactivity,
+                    blob_color=model.blob_color,
+                    blob_pulse=model.blob_pulse,
+                    helix_turns=model.helix_turns,
+                    helix_double=model.helix_double,
+                    helix_speed=model.helix_speed,
+                    helix_glow_enabled=model.helix_glow_enabled,
+                    helix_glow_intensity=model.helix_glow_intensity,
+                    starfield_growth=model.starfield_growth,
+                    blob_growth=model.blob_growth,
+                    helix_growth=model.helix_growth,
+                )
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 

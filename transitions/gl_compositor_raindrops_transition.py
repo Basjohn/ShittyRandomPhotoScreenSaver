@@ -94,7 +94,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
             comp.setGeometry(0, 0, widget.width(), widget.height())
             comp.show()
             comp.raise_()
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Failed to configure compositor geometry/visibility (rain drops)",
                 exc_info=True,
@@ -105,7 +105,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
             warm = getattr(comp, "warm_shader_textures", None)
             if callable(warm):
                 warm(old_pixmap, new_pixmap)
-        except Exception as e:
+        except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm raindrops textures", exc_info=True)
 
         # Drive via shared AnimationManager. Try the shader-based raindrops
@@ -128,7 +128,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
                 on_finished=_on_finished_shader,
                 ripple_count=self._ripple_count,
             )
-        except Exception as e:
+        except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Failed to start shader-based rain drops; falling back to diffuse region API",
                 exc_info=True,
@@ -185,7 +185,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
             try:
                 # Snap to final frame when cancelling mid-way to avoid pops.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cancel current rain drops transition", exc_info=True)
 
         self._animation_id = None
@@ -201,7 +201,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
                 # Ensure compositor is no longer animating; do not force snap
                 # here, as DisplayWidget will already have updated its base.
                 self._compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to cleanup rain drops compositor", exc_info=True)
             self._compositor = None
 
@@ -288,7 +288,7 @@ class GLCompositorRainDropsTransition(BaseTransition):
         if not region.isEmpty():
             try:
                 self._compositor.set_diffuse_region(region)
-            except Exception as e:
+            except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to update rain drops region", exc_info=True)
 
         total = len(self._drops) or 1

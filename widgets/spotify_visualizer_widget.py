@@ -89,6 +89,37 @@ class SpotifyVisualizerWidget(QWidget):
 
         # Visualization mode (Spectrum, Waveform, Abstract)
         self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
+        self._vis_mode_str: str = 'spectrum'
+
+        # Oscilloscope settings
+        self._osc_glow_enabled: bool = True
+        self._osc_glow_intensity: float = 0.5
+        self._osc_glow_color: QColor = QColor(0, 200, 255, 230)
+        self._osc_reactive_glow: bool = True
+
+        # Starfield settings
+        self._star_density: float = 1.0
+        self._star_travel_speed: float = 0.5
+        self._star_reactivity: float = 1.0
+
+        # Blob settings
+        self._blob_color: QColor = QColor(0, 180, 255, 230)
+        self._blob_pulse: float = 1.0
+
+        # Helix settings
+        self._helix_turns: int = 4
+        self._helix_double: bool = True
+        self._helix_speed: float = 1.0
+
+        # Helix glow settings
+        self._helix_glow_enabled: bool = True
+        self._helix_glow_intensity: float = 0.5
+
+        # Card height expansion (per-mode growth factors, user-customizable)
+        self._base_height: int = 80
+        self._starfield_growth: float = 2.0
+        self._blob_growth: float = 2.5
+        self._helix_growth: float = 2.0
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -297,6 +328,110 @@ class SpotifyVisualizerWidget(QWidget):
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         self.apply_sensitivity_config(recommended, sensitivity)
+
+    def apply_vis_mode_config(self, mode: str, **kwargs) -> None:
+        """Apply visualization mode and per-mode settings.
+
+        Called when the settings dialog saves a new visualizer type or
+        per-mode parameter. Updates the internal state so the next
+        ``_on_tick`` push uses the correct mode and parameters.
+        """
+        mode_map = {
+            'spectrum': VisualizerMode.SPECTRUM,
+            'oscilloscope': VisualizerMode.OSCILLOSCOPE,
+            'starfield': VisualizerMode.STARFIELD,
+            'blob': VisualizerMode.BLOB,
+            'helix': VisualizerMode.HELIX,
+        }
+        vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
+        self.set_visualization_mode(vm)
+
+        # Oscilloscope
+        if 'osc_glow_enabled' in kwargs:
+            self._osc_glow_enabled = bool(kwargs['osc_glow_enabled'])
+        if 'osc_glow_intensity' in kwargs:
+            self._osc_glow_intensity = max(0.0, float(kwargs['osc_glow_intensity']))
+        if 'osc_glow_color' in kwargs:
+            c = kwargs['osc_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._osc_glow_color = QColor(*c)
+        if 'osc_reactive_glow' in kwargs:
+            self._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
+
+        # Starfield
+        if 'star_travel_speed' in kwargs:
+            self._star_travel_speed = max(0.0, float(kwargs['star_travel_speed']))
+        if 'star_reactivity' in kwargs:
+            self._star_reactivity = max(0.0, float(kwargs['star_reactivity']))
+        if 'star_density' in kwargs:
+            self._star_density = max(0.1, float(kwargs['star_density']))
+
+        # Blob
+        if 'blob_color' in kwargs:
+            c = kwargs['blob_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._blob_color = QColor(*c)
+        if 'blob_pulse' in kwargs:
+            self._blob_pulse = max(0.0, float(kwargs['blob_pulse']))
+
+        # Helix
+        if 'helix_turns' in kwargs:
+            self._helix_turns = max(2, int(kwargs['helix_turns']))
+        if 'helix_double' in kwargs:
+            self._helix_double = bool(kwargs['helix_double'])
+        if 'helix_speed' in kwargs:
+            self._helix_speed = max(0.0, float(kwargs['helix_speed']))
+
+        # Helix glow
+        if 'helix_glow_enabled' in kwargs:
+            self._helix_glow_enabled = bool(kwargs['helix_glow_enabled'])
+        if 'helix_glow_intensity' in kwargs:
+            self._helix_glow_intensity = max(0.0, float(kwargs['helix_glow_intensity']))
+
+        # Height growth factors
+        if 'starfield_growth' in kwargs:
+            self._starfield_growth = max(0.5, min(5.0, float(kwargs['starfield_growth'])))
+        if 'blob_growth' in kwargs:
+            self._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
+        if 'helix_growth' in kwargs:
+            self._helix_growth = max(0.5, min(5.0, float(kwargs['helix_growth'])))
+
+        # Update widget height if mode changed
+        self._apply_preferred_height()
+
+        logger.debug("[SPOTIFY_VIS] Applied vis mode config: mode=%s", mode)
+
+    def get_preferred_height(self) -> int:
+        """Return the ideal card height for the current visualizer mode."""
+        from widgets.spotify_visualizer.card_height import preferred_height
+        mode = self._vis_mode_str
+        growth = {
+            'starfield': self._starfield_growth,
+            'blob': self._blob_growth,
+            'helix': self._helix_growth,
+        }.get(mode)
+        return preferred_height(mode, self._base_height, growth)
+
+    def _apply_preferred_height(self) -> None:
+        """Resize the widget to match the preferred height for the current mode.
+
+        For spectrum/oscilloscope (growth=1.0), we remove any fixed-height
+        constraint so the positioning system in widget_manager controls
+        the height.  For expanded modes (starfield/blob/helix) we set a
+        minimum height from the growth factor.
+        """
+        mode = self._vis_mode_str
+        if mode in ('spectrum', 'oscilloscope'):
+            # Let the positioning system determine height
+            self.setMinimumHeight(0)
+            self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+            return
+        h = self.get_preferred_height()
+        current = self.height()
+        if current != h:
+            self.setMinimumHeight(h)
+            self.setMaximumHeight(16777215)  # allow positioning system to grow
+            logger.debug("[SPOTIFY_VIS] Card min height set: %d -> %d (mode=%s)", current, h, mode)
 
     def set_software_visualizer_enabled(self, enabled: bool) -> None:
         """Enable or disable the QWidget-based software visualiser path.
@@ -1149,9 +1284,32 @@ class SpotifyVisualizerWidget(QWidget):
             should_push = changed or fade_changed or first_frame or geom_changed
             if should_push:
                 _gpu_push_start = time.time()
-                # Only spectrum mode is supported
-                mode_str = 'spectrum'
-                
+                mode_str = self._vis_mode_str
+
+                # Build extra kwargs for non-spectrum modes
+                extra = {}
+                if mode_str != 'spectrum':
+                    engine = self._engine
+                    if engine is not None:
+                        extra['waveform'] = engine.get_waveform()
+                        extra['energy_bands'] = engine.get_energy_bands()
+
+                    # Per-mode settings
+                    extra['glow_enabled'] = self._osc_glow_enabled
+                    extra['glow_intensity'] = self._osc_glow_intensity
+                    extra['glow_color'] = self._osc_glow_color
+                    extra['reactive_glow'] = self._osc_reactive_glow
+                    extra['star_density'] = self._star_density
+                    extra['travel_speed'] = self._star_travel_speed
+                    extra['star_reactivity'] = self._star_reactivity
+                    extra['blob_color'] = self._blob_color
+                    extra['blob_pulse'] = self._blob_pulse
+                    extra['helix_turns'] = self._helix_turns
+                    extra['helix_double'] = self._helix_double
+                    extra['helix_speed'] = self._helix_speed
+                    extra['helix_glow_enabled'] = self._helix_glow_enabled
+                    extra['helix_glow_intensity'] = self._helix_glow_intensity
+
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),
                     bar_count=self._bar_count,
@@ -1164,6 +1322,7 @@ class SpotifyVisualizerWidget(QWidget):
                     ghost_alpha=self._ghost_alpha,
                     ghost_decay=self._ghost_decay_rate,
                     vis_mode=mode_str,
+                    **extra,
                 )
                 _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
                 if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
@@ -1341,13 +1500,10 @@ class SpotifyVisualizerWidget(QWidget):
             painter.end()
 
     def set_visualization_mode(self, mode: VisualizerMode) -> None:
-        """Set the visualization display mode.
-        
-        Args:
-            mode: VisualizerMode.SPECTRUM (only supported mode)
-        """
+        """Set the visualization display mode."""
         if mode != self._vis_mode:
             self._vis_mode = mode
+            self._vis_mode_str = mode.name.lower()
             logger.info("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
 
     def get_visualization_mode(self) -> VisualizerMode:

@@ -1,0 +1,257 @@
+#version 330 core
+in vec2 v_uv;
+out vec4 fragColor;
+
+uniform vec2 u_resolution;   // logical size in QWidget coordinates
+uniform float u_dpr;         // device pixel ratio of the backing FBO
+uniform int u_bar_count;
+uniform int u_segments;
+uniform float u_bars[64];
+uniform float u_peaks[64];
+uniform vec4 u_fill_color;
+uniform vec4 u_border_color;
+uniform float u_fade;
+uniform int u_playing;
+uniform float u_ghost_alpha;
+
+void main() {
+    if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
+        discard;
+    }
+
+    float width = u_resolution.x;
+    float height = u_resolution.y;
+    if (width <= 0.0 || height <= 0.0) {
+        discard;
+    }
+
+    // Derive logical fragment coordinates from the physical framebuffer
+    // position. QOpenGLWidget renders into a device-pixel-scaled FBO, so we
+    // map gl_FragCoord (physical) back into QWidget logical space using the
+    // current device pixel ratio.
+    float dpr = (u_dpr <= 0.0) ? 1.0 : u_dpr;
+    float fb_height = height * dpr;
+    vec2 fragCoord = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
+
+    // ========== SPECTRUM MODE ==========
+    float margin_x = 8.0;
+    float margin_y = 6.0;
+    float gap = 2.0;
+    float seg_gap = 1.0;
+    float bars_inset = 5.0;
+
+    // Match QWidget geometry: inner rect is rect.adjusted(margin_x, margin_y,
+    // -margin_x, -margin_y). For a logical rect starting at (0, 0) this
+    // gives width = W - 2*margin_x and height = H - 2*margin_y.
+    float inner_left = margin_x;
+    float inner_top = margin_y;
+    float inner_width = width - margin_x * 2.0;
+    float inner_height = height - margin_y * 2.0;
+    float inner_right = inner_left + inner_width;
+    float inner_bottom = inner_top + inner_height;
+
+    if (inner_width <= 0.0 || inner_height <= 0.0) {
+        discard;
+    }
+
+    // Discard anything outside the bar field vertically so we don't fill
+    // the entire card when active_segments is high.
+    if (fragCoord.y < inner_top || fragCoord.y > inner_bottom) {
+        discard;
+    }
+
+    float bar_region_width = inner_width - (bars_inset * 2.0);
+    if (bar_region_width <= 0.0) {
+        discard;
+    }
+
+    int bar_count_int = max(u_bar_count, 1);
+    float bar_count = float(bar_count_int);
+    float total_gap = gap * float(bar_count_int - 1);
+    float usable_width = bar_region_width - total_gap;
+    if (usable_width <= 0.0) {
+        discard;
+    }
+
+    float bar_width = floor(usable_width / bar_count);
+    if (bar_width < 1.0) {
+        discard;
+    }
+
+    float span = bar_width * bar_count + total_gap;
+    float remaining = max(0.0, bar_region_width - span);
+    float bars_left = inner_left + bars_inset + floor(remaining * 0.5);
+
+    float x_rel = fragCoord.x - bars_left;
+    if (x_rel < 0.0) {
+        discard;
+    }
+    if (x_rel >= span) {
+        discard;
+    }
+
+    float step_x = bar_width + gap;
+    int bar_index = int(floor(x_rel / step_x));
+    if (bar_index < 0 || bar_index >= u_bar_count) {
+        discard;
+    }
+
+    // Local X coordinate within the bar; discard the explicit gap region.
+    // Use a half-open range [0, bar_width) so that we never classify the
+    // gap pixel as part of the bar due to floating-point rounding.
+    float bar_local_x = x_rel - float(bar_index) * step_x;
+    if (bar_local_x < 0.0 || bar_local_x >= bar_width) {
+        discard;
+    }
+
+    float value = u_bars[bar_index];
+    if (value < 0.0) {
+        value = 0.0;
+    }
+    if (value > 1.0) {
+        value = 1.0;
+    }
+
+    float peak = u_peaks[bar_index];
+    if (peak < 0.0) {
+        peak = 0.0;
+    }
+    if (peak > 1.0) {
+        peak = 1.0;
+    }
+
+    float total_seg_gap = seg_gap * float(u_segments - 1);
+    float seg_height = (inner_height - total_seg_gap) / float(u_segments);
+    seg_height = floor(seg_height);
+    if (seg_height < 1.0) {
+        discard;
+    }
+
+    float base_bottom = inner_bottom;
+    float step_y = seg_height + seg_gap;
+    float y_rel = base_bottom - fragCoord.y;
+    if (y_rel < 0.0) {
+        discard;
+    }
+
+    int seg_index = int(floor(y_rel / step_y));
+    if (seg_index < 0) {
+        discard;
+    }
+
+    // Local Y coordinate within the segment; discard the vertical gap
+    // region using a half-open range [0, seg_height).
+    float seg_local_y = y_rel - float(seg_index) * step_y;
+    if (seg_local_y < 0.0 || seg_local_y >= seg_height) {
+        discard;
+    }
+
+    float boosted = value * 1.2;
+    if (boosted > 1.0) {
+        boosted = 1.0;
+    }
+    int active_segments = int(round(boosted * float(u_segments)));
+    if (active_segments <= 0) {
+        // Always keep at least one active segment so the visualiser has
+        // a visible baseline even when audio energy is near zero or the
+        // player is paused.
+        active_segments = 1;
+    }
+
+    // Determine whether this fragment belongs to the main bar body
+    // or to a trailing ghost segment derived from the decaying peak.
+    int peak_segments = active_segments;
+    bool is_ghost_frag = false;
+    if (peak > value) {
+        float delta = peak - value;
+        if (delta < 0.0) {
+            delta = 0.0;
+        }
+
+        // Map the peak/value difference into extra segments above the
+        // current active height. Even a modest drop produces at least one
+        // ghost segment when there is vertical room.
+        float boosted_delta = delta * 1.2;
+        if (boosted_delta > 1.0) {
+            boosted_delta = 1.0;
+        }
+        int extra_segments = int(ceil(boosted_delta * float(u_segments)));
+        if (extra_segments <= 0 && delta > 0.01 && active_segments < u_segments) {
+            extra_segments = 1;
+        }
+
+        peak_segments = active_segments + extra_segments;
+        if (peak_segments > u_segments) {
+            peak_segments = u_segments;
+        }
+        if (peak_segments > active_segments && seg_index >= active_segments && seg_index < peak_segments) {
+            is_ghost_frag = true;
+        }
+    }
+
+    bool is_bar_frag = (active_segments > 0) && (seg_index < active_segments);
+    if (!is_bar_frag && !is_ghost_frag) {
+        discard;
+    }
+
+    // Draw a bar segment using the configured fill/border colours. Visual
+    // segmentation between blocks/segments is still provided by the explicit
+    // horizontal/vertical gaps; border detection operates in integer-like
+    // local coordinates to remain stable across resolutions/DPI.
+
+    float bw_px = floor(bar_width);
+    float sh_px = floor(seg_height);
+    float bx = floor(bar_local_x);
+    float by = floor(seg_local_y);
+
+    bool on_border = false;
+    if (is_bar_frag) {
+        if (bw_px <= 2.0 || sh_px <= 2.0) {
+            on_border = true;
+        } else {
+            if (bx <= 0.0 || bx >= bw_px - 1.0 || by <= 0.0 || by >= sh_px - 1.0) {
+                on_border = true;
+            }
+        }
+    }
+
+    vec4 fill = u_fill_color;
+    vec4 border = u_border_color;
+    fill.a *= u_fade;
+    border.a *= u_fade;
+
+    if (is_ghost_frag) {
+        // Ghost bars use the bright border colour with an additional alpha
+        // falloff along the trail so newer ghost segments just above the
+        // live bar remain stronger while the oldest/highest segments fade
+        // out more quickly.
+        float ghost_alpha = clamp(u_ghost_alpha, 0.0, 1.0);
+        if (ghost_alpha <= 0.0) {
+            discard;
+        }
+
+        // Normalise the distance of this ghost segment above the active bar
+        // into [0, 1], where 0.0 sits directly above the bar and 1.0 is the
+        // top-most ghost segment.
+        float ghost_factor = 1.0;
+        if (peak_segments > active_segments) {
+            float ghost_idx = float(seg_index - active_segments);
+            float ghost_len = float(max(1, peak_segments - active_segments));
+            float t = 0.0;
+            if (ghost_len > 1.0) {
+                t = clamp(ghost_idx / (ghost_len - 1.0), 0.0, 1.0);
+            }
+            // Fade from full strength near the bar to a softer outline at
+            // the very top of the trail.
+            float start = 1.0;
+            float end = 0.25;
+            ghost_factor = mix(start, end, t);
+        }
+
+        vec4 ghost = border;
+        ghost.a *= ghost_alpha * ghost_factor;
+        fragColor = ghost;
+    } else {
+        fragColor = on_border ? border : fill;
+    }
+}

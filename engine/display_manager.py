@@ -121,6 +121,8 @@ class DisplayManager(QObject):
         if isinstance(raw, str):
             if raw.upper() == 'ALL':
                 return indices
+            if raw.upper() == 'NONE':
+                return set()
             # Attempt to parse a stringified list such as "[1, 2]"
             try:
                 import ast
