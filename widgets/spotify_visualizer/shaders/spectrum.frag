@@ -122,6 +122,11 @@ void main() {
         peak = 1.0;
     }
 
+    // Blanket power reduction for Spectrum mode: scale all bars
+    // to match the visual intensity of Spotify at lower volumes.
+    value *= 0.70;
+    peak *= 0.85;
+
     // Apply height-aware visual boost: the CPU scales bars by 0.55 to prevent
     // pinning at normal volume.  When the card grows beyond its default height,
     // u_bar_height_scale > 1.0 stretches bars to fill the extra space while
