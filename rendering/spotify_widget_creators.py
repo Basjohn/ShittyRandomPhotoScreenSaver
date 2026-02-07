@@ -297,6 +297,7 @@ def create_spotify_visualizer_widget(
                     osc_line3_color=model.osc_line3_color,
                     osc_line3_glow_color=model.osc_line3_glow_color,
                     spectrum_growth=model.spectrum_growth,
+                    spectrum_single_piece=model.spectrum_single_piece,
                     starfield_growth=model.starfield_growth,
                     blob_growth=model.blob_growth,
                     helix_growth=model.helix_growth,

@@ -501,6 +501,18 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_ghost_decay_row.addWidget(tab.spotify_vis_ghost_decay_label)
     spectrum_layout.addLayout(spotify_vis_ghost_decay_row)
 
+    # Single Piece Mode (solid bars, no segment gaps)
+    tab.spectrum_single_piece = QCheckBox("Single Piece Mode")
+    tab.spectrum_single_piece.setChecked(
+        tab._default_bool('spotify_visualizer', 'spectrum_single_piece', False)
+    )
+    tab.spectrum_single_piece.setToolTip(
+        "Render solid continuous bars instead of segmented blocks. "
+        "Produces a clean pillar look while keeping all other bar behaviour."
+    )
+    tab.spectrum_single_piece.stateChanged.connect(tab._save_settings)
+    spectrum_layout.addWidget(tab.spectrum_single_piece)
+
     # Spectrum card height growth slider (1.0 .. 3.0)
     spectrum_growth_row = QHBoxLayout()
     spectrum_growth_row.addWidget(QLabel("Card Height:"))
@@ -1205,6 +1217,10 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         spectrum_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_growth', 1.0) * 100)
         tab.spectrum_growth.setValue(max(100, min(300, spectrum_growth_val)))
         tab.spectrum_growth_label.setText(f"{spectrum_growth_val}%")
+    if hasattr(tab, 'spectrum_single_piece'):
+        tab.spectrum_single_piece.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_single_piece', False)
+        )
 
     # Oscilloscope colours
     osc_line_color_data = spotify_vis_config.get('osc_line_color', [255, 255, 255, 255])
@@ -1450,6 +1466,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'helix_glow_color': _qcolor_to_list(getattr(tab, '_helix_glow_color', None), [0, 200, 255, 180]),
         'helix_reactive_glow': getattr(tab, 'helix_reactive_glow', None) and tab.helix_reactive_glow.isChecked(),
         'spectrum_growth': (getattr(tab, 'spectrum_growth', None) and tab.spectrum_growth.value() or 100) / 100.0,
+        'spectrum_single_piece': getattr(tab, 'spectrum_single_piece', None) and tab.spectrum_single_piece.isChecked() or False,
         'starfield_growth': (getattr(tab, 'starfield_growth', None) and tab.starfield_growth.value() or 200) / 100.0,
         'blob_growth': (getattr(tab, 'blob_growth', None) and tab.blob_growth.value() or 250) / 100.0,
         'helix_growth': (getattr(tab, 'helix_growth', None) and tab.helix_growth.value() or 200) / 100.0,

@@ -86,6 +86,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._ghosting_enabled: bool = True
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
+        self._spectrum_single_piece: bool = False
 
         # Visualization mode (Spectrum, Waveform, Abstract)
         self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
@@ -247,6 +248,12 @@ class SpotifyVisualizerWidget(QWidget):
         self._current_timer_interval_ms: int = 16
         self._last_gpu_fade_sent: float = -1.0
         self._last_gpu_geom: Optional[QRect] = None
+
+        # Mode transition driven by double-click (no timers, tick-driven)
+        self._mode_transition_ts: float = 0.0   # 0 = no transition active
+        self._mode_transition_phase: int = 0     # 0=idle, 1=fading out, 2=fading in
+        self._mode_transition_duration: float = 0.25  # seconds per half (out/in)
+        self._mode_transition_pending: Optional[VisualizerMode] = None
 
         # When GPU overlay rendering is available, we disable the
         # widget's own bar drawing and instead push frames up to the
@@ -472,6 +479,10 @@ class SpotifyVisualizerWidget(QWidget):
                 self._helix_glow_color = QColor(*c)
         if 'helix_reactive_glow' in kwargs:
             self._helix_reactive_glow = bool(kwargs['helix_reactive_glow'])
+
+        # Spectrum: single piece mode
+        if 'spectrum_single_piece' in kwargs:
+            self._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
 
         # Height growth factors
         if 'spectrum_growth' in kwargs:
@@ -1077,7 +1088,6 @@ class SpotifyVisualizerWidget(QWidget):
         # Configure attributes to prevent flicker with GL compositor
         configure_overlay_widget_attributes(self)
         try:
-            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
             self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
@@ -1085,6 +1095,78 @@ class SpotifyVisualizerWidget(QWidget):
         # room and match the visual weight of other widgets.
         self.setMinimumHeight(88)
         self._update_card_style()
+
+    # ------------------------------------------------------------------
+    # Mouse event handling for mode cycling
+    # ------------------------------------------------------------------
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        """Double-click cycles visualizer mode with a crossfade."""
+        if self._mode_transition_phase != 0:
+            return  # already transitioning
+        _CYCLE_MODES = [
+            VisualizerMode.SPECTRUM,
+            VisualizerMode.OSCILLOSCOPE,
+            VisualizerMode.BLOB,
+        ]
+        try:
+            idx = _CYCLE_MODES.index(self._vis_mode)
+        except ValueError:
+            idx = -1
+        next_mode = _CYCLE_MODES[(idx + 1) % len(_CYCLE_MODES)]
+        self._mode_transition_pending = next_mode
+        self._mode_transition_phase = 1  # start fade-out
+        self._mode_transition_ts = time.time()
+        logger.info("[SPOTIFY_VIS] Mode cycle requested: %s -> %s", self._vis_mode.name, next_mode.name)
+        event.accept()
+
+    def mousePressEvent(self, event) -> None:
+        """Forward single clicks to parent (compositor/reddit)."""
+        event.ignore()
+
+    def mouseReleaseEvent(self, event) -> None:
+        """Forward releases to parent."""
+        event.ignore()
+
+    def _mode_transition_fade_factor(self, now_ts: float) -> float:
+        """Return a 0..1 fade multiplier for the mode crossfade.
+
+        Driven entirely from the existing tick — no timers or polling.
+        Returns 1.0 when no transition is active (zero cost).
+        """
+        phase = self._mode_transition_phase
+        if phase == 0:
+            return 1.0
+
+        elapsed = now_ts - self._mode_transition_ts
+        dur = self._mode_transition_duration
+
+        if phase == 1:
+            # Fading out
+            t = min(1.0, elapsed / dur) if dur > 0 else 1.0
+            if t >= 1.0:
+                # Fade-out complete: switch mode, begin fade-in
+                pending = self._mode_transition_pending
+                if pending is not None:
+                    self.set_visualization_mode(pending)
+                    self._apply_preferred_height()
+                    self._mode_transition_pending = None
+                self._mode_transition_phase = 2
+                self._mode_transition_ts = now_ts
+                return 0.0
+            return 1.0 - t
+
+        if phase == 2:
+            # Fading in
+            t = min(1.0, elapsed / dur) if dur > 0 else 1.0
+            if t >= 1.0:
+                # Transition complete
+                self._mode_transition_phase = 0
+                self._mode_transition_ts = 0.0
+                return 1.0
+            return t
+
+        return 1.0
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         if duration_ms <= 0:
@@ -1392,13 +1474,17 @@ class SpotifyVisualizerWidget(QWidget):
             geom_changed = last_geom is None or (current_geom is not None and current_geom != last_geom)
 
             fade = self._get_gpu_fade_factor(now_ts)
+            # Apply mode-transition crossfade (1.0 when idle, 0→1 during switch)
+            transition_fade = self._mode_transition_fade_factor(now_ts)
+            fade *= transition_fade
             prev_fade = self._last_gpu_fade_sent
             self._last_gpu_fade_sent = fade
             if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
                 fade_changed = True
                 need_card_update = True
 
-            should_push = changed or fade_changed or first_frame or geom_changed
+            transitioning = self._mode_transition_phase != 0
+            should_push = changed or fade_changed or first_frame or geom_changed or transitioning
             if should_push:
                 _gpu_push_start = time.time()
                 mode_str = self._vis_mode_str
@@ -1461,6 +1547,7 @@ class SpotifyVisualizerWidget(QWidget):
                     ghost_alpha=self._ghost_alpha,
                     ghost_decay=self._ghost_decay_rate,
                     vis_mode=mode_str,
+                    single_piece=self._spectrum_single_piece,
                     **extra,
                 )
                 _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
@@ -1616,6 +1703,7 @@ class SpotifyVisualizerWidget(QWidget):
             painter.setPen(border)
 
             # SPECTRUM mode - classic bar visualization
+            _single = self._spectrum_single_piece
             for i in range(count):
                     x = bar_x[i]
                     value = max(0.0, min(1.0, self._display_bars[i]))
@@ -1624,17 +1712,23 @@ class SpotifyVisualizerWidget(QWidget):
                     boosted = value * 1.2
                     if boosted > 1.0:
                         boosted = 1.0
-                    active = int(round(boosted * segments))
-                    if active <= 0:
-                        if self._spotify_playing and value > 0.0:
-                            active = 1
-                        else:
-                            continue
-                    active = min(active, max_segments)
-                    for s in range(active):
-                        y = seg_y[s]
-                        bar_rect = QRect(x, y, bar_width, seg_height)
-                        painter.drawRect(bar_rect)
+
+                    if _single:
+                        bar_h = max(1, int(round(boosted * inner.height())))
+                        bar_y = inner.bottom() - bar_h + 1
+                        painter.drawRect(QRect(x, bar_y, bar_width, bar_h))
+                    else:
+                        active = int(round(boosted * segments))
+                        if active <= 0:
+                            if self._spotify_playing and value > 0.0:
+                                active = 1
+                            else:
+                                continue
+                        active = min(active, max_segments)
+                        for s in range(active):
+                            y = seg_y[s]
+                            bar_rect = QRect(x, y, bar_width, seg_height)
+                            painter.drawRect(bar_rect)
 
             painter.end()
 
@@ -1650,11 +1744,23 @@ class SpotifyVisualizerWidget(QWidget):
         return self._vis_mode
 
     def cycle_visualization_mode(self) -> VisualizerMode:
-        """Cycle to the next visualization mode and return it."""
-        modes = list(VisualizerMode)
-        current_idx = modes.index(self._vis_mode)
-        next_idx = (current_idx + 1) % len(modes)
-        self.set_visualization_mode(modes[next_idx])
+        """Cycle to the next visualization mode and return it.
+
+        Cycles through Spectrum → Oscilloscope → Blob only.
+        Starfield and Helix are excluded from the quick-cycle.
+        """
+        _CYCLE_MODES = [
+            VisualizerMode.SPECTRUM,
+            VisualizerMode.OSCILLOSCOPE,
+            VisualizerMode.BLOB,
+        ]
+        try:
+            idx = _CYCLE_MODES.index(self._vis_mode)
+        except ValueError:
+            idx = -1
+        next_mode = _CYCLE_MODES[(idx + 1) % len(_CYCLE_MODES)]
+        self.set_visualization_mode(next_mode)
+        self._apply_preferred_height()
         return self._vis_mode
 
     def _log_perf_snapshot(self, reset: bool = False) -> None:

@@ -128,6 +128,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._helix_glow_color: QColor = QColor(0, 200, 255, 180)
         self._helix_reactive_glow: bool = True
 
+        # Spectrum: single piece mode (solid bars, no segment gaps)
+        self._single_piece: bool = False
+
         # Ghosting configuration – whether trailing segments are drawn and
         # how strong they appear relative to the main bar border colour. The
         # decay rate is controlled separately via _peak_decay_per_sec.
@@ -227,6 +230,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         osc_line2_glow_color: QColor | None = None,
         osc_line3_color: QColor | None = None,
         osc_line3_glow_color: QColor | None = None,
+        single_piece: bool = False,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -363,6 +367,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if helix_glow_color is not None:
             self._helix_glow_color = QColor(helix_glow_color)
         self._helix_reactive_glow = bool(helix_reactive_glow)
+
+        # Spectrum: single piece (solid bars, no segments)
+        self._single_piece = bool(single_piece)
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -738,7 +745,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 uniforms = {}
                 for uname in (
                     "u_resolution", "u_dpr", "u_fade", "u_time",
-                    "u_bar_count", "u_segments", "u_bar_height_scale", "u_bars", "u_peaks",
+                    "u_bar_count", "u_segments", "u_bar_height_scale", "u_single_piece",
+                    "u_bars", "u_peaks",
                     "u_fill_color", "u_border_color", "u_playing", "u_ghost_alpha",
                     "u_waveform", "u_waveform_count",
                     "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
@@ -933,6 +941,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     cur_h = max(1.0, float(rect.height()))
                     height_scale = max(1.0, cur_h / _SPECTRUM_BASE_HEIGHT)
                     _gl.glUniform1f(loc, float(height_scale))
+
+                loc = u.get("u_single_piece", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._single_piece else 0)
 
                 bars = list(self._bars)
                 if not bars:
@@ -1245,6 +1257,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             max_segments = min(segments, len(seg_y))
             draw_count = min(count, len(bar_x), len(self._bars))
 
+            _BASE_H = 80.0
+            h_scale = max(1.0, float(rect.height()) / _BASE_H)
+
             for i in range(draw_count):
                 x = bar_x[i]
                 try:
@@ -1257,19 +1272,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 if value > 1.0:
                     value = 1.0
                 # Height-aware visual boost (mirrors shader u_bar_height_scale)
-                _BASE_H = 80.0
-                h_scale = max(1.0, float(rect.height()) / _BASE_H)
                 value = min(0.95, value * h_scale)
-                active = int(round(value * segments))
-                if active <= 0:
-                    if self._playing and value > 0.0:
-                        active = 1
-                    else:
-                        continue
-                if active > max_segments:
-                    active = max_segments
-                for s in range(active):
-                    y = seg_y[s]
-                    painter.drawRect(QRect(x, y, bar_width, seg_height))
+
+                if self._single_piece:
+                    # Solid bar: one rectangle from bottom to active height
+                    bar_h = max(1, int(round(value * inner.height())))
+                    bar_y = base_bottom - bar_h + 1
+                    painter.drawRect(QRect(x, bar_y, bar_width, bar_h))
+                else:
+                    active = int(round(value * segments))
+                    if active <= 0:
+                        if self._playing and value > 0.0:
+                            active = 1
+                        else:
+                            continue
+                    if active > max_segments:
+                        active = max_segments
+                    for s in range(active):
+                        y = seg_y[s]
+                        painter.drawRect(QRect(x, y, bar_width, seg_height))
         finally:
             painter.end()
