@@ -248,9 +248,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             if 0.0 < dt < 1.0:  # sanity clamp
                 self._accumulated_time += dt
                 # Starfield: integrate speed*dt so travel is monotonic (never reverses)
+                # Gate on overall energy so travel stops when music is paused
                 if self._vis_mode == 'starfield' and energy_bands is not None:
+                    overall = getattr(energy_bands, 'overall', 0.0)
                     bass = getattr(energy_bands, 'bass', 0.0)
-                    base_spd = max(0.08, self._travel_speed)
+                    # Fade base speed to 0 when silent (overall < 0.02)
+                    activity = min(1.0, overall * 10.0)  # 0→1 over energy 0→0.1
+                    base_spd = self._travel_speed * activity
                     spd = base_spd + bass * self._star_reactivity * 0.4
                     self._starfield_travel_time += dt * spd
         self._last_time_ts = now_ts

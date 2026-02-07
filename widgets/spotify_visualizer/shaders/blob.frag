@@ -102,8 +102,9 @@ void main() {
     float gi = clamp(u_blob_glow_intensity, 0.0, 1.0);
     if (u_blob_reactive_glow == 1) {
         float e = u_overall_energy;
-        glow_sigma = (3.0 + gi * 20.0) + e * e * (20.0 + gi * 30.0);
-        glow_strength = (0.05 + gi * 0.35) + e * (0.3 + gi * 0.5);
+        // Low base (barely visible at silence) → dramatic at full energy
+        glow_sigma = (1.5 + gi * 6.0) + e * e * (25.0 + gi * 45.0);
+        glow_strength = (0.02 + gi * 0.08) + e * (0.45 + gi * 0.8);
     } else {
         glow_sigma = 4.0 + gi * 25.0;
         glow_strength = 0.15 + gi * 0.6;

@@ -11,8 +11,11 @@ uniform float u_time;
 uniform float u_waveform[256];
 uniform int u_waveform_count;
 
-// Energy
+// Energy bands
 uniform float u_overall_energy;
+uniform float u_bass_energy;
+uniform float u_mid_energy;
+uniform float u_high_energy;
 
 // Line colour (separate from glow)
 uniform vec4 u_line_color;
@@ -99,7 +102,7 @@ float sample_waveform(float nx, int offset) {
 // Returns vec4(rgb, alpha).
 vec4 eval_line(
     float ny, float inner_height, float wave_val, float amplitude,
-    vec4 lineCol, vec4 glowCol, float glowSigmaBase
+    vec4 lineCol, vec4 glowCol, float glowSigmaBase, float band_energy
 ) {
     float wave_y = 0.5 + wave_val * amplitude;
     float dist = abs(ny - wave_y);
@@ -112,12 +115,13 @@ vec4 eval_line(
     if (u_glow_enabled == 1 && glowSigmaBase > 0.0) {
         float sigma = glowSigmaBase;
         if (u_reactive_glow == 1) {
-            sigma *= (0.5 + u_overall_energy * 1.5);
+            // Use per-line band energy for reactive glow
+            sigma *= (0.5 + band_energy * 1.8);
         }
         if (sigma > 0.0) {
             glow_alpha = exp(-(dist_px * dist_px) / (2.0 * sigma * sigma));
             if (u_reactive_glow == 1) {
-                glow_alpha *= (0.6 + u_overall_energy * 0.8);
+                glow_alpha *= (0.5 + band_energy * 1.0);
             }
         }
     }
@@ -181,35 +185,44 @@ void main() {
     float amplitude = 0.5 - 1.0 / max(inner_height, 2.0);
     float glow_sigma_base = u_glow_intensity * 8.0;
 
-    // Primary line (always present)
+    int lines = clamp(u_line_count, 1, 3);
+
+    // Per-line energy: single mode uses overall, multi-line splits by band
+    float e1 = (lines == 1) ? u_overall_energy : u_bass_energy;
+    float e2_band = u_mid_energy;
+    float e3_band = u_high_energy;
+
+    // Primary line — bass-reactive in multi-line, overall in single
+    float amp1 = amplitude * (1.0 + e1 * 0.15);
     float w1 = sample_waveform(nx, 0);
-    vec4 c1 = eval_line(ny, inner_height, w1, amplitude,
-                        u_line_color, u_glow_color, glow_sigma_base);
+    vec4 c1 = eval_line(ny, inner_height, w1, amp1,
+                        u_line_color, u_glow_color, glow_sigma_base, e1);
 
     vec3 final_rgb = c1.rgb * c1.a;
     float final_a = c1.a;
 
-    int lines = clamp(u_line_count, 1, 3);
-
     if (lines >= 2) {
-        // Line 2: large phase offset and slightly reduced amplitude
+        // Line 2: mid-frequency reactive — responds to vocals, guitars, keys
         int wf_count = max(u_waveform_count, 2);
-        int offset2 = max(1, wf_count / 3);  // ~33% phase shift
+        int offset2 = max(1, wf_count / 3);
+        float amp2 = amplitude * (0.88 + e2_band * 0.2);
         float w2 = sample_waveform(nx, offset2);
-        vec4 c2 = eval_line(ny, inner_height, w2, amplitude * 0.88,
-                            u_line2_color, u_line2_glow_color, glow_sigma_base * 0.8);
-        // Additive-style blend (back-to-front)
+        vec4 c2 = eval_line(ny, inner_height, w2, amp2,
+                            u_line2_color, u_line2_glow_color,
+                            glow_sigma_base * 0.85, e2_band);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a * 0.7;
         final_a = max(final_a, c2.a * 0.7);
     }
 
     if (lines >= 3) {
-        // Line 3: even larger offset, moderately reduced amplitude
+        // Line 3: high-frequency reactive — responds to hi-hats, cymbals, sibilance
         int wf_count = max(u_waveform_count, 2);
-        int offset3 = max(1, wf_count * 2 / 3);  // ~66% phase shift
+        int offset3 = max(1, wf_count * 2 / 3);
+        float amp3 = amplitude * (0.72 + e3_band * 0.25);
         float w3 = sample_waveform(nx, offset3);
-        vec4 c3 = eval_line(ny, inner_height, w3, amplitude * 0.72,
-                            u_line3_color, u_line3_glow_color, glow_sigma_base * 0.6);
+        vec4 c3 = eval_line(ny, inner_height, w3, amp3,
+                            u_line3_color, u_line3_glow_color,
+                            glow_sigma_base * 0.7, e3_band);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a * 0.6;
         final_a = max(final_a, c3.a * 0.6);
     }
