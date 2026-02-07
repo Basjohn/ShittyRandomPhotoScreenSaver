@@ -17,6 +17,7 @@ from PySide6.QtCore import Signal, Qt
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from ui.tabs.shared_styles import SPINBOX_STYLE
 
 logger = get_logger(__name__)
 
@@ -113,23 +114,17 @@ class TransitionsTab(QWidget):
         type_layout.addLayout(type_row)
 
         # Random transitions option
-        random_row = QHBoxLayout()
         self.random_checkbox = QCheckBox("Always use random transitions")
         self.random_checkbox.stateChanged.connect(self._save_settings)
-        random_row.addWidget(self.random_checkbox)
-        random_row.addStretch()
-        type_layout.addLayout(random_row)
+        type_layout.addWidget(self.random_checkbox)
 
         # Per-transition pool membership: controls whether the selected
         # transition participates in the engine's random rotation and C-key
         # cycling. Explicit selection via the dropdown remains available
         # regardless of this flag.
-        pool_row = QHBoxLayout()
         self.pool_checkbox = QCheckBox("Include in switch/random pool")
         self.pool_checkbox.stateChanged.connect(self._save_settings)
-        pool_row.addWidget(self.pool_checkbox)
-        pool_row.addStretch()
-        type_layout.addLayout(pool_row)
+        type_layout.addWidget(self.pool_checkbox)
         
         layout.addWidget(type_group)
         
@@ -371,37 +366,25 @@ class TransitionsTab(QWidget):
         radius_row.addStretch()
         particle_layout.addLayout(radius_row)
         
-        trail_row = QHBoxLayout()
         self.particle_trail_check = QCheckBox("Motion Trail")
         self.particle_trail_check.setChecked(True)
         self.particle_trail_check.stateChanged.connect(self._save_settings)
-        trail_row.addWidget(self.particle_trail_check)
-        trail_row.addStretch()
-        particle_layout.addLayout(trail_row)
+        particle_layout.addWidget(self.particle_trail_check)
         
-        shading_row = QHBoxLayout()
         self.particle_3d_check = QCheckBox("3D Ball Shading")
         self.particle_3d_check.setChecked(True)
         self.particle_3d_check.stateChanged.connect(self._save_settings)
-        shading_row.addWidget(self.particle_3d_check)
-        shading_row.addStretch()
-        particle_layout.addLayout(shading_row)
+        particle_layout.addWidget(self.particle_3d_check)
         
-        texture_row = QHBoxLayout()
         self.particle_texture_check = QCheckBox("Map Image to Particles")
         self.particle_texture_check.setChecked(True)
         self.particle_texture_check.stateChanged.connect(self._save_settings)
-        texture_row.addWidget(self.particle_texture_check)
-        texture_row.addStretch()
-        particle_layout.addLayout(texture_row)
+        particle_layout.addWidget(self.particle_texture_check)
         
-        wobble_row = QHBoxLayout()
         self.particle_wobble_check = QCheckBox("Wobble on Arrival")
         self.particle_wobble_check.setChecked(False)
         self.particle_wobble_check.stateChanged.connect(self._save_settings)
-        wobble_row.addWidget(self.particle_wobble_check)
-        wobble_row.addStretch()
-        particle_layout.addLayout(wobble_row)
+        particle_layout.addWidget(self.particle_wobble_check)
         
         # Gloss/specular settings
         gloss_row = QHBoxLayout()
@@ -472,68 +455,7 @@ class TransitionsTab(QWidget):
         # Enforce GL-only availability on initial build
         self._refresh_hw_dependent_options()
         
-        # Improve +/- button clarity and feedback on spin boxes
-        self.setStyleSheet(
-            self.styleSheet() + """
-            QSpinBox, QDoubleSpinBox {
-                background-color: #1e1e1e;
-                color: #ffffff;
-                border: 1px solid #3a3a3a;
-                border-radius: 4px;
-                padding-right: 28px; /* more space for larger buttons */
-                min-height: 24px;
-            }
-            QSpinBox::up-button, QDoubleSpinBox::up-button {
-                subcontrol-origin: border;
-                subcontrol-position: top right;
-                width: 24px;
-                height: 12px;
-                background: #2a2a2a;
-                border-left: 1px solid #3a3a3a;
-                border-top: 1px solid #3a3a3a;
-                border-right: 1px solid #3a3a3a;
-                border-bottom: 1px solid #3a3a3a;
-                margin: 0px;
-            }
-            QSpinBox::down-button, QDoubleSpinBox::down-button {
-                subcontrol-origin: border;
-                subcontrol-position: bottom right;
-                width: 24px;
-                height: 12px;
-                background: #2a2a2a;
-                border-left: 1px solid #3a3a3a;
-                border-right: 1px solid #3a3a3a;
-                border-bottom: 1px solid #3a3a3a;
-                margin: 0px;
-            }
-            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
-            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-                background: #3a3a3a;
-            }
-            QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
-            QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
-                background: #505050;
-            }
-            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
-                image: none;
-                width: 0px;
-                height: 0px;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-bottom: 6px solid #ffffff;
-                margin-top: 2px;
-            }
-            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
-                image: none;
-                width: 0px;
-                height: 0px;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 6px solid #ffffff;
-                margin-bottom: 2px;
-            }
-            """
-        )
+        self.setStyleSheet(self.styleSheet() + SPINBOX_STYLE)
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""

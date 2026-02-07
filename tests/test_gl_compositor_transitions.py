@@ -102,7 +102,9 @@ TRANSITION_CASES: List[pytest.param] = [
             name="blockspin",
             factory=lambda: GLCompositorBlockSpinTransition(duration_ms=800, easing="Auto"),
             frames=28,
-            dark_threshold=0.85,
+            # BlockSpin intentionally shows a dark/black background behind the
+            # rotating 3D slab, so dark-frame detection is disabled (threshold=1.0).
+            dark_threshold=1.0,
         ),
         id="blockspin",
     ),

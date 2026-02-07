@@ -18,6 +18,7 @@ from PySide6.QtCore import Signal, Qt
 from core.settings.settings_manager import SettingsManager
 from utils.monitors import get_screen_count
 from core.logging.logger import get_logger
+from ui.tabs.shared_styles import SPINBOX_STYLE
 
 logger = get_logger(__name__)
 
@@ -221,70 +222,7 @@ class DisplayTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-        # Unified styling for +/- spin controls in this tab. This improves the
-        # visual hit area of the buttons and keeps arrow glyphs aligned.
-        self.setStyleSheet(
-            self.styleSheet()
-            + """
-            QSpinBox, QDoubleSpinBox {
-                background-color: #1e1e1e;
-                color: #ffffff;
-                border: 1px solid #3a3a3a;
-                border-radius: 4px;
-                padding-right: 28px; /* more space for larger buttons */
-                min-height: 24px;
-            }
-            QSpinBox::up-button, QDoubleSpinBox::up-button {
-                subcontrol-origin: border;
-                subcontrol-position: top right;
-                width: 24px;
-                height: 12px;
-                background: #2a2a2a;
-                border-left: 1px solid #3a3a3a;
-                border-top: 1px solid #3a3a3a;
-                border-right: 1px solid #3a3a3a;
-                border-bottom: 1px solid #3a3a3a;
-                margin: 0px;
-            }
-            QSpinBox::down-button, QDoubleSpinBox::down-button {
-                subcontrol-origin: border;
-                subcontrol-position: bottom right;
-                width: 24px;
-                height: 12px;
-                background: #2a2a2a;
-                border-left: 1px solid #3a3a3a;
-                border-right: 1px solid #3a3a3a;
-                border-bottom: 1px solid #3a3a3a;
-                margin: 0px;
-            }
-            QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
-            QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-                background: #3a3a3a;
-            }
-            QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
-            QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
-                background: #505050;
-            }
-            QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
-                image: none;
-                width: 0px;
-                height: 0px;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-bottom: 6px solid #ffffff;
-                margin-top: 2px;
-            }
-            QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
-                image: none;
-                width: 0px;
-                height: 0px;
-                border-left: 4px solid transparent;
-                border-right: 4px solid transparent;
-                border-top: 6px solid #ffffff;
-                margin-bottom: 2px;
-            }
-            """
-        )
+        self.setStyleSheet(self.styleSheet() + SPINBOX_STYLE)
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""

@@ -355,6 +355,7 @@ value = settings.get("display.mode", "fill")
 | WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings() | Spotify + Beat Visualizer UI, load, save |
 | WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings() | Reddit 1/2 UI, load, save |
 | WidgetsTab Imgur | ui/tabs/widgets_tab_imgur.py | build_imgur_ui(), load_imgur_settings(), save_imgur_settings() | Imgur UI, load, save (dev-gated) |
+| Shared Styles | ui/tabs/shared_styles.py | SPINBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants for all settings tabs |
 | SourcesTab | ui/tabs/sources_tab.py | SourcesTab | Image source config |
 | TransitionsTab | ui/tabs/transitions_tab.py | TransitionsTab | Transition config |
 | DisplayTab | ui/tabs/display_tab.py | DisplayTab | Display settings |

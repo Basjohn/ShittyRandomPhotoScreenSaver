@@ -301,22 +301,35 @@ class SourcesTab(QWidget):
                 QMessageBox.information(self, "Duplicate", "This folder is already added.")
     
     def _remove_folder(self) -> None:
-        """Remove selected folder source."""
+        """Remove selected folder source.
+
+        Robust against settings returning None, non-list types, or the
+        folder text being desynchronised from the persisted list.
+        """
         current_item = self.folder_list.currentItem()
-        if current_item:
-            folder = current_item.text()
-            
-            # Get current folders using dot notation
+        if not current_item:
+            return
+
+        folder = current_item.text()
+        row = self.folder_list.currentRow()
+
+        try:
             folders = self._settings.get('sources.folders', [])
-            
+            if not isinstance(folders, list):
+                folders = list(folders) if folders else []
+
             if folder in folders:
                 folders.remove(folder)
-                self._settings.set('sources.folders', folders)
-                self._settings.save()
-                self.folder_list.takeItem(self.folder_list.currentRow())
-                self._update_ratio_control_state()
-                self.sources_changed.emit()
-                logger.info(f"Removed folder source: {folder}")
+            self._settings.set('sources.folders', folders)
+            self._settings.save()
+        except Exception as e:
+            logger.warning(f"Failed to update settings while removing folder: {e}")
+
+        # Always remove from UI regardless of settings state
+        self.folder_list.takeItem(row)
+        self._update_ratio_control_state()
+        self.sources_changed.emit()
+        logger.info(f"Removed folder source: {folder}")
     
     def _add_rss(self) -> None:
         """Add RSS feed source."""
@@ -357,22 +370,35 @@ class SourcesTab(QWidget):
             QMessageBox.information(self, "Duplicate", "This RSS feed is already added.")
     
     def _remove_rss(self) -> None:
-        """Remove selected RSS feed source."""
+        """Remove selected RSS feed source.
+
+        Robust against settings returning None, non-list types, or the
+        URL text being desynchronised from the persisted list.
+        """
         current_item = self.rss_list.currentItem()
-        if current_item:
-            url = current_item.text()
-            
-            # Get current RSS feeds using dot notation
+        if not current_item:
+            return
+
+        url = current_item.text()
+        row = self.rss_list.currentRow()
+
+        try:
             rss_feeds = self._settings.get('sources.rss_feeds', [])
-            
+            if not isinstance(rss_feeds, list):
+                rss_feeds = list(rss_feeds) if rss_feeds else []
+
             if url in rss_feeds:
                 rss_feeds.remove(url)
-                self._settings.set('sources.rss_feeds', rss_feeds)
-                self._settings.save()
-                self.rss_list.takeItem(self.rss_list.currentRow())
-                self._update_ratio_control_state()
-                self.sources_changed.emit()
-                logger.info(f"Removed RSS feed: {url}")
+            self._settings.set('sources.rss_feeds', rss_feeds)
+            self._settings.save()
+        except Exception as e:
+            logger.warning(f"Failed to update settings while removing RSS feed: {e}")
+
+        # Always remove from UI regardless of settings state
+        self.rss_list.takeItem(row)
+        self._update_ratio_control_state()
+        self.sources_changed.emit()
+        logger.info(f"Removed RSS feed: {url}")
     
     def _remove_all_rss(self) -> None:
         """Remove all RSS feed sources."""

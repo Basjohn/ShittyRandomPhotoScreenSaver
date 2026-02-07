@@ -18,8 +18,8 @@ def qapp():
 
 @pytest.fixture
 def settings_manager(tmp_path):
-    """Create settings manager."""
-    return SettingsManager(storage_base_dir=tmp_path)
+    """Create isolated settings manager that won't migrate from production QSettings."""
+    return SettingsManager(application="test_dialog", storage_base_dir=tmp_path)
 
 
 @pytest.fixture

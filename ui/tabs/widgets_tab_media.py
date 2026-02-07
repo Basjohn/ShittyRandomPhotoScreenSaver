@@ -344,7 +344,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_border_opacity_row.addWidget(tab.spotify_vis_border_opacity_label)
     spotify_vis_layout.addLayout(spotify_vis_border_opacity_row)
 
-    spotify_vis_sensitivity_row = QHBoxLayout()
     tab.spotify_vis_recommended = QCheckBox("Adaptive")
     tab.spotify_vis_recommended.setChecked(
         tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
@@ -354,9 +353,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     tab.spotify_vis_recommended.stateChanged.connect(tab._save_settings)
     tab.spotify_vis_recommended.stateChanged.connect(lambda _: tab._update_spotify_vis_sensitivity_enabled_state())
-    spotify_vis_sensitivity_row.addWidget(tab.spotify_vis_recommended)
-    spotify_vis_sensitivity_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_sensitivity_row)
+    spotify_vis_layout.addWidget(tab.spotify_vis_recommended)
 
     spotify_vis_sensitivity_slider_row = QHBoxLayout()
     spotify_vis_sensitivity_slider_row.addWidget(QLabel("Sensitivity:"))
@@ -376,7 +373,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_sensitivity_slider_row.addWidget(tab.spotify_vis_sensitivity_label)
     spotify_vis_layout.addLayout(spotify_vis_sensitivity_slider_row)
 
-    spotify_vis_floor_row = QHBoxLayout()
     tab.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
     tab.spotify_vis_dynamic_floor.setChecked(
         tab._default_bool('spotify_visualizer', 'dynamic_range_enabled', True)
@@ -389,9 +385,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.spotify_vis_dynamic_floor.stateChanged.connect(
         lambda _: tab._update_spotify_vis_floor_enabled_state()
     )
-    spotify_vis_floor_row.addWidget(tab.spotify_vis_dynamic_floor)
-    spotify_vis_floor_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_floor_row)
+    spotify_vis_layout.addWidget(tab.spotify_vis_dynamic_floor)
 
     spotify_vis_manual_floor_row = QHBoxLayout()
     spotify_vis_manual_floor_row.addWidget(QLabel("Manual Floor:"))
@@ -412,7 +406,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_layout.addLayout(spotify_vis_manual_floor_row)
 
     # Ghosting controls
-    spotify_vis_ghost_enable_row = QHBoxLayout()
     tab.spotify_vis_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.spotify_vis_ghost_enabled.setChecked(
         tab._default_bool('spotify_visualizer', 'ghosting_enabled', True)
@@ -421,9 +414,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "When enabled, the visualizer draws trailing ghost bars above the current height."
     )
     tab.spotify_vis_ghost_enabled.stateChanged.connect(tab._save_settings)
-    spotify_vis_ghost_enable_row.addWidget(tab.spotify_vis_ghost_enabled)
-    spotify_vis_ghost_enable_row.addStretch()
-    spotify_vis_layout.addLayout(spotify_vis_ghost_enable_row)
+    spotify_vis_layout.addWidget(tab.spotify_vis_ghost_enabled)
 
     spotify_vis_ghost_opacity_row = QHBoxLayout()
     spotify_vis_ghost_opacity_row.addWidget(QLabel("Ghost Opacity:"))
