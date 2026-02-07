@@ -240,24 +240,27 @@ def on_sources_changed(engine: ScreensaverEngine) -> None:
         if engine._build_image_queue():
             logger.info("Image queue rebuilt with updated sources")
 
-            # Restart prefetcher with new queue
+            # Reset prefetcher for new queue
             if hasattr(engine, '_prefetcher') and engine._prefetcher:
                 try:
-                    engine._prefetcher.stop()
+                    engine._prefetcher.clear_inflight()
                 except Exception as e:
                     logger.debug("[ENGINE] Exception suppressed: %s", e)
 
-            # Initialize prefetcher for new queue
-            try:
-                from utils.image_prefetcher import ImagePrefetcher
-                engine._prefetcher = ImagePrefetcher(
-                    thread_manager=engine.thread_manager,
-                    cache=engine._image_cache,
-                    max_concurrent=2,
-                )
-                logger.info("Prefetcher restarted with updated queue")
-            except Exception as e:
-                logger.warning(f"Failed to restart prefetcher: {e}")
+            # Re-create prefetcher only if cache is available
+            if engine._image_cache and engine.thread_manager:
+                try:
+                    from utils.image_prefetcher import ImagePrefetcher
+                    engine._prefetcher = ImagePrefetcher(
+                        thread_manager=engine.thread_manager,
+                        cache=engine._image_cache,
+                        max_concurrent=2,
+                    )
+                    logger.info("Prefetcher restarted with updated queue")
+                except Exception as e:
+                    logger.warning(f"Failed to restart prefetcher: {e}")
+            elif not engine._image_cache:
+                logger.debug("Skipping prefetcher restart — image cache not initialized yet")
         else:
             logger.warning("Failed to rebuild image queue after source change")
     else:

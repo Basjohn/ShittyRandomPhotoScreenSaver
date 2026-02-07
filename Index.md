@@ -193,12 +193,12 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Crossfade | 	ransitions/crossfade_transition.py | 	ransitions/gl_compositor_crossfade_transition.py | Basic fade |
 | Slide | 	ransitions/slide_transition.py | 	ransitions/gl_compositor_slide_transition.py | 4 directions |
 | Wipe | 	ransitions/wipe_transition.py | 	ransitions/gl_compositor_wipe_transition.py | 8 directions |
-| Diffuse | 	ransitions/diffuse_transition.py | 	ransitions/gl_compositor_diffuse_transition.py | Block/Membrane shapes |
+| Diffuse | 	ransitions/diffuse_transition.py | 	ransitions/gl_compositor_diffuse_transition.py | Rectangle/Membrane/Lines/Diamonds/Amorph shapes |
 | Block Flip | 	ransitions/block_puzzle_flip_transition.py | 	ransitions/gl_compositor_blockflip_transition.py | Puzzle effect |
 | Blinds | - | 	ransitions/gl_compositor_blinds_transition.py | GL only |
 | Peel | - | 	ransitions/gl_compositor_peel_transition.py | GL only |
-| Block Spin | - | 	ransitions/gl_compositor_blockspin_transition.py | GL only, 3D |
-| Raindrops | - | 	ransitions/gl_compositor_raindrops_transition.py | GL only (Ripple) |
+| Block Spin | - | 	ransitions/gl_compositor_blockspin_transition.py | GL only, 3D, 6 directions incl. diagonals |
+| Raindrops | - | 	ransitions/gl_compositor_raindrops_transition.py | GL only (Ripple), configurable ripple count 1-8 |
 | Warp | - | 	ransitions/gl_compositor_warp_transition.py | GL only |
 | Crumble | - | 	ransitions/gl_compositor_crumble_transition.py | GL only |
 | Particle | - | 	ransitions/gl_compositor_particle_transition.py | GL only |

@@ -52,14 +52,19 @@ class TestSettingsManagerBasics:
 
     def test_save_and_reload_from_disk(self, tmp_path: Path) -> None:
         storage_root = tmp_path / "settings"
-        manager = _make_manager(tmp_path, base_dir=storage_root)
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
         manager.set("persist.key", "value123")
         manager.save()
 
-        # New manager pointing at same storage should see persisted value
+        # New manager pointing at same storage with same app name should see persisted value
         reloaded = SettingsManager(
             organization="TestOrg",
-            application="TestAppPersist",
+            application=app_name,
             storage_base_dir=storage_root,
         )
         assert reloaded.get("persist.key") == "value123"

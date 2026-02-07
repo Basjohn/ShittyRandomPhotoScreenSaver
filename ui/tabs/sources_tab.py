@@ -564,9 +564,11 @@ class SourcesTab(QWidget):
 
         Uses the same cache location as ``RSSSource`` so that cached
         images can be cleared instantly from the settings UI.
+        Skips files locked by other processes (e.g. active RSS downloads).
         """
         cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
         removed = 0
+        skipped = 0
         try:
             if not cache_dir.exists() or not cache_dir.is_dir():
                 return 0
@@ -575,8 +577,13 @@ class SourcesTab(QWidget):
                     if f.is_file():
                         f.unlink()
                         removed += 1
+                except PermissionError:
+                    skipped += 1
                 except Exception as e:
-                    logger.warning(f"Failed to remove RSS cache file {f}: {e}")
+                    logger.debug(f"Failed to remove RSS cache file {f}: {e}")
+                    skipped += 1
+            if skipped:
+                logger.debug(f"RSS cache clear: removed {removed}, skipped {skipped} locked files")
         except Exception as e:
             logger.error(f"RSS cache clear failed: {e}")
         return removed
