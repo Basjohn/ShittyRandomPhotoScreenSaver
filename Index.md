@@ -71,6 +71,9 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Coordinator | sources/rss/coordinator.py | RSSCoordinator, RSSState | State machine, dynamic budget, orchestration |
 | Facade | sources/rss_source.py | RSSSource | Thin backward-compat wrapper around RSSCoordinator |
 
+- **Wallpaper-only ingest**: `sources/rss/downloader.py` now rejects files below 1920×1080 via `QImageReader` metadata probes before anything touches the cache, ensuring undersized Flickr assets never consume disk or queue slots.
+- **High-quality fallback budget**: `RSSCoordinator` enforces `MIN_WALLPAPER_REFRESH_TARGET` (11 images). When Flickr/json feeds underfill, it automatically tops up using Bing/NASA (trusted high-res feeds) with elevated per-feed limits, keeping the queue viable without extra network passes.
+
 ## Process Workers
 
 | Worker | File | Purpose | Tests |
@@ -260,6 +263,8 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity, u_travel_time, u_nebula_tint{1,2} | Point-star starfield with nebula background, CPU-accumulated monotonic travel (dev-gated) |
 | Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy | 2D SDF organic metaball with +15% drum reactivity, vocal wobble, dip contraction, CPU-smoothed glow |
 | Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
+
+> **Default tweak (v2.75):** Spectrum mode now ships with Single Piece Mode enabled in `core/settings/defaults.py`, matching the preferred “pillar” presentation without manual toggles.
 
 ## Weather System
 

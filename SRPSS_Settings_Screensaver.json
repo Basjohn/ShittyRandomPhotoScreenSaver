@@ -38,15 +38,15 @@
       "folders": [
         "C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET"
       ],
-      "local_ratio": 94,
+      "local_ratio": 95,
       "mode": "folders",
       "rss_background_cap": 30,
       "rss_feeds": [
         "https://www.nasa.gov/feeds/iotd-feed",
-        "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=rss&language=en",
-        "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=motd&feedformat=rss&language=en",
         "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
-        "https://www.flickr.com/services/feeds/photos_public.gne?format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=cityscape,night,longexposure&tagmode=all&format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=architecture,night&tagmode=all&format=json&nojsoncallback=1",
+        "https://www.flickr.com/services/feeds/photos_public.gne?tags=downtown,lights&tagmode=all&format=json&nojsoncallback=1",
         "https://www.flickr.com/services/feeds/photos_public.gne?tags=landscape,nature&format=json&nojsoncallback=1",
         "https://www.flickr.com/services/feeds/photos_public.gne?tags=mountains,peaks&format=json&nojsoncallback=1",
         "https://www.flickr.com/services/feeds/photos_public.gne?tags=ocean,sea&format=json&nojsoncallback=1",
@@ -136,7 +136,7 @@
       },
       "random_always": false,
       "ripple": {
-        "ripple_count": 1
+        "ripple_count": 3
       },
       "slide": {
         "direction": "Bottom to Top"
@@ -148,10 +148,10 @@
     },
     "ui": {
       "dialog_geometry": {
-        "height": 791,
-        "width": 1392,
-        "x": 166,
-        "y": 76
+        "height": 700,
+        "width": 1280,
+        "x": 157,
+        "y": 104
       },
       "dialog_geometry.height": 700,
       "dialog_geometry.width": 1280,
@@ -159,11 +159,12 @@
       "dialog_geometry.y": 60,
       "last_tab_index": 6,
       "last_tab_scroll": {
+        "accessibility": 0,
         "display": 0,
         "presets": 0,
         "sources": 0,
         "transitions": 0,
-        "widgets": 528
+        "widgets": 600
       },
       "last_tab_scroll.accessibility": 0,
       "last_tab_scroll.display": 0,
@@ -174,7 +175,7 @@
       "tab_state": {
         "widgets": {
           "view_state": {
-            "scroll": 528,
+            "scroll": 600,
             "subtab": 2
           }
         }
@@ -461,12 +462,12 @@
           255
         ],
         "blob_glow_color": [
-          0,
-          196,
+          3,
+          104,
           255,
           180
         ],
-        "blob_glow_intensity": 0.6,
+        "blob_glow_intensity": 0.5,
         "blob_growth": 3.99,
         "blob_outline_color": [
           0,
@@ -474,7 +475,7 @@
           255,
           255
         ],
-        "blob_pulse": 1.75,
+        "blob_pulse": 2.0,
         "blob_reactive_glow": true,
         "blob_size": 0.5,
         "blob_width": 0.9,
@@ -498,7 +499,7 @@
         "helix_speed": 1.0,
         "helix_turns": 6,
         "manual_floor": 2.1,
-        "mode": "blob",
+        "mode": "spectrum",
         "monitor": "ALL",
         "nebula_cycle_speed": 0.59,
         "nebula_tint1": [
@@ -559,7 +560,8 @@
         "osc_speed": 0.35,
         "sensitivity": 1.0,
         "software_visualizer_enabled": false,
-        "spectrum_growth": 1.5,
+        "spectrum_growth": 2.0,
+        "spectrum_single_piece": true,
         "star_density": 1.0,
         "star_reactivity": 1.95,
         "star_travel_speed": 0.93,

@@ -68,14 +68,25 @@ def load_all_fragment_shaders() -> Dict[str, str]:
     are silently skipped.
     """
     result: Dict[str, str] = {}
+    missing: list[str] = []
     for mode in _SHADER_FILES:
         src = load_fragment_shader(mode)
         if src is not None:
             result[mode] = src
+        else:
+            missing.append(mode)
     logger.info(
         "[SHADER_LOADER] Loaded %d/%d shaders: %s",
         len(result),
         len(_SHADER_FILES),
         ", ".join(sorted(result.keys())),
     )
+    if missing:
+        logger.error(
+            "[SHADER_LOADER] Missing shaders: %s",
+            ", ".join(sorted(missing)),
+        )
+        raise RuntimeError(
+            "Visualizer shaders missing: " + ", ".join(sorted(missing))
+        )
     return result

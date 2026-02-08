@@ -78,11 +78,21 @@ CPU fallback: QPainter bar drawing in SpotifyVisualizerWidget.paintEvent()
 
 Classic segmented bar analyzer with per-bar ghost peak trails.
 
-**Key uniforms:**
-- `u_bars[64]`, `u_peaks[64]` — bar magnitudes and peak envelope (scaled ×0.55 on upload)
-- `u_bar_count`, `u_segments` — bar/segment counts (segments now dynamic based on card height)
-- `u_fill_color`, `u_border_color` — bar body and outline colours
-- `u_ghost_alpha` — opacity for trailing ghost segments (0.0–1.0)
+**Key uniforms (GPU or CPU fallback):**
+
+| Uniform | Type | Source | Notes |
+|---------|------|--------|-------|
+| `u_bars[64]` | float array | `SpotifyBarsGLOverlay._bars` | Values pre-scaled ×0.55 to match Spotify 55% mixer reference |
+| `u_peaks[64]` | float array | `_peaks` | Same ×0.55 scaling, drives ghost envelope |
+| `u_bar_count` | int | widget | Clamped ≤64 |
+| `u_segments` | int | widget | Dynamic: `max(8, min(64, floor(inner_height / 5)))` |
+| `u_bar_height_scale` | float | widget | `max(1.0, card_height / 80px)` |
+| `u_single_piece` | bool | widget/settings | **Default = 1 (v2.75)** |
+| `u_fill_color`, `u_border_color` | vec4 | settings | SRGB → linear handled by Qt |
+| `u_playing` | bool | beat engine | 1 = audio active |
+| `u_ghost_alpha` | float | settings | Zeroed when ghosting disabled |
+
+**GPU-only extras:** `u_resolution`, `u_dpr`, `u_fade`, `u_time` for overlay management.
 
 **Behaviour:**
 - Bars are boosted ×1.2 before segment mapping; always at least 1 active segment
@@ -131,6 +141,15 @@ Catmull-Rom spline waveform with per-band energy-reactive glow and up to 3 lines
 - `u_blob_glow_intensity` (0–1) — glow size/strength
 - `u_blob_reactive_glow` (0/1) — static vs energy-reactive glow
 - `u_blob_smoothed_energy` — CPU-smoothed overall energy (prevents glow flicker)
+
+| Parameter | Default | Range | Sourced from |
+|-----------|---------|-------|--------------|
+| `u_blob_pulse` | 1.75 | 0.0–2.0 | settings (`blob_pulse`) |
+| `u_blob_width` | 0.9 | 0.1–1.0 | settings |
+| `u_blob_size` | 0.5 | 0.3–2.0 | settings |
+| `u_blob_glow_intensity` | 0.6 | 0.0–1.0 | settings |
+| `u_blob_reactive_glow` | 1 | bool | settings |
+| `u_blob_smoothed_energy` | dynamic | 0–1 | overlay CPU smoothing |
 
 **SDF deformation layers:**
 1. **Bass pulse**: `r += bass * 0.097 * pulse` (+15% drum reactivity vs original 0.084)
@@ -202,13 +221,43 @@ Parametric 3D DNA double-helix with Blinn-Phong tube shading.
 
 ## 3. `_fft_to_bars` Pipeline (bar_computation.py)
 
-1. **FFT normalisation**: `log1p` + power curve. Low-resolution detection via `resolution_boost` adapts when Windows drops loopback block size.
-2. **Logarithmic band edges**: Cached (`_band_edges`). RMS per band → `freq_values`.
-3. **Energy buckets**: `raw_bass = mean(freq_values[:4])`, `raw_mid = mean(freq_values[4:10])`, `raw_treble = mean(freq_values[10:])`.
-4. **Adaptive sensitivity**: Pins to ~0.285× multiplier. Auto-dampens on low-res, lifts on high-res.
-5. **Gradient + template**: `(1 - dist)^2 * 0.82 + 0.18` base gradient. Ridge template stretched to bar_count.
-6. **Hold + drop logic**: Holds short segments during large drops.
-7. **Normalization**: `_running_peak` + `target_peak` gently compresses when peaks drift >1.18.
+1. **Window + FFT**
+   - Capture block = 4096 samples @ 48 kHz (loopback). Windowed with Hann.
+   - Real FFT → magnitude² → `log1p` to reduce floor spread.
+2. **Resolution boost**
+   - When Windows downshifts loopback buffer (<2048 samples), apply `resolution_boost = block_size / 4096` to preserve energy.
+3. **Log-spaced bands**
+   - `_band_edges = logspace(0, Nyquist, bar_count + 1)` cached per bar_count.
+   - Energy per band = RMS of FFT bins within edges.
+4. **Energy buckets (for shaders)**
+   ```python
+   raw_bass = mean(freq_values[0:4])
+   raw_mid = mean(freq_values[4:10])
+   raw_treble = mean(freq_values[10:])
+   ```
+5. **Adaptive sensitivity (`_resolve_sensitivity`)**
+   ```python
+   target = 0.285
+   actual = max(freq_values)
+   multiplier = clamp(target / max(actual, 1e-3), 0.05, 4.0)
+   multiplier *= resolution_boost
+   ```
+6. **Gradient + ridge template**
+   ```python
+   base = (1 - dist)**2 * 0.82 + 0.18  # dist = normalized distance from left edge
+   shaped = base * ridge_template[i]
+   ```
+   - Ridge template derived from Spotify desktop capture; stretched via cubic interpolation to current bar_count.
+7. **Hold + drop**
+   - `hold_frames = 2`, `drop_rate = 0.08` to prevent instant collapses.
+8. **Running peak normalization**
+   ```python
+   if peak > target_peak * 1.18:
+       target_peak = peak
+   else:
+       target_peak = lerp(target_peak, peak, 0.02)
+   bars = [min(1.0, val / target_peak) for val in shaped]
+   ```
 
 ---
 
