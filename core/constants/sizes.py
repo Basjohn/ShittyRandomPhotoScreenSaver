@@ -59,6 +59,12 @@ MAX_IMAGE_DIMENSION = 8192
 MIN_IMAGE_DIMENSION = 16
 """Minimum image dimension to process."""
 
+MIN_WALLPAPER_WIDTH = 1920
+"""Minimum acceptable wallpaper width for ingestion."""
+
+MIN_WALLPAPER_HEIGHT = 1080
+"""Minimum acceptable wallpaper height for ingestion."""
+
 THUMBNAIL_SIZE = 256
 """Default thumbnail size for previews."""
 
@@ -119,6 +125,8 @@ __all__ = [
     # Image processing
     "MAX_IMAGE_DIMENSION",
     "MIN_IMAGE_DIMENSION",
+    "MIN_WALLPAPER_WIDTH",
+    "MIN_WALLPAPER_HEIGHT",
     "THUMBNAIL_SIZE",
     # Audio processing
     "FFT_SAMPLE_SIZE",

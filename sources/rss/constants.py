@@ -11,15 +11,13 @@ DEFAULT_RSS_FEEDS = {
     # NASA - High quality space/science imagery
     "NASA Image of the Day": "https://www.nasa.gov/feeds/iotd-feed",
 
-    # Wikimedia Commons - Curated high-quality images
-    "Wikimedia Picture of the Day": "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=rss&language=en",
-    "Wikimedia Media of the Day": "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=motd&feedformat=rss&language=en",
-
     # Bing - Daily wallpapers, consistently high quality
     "Bing Image of the Day": "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
 
     # Flickr - No rate limits on public RSS feeds, diverse content
-    "Flickr Explore": "https://www.flickr.com/services/feeds/photos_public.gne?format=json&nojsoncallback=1",
+    "Flickr Night Cityscapes": "https://www.flickr.com/services/feeds/photos_public.gne?tags=cityscape,night,longexposure&tagmode=all&format=json&nojsoncallback=1",
+    "Flickr Architecture Nights": "https://www.flickr.com/services/feeds/photos_public.gne?tags=architecture,night&tagmode=all&format=json&nojsoncallback=1",
+    "Flickr Downtown Lights": "https://www.flickr.com/services/feeds/photos_public.gne?tags=downtown,lights&tagmode=all&format=json&nojsoncallback=1",
     "Flickr Landscape": "https://www.flickr.com/services/feeds/photos_public.gne?tags=landscape,nature&format=json&nojsoncallback=1",
     "Flickr Mountains": "https://www.flickr.com/services/feeds/photos_public.gne?tags=mountains,peaks&format=json&nojsoncallback=1",
     "Flickr Ocean": "https://www.flickr.com/services/feeds/photos_public.gne?tags=ocean,sea&format=json&nojsoncallback=1",
@@ -55,6 +53,14 @@ def get_source_priority(url: str) -> int:
 TARGET_TOTAL_IMAGES = 50          # Cache + new downloads ceiling
 MAX_PER_FEED_DOWNLOAD = 3        # Never download more than 3 per feed per pass
 MIN_PER_FEED_DOWNLOAD = 1        # At least 1 per feed when downloads are needed
+MIN_WALLPAPER_REFRESH_TARGET = 11  # Minimum usable images per coordinator pass
+FALLBACK_MAX_PER_FEED_DOWNLOAD = 8  # Extra allowance for high-res feeds (Bing/NASA)
+
+# Domains we trust for high-resolution fallback pulls
+HIGH_QUALITY_FALLBACK_DOMAINS = (
+    "bing.com",
+    "nasa.gov",
+)
 
 # ---------------------------------------------------------------------------
 # Cache

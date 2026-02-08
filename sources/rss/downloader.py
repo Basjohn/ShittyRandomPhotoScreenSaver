@@ -26,6 +26,8 @@ from sources.rss.constants import (
     DEFAULT_TIMEOUT_SECONDS,
 )
 from core.logging.logger import get_logger
+from core.constants import MIN_WALLPAPER_WIDTH, MIN_WALLPAPER_HEIGHT
+from PySide6.QtGui import QImageReader
 
 logger = get_logger(__name__)
 
@@ -273,6 +275,10 @@ class RSSDownloader:
                     return cache_file
                 return None
 
+            if not self._validate_wallpaper_dimensions(cache_file):
+                self._safe_unlink(cache_file)
+                return None
+
             logger.debug(f"[RSS_DL] Downloaded {cache_file.name} ({downloaded} bytes)")
             return cache_file
 
@@ -311,3 +317,23 @@ class RSSDownloader:
             path.unlink(missing_ok=True)
         except Exception:
             pass
+
+    @staticmethod
+    def _validate_wallpaper_dimensions(path: Path) -> bool:
+        try:
+            reader = QImageReader(str(path))
+            size = reader.size()
+            width = size.width()
+            height = size.height()
+            if width < MIN_WALLPAPER_WIDTH or height < MIN_WALLPAPER_HEIGHT:
+                logger.info(
+                    "[RSS_DL] Skipping %s (too small: %sx%s)",
+                    path.name,
+                    width,
+                    height,
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.info("[RSS_DL] Skipping %s (dimension probe failed: %s)", path.name, e)
+            return False

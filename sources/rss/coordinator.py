@@ -25,6 +25,9 @@ from sources.rss.constants import (
     MAX_REDDIT_FEEDS_PER_STARTUP,
     DEFAULT_TIMEOUT_SECONDS,
     DEFAULT_MAX_CACHE_SIZE_MB,
+    MIN_WALLPAPER_REFRESH_TARGET,
+    FALLBACK_MAX_PER_FEED_DOWNLOAD,
+    HIGH_QUALITY_FALLBACK_DOMAINS,
     get_source_priority,
 )
 from sources.rss.cache import RSSCache
@@ -285,12 +288,22 @@ class RSSCoordinator:
                 if is_reddit:
                     self._health.record_failure(feed_url)
 
+        # Fallback: ensure we have a minimum pool of wallpaper-quality images by
+        # leaning on high-quality feeds (Bing/NASA) when other feeds underfill.
+        all_new = self._top_up_with_high_quality_feeds(
+            all_new,
+            urls_to_process,
+            existing_paths,
+        )
+
         # Cleanup cache if we added images and cache is large enough
         if all_new and self._cache.count > 20:
             self._cache.cleanup()
 
         self._set_state(RSSState.LOADED)
-        logger.info(f"[RSS_COORD] Complete: {len(all_new)} new images from {len(urls_to_process)} feeds")
+        logger.info(
+            f"[RSS_COORD] Complete: {len(all_new)} new images from {len(urls_to_process)} feeds"
+        )
         return all_new
 
     def _process_single_feed(
@@ -370,6 +383,69 @@ class RSSCoordinator:
             logger.info(f"[RSS_COORD] +{len(new_images)} images from {feed_url[:60]}")
 
         return new_images
+
+    # ------------------------------------------------------------------
+    # Fallback helpers
+    # ------------------------------------------------------------------
+
+    def _top_up_with_high_quality_feeds(
+        self,
+        current_new: List[ImageMetadata],
+        processed_urls: List[str],
+        existing_paths: Set[str],
+    ) -> List[ImageMetadata]:
+        if len(current_new) >= MIN_WALLPAPER_REFRESH_TARGET:
+            return current_new
+
+        budget_remaining = max(0, TARGET_TOTAL_IMAGES - self._cache.count)
+        if budget_remaining == 0:
+            return current_new
+
+        deficit = min(
+            MIN_WALLPAPER_REFRESH_TARGET - len(current_new),
+            budget_remaining,
+        )
+        if deficit <= 0:
+            return current_new
+
+        fallback_feeds = [
+            url for url in processed_urls if self._is_high_quality_fallback_feed(url)
+        ]
+        if not fallback_feeds:
+            return current_new
+
+        logger.info(
+            "[RSS_COORD] Fallback: need %s more wallpapers, pulling extra from high-quality feeds",
+            deficit,
+        )
+
+        for feed_url in fallback_feeds:
+            if not self._should_continue() or deficit <= 0:
+                break
+
+            feed_limit = min(FALLBACK_MAX_PER_FEED_DOWNLOAD, deficit)
+            logger.info(
+                "[RSS_COORD] Fallback feed: %s (limit=%s)",
+                feed_url[:60],
+                feed_limit,
+            )
+
+            extra_images = self._process_single_feed(feed_url, feed_limit, existing_paths)
+            if not extra_images:
+                continue
+
+            current_new.extend(extra_images)
+            deficit -= len(extra_images)
+            for img in extra_images:
+                if img.local_path:
+                    existing_paths.add(str(img.local_path))
+
+        return current_new
+
+    @staticmethod
+    def _is_high_quality_fallback_feed(feed_url: str) -> bool:
+        url_lower = feed_url.lower()
+        return any(domain in url_lower for domain in HIGH_QUALITY_FALLBACK_DOMAINS)
 
     # ------------------------------------------------------------------
     # Helpers
