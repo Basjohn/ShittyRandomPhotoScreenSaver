@@ -1142,6 +1142,18 @@ class WeatherWidget(BaseOverlayWidget):
         """Check if weather widget is running."""
         return self._enabled
     
+    def handle_double_click(self, local_pos) -> bool:
+        """Called by WidgetManager dispatch. Triggers a weather refresh."""
+        if not self._enabled:
+            return False
+        try:
+            self._fetch_weather()
+            logger.debug("[WEATHER] Double-click triggered weather refresh")
+            return True
+        except Exception:
+            logger.debug("[WEATHER] Double-click refresh failed", exc_info=True)
+            return False
+
     def _fetch_weather(self) -> None:
         """Fetch weather data (always attempts a refresh in the background)."""
 

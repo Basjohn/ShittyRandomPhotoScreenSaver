@@ -43,6 +43,7 @@ class MessageType(Enum):
     HEARTBEAT = "heartbeat"
     HEARTBEAT_ACK = "heartbeat_ack"
     CONFIG_UPDATE = "config_update"
+    WORKER_READY = "worker_ready"     # Worker message loop started, ready for messages
     WORKER_BUSY = "worker_busy"       # Worker is busy with long operation
     WORKER_IDLE = "worker_idle"       # Worker finished long operation
     

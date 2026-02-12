@@ -15,6 +15,7 @@ implementation to preserve visualizer fidelity.
 """
 from __future__ import annotations
 
+import math
 import time
 from dataclasses import dataclass, field
 from multiprocessing import Queue
@@ -58,6 +59,17 @@ class FFTConfig:
     # Role:  edge  edge  edge slope PEAK slope shld  CTR  shld slope PEAK slope edge  edge  edge
     profile_template: List[float] = field(default_factory=lambda: [
         0.10, 0.15, 0.25, 0.50, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.50, 0.25, 0.15, 0.10
+    ])
+    
+    # Dual-curve profile (mirrored per half):
+    #   Edge(bass peak) → decay → dip → vocal peak → taper → calm center
+    #   Per-half from edge: 1.0, 0.82(-18%), 0.70(-15%), 0.61(-12%),
+    #   0.55(-10% dip), 0.80(vocal peak, 2nd/3rd highest), 0.68(-15%), 0.45(center)
+    # Index:  0     1     2     3     4     5     6     7     8     9    10    11    12    13    14
+    # Role:  BASS  bass  bass  bass  dip  VOCAL vocal  CTR  vocal VOCAL  dip  bass  bass  bass  BASS
+    use_curved_profile: bool = False
+    curved_profile_template: List[float] = field(default_factory=lambda: [
+        1.0, 0.72, 0.50, 0.38, 0.28, 0.58, 0.40, 0.22, 0.40, 0.58, 0.28, 0.38, 0.50, 0.72, 1.0
     ])
     
     # Convolution kernel for smoothing
@@ -137,6 +149,9 @@ class FFTWorker(BaseWorker):
                 self._init_state()
         
         # Update other config values
+        if "use_curved_profile" in payload:
+            self._config.use_curved_profile = bool(payload["use_curved_profile"])
+        
         for key in ["smoothing_tau_rise_factor", "smoothing_tau_decay_factor",
                     "base_tau_ms", "ghost_enabled", "ghost_decay",
                     "decay_rate", "attack_speed", "min_floor", "max_floor",
@@ -340,14 +355,8 @@ class FFTWorker(BaseWorker):
         mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
         treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
         
-        # Profile template interpolation
-        template = np.array(self._config.profile_template, dtype=np.float32)
-        if bands != len(template):
-            xp = np.linspace(0.0, 1.0, len(template))
-            x = np.linspace(0.0, 1.0, bands)
-            profile_shape = np.interp(x, xp, template)
-        else:
-            profile_shape = template.copy()
+        # Profile computation (curved cosine-bell or legacy template)
+        use_curved = self._config.use_curved_profile
         
         # Overall energy
         overall_energy = bass_energy * 0.9 + mid_energy * 0.6 + treble_energy * 0.35
@@ -355,31 +364,65 @@ class FFTWorker(BaseWorker):
         
         # CENTER-OUT mapping
         center = bands // 2
+        half = bands // 2
+
+        if use_curved:
+            # Smooth sinusoidal wave curve (matches bar_computation.py)
+            frac_arr = np.abs(np.arange(bands, dtype=np.float32) - center) / max(1.0, float(half))
+            wave = np.sin(frac_arr * np.pi * 1.5 + np.pi * 0.5)
+            profile_shape = wave * 0.35 + 0.50
+            edge_boost = np.exp(-((frac_arr - 1.0) ** 2) / 0.08) * 0.20
+            profile_shape = profile_shape + edge_boost
+            profile_shape = np.maximum(profile_shape, 0.12)
+        else:
+            src = self._config.profile_template
+            template = np.array(src, dtype=np.float32)
+            if bands != len(template):
+                xp = np.linspace(0.0, 1.0, len(template))
+                x = np.linspace(0.0, 1.0, bands)
+                profile_shape = np.interp(x, xp, template)
+            else:
+                profile_shape = template.copy()
+
         bars = []
         for i in range(bands):
             offset = abs(i - center)
-            base = profile_shape[i] * overall_energy
             
-            # Ridge peak boost
-            if offset == 3:
-                base = base * 1.05 + bass_energy * 0.15
-            elif offset == 4:
-                base = base * 0.82
-            
-            # Center reactivity
-            if offset == 0:
-                vocal_drive = mid_energy * 4.0
-                base = vocal_drive * 0.90 + base * 0.10
-            
-            # Shoulder taper
-            if offset == 1:
-                base = base * 0.52 + mid_energy * 0.22
-            if offset == 2:
-                base = base * 0.58 + bass_energy * 0.12
-            
-            # Edge treble
-            if offset >= 5:
-                base = base * 0.65 + treble_energy * 0.4 * (offset - 4)
+            if use_curved:
+                # Smooth cosine zone blending (matches bar_computation.py)
+                frac = offset / max(1.0, float(half))
+                def _cp(t): return math.cos(math.pi * t)
+                w_bass = max(0.0, 0.5 * (1.0 + _cp(min(1.0, max(-1.0, (frac - 0.80) / 0.25)))))
+                w_vocal = max(0.0, 0.5 * (1.0 + _cp(min(1.0, max(-1.0, (frac - 0.42) / 0.22)))))
+                w_center = max(0.0, 0.5 * (1.0 + _cp(min(1.0, max(-1.0, frac / 0.25)))))
+                w_total = w_bass + w_vocal + w_center + 0.001
+                e_bass = bass_energy * 0.78 + mid_energy * 0.04 + treble_energy * 0.04
+                e_vocal = bass_energy * 0.05 + mid_energy * 0.82 + treble_energy * 0.08
+                e_center = bass_energy * 0.05 + mid_energy * 0.18 + treble_energy * 0.08
+                zone_energy = (w_bass * e_bass + w_vocal * e_vocal + w_center * e_center) / w_total
+                base = profile_shape[i] * zone_energy
+            else:
+                base = profile_shape[i] * overall_energy
+                # Ridge peak boost
+                if offset == 3:
+                    base = base * 1.05 + bass_energy * 0.15
+                elif offset == 4:
+                    base = base * 0.82
+                
+                # Center reactivity
+                if offset == 0:
+                    vocal_drive = mid_energy * 4.0
+                    base = vocal_drive * 0.90 + base * 0.10
+                
+                # Shoulder taper
+                if offset == 1:
+                    base = base * 0.52 + mid_energy * 0.22
+                if offset == 2:
+                    base = base * 0.58 + bass_energy * 0.12
+                
+                # Edge treble
+                if offset >= 5:
+                    base = base * 0.65 + treble_energy * 0.4 * (offset - 4)
             
             bars.append(max(0.0, min(1.0, base)))
         
@@ -481,6 +524,6 @@ def fft_worker_main(request_queue: Queue, response_queue: Queue) -> None:
         sys.stderr.flush()
         try:
             logger.exception(f"FFT Worker CRASHED: {e}")
-        except:
+        except Exception:
             pass
         raise

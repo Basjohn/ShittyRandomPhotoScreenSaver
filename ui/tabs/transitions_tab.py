@@ -217,6 +217,8 @@ class TransitionsTab(QWidget):
             "Right to Left",
             "Top to Bottom",
             "Bottom to Top",
+            "Diagonal TL to BR",
+            "Diagonal TR to BL",
             "Random",
         ])
         self.blockflip_direction_combo.currentTextChanged.connect(self._save_settings)
@@ -248,6 +250,34 @@ class TransitionsTab(QWidget):
         blockspin_layout.addLayout(bs_row)
 
         layout.addWidget(self.blockspin_group)
+
+        # Blinds specific settings
+        self.blinds_group = QGroupBox("Blinds Settings")
+        blinds_layout = QVBoxLayout(self.blinds_group)
+
+        blinds_dir_row = QHBoxLayout()
+        blinds_dir_row.addWidget(QLabel("Direction:"))
+        self.blinds_direction_combo = QComboBox()
+        self.blinds_direction_combo.addItems(["Horizontal", "Vertical", "Diagonal", "Random"])
+        self.blinds_direction_combo.currentTextChanged.connect(self._save_settings)
+        blinds_dir_row.addWidget(self.blinds_direction_combo)
+        blinds_dir_row.addStretch()
+        blinds_layout.addLayout(blinds_dir_row)
+
+        blinds_feather_row = QHBoxLayout()
+        blinds_feather_row.addWidget(QLabel("Edge Softness:"))
+        self.blinds_feather_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.blinds_feather_slider.setRange(0, 25)
+        self.blinds_feather_slider.setSingleStep(1)
+        self.blinds_feather_slider.setValue(2)
+        self.blinds_feather_slider.valueChanged.connect(self._save_settings)
+        blinds_feather_row.addWidget(self.blinds_feather_slider, 1)
+        self.blinds_feather_label = QLabel("2")
+        blinds_feather_row.addWidget(self.blinds_feather_label)
+        blinds_feather_row.addStretch()
+        blinds_layout.addLayout(blinds_feather_row)
+
+        layout.addWidget(self.blinds_group)
         
         # Diffuse specific settings
         self.diffuse_group = QGroupBox("Diffuse Settings")
@@ -557,6 +587,9 @@ class TransitionsTab(QWidget):
             getattr(self, 'blockspin_direction_combo', None),
             getattr(self, 'block_size_spin', None),
             getattr(self, 'diffuse_shape_combo', None),
+            # Blinds widgets
+            getattr(self, 'blinds_direction_combo', None),
+            getattr(self, 'blinds_feather_slider', None),
             # Ripple widgets
             getattr(self, 'ripple_count_spin', None),
             # Crumble widgets
@@ -665,6 +698,22 @@ class TransitionsTab(QWidget):
             index = self.diffuse_shape_combo.findText(shape)
             if index >= 0:
                 self.diffuse_shape_combo.setCurrentIndex(index)
+
+            # Load blinds settings - use canonical defaults from defaults.py
+            canonical_blinds = canonical_transitions.get('blinds', {})
+            blinds = transitions_config.get('blinds', {})
+            if not isinstance(blinds, dict):
+                blinds = {}
+            self.blinds_feather_slider.setValue(int(blinds.get('feather', canonical_blinds.get('feather', 2))))
+            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
+            blinds_dir = blinds.get('direction', canonical_blinds.get('direction', 'Horizontal'))
+            try:
+                idx = self.blinds_direction_combo.findText(str(blinds_dir))
+                if idx < 0:
+                    idx = 0
+                self.blinds_direction_combo.setCurrentIndex(idx)
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
             # Load ripple settings
             canonical_ripple = canonical_transitions.get('ripple', {})
@@ -821,6 +870,9 @@ class TransitionsTab(QWidget):
 
         # Show/hide 3D Block Spins settings
         self.blockspin_group.setVisible(transition == "3D Block Spins")
+
+        # Show/hide Blinds settings
+        self.blinds_group.setVisible(transition == "Blinds")
         
         # Show/hide Crumble settings
         self.crumble_group.setVisible(transition == "Crumble")
@@ -927,6 +979,12 @@ class TransitionsTab(QWidget):
         except Exception as e:
             logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
 
+        # Update blinds feather label
+        try:
+            self.blinds_feather_label.setText(str(self.blinds_feather_slider.value()))
+        except Exception:
+            pass
+
         config = {
             'type': cur_type,
             'duration_ms': cur_duration,
@@ -936,6 +994,10 @@ class TransitionsTab(QWidget):
                 'rows': self.grid_rows_spin.value(),
                 'cols': self.grid_cols_spin.value(),
                 'direction': self.blockflip_direction_combo.currentText(),
+            },
+            'blinds': {
+                'feather': self.blinds_feather_slider.value(),
+                'direction': self.blinds_direction_combo.currentText(),
             },
             'diffuse': {
                 'block_size': self.block_size_spin.value(),

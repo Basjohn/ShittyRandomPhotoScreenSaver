@@ -52,9 +52,11 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Settings | core/settings/defaults.py | get_default_settings() | Canonical defaults |
 | Settings | core/settings/models.py | DisplaySettings, TransitionSettings | Type-safe dataclass models |
 | Settings | core/settings/json_store.py | JsonSettingsStore | JSON persistence layer (structured roots: widgets, transitions, custom_preset_backup, ui) |
+| Storage Paths | core/settings/storage_paths.py | get_app_data_dir(), get_cache_dir(), get_rss_cache_dir(), get_feed_health_file(), run_all_migrations() | Canonical path resolver for all app data (settings, cache, state, logs). Replaces scattered %TEMP% paths. |
 | Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
 | Media | core/media/media_controller.py | MediaController | GSMTC media state |
-| Media | core/media/spotify_volume.py | SpotifyVolumeController | pycaw volume control |
+| Media | core/media/spotify_volume.py | SpotifyVolumeController | pycaw per-session volume control |
+| Media | core/media/system_mute.py | is_available(), get_mute(), set_mute(), toggle_mute() | System-wide mute via IAudioEndpointVolume (pycaw) |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
 | Presets | core/settings/presets.py | PresetDefinition, apply_preset() | Widget presets system (moved from core/presets.py) |
 | Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
@@ -240,13 +242,14 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer |
 | Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | - |
 | Spotify Volume | widgets/spotify_volume_widget.py | SpotifyVolumeWidget | widgets.spotify_volume |
+| Mute Button | widgets/mute_button_widget.py | MuteButtonWidget | widgets.media.mute_button_enabled |
 
 ### Visualizer Components
 
 | Module | File | Key Classes/Functions | Purpose |
 |--------|------|-------------|---------|
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
-| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode, _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
+| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
 | Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, process_via_fft_worker, get_zero_bars | DSP/FFT bar computation pipeline (extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
@@ -259,9 +262,10 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Shader | File | Uniforms | Purpose |
 |--------|------|----------|---------|
 | Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha | Classic segmented bar analyzer with dynamic segment count based on card height |
-| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy | Catmull-Rom spline waveform with per-band energy, equalized multi-line glow (3 lines: bass/mid/high) |
+| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_osc_vertical_shift | Pure audio waveform with Catmull-Rom spline, per-band energy, equalized multi-line glow (3 lines: bass/mid/high), vertical shift mode |
+| Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy | Dedicated sine wave visualizer with audio-reactive amplitude, card adaptation (vertical stretch control), multi-line (up to 3) with per-line colors and per-line travel direction, playback-gated oscillation |
 | Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity, u_travel_time, u_nebula_tint{1,2} | Point-star starfield with nebula background, CPU-accumulated monotonic travel (dev-gated) |
-| Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy | 2D SDF organic metaball with +15% drum reactivity, vocal wobble, dip contraction, CPU-smoothed glow |
+| Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy, u_blob_reactive_deformation (0-3.0), u_blob_constant_wobble, u_blob_reactive_wobble | 2D SDF organic metaball with separated constant wobble (time-driven, zero when cw=0) and reactive wobble (energy-driven), vocal wobble, dip contraction, CPU-smoothed glow, quadratic reactive deformation (range 0-3.0) |
 | Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
 
 > **Default tweak (v2.75):** Spectrum mode now ships with Single Piece Mode enabled in `core/settings/defaults.py`, matching the preferred “pillar” presentation without manual toggles.
@@ -368,10 +372,10 @@ value = settings.get("display.mode", "fill")
 | SettingsDialog | ui/settings_dialog.py | SettingsDialog | Main settings dialog container (1595 LOC, refactored from ~1957) |
 | SettingsAboutTab | ui/settings_about_tab.py | build_about_tab(), update_about_header_images() | About tab UI, header image scaling |
 | WidgetsTab | ui/tabs/widgets_tab.py | WidgetsTab, NoWheelSlider | Widget config orchestrator (965 LOC, refactored from ~3200) |
-| WidgetsTab Clock | ui/tabs/widgets_tab_clock.py | build_clock_ui(), load_clock_settings(), save_clock_settings() | Clock 1/2/3 UI, load, save |
-| WidgetsTab Weather | ui/tabs/widgets_tab_weather.py | build_weather_ui(), load_weather_settings(), save_weather_settings() | Weather UI, load, save |
-| WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings() | Spotify + Beat Visualizer UI, load, save |
-| WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings() | Reddit 1/2 UI, load, save |
+| WidgetsTab Clock | ui/tabs/widgets_tab_clock.py | build_clock_ui(), load_clock_settings(), save_clock_settings(), _update_clock_mode_visibility() | Clock 1/2/3 UI, load, save; analog/digital mode visibility gating |
+| WidgetsTab Weather | ui/tabs/widgets_tab_weather.py | build_weather_ui(), load_weather_settings(), save_weather_settings(), _update_weather_icon_visibility(), _update_weather_bg_visibility() | Weather UI, load, save; icon + background visibility gating |
+| WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings(), _update_media_bg_visibility(), _update_ghost_visibility(), _update_osc_multi_line_visibility() | Spotify + Beat Visualizer UI, load, save; background/ghost/multiline visibility gating |
+| WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings(), _update_reddit_enabled_visibility() | Reddit 1/2 UI, load, save; all controls gated by enabled checkbox |
 | WidgetsTab Imgur | ui/tabs/widgets_tab_imgur.py | build_imgur_ui(), load_imgur_settings(), save_imgur_settings() | Imgur UI, load, save (dev-gated) |
 | Shared Styles | ui/tabs/shared_styles.py | SPINBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants for all settings tabs |
 | SourcesTab | ui/tabs/sources_tab.py | SourcesTab | Image source config |
@@ -396,7 +400,10 @@ value = settings.get("display.mode", "fill")
 | audits/AUDIT_THREADING.md | time.sleep, raw QTimer, untracked deleteLater sites |
 | audits/AUDIT_DEAD_CODE.md | Dead/retired modules to clean up |
 | audits/AUDIT_THREADING_RACE_CONDITIONS_2026_02.md | Widget Shiboken guard audit, ThreadPoolExecutor fix |
-| audits/VISUALIZER_DEBUG.md | All 5 visualizer modes: architecture, uniforms, debugging |
+| audits/VISUALIZER_DEBUG.md | All 6 visualizer modes: architecture, uniforms, debugging |
+| audits/AUDIT_SETTINGS_GUI.md | Settings GUI audit: visibility gating, defaults, healing, hardcoded violations |
+| audits/AUDIT_SETTINGS_SYSTEM.md | Settings system audit: models.py sync, migration, healing, hardcoded paths |
+| audits/AUDIT_RESOURCE_VRAM.md | ResourceManager/VRAM/memory audit: GL handles, QTimer lifecycle, leak risks |
 
 ## Test Organization
 
@@ -415,4 +422,5 @@ value = settings.get("display.mode", "fill")
 | tests/test_weather_widget.py | Weather fetch, display, caching (26 tests) |
 | tests/test_slide_jitter.py | Slide transition frame timing (7 tests) |
 | tests/test_widget_manager.py | WidgetManager lifecycle, fade, factory |
+| tests/test_sine_wave_gl_fix.py | Sine wave GL overlay fix regression (mode validation, cycle, shader, card height) |
 | tests/unit/test_policy_compliance.py | Threading/import policy enforcement |

@@ -176,14 +176,45 @@ class ProcessSupervisor:
                 
                 self._workers[worker_type] = process
                 self._health[worker_type].pid = process.pid
-                self._health[worker_type].state = WorkerState.RUNNING
-                self._health[worker_type].record_heartbeat()
                 
                 logger.info(
-                    "Started %s worker (PID: %d)",
+                    "Started %s worker (PID: %d), waiting for ready signal...",
                     worker_type.value,
                     process.pid,
                 )
+                
+                # Wait for WORKER_READY signal before marking as RUNNING.
+                # Without this, callers may send messages before the worker's
+                # message loop has started, causing timeouts on the first
+                # request (e.g. display 0's initial image load).
+                ready = False
+                resp_q = self._response_queues[worker_type]
+                deadline = time.time() + 10.0  # 10s max wait
+                while time.time() < deadline and process.is_alive():
+                    try:
+                        data = resp_q.get(timeout=0.25)
+                        resp = WorkerResponse.from_dict(data)
+                        if resp.msg_type == MessageType.WORKER_READY:
+                            ready = True
+                            break
+                    except QueueEmpty:
+                        continue
+                    except Exception:
+                        break
+                
+                if not ready:
+                    logger.error(
+                        "%s worker started but never signalled ready",
+                        worker_type.value,
+                    )
+                    self._health[worker_type].state = WorkerState.ERROR
+                    self._health[worker_type].error_message = "Worker never signalled ready"
+                    self._broadcast_health(worker_type)
+                    return False
+                
+                self._health[worker_type].state = WorkerState.RUNNING
+                self._health[worker_type].record_heartbeat()
+                logger.info("%s worker ready", worker_type.value)
                 
                 # Start heartbeat monitoring if not already running
                 self._ensure_heartbeat_monitoring()
@@ -394,6 +425,10 @@ class ProcessSupervisor:
                 data = resp_queue.get_nowait()
                 response = WorkerResponse.from_dict(data)
                 responses.append(response)
+                
+                # Skip ready signals (consumed during start())
+                if response.msg_type == MessageType.WORKER_READY:
+                    continue
                 
                 # Handle heartbeat acks
                 if response.msg_type == MessageType.HEARTBEAT_ACK:

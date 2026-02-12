@@ -1,7 +1,7 @@
 # Spotify Visualizer Debug Notes
 
 > **Last updated**: Feb 2026  
-> **Scope**: All 5 visualizer modes, audio capture, FFT pipeline, bar computation, smoothing, playback gating, volume overlay
+> **Scope**: All 6 visualizer modes, audio capture, FFT pipeline, bar computation, smoothing, playback gating, volume overlay
 
 This document captures the current, tested behaviour for the Spotify visualizer system. We only consume loopback audio + GSMTC metadata — no Spotify-version-specific assumptions.
 
@@ -65,7 +65,7 @@ CPU fallback: QPainter bar drawing in SpotifyVisualizerWidget.paintEvent()
    - Per-frame EMA in tick helpers (`apply_visual_smoothing`, rise ~55ms, decay ~145ms).
 4. **Thread safety**: No raw `QTimer`s. All recurring work through `ThreadManager`. Lock-free `TripleBuffer` for audio/bar transfer.
 5. **Playback gating**: FFT halted when Spotify is not playing; 1-bar floor (0.08) for visual continuity.
-6. **Multi-shader**: All 5 GLSL programs compiled at `initializeGL()`; `paintGL()` dispatches to active mode.
+6. **Multi-shader**: All 6 GLSL programs compiled at `initializeGL()`; `paintGL()` dispatches to active mode.
 7. **Dynamic segments**: Spectrum segment count adapts to card height (~4px/segment + 1px gap, 8–64 range).
 
 ---
@@ -99,12 +99,17 @@ Classic segmented bar analyzer with per-bar ghost peak trails.
 - Ghost segments drawn above active height using decaying peak envelope with vertical alpha falloff
 - Segment count dynamically scales with card height: `inner_h // 5` (4px segment + 1px gap), clamped 8–64
 - CPU fallback uses QPainter with cached geometry (same layout math)
+- **Curved Profile** (optional toggle): Dual-curve mirrored layout with bass peak at outer edges,
+  dip, vocal peak mid-way, calm center. Template: `[1.0, 0.82, 0.70, 0.61, 0.55, 0.85, 0.72, 0.35, ...]`
+  (mirrored). Energy adjustments are profile-aware: outer bars bass-reactive, mid bars vocal-reactive,
+  center balanced. Legacy profile retains original behavior.
 
 ### 2.2 Oscilloscope
 
 **Shader**: `widgets/spotify_visualizer/shaders/oscilloscope.frag`
 
 Catmull-Rom spline waveform with per-band energy-reactive glow and up to 3 lines.
+Oscilloscope has its own independent settings (`_osc_*` attributes in widget).
 
 **Key uniforms:**
 - `u_waveform[256]`, `u_waveform_count` — raw waveform buffer (temporally smoothed CPU-side)
@@ -151,18 +156,41 @@ Catmull-Rom spline waveform with per-band energy-reactive glow and up to 3 lines
 | `u_blob_reactive_glow` | 1 | bool | settings |
 | `u_blob_smoothed_energy` | dynamic | 0–1 | overlay CPU smoothing |
 
-**SDF deformation layers:**
-1. **Bass pulse**: `r += bass * 0.097 * pulse` (+15% drum reactivity vs original 0.084)
-2. **Dip contraction**: `r -= (1-smoothed_energy) * 0.010 * pulse` (subtle shrink on silence)
-3. **Mid/high deformation**: 4 layered sine waves at angular frequencies 3/5/7/11
-4. **Overall energy wobble**: slow angular freq 2 sine wave
-5. **Vocal-reactive wobble**: 2 additional smooth low-freq layers driven by `u_mid_energy`
+**SDF deformation layers (constant and reactive cleanly separated):**
+1. **Bass pulse**: `r += bass * 0.077 * pulse` with dip contraction
+2. **Constant wobble** (time-driven, gated by `cw`): 4 sine layers at angular freq 3/5/7/1. Zero when `cw=0`.
+3. **Reactive wobble** (energy-driven, gated by `rw`): 4 sine layers at angular freq 3/5/7/11 driven by mid/high energy. Zero when silent.
+4. **Vocal-reactive wobble**: 2 smooth low-freq layers driven by `u_mid_energy * rw`
+5. **Stretch tendency**: quadratic peak-energy tendrils at angular freq 2/3/5/7/1
+6. **Reactive deformation scale**: `rd` range 0–3.0 (was 0–2.0), quadratic above 1.0
 
 **CPU-side smoothing** (in `spotify_bars_gl_overlay.py`):
 - `_blob_smoothed_energy`: fast rise (~50ms tau), slow decay (~300ms tau)
 - Prevents glow flickering and ensures shrink contraction is smooth
 
 **Card height**: Default growth factor 2.5× (configurable via `card_height.py`)
+
+### 2.6 Sine Wave
+
+**Shader**: `widgets/spotify_visualizer/shaders/sine_wave.frag`
+
+Dedicated sine wave visualizer with audio-reactive amplitude, independent settings from Oscilloscope.
+
+**Settings pipeline**: Sine wave has its own `_sine_*` attributes in the widget, separate from `_osc_*`.
+The `_on_tick` method is mode-aware: when `mode_str == 'sine_wave'`, it sends sine-specific values
+for glow, color, speed, sensitivity, line count, and line offset bias to the GL overlay.
+
+**Key uniforms** (same names as oscilloscope but fed from sine-specific widget attributes):
+- `u_line_color`, `u_glow_color` — sine line/glow appearance (from `_sine_line_color`, `_sine_glow_color`)
+- `u_glow_enabled`, `u_glow_intensity`, `u_reactive_glow` — glow control (from `_sine_glow_*`)
+- `u_sensitivity` — amplitude scaling (from `_sine_sensitivity`, default 1.0)
+- `u_osc_speed` — wave animation speed (from `_sine_speed`, default 1.0)
+- `u_osc_sine_travel` — travel direction: 0=none, 1=left, 2=right (from `_sine_wave_travel`)
+- `u_line_count` (1–3) — multi-line (from `_sine_line_count`)
+- `u_osc_line_offset_bias` — vertical spread (from `_sine_line_offset_bias`)
+- `u_bass_energy`, `u_mid_energy`, `u_high_energy`, `u_overall_energy` — per-band energy
+
+**Card height**: Default growth factor 1.0× (configurable up to 4.0×)
 
 ### 2.4 Starfield (dev-gated: `SRPSS_ENABLE_DEV=true`)
 

@@ -6,7 +6,6 @@ Allows users to configure image sources:
 """
 from typing import Optional
 from pathlib import Path
-import tempfile
 from urllib.parse import urlparse, urlunparse
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
@@ -118,7 +117,7 @@ class SourcesTab(QWidget):
         ratio_layout.addWidget(self.ratio_label)
         
         # Local percentage display label (read-only)
-        self.local_ratio_label = QLabel("60% Local")
+        self.local_ratio_label = QLabel("70% Local")
         self.local_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
         self.local_ratio_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         ratio_layout.addWidget(self.local_ratio_label)
@@ -237,11 +236,11 @@ class SourcesTab(QWidget):
             self.rss_list.addItem(feed)
         
         # Load and display usage ratio
-        local_ratio = self._settings.get('sources.local_ratio', 60)
+        local_ratio = self._settings.get('sources.local_ratio', 70)
         try:
             local_ratio = int(local_ratio)
         except (ValueError, TypeError):
-            local_ratio = 60
+            local_ratio = 70
         local_ratio = max(0, min(100, local_ratio))
         
         # Block signals to prevent save loops during load
@@ -513,7 +512,8 @@ class SourcesTab(QWidget):
         from PySide6.QtWidgets import QMessageBox
         
         # Count files before asking
-        cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
+        from core.settings.storage_paths import get_rss_cache_dir
+        cache_dir = get_rss_cache_dir()
         file_count = 0
         try:
             if cache_dir.exists() and cache_dir.is_dir():
@@ -592,7 +592,8 @@ class SourcesTab(QWidget):
         images can be cleared instantly from the settings UI.
         Skips files locked by other processes (e.g. active RSS downloads).
         """
-        cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
+        from core.settings.storage_paths import get_rss_cache_dir
+        cache_dir = get_rss_cache_dir()
         removed = 0
         skipped = 0
         try:

@@ -65,18 +65,8 @@ class AccessibilityTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setStyleSheet("""
-            QScrollArea { 
-                border: none; 
-                background: transparent; 
-            }
-            QScrollArea > QWidget > QWidget {
-                background: transparent;
-            }
-            QScrollArea QWidget {
-                background: transparent;
-            }
-        """)
+        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
+        scroll.setStyleSheet(SCROLL_AREA_STYLE)
         
         # Create content widget
         content = QWidget()
@@ -86,7 +76,8 @@ class AccessibilityTab(QWidget):
         
         # Title
         title = QLabel("Accessibility")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        from ui.tabs.shared_styles import ACCESSIBILITY_TITLE_STYLE
+        title.setStyleSheet(ACCESSIBILITY_TITLE_STYLE)
         layout.addWidget(title)
         
         # Description
@@ -94,7 +85,8 @@ class AccessibilityTab(QWidget):
             "These features help reduce eye strain and prevent screen burn-in on older displays."
         )
         desc.setWordWrap(True)
-        desc.setStyleSheet("color: #aaaaaa; font-size: 11px; margin-bottom: 10px;")
+        from ui.tabs.shared_styles import ACCESSIBILITY_DESC_STYLE
+        desc.setStyleSheet(ACCESSIBILITY_DESC_STYLE)
         layout.addWidget(desc)
         
         # Background Dimming group
@@ -157,7 +149,8 @@ class AccessibilityTab(QWidget):
             "reducing overall screen brightness without affecting widget visibility."
         )
         dim_desc.setWordWrap(True)
-        dim_desc.setStyleSheet("color: #888888; font-size: 10px; margin-top: 5px;")
+        from ui.tabs.shared_styles import ACCESSIBILITY_SECTION_DESC_STYLE
+        dim_desc.setStyleSheet(ACCESSIBILITY_SECTION_DESC_STYLE)
         layout.addWidget(dim_desc)
         
         return group
@@ -205,7 +198,8 @@ class AccessibilityTab(QWidget):
             "static burn-in on susceptible displays. Not effective for OLED burn-in."
         )
         shift_desc.setWordWrap(True)
-        shift_desc.setStyleSheet("color: #888888; font-size: 10px; margin-top: 5px;")
+        from ui.tabs.shared_styles import ACCESSIBILITY_SECTION_DESC_STYLE as _sec_desc
+        shift_desc.setStyleSheet(_sec_desc)
         layout.addWidget(shift_desc)
         
         return group

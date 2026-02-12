@@ -24,34 +24,79 @@ uniform float u_blob_glow_intensity;  // 0..1  glow size/strength (default 0.5)
 uniform int u_blob_reactive_glow;  // 0 = static glow, 1 = energy-reactive
 uniform vec4 u_blob_outline_color;  // colour for the dark band between fill and glow
 uniform float u_blob_smoothed_energy;  // CPU-side smoothed energy (reduces flicker)
+uniform float u_blob_reactive_deformation;  // 0..2 scales outward energy growth (default 1.0)
+uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.0)
+uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
+uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.0)
+uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 
 // 2D SDF organic blob with audio-reactive deformation
 float blob_sdf(vec2 p, float time) {
-    float r = 0.40 * clamp(u_blob_size, 0.1, 2.5);
+    float r = 0.44 * clamp(u_blob_size, 0.1, 2.5);  // 10% larger minimum
     // Bass pulse — breathe the radius (+15% drum reactivity: 0.084 → 0.097)
     r += u_bass_energy * 0.077 * u_blob_pulse;
     // Subtle contraction on energy dips (~10% of pulse range, smoothed to avoid flicker)
     float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
     r -= (1.0 - se) * 0.053 * u_blob_pulse;
 
+    // Shrink significantly when playback is stopped (to ~45% of normal)
+    if (u_playing == 0) {
+        r *= 0.45 + se * 0.25;  // smoothed energy keeps shrink gradual
+    }
+
     float angle = atan(p.y, p.x);
     float dist = length(p);
 
-    // Organic deformation: layered sine waves driven by energy bands
+    // Organic deformation: constant wobble (time-driven) and reactive wobble (energy-driven)
+    // are cleanly separated so cw=0 means truly no wobble during silence.
+    float rd = clamp(u_blob_reactive_deformation, 0.0, 3.0);
+    float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
+    float rw = clamp(u_blob_reactive_wobble, 0.0, 2.0);
+    float st = clamp(u_blob_stretch_tendency, 0.0, 1.0);
     float deform = 0.0;
-    deform += sin(angle * 3.0 + time * 1.5) * 0.067 * (0.3 + u_mid_energy * 0.7);
-    deform += sin(angle * 5.0 - time * 2.3) * 0.042 * (0.2 + u_mid_energy * 0.8);
-    deform += sin(angle * 7.0 + time * 3.1) * 0.025 * (0.1 + u_high_energy * 0.9);
-    deform += sin(angle * 11.0 - time * 4.7) * 0.013 * u_high_energy;
 
-    // Overall energy wobble
-    deform += sin(angle * 1.0 + time * 0.2) * 0.020 * u_overall_energy;
+    // Constant wobble: reduced amplitude for rounder shape at silence
+    deform += sin(angle * 3.0 + time * 1.5) * 0.045 * 0.3 * cw;
+    deform += sin(angle * 5.0 - time * 2.3) * 0.028 * 0.2 * cw;
+    deform += sin(angle * 7.0 + time * 3.1) * 0.017 * 0.1 * cw;
+    deform += sin(angle * 1.0 + time * 0.2) * 0.013 * cw;
+
+    // Reactive wobble: energy-driven, zero when silent regardless of rw
+    deform += sin(angle * 3.0 + time * 1.5) * 0.067 * u_mid_energy * 0.7 * rw;
+    deform += sin(angle * 5.0 - time * 2.3) * 0.042 * u_mid_energy * 0.8 * rw;
+    deform += sin(angle * 7.0 + time * 3.1) * 0.025 * u_high_energy * 0.9 * rw;
+    deform += sin(angle * 11.0 - time * 4.7) * 0.013 * u_high_energy * rw;
 
     // Vocal-reactive wobble: smooth low-frequency shape change driven by mid (vocal) energy
-    // Uses slow angular frequencies and time evolution to preserve organic smoothness
     float vocal = clamp(u_mid_energy, 0.0, 1.0);
-    deform += sin(angle * 2.0 + time * 0.9) * 0.080 * vocal;
-    deform += sin(angle * 4.0 - time * 1.1) * 0.050 * vocal * vocal;
+    deform += sin(angle * 2.0 + time * 0.9) * 0.080 * vocal * rw;
+    deform += sin(angle * 4.0 - time * 1.1) * 0.050 * vocal * vocal * rw;
+
+    // Stretch tendency: peak energy juts outward as dramatic tendrils
+    // At max, loud moments cause long reaching bursts far beyond normal radius
+    if (st > 0.01) {
+        float peak = max(u_bass_energy, max(u_mid_energy, u_high_energy));
+        float peak2 = peak * peak;
+        float peak3 = peak2 * peak;  // cubic for explosive spikes
+        // Multiple angular frequencies create varied, asymmetric tendrils
+        float stretch = 0.0;
+        // Dominant tendrils — large amplitude, slow rotation
+        stretch += sin(angle * 2.0 + time * 0.7) * peak3 * 1.8;
+        stretch += sin(angle * 1.0 + time * 0.15) * peak2 * 1.2;
+        // Bass-driven bursts — punchy, fast
+        stretch += sin(angle * 3.0 - time * 1.3) * u_bass_energy * u_bass_energy * 1.4;
+        // Mid/vocal tendrils — sustained reach
+        stretch += sin(angle * 5.0 + time * 2.1) * u_mid_energy * u_mid_energy * 0.9;
+        stretch += sin(angle * 7.0 - time * 0.5) * u_mid_energy * u_mid_energy * 0.7;
+        // High-frequency filigree
+        stretch += sin(angle * 9.0 + time * 3.3) * u_high_energy * 0.5;
+        deform += stretch * st;
+    }
+
+    // Scale total deformation by reactive deformation factor
+    // Cubic scaling above 1.0 for truly dramatic stretching at high values
+    float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
+    deform *= rd_scale;
 
     return dist - r - deform;
 }

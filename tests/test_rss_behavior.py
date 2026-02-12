@@ -111,7 +111,17 @@ class TestRSSBehavior:
     def test_rss_source_tracks_cached_urls(self, temp_cache_dir, mock_reddit_response):
         """Test that RSSSource tracks cached URLs and doesn't re-download."""
         from sources.rss_source import RSSSource
-        
+        import io
+        from PIL import Image as PILImage
+
+        # Generate a valid JPEG that passes _validate_wallpaper_dimensions
+        def _make_valid_jpeg() -> bytes:
+            buf = io.BytesIO()
+            PILImage.new("RGB", (1920, 1080), (0, 128, 255)).save(buf, format="JPEG")
+            return buf.getvalue()
+
+        valid_jpeg = _make_valid_jpeg()
+
         feeds = ["https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=5"]
         download_count = [0]
         
@@ -124,8 +134,7 @@ class TestRSSBehavior:
             elif "i.redd.it" in url:
                 download_count[0] += 1
                 mock_resp.headers = {"Content-Type": "image/jpeg"}
-                jpeg_data = b'\xff\xd8\xff\xe0\x00\x10JFIF' + b'\x00' * 1000
-                mock_resp.iter_content = lambda chunk_size=8192: iter([jpeg_data])
+                mock_resp.iter_content = lambda chunk_size=8192: iter([valid_jpeg])
             else:
                 mock_resp.json.return_value = {"kind": "Listing", "data": {"children": []}}
             

@@ -53,6 +53,8 @@ uniform sampler2D uNewTex;
 uniform float u_progress;
 uniform vec2 u_resolution;
 uniform vec2 u_grid;        // (cols, rows)
+uniform float u_feather;     // soft-edge width (0..0.5)
+uniform int u_direction;     // 0=Horizontal, 1=Vertical, 2=Diagonal
 
 void main() {
     // Flip V to match Qt's top-left image origin.
@@ -72,18 +74,29 @@ void main() {
     vec2 cellSize = vec2(1.0) / grid;
     vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside cell
 
-    // Blinds are modelled as a horizontal band within each cell that grows
-    // symmetrically from the centre outwards. At t=0 the band is collapsed
-    // to a thin line; by t=1 it covers the full cell width.
+    // Pick the axis coordinate based on direction.
+    // 0=Horizontal (bands grow along X), 1=Vertical (Y), 2=Diagonal (X+Y).
+    float coord;
+    if (u_direction == 1) {
+        coord = uvLocal.y;
+    } else if (u_direction == 2) {
+        coord = (uvLocal.x + uvLocal.y) * 0.5;
+    } else {
+        coord = uvLocal.x;
+    }
+
+    // Blinds are modelled as bands within each cell that grow symmetrically
+    // from the centre outwards. At t=0 the band is collapsed to a thin line;
+    // by t=1 it covers the full cell.
     float w = clamp(t, 0.0, 1.0);
     float half = 0.5 * w;
     float left = 0.5 - half;
     float right = 0.5 + half;
 
     // Soft edges so the band does not appear as a harsh 1px stripe.
-    float feather = 0.08;
-    float edgeL = smoothstep(left - feather, left, uvLocal.x);
-    float edgeR = 1.0 - smoothstep(right, right + feather, uvLocal.x);
+    float feather = clamp(u_feather, 0.001, 0.5);
+    float edgeL = smoothstep(left - feather, left, coord);
+    float edgeR = 1.0 - smoothstep(right, right + feather, coord);
     float bandMask = clamp(edgeL * edgeR, 0.0, 1.0);
 
     // Late global tail to guarantee we land on a fully revealed frame even
@@ -105,6 +118,8 @@ void main() {
             "uOldTex": gl.glGetUniformLocation(program, "uOldTex"),
             "uNewTex": gl.glGetUniformLocation(program, "uNewTex"),
             "u_grid": gl.glGetUniformLocation(program, "u_grid"),
+            "u_feather": gl.glGetUniformLocation(program, "u_feather"),
+            "u_direction": gl.glGetUniformLocation(program, "u_direction"),
         }
 
     def render(
@@ -139,6 +154,14 @@ void main() {
                 cols = float(max(1, int(getattr(state, "cols", 1))))
                 rows = float(max(1, int(getattr(state, "rows", 1))))
                 gl.glUniform2f(uniforms["u_grid"], cols, rows)
+
+            if uniforms.get("u_feather", -1) != -1:
+                feather = max(0.001, min(0.5, float(getattr(state, "feather", 0.08))))
+                gl.glUniform1f(uniforms["u_feather"], feather)
+
+            if uniforms.get("u_direction", -1) != -1:
+                direction = int(getattr(state, "direction", 0))
+                gl.glUniform1i(uniforms["u_direction"], direction)
 
             if uniforms.get("uOldTex", -1) != -1:
                 gl.glActiveTexture(gl.GL_TEXTURE0)

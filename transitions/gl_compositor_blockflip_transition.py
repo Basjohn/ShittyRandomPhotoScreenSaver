@@ -273,6 +273,13 @@ class GLCompositorBlockFlipTransition(BaseTransition):
                         # "Bottom to Top" – start at the bottom edge.
                         if effective_rows > 1:
                             base = (effective_rows - 1 - row) / float(effective_rows - 1)
+                    # Diagonal bias
+                    elif self._direction == SlideDirection.DIAG_TL_BR:
+                        max_dist = max(1, (effective_cols - 1) + (effective_rows - 1))
+                        base = (col + row) / float(max_dist)
+                    elif self._direction == SlideDirection.DIAG_TR_BL:
+                        max_dist = max(1, (effective_cols - 1) + (effective_rows - 1))
+                        base = ((effective_cols - 1 - col) + row) / float(max_dist)
 
                     span = max(effective_cols, effective_rows)
                     jitter_span = 0.0

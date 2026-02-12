@@ -10,7 +10,6 @@ Thread Safety:
 from __future__ import annotations
 
 import json
-import os
 import threading
 import time
 from dataclasses import dataclass, asdict
@@ -22,11 +21,12 @@ from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtCore import Qt
 
 from core.logging.logger import get_logger
+from core.settings.storage_paths import get_imgur_cache_dir
 
 logger = get_logger(__name__)
 
 # Cache configuration
-DEFAULT_CACHE_DIR = Path(os.environ.get("TEMP", "/tmp")) / "imgur_cache"
+DEFAULT_CACHE_DIR = get_imgur_cache_dir()
 MAX_CACHE_SIZE_MB = 100
 MAX_CACHE_ITEMS = 500
 CACHE_METADATA_FILE = "cache_metadata.json"

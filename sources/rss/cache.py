@@ -39,7 +39,8 @@ class RSSCache:
         if cache_dir:
             self.cache_dir = Path(cache_dir)
         else:
-            self.cache_dir = Path(tempfile.gettempdir()) / "screensaver_rss_cache"
+            from core.settings.storage_paths import get_rss_cache_dir
+            self.cache_dir = get_rss_cache_dir()
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.max_cache_size = max_cache_size_mb * 1024 * 1024

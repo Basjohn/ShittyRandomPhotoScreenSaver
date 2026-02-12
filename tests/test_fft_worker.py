@@ -72,6 +72,61 @@ class TestFFTConfig:
         assert template[7] < template[4]
 
 
+    def test_curved_profile_template_symmetry(self):
+        """Test curved profile template is symmetric."""
+        config = FFTConfig()
+        template = config.curved_profile_template
+        n = len(template)
+        for i in range(n // 2):
+            assert abs(template[i] - template[n - 1 - i]) < 0.01
+
+    def test_curved_profile_template_dual_curve_shape(self):
+        """Test curved profile forms a dual-curve: bass peak at edges, dip, vocal peak, calm center."""
+        config = FFTConfig()
+        curved = config.curved_profile_template
+        n = len(curved)
+        center = n // 2
+        # Edge bars should be the highest (bass peak)
+        assert curved[0] == max(curved), f"Edge should be max, got {curved[0]}"
+        assert curved[-1] == max(curved), f"Edge should be max, got {curved[-1]}"
+        # Center should be the minimum (calm)
+        assert curved[center] == min(curved), (
+            f"Center ({curved[center]}) should be minimum ({min(curved)})"
+        )
+        # There should be a dip between bass zone and vocal zone (index 4 in 15-element)
+        # and a vocal peak after the dip (index 5 in 15-element)
+        # Verify left half has: decay from edge, then dip, then vocal peak
+        dip_idx = 4  # for 15-element template
+        vocal_idx = 5
+        assert curved[dip_idx] < curved[dip_idx - 1], (
+            f"Dip at {dip_idx} ({curved[dip_idx]}) should be less than {dip_idx-1} ({curved[dip_idx-1]})"
+        )
+        assert curved[vocal_idx] > curved[dip_idx], (
+            f"Vocal peak at {vocal_idx} ({curved[vocal_idx]}) should be higher than dip at {dip_idx} ({curved[dip_idx]})"
+        )
+        # Vocal peak should be second/third highest (less than edge bass peak)
+        assert curved[vocal_idx] < curved[0], (
+            f"Vocal peak ({curved[vocal_idx]}) should be less than bass peak ({curved[0]})"
+        )
+
+    def test_curved_profile_peaks_at_edges(self):
+        """Test curved profile has bass peaks at edge indices (0 and 14)."""
+        config = FFTConfig()
+        curved = config.curved_profile_template
+        assert curved[0] == 1.0, f"Expected peak at index 0, got {curved[0]}"
+        assert curved[-1] == 1.0, f"Expected peak at last index, got {curved[-1]}"
+        # Center should be the minimum
+        center = len(curved) // 2
+        assert curved[center] == min(curved), (
+            f"Center ({curved[center]}) should be minimum ({min(curved)})"
+        )
+
+    def test_curved_profile_default_off(self):
+        """Test that curved profile is off by default."""
+        config = FFTConfig()
+        assert config.use_curved_profile is False
+
+
 class TestFFTWorkerConfig:
     """Tests for FFT worker configuration handling."""
     
@@ -310,6 +365,72 @@ class TestFFTGhosting:
         )
         # This may not always be true depending on the signal, so we just check structure
         assert len(peaks_after_silence) == len(peaks_after_strong)
+
+
+class TestCurvedProfileConfig:
+    """Tests for curved profile configuration via FFTWorker messages."""
+
+    def test_toggle_curved_profile_on(self, worker):
+        """Test enabling curved profile via config message."""
+        w, _, _ = worker
+        assert w._config.use_curved_profile is False
+
+        msg = WorkerMessage(
+            msg_type=MessageType.FFT_CONFIG,
+            seq_no=1,
+            correlation_id="test-curved-on",
+            payload={"use_curved_profile": True},
+            worker_type=WorkerType.FFT,
+        )
+        response = w.handle_message(msg)
+        assert response.success is True
+        assert w._config.use_curved_profile is True
+
+    def test_toggle_curved_profile_off(self, worker):
+        """Test disabling curved profile via config message."""
+        w, _, _ = worker
+        w._config.use_curved_profile = True
+
+        msg = WorkerMessage(
+            msg_type=MessageType.FFT_CONFIG,
+            seq_no=2,
+            correlation_id="test-curved-off",
+            payload={"use_curved_profile": False},
+            worker_type=WorkerType.FFT,
+        )
+        response = w.handle_message(msg)
+        assert response.success is True
+        assert w._config.use_curved_profile is False
+
+    def test_curved_produces_different_bars(self, worker):
+        """Test that curved and legacy profiles produce different bar outputs."""
+        w, _, _ = worker
+
+        sample_rate = 44100
+        duration = 0.1
+        t = np.linspace(0, duration, int(sample_rate * duration), False)
+        samples = (0.5 * np.sin(2 * np.pi * 200 * t)).astype(np.float32).tolist()
+
+        def get_bars(curved: bool):
+            w._config.use_curved_profile = curved
+            # Reset state so smoothing doesn't carry over
+            w._init_state()
+            w._state.last_fft_ts = 0.0
+            msg = WorkerMessage(
+                msg_type=MessageType.FFT_FRAME,
+                seq_no=1,
+                correlation_id=f"test-curved-{curved}",
+                payload={"samples": samples, "sample_rate": sample_rate, "sensitivity": 1.0},
+                worker_type=WorkerType.FFT,
+            )
+            resp = w.handle_message(msg)
+            return resp.payload["bars"]
+
+        legacy_bars = get_bars(False)
+        curved_bars = get_bars(True)
+
+        assert len(legacy_bars) == len(curved_bars)
+        assert legacy_bars != curved_bars, "Curved and legacy profiles should produce different bars"
 
 
 if __name__ == "__main__":

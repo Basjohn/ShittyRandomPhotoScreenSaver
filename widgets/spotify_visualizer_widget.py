@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QPainter, QPaintEvent
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled, is_viz_logging_enabled
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
@@ -21,9 +21,9 @@ from utils.profiler import profile
 
 # Re-export package symbols for backward compatibility with external importers
 from widgets.spotify_visualizer.audio_worker import (
-    SpotifyVisualizerAudioWorker,
+    SpotifyVisualizerAudioWorker,  # noqa: F401 – re-export
     VisualizerMode,
-    _AudioFrame,
+    _AudioFrame,  # noqa: F401 – re-export
 )
 from widgets.spotify_visualizer.beat_engine import (
     get_shared_spotify_beat_engine,
@@ -87,6 +87,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
         self._spectrum_single_piece: bool = False
+        self._spectrum_curved_profile: bool = False
 
         # Visualization mode (Spectrum, Waveform, Abstract)
         self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
@@ -124,6 +125,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_size: float = 1.0
         self._blob_glow_intensity: float = 0.5
         self._blob_reactive_glow: bool = True
+        self._blob_reactive_deformation: float = 1.0
+        self._blob_constant_wobble: float = 1.0
+        self._blob_reactive_wobble: float = 1.0
+        self._blob_stretch_tendency: float = 0.0
 
         # Helix settings
         self._helix_turns: int = 4
@@ -142,8 +147,32 @@ class SpotifyVisualizerWidget(QWidget):
         self._starfield_growth: float = 2.0
         self._blob_growth: float = 2.5
         self._helix_growth: float = 2.0
+        self._osc_growth: float = 1.0
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False
+        self._osc_line_offset_bias: float = 0.0
+        self._osc_vertical_shift: bool = False
+        self._sine_wave_growth: float = 1.0
+        self._sine_wave_travel: int = 0  # 0=none, 1=left, 2=right
+        self._sine_travel_line2: int = 0  # per-line travel for line 2
+        self._sine_travel_line3: int = 0  # per-line travel for line 3
+        self._sine_card_adaptation: float = 0.3  # 0.0-1.0, how much of card height wave uses
+        self._sine_wobble_amount: float = 0.0  # 0.0-1.0, music-reactive deformity
+        self._sine_vertical_shift: bool = False  # energy shifts wave center up/down
+        self._sine_glow_enabled: bool = True
+        self._sine_glow_intensity: float = 0.5
+        self._sine_glow_color: QColor = QColor(0, 200, 255, 230)
+        self._sine_line_color: QColor = QColor(255, 255, 255, 255)
+        self._sine_reactive_glow: bool = True
+        self._sine_sensitivity: float = 1.0
+        self._sine_speed: float = 1.0
+        self._sine_line_count: int = 1
+        self._sine_line_offset_bias: float = 0.0
+        self._sine_line_dim: bool = False
+        self._sine_line2_color: QColor = QColor(255, 120, 50, 230)
+        self._sine_line2_glow_color: QColor = QColor(255, 120, 50, 180)
+        self._sine_line3_color: QColor = QColor(50, 255, 120, 230)
+        self._sine_line3_glow_color: QColor = QColor(50, 255, 120, 180)
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -293,6 +322,10 @@ class SpotifyVisualizerWidget(QWidget):
             engine.set_sensitivity_config(sens_rec, sens_value)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay sensitivity config", exc_info=True)
+        try:
+            engine.set_curved_profile(self._spectrum_curved_profile)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay curved profile config", exc_info=True)
 
     # ------------------------------------------------------------------
     # Public configuration
@@ -372,6 +405,7 @@ class SpotifyVisualizerWidget(QWidget):
             'starfield': VisualizerMode.STARFIELD,
             'blob': VisualizerMode.BLOB,
             'helix': VisualizerMode.HELIX,
+            'sine_wave': VisualizerMode.SINE_WAVE,
         }
         vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
         self.set_visualization_mode(vm)
@@ -459,6 +493,14 @@ class SpotifyVisualizerWidget(QWidget):
             self._blob_glow_intensity = max(0.0, min(1.0, float(kwargs['blob_glow_intensity'])))
         if 'blob_reactive_glow' in kwargs:
             self._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
+        if 'blob_reactive_deformation' in kwargs:
+            self._blob_reactive_deformation = max(0.0, min(3.0, float(kwargs['blob_reactive_deformation'])))
+        if 'blob_constant_wobble' in kwargs:
+            self._blob_constant_wobble = max(0.0, min(2.0, float(kwargs['blob_constant_wobble'])))
+        if 'blob_reactive_wobble' in kwargs:
+            self._blob_reactive_wobble = max(0.0, min(2.0, float(kwargs['blob_reactive_wobble'])))
+        if 'blob_stretch_tendency' in kwargs:
+            self._blob_stretch_tendency = max(0.0, min(1.0, float(kwargs['blob_stretch_tendency'])))
 
         # Helix
         if 'helix_turns' in kwargs:
@@ -484,6 +526,18 @@ class SpotifyVisualizerWidget(QWidget):
         if 'spectrum_single_piece' in kwargs:
             self._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
 
+        # Spectrum: curved bar profile
+        if 'spectrum_curved_profile' in kwargs:
+            new_curved = bool(kwargs['spectrum_curved_profile'])
+            if new_curved != self._spectrum_curved_profile:
+                self._spectrum_curved_profile = new_curved
+                try:
+                    engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+                    if engine is not None:
+                        engine.set_curved_profile(new_curved)
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to propagate curved profile to engine", exc_info=True)
+
         # Height growth factors
         if 'spectrum_growth' in kwargs:
             self._spectrum_growth = max(0.5, min(5.0, float(kwargs['spectrum_growth'])))
@@ -491,12 +545,70 @@ class SpotifyVisualizerWidget(QWidget):
             self._starfield_growth = max(0.5, min(5.0, float(kwargs['starfield_growth'])))
         if 'blob_growth' in kwargs:
             self._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
+        if 'osc_growth' in kwargs:
+            self._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
         if 'helix_growth' in kwargs:
             self._helix_growth = max(0.5, min(5.0, float(kwargs['helix_growth'])))
         if 'osc_speed' in kwargs:
             self._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
         if 'osc_line_dim' in kwargs:
             self._osc_line_dim = bool(kwargs['osc_line_dim'])
+        if 'osc_line_offset_bias' in kwargs:
+            self._osc_line_offset_bias = max(0.0, min(1.0, float(kwargs['osc_line_offset_bias'])))
+        if 'osc_vertical_shift' in kwargs:
+            self._osc_vertical_shift = bool(kwargs['osc_vertical_shift'])
+        if 'sine_wave_growth' in kwargs:
+            self._sine_wave_growth = max(0.5, min(5.0, float(kwargs['sine_wave_growth'])))
+        if 'sine_wave_travel' in kwargs:
+            self._sine_wave_travel = max(0, min(2, int(kwargs['sine_wave_travel'])))
+        if 'sine_travel_line2' in kwargs:
+            self._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
+        if 'sine_travel_line3' in kwargs:
+            self._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
+        if 'sine_wobble_amount' in kwargs:
+            self._sine_wobble_amount = max(0.0, min(1.0, float(kwargs['sine_wobble_amount'])))
+        if 'sine_vertical_shift' in kwargs:
+            self._sine_vertical_shift = bool(kwargs['sine_vertical_shift'])
+        if 'sine_card_adaptation' in kwargs:
+            self._sine_card_adaptation = max(0.05, min(1.0, float(kwargs['sine_card_adaptation'])))
+        if 'sine_glow_enabled' in kwargs:
+            self._sine_glow_enabled = bool(kwargs['sine_glow_enabled'])
+        if 'sine_glow_intensity' in kwargs:
+            self._sine_glow_intensity = max(0.0, float(kwargs['sine_glow_intensity']))
+        if 'sine_glow_color' in kwargs:
+            c = kwargs['sine_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._sine_glow_color = QColor(*c)
+        if 'sine_line_color' in kwargs:
+            c = kwargs['sine_line_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._sine_line_color = QColor(*c)
+        if 'sine_reactive_glow' in kwargs:
+            self._sine_reactive_glow = bool(kwargs['sine_reactive_glow'])
+        if 'sine_sensitivity' in kwargs:
+            self._sine_sensitivity = max(0.1, min(5.0, float(kwargs['sine_sensitivity'])))
+        if 'sine_speed' in kwargs:
+            self._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
+        if 'sine_line_count' in kwargs:
+            self._sine_line_count = max(1, min(3, int(kwargs['sine_line_count'])))
+        if 'sine_line_offset_bias' in kwargs:
+            self._sine_line_offset_bias = max(0.0, min(1.0, float(kwargs['sine_line_offset_bias'])))
+        if 'sine_line2_color' in kwargs:
+            c = kwargs['sine_line2_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._sine_line2_color = QColor(*c)
+        if 'sine_line2_glow_color' in kwargs:
+            c = kwargs['sine_line2_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._sine_line2_glow_color = QColor(*c)
+        if 'sine_line3_color' in kwargs:
+            c = kwargs['sine_line3_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._sine_line3_color = QColor(*c)
+        if 'sine_line3_glow_color' in kwargs:
+            c = kwargs['sine_line3_glow_color']
+            if isinstance(c, (list, tuple)) and len(c) >= 3:
+                self._sine_line3_glow_color = QColor(*c)
 
         # Update widget height if mode changed
         self._apply_preferred_height()
@@ -509,36 +621,65 @@ class SpotifyVisualizerWidget(QWidget):
         mode = self._vis_mode_str
         growth = {
             'spectrum': self._spectrum_growth,
+            'oscilloscope': self._osc_growth,
             'starfield': self._starfield_growth,
             'blob': self._blob_growth,
             'helix': self._helix_growth,
+            'sine_wave': self._sine_wave_growth,
         }.get(mode)
         return preferred_height(mode, self._base_height, growth)
+
+    def _request_reposition(self) -> None:
+        """Ask the WidgetManager to reposition this widget for the new mode.
+
+        This ensures the card height and position are correct after a mode
+        switch (e.g. from Spectrum's 80px strip to Blob's taller card).
+        """
+        wm = getattr(self, '_widget_manager', None)
+        if wm is None:
+            return
+        try:
+            parent = self.parent()
+            if parent is None:
+                return
+            pw, ph = parent.width(), parent.height()
+            # Find the media widget sibling for relative positioning
+            media = wm._widgets.get('media')
+            if media is not None:
+                wm.position_spotify_visualizer(self, media, pw, ph)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Reposition after mode switch failed", exc_info=True)
 
     def _apply_preferred_height(self) -> None:
         """Resize the widget to match the preferred height for the current mode.
 
-        For spectrum/oscilloscope (growth=1.0), we remove any fixed-height
-        constraint so the positioning system in widget_manager controls
-        the height.  For expanded modes (starfield/blob/helix) we set a
-        minimum height from the growth factor.
+        For spectrum/oscilloscope (growth=1.0), we explicitly shrink the
+        widget back to base_height so the positioning system doesn't keep
+        a stale tall height from an expanded mode (blob/helix/starfield).
+        For expanded modes we set a minimum height from the growth factor.
         """
         mode = self._vis_mode_str
         growth = {
             'spectrum': self._spectrum_growth,
-            'oscilloscope': 1.0,
+            'oscilloscope': self._osc_growth,
+            'sine_wave': self._sine_wave_growth,
         }.get(mode)
         if growth is not None and growth <= 1.0:
-            # Let the positioning system determine height
+            base = self._base_height
             self.setMinimumHeight(0)
             self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
+            current = self.height()
+            if current > base:
+                self.resize(self.width(), base)
+                logger.debug("[SPOTIFY_VIS] Card height shrunk: %d -> %d (mode=%s)", current, base, mode)
             return
         h = self.get_preferred_height()
         current = self.height()
         if current != h:
             self.setMinimumHeight(h)
             self.setMaximumHeight(16777215)  # allow positioning system to grow
-            logger.debug("[SPOTIFY_VIS] Card min height set: %d -> %d (mode=%s)", current, h, mode)
+            self.resize(self.width(), h)
+            logger.debug("[SPOTIFY_VIS] Card height set: %d -> %d (mode=%s)", current, h, mode)
 
     def set_software_visualizer_enabled(self, enabled: bool) -> None:
         """Enable or disable the QWidget-based software visualiser path.
@@ -952,6 +1093,14 @@ class SpotifyVisualizerWidget(QWidget):
         """Clean up visualizer resources (lifecycle hook)."""
         self._deactivate_impl()
         self._engine = None
+        # Free GL handles on the bars overlay to prevent VRAM leaks
+        try:
+            parent = self.parent()
+            overlay = getattr(parent, "_spotify_bars_overlay", None) if parent else None
+            if overlay is not None and hasattr(overlay, "cleanup_gl"):
+                overlay.cleanup_gl()
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed during GL cleanup: %s", e)
         logger.debug("[LIFECYCLE] SpotifyVisualizerWidget cleaned up")
 
     # ------------------------------------------------------------------
@@ -1100,13 +1249,21 @@ class SpotifyVisualizerWidget(QWidget):
     # Mouse event handling for mode cycling
     # ------------------------------------------------------------------
 
-    def mouseDoubleClickEvent(self, event) -> None:
-        """Double-click cycles visualizer mode with a crossfade."""
+    def set_widget_manager(self, wm) -> None:
+        """Store WidgetManager reference for settings persistence."""
+        self._widget_manager = wm
+
+    def _cycle_mode(self) -> bool:
+        """Cycle to the next visualizer mode with a crossfade.
+
+        Returns True if a cycle was initiated, False if already transitioning.
+        """
         if self._mode_transition_phase != 0:
-            return  # already transitioning
+            return False
         _CYCLE_MODES = [
             VisualizerMode.SPECTRUM,
             VisualizerMode.OSCILLOSCOPE,
+            VisualizerMode.SINE_WAVE,
             VisualizerMode.BLOB,
         ]
         try:
@@ -1118,7 +1275,18 @@ class SpotifyVisualizerWidget(QWidget):
         self._mode_transition_phase = 1  # start fade-out
         self._mode_transition_ts = time.time()
         logger.info("[SPOTIFY_VIS] Mode cycle requested: %s -> %s", self._vis_mode.name, next_mode.name)
-        event.accept()
+        return True
+
+    def handle_double_click(self, local_pos) -> bool:
+        """Called by WidgetManager dispatch. Cycles visualizer mode."""
+        return self._cycle_mode()
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        """Double-click cycles visualizer mode with a crossfade."""
+        if self._cycle_mode():
+            event.accept()
+        else:
+            event.ignore()
 
     def mousePressEvent(self, event) -> None:
         """Forward single clicks to parent (compositor/reddit)."""
@@ -1148,8 +1316,19 @@ class SpotifyVisualizerWidget(QWidget):
                 # Fade-out complete: switch mode, begin fade-in
                 pending = self._mode_transition_pending
                 if pending is not None:
+                    # Reset bar data to prevent stale values from previous mode
+                    zero = [0.0] * self._bar_count
+                    self._display_bars = list(zero)
+                    self._target_bars = list(zero)
+                    self._visual_bars = list(zero)
+                    self._per_bar_energy = list(zero)
+                    # Invalidate geometry cache so paintEvent rebuilds for new dimensions
+                    self._geom_cache_rect = None
+                    self._last_gpu_geom = None
+                    self._has_pushed_first_frame = False
                     self.set_visualization_mode(pending)
                     self._apply_preferred_height()
+                    self._request_reposition()
                     self._mode_transition_pending = None
                 self._mode_transition_phase = 2
                 self._mode_transition_ts = now_ts
@@ -1160,13 +1339,34 @@ class SpotifyVisualizerWidget(QWidget):
             # Fading in
             t = min(1.0, elapsed / dur) if dur > 0 else 1.0
             if t >= 1.0:
-                # Transition complete
+                # Transition complete — persist mode
                 self._mode_transition_phase = 0
                 self._mode_transition_ts = 0.0
+                self._persist_vis_mode()
                 return 1.0
             return t
 
         return 1.0
+
+    def _persist_vis_mode(self) -> None:
+        """Save the current visualizer mode to SettingsManager (if available)."""
+        wm = getattr(self, '_widget_manager', None)
+        if wm is None:
+            return
+        sm = getattr(wm, '_settings_manager', None)
+        if sm is None:
+            return
+        try:
+            mode_str = self._vis_mode_str
+            cfg = sm.get('widgets', {}) or {}
+            vis_cfg = cfg.get('spotify_visualizer', {}) or {}
+            if vis_cfg.get('mode') != mode_str:
+                vis_cfg['mode'] = mode_str
+                cfg['spotify_visualizer'] = vis_cfg
+                sm.set('widgets', cfg)
+                logger.debug("[SPOTIFY_VIS] Persisted vis mode: %s", mode_str)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to persist vis mode", exc_info=True)
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         if duration_ms <= 0:
@@ -1497,12 +1697,13 @@ class SpotifyVisualizerWidget(QWidget):
                         extra['waveform'] = engine.get_waveform()
                         extra['energy_bands'] = engine.get_energy_bands()
 
-                    # Per-mode settings
-                    extra['glow_enabled'] = self._osc_glow_enabled
-                    extra['glow_intensity'] = self._osc_glow_intensity
-                    extra['glow_color'] = self._osc_glow_color
-                    extra['reactive_glow'] = self._osc_reactive_glow
-                    extra['osc_sensitivity'] = self._osc_sensitivity
+                    # Per-mode settings: sine_wave uses its own attributes
+                    _is_sine = (mode_str == 'sine_wave')
+                    extra['glow_enabled'] = self._sine_glow_enabled if _is_sine else self._osc_glow_enabled
+                    extra['glow_intensity'] = self._sine_glow_intensity if _is_sine else self._osc_glow_intensity
+                    extra['glow_color'] = self._sine_glow_color if _is_sine else self._osc_glow_color
+                    extra['reactive_glow'] = self._sine_reactive_glow if _is_sine else self._osc_reactive_glow
+                    extra['osc_sensitivity'] = self._sine_sensitivity if _is_sine else self._osc_sensitivity
                     extra['osc_smoothing'] = self._osc_smoothing
                     extra['star_density'] = self._star_density
                     extra['travel_speed'] = self._star_travel_speed
@@ -1519,8 +1720,20 @@ class SpotifyVisualizerWidget(QWidget):
                     extra['blob_size'] = self._blob_size
                     extra['blob_glow_intensity'] = self._blob_glow_intensity
                     extra['blob_reactive_glow'] = self._blob_reactive_glow
-                    extra['osc_speed'] = self._osc_speed
-                    extra['osc_line_dim'] = self._osc_line_dim
+                    extra['blob_reactive_deformation'] = self._blob_reactive_deformation
+                    extra['blob_constant_wobble'] = self._blob_constant_wobble
+                    extra['blob_reactive_wobble'] = self._blob_reactive_wobble
+                    extra['blob_stretch_tendency'] = self._blob_stretch_tendency
+                    extra['osc_speed'] = self._sine_speed if _is_sine else self._osc_speed
+                    extra['osc_line_dim'] = self._sine_line_dim if _is_sine else self._osc_line_dim
+                    extra['osc_line_offset_bias'] = self._sine_line_offset_bias if _is_sine else self._osc_line_offset_bias
+                    extra['osc_vertical_shift'] = self._osc_vertical_shift
+                    extra['osc_sine_travel'] = self._sine_wave_travel
+                    extra['sine_card_adaptation'] = self._sine_card_adaptation
+                    extra['sine_travel_line2'] = self._sine_travel_line2
+                    extra['sine_travel_line3'] = self._sine_travel_line3
+                    extra['sine_wobble_amount'] = self._sine_wobble_amount
+                    extra['sine_vertical_shift'] = self._sine_vertical_shift
                     extra['helix_turns'] = self._helix_turns
                     extra['helix_double'] = self._helix_double
                     extra['helix_speed'] = self._helix_speed
@@ -1528,12 +1741,12 @@ class SpotifyVisualizerWidget(QWidget):
                     extra['helix_glow_intensity'] = self._helix_glow_intensity
                     extra['helix_glow_color'] = self._helix_glow_color
                     extra['helix_reactive_glow'] = self._helix_reactive_glow
-                    extra['line_color'] = self._osc_line_color
-                    extra['osc_line_count'] = self._osc_line_count
-                    extra['osc_line2_color'] = self._osc_line2_color
-                    extra['osc_line2_glow_color'] = self._osc_line2_glow_color
-                    extra['osc_line3_color'] = self._osc_line3_color
-                    extra['osc_line3_glow_color'] = self._osc_line3_glow_color
+                    extra['line_color'] = self._sine_line_color if _is_sine else self._osc_line_color
+                    extra['osc_line_count'] = self._sine_line_count if _is_sine else self._osc_line_count
+                    extra['osc_line2_color'] = self._sine_line2_color if _is_sine else self._osc_line2_color
+                    extra['osc_line2_glow_color'] = self._sine_line2_glow_color if _is_sine else self._osc_line2_glow_color
+                    extra['osc_line3_color'] = self._sine_line3_color if _is_sine else self._osc_line3_color
+                    extra['osc_line3_glow_color'] = self._sine_line3_glow_color if _is_sine else self._osc_line3_glow_color
 
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),
@@ -1737,6 +1950,13 @@ class SpotifyVisualizerWidget(QWidget):
         if mode != self._vis_mode:
             self._vis_mode = mode
             self._vis_mode_str = mode.name.lower()
+            # Reset display bars so returning modes start clean
+            for i in range(len(self._display_bars)):
+                self._display_bars[i] = 0.0
+            # Invalidate cached GPU geometry so the next tick forces a push
+            self._last_gpu_geom = None
+            self._last_gpu_fade_sent = -1.0
+            self._has_pushed_first_frame = False
             logger.info("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
 
     def get_visualization_mode(self) -> VisualizerMode:
@@ -1752,6 +1972,7 @@ class SpotifyVisualizerWidget(QWidget):
         _CYCLE_MODES = [
             VisualizerMode.SPECTRUM,
             VisualizerMode.OSCILLOSCOPE,
+            VisualizerMode.SINE_WAVE,
             VisualizerMode.BLOB,
         ]
         try:

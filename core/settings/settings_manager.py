@@ -599,7 +599,8 @@ class SettingsManager(QObject):
         with self._lock:
             self._settings.sync()
         logger.debug("Settings saved")
-    
+
+    def load(self) -> None:
         """Load settings from persistent storage."""
         with self._lock:
             try:

@@ -674,6 +674,30 @@ class ClockWidget(BaseOverlayWidget):
         if self._enabled:
             self._update_time()
 
+    def set_widget_manager(self, wm) -> None:
+        """Store WidgetManager reference for settings persistence."""
+        self._widget_manager = wm
+
+    def handle_double_click(self, local_pos) -> bool:
+        """Called by WidgetManager dispatch. Toggles digital/analog mode."""
+        new_mode = "digital" if self._display_mode == "analog" else "analog"
+        self.set_display_mode(new_mode)
+        # Persist to SettingsManager
+        wm = getattr(self, '_widget_manager', None)
+        if wm is not None:
+            sm = getattr(wm, '_settings_manager', None)
+            if sm is not None:
+                try:
+                    cfg = sm.get('widgets', {}) or {}
+                    clock_cfg = cfg.get('clock', {}) or {}
+                    clock_cfg['clock_analog_mode'] = (new_mode == "analog")
+                    cfg['clock'] = clock_cfg
+                    sm.set('widgets', cfg)
+                except Exception:
+                    logger.debug("[CLOCK] Failed to persist display mode", exc_info=True)
+        logger.debug("[CLOCK] Double-click toggled display mode to %s", new_mode)
+        return True
+
     def set_display_mode(self, mode: str) -> None:
         """Set display mode ("digital" or "analog")."""
 
@@ -696,10 +720,26 @@ class ClockWidget(BaseOverlayWidget):
         else:
             self.setMinimumSize(0, 0)
 
+        # Rebuild stylesheet for new mode (padding differs between digital/analog)
+        self._update_stylesheet()
+        # Invalidate analog cache so first paint is clean
+        self._invalidate_clock_face_cache()
+
         if self._enabled:
             self._update_time()
         else:
             self.update()
+
+        # Resize card and reposition after mode switch
+        try:
+            self.adjustSize()
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
+        if self.parent():
+            try:
+                self._update_position()
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
     
     def set_position(self, position: ClockPosition) -> None:
         """

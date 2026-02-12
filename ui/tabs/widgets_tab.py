@@ -85,6 +85,7 @@ class WidgetsTab(QWidget):
         self._imgur_border_color = self._color_from_default('imgur', 'border_color', [255, 255, 255, 255])
         self._media_artwork_size = int(self._widget_default('media', 'artwork_size', 200))
         self._loading = True
+        self._save_coalesce_pending = False
         self._setup_ui()
         self._load_settings()
         self._loading = False
@@ -608,6 +609,54 @@ class WidgetsTab(QWidget):
             self._osc_glow_color = color
             self._save_settings()
 
+    def _choose_sine_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_sine_glow_color', QColor(0, 200, 255, 230)),
+            self, "Choose Sine Wave Glow Color")
+        if color is not None:
+            self._sine_glow_color = color
+            self._save_settings()
+
+    def _choose_sine_line_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_sine_line_color', QColor(255, 255, 255, 255)),
+            self, "Choose Sine Wave Line Color")
+        if color is not None:
+            self._sine_line_color = color
+            self._save_settings()
+
+    def _choose_sine_line2_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_sine_line2_color', QColor(255, 120, 50, 230)),
+            self, "Choose Sine Line 2 Color")
+        if color is not None:
+            self._sine_line2_color = color
+            self._save_settings()
+
+    def _choose_sine_line2_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_sine_line2_glow_color', QColor(255, 120, 50, 180)),
+            self, "Choose Sine Line 2 Glow Color")
+        if color is not None:
+            self._sine_line2_glow_color = color
+            self._save_settings()
+
+    def _choose_sine_line3_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_sine_line3_color', QColor(50, 255, 120, 230)),
+            self, "Choose Sine Line 3 Color")
+        if color is not None:
+            self._sine_line3_color = color
+            self._save_settings()
+
+    def _choose_sine_line3_glow_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_sine_line3_glow_color', QColor(50, 255, 120, 180)),
+            self, "Choose Sine Line 3 Glow Color")
+        if color is not None:
+            self._sine_line3_glow_color = color
+            self._save_settings()
+
     def _choose_osc_line2_color(self) -> None:
         color = StyledColorPicker.get_color(
             getattr(self, '_osc_line2_color', QColor(255, 120, 50, 230)),
@@ -745,11 +794,28 @@ class WidgetsTab(QWidget):
 
     # Gmail methods removed - archived in archive/gmail_feature/
     
+    _SAVE_COALESCE_MS = 200
+
     def _save_settings(self) -> None:
-        """Save current settings.
-        
-        Delegates per-widget saving to extraction modules.
+        """Debounced save — coalesces rapid slider/checkbox changes.
+
+        Each call resets a 200ms single-shot timer so only ONE actual
+        write occurs after user input settles.  This reduces JSON writes
+        from 10+/sec during slider drags to 1-2.
         """
+        if getattr(self, "_loading", False):
+            return
+        if not getattr(self, "_save_coalesce_pending", False):
+            self._save_coalesce_pending = True
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(self._SAVE_COALESCE_MS, self._save_settings_now)
+        # If already pending, the timer is already ticking — we just
+        # let it fire.  For very fast bursts this may occasionally
+        # coalesce 2 writes instead of 1, which is acceptable.
+
+    def _save_settings_now(self) -> None:
+        """Perform the actual settings save (called by coalesce timer)."""
+        self._save_coalesce_pending = False
         if getattr(self, "_loading", False):
             return
 
@@ -760,7 +826,7 @@ class WidgetsTab(QWidget):
         from ui.tabs.widgets_tab_imgur import save_imgur_settings
 
         try:
-            logger.debug("[WIDGETS_TAB] _save_settings start")
+            logger.debug("[WIDGETS_TAB] _save_settings_now start")
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
@@ -825,6 +891,7 @@ class WidgetsTab(QWidget):
             'starfield': getattr(self, '_starfield_settings_container', None),
             'blob': getattr(self, '_blob_settings_container', None),
             'helix': getattr(self, '_helix_settings_container', None),
+            'sine_wave': getattr(self, '_sine_wave_settings_container', None),
         }
         for m, container in containers.items():
             if container is not None:

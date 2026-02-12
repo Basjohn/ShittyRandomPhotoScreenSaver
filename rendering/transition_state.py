@@ -103,6 +103,8 @@ class BlindsState(TransitionStateBase):
     region: Optional[QRegion] = None
     cols: int = 0
     rows: int = 0
+    feather: float = 0.08
+    direction: int = 0  # 0=Horizontal, 1=Vertical, 2=Diagonal
 
 
 @dataclass

@@ -24,6 +24,38 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _update_media_enabled_visibility(tab) -> None:
+    """Show/hide all media controls based on media_enabled checkbox."""
+    enabled = getattr(tab, 'media_enabled', None) and tab.media_enabled.isChecked()
+    container = getattr(tab, '_media_controls_container', None)
+    if container is not None:
+        container.setVisible(bool(enabled))
+
+
+def _update_spotify_vis_enabled_visibility(tab) -> None:
+    """Show/hide all visualizer controls based on spotify_vis_enabled checkbox."""
+    enabled = getattr(tab, 'spotify_vis_enabled', None) and tab.spotify_vis_enabled.isChecked()
+    container = getattr(tab, '_spotify_vis_controls_container', None)
+    if container is not None:
+        container.setVisible(bool(enabled))
+
+
+def _update_ghost_visibility(tab) -> None:
+    """Show/hide ghost opacity/decay sliders based on ghost_enabled checkbox."""
+    show = getattr(tab, 'spotify_vis_ghost_enabled', None) and tab.spotify_vis_ghost_enabled.isChecked()
+    container = getattr(tab, '_ghost_sub_container', None)
+    if container is not None:
+        container.setVisible(bool(show))
+
+
+def _update_media_bg_visibility(tab) -> None:
+    """Show/hide media background styling controls based on show_background checkbox."""
+    show = getattr(tab, 'media_show_background', None) and tab.media_show_background.isChecked()
+    container = getattr(tab, '_media_bg_container', None)
+    if container is not None:
+        container.setVisible(bool(show))
+
+
 def _qcolor_to_list(qc, fallback: list) -> list:
     """Convert a QColor to an RGBA list, or return fallback."""
     if qc is None:
@@ -48,6 +80,20 @@ def _update_osc_multi_line_visibility(tab) -> None:
             w.setVisible(bool(show_l3))
 
 
+def _update_sine_multi_line_visibility(tab) -> None:
+    """Show/hide sine wave multi-line sub-controls based on checkbox and line count."""
+    enabled = getattr(tab, 'sine_multi_line', None) and tab.sine_multi_line.isChecked()
+    container = getattr(tab, '_sine_multi_container', None)
+    if container is not None:
+        container.setVisible(bool(enabled))
+    # Line 3 controls only visible when count == 3
+    line_count = getattr(tab, 'sine_line_count_slider', None)
+    show_l3 = enabled and line_count is not None and line_count.value() >= 3
+    for w in (getattr(tab, '_sine_line3_label', None), getattr(tab, '_sine_l3_row_widget', None)):
+        if w is not None:
+            w.setVisible(bool(show_l3))
+
+
 def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """Build media + spotify visualizer section UI.
 
@@ -67,13 +113,19 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_enabled.stateChanged.connect(tab._update_stack_status)
     media_layout.addWidget(tab.media_enabled)
 
+    # Container for all media controls gated by enable checkbox
+    tab._media_controls_container = QWidget()
+    _media_ctrl_layout = QVBoxLayout(tab._media_controls_container)
+    _media_ctrl_layout.setContentsMargins(0, 0, 0, 0)
+    _media_ctrl_layout.setSpacing(4)
+
     media_info = QLabel(
         "This widget is display-only and non-interactive. Transport controls will "
         "only be active when explicitly enabled via input settings (hard-exit / Ctrl mode)."
     )
     media_info.setWordWrap(True)
     media_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-    media_layout.addWidget(media_info)
+    _media_ctrl_layout.addWidget(media_info)
 
     media_pos_row = QHBoxLayout()
     media_pos_row.addWidget(QLabel("Position:"))
@@ -91,7 +143,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_stack_status.setMinimumWidth(100)
     media_pos_row.addWidget(tab.media_stack_status)
     media_pos_row.addStretch()
-    media_layout.addLayout(media_pos_row)
+    _media_ctrl_layout.addLayout(media_pos_row)
 
     media_disp_row = QHBoxLayout()
     media_disp_row.addWidget(QLabel("Display:"))
@@ -103,7 +155,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_monitor_default = tab._widget_default('media', 'monitor', 'ALL')
     tab._set_combo_text(tab.media_monitor_combo, str(media_monitor_default))
     media_disp_row.addStretch()
-    media_layout.addLayout(media_disp_row)
+    _media_ctrl_layout.addLayout(media_disp_row)
 
     media_font_family_row = QHBoxLayout()
     media_font_family_row.addWidget(QLabel("Font:"))
@@ -114,7 +166,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_font_combo.currentFontChanged.connect(tab._save_settings)
     media_font_family_row.addWidget(tab.media_font_combo)
     media_font_family_row.addStretch()
-    media_layout.addLayout(media_font_family_row)
+    _media_ctrl_layout.addLayout(media_font_family_row)
 
     media_font_row = QHBoxLayout()
     media_font_row.addWidget(QLabel("Font Size:"))
@@ -127,7 +179,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_font_row.addWidget(tab.media_font_size)
     media_font_row.addWidget(QLabel("px"))
     media_font_row.addStretch()
-    media_layout.addLayout(media_font_row)
+    _media_ctrl_layout.addLayout(media_font_row)
 
     media_margin_row = QHBoxLayout()
     media_margin_row.addWidget(QLabel("Margin:"))
@@ -139,7 +191,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_margin_row.addWidget(tab.media_margin)
     media_margin_row.addWidget(QLabel("px"))
     media_margin_row.addStretch()
-    media_layout.addLayout(media_margin_row)
+    _media_ctrl_layout.addLayout(media_margin_row)
 
     media_color_row = QHBoxLayout()
     media_color_row.addWidget(QLabel("Text Color:"))
@@ -147,12 +199,18 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_color_btn.clicked.connect(tab._choose_media_color)
     media_color_row.addWidget(tab.media_color_btn)
     media_color_row.addStretch()
-    media_layout.addLayout(media_color_row)
+    _media_ctrl_layout.addLayout(media_color_row)
 
     tab.media_show_background = QCheckBox("Show Background Frame")
     tab.media_show_background.setChecked(tab._default_bool('media', 'show_background', True))
     tab.media_show_background.stateChanged.connect(tab._save_settings)
-    media_layout.addWidget(tab.media_show_background)
+    _media_ctrl_layout.addWidget(tab.media_show_background)
+
+    # Background sub-controls container (shown only when show_background is checked)
+    tab._media_bg_container = QWidget()
+    _mbg_layout = QVBoxLayout(tab._media_bg_container)
+    _mbg_layout.setContentsMargins(0, 0, 0, 0)
+    _mbg_layout.setSpacing(4)
 
     tab.media_intense_shadow = QCheckBox("Intense Shadows")
     tab.media_intense_shadow.setChecked(tab._default_bool('media', 'intense_shadow', True))
@@ -160,7 +218,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
     )
     tab.media_intense_shadow.stateChanged.connect(tab._save_settings)
-    media_layout.addWidget(tab.media_intense_shadow)
+    _mbg_layout.addWidget(tab.media_intense_shadow)
 
     media_opacity_row = QHBoxLayout()
     media_opacity_row.addWidget(QLabel("Background Opacity:"))
@@ -178,7 +236,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.media_bg_opacity_label.setText(f"{v}%")
     )
     media_opacity_row.addWidget(tab.media_bg_opacity_label)
-    media_layout.addLayout(media_opacity_row)
+    _mbg_layout.addLayout(media_opacity_row)
 
     media_bg_color_row = QHBoxLayout()
     media_bg_color_row.addWidget(QLabel("Background Color:"))
@@ -186,7 +244,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_bg_color_btn.clicked.connect(tab._choose_media_bg_color)
     media_bg_color_row.addWidget(tab.media_bg_color_btn)
     media_bg_color_row.addStretch()
-    media_layout.addLayout(media_bg_color_row)
+    _mbg_layout.addLayout(media_bg_color_row)
 
     media_border_color_row = QHBoxLayout()
     media_border_color_row.addWidget(QLabel("Border Color:"))
@@ -194,7 +252,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_border_color_btn.clicked.connect(tab._choose_media_border_color)
     media_border_color_row.addWidget(tab.media_border_color_btn)
     media_border_color_row.addStretch()
-    media_layout.addLayout(media_border_color_row)
+    _mbg_layout.addLayout(media_border_color_row)
 
     media_border_opacity_row = QHBoxLayout()
     media_border_opacity_row.addWidget(QLabel("Border Opacity:"))
@@ -212,7 +270,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.media_border_opacity_label.setText(f"{v}%")
     )
     media_border_opacity_row.addWidget(tab.media_border_opacity_label)
-    media_layout.addLayout(media_border_opacity_row)
+    _mbg_layout.addLayout(media_border_opacity_row)
+
+    _media_ctrl_layout.addWidget(tab._media_bg_container)
+    tab.media_show_background.stateChanged.connect(lambda: _update_media_bg_visibility(tab))
+    _update_media_bg_visibility(tab)
 
     media_volume_fill_row = QHBoxLayout()
     media_volume_fill_row.addWidget(QLabel("Volume Fill Color:"))
@@ -220,7 +282,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_volume_fill_color_btn.clicked.connect(tab._choose_media_volume_fill_color)
     media_volume_fill_row.addWidget(tab.media_volume_fill_color_btn)
     media_volume_fill_row.addStretch()
-    media_layout.addLayout(media_volume_fill_row)
+    _media_ctrl_layout.addLayout(media_volume_fill_row)
 
     media_artwork_row = QHBoxLayout()
     media_artwork_row.addWidget(QLabel("Artwork Size:"))
@@ -233,28 +295,28 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_artwork_row.addWidget(tab.media_artwork_size)
     media_artwork_row.addWidget(QLabel("px"))
     media_artwork_row.addStretch()
-    media_layout.addLayout(media_artwork_row)
+    _media_ctrl_layout.addLayout(media_artwork_row)
 
     tab.media_rounded_artwork = QCheckBox("Rounded Artwork Border")
     tab.media_rounded_artwork.setChecked(
         tab._default_bool('media', 'rounded_artwork_border', True)
     )
     tab.media_rounded_artwork.stateChanged.connect(tab._save_settings)
-    media_layout.addWidget(tab.media_rounded_artwork)
+    _media_ctrl_layout.addWidget(tab.media_rounded_artwork)
 
     tab.media_show_header_frame = QCheckBox("Header Border Around Logo + Title")
     tab.media_show_header_frame.setChecked(
         tab._default_bool('media', 'show_header_frame', True)
     )
     tab.media_show_header_frame.stateChanged.connect(tab._save_settings)
-    media_layout.addWidget(tab.media_show_header_frame)
+    _media_ctrl_layout.addWidget(tab.media_show_header_frame)
 
     tab.media_show_controls = QCheckBox("Show Transport Controls")
     tab.media_show_controls.setChecked(
         tab._default_bool('media', 'show_controls', True)
     )
     tab.media_show_controls.stateChanged.connect(tab._save_settings)
-    media_layout.addWidget(tab.media_show_controls)
+    _media_ctrl_layout.addWidget(tab.media_show_controls)
 
     tab.media_spotify_volume_enabled = QCheckBox("Enable Spotify Volume Slider")
     tab.media_spotify_volume_enabled.setToolTip(
@@ -265,7 +327,22 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'spotify_volume_enabled', True)
     )
     tab.media_spotify_volume_enabled.stateChanged.connect(tab._save_settings)
-    media_layout.addWidget(tab.media_spotify_volume_enabled)
+    _media_ctrl_layout.addWidget(tab.media_spotify_volume_enabled)
+
+    tab.media_mute_button_enabled = QCheckBox("Enable System Mute Button")
+    tab.media_mute_button_enabled.setToolTip(
+        "Show a small mute toggle button near the media card. "
+        "Single-click toggles system-wide mute on/off (requires pycaw/Core Audio)."
+    )
+    tab.media_mute_button_enabled.setChecked(
+        tab._default_bool('media', 'mute_button_enabled', False)
+    )
+    tab.media_mute_button_enabled.stateChanged.connect(tab._save_settings)
+    _media_ctrl_layout.addWidget(tab.media_mute_button_enabled)
+
+    media_layout.addWidget(tab._media_controls_container)
+    tab.media_enabled.stateChanged.connect(lambda: _update_media_enabled_visibility(tab))
+    _update_media_enabled_visibility(tab)
 
     # --- Spotify Beat Visualizer Group ---
     spotify_vis_group = QGroupBox("Spotify Beat Visualizer")
@@ -292,6 +369,12 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_enable_row.addWidget(tab.spotify_vis_software_enabled)
     spotify_vis_layout.addLayout(spotify_vis_enable_row)
 
+    # Container for all visualizer controls gated by enable checkbox
+    tab._spotify_vis_controls_container = QWidget()
+    _svctl = QVBoxLayout(tab._spotify_vis_controls_container)
+    _svctl.setContentsMargins(0, 0, 0, 0)
+    _svctl.setSpacing(4)
+
     # --- Visualizer Type Selector ---
     vis_type_row = QHBoxLayout()
     vis_type_row.addWidget(QLabel("Visualizer Type:"))
@@ -304,6 +387,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     if _dev_features:
         tab.spotify_vis_type_combo.addItem("Starfield", "starfield")
     tab.spotify_vis_type_combo.addItem("Blob", "blob")
+    tab.spotify_vis_type_combo.addItem("Sine Waves", "sine_wave")
 
     default_mode = tab._default_str('spotify_visualizer', 'mode', 'spectrum')
     mode_idx = tab.spotify_vis_type_combo.findData(default_mode)
@@ -318,7 +402,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     vis_type_row.addWidget(tab.spotify_vis_type_combo)
     vis_type_row.addStretch()
-    spotify_vis_layout.addLayout(vis_type_row)
+    _svctl.addLayout(vis_type_row)
 
     # ==========================================
     # Spectrum-only settings container
@@ -465,6 +549,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.spotify_vis_ghost_enabled.stateChanged.connect(tab._save_settings)
     spectrum_layout.addWidget(tab.spotify_vis_ghost_enabled)
 
+    tab._ghost_sub_container = QWidget()
+    _ghost_layout = QVBoxLayout(tab._ghost_sub_container)
+    _ghost_layout.setContentsMargins(0, 0, 0, 0)
+    _ghost_layout.setSpacing(4)
+
     spotify_vis_ghost_opacity_row = QHBoxLayout()
     spotify_vis_ghost_opacity_row.addWidget(QLabel("Ghost Opacity:"))
     tab.spotify_vis_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -481,7 +570,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.spotify_vis_ghost_opacity_label.setText(f"{v}%")
     )
     spotify_vis_ghost_opacity_row.addWidget(tab.spotify_vis_ghost_opacity_label)
-    spectrum_layout.addLayout(spotify_vis_ghost_opacity_row)
+    _ghost_layout.addLayout(spotify_vis_ghost_opacity_row)
 
     spotify_vis_ghost_decay_row = QHBoxLayout()
     spotify_vis_ghost_decay_row.addWidget(QLabel("Ghost Decay Speed:"))
@@ -499,7 +588,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.spotify_vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
     )
     spotify_vis_ghost_decay_row.addWidget(tab.spotify_vis_ghost_decay_label)
-    spectrum_layout.addLayout(spotify_vis_ghost_decay_row)
+    _ghost_layout.addLayout(spotify_vis_ghost_decay_row)
+
+    spectrum_layout.addWidget(tab._ghost_sub_container)
+    tab.spotify_vis_ghost_enabled.stateChanged.connect(lambda: _update_ghost_visibility(tab))
+    _update_ghost_visibility(tab)
 
     # Single Piece Mode (solid bars, no segment gaps)
     tab.spectrum_single_piece = QCheckBox("Single Piece Mode")
@@ -513,27 +606,40 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.spectrum_single_piece.stateChanged.connect(tab._save_settings)
     spectrum_layout.addWidget(tab.spectrum_single_piece)
 
+    # Curved Bar Profile (shifts peak shape outward for a curved look)
+    tab.spectrum_curved_profile = QCheckBox("Curved Bar Profile")
+    tab.spectrum_curved_profile.setChecked(
+        tab._default_bool('spotify_visualizer', 'spectrum_curved_profile', False)
+    )
+    tab.spectrum_curved_profile.setToolTip(
+        "Shifts the mirrored peak bars outward so each ridge curves "
+        "(left highest, middle slightly lower, right slightly lower) "
+        "while preserving total energy and reactivity."
+    )
+    tab.spectrum_curved_profile.stateChanged.connect(tab._save_settings)
+    spectrum_layout.addWidget(tab.spectrum_curved_profile)
+
     # Spectrum card height growth slider (1.0 .. 3.0)
     spectrum_growth_row = QHBoxLayout()
     spectrum_growth_row.addWidget(QLabel("Card Height:"))
     tab.spectrum_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_growth.setMinimum(100)
-    tab.spectrum_growth.setMaximum(300)
+    tab.spectrum_growth.setMaximum(400)
     spectrum_growth_val = int(tab._default_float('spotify_visualizer', 'spectrum_growth', 1.0) * 100)
-    tab.spectrum_growth.setValue(max(100, min(300, spectrum_growth_val)))
+    tab.spectrum_growth.setValue(max(100, min(400, spectrum_growth_val)))
     tab.spectrum_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spectrum_growth.setTickInterval(25)
+    tab.spectrum_growth.setTickInterval(50)
     tab.spectrum_growth.setToolTip("Height multiplier for the spectrum card. 100% = current default height.")
     tab.spectrum_growth.valueChanged.connect(tab._save_settings)
     spectrum_growth_row.addWidget(tab.spectrum_growth)
-    tab.spectrum_growth_label = QLabel(f"{spectrum_growth_val}%")
+    tab.spectrum_growth_label = QLabel(f"{spectrum_growth_val / 100.0:.1f}x")
     tab.spectrum_growth.valueChanged.connect(
-        lambda v: tab.spectrum_growth_label.setText(f"{v}%")
+        lambda v: tab.spectrum_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     spectrum_growth_row.addWidget(tab.spectrum_growth_label)
     spectrum_layout.addLayout(spectrum_growth_row)
 
-    spotify_vis_layout.addWidget(tab._spectrum_settings_container)
+    _svctl.addWidget(tab._spectrum_settings_container)
 
     # ==========================================
     # Oscilloscope settings container
@@ -636,6 +742,40 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.osc_line_dim.stateChanged.connect(tab._save_settings)
     osc_layout.addWidget(tab.osc_line_dim)
 
+    # Line Offset Bias slider (0..100, maps to 0.0..1.0, multi-line only)
+    osc_lob_row = QHBoxLayout()
+    osc_lob_row.addWidget(QLabel("Line Offset Bias:"))
+    tab.osc_line_offset_bias = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_line_offset_bias.setMinimum(0)
+    tab.osc_line_offset_bias.setMaximum(100)
+    osc_lob_val = int(tab._default_float('spotify_visualizer', 'osc_line_offset_bias', 0.0) * 100)
+    tab.osc_line_offset_bias.setValue(osc_lob_val)
+    tab.osc_line_offset_bias.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_line_offset_bias.setTickInterval(10)
+    tab.osc_line_offset_bias.setToolTip(
+        "Increases base vertical spread between lines and per-band energy reliance "
+        "(bass/mid/treble). Multi-line mode only. 0% = energy-only spacing, "
+        "100% = maximum spread with strong per-band separation."
+    )
+    tab.osc_line_offset_bias.valueChanged.connect(tab._save_settings)
+    osc_lob_row.addWidget(tab.osc_line_offset_bias)
+    tab.osc_line_offset_bias_label = QLabel(f"{osc_lob_val}%")
+    tab.osc_line_offset_bias.valueChanged.connect(
+        lambda v: tab.osc_line_offset_bias_label.setText(f"{v}%")
+    )
+    osc_lob_row.addWidget(tab.osc_line_offset_bias_label)
+    osc_layout.addLayout(osc_lob_row)
+
+    tab.osc_vertical_shift = QCheckBox("Vertical Shift")
+    tab.osc_vertical_shift.setChecked(tab._default_bool('spotify_visualizer', 'osc_vertical_shift', False))
+    tab.osc_vertical_shift.setToolTip(
+        "When enabled, disables offset bias and places lines at fixed vertical positions "
+        "(top / middle / bottom) spaced 20-80px apart depending on card height. "
+        "Line 1 stays at center. Multi-line only."
+    )
+    tab.osc_vertical_shift.stateChanged.connect(tab._save_settings)
+    osc_layout.addWidget(tab.osc_vertical_shift)
+
     # Line colour picker (separate from glow)
     osc_line_color_row = QHBoxLayout()
     osc_line_color_row.addWidget(QLabel("Line Color:"))
@@ -716,7 +856,27 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     osc_layout.addWidget(tab._osc_multi_container)
     _update_osc_multi_line_visibility(tab)
 
-    spotify_vis_layout.addWidget(tab._osc_settings_container)
+    # Oscilloscope card height growth slider (1.0 .. 3.0)
+    osc_growth_row = QHBoxLayout()
+    osc_growth_row.addWidget(QLabel("Card Height:"))
+    tab.osc_growth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_growth.setMinimum(100)
+    tab.osc_growth.setMaximum(400)
+    osc_growth_val = int(tab._default_float('spotify_visualizer', 'osc_growth', 1.0) * 100)
+    tab.osc_growth.setValue(max(100, min(400, osc_growth_val)))
+    tab.osc_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_growth.setTickInterval(50)
+    tab.osc_growth.setToolTip("Height multiplier for the oscilloscope card.")
+    tab.osc_growth.valueChanged.connect(tab._save_settings)
+    osc_growth_row.addWidget(tab.osc_growth)
+    tab.osc_growth_label = QLabel(f"{osc_growth_val / 100.0:.1f}x")
+    tab.osc_growth.valueChanged.connect(
+        lambda v: tab.osc_growth_label.setText(f"{v / 100.0:.1f}x")
+    )
+    osc_growth_row.addWidget(tab.osc_growth_label)
+    osc_layout.addLayout(osc_growth_row)
+
+    _svctl.addWidget(tab._osc_settings_container)
 
     # ==========================================
     # Starfield settings container
@@ -794,7 +954,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     nebula_speed_row.addWidget(tab.nebula_cycle_speed_label)
     star_layout.addLayout(nebula_speed_row)
 
-    spotify_vis_layout.addWidget(tab._starfield_settings_container)
+    _svctl.addWidget(tab._starfield_settings_container)
 
     # ==========================================
     # Blob settings container
@@ -919,7 +1079,99 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     blob_gi_row.addWidget(tab.blob_glow_intensity_label)
     blob_layout.addLayout(blob_gi_row)
 
-    spotify_vis_layout.addWidget(tab._blob_settings_container)
+    # Reactive Deformation slider (0..300, default 100 = 1.0x)
+    blob_rd_row = QHBoxLayout()
+    blob_rd_row.addWidget(QLabel("Reactive Deformation:"))
+    tab.blob_reactive_deformation = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_reactive_deformation.setMinimum(0)
+    tab.blob_reactive_deformation.setMaximum(300)
+    blob_rd_val = int(tab._default_float('spotify_visualizer', 'blob_reactive_deformation', 1.0) * 100)
+    tab.blob_reactive_deformation.setValue(blob_rd_val)
+    tab.blob_reactive_deformation.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_reactive_deformation.setTickInterval(50)
+    tab.blob_reactive_deformation.setToolTip(
+        "Scales overall outward energy-driven growth. "
+        "0% = no deformation, 100% = default, 300% = extreme."
+    )
+    tab.blob_reactive_deformation.valueChanged.connect(tab._save_settings)
+    blob_rd_row.addWidget(tab.blob_reactive_deformation)
+    tab.blob_reactive_deformation_label = QLabel(f"{blob_rd_val}%")
+    tab.blob_reactive_deformation.valueChanged.connect(
+        lambda v: tab.blob_reactive_deformation_label.setText(f"{v}%")
+    )
+    blob_rd_row.addWidget(tab.blob_reactive_deformation_label)
+    blob_layout.addLayout(blob_rd_row)
+
+    # Constant Wobble Energy slider (0..200, default 100 = 1.0x)
+    blob_cw_row = QHBoxLayout()
+    blob_cw_row.addWidget(QLabel("Constant Wobble:"))
+    tab.blob_constant_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_constant_wobble.setMinimum(0)
+    tab.blob_constant_wobble.setMaximum(200)
+    blob_cw_val = int(tab._default_float('spotify_visualizer', 'blob_constant_wobble', 1.0) * 100)
+    tab.blob_constant_wobble.setValue(blob_cw_val)
+    tab.blob_constant_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_constant_wobble.setTickInterval(25)
+    tab.blob_constant_wobble.setToolTip(
+        "Base wobble amplitude present even during silence. "
+        "0% = flat, 100% = default organic motion, 200% = exaggerated."
+    )
+    tab.blob_constant_wobble.valueChanged.connect(tab._save_settings)
+    blob_cw_row.addWidget(tab.blob_constant_wobble)
+    tab.blob_constant_wobble_label = QLabel(f"{blob_cw_val}%")
+    tab.blob_constant_wobble.valueChanged.connect(
+        lambda v: tab.blob_constant_wobble_label.setText(f"{v}%")
+    )
+    blob_cw_row.addWidget(tab.blob_constant_wobble_label)
+    blob_layout.addLayout(blob_cw_row)
+
+    # Reactive Wobble Energy slider (0..200, default 100 = 1.0x)
+    blob_rw_row = QHBoxLayout()
+    blob_rw_row.addWidget(QLabel("Reactive Wobble:"))
+    tab.blob_reactive_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_reactive_wobble.setMinimum(0)
+    tab.blob_reactive_wobble.setMaximum(200)
+    blob_rw_val = int(tab._default_float('spotify_visualizer', 'blob_reactive_wobble', 1.0) * 100)
+    tab.blob_reactive_wobble.setValue(blob_rw_val)
+    tab.blob_reactive_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_reactive_wobble.setTickInterval(25)
+    tab.blob_reactive_wobble.setToolTip(
+        "Energy-driven wobble amplitude (mostly vocals/mid). "
+        "0% = no audio reaction, 100% = default, 200% = exaggerated."
+    )
+    tab.blob_reactive_wobble.valueChanged.connect(tab._save_settings)
+    blob_rw_row.addWidget(tab.blob_reactive_wobble)
+    tab.blob_reactive_wobble_label = QLabel(f"{blob_rw_val}%")
+    tab.blob_reactive_wobble.valueChanged.connect(
+        lambda v: tab.blob_reactive_wobble_label.setText(f"{v}%")
+    )
+    blob_rw_row.addWidget(tab.blob_reactive_wobble_label)
+    blob_layout.addLayout(blob_rw_row)
+
+    # Stretch Tendency slider (0..100, default 0 = 0.0)
+    blob_st_row = QHBoxLayout()
+    blob_st_row.addWidget(QLabel("Stretch Tendency:"))
+    tab.blob_stretch_tendency = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_stretch_tendency.setMinimum(0)
+    tab.blob_stretch_tendency.setMaximum(100)
+    blob_st_val = int(tab._default_float('spotify_visualizer', 'blob_stretch_tendency', 0.0) * 100)
+    tab.blob_stretch_tendency.setValue(max(0, min(100, blob_st_val)))
+    tab.blob_stretch_tendency.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_stretch_tendency.setTickInterval(10)
+    tab.blob_stretch_tendency.setToolTip(
+        "Bias deformation toward horizontal stretching rather than uniform growth. "
+        "0% = uniform (default), 100% = fully horizontal stretch."
+    )
+    tab.blob_stretch_tendency.valueChanged.connect(tab._save_settings)
+    blob_st_row.addWidget(tab.blob_stretch_tendency)
+    tab.blob_stretch_tendency_label = QLabel(f"{blob_st_val}%")
+    tab.blob_stretch_tendency.valueChanged.connect(
+        lambda v: tab.blob_stretch_tendency_label.setText(f"{v}%")
+    )
+    blob_st_row.addWidget(tab.blob_stretch_tendency_label)
+    blob_layout.addLayout(blob_st_row)
+
+    _svctl.addWidget(tab._blob_settings_container)
 
     # ==========================================
     # Helix settings container
@@ -1019,7 +1271,283 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     helix_growth_row.addWidget(tab.helix_growth_label)
     helix_layout.addLayout(helix_growth_row)
 
-    spotify_vis_layout.addWidget(tab._helix_settings_container)
+    _svctl.addWidget(tab._helix_settings_container)
+
+    # ==========================================
+    # Sine Wave settings container
+    # ==========================================
+    tab._sine_wave_settings_container = QWidget()
+    sine_layout = QVBoxLayout(tab._sine_wave_settings_container)
+    sine_layout.setContentsMargins(0, 0, 0, 0)
+
+    # Glow
+    tab.sine_glow_enabled = QCheckBox("Enable Glow")
+    tab.sine_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'sine_glow_enabled', True))
+    tab.sine_glow_enabled.stateChanged.connect(tab._save_settings)
+    sine_layout.addWidget(tab.sine_glow_enabled)
+
+    # Glow intensity
+    sine_glow_row = QHBoxLayout()
+    sine_glow_row.addWidget(QLabel("Glow Intensity:"))
+    tab.sine_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_glow_intensity.setMinimum(0)
+    tab.sine_glow_intensity.setMaximum(100)
+    sine_glow_val = int(tab._default_float('spotify_visualizer', 'sine_glow_intensity', 0.5) * 100)
+    tab.sine_glow_intensity.setValue(sine_glow_val)
+    tab.sine_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_glow_intensity.setTickInterval(10)
+    tab.sine_glow_intensity.valueChanged.connect(tab._save_settings)
+    sine_glow_row.addWidget(tab.sine_glow_intensity)
+    tab.sine_glow_intensity_label = QLabel(f"{sine_glow_val}%")
+    tab.sine_glow_intensity.valueChanged.connect(
+        lambda v: tab.sine_glow_intensity_label.setText(f"{v}%")
+    )
+    sine_glow_row.addWidget(tab.sine_glow_intensity_label)
+    sine_layout.addLayout(sine_glow_row)
+
+    # Glow colour
+    sine_glow_color_row = QHBoxLayout()
+    sine_glow_color_row.addWidget(QLabel("Glow Color:"))
+    tab.sine_glow_color_btn = QPushButton("Choose Color...")
+    tab.sine_glow_color_btn.clicked.connect(tab._choose_sine_glow_color)
+    sine_glow_color_row.addWidget(tab.sine_glow_color_btn)
+    sine_glow_color_row.addStretch()
+    sine_layout.addLayout(sine_glow_color_row)
+
+    # Line colour
+    sine_line_color_row = QHBoxLayout()
+    sine_line_color_row.addWidget(QLabel("Line Color:"))
+    tab.sine_line_color_btn = QPushButton("Choose Color...")
+    tab.sine_line_color_btn.clicked.connect(tab._choose_sine_line_color)
+    sine_line_color_row.addWidget(tab.sine_line_color_btn)
+    sine_line_color_row.addStretch()
+    sine_layout.addLayout(sine_line_color_row)
+
+    # Reactive glow
+    tab.sine_reactive_glow = QCheckBox("Reactive Glow (energy-driven)")
+    tab.sine_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'sine_reactive_glow', True))
+    tab.sine_reactive_glow.stateChanged.connect(tab._save_settings)
+    sine_layout.addWidget(tab.sine_reactive_glow)
+
+    # Sensitivity
+    sine_sens_row = QHBoxLayout()
+    sine_sens_row.addWidget(QLabel("Sensitivity:"))
+    tab.sine_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_sensitivity.setMinimum(10)
+    tab.sine_sensitivity.setMaximum(500)
+    sine_sens_val = int(tab._default_float('spotify_visualizer', 'sine_sensitivity', 1.0) * 100)
+    tab.sine_sensitivity.setValue(max(10, min(500, sine_sens_val)))
+    tab.sine_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_sensitivity.setTickInterval(50)
+    tab.sine_sensitivity.setToolTip("How much audio energy affects sine wave amplitude.")
+    tab.sine_sensitivity.valueChanged.connect(tab._save_settings)
+    sine_sens_row.addWidget(tab.sine_sensitivity)
+    tab.sine_sensitivity_label = QLabel(f"{sine_sens_val / 100.0:.2f}x")
+    tab.sine_sensitivity.valueChanged.connect(
+        lambda v: tab.sine_sensitivity_label.setText(f"{v / 100.0:.2f}x")
+    )
+    sine_sens_row.addWidget(tab.sine_sensitivity_label)
+    sine_layout.addLayout(sine_sens_row)
+
+    # Speed
+    sine_speed_row = QHBoxLayout()
+    sine_speed_row.addWidget(QLabel("Speed:"))
+    tab.sine_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_speed.setMinimum(10)
+    tab.sine_speed.setMaximum(100)
+    sine_speed_val = int(tab._default_float('spotify_visualizer', 'sine_speed', 1.0) * 100)
+    tab.sine_speed.setValue(max(10, min(100, sine_speed_val)))
+    tab.sine_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_speed.setTickInterval(10)
+    tab.sine_speed.setToolTip("Wave animation speed multiplier.")
+    tab.sine_speed.valueChanged.connect(tab._save_settings)
+    sine_speed_row.addWidget(tab.sine_speed)
+    tab.sine_speed_label = QLabel(f"{sine_speed_val / 100.0:.2f}x")
+    tab.sine_speed.valueChanged.connect(
+        lambda v: tab.sine_speed_label.setText(f"{v / 100.0:.2f}x")
+    )
+    sine_speed_row.addWidget(tab.sine_speed_label)
+    sine_layout.addLayout(sine_speed_row)
+
+    # Travel direction
+    sine_travel_row = QHBoxLayout()
+    sine_travel_row.addWidget(QLabel("Travel:"))
+    tab.sine_travel = QComboBox()
+    tab.sine_travel.addItems(["None", "Scroll Left", "Scroll Right"])
+    default_sine_travel = tab._default_int('spotify_visualizer', 'sine_wave_travel', 0)
+    tab.sine_travel.setCurrentIndex(max(0, min(2, default_sine_travel)))
+    tab.sine_travel.setToolTip("Direction the sine wave scrolls.")
+    tab.sine_travel.currentIndexChanged.connect(tab._save_settings)
+    sine_travel_row.addWidget(tab.sine_travel)
+    sine_travel_row.addStretch()
+    sine_layout.addLayout(sine_travel_row)
+
+    # Wobble (music-reactive deformity)
+    sine_wobble_row = QHBoxLayout()
+    sine_wobble_row.addWidget(QLabel("Wobble:"))
+    tab.sine_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_wobble.setMinimum(0)
+    tab.sine_wobble.setMaximum(100)
+    sine_wobble_val = int(tab._default_float('spotify_visualizer', 'sine_wobble_amount', 0.0) * 100)
+    tab.sine_wobble.setValue(max(0, min(100, sine_wobble_val)))
+    tab.sine_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_wobble.setTickInterval(10)
+    tab.sine_wobble.setToolTip("Music-reactive deformity. Higher = more wobble for less energy.")
+    tab.sine_wobble.valueChanged.connect(tab._save_settings)
+    sine_wobble_row.addWidget(tab.sine_wobble)
+    tab.sine_wobble_label = QLabel(f"{sine_wobble_val}%")
+    tab.sine_wobble.valueChanged.connect(
+        lambda v: tab.sine_wobble_label.setText(f"{v}%")
+    )
+    sine_wobble_row.addWidget(tab.sine_wobble_label)
+    sine_layout.addLayout(sine_wobble_row)
+
+    # Vertical Shift
+    tab.sine_vertical_shift = QCheckBox("Vertical Shift (spread lines to separate positions)")
+    tab.sine_vertical_shift.setChecked(
+        bool(tab._default_int('spotify_visualizer', 'sine_vertical_shift', 0))
+    )
+    tab.sine_vertical_shift.setToolTip("When enabled, lines are placed at separate vertical positions (line 1 center, line 2 above, line 3 below).")
+    tab.sine_vertical_shift.stateChanged.connect(tab._save_settings)
+    sine_layout.addWidget(tab.sine_vertical_shift)
+
+    # Multi-line
+    tab.sine_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
+    tab.sine_multi_line.setChecked(
+        tab._default_int('spotify_visualizer', 'sine_line_count', 1) > 1
+    )
+    tab.sine_multi_line.setToolTip("Enable additional sine waves with different frequency distributions.")
+    tab.sine_multi_line.stateChanged.connect(tab._save_settings)
+    tab.sine_multi_line.stateChanged.connect(lambda: _update_sine_multi_line_visibility(tab))
+    sine_layout.addWidget(tab.sine_multi_line)
+
+    # Multi-line sub-container (shown only when multi-line enabled)
+    tab._sine_multi_container = QWidget()
+    sine_ml_layout = QVBoxLayout(tab._sine_multi_container)
+    sine_ml_layout.setContentsMargins(16, 0, 0, 0)
+
+    # Line count slider
+    sine_lc_row = QHBoxLayout()
+    sine_lc_row.addWidget(QLabel("Line Count:"))
+    tab.sine_line_count_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_line_count_slider.setMinimum(2)
+    tab.sine_line_count_slider.setMaximum(3)
+    tab.sine_line_count_slider.setValue(max(2, tab._default_int('spotify_visualizer', 'sine_line_count', 2)))
+    tab.sine_line_count_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_line_count_slider.setTickInterval(1)
+    tab.sine_line_count_slider.valueChanged.connect(tab._save_settings)
+    tab.sine_line_count_slider.valueChanged.connect(lambda: _update_sine_multi_line_visibility(tab))
+    sine_lc_row.addWidget(tab.sine_line_count_slider)
+    tab.sine_line_count_label = QLabel(str(max(2, tab._default_int('spotify_visualizer', 'sine_line_count', 2))))
+    tab.sine_line_count_slider.valueChanged.connect(
+        lambda v: tab.sine_line_count_label.setText(str(v))
+    )
+    sine_lc_row.addWidget(tab.sine_line_count_label)
+    sine_ml_layout.addLayout(sine_lc_row)
+
+    # Line 2 colours + travel
+    sine_ml_layout.addWidget(QLabel("Line 2:"))
+    sine_l2_row = QHBoxLayout()
+    tab.sine_line2_color_btn = QPushButton("Line Color...")
+    tab.sine_line2_color_btn.clicked.connect(tab._choose_sine_line2_color)
+    sine_l2_row.addWidget(tab.sine_line2_color_btn)
+    tab.sine_line2_glow_btn = QPushButton("Glow Color...")
+    tab.sine_line2_glow_btn.clicked.connect(tab._choose_sine_line2_glow_color)
+    sine_l2_row.addWidget(tab.sine_line2_glow_btn)
+    sine_l2_row.addWidget(QLabel("Travel:"))
+    tab.sine_travel_line2 = QComboBox()
+    tab.sine_travel_line2.addItems(["None", "Left", "Right"])
+    tab.sine_travel_line2.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line2', 0))))
+    tab.sine_travel_line2.currentIndexChanged.connect(tab._save_settings)
+    sine_l2_row.addWidget(tab.sine_travel_line2)
+    sine_l2_row.addStretch()
+    sine_ml_layout.addLayout(sine_l2_row)
+
+    # Line 3 colours (only visible when line_count == 3)
+    tab._sine_line3_label = QLabel("Line 3:")
+    sine_ml_layout.addWidget(tab._sine_line3_label)
+    tab._sine_l3_row_widget = QWidget()
+    sine_l3_row = QHBoxLayout(tab._sine_l3_row_widget)
+    sine_l3_row.setContentsMargins(0, 0, 0, 0)
+    tab.sine_line3_color_btn = QPushButton("Line Color...")
+    tab.sine_line3_color_btn.clicked.connect(tab._choose_sine_line3_color)
+    sine_l3_row.addWidget(tab.sine_line3_color_btn)
+    tab.sine_line3_glow_btn = QPushButton("Glow Color...")
+    tab.sine_line3_glow_btn.clicked.connect(tab._choose_sine_line3_glow_color)
+    sine_l3_row.addWidget(tab.sine_line3_glow_btn)
+    sine_l3_row.addWidget(QLabel("Travel:"))
+    tab.sine_travel_line3 = QComboBox()
+    tab.sine_travel_line3.addItems(["None", "Left", "Right"])
+    tab.sine_travel_line3.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line3', 0))))
+    tab.sine_travel_line3.currentIndexChanged.connect(tab._save_settings)
+    sine_l3_row.addWidget(tab.sine_travel_line3)
+    sine_l3_row.addStretch()
+    sine_ml_layout.addWidget(tab._sine_l3_row_widget)
+
+    sine_layout.addWidget(tab._sine_multi_container)
+    _update_sine_multi_line_visibility(tab)
+
+    # Line Offset Bias
+    sine_lob_row = QHBoxLayout()
+    sine_lob_row.addWidget(QLabel("Line Offset Bias:"))
+    tab.sine_line_offset_bias = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_line_offset_bias.setMinimum(0)
+    tab.sine_line_offset_bias.setMaximum(100)
+    sine_lob_val = int(tab._default_float('spotify_visualizer', 'sine_line_offset_bias', 0.0) * 100)
+    tab.sine_line_offset_bias.setValue(max(0, min(100, sine_lob_val)))
+    tab.sine_line_offset_bias.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_line_offset_bias.setTickInterval(10)
+    tab.sine_line_offset_bias.setToolTip("Vertical spread between lines in multi-line mode.")
+    tab.sine_line_offset_bias.valueChanged.connect(tab._save_settings)
+    sine_lob_row.addWidget(tab.sine_line_offset_bias)
+    tab.sine_line_offset_bias_label = QLabel(f"{sine_lob_val}%")
+    tab.sine_line_offset_bias.valueChanged.connect(
+        lambda v: tab.sine_line_offset_bias_label.setText(f"{v}%")
+    )
+    sine_lob_row.addWidget(tab.sine_line_offset_bias_label)
+    sine_layout.addLayout(sine_lob_row)
+
+    # Widget Card Adaptation (vertical stretch control)
+    sine_adapt_row = QHBoxLayout()
+    sine_adapt_row.addWidget(QLabel("Card Adaptation:"))
+    tab.sine_card_adaptation = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_card_adaptation.setMinimum(3)
+    tab.sine_card_adaptation.setMaximum(100)
+    sine_adapt_val = int(tab._default_float('spotify_visualizer', 'sine_card_adaptation', 0.3) * 100)
+    tab.sine_card_adaptation.setValue(max(3, min(100, sine_adapt_val)))
+    tab.sine_card_adaptation.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_card_adaptation.setTickInterval(10)
+    tab.sine_card_adaptation.setToolTip("How much of the card height the sine wave uses. Lower = less vertical stretch.")
+    tab.sine_card_adaptation.valueChanged.connect(tab._save_settings)
+    sine_adapt_row.addWidget(tab.sine_card_adaptation)
+    tab.sine_card_adaptation_label = QLabel(f"{sine_adapt_val}%")
+    tab.sine_card_adaptation.valueChanged.connect(
+        lambda v: tab.sine_card_adaptation_label.setText(f"{v}%")
+    )
+    sine_adapt_row.addWidget(tab.sine_card_adaptation_label)
+    sine_layout.addLayout(sine_adapt_row)
+
+    # Card Height
+    sine_growth_row = QHBoxLayout()
+    sine_growth_row.addWidget(QLabel("Card Height:"))
+    tab.sine_wave_growth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_wave_growth.setMinimum(100)
+    tab.sine_wave_growth.setMaximum(400)
+    sine_growth_val = int(tab._default_float('spotify_visualizer', 'sine_wave_growth', 1.0) * 100)
+    tab.sine_wave_growth.setValue(max(100, min(400, sine_growth_val)))
+    tab.sine_wave_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_wave_growth.setTickInterval(50)
+    tab.sine_wave_growth.setToolTip("Height multiplier for the sine wave card.")
+    tab.sine_wave_growth.valueChanged.connect(tab._save_settings)
+    sine_growth_row.addWidget(tab.sine_wave_growth)
+    tab.sine_wave_growth_label = QLabel(f"{sine_growth_val / 100.0:.1f}x")
+    tab.sine_wave_growth.valueChanged.connect(
+        lambda v: tab.sine_wave_growth_label.setText(f"{v / 100.0:.1f}x")
+    )
+    sine_growth_row.addWidget(tab.sine_wave_growth_label)
+    sine_layout.addLayout(sine_growth_row)
+
+    _svctl.addWidget(tab._sine_wave_settings_container)
 
     # Add card height growth sliders to starfield and blob containers
     # --- Starfield height growth ---
@@ -1060,6 +1588,10 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     blob_growth_row.addWidget(tab.blob_growth_label)
     blob_layout.addLayout(blob_growth_row)
 
+    spotify_vis_layout.addWidget(tab._spotify_vis_controls_container)
+    tab.spotify_vis_enabled.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
+    _update_spotify_vis_enabled_visibility(tab)
+
     # Initial visibility
     tab._update_vis_mode_sections()
 
@@ -1099,6 +1631,9 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.media_spotify_volume_enabled.setChecked(
         tab._config_bool('media', media_config, 'spotify_volume_enabled', True)
     )
+    tab.media_mute_button_enabled.setChecked(
+        tab._config_bool('media', media_config, 'mute_button_enabled', False)
+    )
 
     # Colors
     media_color_data = media_config.get('color', tab._widget_default('media', 'color', [255, 255, 255, 230]))
@@ -1128,6 +1663,8 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     midx = tab.media_monitor_combo.findText(m_mon_text)
     if midx >= 0:
         tab.media_monitor_combo.setCurrentIndex(midx)
+
+    _update_media_bg_visibility(tab)
 
     # Spotify Visualizer
     spotify_vis_config = widgets.get('spotify_visualizer', {})
@@ -1207,19 +1744,33 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         osc_smooth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_smoothing', 0.7) * 100)
         tab.osc_smoothing.setValue(max(0, min(100, osc_smooth_val)))
         tab.osc_smoothing_label.setText(f"{osc_smooth_val}%")
+    if hasattr(tab, 'osc_growth'):
+        osc_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_growth', 1.0) * 100)
+        tab.osc_growth.setValue(max(100, min(400, osc_growth_val)))
+        tab.osc_growth_label.setText(f"{osc_growth_val / 100.0:.1f}x")
     if hasattr(tab, 'osc_speed'):
         osc_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_speed', 1.0) * 100)
         tab.osc_speed.setValue(max(10, min(100, osc_speed_val)))
         tab.osc_speed_label.setText(f"{osc_speed_val}%")
     if hasattr(tab, 'osc_line_dim'):
         tab.osc_line_dim.setChecked(bool(spotify_vis_config.get('osc_line_dim', False)))
+    if hasattr(tab, 'osc_line_offset_bias'):
+        osc_lob_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_line_offset_bias', 0.0) * 100)
+        tab.osc_line_offset_bias.setValue(max(0, min(100, osc_lob_val)))
+        tab.osc_line_offset_bias_label.setText(f"{osc_lob_val}%")
+    if hasattr(tab, 'osc_vertical_shift'):
+        tab.osc_vertical_shift.setChecked(bool(spotify_vis_config.get('osc_vertical_shift', False)))
     if hasattr(tab, 'spectrum_growth'):
         spectrum_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_growth', 1.0) * 100)
-        tab.spectrum_growth.setValue(max(100, min(300, spectrum_growth_val)))
-        tab.spectrum_growth_label.setText(f"{spectrum_growth_val}%")
+        tab.spectrum_growth.setValue(max(100, min(400, spectrum_growth_val)))
+        tab.spectrum_growth_label.setText(f"{spectrum_growth_val / 100.0:.1f}x")
     if hasattr(tab, 'spectrum_single_piece'):
         tab.spectrum_single_piece.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_single_piece', False)
+        )
+    if hasattr(tab, 'spectrum_curved_profile'):
+        tab.spectrum_curved_profile.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_curved_profile', False)
         )
 
     # Oscilloscope colours
@@ -1314,6 +1865,22 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.blob_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'blob_reactive_glow', True)
         )
+    if hasattr(tab, 'blob_reactive_deformation'):
+        blob_rd_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_reactive_deformation', 1.0) * 100)
+        tab.blob_reactive_deformation.setValue(max(0, min(300, blob_rd_val)))
+        tab.blob_reactive_deformation_label.setText(f"{blob_rd_val}%")
+    if hasattr(tab, 'blob_constant_wobble'):
+        blob_cw_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_constant_wobble', 1.0) * 100)
+        tab.blob_constant_wobble.setValue(max(0, min(200, blob_cw_val)))
+        tab.blob_constant_wobble_label.setText(f"{blob_cw_val}%")
+    if hasattr(tab, 'blob_reactive_wobble'):
+        blob_rw_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_reactive_wobble', 1.0) * 100)
+        tab.blob_reactive_wobble.setValue(max(0, min(200, blob_rw_val)))
+        tab.blob_reactive_wobble_label.setText(f"{blob_rw_val}%")
+    if hasattr(tab, 'blob_stretch_tendency'):
+        blob_st_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stretch_tendency', 0.0) * 100)
+        tab.blob_stretch_tendency.setValue(max(0, min(100, blob_st_val)))
+        tab.blob_stretch_tendency_label.setText(f"{blob_st_val}%")
     if hasattr(tab, 'blob_growth'):
         blob_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_growth', 2.5) * 100)
         tab.blob_growth.setValue(max(100, min(400, blob_growth_val)))
@@ -1354,6 +1921,85 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.helix_growth.setValue(max(100, min(400, helix_growth_val)))
         tab.helix_growth_label.setText(f"{helix_growth_val / 100.0:.1f}x")
 
+    # Sine Wave settings
+    if hasattr(tab, 'sine_glow_enabled'):
+        tab.sine_glow_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'sine_glow_enabled', True)
+        )
+    if hasattr(tab, 'sine_glow_intensity'):
+        sine_gi_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_glow_intensity', 0.5) * 100)
+        tab.sine_glow_intensity.setValue(max(0, min(100, sine_gi_val)))
+        tab.sine_glow_intensity_label.setText(f"{sine_gi_val}%")
+    sine_glow_color_data = spotify_vis_config.get('sine_glow_color', [0, 200, 255, 230])
+    try:
+        tab._sine_glow_color = QColor(*sine_glow_color_data)
+    except Exception:
+        tab._sine_glow_color = QColor(0, 200, 255, 230)
+    sine_line_color_data = spotify_vis_config.get('sine_line_color', [255, 255, 255, 255])
+    try:
+        tab._sine_line_color = QColor(*sine_line_color_data)
+    except Exception:
+        tab._sine_line_color = QColor(255, 255, 255, 255)
+    if hasattr(tab, 'sine_reactive_glow'):
+        tab.sine_reactive_glow.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'sine_reactive_glow', True)
+        )
+    if hasattr(tab, 'sine_sensitivity'):
+        sine_sens_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_sensitivity', 1.0) * 100)
+        tab.sine_sensitivity.setValue(max(10, min(500, sine_sens_val)))
+        tab.sine_sensitivity_label.setText(f"{sine_sens_val / 100.0:.2f}x")
+    if hasattr(tab, 'sine_speed'):
+        sine_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_speed', 1.0) * 100)
+        tab.sine_speed.setValue(max(10, min(100, sine_speed_val)))
+        tab.sine_speed_label.setText(f"{sine_speed_val / 100.0:.2f}x")
+    if hasattr(tab, 'sine_wobble'):
+        sine_wob = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wobble_amount', 0.0) * 100)
+        tab.sine_wobble.setValue(max(0, min(100, sine_wob)))
+        tab.sine_wobble_label.setText(f"{sine_wob}%")
+    if hasattr(tab, 'sine_vertical_shift'):
+        tab.sine_vertical_shift.setChecked(bool(spotify_vis_config.get('sine_vertical_shift', False)))
+    if hasattr(tab, 'sine_travel'):
+        sine_travel_val = int(spotify_vis_config.get('sine_wave_travel', 0) or 0)
+        tab.sine_travel.setCurrentIndex(max(0, min(2, sine_travel_val)))
+    if hasattr(tab, 'sine_travel_line2'):
+        stl2 = int(spotify_vis_config.get('sine_travel_line2', 0) or 0)
+        tab.sine_travel_line2.setCurrentIndex(max(0, min(2, stl2)))
+    if hasattr(tab, 'sine_travel_line3'):
+        stl3 = int(spotify_vis_config.get('sine_travel_line3', 0) or 0)
+        tab.sine_travel_line3.setCurrentIndex(max(0, min(2, stl3)))
+    if hasattr(tab, 'sine_multi_line'):
+        sine_lc = int(spotify_vis_config.get('sine_line_count', 1) or 1)
+        tab.sine_multi_line.setChecked(sine_lc > 1)
+    if hasattr(tab, 'sine_line_count_slider'):
+        sine_lc = int(spotify_vis_config.get('sine_line_count', 2) or 2)
+        tab.sine_line_count_slider.setValue(max(2, min(3, sine_lc)))
+        tab.sine_line_count_label.setText(str(max(2, min(3, sine_lc))))
+    # Sine line 2/3 colours
+    for attr, key, fallback in (
+        ('_sine_line2_color', 'sine_line2_color', [255, 120, 50, 230]),
+        ('_sine_line2_glow_color', 'sine_line2_glow_color', [255, 120, 50, 180]),
+        ('_sine_line3_color', 'sine_line3_color', [50, 255, 120, 230]),
+        ('_sine_line3_glow_color', 'sine_line3_glow_color', [50, 255, 120, 180]),
+    ):
+        data = spotify_vis_config.get(key, fallback)
+        try:
+            setattr(tab, attr, QColor(*data))
+        except Exception:
+            setattr(tab, attr, QColor(*fallback))
+    _update_sine_multi_line_visibility(tab)
+    if hasattr(tab, 'sine_line_offset_bias'):
+        sine_lob_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_line_offset_bias', 0.0) * 100)
+        tab.sine_line_offset_bias.setValue(max(0, min(100, sine_lob_val)))
+        tab.sine_line_offset_bias_label.setText(f"{sine_lob_val}%")
+    if hasattr(tab, 'sine_card_adaptation'):
+        sine_ca = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_card_adaptation', 0.3) * 100)
+        tab.sine_card_adaptation.setValue(max(3, min(100, sine_ca)))
+        tab.sine_card_adaptation_label.setText(f"{sine_ca}%")
+    if hasattr(tab, 'sine_wave_growth'):
+        sine_gv = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wave_growth', 1.0) * 100)
+        tab.sine_wave_growth.setValue(max(100, min(400, sine_gv)))
+        tab.sine_wave_growth_label.setText(f"{sine_gv / 100.0:.1f}x")
+
     # Update per-mode section visibility
     tab._update_vis_mode_sections()
 
@@ -1370,6 +2016,9 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     ghost_decay_slider = max(10, min(100, int(ghost_decay_f * 100.0)))
     tab.spotify_vis_ghost_decay.setValue(ghost_decay_slider)
     tab.spotify_vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
+    _update_ghost_visibility(tab)
+    _update_media_enabled_visibility(tab)
+    _update_spotify_vis_enabled_visibility(tab)
 
 
 def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
@@ -1401,6 +2050,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'show_header_frame': tab.media_show_header_frame.isChecked(),
         'show_controls': tab.media_show_controls.isChecked(),
         'spotify_volume_enabled': tab.media_spotify_volume_enabled.isChecked(),
+        'mute_button_enabled': tab.media_mute_button_enabled.isChecked(),
     }
     mmon_text = tab.media_monitor_combo.currentText()
     media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
@@ -1458,6 +2108,10 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_size': (getattr(tab, 'blob_size', None) and tab.blob_size.value() or 100) / 100.0,
         'blob_glow_intensity': (getattr(tab, 'blob_glow_intensity', None) and tab.blob_glow_intensity.value() or 50) / 100.0,
         'blob_reactive_glow': getattr(tab, 'blob_reactive_glow', None) and tab.blob_reactive_glow.isChecked(),
+        'blob_reactive_deformation': (getattr(tab, 'blob_reactive_deformation', None) and tab.blob_reactive_deformation.value() or 100) / 100.0,
+        'blob_constant_wobble': (getattr(tab, 'blob_constant_wobble', None) and tab.blob_constant_wobble.value() or 100) / 100.0,
+        'blob_reactive_wobble': (getattr(tab, 'blob_reactive_wobble', None) and tab.blob_reactive_wobble.value() or 100) / 100.0,
+        'blob_stretch_tendency': (getattr(tab, 'blob_stretch_tendency', None) and tab.blob_stretch_tendency.value() or 0) / 100.0,
         'helix_turns': getattr(tab, 'helix_turns', None) and tab.helix_turns.value() or 4,
         'helix_double': getattr(tab, 'helix_double', None) and tab.helix_double.isChecked(),
         'helix_speed': (getattr(tab, 'helix_speed', None) and tab.helix_speed.value() or 100) / 100.0,
@@ -1467,11 +2121,35 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'helix_reactive_glow': getattr(tab, 'helix_reactive_glow', None) and tab.helix_reactive_glow.isChecked(),
         'spectrum_growth': (getattr(tab, 'spectrum_growth', None) and tab.spectrum_growth.value() or 100) / 100.0,
         'spectrum_single_piece': getattr(tab, 'spectrum_single_piece', None) and tab.spectrum_single_piece.isChecked() or False,
+        'spectrum_curved_profile': getattr(tab, 'spectrum_curved_profile', None) and tab.spectrum_curved_profile.isChecked() or False,
         'starfield_growth': (getattr(tab, 'starfield_growth', None) and tab.starfield_growth.value() or 200) / 100.0,
         'blob_growth': (getattr(tab, 'blob_growth', None) and tab.blob_growth.value() or 250) / 100.0,
         'helix_growth': (getattr(tab, 'helix_growth', None) and tab.helix_growth.value() or 200) / 100.0,
+        'osc_growth': (getattr(tab, 'osc_growth', None) and tab.osc_growth.value() or 100) / 100.0,
         'osc_speed': (getattr(tab, 'osc_speed', None) and tab.osc_speed.value() or 100) / 100.0,
         'osc_line_dim': getattr(tab, 'osc_line_dim', None) and tab.osc_line_dim.isChecked(),
+        'osc_line_offset_bias': (getattr(tab, 'osc_line_offset_bias', None) and tab.osc_line_offset_bias.value() or 0) / 100.0,
+        'osc_vertical_shift': getattr(tab, 'osc_vertical_shift', None) and tab.osc_vertical_shift.isChecked(),
+        'sine_glow_enabled': getattr(tab, 'sine_glow_enabled', None) and tab.sine_glow_enabled.isChecked(),
+        'sine_glow_intensity': (getattr(tab, 'sine_glow_intensity', None) and tab.sine_glow_intensity.value() or 50) / 100.0,
+        'sine_glow_color': _qcolor_to_list(getattr(tab, '_sine_glow_color', None), [0, 200, 255, 230]),
+        'sine_line_color': _qcolor_to_list(getattr(tab, '_sine_line_color', None), [255, 255, 255, 255]),
+        'sine_reactive_glow': getattr(tab, 'sine_reactive_glow', None) and tab.sine_reactive_glow.isChecked(),
+        'sine_sensitivity': (getattr(tab, 'sine_sensitivity', None) and tab.sine_sensitivity.value() or 100) / 100.0,
+        'sine_speed': (getattr(tab, 'sine_speed', None) and tab.sine_speed.value() or 100) / 100.0,
+        'sine_wobble_amount': (getattr(tab, 'sine_wobble', None) and tab.sine_wobble.value() or 0) / 100.0,
+        'sine_vertical_shift': getattr(tab, 'sine_vertical_shift', None) and tab.sine_vertical_shift.isChecked(),
+        'sine_wave_travel': getattr(tab, 'sine_travel', None) and tab.sine_travel.currentIndex() or 0,
+        'sine_travel_line2': getattr(tab, 'sine_travel_line2', None) and tab.sine_travel_line2.currentIndex() or 0,
+        'sine_travel_line3': getattr(tab, 'sine_travel_line3', None) and tab.sine_travel_line3.currentIndex() or 0,
+        'sine_line_count': (getattr(tab, 'sine_line_count_slider', None) and tab.sine_line_count_slider.value() or 2) if (getattr(tab, 'sine_multi_line', None) and tab.sine_multi_line.isChecked()) else 1,
+        'sine_line_offset_bias': (getattr(tab, 'sine_line_offset_bias', None) and tab.sine_line_offset_bias.value() or 0) / 100.0,
+        'sine_card_adaptation': (getattr(tab, 'sine_card_adaptation', None) and tab.sine_card_adaptation.value() or 30) / 100.0,
+        'sine_wave_growth': (getattr(tab, 'sine_wave_growth', None) and tab.sine_wave_growth.value() or 100) / 100.0,
+        'sine_line2_color': _qcolor_to_list(getattr(tab, '_sine_line2_color', None), [255, 120, 50, 230]),
+        'sine_line2_glow_color': _qcolor_to_list(getattr(tab, '_sine_line2_glow_color', None), [255, 120, 50, 180]),
+        'sine_line3_color': _qcolor_to_list(getattr(tab, '_sine_line3_color', None), [50, 255, 120, 230]),
+        'sine_line3_glow_color': _qcolor_to_list(getattr(tab, '_sine_line3_glow_color', None), [50, 255, 120, 180]),
     }
 
     tab._update_spotify_vis_sensitivity_enabled_state()

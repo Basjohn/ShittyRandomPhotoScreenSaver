@@ -163,6 +163,31 @@ class _BlockFlipWidget(QWidget):
                             path.lineTo(x1, y1)
                             path.lineTo(apex_x, apex_y)
                             path.closeSubpath()
+                        elif direction == SlideDirection.DIAG_TL_BR:
+                            # Wave from top-left corner expanding toward bottom-right
+                            tl_x, tl_y = r.x(), r.y()
+                            br_x = r.x() + r.width()
+                            br_y = r.y() + r.height()
+                            ex = tl_x + int((br_x - tl_x) * eased)
+                            ey = tl_y + int((br_y - tl_y) * eased)
+                            path.moveTo(tl_x, tl_y)
+                            path.lineTo(ex, tl_y)
+                            path.lineTo(ex, ey)
+                            path.lineTo(tl_x, ey)
+                            path.closeSubpath()
+                        elif direction == SlideDirection.DIAG_TR_BL:
+                            # Wave from top-right corner expanding toward bottom-left
+                            tr_x = r.x() + r.width()
+                            tr_y = r.y()
+                            bl_x = r.x()
+                            bl_y = r.y() + r.height()
+                            ex = tr_x - int((tr_x - bl_x) * eased)
+                            ey = tr_y + int((bl_y - tr_y) * eased)
+                            path.moveTo(tr_x, tr_y)
+                            path.lineTo(ex, tr_y)
+                            path.lineTo(ex, ey)
+                            path.lineTo(tr_x, ey)
+                            path.closeSubpath()
                         else:
                             path = QPainterPath()
 
@@ -474,6 +499,15 @@ class BlockPuzzleFlipTransition(BaseTransition):
                         # "Bottom to Top" – start at the bottom edge.
                         if effective_rows > 1:
                             base = (effective_rows - 1 - row) / float(effective_rows - 1)
+                    # Diagonal bias
+                    elif self._direction == SlideDirection.DIAG_TL_BR:
+                        # Top-left to bottom-right diagonal wave
+                        max_dist = max(1, (effective_cols - 1) + (effective_rows - 1))
+                        base = (col + row) / float(max_dist)
+                    elif self._direction == SlideDirection.DIAG_TR_BL:
+                        # Top-right to bottom-left diagonal wave
+                        max_dist = max(1, (effective_cols - 1) + (effective_rows - 1))
+                        base = ((effective_cols - 1 - col) + row) / float(max_dist)
 
                     # Small jitter so neighbouring blocks do not all start at
                     # exactly the same moment; scaled by grid density so the

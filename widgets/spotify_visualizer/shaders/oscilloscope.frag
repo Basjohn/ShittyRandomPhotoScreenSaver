@@ -40,6 +40,12 @@ uniform vec4 u_line3_glow_color;
 // Optional line 2/3 glow dimming (0 = equal glow, 1 = half-strength dim)
 uniform int u_osc_line_dim;
 
+// Line Offset Bias: 0 = energy-only spacing, 1 = max base spread + per-band weight (multi-line only)
+uniform float u_osc_line_offset_bias;
+
+// Vertical Shift: when 1, disables offset and places lines at fixed top/middle/bottom positions
+uniform int u_osc_vertical_shift;
+
 float get_waveform_sample(int idx) {
     // Modular wrap so offset lines read valid circular-buffer data
     int n = max(u_waveform_count, 1);
@@ -50,11 +56,12 @@ float get_waveform_sample(int idx) {
 // Gaussian-weighted multi-tap smoothing around a sample index.
 // The smoothing uniform controls the kernel radius: 0 = single sample, 1 = wide blur.
 float smoothed_sample(int center) {
-    if (u_smoothing <= 0.01) {
+    float eff_smooth = u_smoothing;
+    if (eff_smooth <= 0.01) {
         return get_waveform_sample(center);
     }
     // Kernel half-width scales from 1 to 12 taps based on smoothing
-    int half_w = int(1.0 + u_smoothing * 11.0);
+    int half_w = int(1.0 + eff_smooth * 11.0);
     float sigma = max(0.5, float(half_w) * 0.45);
     float total = 0.0;
     float weight_sum = 0.0;
@@ -196,6 +203,10 @@ void main() {
     float e2_band = u_mid_energy * 1.15;
     float e3_band = u_high_energy * 1.15;
 
+    // Line Offset Bias: base vertical spread + per-band energy weight (multi-line)
+    float lob = clamp(u_osc_line_offset_bias, 0.0, 1.0);
+    float band_boost = 1.0 + lob * 1.5;  // up to 2.5x per-band reliance
+
     // Primary line — bass-reactive in multi-line, overall in single
     float amp1 = amplitude * (1.0 + e1 * 0.13);
     float w1 = sample_waveform(nx, 0);
@@ -209,10 +220,21 @@ void main() {
         // Line 2: mid-frequency reactive — responds to vocals, guitars, keys
         int wf_count = max(u_waveform_count, 2);
         int offset2 = max(1, wf_count / 3);
-        float amp2 = amplitude * (0.88 + e2_band * 0.22);
+        // Line Offset Bias: increase mid-energy reliance and add vertical spread
+        float amp2 = amplitude * (0.88 + e2_band * 0.22 * band_boost);
         float w2 = sample_waveform(nx, offset2);
+        float ny2;
+        if (u_osc_vertical_shift == 1) {
+            // Vertical Shift: fixed position above center (20-80px spacing)
+            float spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
+            float shift = spacing_px / inner_height;
+            ny2 = ny + shift;  // shift coordinate up → line renders above center
+            amp2 = amplitude * (0.7 + e2_band * 0.15);
+        } else {
+            ny2 = ny - lob * 0.18;
+        }
         float sigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        vec4 c2 = eval_line(ny, inner_height, w2, amp2,
+        vec4 c2 = eval_line(ny2, inner_height, w2, amp2,
                             u_line2_color, u_line2_glow_color,
                             sigma2, e2_band);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
@@ -223,10 +245,21 @@ void main() {
         // Line 3: high-frequency reactive — responds to hi-hats, cymbals, sibilance
         int wf_count = max(u_waveform_count, 2);
         int offset3 = max(1, wf_count * 2 / 3);
-        float amp3 = amplitude * (0.75 + e3_band * 0.28);
+        // Line Offset Bias: increase high-energy reliance and add vertical spread
+        float amp3 = amplitude * (0.75 + e3_band * 0.28 * band_boost);
         float w3 = sample_waveform(nx, offset3);
+        float ny3;
+        if (u_osc_vertical_shift == 1) {
+            // Vertical Shift: fixed position below center (20-80px spacing)
+            float spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
+            float shift = spacing_px / inner_height;
+            ny3 = ny - shift;  // shift coordinate down → line renders below center
+            amp3 = amplitude * (0.6 + e3_band * 0.18);
+        } else {
+            ny3 = ny + lob * 0.18;
+        }
         float sigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        vec4 c3 = eval_line(ny, inner_height, w3, amp3,
+        vec4 c3 = eval_line(ny3, inner_height, w3, amp3,
                             u_line3_color, u_line3_glow_color,
                             sigma3, e3_band);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;

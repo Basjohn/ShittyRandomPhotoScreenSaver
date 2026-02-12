@@ -16,6 +16,7 @@ from rendering.widget_setup import parse_color_to_qcolor
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
+from widgets.mute_button_widget import MuteButtonWidget
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
@@ -303,6 +304,34 @@ def create_spotify_visualizer_widget(
                     helix_growth=model.helix_growth,
                     osc_speed=model.osc_speed,
                     osc_line_dim=model.osc_line_dim,
+                    osc_line_offset_bias=model.osc_line_offset_bias,
+                    osc_vertical_shift=model.osc_vertical_shift,
+                    osc_growth=model.osc_growth,
+                    blob_reactive_deformation=model.blob_reactive_deformation,
+                    blob_constant_wobble=model.blob_constant_wobble,
+                    blob_reactive_wobble=model.blob_reactive_wobble,
+                    blob_stretch_tendency=model.blob_stretch_tendency,
+                    spectrum_curved_profile=model.spectrum_curved_profile,
+                    sine_wave_growth=model.sine_wave_growth,
+                    sine_wave_travel=model.sine_wave_travel,
+                    sine_glow_enabled=model.sine_glow_enabled,
+                    sine_glow_intensity=model.sine_glow_intensity,
+                    sine_glow_color=model.sine_glow_color,
+                    sine_line_color=model.sine_line_color,
+                    sine_reactive_glow=model.sine_reactive_glow,
+                    sine_sensitivity=model.sine_sensitivity,
+                    sine_speed=model.sine_speed,
+                    sine_line_count=model.sine_line_count,
+                    sine_line_offset_bias=model.sine_line_offset_bias,
+                    sine_line2_color=model.sine_line2_color,
+                    sine_line2_glow_color=model.sine_line2_glow_color,
+                    sine_line3_color=model.sine_line3_color,
+                    sine_line3_glow_color=model.sine_line3_glow_color,
+                    sine_travel_line2=model.sine_travel_line2,
+                    sine_travel_line3=model.sine_travel_line3,
+                    sine_wobble_amount=model.sine_wobble_amount,
+                    sine_vertical_shift=model.sine_vertical_shift,
+                    sine_card_adaptation=model.sine_card_adaptation,
                 )
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
@@ -336,4 +365,65 @@ def create_spotify_visualizer_widget(
         return vis
     except Exception as e:
         logger.error("Failed to create Spotify visualizer widget: %s", e, exc_info=True)
+        return None
+
+
+def create_mute_button_widget(
+    mgr: "WidgetManager",
+    widgets_config: dict,
+    screen_index: int,
+    thread_manager: Optional["ThreadManager"] = None,
+    media_widget: Optional[MediaWidget] = None,
+) -> Optional[MuteButtonWidget]:
+    """Create and configure a system mute button widget."""
+    if media_widget is None:
+        return None
+
+    media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
+    mute_enabled = SettingsManager.to_bool(media_settings.get('mute_button_enabled', False), False)
+    if not mute_enabled:
+        return None
+
+    media_monitor_sel = media_settings.get('monitor', 'ALL')
+    try:
+        show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
+    except Exception as e:
+        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        show_on_this = False
+
+    if not show_on_this:
+        return None
+
+    try:
+        btn = MuteButtonWidget(mgr._parent)
+        btn.set_enabled(True)
+
+        if thread_manager is not None:
+            btn.set_thread_manager(thread_manager)
+
+        btn.set_anchor(media_widget)
+
+        # Inherit media card background and border colours
+        bg_color_data = media_settings.get('bg_color', [35, 35, 35, 255])
+        bg_qcolor = parse_color_to_qcolor(bg_color_data)
+        border_color_data = media_settings.get('border_color', [255, 255, 255, 255])
+        border_opacity = media_settings.get('border_opacity', 0.8)
+        try:
+            bo = float(border_opacity)
+        except Exception:
+            bo = 0.8
+        border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
+        text_color_data = media_settings.get('color', [255, 255, 255, 230])
+        icon_qcolor = parse_color_to_qcolor(text_color_data)
+
+        if bg_qcolor and border_qcolor and icon_qcolor:
+            btn.set_colors(bg_qcolor, border_qcolor, icon_qcolor)
+
+        mgr.register_widget("mute_button", btn)
+        mgr.add_expected_overlay("mute_button")
+        mgr._bind_parent_attribute("mute_button_widget", btn)
+        logger.debug("[MUTE_BTN] Created mute button widget (screen=%s)", screen_index)
+        return btn
+    except Exception as e:
+        logger.error("Failed to create mute button widget: %s", e, exc_info=True)
         return None

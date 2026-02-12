@@ -32,6 +32,7 @@ _SHADER_FILES: Dict[str, str] = {
     "starfield": "starfield.frag",
     "blob": "blob.frag",
     "helix": "helix.frag",
+    "sine_wave": "sine_wave.frag",
 }
 
 

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Callable
 
-import ctypes
 import time
 
 # Import metrics classes from extracted package
@@ -1138,6 +1137,8 @@ class GLCompositorWidget(QOpenGLWidget):
             new_pixmap=new_pixmap,
             cols=cols,
             rows=rows,
+            feather=0.08,
+            direction=0,
         )
         return self._with_temp_state("_blinds", state, self._prepare_blinds_textures)
 
@@ -1406,10 +1407,12 @@ class GLCompositorWidget(QOpenGLWidget):
         on_finished: Optional[Callable[[], None]] = None,
         grid_cols: Optional[int] = None,
         grid_rows: Optional[int] = None,
+        feather: float = 0.08,
+        direction: int = 0,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_blinds
-        return start_blinds(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows)
+        return start_blinds(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows, feather=feather, direction=direction)
 
     def start_crumble(
         self,

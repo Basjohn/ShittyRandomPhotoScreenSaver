@@ -104,7 +104,7 @@ def load_image_via_worker(
                 response = WorkerResponse.from_dict(data)
 
                 # Handle internal messages (heartbeat, busy/idle)
-                if response.msg_type in (MessageType.WORKER_BUSY, MessageType.WORKER_IDLE, MessageType.HEARTBEAT_ACK):
+                if response.msg_type in (MessageType.WORKER_READY, MessageType.WORKER_BUSY, MessageType.WORKER_IDLE, MessageType.HEARTBEAT_ACK):
                     continue
 
                 if response.correlation_id == _correlation_id:

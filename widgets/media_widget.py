@@ -551,6 +551,15 @@ class MediaWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
+        # Notify mute button widget
+        mute_btn = getattr(parent, "mute_button_widget", None)
+        if mute_btn is not None:
+            try:
+                if hasattr(mute_btn, "sync_visibility_with_anchor"):
+                    mute_btn.sync_visibility_with_anchor()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+
     # ------------------------------------------------------------------
     # Styling
     # ------------------------------------------------------------------
@@ -863,6 +872,21 @@ class MediaWidget(BaseOverlayWidget):
         self._trigger_controls_feedback(key, source=source)
         if force_refresh:
             self._request_refresh_after_control()
+
+    def handle_double_click(self, local_pos) -> bool:
+        """Called by WidgetManager dispatch. Refreshes artwork/track info."""
+        if not self._enabled:
+            return False
+        try:
+            if self._thread_manager is not None:
+                self._refresh_async()
+            else:
+                self._refresh()
+            logger.debug("[MEDIA_WIDGET] Double-click triggered artwork refresh")
+            return True
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Double-click refresh failed", exc_info=True)
+            return False
 
     def _request_refresh_after_control(self) -> bool:
         if not self._enabled:

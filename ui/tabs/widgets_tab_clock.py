@@ -23,6 +23,25 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _update_clock_enabled_visibility(tab: WidgetsTab) -> None:
+    """Show/hide all clock controls based on clock_enabled checkbox."""
+    enabled = getattr(tab, 'clock_enabled', None) and tab.clock_enabled.isChecked()
+    container = getattr(tab, '_clock_controls_container', None)
+    if container is not None:
+        container.setVisible(bool(enabled))
+
+
+def _update_clock_mode_visibility(tab: WidgetsTab) -> None:
+    """Show/hide analogue vs digital controls based on clock mode checkbox."""
+    is_analog = getattr(tab, 'clock_analog_mode', None) and tab.clock_analog_mode.isChecked()
+    analog_container = getattr(tab, '_clock_analog_container', None)
+    digital_container = getattr(tab, '_clock_digital_container', None)
+    if analog_container is not None:
+        analog_container.setVisible(bool(is_analog))
+    if digital_container is not None:
+        digital_container.setVisible(not bool(is_analog))
+
+
 def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """Build clock section UI and attach widgets to tab instance.
 
@@ -40,6 +59,12 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_enabled.stateChanged.connect(tab._update_stack_status)
     clock_layout.addWidget(tab.clock_enabled)
 
+    # Container for all clock controls gated by enable checkbox
+    tab._clock_controls_container = QWidget()
+    _clock_ctrl_layout = QVBoxLayout(tab._clock_controls_container)
+    _clock_ctrl_layout.setContentsMargins(0, 0, 0, 0)
+    _clock_ctrl_layout.setSpacing(4)
+
     # Time format
     format_row = QHBoxLayout()
     format_row.addWidget(QLabel("Format:"))
@@ -51,14 +76,14 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._set_combo_text(tab.clock_format, format_map.get(default_format, "24 Hour"))
     format_row.addWidget(tab.clock_format)
     format_row.addStretch()
-    clock_layout.addLayout(format_row)
+    _clock_ctrl_layout.addLayout(format_row)
 
     # Show seconds
     tab.clock_seconds = QCheckBox("Show Seconds")
     tab.clock_seconds.setChecked(tab._default_bool('clock', 'show_seconds', True))
     tab.clock_seconds.stateChanged.connect(tab._save_settings)
     tab.clock_seconds.stateChanged.connect(tab._update_stack_status)
-    clock_layout.addWidget(tab.clock_seconds)
+    _clock_ctrl_layout.addWidget(tab.clock_seconds)
 
     # Timezone
     tz_row = QHBoxLayout()
@@ -75,14 +100,14 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.tz_auto_btn.clicked.connect(tab._auto_detect_timezone)
     tz_row.addWidget(tab.tz_auto_btn)
     tz_row.addStretch()
-    clock_layout.addLayout(tz_row)
+    _clock_ctrl_layout.addLayout(tz_row)
 
     # Show timezone abbreviation
     tab.clock_show_tz = QCheckBox("Show Timezone Abbreviation")
     tab.clock_show_tz.setChecked(tab._default_bool('clock', 'show_timezone', True))
     tab.clock_show_tz.stateChanged.connect(tab._save_settings)
     tab.clock_show_tz.stateChanged.connect(tab._update_stack_status)
-    clock_layout.addWidget(tab.clock_show_tz)
+    _clock_ctrl_layout.addWidget(tab.clock_show_tz)
 
     # Analogue mode options
     tab.clock_analog_mode = QCheckBox("Use Analogue Clock")
@@ -93,7 +118,13 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     tab.clock_analog_mode.stateChanged.connect(tab._save_settings)
     tab.clock_analog_mode.stateChanged.connect(tab._update_stack_status)
-    clock_layout.addWidget(tab.clock_analog_mode)
+    _clock_ctrl_layout.addWidget(tab.clock_analog_mode)
+
+    # Analogue-only controls container
+    tab._clock_analog_container = QWidget()
+    _analog_layout = QVBoxLayout(tab._clock_analog_container)
+    _analog_layout.setContentsMargins(0, 0, 0, 0)
+    _analog_layout.setSpacing(4)
 
     tab.clock_analog_shadow = QCheckBox("Analogue Face Shadow")
     tab.clock_analog_shadow.setChecked(tab._default_bool('clock', 'analog_face_shadow', True))
@@ -101,7 +132,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Enable a subtle drop shadow under the analogue clock face and hands."
     )
     tab.clock_analog_shadow.stateChanged.connect(tab._save_settings)
-    clock_layout.addWidget(tab.clock_analog_shadow)
+    _analog_layout.addWidget(tab.clock_analog_shadow)
 
     tab.clock_analog_shadow_intense = QCheckBox("Intense Analogue Shadows")
     tab.clock_analog_shadow_intense.setChecked(tab._default_bool('clock', 'analog_shadow_intense', False))
@@ -109,7 +140,20 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Doubles analogue shadow opacity and enlarges the drop shadow by ~50% for dramatic lighting."
     )
     tab.clock_analog_shadow_intense.stateChanged.connect(tab._save_settings)
-    clock_layout.addWidget(tab.clock_analog_shadow_intense)
+    _analog_layout.addWidget(tab.clock_analog_shadow_intense)
+
+    tab.clock_show_numerals = QCheckBox("Show Hour Numerals")
+    tab.clock_show_numerals.setChecked(tab._default_bool('clock', 'show_numerals', True))
+    tab.clock_show_numerals.stateChanged.connect(tab._save_settings)
+    _analog_layout.addWidget(tab.clock_show_numerals)
+
+    _clock_ctrl_layout.addWidget(tab._clock_analog_container)
+
+    # Digital-only controls container
+    tab._clock_digital_container = QWidget()
+    _digital_layout = QVBoxLayout(tab._clock_digital_container)
+    _digital_layout.setContentsMargins(0, 0, 0, 0)
+    _digital_layout.setSpacing(4)
 
     tab.clock_digital_shadow_intense = QCheckBox("Intense Digital Shadows")
     tab.clock_digital_shadow_intense.setChecked(tab._default_bool('clock', 'digital_shadow_intense', False))
@@ -117,12 +161,12 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Doubles digital clock shadow blur, opacity, and offset for dramatic effect on large displays."
     )
     tab.clock_digital_shadow_intense.stateChanged.connect(tab._save_settings)
-    clock_layout.addWidget(tab.clock_digital_shadow_intense)
+    _digital_layout.addWidget(tab.clock_digital_shadow_intense)
 
-    tab.clock_show_numerals = QCheckBox("Show Hour Numerals (Analogue)")
-    tab.clock_show_numerals.setChecked(tab._default_bool('clock', 'show_numerals', True))
-    tab.clock_show_numerals.stateChanged.connect(tab._save_settings)
-    clock_layout.addWidget(tab.clock_show_numerals)
+    _clock_ctrl_layout.addWidget(tab._clock_digital_container)
+
+    tab.clock_analog_mode.stateChanged.connect(lambda: _update_clock_mode_visibility(tab))
+    _update_clock_mode_visibility(tab)
 
     # Position
     position_row = QHBoxLayout()
@@ -141,7 +185,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_stack_status.setMinimumWidth(100)
     position_row.addWidget(tab.clock_stack_status)
     position_row.addStretch()
-    clock_layout.addLayout(position_row)
+    _clock_ctrl_layout.addLayout(position_row)
 
     # Display (monitor selection)
     clock_disp_row = QHBoxLayout()
@@ -154,7 +198,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     clock_monitor_default = tab._widget_default('clock', 'monitor', 'ALL')
     tab._set_combo_text(tab.clock_monitor_combo, str(clock_monitor_default))
     clock_disp_row.addStretch()
-    clock_layout.addLayout(clock_disp_row)
+    _clock_ctrl_layout.addLayout(clock_disp_row)
 
     # Font family
     font_family_row = QHBoxLayout()
@@ -166,7 +210,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_font_combo.currentFontChanged.connect(tab._save_settings)
     font_family_row.addWidget(tab.clock_font_combo)
     font_family_row.addStretch()
-    clock_layout.addLayout(font_family_row)
+    _clock_ctrl_layout.addLayout(font_family_row)
 
     # Font size
     font_row = QHBoxLayout()
@@ -180,7 +224,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     font_row.addWidget(tab.clock_font_size)
     font_row.addWidget(QLabel("px"))
     font_row.addStretch()
-    clock_layout.addLayout(font_row)
+    _clock_ctrl_layout.addLayout(font_row)
 
     # Text color
     color_row = QHBoxLayout()
@@ -189,7 +233,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_color_btn.clicked.connect(tab._choose_clock_color)
     color_row.addWidget(tab.clock_color_btn)
     color_row.addStretch()
-    clock_layout.addLayout(color_row)
+    _clock_ctrl_layout.addLayout(color_row)
 
     # Margin
     margin_row = QHBoxLayout()
@@ -202,13 +246,13 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     margin_row.addWidget(tab.clock_margin)
     margin_row.addWidget(QLabel("px"))
     margin_row.addStretch()
-    clock_layout.addLayout(margin_row)
+    _clock_ctrl_layout.addLayout(margin_row)
 
     # Background frame
     tab.clock_show_background = QCheckBox("Show Background Frame")
     tab.clock_show_background.setChecked(tab._default_bool('clock', 'show_background', True))
     tab.clock_show_background.stateChanged.connect(tab._save_settings)
-    clock_layout.addWidget(tab.clock_show_background)
+    _clock_ctrl_layout.addWidget(tab.clock_show_background)
 
     # Background opacity
     opacity_row = QHBoxLayout()
@@ -225,7 +269,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_opacity_label = QLabel(f"{clock_bg_opacity_pct}%")
     tab.clock_bg_opacity.valueChanged.connect(lambda v: tab.clock_opacity_label.setText(f"{v}%"))
     opacity_row.addWidget(tab.clock_opacity_label)
-    clock_layout.addLayout(opacity_row)
+    _clock_ctrl_layout.addLayout(opacity_row)
 
     # Background color
     clock_bg_color_row = QHBoxLayout()
@@ -234,7 +278,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_bg_color_btn.clicked.connect(tab._choose_clock_bg_color)
     clock_bg_color_row.addWidget(tab.clock_bg_color_btn)
     clock_bg_color_row.addStretch()
-    clock_layout.addLayout(clock_bg_color_row)
+    _clock_ctrl_layout.addLayout(clock_bg_color_row)
 
     # Background border color
     clock_border_color_row = QHBoxLayout()
@@ -243,7 +287,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_border_color_btn.clicked.connect(tab._choose_clock_border_color)
     clock_border_color_row.addWidget(tab.clock_border_color_btn)
     clock_border_color_row.addStretch()
-    clock_layout.addLayout(clock_border_color_row)
+    _clock_ctrl_layout.addLayout(clock_border_color_row)
 
     # Background border opacity
     clock_border_opacity_row = QHBoxLayout()
@@ -262,11 +306,11 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.clock_border_opacity_label.setText(f"{v}%")
     )
     clock_border_opacity_row.addWidget(tab.clock_border_opacity_label)
-    clock_layout.addLayout(clock_border_opacity_row)
+    _clock_ctrl_layout.addLayout(clock_border_opacity_row)
 
     extra_label = QLabel("Additional clocks (optional, share style with main clock)")
     extra_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-    clock_layout.addWidget(extra_label)
+    _clock_ctrl_layout.addWidget(extra_label)
 
     clock2_row = QHBoxLayout()
     tab.clock2_enabled = QCheckBox("Enable Clock 2")
@@ -285,7 +329,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock2_timezone.currentTextChanged.connect(tab._save_settings)
     clock2_row.addWidget(tab.clock2_timezone)
     clock2_row.addStretch()
-    clock_layout.addLayout(clock2_row)
+    _clock_ctrl_layout.addLayout(clock2_row)
 
     clock3_row = QHBoxLayout()
     tab.clock3_enabled = QCheckBox("Enable Clock 3")
@@ -304,7 +348,11 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock3_timezone.currentTextChanged.connect(tab._save_settings)
     clock3_row.addWidget(tab.clock3_timezone)
     clock3_row.addStretch()
-    clock_layout.addLayout(clock3_row)
+    _clock_ctrl_layout.addLayout(clock3_row)
+
+    clock_layout.addWidget(tab._clock_controls_container)
+    tab.clock_enabled.stateChanged.connect(lambda: _update_clock_enabled_visibility(tab))
+    _update_clock_enabled_visibility(tab)
 
     container = QWidget()
     container_layout = QVBoxLayout(container)
@@ -378,6 +426,9 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     border_opacity_pct = int(clock_config.get('border_opacity', tab._default_float('clock', 'border_opacity', 0.8)) * 100)
     tab.clock_border_opacity.setValue(border_opacity_pct)
     tab.clock_border_opacity_label.setText(f"{border_opacity_pct}%")
+
+    _update_clock_mode_visibility(tab)
+    _update_clock_enabled_visibility(tab)
 
     # Clock 2
     clock2_config = widgets.get('clock2', {})

@@ -380,12 +380,23 @@ class InputHandler(QObject):
     def handle_mouse_double_click(self, event: QMouseEvent) -> bool:
         """
         Handle a mouse double click event.
-        
-        Triggers transition to the next image (same as 'x' key).
+
+        First attempts to dispatch to the topmost interactive widget under the
+        cursor via WidgetManager.  If no widget consumes the event, falls back
+        to triggering a transition to the next image (same as 'x' key).
         """
         # Don't trigger if context menu is active
         if self._context_menu_active:
             return False
+
+        # Try widget dispatch first
+        if self._widget_manager is not None:
+            try:
+                global_pos = event.globalPosition().toPoint()
+                if self._widget_manager.dispatch_double_click(global_pos):
+                    return True
+            except Exception:
+                logger.debug("[INPUT] Widget double-click dispatch failed", exc_info=True)
 
         logger.info("Double-click detected - requesting next image")
         self.next_image_requested.emit()
@@ -677,6 +688,17 @@ class InputHandler(QObject):
             except Exception as e:
                 logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         
+        # Mute button widget
+        if not handled:
+            try:
+                mute_btn = getattr(self._parent, "mute_button_widget", None) if self._parent else None
+                if mute_btn is not None and mute_btn.isVisible() and mute_btn.geometry().contains(pos):
+                    if hasattr(mute_btn, 'handle_click'):
+                        handled = mute_btn.handle_click()
+                        logger.debug("[MUTE_BTN] handle_click returned: %s", handled)
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+
         # Media widget transport controls
         if not handled and media_widget is not None:
             try:
@@ -825,6 +847,7 @@ class InputHandler(QObject):
         logger.debug("[INPUT_HANDLER] _handle_media_key_feedback: key=%s", key)
         command = None
         source = "media_key"
+        native_vk = 0  # set early so volume-key check below always has a value
 
         if key in (
             Qt.Key.Key_MediaPlay,
@@ -857,6 +880,17 @@ class InputHandler(QObject):
             source = f"media_key_vk:{native_vk}" if native_vk else source
         else:
             source = f"media_key:{int(key)}"
+
+        # Volume mute/up/down: OS already handled the actual audio change.
+        # We just need to refresh the mute button UI to reflect the new state.
+        is_volume_key = (
+            key in (Qt.Key.Key_VolumeMute, Qt.Key.Key_VolumeUp, Qt.Key.Key_VolumeDown)
+            or (command is None and native_vk in (0xAD, 0xAE, 0xAF))
+        )
+        if is_volume_key:
+            self._refresh_mute_button_state()
+            if command is None:
+                return  # pure volume key, no media command to route
 
         if command is None:
             logger.info("[INPUT_HANDLER] Media key: command is None (key=%s), skipping", key)
@@ -902,6 +936,22 @@ class InputHandler(QObject):
             logger.info("[INPUT_HANDLER] Media key %s handled successfully", command)
         else:
             logger.debug("[INPUT_HANDLER] Media key %s not handled by media widget", command)
+
+    def _refresh_mute_button_state(self) -> None:
+        """Poll the mute button to refresh its UI after the OS handles a volume key."""
+        mute_btn = None
+        # Try parent (DisplayWidget) first
+        if self._parent is not None:
+            mute_btn = getattr(self._parent, "mute_button_widget", None)
+        # Fall back to widget_manager
+        if mute_btn is None and self._widget_manager is not None:
+            mute_btn = self._widget_manager.get_widget("mute_button")
+        if mute_btn is not None and hasattr(mute_btn, 'poll_mute_state'):
+            try:
+                mute_btn.poll_mute_state()
+                logger.debug("[INPUT_HANDLER] Refreshed mute button state after volume key")
+            except Exception as exc:
+                logger.debug("[INPUT_HANDLER] Mute button refresh failed: %s", exc)
 
     def route_volume_drag(self, pos: QPoint, spotify_volume_widget) -> bool:
         """Route drag events to Spotify volume widget."""

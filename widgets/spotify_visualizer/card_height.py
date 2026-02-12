@@ -34,6 +34,7 @@ DEFAULT_GROWTH: dict[str, float] = {
     "starfield": 2.0,
     "blob": 2.5,
     "helix": 2.0,
+    "sine_wave": 1.0,
 }
 
 

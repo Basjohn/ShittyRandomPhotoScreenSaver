@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
@@ -277,6 +277,38 @@ class WidgetManager:
         """Get all managed widgets."""
         return list(self._widgets.values())
     
+    def dispatch_double_click(self, global_pos: QPoint) -> bool:
+        """Find the topmost interactive widget under *global_pos* and delegate.
+
+        Iterates registered widgets in reverse-insertion order (topmost first),
+        maps the global position to widget-local coordinates, and calls
+        ``handle_double_click(local_point)`` if the widget exposes it and the
+        point lands inside the widget geometry.
+
+        Returns True if a widget consumed the event, False otherwise (so the
+        caller can fall back to the default next-image behaviour).
+
+        This method performs only event-driven geometry checks — no periodic
+        scans or timers.
+        """
+        for name in reversed(list(self._widgets)):
+            widget = self._widgets.get(name)
+            if widget is None or not widget.isVisible():
+                continue
+            try:
+                local_pt = widget.mapFromGlobal(global_pos)
+                if not widget.rect().contains(local_pt):
+                    continue
+                handler = getattr(widget, "handle_double_click", None)
+                if handler is not None and callable(handler):
+                    consumed = handler(local_pt)
+                    if consumed:
+                        logger.debug("[WIDGET_MANAGER] Double-click consumed by %s", name)
+                        return True
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Double-click dispatch error for %s", name, exc_info=True)
+        return False
+
     def raise_all(self, force: bool = False) -> None:
         """
         Raise all widgets above the compositor.
@@ -1369,4 +1401,17 @@ class WidgetManager:
         from rendering.spotify_widget_creators import create_spotify_visualizer_widget
         return create_spotify_visualizer_widget(
             self, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
+        )
+
+    def create_mute_button_widget(
+        self,
+        widgets_config: dict,
+        screen_index: int,
+        thread_manager: Optional["ThreadManager"] = None,
+        media_widget: Optional[MediaWidget] = None,
+    ):
+        """Delegates to rendering.spotify_widget_creators."""
+        from rendering.spotify_widget_creators import create_mute_button_widget
+        return create_mute_button_widget(
+            self, widgets_config, screen_index, thread_manager, media_widget,
         )

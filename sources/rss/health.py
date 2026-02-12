@@ -4,11 +4,10 @@ Feed health tracking with persistent storage.
 Responsibilities:
     - Track consecutive failures per feed URL
     - Exponential backoff for unhealthy feeds
-    - Persist health data across restarts (JSON in temp dir)
+    - Persist health data across restarts (JSON in app data dir)
     - Auto-reset after FEED_HEALTH_RESET_HOURS
 """
 import json
-import tempfile
 import time
 from pathlib import Path
 from typing import Dict, Optional
@@ -19,10 +18,11 @@ from sources.rss.constants import (
     FEED_HEALTH_RESET_HOURS,
 )
 from core.logging.logger import get_logger
+from core.settings.storage_paths import get_feed_health_file
 
 logger = get_logger(__name__)
 
-_HEALTH_FILE = Path(tempfile.gettempdir()) / "srpss_feed_health.json"
+_HEALTH_FILE = get_feed_health_file()
 
 
 class FeedHealthTracker:

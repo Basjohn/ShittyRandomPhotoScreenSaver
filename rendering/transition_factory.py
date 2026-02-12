@@ -51,6 +51,8 @@ SLIDE_DIRECTION_MAP = {
     'Bottom to Top': SlideDirection.UP,
     'Diagonal TL-BR': SlideDirection.DIAG_TL_BR,
     'Diagonal TR-BL': SlideDirection.DIAG_TR_BL,
+    'Diagonal TL to BR': SlideDirection.DIAG_TL_BR,
+    'Diagonal TR to BL': SlideDirection.DIAG_TR_BL,
 }
 
 SLIDE_DIRECTION_REVERSE = {v: k for k, v in SLIDE_DIRECTION_MAP.items()}
@@ -357,7 +359,7 @@ class TransitionFactory:
             return self._create_blockspin(settings, duration_ms, easing_str, use_compositor)
         
         if transition_type == 'Blinds':
-            return self._create_blinds(duration_ms, use_compositor)
+            return self._create_blinds(settings, duration_ms, use_compositor)
         
         if transition_type == 'Crumble':
             return self._create_crumble(settings, duration_ms, use_compositor)
@@ -427,11 +429,14 @@ class TransitionFactory:
         rows = self._safe_int(block_flip_settings.get('rows', 4), 4)
         cols = self._safe_int(block_flip_settings.get('cols', 6), 6)
         
-        # Get direction from block_flip config (cardinal directions only)
         dir_str = block_flip_settings.get('direction', 'Random') or 'Random'
         if dir_str == 'Random':
-            cardinal = [SlideDirection.LEFT, SlideDirection.RIGHT, SlideDirection.UP, SlideDirection.DOWN]
-            direction = random.choice(cardinal)
+            all_dirs = [
+                SlideDirection.LEFT, SlideDirection.RIGHT,
+                SlideDirection.UP, SlideDirection.DOWN,
+                SlideDirection.DIAG_TL_BR, SlideDirection.DIAG_TR_BL,
+            ]
+            direction = random.choice(all_dirs)
         else:
             direction = SLIDE_DIRECTION_MAP.get(dir_str, SlideDirection.LEFT)
         
@@ -452,9 +457,23 @@ class TransitionFactory:
             return GLCompositorBlockSpinTransition(duration_ms, easing_str, direction)
         return CrossfadeTransition(duration_ms, easing_str)
     
-    def _create_blinds(self, duration_ms: int, use_compositor: bool) -> BaseTransition:
+    def _create_blinds(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
         if use_compositor:
-            return GLCompositorBlindsTransition(duration_ms)
+            blinds_cfg = settings.get('blinds', {})
+            if not isinstance(blinds_cfg, dict):
+                blinds_cfg = {}
+            feather = float(blinds_cfg.get('feather', 2)) / 25.0  # slider 0-25 → 0.0-1.0 → shader 0.0-0.5
+            feather = max(0.001, min(0.5, feather * 0.5))
+            direction_str = str(blinds_cfg.get('direction', 'Horizontal'))
+            if direction_str == 'Random':
+                direction_str = random.choice(['Horizontal', 'Vertical', 'Diagonal'])
+            direction_map = {'Horizontal': 0, 'Vertical': 1, 'Diagonal': 2}
+            direction = direction_map.get(direction_str, 0)
+            return GLCompositorBlindsTransition(
+                duration_ms=duration_ms,
+                feather=feather,
+                direction=direction,
+            )
         return CrossfadeTransition(duration_ms)
     
     def _create_crumble(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:

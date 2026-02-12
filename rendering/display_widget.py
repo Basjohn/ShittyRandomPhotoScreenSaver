@@ -887,6 +887,16 @@ class DisplayWidget(QWidget):
                 self.width(), self.height()
             )
 
+    def _position_mute_button(self) -> None:
+        """Position mute button relative to media widget."""
+        mute_btn = getattr(self, "mute_button_widget", None)
+        if mute_btn is not None and hasattr(mute_btn, 'update_position'):
+            try:
+                mute_btn.sync_visibility_with_anchor()
+                mute_btn.update_position()
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
     def push_spotify_visualizer_frame(self, **kwargs):
         """Delegates to rendering.display_image_ops."""
         from rendering.display_image_ops import push_spotify_visualizer_frame

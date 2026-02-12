@@ -415,6 +415,8 @@ def start_blinds(
     on_finished: Optional[Callable[[], None]] = None,
     grid_cols: Optional[int] = None,
     grid_rows: Optional[int] = None,
+    feather: float = 0.08,
+    direction: int = 0,
 ) -> Optional[str]:
     """Begin a blinds reveal using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -430,6 +432,8 @@ def start_blinds(
         old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
         cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
         rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
+        feather=max(0.001, min(0.5, float(feather))),
+        direction=int(direction),
     )
     widget._pre_upload_textures(widget._prepare_blinds_textures)
     widget._profiler.start("blinds")

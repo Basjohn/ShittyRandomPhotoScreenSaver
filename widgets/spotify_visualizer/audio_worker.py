@@ -18,7 +18,7 @@ from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger, is_verbose_logging
-from core.process import ProcessSupervisor, WorkerType
+from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
 from utils.audio_capture import create_audio_capture, AudioCaptureConfig
 
@@ -39,6 +39,7 @@ class VisualizerMode(Enum):
     STARFIELD = auto()      # Audio-reactive traveling starfield
     BLOB = auto()           # Organic reactive metaball
     HELIX = auto()          # DNA / double-helix spiral
+    SINE_WAVE = auto()      # Pure sine wave with audio-reactive amplitude
 
 
 @dataclass
@@ -66,11 +67,6 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._running: bool = False
         self._backend = None  # AudioCaptureBackend instance
         self._np = None
-        # ProcessSupervisor for FFTWorker integration
-        self._process_supervisor = process_supervisor
-        self._fft_worker_available: bool = False
-        self._fft_worker_failed_count: int = 0
-        self._fft_worker_max_failures: int = 5  # Disable after 5 consecutive failures
         # FFT band caching
         self._band_cache_key = None
         self._band_log_idx = None
@@ -136,6 +132,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Last config for replay
         self._last_sensitivity_config = (True, 1.0)
         self._last_floor_config = (True, 2.1)
+        
+        # Spectrum profile variant (curved vs legacy)
+        self._use_curved_profile: bool = False
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
@@ -191,6 +190,10 @@ class SpotifyVisualizerAudioWorker(QObject):
             value = 0
         self._preferred_block_size = value
 
+    def set_curved_profile(self, enabled: bool) -> None:
+        """Toggle between curved and legacy spectrum bar profile."""
+        self._use_curved_profile = bool(enabled)
+
     def set_energy_boost(self, boost: float) -> None:
         """Adjust post-FFT energy boost factor."""
         try:
@@ -203,26 +206,6 @@ class SpotifyVisualizerAudioWorker(QObject):
         if val > 1.8:
             val = 1.8
         self._energy_boost = val
-
-    def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
-        """Set the ProcessSupervisor for FFTWorker integration."""
-        self._process_supervisor = supervisor
-        self._fft_worker_available = False
-        self._fft_worker_failed_count = 0
-        
-        if supervisor is not None:
-            try:
-                self._fft_worker_available = supervisor.is_running(WorkerType.FFT)
-                if self._fft_worker_available:
-                    logger.info("[SPOTIFY_VIS] FFTWorker available for audio processing")
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                self._fft_worker_available = False
-
-    def _process_via_fft_worker(self, samples) -> Optional[List[float]]:
-        """Delegates to widgets.spotify_visualizer.bar_computation."""
-        from widgets.spotify_visualizer.bar_computation import process_via_fft_worker
-        return process_via_fft_worker(self, samples)
 
     def is_running(self) -> bool:
         return self._running

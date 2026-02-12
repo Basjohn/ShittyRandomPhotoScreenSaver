@@ -128,6 +128,14 @@ class BaseWorker:
             os.getpid(),
         )
         
+        # Signal to supervisor that the message loop is ready
+        self._send_response(WorkerResponse(
+            msg_type=MessageType.WORKER_READY,
+            seq_no=0,
+            correlation_id="",
+            success=True,
+        ))
+        
         try:
             while not self._shutdown:
                 try:

@@ -40,10 +40,14 @@ class GLCompositorBlindsTransition(BaseTransition):
         duration_ms: int = 1800,
         slat_rows: int = 5,
         slat_cols: int = 7,
+        feather: float = 0.08,
+        direction: int = 0,
     ) -> None:
         super().__init__(duration_ms)
         self._rows = slat_rows
         self._cols = slat_cols
+        self._feather = max(0.001, min(0.5, float(feather)))
+        self._direction = int(direction)  # 0=Horizontal, 1=Vertical, 2=Diagonal
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._slats: List[_CompositorBlindSlat] = []
@@ -126,6 +130,8 @@ class GLCompositorBlindsTransition(BaseTransition):
             on_finished=_on_finished,
             grid_cols=self._grid_cols or 0,
             grid_rows=self._grid_rows or 0,
+            feather=self._feather,
+            direction=self._direction,
         )
 
         self._set_state(TransitionState.RUNNING)

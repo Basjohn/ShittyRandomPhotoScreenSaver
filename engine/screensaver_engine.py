@@ -283,6 +283,13 @@ class ScreensaverEngine(QObject):
                 logger.error("Failed to load settings")
                 return False
             
+            # Migrate legacy storage paths (safe to call multiple times)
+            try:
+                from core.settings.storage_paths import run_all_migrations
+                run_all_migrations()
+            except Exception as exc:
+                logger.debug("[STORAGE] Migration failed (non-fatal): %s", exc)
+            
             # Initialize image sources
             if not self._initialize_sources():
                 logger.warning("[FALLBACK] No image sources initialized")

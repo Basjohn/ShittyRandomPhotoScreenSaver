@@ -8,15 +8,14 @@ Free weather API with no API key required.
 from typing import Optional, Dict, Any, Tuple
 import time
 import json
-import tempfile
-from pathlib import Path
 import requests
 from core.logging.logger import get_logger
+from core.settings.storage_paths import get_weather_cache_file
 
 logger = get_logger(__name__)
 
 # Weather cache file location
-_WEATHER_CACHE_FILE = Path(tempfile.gettempdir()) / "screensaver_weather_cache.json"
+_WEATHER_CACHE_FILE = get_weather_cache_file()
 _WEATHER_CACHE_TTL_SECONDS = 1800  # 30 minutes
 
 

@@ -6,16 +6,23 @@ center-out frequency mapping, reactive smoothing, and adaptive normalization.
 """
 from __future__ import annotations
 
+import math
 import time
 from typing import List, Optional, TYPE_CHECKING
 
 from core.logging.logger import get_logger, is_verbose_logging
-from core.process import WorkerType, MessageType
 
 if TYPE_CHECKING:
     from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker
 
 logger = get_logger(__name__)
+
+_PI = math.pi
+
+
+def _cos_pi(t: float) -> float:
+    """cos(π * t) — used for smooth cosine crossfade between zones."""
+    return math.cos(_PI * t)
 
 
 def get_zero_bars(worker: "SpotifyVisualizerAudioWorker") -> List[float]:
@@ -25,73 +32,11 @@ def get_zero_bars(worker: "SpotifyVisualizerAudioWorker") -> List[float]:
     return worker._zero_bars
 
 
-def process_via_fft_worker(
-    worker: "SpotifyVisualizerAudioWorker", samples
-) -> Optional[List[float]]:
-    """Process audio samples using FFTWorker in separate process.
 
-    Returns bar heights if successful, None if worker unavailable or failed.
-    """
-    if not worker._process_supervisor or not worker._fft_worker_available:
-        return None
-
-    if worker._fft_worker_failed_count >= worker._fft_worker_max_failures:
-        return None
-
-    try:
-        if not worker._process_supervisor.is_running(WorkerType.FFT):
-            worker._fft_worker_available = False
-            return None
-
-        samples_list = samples.tolist() if hasattr(samples, 'tolist') else list(samples)
-
-        with worker._cfg_lock:
-            use_recommended = bool(worker._use_recommended)
-            user_sens = float(worker._user_sensitivity)
-            use_dynamic_floor = bool(worker._use_dynamic_floor)
-
-        sensitivity = user_sens if not use_recommended else 1.0
-
-        correlation_id = worker._process_supervisor.send_message(
-            WorkerType.FFT,
-            MessageType.FFT_FRAME,
-            payload={
-                "samples": samples_list,
-                "sample_rate": 48000,
-                "sensitivity": sensitivity,
-                "use_dynamic_floor": use_dynamic_floor,
-            },
-        )
-
-        if not correlation_id:
-            worker._fft_worker_failed_count += 1
-            return None
-
-        start_time = time.time()
-        timeout_s = 0.015
-
-        while (time.time() - start_time) < timeout_s:
-            responses = worker._process_supervisor.poll_responses(WorkerType.FFT, max_count=5)
-
-            for response in responses:
-                if response.correlation_id == correlation_id:
-                    if response.success:
-                        bars = response.payload.get("bars", [])
-                        if bars and len(bars) > 0:
-                            worker._fft_worker_failed_count = 0
-                            return bars
-                    else:
-                        worker._fft_worker_failed_count += 1
-                        return None
-
-            time.sleep(0.001)
-
-        return None
-
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] FFTWorker processing error: %s", e)
-        worker._fft_worker_failed_count += 1
-        return None
+# NOTE: process_via_fft_worker was removed — all FFT processing is now inline.
+# The separate-process FFT worker had a 15ms IPC timeout that caused silent
+# fallback to inline computation on most frames. Maintaining two identical
+# code paths (worker + inline) was a debugging trap. See commit history.
 
 
 def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
@@ -208,41 +153,91 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
 
         # CENTER-OUT MIRRORED LAYOUT
-        profile_template = np.array(
-            [0.10, 0.15, 0.25, 0.50, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.50, 0.25, 0.15, 0.10],
-            dtype="float32",
-        )
-        if bands != profile_template.size:
-            xp = np.linspace(0.0, 1.0, profile_template.size)
-            x = np.linspace(0.0, 1.0, bands)
-            profile_shape = np.interp(x, xp, profile_template)
-        else:
-            profile_shape = profile_template.copy()
+        _LEGACY_PROFILE = [0.10, 0.15, 0.25, 0.50, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.50, 0.25, 0.15, 0.10]
+        _use_curved = getattr(worker, '_use_curved_profile', False)
 
         overall_energy = (bass_energy * 0.9 + mid_energy * 0.6 + treble_energy * 0.35)
         overall_energy = max(0.0, min(1.8, overall_energy))
 
-        # Apply shape template scaled by overall energy
+        half = bands // 2
+
+        if _use_curved:
+            # Smooth sinusoidal wave curve from edge to center
+            # Creates flowing wave: bass peak (edge) → dip → vocal peak → dip → center
+            frac_arr = np.abs(np.arange(bands, dtype="float32") - center) / max(1.0, float(half))
+            
+            # Base sinusoidal wave: 1.5 cycles from edge (frac=1.0) to center (frac=0.0)
+            # This creates: peak → trough → peak → trough → low
+            wave = np.sin(frac_arr * np.pi * 1.5 + np.pi * 0.5)
+            
+            # Scale and offset to create proper height profile
+            # Bass peak at edge (frac=1.0): ~0.85
+            # First dip (frac≈0.67): ~0.30
+            # Vocal peak (frac≈0.33): ~0.60
+            # Second dip (frac≈0.17): ~0.25
+            # Center (frac=0.0): ~0.15
+            profile_shape = wave * 0.35 + 0.50
+            
+            # Boost edge (bass) peak slightly
+            edge_boost = np.exp(-((frac_arr - 1.0) ** 2) / 0.08) * 0.20
+            profile_shape = profile_shape + edge_boost
+            
+            # Ensure minimum floor
+            profile_shape = np.maximum(profile_shape, 0.12)
+        else:
+            profile_template = np.array(_LEGACY_PROFILE, dtype="float32")
+            if bands != profile_template.size:
+                xp = np.linspace(0.0, 1.0, profile_template.size)
+                x = np.linspace(0.0, 1.0, bands)
+                profile_shape = np.interp(x, xp, profile_template)
+            else:
+                profile_shape = profile_template.copy()
+
+        # Apply shape template scaled by energy
         for i in range(bands):
             offset = abs(i - center)
-            base = profile_shape[i] * overall_energy
 
-            if offset == 3:
-                base = base * 1.05 + bass_energy * 0.15
-            elif offset == 4:
-                base = base * 0.82
+            if _use_curved:
+                # Smooth zone energy blending using cosine crossfade.
+                # No hard if/elif boundaries — zones blend smoothly.
+                frac = offset / max(1.0, float(half))
 
-            if offset == 0:
-                vocal_drive = mid_energy * 4.0
-                base = vocal_drive * 0.90 + base * 0.10
+                # Cosine blend weights: each zone has a smooth bell-shaped weight
+                # Bass zone weight: peaks at frac=1.0 (edge)
+                w_bass = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, (frac - 0.80) / 0.25)))))
+                # Vocal zone weight: peaks at frac=0.42
+                w_vocal = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, (frac - 0.42) / 0.22)))))
+                # Center zone weight: peaks at frac=0.0
+                w_center = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, frac / 0.25)))))
+                # Normalize weights
+                w_total = w_bass + w_vocal + w_center + 0.001
 
-            if offset == 1:
-                base = base * 0.52 + mid_energy * 0.22
-            if offset == 2:
-                base = base * 0.58 + bass_energy * 0.12
+                # Per-zone energy (reduced to prevent pinning)
+                e_bass = bass_energy * 0.78 + mid_energy * 0.04 + treble_energy * 0.04
+                e_vocal = bass_energy * 0.05 + mid_energy * 0.82 + treble_energy * 0.08
+                e_center = bass_energy * 0.05 + mid_energy * 0.18 + treble_energy * 0.08
 
-            if offset >= 5:
-                base = base * 0.65 + treble_energy * 0.4 * (offset - 4)
+                zone_energy = (w_bass * e_bass + w_vocal * e_vocal + w_center * e_center) / w_total
+
+                base = profile_shape[i] * zone_energy
+            else:
+                base = profile_shape[i] * overall_energy
+                if offset == 3:
+                    base = base * 1.05 + bass_energy * 0.15
+                elif offset == 4:
+                    base = base * 0.82
+
+                if offset == 0:
+                    vocal_drive = mid_energy * 4.0
+                    base = vocal_drive * 0.90 + base * 0.10
+
+                if offset == 1:
+                    base = base * 0.52 + mid_energy * 0.22
+                if offset == 2:
+                    base = base * 0.58 + bass_energy * 0.12
+
+                if offset >= 5:
+                    base = base * 0.65 + treble_energy * 0.4 * (offset - 4)
 
             arr[i] = base
 
@@ -749,20 +744,7 @@ def compute_bars_from_samples(
         if peak_raw < 1e-3:
             return get_zero_bars(worker)
 
-        # Try FFTWorker first
-        bars = None
-        if worker._fft_worker_available and worker._fft_worker_failed_count < worker._fft_worker_max_failures:
-            bars = process_via_fft_worker(worker, mono)
-            if bars is not None:
-                target = int(worker._bar_count)
-                if len(bars) != target:
-                    if len(bars) < target:
-                        bars = bars + [0.0] * (target - len(bars))
-                    else:
-                        bars = bars[:target]
-                return bars
-
-        # Fallback to local FFT processing
+        # Inline FFT processing (single code path — no IPC fallback)
         fft = np_mod.fft.rfft(mono)
         np_mod.abs(fft, out=fft)
         bars = fft_to_bars(worker, fft)

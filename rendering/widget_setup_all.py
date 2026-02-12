@@ -274,6 +274,13 @@ def setup_all_widgets(
             created['spotify_visualizer_widget'] = vis_widget
             mgr._register_spotify_secondary_fade(vis_widget)
 
+        mute_btn = mgr.create_mute_button_widget(
+            widgets_config, screen_index, thread_manager, media_widget,
+        )
+        if mute_btn:
+            created['mute_button_widget'] = mute_btn
+            mgr._register_spotify_secondary_fade(mute_btn)
+
         mgr._queue_spotify_visibility_sync(media_widget)
 
     # NOW start all widgets - ensures fade sync has complete expected overlay set

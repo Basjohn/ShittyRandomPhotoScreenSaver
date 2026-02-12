@@ -40,12 +40,16 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_enabled.stateChanged.connect(tab._save_settings)
     imgur_layout.addWidget(tab.imgur_enabled)
 
+    tab._imgur_controls_container = QWidget()
+    _imgur_ctl = QVBoxLayout(tab._imgur_controls_container)
+    _imgur_ctl.setContentsMargins(0, 0, 0, 0)
+
     imgur_info = QLabel(
         "Displays curated images from Imgur. Click images to open in browser."
     )
     imgur_info.setWordWrap(True)
     imgur_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
-    imgur_layout.addWidget(imgur_info)
+    _imgur_ctl.addWidget(imgur_info)
 
     # Tag selection
     imgur_tag_row = QHBoxLayout()
@@ -68,7 +72,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_custom_tag.textChanged.connect(tab._save_settings)
     imgur_tag_row.addWidget(tab.imgur_custom_tag)
     imgur_tag_row.addStretch()
-    imgur_layout.addLayout(imgur_tag_row)
+    _imgur_ctl.addLayout(imgur_tag_row)
 
     # Grid dimensions
     imgur_grid_row = QHBoxLayout()
@@ -93,7 +97,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_grid_total = QLabel("= 8 images")
     imgur_grid_row.addWidget(tab.imgur_grid_total)
     imgur_grid_row.addStretch()
-    imgur_layout.addLayout(imgur_grid_row)
+    _imgur_ctl.addLayout(imgur_grid_row)
 
     # Position
     imgur_pos_row = QHBoxLayout()
@@ -109,7 +113,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_pos_row.addWidget(tab.imgur_position)
     tab._set_combo_text(tab.imgur_position, tab._default_str('imgur', 'position', 'Top Right'))
     imgur_pos_row.addStretch()
-    imgur_layout.addLayout(imgur_pos_row)
+    _imgur_ctl.addLayout(imgur_pos_row)
 
     # Display (monitor selection)
     imgur_disp_row = QHBoxLayout()
@@ -122,7 +126,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_monitor_default = tab._widget_default('imgur', 'monitor', 2)
     tab._set_combo_text(tab.imgur_monitor_combo, str(imgur_monitor_default))
     imgur_disp_row.addStretch()
-    imgur_layout.addLayout(imgur_disp_row)
+    _imgur_ctl.addLayout(imgur_disp_row)
 
     # Update interval
     imgur_interval_row = QHBoxLayout()
@@ -135,14 +139,14 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_interval.valueChanged.connect(tab._save_settings)
     imgur_interval_row.addWidget(tab.imgur_interval)
     imgur_interval_row.addStretch()
-    imgur_layout.addLayout(imgur_interval_row)
+    _imgur_ctl.addLayout(imgur_interval_row)
 
     # Show header
     tab.imgur_show_header = QCheckBox("Show Header")
     tab.imgur_show_header.setToolTip("Show Imgur logo and tag name in header")
     tab.imgur_show_header.setChecked(tab._default_bool('imgur', 'show_header', True))
     tab.imgur_show_header.stateChanged.connect(tab._save_settings)
-    imgur_layout.addWidget(tab.imgur_show_header)
+    _imgur_ctl.addWidget(tab.imgur_show_header)
 
     # Font family
     imgur_font_family_row = QHBoxLayout()
@@ -155,7 +159,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_font_combo.currentFontChanged.connect(tab._save_settings)
     imgur_font_family_row.addWidget(tab.imgur_font_combo)
     imgur_font_family_row.addStretch()
-    imgur_layout.addLayout(imgur_font_family_row)
+    _imgur_ctl.addLayout(imgur_font_family_row)
 
     # Font size
     imgur_font_row = QHBoxLayout()
@@ -169,7 +173,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_font_row.addWidget(tab.imgur_font_size)
     imgur_font_row.addWidget(QLabel("px"))
     imgur_font_row.addStretch()
-    imgur_layout.addLayout(imgur_font_row)
+    _imgur_ctl.addLayout(imgur_font_row)
 
     # Margin
     imgur_margin_row = QHBoxLayout()
@@ -182,7 +186,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_margin_row.addWidget(tab.imgur_margin)
     imgur_margin_row.addWidget(QLabel("px"))
     imgur_margin_row.addStretch()
-    imgur_layout.addLayout(imgur_margin_row)
+    _imgur_ctl.addLayout(imgur_margin_row)
 
     # Text color
     imgur_color_row = QHBoxLayout()
@@ -191,21 +195,21 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_color_btn.clicked.connect(tab._choose_imgur_color)
     imgur_color_row.addWidget(tab.imgur_color_btn)
     imgur_color_row.addStretch()
-    imgur_layout.addLayout(imgur_color_row)
+    _imgur_ctl.addLayout(imgur_color_row)
 
     # Background frame
     tab.imgur_show_background = QCheckBox("Show Background Frame")
     tab.imgur_show_background.setToolTip("Show a semi-transparent background behind the widget")
     tab.imgur_show_background.setChecked(tab._default_bool('imgur', 'show_background', True))
     tab.imgur_show_background.stateChanged.connect(tab._save_settings)
-    imgur_layout.addWidget(tab.imgur_show_background)
+    _imgur_ctl.addWidget(tab.imgur_show_background)
 
     # Intense shadow
     tab.imgur_intense_shadow = QCheckBox("Intense Shadow")
     tab.imgur_intense_shadow.setToolTip("Use a more pronounced drop shadow effect")
     tab.imgur_intense_shadow.setChecked(tab._default_bool('imgur', 'intense_shadow', True))
     tab.imgur_intense_shadow.stateChanged.connect(tab._save_settings)
-    imgur_layout.addWidget(tab.imgur_intense_shadow)
+    _imgur_ctl.addWidget(tab.imgur_intense_shadow)
 
     # Background opacity
     imgur_opacity_row = QHBoxLayout()
@@ -224,7 +228,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.imgur_bg_opacity_label.setText(f"{v}%")
     )
     imgur_opacity_row.addWidget(tab.imgur_bg_opacity_label)
-    imgur_layout.addLayout(imgur_opacity_row)
+    _imgur_ctl.addLayout(imgur_opacity_row)
 
     # Background color
     imgur_bg_color_row = QHBoxLayout()
@@ -233,7 +237,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_bg_color_btn.clicked.connect(tab._choose_imgur_bg_color)
     imgur_bg_color_row.addWidget(tab.imgur_bg_color_btn)
     imgur_bg_color_row.addStretch()
-    imgur_layout.addLayout(imgur_bg_color_row)
+    _imgur_ctl.addLayout(imgur_bg_color_row)
 
     # Border color
     imgur_border_color_row = QHBoxLayout()
@@ -242,7 +246,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_border_color_btn.clicked.connect(tab._choose_imgur_border_color)
     imgur_border_color_row.addWidget(tab.imgur_border_color_btn)
     imgur_border_color_row.addStretch()
-    imgur_layout.addLayout(imgur_border_color_row)
+    _imgur_ctl.addLayout(imgur_border_color_row)
 
     # Border opacity
     imgur_border_opacity_row = QHBoxLayout()
@@ -261,7 +265,18 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         lambda v: tab.imgur_border_opacity_label.setText(f"{v}%")
     )
     imgur_border_opacity_row.addWidget(tab.imgur_border_opacity_label)
-    imgur_layout.addLayout(imgur_border_opacity_row)
+    _imgur_ctl.addLayout(imgur_border_opacity_row)
+
+    imgur_layout.addWidget(tab._imgur_controls_container)
+
+    def _update_imgur_enabled_visibility(tab_ref=tab):
+        enabled = getattr(tab_ref, 'imgur_enabled', None) and tab_ref.imgur_enabled.isChecked()
+        c = getattr(tab_ref, '_imgur_controls_container', None)
+        if c is not None:
+            c.setVisible(bool(enabled))
+    tab._update_imgur_enabled_visibility = _update_imgur_enabled_visibility
+    tab.imgur_enabled.stateChanged.connect(lambda: _update_imgur_enabled_visibility())
+    _update_imgur_enabled_visibility()
 
     container = QWidget()
     container_layout = QVBoxLayout(container)
@@ -326,6 +341,8 @@ def load_imgur_settings(tab: WidgetsTab, widgets: dict) -> None:
 
     tab._on_imgur_tag_changed(imgur_tag)
     tab._update_imgur_grid_total()
+    if hasattr(tab, '_update_imgur_enabled_visibility'):
+        tab._update_imgur_enabled_visibility()
 
 
 def save_imgur_settings(tab: WidgetsTab) -> dict | None:

@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QRect, QRectF
 from PySide6.QtGui import (
     QFont,
     QColor,
+    QPen,
     QPixmap,
     QPainter,
     QPainterPath,
@@ -242,7 +243,8 @@ def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:
             widget._controls_row_radius - 1,
             widget._controls_row_radius - 1,
         )
-        painter.setPen(outline)
+        outline_pen = QPen(outline, 1.75)
+        painter.setPen(outline_pen)
         painter.drawRoundedRect(
             row_rect.adjusted(0, 0, 0, 0),
             widget._controls_row_radius,
@@ -368,6 +370,7 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
     pad = 20
     x = max(pad, widget.width() - pad - frame_w)
     y = pad
+    widget._last_artwork_rect = QRect(x, y, frame_w, frame_h)
     painter.save()
     try:
         if widget._artwork_opacity != 1.0:

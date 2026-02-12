@@ -160,4 +160,9 @@ def update_position(widget) -> None:
                 parent._position_spotify_volume()
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        if hasattr(parent, "_position_mute_button"):
+            try:
+                parent._position_mute_button()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 

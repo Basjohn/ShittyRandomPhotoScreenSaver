@@ -29,7 +29,6 @@ docs/
 logs/
 bak/
 archive/
-docs/
 *.log
 audits/
 htmlcov/

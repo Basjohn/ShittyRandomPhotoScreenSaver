@@ -1045,11 +1045,11 @@ class RedditWidget(BaseOverlayWidget):
         
         needs_regen = self._cache_invalidated or not cache_valid
         
-        # Rate limit: don't regenerate more than once per second
+        # Rate limit: don't regenerate more than once per 0.3s (was 1s — too long for refresh)
         if needs_regen:
             now = time.time()
             last_regen = getattr(self, "_last_cache_regen_ts", 0.0)
-            if now - last_regen < 1.0:
+            if now - last_regen < 0.3:
                 # Too soon, use existing cache even if not perfect
                 needs_regen = False
                 if is_perf_metrics_enabled() and self._cache_invalidated:
@@ -1305,6 +1305,26 @@ class RedditWidget(BaseOverlayWidget):
             if rect.contains(local_pos):
                 return url
         return None
+
+    def handle_double_click(self, local_pos) -> bool:
+        """Called by WidgetManager dispatch. Refreshes feed on non-link areas.
+
+        If the double-click lands on a link or title row, returns False so the
+        normal click handler can open the URL. Otherwise triggers a feed refresh.
+        """
+        if not self._enabled:
+            return False
+        # If the click is on a link/title, don't consume — let normal click flow handle it
+        url = self.resolve_click_target(local_pos)
+        if url is not None:
+            return False
+        try:
+            self._fetch_feed()
+            logger.debug("[REDDIT] Double-click triggered subreddit refresh")
+            return True
+        except Exception:
+            logger.debug("[REDDIT] Double-click refresh failed", exc_info=True)
+            return False
 
     def handle_click(self, local_pos: QPoint) -> bool:
         """Handle a click in widget-local coordinates.

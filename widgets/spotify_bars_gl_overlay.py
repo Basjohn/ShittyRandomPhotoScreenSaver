@@ -113,8 +113,20 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_intensity: float = 0.5
         self._blob_reactive_glow: bool = True
         self._blob_smoothed_energy: float = 0.0  # CPU-side smoothed energy for glow decay
+        self._blob_reactive_deformation: float = 1.0
+        self._blob_constant_wobble: float = 1.0
+        self._blob_reactive_wobble: float = 1.0
+        self._blob_stretch_tendency: float = 0.0
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
+        self._osc_line_offset_bias: float = 0.0
+        self._osc_vertical_shift: bool = False
+        self._osc_sine_travel: int = 0  # 0=none, 1=left, 2=right (used by sine_wave mode)
+        self._sine_card_adaptation: float = 0.3  # 0.0-1.0, how much of card height wave uses
+        self._sine_travel_line2: int = 0  # per-line travel: 0=none, 1=left, 2=right
+        self._sine_travel_line3: int = 0
+        self._sine_wobble_amount: float = 0.0  # 0.0-1.0, music-reactive deformity
+        self._sine_vertical_shift: bool = False
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
@@ -215,8 +227,20 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_size: float = 1.0,
         blob_glow_intensity: float = 0.5,
         blob_reactive_glow: bool = True,
+        blob_reactive_deformation: float = 1.0,
+        blob_constant_wobble: float = 1.0,
+        blob_reactive_wobble: float = 1.0,
+        blob_stretch_tendency: float = 0.0,
         osc_speed: float = 1.0,
         osc_line_dim: bool = False,
+        osc_line_offset_bias: float = 0.0,
+        osc_vertical_shift: bool = False,
+        osc_sine_travel: int = 0,
+        sine_card_adaptation: float = 0.3,
+        sine_travel_line2: int = 0,
+        sine_travel_line3: int = 0,
+        sine_wobble_amount: float = 0.0,
+        sine_vertical_shift: bool = False,
         helix_turns: int = 4,
         helix_double: bool = True,
         helix_speed: float = 1.0,
@@ -250,7 +274,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Set active visualizer mode
         self._vis_mode = vis_mode if vis_mode in (
-            'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix'
+            'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave'
         ) else 'spectrum'
 
         # Update accumulated time for animated modes
@@ -276,8 +300,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # Fast rise (~50ms tau), slow decay (~300ms tau)
                     alpha = min(1.0, dt / 0.05) if raw_e > prev else min(1.0, dt / 0.30)
                     self._blob_smoothed_energy = prev + (raw_e - prev) * alpha
-                # Oscilloscope: smooth per-band energy for glow anti-flicker
-                if self._vis_mode == 'oscilloscope' and energy_bands is not None:
+                # Oscilloscope / Sine Wave: smooth per-band energy for glow anti-flicker
+                if self._vis_mode in ('oscilloscope', 'sine_wave') and energy_bands is not None:
                     for attr, band in (
                         ('_osc_smoothed_bass', 'bass'),
                         ('_osc_smoothed_mid', 'mid'),
@@ -355,8 +379,20 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_size = max(0.3, min(2.0, float(blob_size)))
         self._blob_glow_intensity = max(0.0, min(1.0, float(blob_glow_intensity)))
         self._blob_reactive_glow = bool(blob_reactive_glow)
+        self._blob_reactive_deformation = max(0.0, min(2.0, float(blob_reactive_deformation)))
+        self._blob_constant_wobble = max(0.0, min(2.0, float(blob_constant_wobble)))
+        self._blob_reactive_wobble = max(0.0, min(2.0, float(blob_reactive_wobble)))
+        self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
         self._osc_speed = max(0.01, min(1.0, float(osc_speed)))
         self._osc_line_dim = bool(osc_line_dim)
+        self._osc_line_offset_bias = max(0.0, min(1.0, float(osc_line_offset_bias)))
+        self._osc_vertical_shift = bool(osc_vertical_shift)
+        self._osc_sine_travel = max(0, min(2, int(osc_sine_travel)))
+        self._sine_card_adaptation = max(0.05, min(1.0, float(sine_card_adaptation)))
+        self._sine_travel_line2 = max(0, min(2, int(sine_travel_line2)))
+        self._sine_travel_line3 = max(0, min(2, int(sine_travel_line3)))
+        self._sine_wobble_amount = max(0.0, min(1.0, float(sine_wobble_amount)))
+        self._sine_vertical_shift = bool(sine_vertical_shift)
 
         # Helix settings
         self._helix_turns = max(2, int(helix_turns))
@@ -757,7 +793,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity",
                     "u_blob_reactive_glow", "u_blob_smoothed_energy",
+                    "u_blob_reactive_deformation", "u_blob_constant_wobble", "u_blob_reactive_wobble",
+                    "u_blob_stretch_tendency",
                     "u_osc_speed", "u_osc_line_dim",
+                    "u_osc_line_offset_bias",
+                    "u_osc_vertical_shift",
+                    "u_osc_sine_travel",
+                    "u_card_adaptation",
+                    "u_sine_travel_line2", "u_sine_travel_line3",
+                    "u_wobble_amount", "u_osc_vertical_shift",
                     "u_helix_turns", "u_helix_double", "u_helix_speed",
                     "u_helix_glow_enabled", "u_helix_glow_intensity",
                     "u_helix_glow_color", "u_helix_reactive_glow",
@@ -808,21 +852,31 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Register GL handles with ResourceManager for VRAM leak prevention
         try:
             from core.resources.manager import ResourceManager
+            from OpenGL import GL as _gl_mod
             rm = ResourceManager()
             for mode, prog in self._gl_programs.items():
-                rid = rm.register_gl_program(
-                    prog, description=f"SpotifyBarsGLOverlay {mode} shader"
+                rid = rm.register_gl_handle(
+                    prog, "program",
+                    lambda h, _g=_gl_mod: _g.glDeleteProgram(h),
+                    description=f"SpotifyBarsGLOverlay {mode} shader",
+                    group="spotify_vis_gl",
                 )
                 self._gl_program_rids[mode] = rid
-            self._gl_vao_rid = rm.register_gl_vao(
-                vao, description="SpotifyBarsGLOverlay VAO"
+            self._gl_vao_rid = rm.register_gl_handle(
+                vao, "vao",
+                lambda h, _g=_gl_mod: _g.glDeleteVertexArrays(1, [h]),
+                description="SpotifyBarsGLOverlay VAO",
+                group="spotify_vis_gl",
             )
-            self._gl_vbo_rid = rm.register_gl_vbo(
-                vbo, description="SpotifyBarsGLOverlay VBO"
+            self._gl_vbo_rid = rm.register_gl_handle(
+                vbo, "vbo",
+                lambda h, _g=_gl_mod: _g.glDeleteBuffers(1, [h]),
+                description="SpotifyBarsGLOverlay VBO",
+                group="spotify_vis_gl",
             )
             logger.debug("[SPOTIFY_VIS] GL handles registered with ResourceManager")
         except Exception as e:
-            logger.debug(f"[SPOTIFY_VIS] Failed to register GL handles: {e}")
+            logger.debug("[SPOTIFY_VIS] Failed to register GL handles: %s", e)
             self._gl_vao_rid = None
             self._gl_vbo_rid = None
 
@@ -830,6 +884,45 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             "[SPOTIFY_VIS] Multi-shader pipeline ready: %s",
             ", ".join(sorted(self._gl_programs.keys())),
         )
+
+    def cleanup_gl(self) -> None:
+        """Delete all GL handles (programs, VAO, VBO) to prevent VRAM leaks.
+
+        Must be called with a valid GL context (e.g. from the widget's
+        destroy path while the context is still current).
+        """
+        try:
+            from OpenGL import GL as _gl
+        except ImportError:
+            return
+
+        for mode, prog in list(self._gl_programs.items()):
+            try:
+                _gl.glDeleteProgram(prog)
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Failed to delete %s program: %s", mode, e)
+        self._gl_programs.clear()
+        self._gl_uniforms.clear()
+        self._gl_program = None
+
+        if self._gl_vbo is not None:
+            try:
+                _gl.glDeleteBuffers(1, [self._gl_vbo])
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Failed to delete VBO: %s", e)
+            self._gl_vbo = None
+
+        if self._gl_vao is not None:
+            try:
+                _gl.glDeleteVertexArrays(1, [self._gl_vao])
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Failed to delete VAO: %s", e)
+            self._gl_vao = None
+
+        self._gl_program_rids.clear()
+        self._gl_vao_rid = None
+        self._gl_vbo_rid = None
+        logger.debug("[SPOTIFY_VIS] GL handles cleaned up")
 
     def _get_dpr(self) -> float:
         """Resolve device pixel ratio for the backing FBO."""
@@ -1011,7 +1104,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     _gl.glUniform4f(loc, float(border.redF()), float(border.greenF()),
                                     float(border.blueF()), float(border.alphaF()))
 
-            # --- Oscilloscope uniforms ---
+            # --- Oscilloscope uniforms (waveform data only) ---
             if mode == 'oscilloscope':
                 wf = self._waveform
                 wf_count = min(len(wf), 256) if wf else 0
@@ -1025,6 +1118,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         wf_buf[i] = float(wf[i])
                     _gl.glUniform1fv(loc, 256, wf_buf)
 
+            # --- Shared line/glow uniforms (oscilloscope + sine_wave) ---
+            if mode in ('oscilloscope', 'sine_wave'):
                 loc = u.get("u_glow_enabled", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._glow_enabled else 0)
@@ -1068,14 +1163,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         _gl.glUniform4f(loc, float(qc.redF()), float(qc.greenF()),
                                         float(qc.blueF()), float(qc.alphaF()))
 
-            # --- Energy band uniforms (oscilloscope, starfield, blob, helix) ---
-            if mode in ('oscilloscope', 'starfield', 'blob', 'helix'):
+            # --- Energy band uniforms (oscilloscope, sine_wave, starfield, blob, helix) ---
+            if mode in ('oscilloscope', 'sine_wave', 'starfield', 'blob', 'helix'):
                 eb = self._energy_bands
                 loc = u.get("u_overall_energy", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(eb.overall))
-                # Oscilloscope uses CPU-smoothed bands for glow anti-flicker
-                if mode == 'oscilloscope':
+                # Oscilloscope/sine_wave use CPU-smoothed bands for glow anti-flicker
+                if mode in ('oscilloscope', 'sine_wave'):
                     bass_val = self._osc_smoothed_bass
                     mid_val = self._osc_smoothed_mid
                     high_val = self._osc_smoothed_high
@@ -1159,6 +1254,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_blob_smoothed_energy", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_smoothed_energy))
+                loc = u.get("u_blob_reactive_deformation", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_reactive_deformation))
+                loc = u.get("u_blob_constant_wobble", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_constant_wobble))
+                loc = u.get("u_blob_reactive_wobble", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_reactive_wobble))
+                loc = u.get("u_blob_stretch_tendency", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_stretch_tendency))
 
             # --- Oscilloscope uniforms ---
             if mode == 'oscilloscope':
@@ -1168,6 +1275,45 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_osc_line_dim", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._osc_line_dim else 0)
+                loc = u.get("u_osc_line_offset_bias", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._osc_line_offset_bias))
+                loc = u.get("u_osc_vertical_shift", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._osc_vertical_shift else 0)
+
+            # --- Sine Wave uniforms (shares osc speed/dim/offset/travel) ---
+            if mode == 'sine_wave':
+                loc = u.get("u_playing", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._playing else 0)
+                loc = u.get("u_osc_speed", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._osc_speed))
+                loc = u.get("u_osc_line_dim", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._osc_line_dim else 0)
+                loc = u.get("u_osc_line_offset_bias", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._osc_line_offset_bias))
+                loc = u.get("u_osc_sine_travel", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, int(self._osc_sine_travel))
+                loc = u.get("u_card_adaptation", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_card_adaptation))
+                loc = u.get("u_sine_travel_line2", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, int(self._sine_travel_line2))
+                loc = u.get("u_sine_travel_line3", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, int(self._sine_travel_line3))
+                loc = u.get("u_wobble_amount", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_wobble_amount))
+                loc = u.get("u_osc_vertical_shift", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._sine_vertical_shift else 0)
 
             # --- Helix uniforms ---
             if mode == 'helix':
