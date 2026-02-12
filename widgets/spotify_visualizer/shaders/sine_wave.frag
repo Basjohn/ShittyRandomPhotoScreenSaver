@@ -53,12 +53,16 @@ uniform int u_sine_travel_line3;
 // Playback state: 1 = playing, 0 = paused
 uniform int u_playing;
 
-// Wobble: music-reactive positional wobble along the line (0.0-1.0)
+// Wave Effect: positional wave-like undulation along the line (0.0-1.0)
 // Preserves exact sine shape, only shifts line position up/down
-uniform float u_wobble_amount;
+uniform float u_wave_effect;
 
-// Vertical shift: when 1, spreads lines to fixed top/center/bottom positions
-// (same behaviour as oscilloscope vertical shift)
+// Micro Wobble: energy-reactive micro distortions / bumps along the line (0.0-1.0)
+// Creates small dents/spikes that react to audio without changing core shape
+uniform float u_micro_wobble;
+
+// Vertical shift: -50 to 200, controls line spread.
+// 0 = all lines on same center, 100 = default spread, 200 = max spread
 uniform int u_osc_vertical_shift;
 
 // Compute line + glow contribution for one sine line.
@@ -179,14 +183,19 @@ void main() {
     if (u_sine_travel_line3 == 1) phase3 = u_time * 2.0 * effective_speed;
     if (u_sine_travel_line3 == 2) phase3 = u_time * -2.0 * effective_speed;
 
-    // Wobble amount
-    float wobble = clamp(u_wobble_amount, 0.0, 1.0);
+    // Wave effect amount (positional undulation)
+    float wave_fx = clamp(u_wave_effect, 0.0, 1.0);
 
-    // Vertical shift: compute spacing once (same as oscilloscope)
+    // Micro wobble amount (energy-reactive micro distortions)
+    float micro_wob = clamp(u_micro_wobble, 0.0, 1.0);
+
+    // Vertical shift: int value maps to fraction of default spacing
+    // 0 = no spread, 100 = default spread, 200 = 2x spread, -50 = crossed
+    float v_shift_pct = float(u_osc_vertical_shift) / 100.0;
     float v_spacing = 0.0;
-    if (u_osc_vertical_shift == 1 && lines >= 2) {
-        float spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
-        v_spacing = spacing_px / inner_height;
+    if (abs(v_shift_pct) > 0.001 && lines >= 2) {
+        float base_spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
+        v_spacing = (base_spacing_px * v_shift_pct) / inner_height;
     }
 
     // =====================================================================
@@ -197,19 +206,32 @@ void main() {
     float amp1 = amplitude * (1.0 + e1 * 0.15 * sens);
     float w1 = sin(nx * sine_freq + phase1);
 
-    // Wobble: positional y-offset in NORMALIZED space (added to wave_y after scaling)
-    // This preserves the exact sine shape — only shifts the line up/down organically
-    float wob1 = 0.0;
-    if (wobble > 0.001) {
+    // Wave effect: positional y-offset preserving sine shape
+    float wfx1 = 0.0;
+    if (wave_fx > 0.001) {
         float we1 = (lines == 1) ? u_overall_energy : u_bass_energy;
-        float wob_raw = sin(nx * 5.3 + u_time * 1.7) * 0.50
+        float wfx_raw = sin(nx * 5.3 + u_time * 1.7) * 0.50
                       + sin(nx * 11.1 - u_time * 2.5) * 0.30
                       + sin(nx * 2.1 + u_time * 0.9) * 0.25;
-        wob1 = wob_raw * (0.3 + we1 * 0.7) * wobble * amplitude;
+        wfx1 = wfx_raw * (0.3 + we1 * 0.7) * wave_fx * amplitude;
+    }
+
+    // Micro wobble: high-frequency energy-reactive bumps along the line
+    float mw1 = 0.0;
+    if (micro_wob > 0.001) {
+        float me1 = (lines == 1) ? u_overall_energy : u_bass_energy;
+        float mw_raw = sin(nx * 47.0 + u_time * 3.1) * 0.35
+                     + sin(nx * 97.0 - u_time * 2.7) * 0.28
+                     + sin(nx * 157.0 + u_time * 4.3) * 0.22
+                     + sin(nx * 251.0 - u_time * 1.9) * 0.15;
+        float sharpness = 1.0 + micro_wob * 2.0;
+        mw_raw = sign(mw_raw) * pow(abs(mw_raw), 1.0 / sharpness);
+        mw1 = mw_raw * me1 * micro_wob * amplitude * 0.18;
     }
 
     float ny1 = ny;
-    vec4 c1 = eval_line(ny1, inner_height, w1 + wob1 / max(amp1, 0.001), amp1,
+    float w1_final = w1 + wfx1 / max(amp1, 0.001) + mw1 / max(amp1, 0.001);
+    vec4 c1 = eval_line(ny1, inner_height, w1_final, amp1,
                         u_line_color, u_glow_color, glow_sigma_base, e1);
 
     vec3 final_rgb = c1.rgb * c1.a;
@@ -222,15 +244,26 @@ void main() {
         float amp2 = amplitude * (1.0 + e2_band * 0.15 * sens);
         float w2 = sin(nx * sine_freq + 2.094 + phase2);
 
-        float wob2 = 0.0;
-        if (wobble > 0.001) {
-            float wob_raw2 = sin(nx * 7.7 + u_time * 2.1) * 0.45
+        float wfx2 = 0.0;
+        if (wave_fx > 0.001) {
+            float wfx_raw2 = sin(nx * 7.7 + u_time * 2.1) * 0.45
                            + sin(nx * 13.3 - u_time * 1.3) * 0.30;
-            wob2 = wob_raw2 * (0.3 + u_mid_energy * 0.7) * wobble * amplitude;
+            wfx2 = wfx_raw2 * (0.3 + u_mid_energy * 0.7) * wave_fx * amplitude;
+        }
+
+        float mw2 = 0.0;
+        if (micro_wob > 0.001) {
+            float mw_raw2 = sin(nx * 53.0 + u_time * 2.9) * 0.35
+                          + sin(nx * 109.0 - u_time * 3.3) * 0.28
+                          + sin(nx * 173.0 + u_time * 3.7) * 0.22
+                          + sin(nx * 263.0 - u_time * 2.1) * 0.15;
+            float sharpness2 = 1.0 + micro_wob * 2.0;
+            mw_raw2 = sign(mw_raw2) * pow(abs(mw_raw2), 1.0 / sharpness2);
+            mw2 = mw_raw2 * u_mid_energy * micro_wob * amplitude * 0.18;
         }
 
         float ny2;
-        if (u_osc_vertical_shift == 1) {
+        if (abs(v_shift_pct) > 0.001) {
             ny2 = ny + v_spacing;
             amp2 = amplitude * (0.7 + e2_band * 0.15);
         } else {
@@ -238,7 +271,8 @@ void main() {
         }
 
         float sigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        vec4 c2 = eval_line(ny2, inner_height, w2 + wob2 / max(amp2, 0.001), amp2,
+        float w2_final = w2 + wfx2 / max(amp2, 0.001) + mw2 / max(amp2, 0.001);
+        vec4 c2 = eval_line(ny2, inner_height, w2_final, amp2,
                             u_line2_color, u_line2_glow_color, sigma2, e2_band);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
         final_a = max(final_a, c2.a);
@@ -251,15 +285,26 @@ void main() {
         float amp3 = amplitude * (1.0 + e3_band * 0.15 * sens);
         float w3 = sin(nx * sine_freq + 4.189 + phase3);
 
-        float wob3 = 0.0;
-        if (wobble > 0.001) {
-            float wob_raw3 = sin(nx * 4.3 - u_time * 1.9) * 0.40
+        float wfx3 = 0.0;
+        if (wave_fx > 0.001) {
+            float wfx_raw3 = sin(nx * 4.3 - u_time * 1.9) * 0.40
                            + sin(nx * 9.7 + u_time * 2.7) * 0.30;
-            wob3 = wob_raw3 * (0.3 + u_high_energy * 0.7) * wobble * amplitude;
+            wfx3 = wfx_raw3 * (0.3 + u_high_energy * 0.7) * wave_fx * amplitude;
+        }
+
+        float mw3 = 0.0;
+        if (micro_wob > 0.001) {
+            float mw_raw3 = sin(nx * 59.0 - u_time * 3.5) * 0.35
+                          + sin(nx * 127.0 + u_time * 2.3) * 0.28
+                          + sin(nx * 199.0 - u_time * 4.1) * 0.22
+                          + sin(nx * 281.0 + u_time * 1.7) * 0.15;
+            float sharpness3 = 1.0 + micro_wob * 2.0;
+            mw_raw3 = sign(mw_raw3) * pow(abs(mw_raw3), 1.0 / sharpness3);
+            mw3 = mw_raw3 * u_high_energy * micro_wob * amplitude * 0.18;
         }
 
         float ny3;
-        if (u_osc_vertical_shift == 1) {
+        if (abs(v_shift_pct) > 0.001) {
             ny3 = ny - v_spacing;
             amp3 = amplitude * (0.6 + e3_band * 0.18);
         } else {
@@ -267,7 +312,8 @@ void main() {
         }
 
         float sigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        vec4 c3 = eval_line(ny3, inner_height, w3 + wob3 / max(amp3, 0.001), amp3,
+        float w3_final = w3 + wfx3 / max(amp3, 0.001) + mw3 / max(amp3, 0.001);
+        vec4 c3 = eval_line(ny3, inner_height, w3_final, amp3,
                             u_line3_color, u_line3_glow_color, sigma3, e3_band);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;
         final_a = max(final_a, c3.a);

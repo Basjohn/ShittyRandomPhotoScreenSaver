@@ -305,7 +305,7 @@ def create_spotify_visualizer_widget(
                     osc_speed=model.osc_speed,
                     osc_line_dim=model.osc_line_dim,
                     osc_line_offset_bias=model.osc_line_offset_bias,
-                    osc_vertical_shift=model.osc_vertical_shift,
+                    osc_vertical_shift=int(model.osc_vertical_shift),
                     osc_growth=model.osc_growth,
                     blob_reactive_deformation=model.blob_reactive_deformation,
                     blob_constant_wobble=model.blob_constant_wobble,
@@ -329,7 +329,8 @@ def create_spotify_visualizer_widget(
                     sine_line3_glow_color=model.sine_line3_glow_color,
                     sine_travel_line2=model.sine_travel_line2,
                     sine_travel_line3=model.sine_travel_line3,
-                    sine_wobble_amount=model.sine_wobble_amount,
+                    sine_wave_effect=model.sine_wave_effect,
+                    sine_micro_wobble=model.sine_micro_wobble,
                     sine_vertical_shift=model.sine_vertical_shift,
                     sine_card_adaptation=model.sine_card_adaptation,
                 )

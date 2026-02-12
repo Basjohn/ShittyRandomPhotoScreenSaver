@@ -766,15 +766,27 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     osc_lob_row.addWidget(tab.osc_line_offset_bias_label)
     osc_layout.addLayout(osc_lob_row)
 
-    tab.osc_vertical_shift = QCheckBox("Vertical Shift")
-    tab.osc_vertical_shift.setChecked(tab._default_bool('spotify_visualizer', 'osc_vertical_shift', False))
+    osc_vshift_row = QHBoxLayout()
+    osc_vshift_row.addWidget(QLabel("Vertical Shift:"))
+    tab.osc_vertical_shift = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_vertical_shift.setMinimum(-50)
+    tab.osc_vertical_shift.setMaximum(200)
+    osc_vshift_val = int(tab._default_int('spotify_visualizer', 'osc_vertical_shift', 0))
+    tab.osc_vertical_shift.setValue(max(-50, min(200, osc_vshift_val)))
+    tab.osc_vertical_shift.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_vertical_shift.setTickInterval(25)
     tab.osc_vertical_shift.setToolTip(
-        "When enabled, disables offset bias and places lines at fixed vertical positions "
-        "(top / middle / bottom) spaced 20-80px apart depending on card height. "
-        "Line 1 stays at center. Multi-line only."
+        "Controls vertical spread between lines. 0 = all aligned, "
+        "100 = default spread, 200 = max spread, negative = lines cross. Multi-line only."
     )
-    tab.osc_vertical_shift.stateChanged.connect(tab._save_settings)
-    osc_layout.addWidget(tab.osc_vertical_shift)
+    tab.osc_vertical_shift.valueChanged.connect(tab._save_settings)
+    osc_vshift_row.addWidget(tab.osc_vertical_shift)
+    tab.osc_vertical_shift_label = QLabel(f"{osc_vshift_val}")
+    tab.osc_vertical_shift.valueChanged.connect(
+        lambda v: tab.osc_vertical_shift_label.setText(f"{v}")
+    )
+    osc_vshift_row.addWidget(tab.osc_vertical_shift_label)
+    osc_layout.addLayout(osc_vshift_row)
 
     # Line colour picker (separate from glow)
     osc_line_color_row = QHBoxLayout()
@@ -1382,34 +1394,66 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     sine_travel_row.addStretch()
     sine_layout.addLayout(sine_travel_row)
 
-    # Wobble (music-reactive deformity)
-    sine_wobble_row = QHBoxLayout()
-    sine_wobble_row.addWidget(QLabel("Wobble:"))
-    tab.sine_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.sine_wobble.setMinimum(0)
-    tab.sine_wobble.setMaximum(100)
-    sine_wobble_val = int(tab._default_float('spotify_visualizer', 'sine_wobble_amount', 0.0) * 100)
-    tab.sine_wobble.setValue(max(0, min(100, sine_wobble_val)))
-    tab.sine_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.sine_wobble.setTickInterval(10)
-    tab.sine_wobble.setToolTip("Music-reactive deformity. Higher = more wobble for less energy.")
-    tab.sine_wobble.valueChanged.connect(tab._save_settings)
-    sine_wobble_row.addWidget(tab.sine_wobble)
-    tab.sine_wobble_label = QLabel(f"{sine_wobble_val}%")
-    tab.sine_wobble.valueChanged.connect(
-        lambda v: tab.sine_wobble_label.setText(f"{v}%")
+    # Wave Effect (positional wave-like undulation)
+    sine_wave_fx_row = QHBoxLayout()
+    sine_wave_fx_row.addWidget(QLabel("Wave Effect:"))
+    tab.sine_wave_effect = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_wave_effect.setMinimum(0)
+    tab.sine_wave_effect.setMaximum(100)
+    sine_wave_fx_val = int(tab._default_float('spotify_visualizer', 'sine_wave_effect',
+                           tab._default_float('spotify_visualizer', 'sine_wobble_amount', 0.0)) * 100)
+    tab.sine_wave_effect.setValue(max(0, min(100, sine_wave_fx_val)))
+    tab.sine_wave_effect.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_wave_effect.setTickInterval(10)
+    tab.sine_wave_effect.setToolTip("Adds a wave-like positional undulation along the sine lines. Higher = more movement.")
+    tab.sine_wave_effect.valueChanged.connect(tab._save_settings)
+    sine_wave_fx_row.addWidget(tab.sine_wave_effect)
+    tab.sine_wave_effect_label = QLabel(f"{sine_wave_fx_val}%")
+    tab.sine_wave_effect.valueChanged.connect(
+        lambda v: tab.sine_wave_effect_label.setText(f"{v}%")
     )
-    sine_wobble_row.addWidget(tab.sine_wobble_label)
-    sine_layout.addLayout(sine_wobble_row)
+    sine_wave_fx_row.addWidget(tab.sine_wave_effect_label)
+    sine_layout.addLayout(sine_wave_fx_row)
 
-    # Vertical Shift
-    tab.sine_vertical_shift = QCheckBox("Vertical Shift (spread lines to separate positions)")
-    tab.sine_vertical_shift.setChecked(
-        bool(tab._default_int('spotify_visualizer', 'sine_vertical_shift', 0))
+    # Micro Wobble (energy-reactive micro distortions)
+    sine_mw_row = QHBoxLayout()
+    sine_mw_row.addWidget(QLabel("Micro Wobble:"))
+    tab.sine_micro_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_micro_wobble.setMinimum(0)
+    tab.sine_micro_wobble.setMaximum(100)
+    sine_mw_val = int(tab._default_float('spotify_visualizer', 'sine_micro_wobble', 0.0) * 100)
+    tab.sine_micro_wobble.setValue(max(0, min(100, sine_mw_val)))
+    tab.sine_micro_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_micro_wobble.setTickInterval(10)
+    tab.sine_micro_wobble.setToolTip("Energy-reactive micro distortions along the line. Small dents/bumps that react to audio without changing core shape. Higher = sharper.")
+    tab.sine_micro_wobble.valueChanged.connect(tab._save_settings)
+    sine_mw_row.addWidget(tab.sine_micro_wobble)
+    tab.sine_micro_wobble_label = QLabel(f"{sine_mw_val}%")
+    tab.sine_micro_wobble.valueChanged.connect(
+        lambda v: tab.sine_micro_wobble_label.setText(f"{v}%")
     )
-    tab.sine_vertical_shift.setToolTip("When enabled, lines are placed at separate vertical positions (line 1 center, line 2 above, line 3 below).")
-    tab.sine_vertical_shift.stateChanged.connect(tab._save_settings)
-    sine_layout.addWidget(tab.sine_vertical_shift)
+    sine_mw_row.addWidget(tab.sine_micro_wobble_label)
+    sine_layout.addLayout(sine_mw_row)
+
+    # Vertical Shift (slider -50 to 200, 0 = aligned)
+    sine_vshift_row = QHBoxLayout()
+    sine_vshift_row.addWidget(QLabel("Vertical Shift:"))
+    tab.sine_vertical_shift = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_vertical_shift.setMinimum(-50)
+    tab.sine_vertical_shift.setMaximum(200)
+    sine_vshift_val = int(tab._default_int('spotify_visualizer', 'sine_vertical_shift', 0))
+    tab.sine_vertical_shift.setValue(max(-50, min(200, sine_vshift_val)))
+    tab.sine_vertical_shift.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_vertical_shift.setTickInterval(25)
+    tab.sine_vertical_shift.setToolTip("Controls vertical spread between lines. 0 = all aligned, 100 = default spread, 200 = max spread, negative = lines cross. Multi-line only.")
+    tab.sine_vertical_shift.valueChanged.connect(tab._save_settings)
+    sine_vshift_row.addWidget(tab.sine_vertical_shift)
+    tab.sine_vertical_shift_label = QLabel(f"{sine_vshift_val}")
+    tab.sine_vertical_shift.valueChanged.connect(
+        lambda v: tab.sine_vertical_shift_label.setText(f"{v}")
+    )
+    sine_vshift_row.addWidget(tab.sine_vertical_shift_label)
+    sine_layout.addLayout(sine_vshift_row)
 
     # Multi-line
     tab.sine_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
@@ -1759,7 +1803,11 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.osc_line_offset_bias.setValue(max(0, min(100, osc_lob_val)))
         tab.osc_line_offset_bias_label.setText(f"{osc_lob_val}%")
     if hasattr(tab, 'osc_vertical_shift'):
-        tab.osc_vertical_shift.setChecked(bool(spotify_vis_config.get('osc_vertical_shift', False)))
+        osc_vs = int(spotify_vis_config.get('osc_vertical_shift', 0))
+        if isinstance(spotify_vis_config.get('osc_vertical_shift'), bool):
+            osc_vs = 100 if spotify_vis_config.get('osc_vertical_shift') else 0
+        tab.osc_vertical_shift.setValue(max(-50, min(200, osc_vs)))
+        tab.osc_vertical_shift_label.setText(f"{osc_vs}")
     if hasattr(tab, 'spectrum_growth'):
         spectrum_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_growth', 1.0) * 100)
         tab.spectrum_growth.setValue(max(100, min(400, spectrum_growth_val)))
@@ -1952,12 +2000,21 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         sine_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_speed', 1.0) * 100)
         tab.sine_speed.setValue(max(10, min(100, sine_speed_val)))
         tab.sine_speed_label.setText(f"{sine_speed_val / 100.0:.2f}x")
-    if hasattr(tab, 'sine_wobble'):
-        sine_wob = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wobble_amount', 0.0) * 100)
-        tab.sine_wobble.setValue(max(0, min(100, sine_wob)))
-        tab.sine_wobble_label.setText(f"{sine_wob}%")
+    if hasattr(tab, 'sine_wave_effect'):
+        sine_wfx = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wave_effect',
+                       tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wobble_amount', 0.0)) * 100)
+        tab.sine_wave_effect.setValue(max(0, min(100, sine_wfx)))
+        tab.sine_wave_effect_label.setText(f"{sine_wfx}%")
+    if hasattr(tab, 'sine_micro_wobble'):
+        sine_mw = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_micro_wobble', 0.0) * 100)
+        tab.sine_micro_wobble.setValue(max(0, min(100, sine_mw)))
+        tab.sine_micro_wobble_label.setText(f"{sine_mw}%")
     if hasattr(tab, 'sine_vertical_shift'):
-        tab.sine_vertical_shift.setChecked(bool(spotify_vis_config.get('sine_vertical_shift', False)))
+        sine_vs = int(spotify_vis_config.get('sine_vertical_shift', 0))
+        if isinstance(spotify_vis_config.get('sine_vertical_shift'), bool):
+            sine_vs = 100 if spotify_vis_config.get('sine_vertical_shift') else 0
+        tab.sine_vertical_shift.setValue(max(-50, min(200, sine_vs)))
+        tab.sine_vertical_shift_label.setText(f"{sine_vs}")
     if hasattr(tab, 'sine_travel'):
         sine_travel_val = int(spotify_vis_config.get('sine_wave_travel', 0) or 0)
         tab.sine_travel.setCurrentIndex(max(0, min(2, sine_travel_val)))
@@ -2129,7 +2186,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_speed': (getattr(tab, 'osc_speed', None) and tab.osc_speed.value() or 100) / 100.0,
         'osc_line_dim': getattr(tab, 'osc_line_dim', None) and tab.osc_line_dim.isChecked(),
         'osc_line_offset_bias': (getattr(tab, 'osc_line_offset_bias', None) and tab.osc_line_offset_bias.value() or 0) / 100.0,
-        'osc_vertical_shift': getattr(tab, 'osc_vertical_shift', None) and tab.osc_vertical_shift.isChecked(),
+        'osc_vertical_shift': getattr(tab, 'osc_vertical_shift', None) and tab.osc_vertical_shift.value() or 0,
         'sine_glow_enabled': getattr(tab, 'sine_glow_enabled', None) and tab.sine_glow_enabled.isChecked(),
         'sine_glow_intensity': (getattr(tab, 'sine_glow_intensity', None) and tab.sine_glow_intensity.value() or 50) / 100.0,
         'sine_glow_color': _qcolor_to_list(getattr(tab, '_sine_glow_color', None), [0, 200, 255, 230]),
@@ -2137,8 +2194,9 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_reactive_glow': getattr(tab, 'sine_reactive_glow', None) and tab.sine_reactive_glow.isChecked(),
         'sine_sensitivity': (getattr(tab, 'sine_sensitivity', None) and tab.sine_sensitivity.value() or 100) / 100.0,
         'sine_speed': (getattr(tab, 'sine_speed', None) and tab.sine_speed.value() or 100) / 100.0,
-        'sine_wobble_amount': (getattr(tab, 'sine_wobble', None) and tab.sine_wobble.value() or 0) / 100.0,
-        'sine_vertical_shift': getattr(tab, 'sine_vertical_shift', None) and tab.sine_vertical_shift.isChecked(),
+        'sine_wave_effect': (getattr(tab, 'sine_wave_effect', None) and tab.sine_wave_effect.value() or 0) / 100.0,
+        'sine_micro_wobble': (getattr(tab, 'sine_micro_wobble', None) and tab.sine_micro_wobble.value() or 0) / 100.0,
+        'sine_vertical_shift': getattr(tab, 'sine_vertical_shift', None) and tab.sine_vertical_shift.value() or 0,
         'sine_wave_travel': getattr(tab, 'sine_travel', None) and tab.sine_travel.currentIndex() or 0,
         'sine_travel_line2': getattr(tab, 'sine_travel_line2', None) and tab.sine_travel_line2.currentIndex() or 0,
         'sine_travel_line3': getattr(tab, 'sine_travel_line3', None) and tab.sine_travel_line3.currentIndex() or 0,

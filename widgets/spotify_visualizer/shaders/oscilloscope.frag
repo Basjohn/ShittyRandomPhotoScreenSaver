@@ -224,11 +224,11 @@ void main() {
         float amp2 = amplitude * (0.88 + e2_band * 0.22 * band_boost);
         float w2 = sample_waveform(nx, offset2);
         float ny2;
-        if (u_osc_vertical_shift == 1) {
-            // Vertical Shift: fixed position above center (20-80px spacing)
-            float spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
-            float shift = spacing_px / inner_height;
-            ny2 = ny + shift;  // shift coordinate up → line renders above center
+        float v_shift_pct = float(u_osc_vertical_shift) / 100.0;
+        if (abs(v_shift_pct) > 0.001) {
+            float base_sp = clamp(inner_height * 0.25, 20.0, 80.0);
+            float shift = (base_sp * v_shift_pct) / inner_height;
+            ny2 = ny + shift;
             amp2 = amplitude * (0.7 + e2_band * 0.15);
         } else {
             ny2 = ny - lob * 0.18;
@@ -249,11 +249,11 @@ void main() {
         float amp3 = amplitude * (0.75 + e3_band * 0.28 * band_boost);
         float w3 = sample_waveform(nx, offset3);
         float ny3;
-        if (u_osc_vertical_shift == 1) {
-            // Vertical Shift: fixed position below center (20-80px spacing)
-            float spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
-            float shift = spacing_px / inner_height;
-            ny3 = ny - shift;  // shift coordinate down → line renders below center
+        float v_shift_pct3 = float(u_osc_vertical_shift) / 100.0;
+        if (abs(v_shift_pct3) > 0.001) {
+            float base_sp3 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float shift3 = (base_sp3 * v_shift_pct3) / inner_height;
+            ny3 = ny - shift3;
             amp3 = amplitude * (0.6 + e3_band * 0.18);
         } else {
             ny3 = ny + lob * 0.18;

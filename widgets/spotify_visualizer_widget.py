@@ -151,14 +151,15 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False
         self._osc_line_offset_bias: float = 0.0
-        self._osc_vertical_shift: bool = False
+        self._osc_vertical_shift: int = 0
         self._sine_wave_growth: float = 1.0
         self._sine_wave_travel: int = 0  # 0=none, 1=left, 2=right
         self._sine_travel_line2: int = 0  # per-line travel for line 2
         self._sine_travel_line3: int = 0  # per-line travel for line 3
         self._sine_card_adaptation: float = 0.3  # 0.0-1.0, how much of card height wave uses
-        self._sine_wobble_amount: float = 0.0  # 0.0-1.0, music-reactive deformity
-        self._sine_vertical_shift: bool = False  # energy shifts wave center up/down
+        self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
+        self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
+        self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
         self._sine_glow_enabled: bool = True
         self._sine_glow_intensity: float = 0.5
         self._sine_glow_color: QColor = QColor(0, 200, 255, 230)
@@ -556,7 +557,7 @@ class SpotifyVisualizerWidget(QWidget):
         if 'osc_line_offset_bias' in kwargs:
             self._osc_line_offset_bias = max(0.0, min(1.0, float(kwargs['osc_line_offset_bias'])))
         if 'osc_vertical_shift' in kwargs:
-            self._osc_vertical_shift = bool(kwargs['osc_vertical_shift'])
+            self._osc_vertical_shift = int(kwargs['osc_vertical_shift'])
         if 'sine_wave_growth' in kwargs:
             self._sine_wave_growth = max(0.5, min(5.0, float(kwargs['sine_wave_growth'])))
         if 'sine_wave_travel' in kwargs:
@@ -565,10 +566,12 @@ class SpotifyVisualizerWidget(QWidget):
             self._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
         if 'sine_travel_line3' in kwargs:
             self._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
-        if 'sine_wobble_amount' in kwargs:
-            self._sine_wobble_amount = max(0.0, min(1.0, float(kwargs['sine_wobble_amount'])))
+        if 'sine_wave_effect' in kwargs:
+            self._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
+        if 'sine_micro_wobble' in kwargs:
+            self._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
         if 'sine_vertical_shift' in kwargs:
-            self._sine_vertical_shift = bool(kwargs['sine_vertical_shift'])
+            self._sine_vertical_shift = int(kwargs['sine_vertical_shift'])
         if 'sine_card_adaptation' in kwargs:
             self._sine_card_adaptation = max(0.05, min(1.0, float(kwargs['sine_card_adaptation'])))
         if 'sine_glow_enabled' in kwargs:
@@ -1732,7 +1735,8 @@ class SpotifyVisualizerWidget(QWidget):
                     extra['sine_card_adaptation'] = self._sine_card_adaptation
                     extra['sine_travel_line2'] = self._sine_travel_line2
                     extra['sine_travel_line3'] = self._sine_travel_line3
-                    extra['sine_wobble_amount'] = self._sine_wobble_amount
+                    extra['sine_wave_effect'] = self._sine_wave_effect
+                    extra['sine_micro_wobble'] = self._sine_micro_wobble
                     extra['sine_vertical_shift'] = self._sine_vertical_shift
                     extra['helix_turns'] = self._helix_turns
                     extra['helix_double'] = self._helix_double

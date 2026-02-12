@@ -120,13 +120,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
         self._osc_line_offset_bias: float = 0.0
-        self._osc_vertical_shift: bool = False
+        self._osc_vertical_shift: int = 0
         self._osc_sine_travel: int = 0  # 0=none, 1=left, 2=right (used by sine_wave mode)
         self._sine_card_adaptation: float = 0.3  # 0.0-1.0, how much of card height wave uses
         self._sine_travel_line2: int = 0  # per-line travel: 0=none, 1=left, 2=right
         self._sine_travel_line3: int = 0
-        self._sine_wobble_amount: float = 0.0  # 0.0-1.0, music-reactive deformity
-        self._sine_vertical_shift: bool = False
+        self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
+        self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
+        self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
@@ -234,13 +235,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         osc_speed: float = 1.0,
         osc_line_dim: bool = False,
         osc_line_offset_bias: float = 0.0,
-        osc_vertical_shift: bool = False,
+        osc_vertical_shift: int = 0,
         osc_sine_travel: int = 0,
         sine_card_adaptation: float = 0.3,
         sine_travel_line2: int = 0,
         sine_travel_line3: int = 0,
-        sine_wobble_amount: float = 0.0,
-        sine_vertical_shift: bool = False,
+        sine_wave_effect: float = 0.0,
+        sine_micro_wobble: float = 0.0,
+        sine_vertical_shift: int = 0,
         helix_turns: int = 4,
         helix_double: bool = True,
         helix_speed: float = 1.0,
@@ -386,13 +388,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_speed = max(0.01, min(1.0, float(osc_speed)))
         self._osc_line_dim = bool(osc_line_dim)
         self._osc_line_offset_bias = max(0.0, min(1.0, float(osc_line_offset_bias)))
-        self._osc_vertical_shift = bool(osc_vertical_shift)
+        self._osc_vertical_shift = max(-50, min(200, int(osc_vertical_shift)))
         self._osc_sine_travel = max(0, min(2, int(osc_sine_travel)))
         self._sine_card_adaptation = max(0.05, min(1.0, float(sine_card_adaptation)))
         self._sine_travel_line2 = max(0, min(2, int(sine_travel_line2)))
         self._sine_travel_line3 = max(0, min(2, int(sine_travel_line3)))
-        self._sine_wobble_amount = max(0.0, min(1.0, float(sine_wobble_amount)))
-        self._sine_vertical_shift = bool(sine_vertical_shift)
+        self._sine_wave_effect = max(0.0, min(1.0, float(sine_wave_effect)))
+        self._sine_micro_wobble = max(0.0, min(1.0, float(sine_micro_wobble)))
+        self._sine_vertical_shift = max(-50, min(200, int(sine_vertical_shift)))
 
         # Helix settings
         self._helix_turns = max(2, int(helix_turns))
@@ -1280,7 +1283,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     _gl.glUniform1f(loc, float(self._osc_line_offset_bias))
                 loc = u.get("u_osc_vertical_shift", -1)
                 if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._osc_vertical_shift else 0)
+                    _gl.glUniform1i(loc, int(self._osc_vertical_shift))
 
             # --- Sine Wave uniforms (shares osc speed/dim/offset/travel) ---
             if mode == 'sine_wave':
@@ -1308,12 +1311,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_sine_travel_line3", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, int(self._sine_travel_line3))
-                loc = u.get("u_wobble_amount", -1)
+                loc = u.get("u_wave_effect", -1)
                 if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_wobble_amount))
+                    _gl.glUniform1f(loc, float(self._sine_wave_effect))
+                loc = u.get("u_micro_wobble", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_micro_wobble))
                 loc = u.get("u_osc_vertical_shift", -1)
                 if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._sine_vertical_shift else 0)
+                    _gl.glUniform1i(loc, int(self._sine_vertical_shift))
 
             # --- Helix uniforms ---
             if mode == 'helix':
