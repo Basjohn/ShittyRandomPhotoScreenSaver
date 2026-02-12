@@ -2,7 +2,8 @@
 <img width="625" height="202" alt="How dare you hover your cursor here!" src="https://github.com/user-attachments/assets/cbc989a9-a057-49ae-a23a-750d92f6f37c" />
 
 ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver that is suprisingly less shit than the majority of ancient decrepid screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
-![ShittyRandomPhotoScreenSaverS](https://github.com/user-attachments/assets/41e1e70f-1bfa-4934-b470-3753aaebfc96)
+![SSRPSweb](https://github.com/user-attachments/assets/adeb9d02-bba7-4ebe-bd47-c173caecaa8d)
+
 
 ---
 
