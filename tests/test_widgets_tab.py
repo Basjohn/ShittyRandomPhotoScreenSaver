@@ -83,8 +83,8 @@ class TestWidgetsTab:
         tab.weather_show_background.setChecked(True)
         tab.weather_bg_opacity.setValue(80)  # 80%
 
-        # Persist settings
-        tab._save_settings()
+        # Persist settings (call _now directly; _save_settings is debounced)
+        tab._save_settings_now()
 
         widgets_cfg = tab._settings.get("widgets", {})
         assert isinstance(widgets_cfg, dict)

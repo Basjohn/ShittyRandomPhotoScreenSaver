@@ -10,7 +10,7 @@ import math
 import time
 from typing import List, Optional, TYPE_CHECKING
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 
 if TYPE_CHECKING:
     from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker
@@ -680,6 +680,9 @@ def maybe_log_floor_state(
 
     throttle = 5.0
     if not state_changed and last_ts and (now - last_ts) < throttle:
+        return
+
+    if not is_perf_metrics_enabled():
         return
 
     try:

@@ -1065,7 +1065,8 @@ class WidgetsTab(QWidget):
             'limit': 4,
         }
         try:
-            config['reddit2']['limit'] = int(self.reddit2_items.currentText())
+            if hasattr(self, 'reddit2_items'):
+                config['reddit2']['limit'] = int(self.reddit2_items.currentText())
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         

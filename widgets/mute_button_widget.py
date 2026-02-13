@@ -116,13 +116,12 @@ class MuteButtonWidget(QWidget):
             return
         try:
             from widgets.shadow_utils import ShadowFadeProfile
-            profile = ShadowFadeProfile(
-                widget=self,
-                duration_ms=duration_ms,
-                shadow_renderer=None,
+            ShadowFadeProfile.start_fade_in(
+                self,
+                None,
+                has_background_frame=False,
+                on_finished=lambda: setattr(self, '_has_faded_in', True),
             )
-            profile.start()
-            self._has_faded_in = True
         except Exception:
             logger.debug("[MUTE_BTN] _start_widget_fade_in fallback", exc_info=True)
             self.show()

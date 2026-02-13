@@ -688,9 +688,11 @@ class TestSettingsIntegration:
     def test_settings_nested_dict_access(self, tmp_path):
         app_id = f"NestedDictTest_{uuid.uuid4().hex}"
         settings = SettingsManager(organization="Test", application=app_id, storage_base_dir=tmp_path)
-        settings.set("sources", {"folders": ["/initial/path"], "rss_feeds": []})
+        # Use dot-notation to set (flat keys are how _set_defaults stores sources.*)
+        settings.set("sources.folders", ["/initial/path"])
+        settings.set("sources.rss_feeds", [])
         settings.save()
-        # JsonSettingsStore supports dot-notation access into nested dicts
+        # JsonSettingsStore supports dot-notation access
         folders = settings.get("sources.folders", [])
         assert "/initial/path" in folders
         # Overwriting with dot notation should work
@@ -737,7 +739,7 @@ class TestSettingsIntegration:
         tab.media_enabled.setChecked(True)
         tab.media_position.setCurrentText("Bottom Left")
         tab.media_monitor_combo.setCurrentText("ALL")
-        tab._save_settings()
+        tab._save_settings_now()
         widgets_cfg = settings.get("widgets", {})
         media_cfg = widgets_cfg.get("media", {})
         assert media_cfg.get("enabled") is True
@@ -753,7 +755,7 @@ class TestSettingsIntegration:
         tab = dialog.widgets_tab
         tab.media_enabled.setChecked(True)
         tab.media_monitor_combo.setCurrentText("ALL")
-        tab._save_settings()
+        tab._save_settings_now()
         dialog.close()
 
         widget = DisplayWidget(
@@ -898,7 +900,7 @@ class TestWidgetRouting:
         tab.weather_monitor_combo.setCurrentText("ALL")
         tab.weather_show_background.setChecked(True)
         tab.weather_bg_opacity.setValue(80)
-        tab._save_settings()
+        tab._save_settings_now()
 
         def fake_weather_start(self):
             self._enabled = True

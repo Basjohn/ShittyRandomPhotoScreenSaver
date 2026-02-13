@@ -458,9 +458,12 @@ class GLCompositorWidget(QOpenGLWidget):
         """Get the display refresh rate for this compositor's screen.
         
         Returns:
-            Display refresh rate in Hz (defaults to 60 if detection fails)
+            Display refresh rate in Hz.  When detection fails the fallback
+            is 240 (uncapped) rather than 60 so high-Hz panels are never
+            artificially throttled.
         """
-        display_hz = 60
+        _FALLBACK_HZ = 240  # prefer too-fast over too-slow
+        display_hz = 0
         try:
             screen = None
             parent = self.parent()
@@ -479,10 +482,11 @@ class GLCompositorWidget(QOpenGLWidget):
                 screen = QGuiApplication.primaryScreen()
             if screen is not None:
                 display_hz = int(screen.refreshRate())
-                if display_hz <= 0:
-                    display_hz = 60
         except Exception:
             pass
+        if display_hz <= 0:
+            display_hz = _FALLBACK_HZ
+            logger.debug("[GL COMPOSITOR] Screen Hz detection failed, using fallback %d", _FALLBACK_HZ)
         return display_hz
 
     def _calculate_target_fps(self, display_hz: int) -> int:
@@ -490,14 +494,25 @@ class GLCompositorWidget(QOpenGLWidget):
         
         Policy: cap to display refresh rate, never divide it down.
         No adaptive ladders, no vsync — pure timer at display Hz.
+        
+        Priority order:
+        1. Already-cached value on this compositor (survives settings dialog)
+        2. Parent DisplayWidget._target_fps (set once at startup)
+        3. Late re-detection from parent screen
+        4. display_hz from _get_display_refresh_rate()
         """
+        # 1. Reuse our own cached value if we already detected successfully
+        if self._render_timer_fps > 0:
+            return self._render_timer_fps
+
+        # 2. Parent's cached target (set by configure_refresh_rate_sync at startup)
         parent = self.parent()
         from rendering.display_widget import DisplayWidget  # local import to avoid cycle
         if isinstance(parent, DisplayWidget):
             target = getattr(parent, "_target_fps", 0)
             if target > 0:
                 return target
-            # parent._target_fps is 0 (not yet detected) — force detection now
+            # 3. parent._target_fps is 0 (not yet detected) — force detection now
             try:
                 detected = int(round(parent._detect_refresh_rate()))
                 if detected > 0:
@@ -511,9 +526,7 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception:
                 logger.debug("[GL COMPOSITOR] Late FPS detection failed", exc_info=True)
 
-        # Final fallback: use display_hz from screen query
-        if display_hz <= 0:
-            display_hz = 60
+        # 4. Final fallback: use display_hz from screen query (already 240 if unknown)
         target = min(240, max(30, display_hz))
 
         if is_perf_metrics_enabled():
@@ -1613,111 +1626,70 @@ class GLCompositorWidget(QOpenGLWidget):
         return create_card_flip_program(self)
 
     def _compile_shader(self, source: str, shader_type: int) -> int:
-        """Compile a single GLSL shader and return its id."""
-
-        if gl is None:
-            raise RuntimeError("OpenGL context not available for shader compilation")
-
-        shader = gl.glCreateShader(shader_type)
-        gl.glShaderSource(shader, source)
-        gl.glCompileShader(shader)
-        status = gl.glGetShaderiv(shader, gl.GL_COMPILE_STATUS)
-        if status != gl.GL_TRUE:
-            log = gl.glGetShaderInfoLog(shader)
-            logger.debug("[GL SHADER] Failed to compile shader: %r", log)
-            gl.glDeleteShader(shader)
-            raise RuntimeError(f"Failed to compile shader: {log!r}")
-        return int(shader)
+        """Delegates to gl_compositor_pkg.shader_dispatch."""
+        from rendering.gl_compositor_pkg.shader_dispatch import compile_shader
+        return compile_shader(source, shader_type)
 
     # ------------------------------------------------------------------
-    # Shader helpers for Block Spins
+    # Shader capability checks — delegates to shader_dispatch
     # ------------------------------------------------------------------
 
     def _can_use_blockspin_shader(self) -> bool:
-        if self._gl_disabled_for_session or gl is None:
-            return False
-        if self._gl_pipeline is None or not self._gl_pipeline.initialized:
-            return False
-        if self._blockspin is None:
-            return False
-        return True
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_blockspin_shader
+        return can_use_blockspin_shader(self)
 
     def _can_use_simple_shader(self, state: object, program_id: int) -> bool:
-        """Shared capability check for simple fullscreen quad shaders.
-
-        Used by Ripple (raindrops), Warp Dissolve and Shooting Stars, which
-        all draw a single quad over the full compositor surface.
-        """
-
-        if self._gl_disabled_for_session or gl is None:
-            return False
-        if self._gl_pipeline is None or not self._gl_pipeline.initialized:
-            return False
-        if state is None:
-            return False
-        if not program_id:
-            return False
-        return True
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_simple_shader
+        return can_use_simple_shader(self, state, program_id)
 
     def _can_use_warp_shader(self) -> bool:
-        return self._can_use_simple_shader(self._warp, getattr(self._gl_pipeline, "warp_program", 0))
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_warp_shader
+        return can_use_warp_shader(self)
 
     def _can_use_raindrops_shader(self) -> bool:
-        return self._can_use_simple_shader(self._raindrops, self._gl_pipeline.raindrops_program)
-
-    def _can_use_grid_shader(self, state, program_attr: str) -> bool:
-        """Check if a grid-based shader (diffuse, blockflip, blinds) can be used."""
-        if state is None:
-            return False
-        if getattr(state, "cols", 0) <= 0 or getattr(state, "rows", 0) <= 0:
-            return False
-        return self._can_use_simple_shader(state, getattr(self._gl_pipeline, program_attr, 0))
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_raindrops_shader
+        return can_use_raindrops_shader(self)
 
     def _can_use_diffuse_shader(self) -> bool:
-        return self._can_use_grid_shader(self._diffuse, "diffuse_program")
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_diffuse_shader
+        return can_use_diffuse_shader(self)
 
     def _can_use_blockflip_shader(self) -> bool:
-        return self._can_use_grid_shader(self._blockflip, "blockflip_program")
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_blockflip_shader
+        return can_use_blockflip_shader(self)
 
     def _can_use_peel_shader(self) -> bool:
-        st = self._peel
-        if st is None or getattr(st, "strips", 0) <= 0:
-            return False
-        return self._can_use_simple_shader(st, getattr(self._gl_pipeline, "peel_program", 0))
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_peel_shader
+        return can_use_peel_shader(self)
 
     def _can_use_blinds_shader(self) -> bool:
-        return self._can_use_grid_shader(self._blinds, "blinds_program")
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_blinds_shader
+        return can_use_blinds_shader(self)
 
     def _can_use_crumble_shader(self) -> bool:
-        return self._can_use_simple_shader(self._crumble, getattr(self._gl_pipeline, "crumble_program", 0))
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_crumble_shader
+        return can_use_crumble_shader(self)
 
     def _can_use_particle_shader(self) -> bool:
-        return self._can_use_simple_shader(self._particle, getattr(self._gl_pipeline, "particle_program", 0))
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_particle_shader
+        return can_use_particle_shader(self)
 
     def _can_use_crossfade_shader(self) -> bool:
-        return self._can_use_simple_shader(self._crossfade, getattr(self._gl_pipeline, "crossfade_program", 0))
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_crossfade_shader
+        return can_use_crossfade_shader(self)
 
     def _can_use_slide_shader(self) -> bool:
-        return self._can_use_simple_shader(self._slide, getattr(self._gl_pipeline, "slide_program", 0))
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_slide_shader
+        return can_use_slide_shader(self)
 
     def _can_use_wipe_shader(self) -> bool:
-        return self._can_use_simple_shader(self._wipe, getattr(self._gl_pipeline, "wipe_program", 0))
-
-    # NOTE: _can_use_shuffle_shader() and _can_use_claws_shader() removed - these transitions are retired.
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_wipe_shader
+        return can_use_wipe_shader(self)
 
     def warm_shader_textures(self, old_pixmap: Optional[QPixmap], new_pixmap: Optional[QPixmap]) -> None:
-        """Best-effort prewarm of shader textures for a pixmap pair.
-
-        This initialises the GLSL pipeline on first use (if not already
-        done), then uploads/caches textures for the provided old/new pixmaps
-        so shader-backed transitions can reuse them without paying the full
-        upload cost on their first frame. Failures are logged at DEBUG and do
-        not affect the caller.
-        """
-
+        """Best-effort prewarm of shader textures for a pixmap pair."""
         if not self._ensure_gl_pipeline_ready():
             return
-
         self._warm_pixmap_textures(old_pixmap, new_pixmap)
 
     def warm_transition_resources(
@@ -1729,14 +1701,11 @@ class GLCompositorWidget(QOpenGLWidget):
         """Warm shader program + textures for a specific transition type."""
         if new_pixmap is None or new_pixmap.isNull():
             return False
-
         warm_old = old_pixmap
         if warm_old is None or warm_old.isNull():
             warm_old = new_pixmap
-
         if not self._ensure_gl_pipeline_ready():
             return False
-
         program_key = self._transition_program_map.get(transition_name)
         if program_key:
             try:
@@ -1744,214 +1713,140 @@ class GLCompositorWidget(QOpenGLWidget):
                 if not cache.is_compiled(program_key):
                     cache.get_program(program_key)
             except Exception:
-                logger.debug(
-                    "[GL COMPOSITOR] Failed to precompile shader program for %s",
-                    transition_name,
-                    exc_info=True,
-                )
-
+                logger.debug("[GL COMPOSITOR] Failed to precompile shader program for %s", transition_name, exc_info=True)
         textures_ready = self._warm_pixmap_textures(warm_old, new_pixmap)
         state_ready = textures_ready and self._warm_transition_state(transition_name, warm_old, new_pixmap)
         if not state_ready:
             logger.debug("[GL COMPOSITOR] Transition warmup incomplete for %s", transition_name)
         return state_ready
 
-    # NOTE: PBO and texture upload methods moved to GLTextureManager
-    # See rendering/gl_programs/texture_manager.py
+    # ------------------------------------------------------------------
+    # Texture preparation — delegates to shader_dispatch
+    # ------------------------------------------------------------------
 
     def _release_transition_textures(self) -> None:
-        """Release current transition texture references via texture manager."""
-        if self._texture_manager is not None:
-            self._texture_manager.release_transition_textures()
+        from rendering.gl_compositor_pkg.shader_dispatch import release_transition_textures
+        release_transition_textures(self)
 
     def _prepare_pair_textures(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
-        """Prepare texture pair via texture manager."""
-        if self._gl_pipeline is None:
-            return False
-        try:
-            result = self._texture_manager.prepare_transition_textures(old_pixmap, new_pixmap)
-            if not result:
-                self._gl_disabled_for_session = True
-                self._use_shaders = False
-            return result
-        except Exception:
-            logger.debug("[GL SHADER] Failed to upload transition textures", exc_info=True)
-            self._release_transition_textures()
-            self._gl_disabled_for_session = True
-            self._use_shaders = False
-            return False
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_pair_textures
+        return prepare_pair_textures(self, old_pixmap, new_pixmap)
 
     def _prepare_transition_textures(self, can_use_fn, state) -> bool:
-        """Generic texture preparation for any transition type."""
-        if not can_use_fn():
-            return False
-        if self._gl_pipeline is None:
-            return False
-        if self._texture_manager is None:
-            return False
-        if self._texture_manager.has_transition_textures():
-            return True
-        if state is None:
-            return False
-        return self._prepare_pair_textures(state.old_pixmap, state.new_pixmap)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_transition_textures
+        return prepare_transition_textures(self, can_use_fn, state)
 
     def _prepare_blockspin_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_blockspin_shader, self._blockspin)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_blockspin_textures
+        return prepare_blockspin_textures(self)
 
     def _prepare_warp_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_warp_shader, self._warp)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_warp_textures
+        return prepare_warp_textures(self)
 
     def _prepare_raindrops_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_raindrops_shader, self._raindrops)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_raindrops_textures
+        return prepare_raindrops_textures(self)
 
     def _prepare_diffuse_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_diffuse_shader, self._diffuse)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_diffuse_textures
+        return prepare_diffuse_textures(self)
 
     def _prepare_blockflip_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_blockflip_shader, self._blockflip)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_blockflip_textures
+        return prepare_blockflip_textures(self)
 
     def _prepare_peel_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_peel_shader, self._peel)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_peel_textures
+        return prepare_peel_textures(self)
 
     def _prepare_blinds_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_blinds_shader, self._blinds)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_blinds_textures
+        return prepare_blinds_textures(self)
 
     def _prepare_crumble_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_crumble_shader, self._crumble)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_crumble_textures
+        return prepare_crumble_textures(self)
 
     def _prepare_particle_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_particle_shader, self._particle)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_particle_textures
+        return prepare_particle_textures(self)
 
     def _prepare_crossfade_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_crossfade_shader, self._crossfade)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_crossfade_textures
+        return prepare_crossfade_textures(self)
 
     def _prepare_slide_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_slide_shader, self._slide)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_slide_textures
+        return prepare_slide_textures(self)
 
     def _prepare_wipe_textures(self) -> bool:
-        return self._prepare_transition_textures(self._can_use_wipe_shader, self._wipe)
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_wipe_textures
+        return prepare_wipe_textures(self)
+
+    # ------------------------------------------------------------------
+    # Viewport — delegates to shader_dispatch
+    # ------------------------------------------------------------------
 
     def _get_viewport_size(self) -> tuple[int, int]:
-        """Return the framebuffer viewport size in physical pixels.
-        
-        PERFORMANCE OPTIMIZED: Caches the result and only recalculates when
-        widget size changes. This eliminates per-frame DPR lookups and float
-        conversions in the hot render path.
-        """
-        current_size = (self.width(), self.height())
-        
-        # Return cached value if widget size hasn't changed
-        if self._cached_viewport is not None and self._cached_widget_size == current_size:
-            return self._cached_viewport
-        
-        # Recalculate viewport size
-        try:
-            dpr = float(self.devicePixelRatioF())
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            dpr = 1.0
-        w = max(1, int(round(current_size[0] * dpr)))
-        h = max(1, int(round(current_size[1] * dpr)))
-        # Guard against off-by-one rounding between Qt's reported size and
-        # the underlying framebuffer by slightly over-covering vertically.
-        # This prevents a 1px retained strip from the previous frame at the
-        # top edge on certain DPI/size combinations.
-        h = max(1, h + 1)
-        
-        # Cache the result
-        self._cached_viewport = (w, h)
-        self._cached_widget_size = current_size
-        return self._cached_viewport
+        from rendering.gl_compositor_pkg.shader_dispatch import get_viewport_size
+        return get_viewport_size(self)
+
+    # ------------------------------------------------------------------
+    # Paint shader dispatch — delegates to shader_dispatch
+    # ------------------------------------------------------------------
 
     def _paint_blockspin_shader(self, target: QRect) -> None:
-        """Render BlockSpin transition - delegates to GLTransitionRenderer."""
-        if gl is None:
-            return
-        if not self._can_use_blockspin_shader() or self._gl_pipeline is None or self._blockspin is None:
-            return
-        if not self._blockspin.old_pixmap or self._blockspin.old_pixmap.isNull() or not self._blockspin.new_pixmap or self._blockspin.new_pixmap.isNull():
-            return
-        if not self._prepare_blockspin_textures():
-            return
-        self._transition_renderer.render_blockspin_shader(target, self._blockspin)
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_blockspin_shader
+        paint_blockspin_shader(self, target)
 
     def _paint_peel_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_peel_shader, self._peel, self._prepare_peel_textures,
-            "peel_program", "peel_uniforms", "peel"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_peel_shader
+        paint_peel_shader(self, target)
 
     def _paint_crumble_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_crumble_shader, self._crumble, self._prepare_crumble_textures,
-            "crumble_program", "crumble_uniforms", "crumble"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_crumble_shader
+        paint_crumble_shader(self, target)
 
     def _paint_particle_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_particle_shader, self._particle, self._prepare_particle_textures,
-            "particle_program", "particle_uniforms", "particle"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_particle_shader
+        paint_particle_shader(self, target)
 
-    def _render_simple_shader(
-        self, can_use_fn, state, prep_fn, program_attr: str, uniforms_attr: str, helper_name: str
-    ) -> None:
-        """Generic shader render - delegates to GLTransitionRenderer."""
-        self._transition_renderer.render_simple_shader(
-            can_use_fn, state, prep_fn, program_attr, uniforms_attr, helper_name
-        )
+    def _render_simple_shader(self, can_use_fn, state, prep_fn, program_attr, uniforms_attr, helper_name):
+        from rendering.gl_compositor_pkg.shader_dispatch import render_simple_shader
+        render_simple_shader(self, can_use_fn, state, prep_fn, program_attr, uniforms_attr, helper_name)
 
     def _paint_blinds_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_blinds_shader, self._blinds, self._prepare_blinds_textures,
-            "blinds_program", "blinds_uniforms", "blinds"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_blinds_shader
+        paint_blinds_shader(self, target)
 
     def _paint_wipe_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_wipe_shader, self._wipe, self._prepare_wipe_textures,
-            "wipe_program", "wipe_uniforms", "wipe"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_wipe_shader
+        paint_wipe_shader(self, target)
 
     def _paint_slide_shader(self, target: QRect) -> None:
-        """Render Slide transition - delegates to GLTransitionRenderer."""
-        if not self._can_use_slide_shader() or self._gl_pipeline is None or self._slide is None:
-            return
-        if not self._slide.old_pixmap or self._slide.old_pixmap.isNull() or not self._slide.new_pixmap or self._slide.new_pixmap.isNull():
-            return
-        if not self._prepare_slide_textures():
-            return
-        self._transition_renderer.render_slide_shader(target, self._slide)
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_slide_shader
+        paint_slide_shader(self, target)
 
     def _paint_crossfade_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_crossfade_shader, self._crossfade, self._prepare_crossfade_textures,
-            "crossfade_program", "crossfade_uniforms", "crossfade"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_crossfade_shader
+        paint_crossfade_shader(self, target)
 
     def _paint_diffuse_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_diffuse_shader, self._diffuse, self._prepare_diffuse_textures,
-            "diffuse_program", "diffuse_uniforms", "diffuse"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_diffuse_shader
+        paint_diffuse_shader(self, target)
 
     def _paint_blockflip_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_blockflip_shader, self._blockflip, self._prepare_blockflip_textures,
-            "blockflip_program", "blockflip_uniforms", "blockflip"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_blockflip_shader
+        paint_blockflip_shader(self, target)
 
     def _paint_warp_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_warp_shader, self._warp, self._prepare_warp_textures,
-            "warp_program", "warp_uniforms", "warp"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_warp_shader
+        paint_warp_shader(self, target)
 
     def _paint_raindrops_shader(self, target: QRect) -> None:
-        self._render_simple_shader(
-            self._can_use_raindrops_shader, self._raindrops, self._prepare_raindrops_textures,
-            "raindrops_program", "raindrops_uniforms", "raindrops"
-        )
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_raindrops_shader
+        paint_raindrops_shader(self, target)
 
     def _paint_debug_overlay(self, painter: QPainter) -> None:
         """Delegates to gl_compositor_pkg.overlays."""
@@ -1969,21 +1864,8 @@ class GLCompositorWidget(QOpenGLWidget):
         return render_debug_overlay_image(self)
 
     def _paint_debug_overlay_gl(self) -> None:
-        if not is_perf_metrics_enabled():
-            return
-
-        image = self._render_debug_overlay_image()
-        if image is None:
-            return
-
-        # BUG FIX: Unbind shader before using QPainter
-        gl.glUseProgram(0)
-
-        painter = QPainter(self)
-        try:
-            painter.drawImage(0, 0, image)
-        finally:
-            painter.end()
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_debug_overlay_gl
+        paint_debug_overlay_gl(self)
 
     def paintGL(self) -> None:  # type: ignore[override]
         """Delegates to rendering.gl_compositor_pkg.paint."""
@@ -1991,23 +1873,8 @@ class GLCompositorWidget(QOpenGLWidget):
         return handle_paintGL(self)
 
     def _try_shader_path(self, name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
-        """Try to render a transition via shader path. Returns True if successful."""
-        if state is None or not can_use_fn():
-            return False
-        try:
-            if prep_fn is not None and not prep_fn():
-                return False
-            paint_fn(target)
-            self._paint_dimming_gl()
-            self._paint_spotify_visualizer_gl()
-            if is_perf_metrics_enabled():
-                self._paint_debug_overlay_gl()
-            return True
-        except Exception:
-            logger.debug("[GL SHADER] Shader %s path failed; disabling shader pipeline", name, exc_info=True)
-            self._gl_disabled_for_session = True
-            self._use_shaders = False
-            return False
+        from rendering.gl_compositor_pkg.shader_dispatch import try_shader_path
+        return try_shader_path(self, name, state, can_use_fn, paint_fn, target, prep_fn)
 
     def _paintGL_impl(self) -> None:
         """Delegates to rendering.gl_compositor_pkg.paint."""
@@ -2015,19 +1882,13 @@ class GLCompositorWidget(QOpenGLWidget):
         return paintGL_impl(self)
 
     def _paint_spotify_visualizer_gl(self) -> None:
-        if not self._spotify_vis_enabled:
-            return
-        painter = QPainter(self)
-        try:
-            self._paint_spotify_visualizer(painter)
-        finally:
-            painter.end()
-    
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_spotify_visualizer_gl
+        paint_spotify_visualizer_gl(self)
+
     def _paint_dimming(self, painter: QPainter) -> None:
         """Paint the dimming overlay if enabled (QPainter fallback path)."""
         if not self._dimming_enabled or self._dimming_opacity <= 0.0:
             return
-        
         try:
             painter.save()
             painter.setOpacity(self._dimming_opacity)
@@ -2035,7 +1896,7 @@ class GLCompositorWidget(QOpenGLWidget):
             painter.restore()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-    
+
     def _paint_dimming_gl(self) -> None:
         """Delegates to gl_compositor_pkg.overlays."""
         from rendering.gl_compositor_pkg.overlays import paint_dimming_gl

@@ -208,42 +208,62 @@ void main() {
             }
         }
 
-        // Border radius: FIXED radius based on bar_width so all bars look
-        // identical regardless of height.  Only shrink when the combined
-        // shape is extremely short (< 2*radius) to avoid visual artifacts.
-        float combined_h = max(active_height, peak_height);
+        // Border radius: each shape (bar / ghost) gets its own independent
+        // rounding so all tops look consistent regardless of relative heights.
         float br_max = min(u_border_radius, bar_width * 0.5);
-        float br = (combined_h < br_max * 2.0) ? min(br_max, combined_h * 0.5) : br_max;
-        if (br > 0.5 && (is_bar || is_ghost)) {
+        if (br_max > 0.5) {
             float bx_f = bar_local_x;
             float by_f = y_rel;
-            // Round the TOP two corners of the combined shape
-            if (by_f > combined_h - br) {
-                if (bx_f < br) {
-                    float dx = br - bx_f;
-                    float dy = by_f - (combined_h - br);
-                    if (dx * dx + dy * dy > br * br) discard;
-                }
-                if (bx_f > bar_width - br) {
-                    float dx = bx_f - (bar_width - br);
-                    float dy = by_f - (combined_h - br);
-                    if (dx * dx + dy * dy > br * br) discard;
+
+            if (is_bar) {
+                // Round the TOP two corners of the active bar
+                float br_bar = (active_height < br_max * 2.0)
+                    ? min(br_max, active_height * 0.5) : br_max;
+                if (br_bar > 0.5 && by_f > active_height - br_bar) {
+                    if (bx_f < br_bar) {
+                        float dx = br_bar - bx_f;
+                        float dy = by_f - (active_height - br_bar);
+                        if (dx * dx + dy * dy > br_bar * br_bar) discard;
+                    }
+                    if (bx_f > bar_width - br_bar) {
+                        float dx = bx_f - (bar_width - br_bar);
+                        float dy = by_f - (active_height - br_bar);
+                        if (dx * dx + dy * dy > br_bar * br_bar) discard;
+                    }
                 }
             }
-            // Round ghost bottom corners so the ghost rectangle doesn't
-            // protrude past the bar's rounded top corners.
-            if (is_ghost && active_height > 2.0) {
-                float br_bottom = (active_height < br_max * 2.0) ? min(br_max, active_height * 0.5) : br_max;
-                if (br_bottom > 0.5 && by_f < active_height + br_bottom) {
-                    if (bx_f < br_bottom) {
-                        float dx = br_bottom - bx_f;
-                        float dy = (active_height + br_bottom) - by_f;
-                        if (dx * dx + dy * dy > br_bottom * br_bottom) discard;
+
+            if (is_ghost) {
+                // Round the TOP two corners of the ghost
+                float br_ghost = (peak_height < br_max * 2.0)
+                    ? min(br_max, peak_height * 0.5) : br_max;
+                if (br_ghost > 0.5 && by_f > peak_height - br_ghost) {
+                    if (bx_f < br_ghost) {
+                        float dx = br_ghost - bx_f;
+                        float dy = by_f - (peak_height - br_ghost);
+                        if (dx * dx + dy * dy > br_ghost * br_ghost) discard;
                     }
-                    if (bx_f > bar_width - br_bottom) {
-                        float dx = bx_f - (bar_width - br_bottom);
-                        float dy = (active_height + br_bottom) - by_f;
-                        if (dx * dx + dy * dy > br_bottom * br_bottom) discard;
+                    if (bx_f > bar_width - br_ghost) {
+                        float dx = bx_f - (bar_width - br_ghost);
+                        float dy = by_f - (peak_height - br_ghost);
+                        if (dx * dx + dy * dy > br_ghost * br_ghost) discard;
+                    }
+                }
+                // Round ghost BOTTOM corners where ghost meets bar top
+                if (active_height > 2.0) {
+                    float br_bot = (active_height < br_max * 2.0)
+                        ? min(br_max, active_height * 0.5) : br_max;
+                    if (br_bot > 0.5 && by_f < active_height + br_bot) {
+                        if (bx_f < br_bot) {
+                            float dx = br_bot - bx_f;
+                            float dy = (active_height + br_bot) - by_f;
+                            if (dx * dx + dy * dy > br_bot * br_bot) discard;
+                        }
+                        if (bx_f > bar_width - br_bot) {
+                            float dx = bx_f - (bar_width - br_bot);
+                            float dy = (active_height + br_bot) - by_f;
+                            if (dx * dx + dy * dy > br_bot * br_bot) discard;
+                        }
                     }
                 }
             }

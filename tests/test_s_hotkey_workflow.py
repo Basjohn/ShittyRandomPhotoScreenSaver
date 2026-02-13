@@ -193,7 +193,7 @@ def test_settings_dialog_import_exists():
     
     This would catch NameError issues.
     """
-    from engine.screensaver_engine import QApplication
+    from PySide6.QtWidgets import QApplication
     from core.animation.animator import AnimationManager
     from ui.settings_dialog import SettingsDialog
     

@@ -874,11 +874,19 @@ class MediaWidget(BaseOverlayWidget):
         if not self._enabled:
             return False
         try:
+            # Bust GSMTC cache so we actually re-query the controller
+            self._gsmtc_cached_result = None
+            self._gsmtc_cache_ts = 0.0
+            # Clear scaled artwork cache so new artwork is rendered fresh
+            self._scaled_artwork_cache = None
+            self._scaled_artwork_cache_key = None
+            # Force clear in-flight guard so the refresh actually runs
+            self._refresh_in_flight = False
             if self._thread_manager is not None:
                 self._refresh_async()
             else:
                 self._refresh()
-            logger.debug("[MEDIA_WIDGET] Double-click triggered artwork refresh")
+            logger.info("[MEDIA_WIDGET] Double-click triggered artwork refresh")
             return True
         except Exception:
             logger.debug("[MEDIA_WIDGET] Double-click refresh failed", exc_info=True)
@@ -1086,20 +1094,6 @@ class MediaWidget(BaseOverlayWidget):
         self._scaled_artwork_cache_key = None
         # Notify Spotify widgets
         self._notify_spotify_widgets_visibility()
-    
-    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
-        """Fade the entire widget in."""
-        try:
-            from widgets.shadow_utils import ShadowFadeProfile
-            ShadowFadeProfile.start_fade_in(
-                self,
-                duration_ms=duration_ms,
-                on_complete=lambda: self._handle_fade_in_complete()
-            )
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Fade in failed, showing instantly: %s", e)
-            self.show()
-            self._handle_fade_in_complete()
     
     def _handle_fade_in_complete(self) -> None:
         """Mark fade-in complete."""

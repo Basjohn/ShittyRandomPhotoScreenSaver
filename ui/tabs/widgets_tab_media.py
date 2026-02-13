@@ -656,6 +656,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     _update_osc_multi_line_visibility(tab)
 
     # Per-mode settings: Starfield
+    tab._star_density_value = tab._config_float('spotify_visualizer', spotify_vis_config, 'star_density', 1.0)
     if hasattr(tab, 'star_travel_speed'):
         star_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'star_travel_speed', 0.5) * 100)
         tab.star_travel_speed.setValue(max(0, min(200, star_speed_val)))
@@ -958,6 +959,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_line2_glow_color': _qcolor_to_list(getattr(tab, '_osc_line2_glow_color', None), [255, 120, 50, 180]),
         'osc_line3_color': _qcolor_to_list(getattr(tab, '_osc_line3_color', None), [50, 255, 120, 230]),
         'osc_line3_glow_color': _qcolor_to_list(getattr(tab, '_osc_line3_glow_color', None), [50, 255, 120, 180]),
+        'star_density': getattr(tab, '_star_density_value', 1.0),
         'star_travel_speed': (tab.star_travel_speed.value() if hasattr(tab, 'star_travel_speed') else 50) / 100.0,
         'star_reactivity': (tab.star_reactivity.value() if hasattr(tab, 'star_reactivity') else 100) / 100.0,
         'nebula_tint1': _qcolor_to_list(getattr(tab, '_nebula_tint1', None), [20, 40, 120]),
@@ -1009,6 +1011,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_travel_line2': tab.sine_travel_line2.currentIndex() if hasattr(tab, 'sine_travel_line2') else 0,
         'sine_travel_line3': tab.sine_travel_line3.currentIndex() if hasattr(tab, 'sine_travel_line3') else 0,
         'sine_line_count': (tab.sine_line_count_slider.value() if hasattr(tab, 'sine_line_count_slider') else 2) if (hasattr(tab, 'sine_multi_line') and tab.sine_multi_line.isChecked()) else 1,
+        'sine_line_dim': tab.sine_line_dim.isChecked() if hasattr(tab, 'sine_line_dim') else False,
         'sine_line_offset_bias': (tab.sine_line_offset_bias.value() if hasattr(tab, 'sine_line_offset_bias') else 0) / 100.0,
         'sine_card_adaptation': (tab.sine_card_adaptation.value() if hasattr(tab, 'sine_card_adaptation') else 30) / 100.0,
         'sine_wave_growth': (tab.sine_wave_growth.value() if hasattr(tab, 'sine_wave_growth') else 100) / 100.0,

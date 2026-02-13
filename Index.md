@@ -60,7 +60,10 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Media | core/media/system_mute.py | is_available(), get_mute(), set_mute(), toggle_mute() | System-wide mute via IAudioEndpointVolume (pycaw) |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
 | Presets | core/settings/presets.py | PresetDefinition, apply_preset() | Widget presets system (moved from core/presets.py) |
+| SST I/O | core/settings/sst_io.py | export_to_sst(), import_from_sst(), preview_import_from_sst() | Settings snapshot transport (extracted from settings_manager.py) |
+| Lifecycle | core/lifecycle.py | Lifecycle, Cleanable | Runtime-checkable Protocols for start/stop/cleanup interface |
 | Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
+| Display Cleanup | rendering/display_cleanup.py | on_destroyed() | Widget destruction/cleanup logic (extracted from display_widget.py) |
 
 ## RSS Image Source (`sources/rss/`)
 
@@ -103,7 +106,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| DisplayWidget | rendering/display_widget.py | DisplayWidget | Core fullscreen presenter (1684 lines after refactor) |
+| DisplayWidget | rendering/display_widget.py | DisplayWidget | Core fullscreen presenter (1595 lines, delegates to 6 helper modules) |
 | Display Setup | rendering/display_setup.py | show_on_screen, setup_widgets, ensure_overlay_stack | Display initialization, widget setup, screen change |
 | Display Image Ops | rendering/display_image_ops.py | set_processed_image, on_transition_finished, push_spotify_visualizer_frame | Image display pipeline, transition finish |
 | Display GL Init | rendering/display_gl_init.py | init_renderer_backend, ensure_gl_compositor, ensure_render_surface | GL compositor/surface setup, cleanup |
@@ -111,11 +114,12 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter |
 | Display Input | rendering/display_input.py | handle_mousePressEvent, show_ctrl_cursor_hint | Cursor halo, mouse press/move |
 | Display Overlays | rendering/display_overlays.py | start_overlay_fades, perform_activation_refresh | Overlay fades, window diagnostics |
-| GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (2037 lines after refactor) |
+| GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (1891 lines, thin delegates) |
 | GL Transitions | rendering/gl_compositor_pkg/transitions.py | start_crossfade, start_warp, etc. | 12 transition start methods |
 | GL Overlays | rendering/gl_compositor_pkg/overlays.py | paint_debug_overlay, paint_spotify_visualizer | Debug/Spotify/dimming overlays |
 | GL Lifecycle | rendering/gl_compositor_pkg/gl_lifecycle.py | handle_initializeGL, init_gl_pipeline | GL init, pipeline, shader creation |
 | GL Paint | rendering/gl_compositor_pkg/paint.py | handle_paintGL, paintGL_impl | Paint orchestration |
+| GL Shader Dispatch | rendering/gl_compositor_pkg/shader_dispatch.py | can_use_*_shader, prepare_*_textures, paint_*_shader, compile_shader, get_viewport_size | Shader capability checks, texture prep, paint dispatch |
 | GL Trans Lifecycle | rendering/gl_compositor_pkg/transition_lifecycle.py | cancel_current_transition | Transition cancel, Spotify state |
 | TransitionRenderer | rendering/gl_transition_renderer.py | GLTransitionRenderer | Centralized transition rendering |
 
@@ -157,6 +161,8 @@ endering/gl_profiler.py | TransitionProfiler | Frame timing metrics |
 endering/render_strategy.py | TimerRenderStrategy | Timer-based rendering |
 | Adaptive Timer | 
 endering/adaptive_timer.py | AdaptiveTimerStrategy | Adaptive frame pacing |
+
+> **Render timing defaults:** `GLCompositorWidget` now caches the first successfully detected refresh rate per display and reuses it for subsequent restarts/settings-dialog hops. If hardware/Qt fails to report a Hz value, the compositor, display setup, display widget, and adaptive timer all fall back to an uncapped 240 Hz target instead of 60 Hz so high-refresh panels never get stuck at 60 fps.
 
 ## Rendering - GL Programs
 
@@ -309,12 +315,12 @@ endering/display_modes.py | DisplayMode | FILL/FIT/SHRINK enums |
 |---------|------|---------|-------------|
 | display.hw_accel | bool | true | Enable hardware acceleration |
 | display.mode | enum | fill | Image display mode |
-| display.use_lanczos | bool | false | Use Lanczos resampling |
+| display.use_lanczos | bool | false | Use Lanczos resampling (now stored in defaults) |
 | display.sharpen_downscale | bool | false | Sharpen when downscaling |
-| 	iming.interval | int | 45 | Image rotation interval (seconds) |
-| 	ransitions.type | enum | Crossfade | Transition type |
-| 	ransitions.duration_ms | int | 1300 | Transition duration |
-| input.hard_exit | bool | false | Require ESC/Q to exit |
+| 	timing.interval | int | 45 | Image rotation interval (seconds) |
+| 	transitions.type | enum | Random | Transition type selected when Random pool disabled |
+| 	transitions.duration_ms | int | 4000 | Baseline transition duration (per-type overrides exist) |
+| input.hard_exit | bool | true | Require ESC/Q to exit (matches user profile) |
 | cache.prefetch_ahead | int | 5 | Images to prefetch |
 | cache.max_items | int | 24 | Max cache entries |
 

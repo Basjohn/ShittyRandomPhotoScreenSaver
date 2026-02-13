@@ -307,6 +307,7 @@ def handle_screen_change(widget, screen) -> None:
         logger.debug("[SCREEN] GL compositor update failed", exc_info=True)
 
 def detect_refresh_rate(widget) -> float:
+    _FALLBACK_HZ = 240.0  # prefer too-fast over too-slow
     try:
         screen = widget._screen
         if screen is None:
@@ -314,20 +315,21 @@ def detect_refresh_rate(widget) -> float:
             screens = QGuiApplication.screens()
             screen = screens[widget.screen_index] if widget.screen_index < len(screens) else QGuiApplication.primaryScreen()
         hz_attr = getattr(screen, 'refreshRate', None)
-        rate = float(hz_attr()) if callable(hz_attr) else 60.0
-        if not (10.0 <= rate <= 240.0):
-            return 60.0
+        rate = float(hz_attr()) if callable(hz_attr) else _FALLBACK_HZ
+        if not (10.0 <= rate <= 500.0):
+            logger.debug("[DISPLAY_WIDGET] Refresh rate out of range (%.1f), using fallback %d", rate, int(_FALLBACK_HZ))
+            return _FALLBACK_HZ
         return rate
     except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        return 60.0
+        logger.debug("[DISPLAY_WIDGET] Refresh rate detection failed: %s, using fallback %d", e, int(_FALLBACK_HZ))
+        return _FALLBACK_HZ
 
 def configure_refresh_rate_sync(widget) -> None:
     detected = int(round(widget._detect_refresh_rate()))
     widget._target_fps = widget._resolve_display_target_fps(detected)
     if widget._target_fps <= 0:
-        logger.warning("[REFRESH_DIAG] FPS detection failed for screen=%s, forcing 60", widget.screen_index)
-        widget._target_fps = 60
+        logger.warning("[REFRESH_DIAG] FPS detection failed for screen=%s, forcing 240 (uncapped)", widget.screen_index)
+        widget._target_fps = 240
     if is_perf_metrics_enabled():
         logger.info(
             "[REFRESH_DIAG] source=settings:display.refresh_sync screen=%s detected_hz=%d target_fps=%d",

@@ -807,6 +807,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_osc_line_offset_bias",
                     "u_osc_vertical_shift",
                     "u_osc_sine_travel",
+                    "u_sine_speed", "u_sine_line_dim",
+                    "u_sine_line_offset_bias",
+                    "u_sine_vertical_shift",
+                    "u_sine_travel",
                     "u_card_adaptation",
                     "u_sine_travel_line2", "u_sine_travel_line3",
                     "u_wave_effect", "u_micro_wobble",
@@ -1304,16 +1308,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_playing", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._playing else 0)
-                loc = u.get("u_osc_speed", -1)
+                loc = u.get("u_sine_speed", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._osc_speed))
-                loc = u.get("u_osc_line_dim", -1)
+                loc = u.get("u_sine_line_dim", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._osc_line_dim else 0)
-                loc = u.get("u_osc_line_offset_bias", -1)
+                loc = u.get("u_sine_line_offset_bias", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._osc_line_offset_bias))
-                loc = u.get("u_osc_sine_travel", -1)
+                loc = u.get("u_sine_travel", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, int(self._osc_sine_travel))
                 loc = u.get("u_card_adaptation", -1)
@@ -1331,7 +1335,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_micro_wobble", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._sine_micro_wobble))
-                loc = u.get("u_osc_vertical_shift", -1)
+                loc = u.get("u_sine_vertical_shift", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, int(self._sine_vertical_shift))
 

@@ -310,7 +310,8 @@ class AdaptiveTimerStrategy:
     
     def _timer_loop(self) -> None:
         """Main timer loop with state machine."""
-        target_interval = max(1.0, 1000.0 / self._config.target_fps) / 1000.0
+        fps = self._config.target_fps if self._config.target_fps > 0 else 240.0
+        target_interval = max(1.0, 1000.0 / fps) / 1000.0
         sleep_threshold = 0.002
         
         logger.debug("[ADAPTIVE_TIMER] Loop started (target=%.2fms)", target_interval * 1000)

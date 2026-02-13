@@ -33,19 +33,19 @@ uniform vec4 u_line3_color;
 uniform vec4 u_line3_glow_color;
 
 // Optional line 2/3 glow dimming (0 = equal glow, 1 = half-strength dim)
-uniform int u_osc_line_dim;
+uniform int u_sine_line_dim;
 
 // Sine Wave Speed: time multiplier for wave animation
-uniform float u_osc_speed;
+uniform float u_sine_speed;
 
 // Card Adaptation: 0.0-1.0, controls how much of the card height the wave uses
 uniform float u_card_adaptation;
 
 // Line Offset Bias: vertical spread between lines in multi-line mode
-uniform float u_osc_line_offset_bias;
+uniform float u_sine_line_offset_bias;
 
 // Sine Wave Travel: 0 = none, 1 = scroll left, 2 = scroll right
-uniform int u_osc_sine_travel;
+uniform int u_sine_travel;
 // Per-line travel overrides for multi-line mode (same encoding: 0/1/2)
 uniform int u_sine_travel_line2;
 uniform int u_sine_travel_line3;
@@ -63,7 +63,7 @@ uniform float u_micro_wobble;
 
 // Vertical shift: -50 to 200, controls line spread.
 // 0 = all lines on same center, 100 = default spread, 200 = max spread
-uniform int u_osc_vertical_shift;
+uniform int u_sine_vertical_shift;
 
 // Compute line + glow contribution for one sine line.
 // mw_displacement: reserved (pass 0.0; micro wobble is now applied to wave_val before calling)
@@ -83,13 +83,13 @@ vec4 eval_line(
     if (u_glow_enabled == 1 && glowSigmaBase > 0.0) {
         float sigma = glowSigmaBase;
         if (u_reactive_glow == 1) {
-            // Boosted: reach visible glow at lower energy (20%+ more noticeable)
-            sigma *= (0.6 + band_energy * 2.4);
+            // Boosted: reach visible glow at lower energy (+10% min/max)
+            sigma *= (0.66 + band_energy * 2.64);
         }
         if (sigma > 0.0) {
             glow_alpha = exp(-(dist_px * dist_px) / (2.0 * sigma * sigma));
             if (u_reactive_glow == 1) {
-                glow_alpha *= (0.6 + band_energy * 1.4);
+                glow_alpha *= (0.66 + band_energy * 1.54);
             }
         }
     }
@@ -155,32 +155,42 @@ void main() {
     // Sensitivity: controls how much BASS drives pulsing amplitude
     float sens = clamp(u_sensitivity, 0.1, 5.0);
 
-    // Per-line energy: base mix + bass pulsing scaled by sensitivity
-    // Single mode: modest base + bass*sens for reactive pulsing
-    // Multi-line: each line driven by its own band + bass*sens
+    // Per-line energy: sensitivity only drives amplitude pulse, NOT glow.
+    // bass_pulse = sensitivity-scaled bass for amplitude pulsing only.
     float bass_pulse = u_bass_energy * sens * 0.85;
+
+    // Amplitude energy (includes sensitivity via bass_pulse)
     float e1 = (lines == 1)
         ? (u_mid_energy * 0.35 + u_high_energy * 0.10 + bass_pulse)
         : (u_bass_energy * 0.4 + bass_pulse);
-    float e2_band = u_mid_energy * 0.5 + bass_pulse * 0.5;
-    float e3_band = u_high_energy * 0.5 + bass_pulse * 0.3;
+    // Lines 2/3: 70% own band + 30% bass bleed (bass_pulse carries sensitivity)
+    float e2_band = u_mid_energy * 0.70 + bass_pulse * 0.30;
+    float e3_band = u_high_energy * 0.70 + bass_pulse * 0.30;
+
+    // Glow energy: raw band energy WITHOUT sensitivity scaling.
+    // Reactive glow should respond to actual audio levels, not the sensitivity knob.
+    float glow_e1 = (lines == 1)
+        ? (u_mid_energy * 0.35 + u_high_energy * 0.10 + u_bass_energy * 0.55)
+        : (u_bass_energy * 0.7 + u_mid_energy * 0.2 + u_high_energy * 0.1);
+    float glow_e2 = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
+    float glow_e3 = u_high_energy * 0.70 + u_bass_energy * 0.15 + u_mid_energy * 0.15;
 
     // Line Offset Bias: base vertical spread between lines (multi-line)
-    float lob = clamp(u_osc_line_offset_bias, 0.0, 1.0);
+    float lob = clamp(u_sine_line_offset_bias, 0.0, 1.0);
 
     // Sine frequency: 3 full cycles across the card width
     float sine_freq = 6.2831853 * 3.0;
 
     // Speed slider: controls travel rate. Gated on playback.
-    float speed = clamp(u_osc_speed, 0.0, 3.0);
+    float speed = clamp(u_sine_speed, 0.0, 3.0);
     float play_gate = (u_playing == 1) ? 1.0 : 0.0;
     float effective_speed = speed * play_gate;
 
     // Travel phase per line: ONLY non-zero when direction != NONE (0).
     // 1=left (positive phase shift), 2=right (negative phase shift)
     float phase1 = 0.0;
-    if (u_osc_sine_travel == 1) phase1 = u_time * 2.0 * effective_speed;
-    if (u_osc_sine_travel == 2) phase1 = u_time * -2.0 * effective_speed;
+    if (u_sine_travel == 1) phase1 = u_time * 2.0 * effective_speed;
+    if (u_sine_travel == 2) phase1 = u_time * -2.0 * effective_speed;
 
     float phase2 = 0.0;
     if (u_sine_travel_line2 == 1) phase2 = u_time * 2.0 * effective_speed;
@@ -198,7 +208,7 @@ void main() {
 
     // Vertical shift: purely Y-positioning of lines (does NOT affect amplitude/shape)
     // 0 = no spread, 100 = default spread, 200 = 2x spread, negative = inverted
-    float v_shift_pct = float(u_osc_vertical_shift) / 100.0;
+    float v_shift_pct = float(u_sine_vertical_shift) / 100.0;
     float v_spacing = 0.0;
     if (abs(v_shift_pct) > 0.001 && lines >= 2) {
         float base_spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
@@ -228,12 +238,12 @@ void main() {
     }
 
     // Micro wobble: high-frequency energy-reactive bumps/dents along the line
-    // Bass-driven so it reacts to kick/bass hits. Higher scale for visible small bursts.
+    // Vocal/mid-driven so it reacts to vocals and melodic content.
     // Added to wave_val BEFORE amplitude scaling so they distort the shape itself
     float mw1 = 0.0;
     if (micro_wob > 0.001 && play_gate > 0.5) {
-        // Bass-dominant energy drive for reactive wobble
-        float mw_energy = u_bass_energy * 0.65 + u_mid_energy * 0.25 + u_high_energy * 0.10;
+        // Vocal/mid-dominant energy drive for reactive wobble
+        float mw_energy = u_mid_energy * 0.60 + u_high_energy * 0.25 + u_bass_energy * 0.15;
         float mw_drive = clamp(mw_energy * 2.5, 0.0, 1.0);
         if (mw_drive > 0.01) {
             // HIGH spatial frequencies for visible jagged bumps
@@ -252,7 +262,7 @@ void main() {
     // Micro wobble added to wave value (distorts shape), wave effect added as position shift
     float w1_final = w1 + mw1 + wfx1 / max(amp1, 0.001);
     vec4 c1 = eval_line(ny1, inner_height, w1_final, amp1,
-                        u_line_color, u_glow_color, glow_sigma_base, e1, 0.0);
+                        u_line_color, u_glow_color, glow_sigma_base, glow_e1, 0.0);
 
     vec3 final_rgb = c1.rgb * c1.a;
     float final_a = c1.a;
@@ -275,7 +285,7 @@ void main() {
 
         float mw2 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
-            float mw_energy2 = u_bass_energy * 0.65 + u_mid_energy * 0.25 + u_high_energy * 0.10;
+            float mw_energy2 = u_mid_energy * 0.60 + u_high_energy * 0.25 + u_bass_energy * 0.15;
             float mw_drive2 = clamp(mw_energy2 * 2.5, 0.0, 1.0);
             if (mw_drive2 > 0.01) {
                 float mw_raw2 = sin(nx * 139.0 + u_time * 2.0) * 0.28
@@ -295,10 +305,10 @@ void main() {
             ny2 = ny - lob * 0.12;
         }
 
-        float sigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
+        float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
         float w2_final = w2 + mw2 + wfx2 / max(amp2, 0.001);
         vec4 c2 = eval_line(ny2, inner_height, w2_final, amp2,
-                            u_line2_color, u_line2_glow_color, sigma2, e2_band, 0.0);
+                            u_line2_color, u_line2_glow_color, sigma2, glow_e2, 0.0);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
         final_a = max(final_a, c2.a);
     }
@@ -321,7 +331,7 @@ void main() {
 
         float mw3 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
-            float mw_energy3 = u_bass_energy * 0.65 + u_mid_energy * 0.20 + u_high_energy * 0.15;
+            float mw_energy3 = u_mid_energy * 0.55 + u_high_energy * 0.30 + u_bass_energy * 0.15;
             float mw_drive3 = clamp(mw_energy3 * 2.5, 0.0, 1.0);
             if (mw_drive3 > 0.01) {
                 float mw_raw3 = sin(nx * 151.0 - u_time * 2.2) * 0.28
@@ -341,10 +351,10 @@ void main() {
             ny3 = ny + lob * 0.12;
         }
 
-        float sigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
+        float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
         float w3_final = w3 + mw3 + wfx3 / max(amp3, 0.001);
         vec4 c3 = eval_line(ny3, inner_height, w3_final, amp3,
-                            u_line3_color, u_line3_glow_color, sigma3, e3_band, 0.0);
+                            u_line3_color, u_line3_glow_color, sigma3, glow_e3, 0.0);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;
         final_a = max(final_a, c3.a);
     }

@@ -68,26 +68,33 @@ void main() {
     // Logical grid in UV space; when u_grid is unset we fall back to a
     // single full-frame cell so the effect still works.
     vec2 grid = max(u_grid, vec2(1.0));
-    vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
 
-    vec2 cellOrigin = cell / grid;
-    vec2 cellSize = vec2(1.0) / grid;
-    vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside cell
-
-    // Pick the axis coordinate based on direction.
-    // 0=Horizontal (bands grow along X), 1=Vertical (Y), 2=Diagonal (X+Y).
     float coord;
-    if (u_direction == 1) {
-        coord = uvLocal.y;
-    } else if (u_direction == 2) {
-        coord = (uvLocal.x + uvLocal.y) * 0.5;
+    if (u_direction == 2) {
+        // Diagonal: true screen-spanning diagonal bands.
+        // Project UV onto the diagonal axis (top-left → bottom-right).
+        // Use the average of grid.x and grid.y as the band count so the
+        // number of diagonal stripes scales with the configured grid.
+        float bands = max(1.0, (grid.x + grid.y) * 0.5);
+        float diag = (uv.x + uv.y) * 0.5;  // 0..1 along diagonal
+        coord = fract(diag * bands);         // repeat into bands
     } else {
-        coord = uvLocal.x;
+        // Horizontal / Vertical: per-cell bands as before.
+        vec2 cell = clamp(floor(uv * grid), vec2(0.0), grid - vec2(1.0));
+        vec2 cellOrigin = cell / grid;
+        vec2 cellSize = vec2(1.0) / grid;
+        vec2 uvLocal = (uv - cellOrigin) / cellSize; // 0..1 inside cell
+
+        if (u_direction == 1) {
+            coord = uvLocal.y;
+        } else {
+            coord = uvLocal.x;
+        }
     }
 
-    // Blinds are modelled as bands within each cell that grow symmetrically
-    // from the centre outwards. At t=0 the band is collapsed to a thin line;
-    // by t=1 it covers the full cell.
+    // Blinds are modelled as bands that grow symmetrically from the centre
+    // outwards. At t=0 the band is collapsed to a thin line; by t=1 it
+    // covers the full cell / stripe.
     float w = clamp(t, 0.0, 1.0);
     float half = 0.5 * w;
     float left = 0.5 - half;

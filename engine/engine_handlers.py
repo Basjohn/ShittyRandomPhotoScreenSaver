@@ -102,7 +102,7 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     # This ensures Spotify detection resumes if user opened Spotify while in settings
     try:
         if engine.display_manager:
-            for display in engine.display_manager.get_displays():
+            for display in engine.display_manager.displays:
                 media_widget = getattr(display, 'media_widget', None)
                 if media_widget and hasattr(media_widget, 'wake_from_idle'):
                     media_widget.wake_from_idle()

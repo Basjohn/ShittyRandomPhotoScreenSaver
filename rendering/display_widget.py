@@ -468,9 +468,10 @@ class DisplayWidget(QWidget):
         
         Policy: cap to display refresh rate, never divide it down.
         No adaptive ladders, no vsync — pure timer at display Hz.
+        When detection fails, prefer uncapped (240) over throttled (60).
         """
         if detected_hz <= 0:
-            detected_hz = 60
+            detected_hz = 240
         return min(240, max(30, detected_hz))
     
     def show_on_screen(self) -> None:
@@ -971,90 +972,9 @@ class DisplayWidget(QWidget):
         cleanup_widget(self)
 
     def _on_destroyed(self, *_args) -> None:
-        """Ensure active transitions are stopped when the widget is destroyed."""
-        # NOTE: Deferred Reddit URL opening is now handled by DisplayManager.cleanup()
-        # to ensure it happens AFTER windows are hidden but BEFORE QApplication.quit()
-        if self.settings_manager and self._settings_listener_connected:
-            try:
-                self.settings_manager.settings_changed.disconnect(self._on_settings_value_changed)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            finally:
-                self._settings_listener_connected = False
-        
-        # Phase 5: Unregister from MultiMonitorCoordinator
-        if self._screen is not None:
-            try:
-                self._coordinator.unregister_instance(self, self._screen)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
-        # Phase 5: Release focus and event filter ownership via coordinator
-        try:
-            self._coordinator.release_focus(self)
-            self._coordinator.uninstall_event_filter(self)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        
-        self._destroy_render_surface()
-        
-        # Ensure compositor is torn down cleanly
-        try:
-            if self._gl_compositor is not None:
-                cleanup = getattr(self._gl_compositor, "cleanup", None)
-                if callable(cleanup):
-                    try:
-                        cleanup()
-                    except Exception as e:
-                        logger.debug("[GL COMPOSITOR] Cleanup failed: %s", e, exc_info=True)
-                self._gl_compositor.hide()
-                self._gl_compositor.setParent(None)
-                self._gl_compositor = None
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Teardown failed: %s", e, exc_info=True)
-            self._gl_compositor = None
-        
-        # Cleanup all overlay widgets using helper
-        self._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "stop")
-        self._cleanup_widget("media_widget", "MEDIA", "cleanup")
-        self._cleanup_widget("weather_widget", "WEATHER", "cleanup")
-        self._cleanup_widget("reddit_widget", "REDDIT", "cleanup")
-        self._cleanup_widget("reddit2_widget", "REDDIT2", "cleanup")
-        self._cleanup_widget("_pixel_shift_manager", "PIXEL_SHIFT", "cleanup")
-        
-        # Cleanup cursor halo (top-level window, must be explicitly destroyed)
-        try:
-            if self._ctrl_cursor_hint is not None:
-                self._ctrl_cursor_hint.hide()
-                self._ctrl_cursor_hint.deleteLater()
-                self._ctrl_cursor_hint = None
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._ctrl_cursor_hint = None
-        
-        # Stop and clean up any active transition via TransitionController
-        try:
-            if self._transition_controller is not None:
-                self._transition_controller.stop_current()
-            elif self._current_transition:
-                try:
-                    self._current_transition.stop()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    self._current_transition.cleanup()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                self._current_transition = None
-        except Exception as e:
-            logger.debug("[TRANSITION] Cleanup failed: %s", e, exc_info=True)
-        
-        # Hide overlays and cancel watchdog timer
-        try:
-            hide_all_overlays(self)
-        except Exception as e:
-            logger.debug("[OVERLAYS] Hide failed: %s", e, exc_info=True)
-        self._cancel_transition_watchdog()
+        """Delegates to rendering.display_cleanup."""
+        from rendering.display_cleanup import on_destroyed
+        on_destroyed(self, *_args)
 
     def _update_backend_fallback_overlay(self) -> None:
         """Show or hide diagnostic overlay based on backend selection state."""
