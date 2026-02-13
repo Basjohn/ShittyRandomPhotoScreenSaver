@@ -15,6 +15,8 @@ uniform int u_playing;
 uniform float u_ghost_alpha;
 uniform float u_bar_height_scale;  // visual boost for taller cards (1.0 = default height)
 uniform int u_single_piece;        // 1 = solid bars (no segment gaps)
+uniform int u_slanted;             // 1 = diagonal-sliced bar edges facing center
+uniform float u_border_radius;     // border radius in px (0 = square, ~6 = rounded)
 
 void main() {
     if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
@@ -142,6 +144,24 @@ void main() {
         boosted_peak = 0.95;
     }
 
+    // --- Slanted profile: compute diagonal clip for inner bar edge ---
+    // The inner edge (facing center) gets a diagonal cut.
+    // Center bar gets both edges slanted.
+    float slant_clip = 0.0;  // extra x-inset at top of bar (0 at bottom)
+    bool slant_active = (u_slanted == 1 && bar_width > 4.0);
+
+    // Determine which side faces center for this bar
+    int center_bar = bar_count_int / 2;
+    bool bar_left_of_center = (bar_index < center_bar);
+    bool bar_right_of_center = (bar_index > center_bar);
+    bool bar_is_center = (bar_index == center_bar);
+
+    // Linchpin bars: offset 3 from center (bars 8 and 14 in 21-bar)
+    // These get BOTH sides slanted lightly as visual anchors
+    int bar_offset = abs(bar_index - center_bar);
+    // Hardcoded offset 3 — avoids GLSL float→int truncation issues
+    bool bar_is_linchpin = (bar_offset == 3);
+
     // ========== SINGLE PIECE MODE ==========
     // Render solid continuous bars with no segment gaps.
     if (u_single_piece == 1) {
@@ -164,6 +184,54 @@ void main() {
 
         if (!is_bar && !is_ghost) {
             discard;
+        }
+
+        // Slanted clip for single-piece bars
+        if (slant_active && active_height > 4.0) {
+            float slant_amount = min(bar_width * 0.35, 8.0);
+            float y_frac = clamp(y_rel / max(active_height, 1.0), 0.0, 1.0);
+            float clip_px = slant_amount * y_frac;
+            if (bar_is_center) {
+                // Center bar: both edges slanted
+                float half_clip = clip_px * 0.5;
+                if (bar_local_x < half_clip || bar_local_x > bar_width - half_clip) discard;
+            } else if (bar_is_linchpin) {
+                // Linchpin bars: both edges slanted lightly (40% strength)
+                float lp_clip = clip_px * 0.4;
+                if (bar_local_x < lp_clip || bar_local_x > bar_width - lp_clip) discard;
+            } else if (bar_left_of_center) {
+                // Right edge (facing center) gets diagonal
+                if (bar_local_x > bar_width - clip_px) discard;
+            } else if (bar_right_of_center) {
+                // Left edge (facing center) gets diagonal
+                if (bar_local_x < clip_px) discard;
+            }
+        }
+
+        // Border radius clip for single-piece bars (applies to both bar and ghost)
+        float br = clamp(u_border_radius, 0.0, min(bar_width * 0.5, active_height * 0.5));
+        // Ghost uses peak_height for its top rounding
+        float br_ghost = clamp(u_border_radius, 0.0, min(bar_width * 0.5, peak_height * 0.5));
+        if (br > 0.5 && (is_bar || is_ghost)) {
+            float eff_br = is_ghost ? br_ghost : br;
+            float eff_h = is_ghost ? peak_height : active_height;
+            float bx_f = bar_local_x;
+            float by_f = y_rel;
+            // Only round the top two corners (bottom stays flat)
+            if (by_f > eff_h - eff_br) {
+                // Top-left corner
+                if (bx_f < eff_br) {
+                    float dx = eff_br - bx_f;
+                    float dy = by_f - (eff_h - eff_br);
+                    if (dx * dx + dy * dy > eff_br * eff_br) discard;
+                }
+                // Top-right corner
+                if (bx_f > bar_width - eff_br) {
+                    float dx = bx_f - (bar_width - eff_br);
+                    float dy = by_f - (eff_h - eff_br);
+                    if (dx * dx + dy * dy > eff_br * eff_br) discard;
+                }
+            }
         }
 
         vec4 fill = u_fill_color;
@@ -228,6 +296,57 @@ void main() {
     float seg_local_y = y_rel - float(seg_index) * step_y;
     if (seg_local_y < 0.0 || seg_local_y >= seg_height) {
         discard;
+    }
+
+    // Slanted clip for segmented bars
+    if (slant_active && seg_height > 2.0) {
+        float slant_amount = min(bar_width * 0.35, 8.0);
+        // Use global y position within the bar (not segment-local) for consistent diagonal
+        float total_bar_h = float(u_segments) * step_y;
+        float y_global_frac = clamp(y_rel / max(total_bar_h, 1.0), 0.0, 1.0);
+        float clip_px = slant_amount * y_global_frac;
+        if (bar_is_center) {
+            float half_clip = clip_px * 0.5;
+            if (bar_local_x < half_clip || bar_local_x > bar_width - half_clip) discard;
+        } else if (bar_is_linchpin) {
+            float lp_clip = clip_px * 0.4;
+            if (bar_local_x < lp_clip || bar_local_x > bar_width - lp_clip) discard;
+        } else if (bar_left_of_center) {
+            if (bar_local_x > bar_width - clip_px) discard;
+        } else if (bar_right_of_center) {
+            if (bar_local_x < clip_px) discard;
+        }
+    }
+
+    // Border radius clip for segmented bars (all 4 corners of each segment)
+    float br_seg = clamp(u_border_radius, 0.0, min(bar_width * 0.5, seg_height * 0.5));
+    if (br_seg > 0.5) {
+        float bx_f = bar_local_x;
+        float by_f = seg_local_y;
+        // Bottom-left corner
+        if (bx_f < br_seg && by_f < br_seg) {
+            float dx = br_seg - bx_f;
+            float dy = br_seg - by_f;
+            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+        }
+        // Bottom-right corner
+        if (bx_f > bar_width - br_seg && by_f < br_seg) {
+            float dx = bx_f - (bar_width - br_seg);
+            float dy = br_seg - by_f;
+            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+        }
+        // Top-left corner
+        if (bx_f < br_seg && by_f > seg_height - br_seg) {
+            float dx = br_seg - bx_f;
+            float dy = by_f - (seg_height - br_seg);
+            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+        }
+        // Top-right corner
+        if (bx_f > bar_width - br_seg && by_f > seg_height - br_seg) {
+            float dx = bx_f - (bar_width - br_seg);
+            float dy = by_f - (seg_height - br_seg);
+            if (dx * dx + dy * dy > br_seg * br_seg) discard;
+        }
     }
 
     int active_segments = int(round(boosted * float(u_segments)));

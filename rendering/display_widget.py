@@ -3,7 +3,6 @@ from collections import defaultdict
 from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List, Set
 import logging
 import time
-import weakref
 import sys
 import ctypes
 try:
@@ -32,7 +31,6 @@ from PySide6.QtGui import (
     QGuiApplication,
     QWheelEvent,
 )
-from shiboken6 import Shiboken
 from rendering.display_modes import DisplayMode
 from rendering.image_processor import ImageProcessor
 from rendering.gl_compositor import GLCompositorWidget
@@ -64,11 +62,9 @@ from transitions.overlay_manager import (
     any_gl_overlay_visible,
     show_backend_fallback_overlay,
     hide_backend_fallback_overlay,
-    GL_OVERLAY_KEYS,
 )
-from core.events import EventSystem
 from core.mc import is_mc_build
-from rendering.backends import BackendSelectionResult, create_backend_from_settings
+from rendering.backends import BackendSelectionResult
 from rendering.backends.base import RendererBackend, RenderSurface, SurfaceDescriptor
 
 
@@ -238,7 +234,7 @@ class DisplayWidget(QWidget):
         self._device_pixel_ratio = 1.0  # DPI scaling factor
         self._initial_mouse_pos = None  # Track mouse movement for exit
         self._mouse_move_threshold = 10  # Pixels of movement before exit
-        self._target_fps = 60  # Target FPS derived from screen refresh rate
+        self._target_fps = 0  # 0 = not yet detected; set by configure_refresh_rate_sync
         self._pre_raise_log_emitted = False
         self._base_fallback_paint_logged = False
         self._seed_pixmap: Optional[QPixmap] = None
@@ -467,21 +463,15 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-    def _resolve_display_target_fps(self, detected_hz: int, *, adaptive: bool = True) -> int:
-        """Resolve per-display target FPS with optional adaptive ladder."""
-
+    def _resolve_display_target_fps(self, detected_hz: int) -> int:
+        """Resolve per-display target FPS.
+        
+        Policy: cap to display refresh rate, never divide it down.
+        No adaptive ladders, no vsync — pure timer at display Hz.
+        """
         if detected_hz <= 0:
             detected_hz = 60
-        if adaptive:
-            if detected_hz <= 60:
-                target = detected_hz
-            elif detected_hz <= 120:
-                target = max(30, detected_hz // 2)
-            else:
-                target = max(30, detected_hz // 3)
-        else:
-            target = detected_hz
-        return min(240, max(30, target))
+        return min(240, max(30, detected_hz))
     
     def show_on_screen(self) -> None:
         """Delegates to rendering.display_setup."""

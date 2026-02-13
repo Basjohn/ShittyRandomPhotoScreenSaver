@@ -69,7 +69,6 @@ class TestLanczosScaling:
         Verify that PIL conversion doesn't triple or distort the image.
         """
         screen_size = QSize(1707, 960)
-        source_size = test_image_large.size()
         
         # Process with Lanczos
         result = ImageProcessor.process_image(
@@ -105,7 +104,7 @@ class TestLanczosScaling:
         assert result.height() <= screen_size.height()
         
         # Should handle alpha channel without crashing
-        result_image = result.toImage()
+        result.toImage()  # verify conversion doesn't crash
         # If original had alpha, result should too
         # (though conversion may change format)
     
@@ -237,7 +236,7 @@ class TestLanczosScaling:
     def test_lanczos_aspect_ratio_preserved(self, test_image_large):
         """Test that Lanczos preserves aspect ratio."""
         screen_size = QSize(800, 600)
-        source_ratio = test_image_large.width() / test_image_large.height()
+        _ = test_image_large.width() / test_image_large.height()  # noqa: F841
         
         result = ImageProcessor.process_image(
             test_image_large,

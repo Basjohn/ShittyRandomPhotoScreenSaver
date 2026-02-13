@@ -10,6 +10,10 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum, auto
 from typing import Any, Dict, Protocol, runtime_checkable
 
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class ResourceType(Enum):
     """Types of resources that can be managed."""

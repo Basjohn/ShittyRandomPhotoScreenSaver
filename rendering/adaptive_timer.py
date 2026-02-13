@@ -43,7 +43,7 @@ class TimerState(Enum):
 @dataclass
 class AdaptiveTimerConfig:
     """Configuration for adaptive timer strategy."""
-    target_fps: int = 60
+    target_fps: int = 0  # Always overridden by compositor; 0 = sentinel
     fallback_on_failure: bool = True
     min_frame_time_ms: float = 8.0
     # New: Time before transitioning PAUSED -> IDLE (seconds)

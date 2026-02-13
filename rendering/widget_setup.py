@@ -21,22 +21,10 @@ logger = get_logger(__name__)
 def parse_color_to_qcolor(color_data: Any, opacity_override: float = None) -> Optional[QColor]:
     """Parse color data [r,g,b,a] to QColor, with optional opacity override.
     
-    Args:
-        color_data: List/tuple of [r, g, b] or [r, g, b, a] values
-        opacity_override: Optional opacity multiplier (0.0-1.0) to apply to alpha
-        
-    Returns:
-        QColor or None if parsing fails
+    Delegates to centralized ui.color_utils.list_to_qcolor.
     """
-    try:
-        r, g, b = color_data[0], color_data[1], color_data[2]
-        a = color_data[3] if len(color_data) > 3 else 255
-        if opacity_override is not None:
-            a = int(max(0.0, min(1.0, opacity_override)) * a)
-        return QColor(r, g, b, a)
-    except Exception as e:
-        logger.debug("[MISC] Exception suppressed: %s", e)
-        return None
+    from ui.color_utils import list_to_qcolor
+    return list_to_qcolor(color_data, fallback=None, opacity_override=opacity_override)
 
 
 def resolve_monitor_visibility(monitor_sel: str, screen_index: int) -> bool:

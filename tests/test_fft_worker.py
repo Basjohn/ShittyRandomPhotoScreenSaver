@@ -356,14 +356,7 @@ class TestFFTGhosting:
         w.handle_message(msg2)
         peaks_after_silence = list(w._state.peaks)
         
-        # Peaks should have decayed
-        # At least some peaks should be lower
-        decayed = any(
-            peaks_after_silence[i] < peaks_after_strong[i] * 0.99
-            for i in range(len(peaks_after_strong))
-            if peaks_after_strong[i] > 0.01
-        )
-        # This may not always be true depending on the signal, so we just check structure
+        # Peaks should have decayed — structure check only (decay amount varies by signal)
         assert len(peaks_after_silence) == len(peaks_after_strong)
 
 

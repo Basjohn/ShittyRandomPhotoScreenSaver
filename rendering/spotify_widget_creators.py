@@ -25,6 +25,89 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> None:
+    """Apply full vis mode config from model to a live SpotifyVisualizerWidget.
+    
+    Reusable helper called from both initial setup and live settings refresh.
+    """
+    if not hasattr(vis, 'apply_vis_mode_config'):
+        return
+    vis.apply_vis_mode_config(
+        mode=str(model.mode),
+        osc_glow_enabled=model.osc_glow_enabled,
+        osc_glow_intensity=model.osc_glow_intensity,
+        osc_glow_color=model.osc_glow_color,
+        osc_reactive_glow=model.osc_reactive_glow,
+        osc_sensitivity=model.osc_sensitivity,
+        osc_smoothing=model.osc_smoothing,
+        star_density=model.star_density,
+        star_travel_speed=model.star_travel_speed,
+        star_reactivity=model.star_reactivity,
+        nebula_tint1=model.nebula_tint1,
+        nebula_tint2=model.nebula_tint2,
+        nebula_cycle_speed=model.nebula_cycle_speed,
+        blob_color=model.blob_color,
+        blob_glow_color=model.blob_glow_color,
+        blob_edge_color=model.blob_edge_color,
+        blob_outline_color=model.blob_outline_color,
+        blob_pulse=model.blob_pulse,
+        blob_width=model.blob_width,
+        blob_size=model.blob_size,
+        blob_glow_intensity=model.blob_glow_intensity,
+        blob_reactive_glow=model.blob_reactive_glow,
+        helix_turns=model.helix_turns,
+        helix_double=model.helix_double,
+        helix_speed=model.helix_speed,
+        helix_glow_enabled=model.helix_glow_enabled,
+        helix_glow_intensity=model.helix_glow_intensity,
+        helix_glow_color=model.helix_glow_color,
+        helix_reactive_glow=model.helix_reactive_glow,
+        osc_line_color=model.osc_line_color,
+        osc_line_count=model.osc_line_count,
+        osc_line2_color=model.osc_line2_color,
+        osc_line2_glow_color=model.osc_line2_glow_color,
+        osc_line3_color=model.osc_line3_color,
+        osc_line3_glow_color=model.osc_line3_glow_color,
+        spectrum_growth=model.spectrum_growth,
+        spectrum_single_piece=model.spectrum_single_piece,
+        starfield_growth=model.starfield_growth,
+        blob_growth=model.blob_growth,
+        helix_growth=model.helix_growth,
+        osc_speed=model.osc_speed,
+        osc_line_dim=model.osc_line_dim,
+        osc_line_offset_bias=model.osc_line_offset_bias,
+        osc_vertical_shift=int(model.osc_vertical_shift),
+        osc_growth=model.osc_growth,
+        blob_reactive_deformation=model.blob_reactive_deformation,
+        blob_constant_wobble=model.blob_constant_wobble,
+        blob_reactive_wobble=model.blob_reactive_wobble,
+        blob_stretch_tendency=model.blob_stretch_tendency,
+        spectrum_bar_profile=model.spectrum_bar_profile,
+        spectrum_border_radius=model.spectrum_border_radius,
+        sine_wave_growth=model.sine_wave_growth,
+        sine_wave_travel=model.sine_wave_travel,
+        sine_glow_enabled=model.sine_glow_enabled,
+        sine_glow_intensity=model.sine_glow_intensity,
+        sine_glow_color=model.sine_glow_color,
+        sine_line_color=model.sine_line_color,
+        sine_reactive_glow=model.sine_reactive_glow,
+        sine_sensitivity=model.sine_sensitivity,
+        sine_speed=model.sine_speed,
+        sine_line_count=model.sine_line_count,
+        sine_line_offset_bias=model.sine_line_offset_bias,
+        sine_line2_color=model.sine_line2_color,
+        sine_line2_glow_color=model.sine_line2_glow_color,
+        sine_line3_color=model.sine_line3_color,
+        sine_line3_glow_color=model.sine_line3_glow_color,
+        sine_travel_line2=model.sine_travel_line2,
+        sine_travel_line3=model.sine_travel_line3,
+        sine_wave_effect=model.sine_wave_effect,
+        sine_micro_wobble=model.sine_micro_wobble,
+        sine_vertical_shift=model.sine_vertical_shift,
+        sine_card_adaptation=model.sine_card_adaptation,
+    )
+
+
 def create_spotify_volume_widget(
     mgr: "WidgetManager",
     widgets_config: dict,
@@ -85,14 +168,18 @@ def create_spotify_volume_widget(
         border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
 
         try:
-            fill_color_data = media_model.spotify_volume_fill_color or [255, 255, 255, 230]
+            fill_color_data = media_model.spotify_volume_fill_color or [255, 255, 255, 140]
             try:
                 fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
-                fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
+                fa = fill_color_data[3] if len(fill_color_data) > 3 else 140
+                # Migrate old default: set_colors() used to force alpha=140,
+                # so saved alpha=230 was never visible — convert to 140.
+                if fa == 230 and fr == 255 and fg == 255 and fb == 255:
+                    fa = 140
                 fill_color = QColor(fr, fg, fb, fa)
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                fill_color = QColor(255, 255, 255, 230)
+                fill_color = QColor(255, 255, 255, 140)
 
             if hasattr(vol, "set_colors"):
                 vol.set_colors(track_bg=bg_qcolor, track_border=border_qcolor, fill=fill_color)
@@ -260,80 +347,7 @@ def create_spotify_visualizer_widget(
 
         # Visualization mode + per-mode settings
         try:
-            if hasattr(vis, 'apply_vis_mode_config'):
-                vis.apply_vis_mode_config(
-                    mode=str(model.mode),
-                    osc_glow_enabled=model.osc_glow_enabled,
-                    osc_glow_intensity=model.osc_glow_intensity,
-                    osc_glow_color=model.osc_glow_color,
-                    osc_reactive_glow=model.osc_reactive_glow,
-                    osc_sensitivity=model.osc_sensitivity,
-                    osc_smoothing=model.osc_smoothing,
-                    star_density=model.star_density,
-                    star_travel_speed=model.star_travel_speed,
-                    star_reactivity=model.star_reactivity,
-                    nebula_tint1=model.nebula_tint1,
-                    nebula_tint2=model.nebula_tint2,
-                    nebula_cycle_speed=model.nebula_cycle_speed,
-                    blob_color=model.blob_color,
-                    blob_glow_color=model.blob_glow_color,
-                    blob_edge_color=model.blob_edge_color,
-                    blob_outline_color=model.blob_outline_color,
-                    blob_pulse=model.blob_pulse,
-                    blob_width=model.blob_width,
-                    blob_size=model.blob_size,
-                    blob_glow_intensity=model.blob_glow_intensity,
-                    blob_reactive_glow=model.blob_reactive_glow,
-                    helix_turns=model.helix_turns,
-                    helix_double=model.helix_double,
-                    helix_speed=model.helix_speed,
-                    helix_glow_enabled=model.helix_glow_enabled,
-                    helix_glow_intensity=model.helix_glow_intensity,
-                    helix_glow_color=model.helix_glow_color,
-                    helix_reactive_glow=model.helix_reactive_glow,
-                    osc_line_color=model.osc_line_color,
-                    osc_line_count=model.osc_line_count,
-                    osc_line2_color=model.osc_line2_color,
-                    osc_line2_glow_color=model.osc_line2_glow_color,
-                    osc_line3_color=model.osc_line3_color,
-                    osc_line3_glow_color=model.osc_line3_glow_color,
-                    spectrum_growth=model.spectrum_growth,
-                    spectrum_single_piece=model.spectrum_single_piece,
-                    starfield_growth=model.starfield_growth,
-                    blob_growth=model.blob_growth,
-                    helix_growth=model.helix_growth,
-                    osc_speed=model.osc_speed,
-                    osc_line_dim=model.osc_line_dim,
-                    osc_line_offset_bias=model.osc_line_offset_bias,
-                    osc_vertical_shift=int(model.osc_vertical_shift),
-                    osc_growth=model.osc_growth,
-                    blob_reactive_deformation=model.blob_reactive_deformation,
-                    blob_constant_wobble=model.blob_constant_wobble,
-                    blob_reactive_wobble=model.blob_reactive_wobble,
-                    blob_stretch_tendency=model.blob_stretch_tendency,
-                    spectrum_curved_profile=model.spectrum_curved_profile,
-                    sine_wave_growth=model.sine_wave_growth,
-                    sine_wave_travel=model.sine_wave_travel,
-                    sine_glow_enabled=model.sine_glow_enabled,
-                    sine_glow_intensity=model.sine_glow_intensity,
-                    sine_glow_color=model.sine_glow_color,
-                    sine_line_color=model.sine_line_color,
-                    sine_reactive_glow=model.sine_reactive_glow,
-                    sine_sensitivity=model.sine_sensitivity,
-                    sine_speed=model.sine_speed,
-                    sine_line_count=model.sine_line_count,
-                    sine_line_offset_bias=model.sine_line_offset_bias,
-                    sine_line2_color=model.sine_line2_color,
-                    sine_line2_glow_color=model.sine_line2_glow_color,
-                    sine_line3_color=model.sine_line3_color,
-                    sine_line3_glow_color=model.sine_line3_glow_color,
-                    sine_travel_line2=model.sine_travel_line2,
-                    sine_travel_line3=model.sine_travel_line3,
-                    sine_wave_effect=model.sine_wave_effect,
-                    sine_micro_wobble=model.sine_micro_wobble,
-                    sine_vertical_shift=model.sine_vertical_shift,
-                    sine_card_adaptation=model.sine_card_adaptation,
-                )
+            apply_spotify_vis_model_config(vis, model)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 

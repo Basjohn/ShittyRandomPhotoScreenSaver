@@ -4,6 +4,10 @@ from typing import Any, Dict, Optional, Set
 
 from PySide6.QtGui import QPixmap
 
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 def _sanitize_details(details: Dict[str, Any]) -> Dict[str, Any]:
     sanitized = dict(details)

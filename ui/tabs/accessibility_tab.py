@@ -8,20 +8,15 @@ Provides accessibility-focused features:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QGroupBox, QCheckBox, QSlider, QScrollArea,
+    QGroupBox, QCheckBox, QScrollArea,
 )
 from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from ui.tabs.shared_styles import NoWheelSlider
 
 logger = get_logger(__name__)
-
-
-class NoWheelSlider(QSlider):
-    """Slider that ignores mouse wheel events to prevent accidental changes."""
-    def wheelEvent(self, event):  # type: ignore[override]
-        event.ignore()
 
 
 class AccessibilityTab(QWidget):
@@ -131,7 +126,7 @@ class AccessibilityTab(QWidget):
         self.dimming_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.dimming_opacity_slider.setRange(10, 90)  # 10% to 90%
         self.dimming_opacity_slider.setValue(30)  # Default 30%
-        self.dimming_opacity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.dimming_opacity_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
         self.dimming_opacity_slider.setTickInterval(10)
         self.dimming_opacity_slider.valueChanged.connect(self._on_dimming_opacity_changed)
         opacity_row.addWidget(self.dimming_opacity_slider, 1)
@@ -179,7 +174,7 @@ class AccessibilityTab(QWidget):
         self.pixel_shift_rate_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.pixel_shift_rate_slider.setRange(1, 5)
         self.pixel_shift_rate_slider.setValue(1)  # Default 1 shift per minute
-        self.pixel_shift_rate_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.pixel_shift_rate_slider.setTickPosition(NoWheelSlider.TickPosition.TicksBelow)
         self.pixel_shift_rate_slider.setTickInterval(1)
         self.pixel_shift_rate_slider.valueChanged.connect(self._on_pixel_shift_rate_changed)
         shift_row.addWidget(self.pixel_shift_rate_slider, 1)

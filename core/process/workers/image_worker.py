@@ -27,6 +27,9 @@ from core.process.types import (
     WorkerType,
 )
 from core.process.workers.base import BaseWorker
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
 
 try:
     from PIL import Image, ImageFilter

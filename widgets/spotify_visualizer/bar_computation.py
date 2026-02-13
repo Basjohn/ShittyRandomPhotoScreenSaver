@@ -181,7 +181,16 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             # Boost edge (bass) peak slightly
             edge_boost = np.exp(-((frac_arr - 1.0) ** 2) / 0.08) * 0.20
             profile_shape = profile_shape + edge_boost
-            
+
+            # Vocal peak at frac≈0.40 (offset 4 for 21 bars = "bar 7" from edge)
+            # Creates dual-peak: bass peak (edge) → dip → vocal peak → dip → center
+            vocal_peak = np.exp(-((frac_arr - 0.40) ** 2) / 0.018) * 0.12
+            vocal_dip = -np.exp(-((frac_arr - 0.30) ** 2) / 0.015) * 0.06
+            # Broad suppression for bars 7/8/9 (frac 0.20-0.40) to prevent top-pinning
+            # Bar 8 (frac=0.30) gets deepest cut; bar 7 and 9 get less
+            mid_suppress = -np.exp(-((frac_arr - 0.30) ** 2) / 0.025) * 0.14
+            profile_shape = profile_shape + vocal_peak + vocal_dip + mid_suppress
+
             # Ensure minimum floor
             profile_shape = np.maximum(profile_shape, 0.12)
         else:
@@ -205,8 +214,8 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                 # Cosine blend weights: each zone has a smooth bell-shaped weight
                 # Bass zone weight: peaks at frac=1.0 (edge)
                 w_bass = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, (frac - 0.80) / 0.25)))))
-                # Vocal zone weight: peaks at frac=0.42
-                w_vocal = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, (frac - 0.42) / 0.22)))))
+                # Vocal zone weight: peaks at frac=0.40
+                w_vocal = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, (frac - 0.40) / 0.22)))))
                 # Center zone weight: peaks at frac=0.0
                 w_center = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, frac / 0.25)))))
                 # Normalize weights
@@ -228,8 +237,8 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                     base = base * 0.82
 
                 if offset == 0:
-                    vocal_drive = mid_energy * 4.0
-                    base = vocal_drive * 0.90 + base * 0.10
+                    vocal_drive = mid_energy * 3.2
+                    base = vocal_drive * 0.80 + base * 0.20
 
                 if offset == 1:
                     base = base * 0.52 + mid_energy * 0.22

@@ -66,11 +66,13 @@ uniform float u_micro_wobble;
 uniform int u_osc_vertical_shift;
 
 // Compute line + glow contribution for one sine line.
+// mw_displacement: reserved (pass 0.0; micro wobble is now applied to wave_val before calling)
 vec4 eval_line(
     float ny, float inner_height, float wave_val, float amplitude,
-    vec4 lineCol, vec4 glowCol, float glowSigmaBase, float band_energy
+    vec4 lineCol, vec4 glowCol, float glowSigmaBase, float band_energy,
+    float mw_displacement
 ) {
-    float wave_y = 0.5 + wave_val * amplitude;
+    float wave_y = 0.5 + wave_val * amplitude + mw_displacement;
     float dist = abs(ny - wave_y);
     float dist_px = dist * inner_height;
 
@@ -145,17 +147,19 @@ void main() {
     // --- Amplitude: card_adaptation IS the fraction of half-height the wave uses ---
     // adapt=1.0 → wave peaks touch card edges, adapt=0.3 → wave uses 30% of card
     float adapt = clamp(u_card_adaptation, 0.05, 1.0);
-    float amplitude = (0.5 - 1.0 / max(inner_height, 2.0)) * adapt;
+    float base_amplitude = (0.5 - 1.0 / max(inner_height, 2.0)) * adapt;
     float glow_sigma_base = u_glow_intensity * 8.0;
 
     int lines = clamp(u_line_count, 1, 3);
 
-    // Per-line energy: single mode uses overall, multi-line splits by band
-    float e1 = (lines == 1) ? u_overall_energy : u_bass_energy * 1.15;
+    // Per-line energy: single mode uses vocal-led mix, multi-line splits by band
+    float e1 = (lines == 1)
+        ? (u_mid_energy * 0.70 + u_bass_energy * 0.18 + u_high_energy * 0.12)
+        : u_bass_energy * 1.15;
     float e2_band = u_mid_energy * 1.15;
     float e3_band = u_high_energy * 1.15;
 
-    // Sensitivity scales energy contribution
+    // Sensitivity scales how much bass/energy affects pulsing amplitude
     float sens = clamp(u_sensitivity, 0.1, 5.0);
 
     // Line Offset Bias: base vertical spread between lines (multi-line)
@@ -202,37 +206,47 @@ void main() {
     // LINE 1 (primary) — always centered vertically
     // =====================================================================
     // wave_val is raw sine in [-1, 1]. amplitude is the SOLE vertical scaler.
-    // Energy adds a small boost to amplitude, NOT to the wave value itself.
-    float amp1 = amplitude * (1.0 + e1 * 0.15 * sens);
+    // Energy adds a significant boost to amplitude so wave reacts to vocals.
+    // Sensitivity controls how much bass drives pulsing. Clamp to 0.48 to stay in card.
+    float amp1 = min(base_amplitude * (1.0 + e1 * 1.2 * sens), 0.48);
     float w1 = sin(nx * sine_freq + phase1);
 
-    // Wave effect: positional y-offset preserving sine shape
+    // Wave effect: vocal-led positional y-offset preserving sine shape
     float wfx1 = 0.0;
     if (wave_fx > 0.001) {
-        float we1 = (lines == 1) ? u_overall_energy : u_bass_energy;
+        float we1_raw = u_mid_energy * 0.7 + u_bass_energy * 0.2 + u_high_energy * 0.1;
+        float we1 = sqrt(max(we1_raw, 0.0));
         float wfx_raw = sin(nx * 5.3 + u_time * 1.7) * 0.50
                       + sin(nx * 11.1 - u_time * 2.5) * 0.30
                       + sin(nx * 2.1 + u_time * 0.9) * 0.25;
-        wfx1 = wfx_raw * (0.3 + we1 * 0.7) * wave_fx * amplitude;
+        wfx1 = wfx_raw * we1 * wave_fx * base_amplitude;
     }
 
-    // Micro wobble: high-frequency energy-reactive bumps along the line
+    // Micro wobble: high-frequency energy-reactive bumps/dents along the line
+    // These are small jagged distortions that make the line look "fuzzy" or "hairy"
+    // Added to wave_val BEFORE amplitude scaling so they distort the shape itself
     float mw1 = 0.0;
-    if (micro_wob > 0.001) {
-        float me1 = (lines == 1) ? u_overall_energy : u_bass_energy;
-        float mw_raw = sin(nx * 47.0 + u_time * 3.1) * 0.35
-                     + sin(nx * 97.0 - u_time * 2.7) * 0.28
-                     + sin(nx * 157.0 + u_time * 4.3) * 0.22
-                     + sin(nx * 251.0 - u_time * 1.9) * 0.15;
-        float sharpness = 1.0 + micro_wob * 2.0;
-        mw_raw = sign(mw_raw) * pow(abs(mw_raw), 1.0 / sharpness);
-        mw1 = mw_raw * me1 * micro_wob * amplitude * 0.18;
+    if (micro_wob > 0.001 && play_gate > 0.5) {
+        float mw_energy = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
+        float mw_drive = clamp(mw_energy * 2.0, 0.0, 1.0);
+        if (mw_drive > 0.01) {
+            // HIGH spatial frequencies (120-280 cycles) = visible jagged bumps
+            // Multiple octaves for organic look, fast time for lively motion
+            float mw_raw = sin(nx * 127.0 + u_time * 3.1) * 0.30
+                         + sin(nx * 197.0 - u_time * 4.7) * 0.25
+                         + sin(nx * 283.0 + u_time * 2.3) * 0.20
+                         + sin(nx * 89.0 - u_time * 5.5) * 0.15
+                         + sin(nx * 163.0 + u_time * 1.9) * 0.10;
+            // Scale: at full slider, bumps are ~0.15 of wave amplitude
+            mw1 = mw_raw * mw_drive * micro_wob * 0.15;
+        }
     }
 
     float ny1 = ny;
-    float w1_final = w1 + wfx1 / max(amp1, 0.001) + mw1 / max(amp1, 0.001);
+    // Micro wobble added to wave value (distorts shape), wave effect added as position shift
+    float w1_final = w1 + mw1 + wfx1 / max(amp1, 0.001);
     vec4 c1 = eval_line(ny1, inner_height, w1_final, amp1,
-                        u_line_color, u_glow_color, glow_sigma_base, e1);
+                        u_line_color, u_glow_color, glow_sigma_base, e1, 0.0);
 
     vec3 final_rgb = c1.rgb * c1.a;
     float final_a = c1.a;
@@ -241,39 +255,44 @@ void main() {
     // LINE 2 — shifted above center when vertical shift enabled
     // =====================================================================
     if (lines >= 2) {
-        float amp2 = amplitude * (1.0 + e2_band * 0.15 * sens);
+        float amp2 = min(base_amplitude * (1.0 + e2_band * 1.2 * sens), 0.48);
         float w2 = sin(nx * sine_freq + 2.094 + phase2);
 
         float wfx2 = 0.0;
         if (wave_fx > 0.001) {
+            float we2_raw = u_mid_energy * 0.7 + u_bass_energy * 0.15 + u_high_energy * 0.15;
+            float we2 = sqrt(max(we2_raw, 0.0));
             float wfx_raw2 = sin(nx * 7.7 + u_time * 2.1) * 0.45
                            + sin(nx * 13.3 - u_time * 1.3) * 0.30;
-            wfx2 = wfx_raw2 * (0.3 + u_mid_energy * 0.7) * wave_fx * amplitude;
+            wfx2 = wfx_raw2 * we2 * wave_fx * base_amplitude;
         }
 
         float mw2 = 0.0;
-        if (micro_wob > 0.001) {
-            float mw_raw2 = sin(nx * 53.0 + u_time * 2.9) * 0.35
-                          + sin(nx * 109.0 - u_time * 3.3) * 0.28
-                          + sin(nx * 173.0 + u_time * 3.7) * 0.22
-                          + sin(nx * 263.0 - u_time * 2.1) * 0.15;
-            float sharpness2 = 1.0 + micro_wob * 2.0;
-            mw_raw2 = sign(mw_raw2) * pow(abs(mw_raw2), 1.0 / sharpness2);
-            mw2 = mw_raw2 * u_mid_energy * micro_wob * amplitude * 0.18;
+        if (micro_wob > 0.001 && play_gate > 0.5) {
+            float mw_energy2 = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
+            float mw_drive2 = clamp(mw_energy2 * 2.0, 0.0, 1.0);
+            if (mw_drive2 > 0.01) {
+                float mw_raw2 = sin(nx * 139.0 + u_time * 3.5) * 0.30
+                              + sin(nx * 211.0 - u_time * 4.1) * 0.25
+                              + sin(nx * 271.0 + u_time * 2.7) * 0.20
+                              + sin(nx * 97.0 - u_time * 5.9) * 0.15
+                              + sin(nx * 173.0 + u_time * 2.1) * 0.10;
+                mw2 = mw_raw2 * mw_drive2 * micro_wob * 0.15;
+            }
         }
 
         float ny2;
         if (abs(v_shift_pct) > 0.001) {
             ny2 = ny + v_spacing;
-            amp2 = amplitude * (0.7 + e2_band * 0.15);
+            amp2 = min(base_amplitude * (0.7 + e2_band * 0.15), 0.48);
         } else {
             ny2 = ny - lob * 0.12;
         }
 
         float sigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        float w2_final = w2 + wfx2 / max(amp2, 0.001) + mw2 / max(amp2, 0.001);
+        float w2_final = w2 + mw2 + wfx2 / max(amp2, 0.001);
         vec4 c2 = eval_line(ny2, inner_height, w2_final, amp2,
-                            u_line2_color, u_line2_glow_color, sigma2, e2_band);
+                            u_line2_color, u_line2_glow_color, sigma2, e2_band, 0.0);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
         final_a = max(final_a, c2.a);
     }
@@ -282,39 +301,44 @@ void main() {
     // LINE 3 — shifted below center when vertical shift enabled
     // =====================================================================
     if (lines >= 3) {
-        float amp3 = amplitude * (1.0 + e3_band * 0.15 * sens);
+        float amp3 = min(base_amplitude * (1.0 + e3_band * 1.2 * sens), 0.48);
         float w3 = sin(nx * sine_freq + 4.189 + phase3);
 
         float wfx3 = 0.0;
         if (wave_fx > 0.001) {
+            float we3_raw = u_mid_energy * 0.65 + u_high_energy * 0.25 + u_bass_energy * 0.1;
+            float we3 = sqrt(max(we3_raw, 0.0));
             float wfx_raw3 = sin(nx * 4.3 - u_time * 1.9) * 0.40
                            + sin(nx * 9.7 + u_time * 2.7) * 0.30;
-            wfx3 = wfx_raw3 * (0.3 + u_high_energy * 0.7) * wave_fx * amplitude;
+            wfx3 = wfx_raw3 * we3 * wave_fx * base_amplitude;
         }
 
         float mw3 = 0.0;
-        if (micro_wob > 0.001) {
-            float mw_raw3 = sin(nx * 59.0 - u_time * 3.5) * 0.35
-                          + sin(nx * 127.0 + u_time * 2.3) * 0.28
-                          + sin(nx * 199.0 - u_time * 4.1) * 0.22
-                          + sin(nx * 281.0 + u_time * 1.7) * 0.15;
-            float sharpness3 = 1.0 + micro_wob * 2.0;
-            mw_raw3 = sign(mw_raw3) * pow(abs(mw_raw3), 1.0 / sharpness3);
-            mw3 = mw_raw3 * u_high_energy * micro_wob * amplitude * 0.18;
+        if (micro_wob > 0.001 && play_gate > 0.5) {
+            float mw_energy3 = u_mid_energy * 0.65 + u_high_energy * 0.25 + u_bass_energy * 0.10;
+            float mw_drive3 = clamp(mw_energy3 * 2.0, 0.0, 1.0);
+            if (mw_drive3 > 0.01) {
+                float mw_raw3 = sin(nx * 151.0 - u_time * 3.9) * 0.30
+                              + sin(nx * 223.0 + u_time * 4.3) * 0.25
+                              + sin(nx * 293.0 - u_time * 2.5) * 0.20
+                              + sin(nx * 107.0 + u_time * 6.1) * 0.15
+                              + sin(nx * 181.0 - u_time * 1.7) * 0.10;
+                mw3 = mw_raw3 * mw_drive3 * micro_wob * 0.15;
+            }
         }
 
         float ny3;
         if (abs(v_shift_pct) > 0.001) {
             ny3 = ny - v_spacing;
-            amp3 = amplitude * (0.6 + e3_band * 0.18);
+            amp3 = min(base_amplitude * (0.6 + e3_band * 0.18), 0.48);
         } else {
             ny3 = ny + lob * 0.12;
         }
 
         float sigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        float w3_final = w3 + wfx3 / max(amp3, 0.001) + mw3 / max(amp3, 0.001);
+        float w3_final = w3 + mw3 + wfx3 / max(amp3, 0.001);
         vec4 c3 = eval_line(ny3, inner_height, w3_final, amp3,
-                            u_line3_color, u_line3_glow_color, sigma3, e3_band);
+                            u_line3_color, u_line3_glow_color, sigma3, e3_band, 0.0);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;
         final_a = max(final_a, c3.a);
     }

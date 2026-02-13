@@ -540,6 +540,47 @@ class WidgetManager:
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify floor config", exc_info=True)
 
+        # Full vis mode config refresh — ensures ALL per-mode settings
+        # (wobble, wave effect, glow, colors, etc.) apply immediately on save
+        try:
+            from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+            apply_spotify_vis_model_config(vis, model)
+        except ImportError:
+            # Fallback: apply_vis_mode_config directly if helper not available
+            try:
+                if hasattr(vis, 'apply_vis_mode_config'):
+                    vis.apply_vis_mode_config(
+                        mode=str(model.mode),
+                        sine_micro_wobble=model.sine_micro_wobble,
+                        sine_wave_effect=model.sine_wave_effect,
+                        sine_vertical_shift=model.sine_vertical_shift,
+                        sine_card_adaptation=model.sine_card_adaptation,
+                        sine_speed=model.sine_speed,
+                        sine_wave_travel=model.sine_wave_travel,
+                        sine_line_count=model.sine_line_count,
+                        sine_line_offset_bias=model.sine_line_offset_bias,
+                        sine_travel_line2=model.sine_travel_line2,
+                        sine_travel_line3=model.sine_travel_line3,
+                        osc_speed=model.osc_speed,
+                        osc_sensitivity=model.osc_sensitivity,
+                        osc_smoothing=model.osc_smoothing,
+                        osc_glow_enabled=model.osc_glow_enabled,
+                        osc_glow_intensity=model.osc_glow_intensity,
+                        osc_reactive_glow=model.osc_reactive_glow,
+                        spectrum_bar_profile=model.spectrum_bar_profile,
+                    )
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to reapply vis mode config", exc_info=True)
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply full vis mode config", exc_info=True)
+
+        # Bar profile (curved/slanted/legacy)
+        try:
+            if hasattr(vis, 'apply_curved_profile'):
+                vis.apply_curved_profile(model.spectrum_bar_profile != 'legacy')
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply bar profile", exc_info=True)
+
         media_cfg = cfg.get('media', {}) if isinstance(cfg, Mapping) else {}
         self._apply_media_card_style_to_visualizer(vis, media_cfg)
 

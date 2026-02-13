@@ -27,7 +27,7 @@ def test_subscribe_and_publish():
     assert system.get_subscription_count() == 1
     
     # Publish event
-    event = system.publish("test.event", data="test data")
+    system.publish("test.event", data="test data")
     
     assert len(received_events) == 1
     assert received_events[0].event_type == "test.event"

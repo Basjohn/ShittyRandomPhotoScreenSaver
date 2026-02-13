@@ -62,9 +62,9 @@ class _SpotifyBeatEngine(QObject):
         self._last_smooth_ts: float = -1.0
         self._smoothing_tau: float = 0.12  # Base smoothing time constant
         
-        # Anti-flicker: Solution 1+2 ONLY (stronger intensity, NO temporal stability)
-        self._segment_hysteresis: float = 0.08  # 8% buffer - strong boundary resistance
-        self._min_change_threshold: float = 0.05  # 5% threshold - filters noise
+        # Anti-flicker: dead-zone threshold filters micro-oscillations
+        self._segment_hysteresis: float = 0.0  # Disabled — was amplifying oscillations
+        self._min_change_threshold: float = 0.06  # 6% dead-zone — filters segment-boundary noise
         
         # Playback state gating for FFT processing
         self._is_spotify_playing: bool = False

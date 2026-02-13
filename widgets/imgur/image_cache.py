@@ -163,7 +163,7 @@ class ImgurImageCache:
                         width = img.width()
                         height = img.height()
                 except Exception:
-                    pass
+                    logger.debug("[IMGUR_CACHE] QImage probe failed for %s", path, exc_info=True)
                 
                 now = time.time()
                 cached = CachedImage(

@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QCheckBox, QPushButton,
-    QScrollArea, QSlider, QButtonGroup,
+    QScrollArea, QButtonGroup,
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
@@ -24,17 +24,12 @@ from PySide6.QtGui import QColor
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
 from core.settings.defaults import get_default_settings
-from ui.tabs.shared_styles import SPINBOX_STYLE, TOOLTIP_STYLE
+from ui.tabs.shared_styles import SPINBOX_STYLE, TOOLTIP_STYLE, NoWheelSlider  # noqa: F401 — re-exported
 from ui.styled_popup import StyledColorPicker
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
 
 logger = get_logger(__name__)
-
-
-class NoWheelSlider(QSlider):
-    def wheelEvent(self, event):  # type: ignore[override]
-        event.ignore()
 
 
 class WidgetsTab(QWidget):

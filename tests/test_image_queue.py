@@ -57,7 +57,7 @@ def test_add_images_with_shuffle(sample_images):
     assert queue.size() == 10
     
     # Images should be in different order (not guaranteed but extremely likely)
-    first_img = queue.peek()
+    queue.peek()  # verify doesn't crash
     # Can't guarantee shuffle order, just verify it works
 
 
@@ -97,10 +97,10 @@ def test_queue_wraparound(sample_images):
     queue.add_images(sample_images[:3])  # Only 3 images
     
     # Consume all images
-    img1 = queue.next()
-    img2 = queue.next()
-    img3 = queue.next()
-    
+    queue.next()
+    queue.next()
+    queue.next()
+
     assert queue.size() == 0
     assert queue.get_wrap_count() == 0
     
@@ -209,7 +209,7 @@ def test_shuffle_method(sample_images):
     queue.add_images(sample_images)
     
     # Get first image before shuffle
-    first_before = queue.peek()
+    queue.peek()  # capture state before shuffle
     
     # Shuffle
     queue.shuffle()
@@ -365,8 +365,8 @@ def test_previous_image(sample_images):
     queue.add_images(sample_images)
     
     # Move forward
-    img1 = queue.next()  # image_0
-    img2 = queue.next()  # image_1
+    queue.next()  # image_0
+    queue.next()  # image_1
     
     # Go back
     prev = queue.previous()

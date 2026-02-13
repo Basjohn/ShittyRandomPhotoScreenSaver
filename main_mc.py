@@ -15,6 +15,9 @@ from __future__ import annotations
 import sys
 from main import main as core_main, parse_screensaver_args
 from core.settings.settings_manager import SettingsManager
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def _inject_run_mode_arg() -> None:

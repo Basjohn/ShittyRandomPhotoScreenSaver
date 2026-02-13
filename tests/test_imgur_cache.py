@@ -7,14 +7,11 @@ Tests cover:
 - Thread safety
 """
 import pytest
-from unittest.mock import patch, MagicMock
 import tempfile
-import json
 from pathlib import Path
 
 from widgets.imgur.image_cache import (
     ImgurImageCache, CachedImage,
-    DEFAULT_CACHE_DIR, MAX_CACHE_SIZE_MB, MAX_CACHE_ITEMS,
 )
 
 

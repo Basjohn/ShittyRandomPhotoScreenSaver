@@ -17,6 +17,9 @@ from enum import Enum, auto
 from typing import Dict
 
 from core.process.types import WorkerType
+from core.logging.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class BackpressurePolicy(Enum):

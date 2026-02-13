@@ -25,15 +25,14 @@ import random
 from enum import Enum, auto
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-from PySide6.QtCore import QObject, Signal, QTimer, QMetaObject, Qt, QThread
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QObject, Signal, QTimer
 from PySide6.QtGui import QPixmap, QImage
 
 from core.events import EventSystem
 from core.resources import ResourceManager
 from core.threading import ThreadManager
 from core.settings import SettingsManager
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import get_logger
 from core.process.types import WorkerType
 from core.process.supervisor import ProcessSupervisor
 from core.process.workers import (

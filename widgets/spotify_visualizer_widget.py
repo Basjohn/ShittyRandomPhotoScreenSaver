@@ -87,11 +87,11 @@ class SpotifyVisualizerWidget(QWidget):
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
         self._spectrum_single_piece: bool = False
-        self._spectrum_curved_profile: bool = False
+        self._spectrum_bar_profile: str = 'legacy'
+        self._spectrum_border_radius: float = 0.0
 
         # Visualization mode (Spectrum, Waveform, Abstract)
         self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
-        self._vis_mode_str: str = 'spectrum'
 
         # Oscilloscope settings
         self._osc_glow_enabled: bool = True
@@ -324,7 +324,7 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay sensitivity config", exc_info=True)
         try:
-            engine.set_curved_profile(self._spectrum_curved_profile)
+            engine.set_curved_profile(self._spectrum_bar_profile != 'legacy')
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay curved profile config", exc_info=True)
 
@@ -397,8 +397,8 @@ class SpotifyVisualizerWidget(QWidget):
         """Apply visualization mode and per-mode settings.
 
         Called when the settings dialog saves a new visualizer type or
-        per-mode parameter. Updates the internal state so the next
-        ``_on_tick`` push uses the correct mode and parameters.
+        per-mode parameter.  Delegates keyword→attribute mapping to
+        :mod:`widgets.spotify_visualizer.config_applier`.
         """
         mode_map = {
             'spectrum': VisualizerMode.SPECTRUM,
@@ -411,212 +411,16 @@ class SpotifyVisualizerWidget(QWidget):
         vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
         self.set_visualization_mode(vm)
 
-        # Oscilloscope
-        if 'osc_glow_enabled' in kwargs:
-            self._osc_glow_enabled = bool(kwargs['osc_glow_enabled'])
-        if 'osc_glow_intensity' in kwargs:
-            self._osc_glow_intensity = max(0.0, float(kwargs['osc_glow_intensity']))
-        if 'osc_glow_color' in kwargs:
-            c = kwargs['osc_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._osc_glow_color = QColor(*c)
-        if 'osc_reactive_glow' in kwargs:
-            self._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
-        if 'osc_sensitivity' in kwargs:
-            self._osc_sensitivity = max(0.5, min(10.0, float(kwargs['osc_sensitivity'])))
-        if 'osc_smoothing' in kwargs:
-            self._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
-        if 'osc_line_color' in kwargs:
-            c = kwargs['osc_line_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._osc_line_color = QColor(*c)
-        if 'osc_line_count' in kwargs:
-            self._osc_line_count = max(1, min(3, int(kwargs['osc_line_count'])))
-        if 'osc_line2_color' in kwargs:
-            c = kwargs['osc_line2_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._osc_line2_color = QColor(*c)
-        if 'osc_line2_glow_color' in kwargs:
-            c = kwargs['osc_line2_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._osc_line2_glow_color = QColor(*c)
-        if 'osc_line3_color' in kwargs:
-            c = kwargs['osc_line3_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._osc_line3_color = QColor(*c)
-        if 'osc_line3_glow_color' in kwargs:
-            c = kwargs['osc_line3_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._osc_line3_glow_color = QColor(*c)
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+        apply_vis_mode_kwargs(self, kwargs)
 
-        # Starfield
-        if 'star_travel_speed' in kwargs:
-            self._star_travel_speed = max(0.0, float(kwargs['star_travel_speed']))
-        if 'star_reactivity' in kwargs:
-            self._star_reactivity = max(0.0, float(kwargs['star_reactivity']))
-        if 'star_density' in kwargs:
-            self._star_density = max(0.1, float(kwargs['star_density']))
-        if 'nebula_tint1' in kwargs:
-            c = kwargs['nebula_tint1']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._nebula_tint1 = QColor(c[0], c[1], c[2])
-        if 'nebula_tint2' in kwargs:
-            c = kwargs['nebula_tint2']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._nebula_tint2 = QColor(c[0], c[1], c[2])
-        if 'nebula_cycle_speed' in kwargs:
-            self._nebula_cycle_speed = max(0.0, min(1.0, float(kwargs['nebula_cycle_speed'])))
-
-        # Blob
-        if 'blob_color' in kwargs:
-            c = kwargs['blob_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._blob_color = QColor(*c)
-        if 'blob_glow_color' in kwargs:
-            c = kwargs['blob_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._blob_glow_color = QColor(*c)
-        if 'blob_edge_color' in kwargs:
-            c = kwargs['blob_edge_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._blob_edge_color = QColor(*c)
-        if 'blob_outline_color' in kwargs:
-            c = kwargs['blob_outline_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._blob_outline_color = QColor(*c)
-        if 'blob_pulse' in kwargs:
-            self._blob_pulse = max(0.0, float(kwargs['blob_pulse']))
-        if 'blob_width' in kwargs:
-            self._blob_width = max(0.1, min(1.0, float(kwargs['blob_width'])))
-        if 'blob_size' in kwargs:
-            self._blob_size = max(0.3, min(2.0, float(kwargs['blob_size'])))
-        if 'blob_glow_intensity' in kwargs:
-            self._blob_glow_intensity = max(0.0, min(1.0, float(kwargs['blob_glow_intensity'])))
-        if 'blob_reactive_glow' in kwargs:
-            self._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
-        if 'blob_reactive_deformation' in kwargs:
-            self._blob_reactive_deformation = max(0.0, min(3.0, float(kwargs['blob_reactive_deformation'])))
-        if 'blob_constant_wobble' in kwargs:
-            self._blob_constant_wobble = max(0.0, min(2.0, float(kwargs['blob_constant_wobble'])))
-        if 'blob_reactive_wobble' in kwargs:
-            self._blob_reactive_wobble = max(0.0, min(2.0, float(kwargs['blob_reactive_wobble'])))
-        if 'blob_stretch_tendency' in kwargs:
-            self._blob_stretch_tendency = max(0.0, min(1.0, float(kwargs['blob_stretch_tendency'])))
-
-        # Helix
-        if 'helix_turns' in kwargs:
-            self._helix_turns = max(2, int(kwargs['helix_turns']))
-        if 'helix_double' in kwargs:
-            self._helix_double = bool(kwargs['helix_double'])
-        if 'helix_speed' in kwargs:
-            self._helix_speed = max(0.0, float(kwargs['helix_speed']))
-
-        # Helix glow
-        if 'helix_glow_enabled' in kwargs:
-            self._helix_glow_enabled = bool(kwargs['helix_glow_enabled'])
-        if 'helix_glow_intensity' in kwargs:
-            self._helix_glow_intensity = max(0.0, float(kwargs['helix_glow_intensity']))
-        if 'helix_glow_color' in kwargs:
-            c = kwargs['helix_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._helix_glow_color = QColor(*c)
-        if 'helix_reactive_glow' in kwargs:
-            self._helix_reactive_glow = bool(kwargs['helix_reactive_glow'])
-
-        # Spectrum: single piece mode
-        if 'spectrum_single_piece' in kwargs:
-            self._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
-
-        # Spectrum: curved bar profile
-        if 'spectrum_curved_profile' in kwargs:
-            new_curved = bool(kwargs['spectrum_curved_profile'])
-            if new_curved != self._spectrum_curved_profile:
-                self._spectrum_curved_profile = new_curved
-                try:
-                    engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-                    if engine is not None:
-                        engine.set_curved_profile(new_curved)
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to propagate curved profile to engine", exc_info=True)
-
-        # Height growth factors
-        if 'spectrum_growth' in kwargs:
-            self._spectrum_growth = max(0.5, min(5.0, float(kwargs['spectrum_growth'])))
-        if 'starfield_growth' in kwargs:
-            self._starfield_growth = max(0.5, min(5.0, float(kwargs['starfield_growth'])))
-        if 'blob_growth' in kwargs:
-            self._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
-        if 'osc_growth' in kwargs:
-            self._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
-        if 'helix_growth' in kwargs:
-            self._helix_growth = max(0.5, min(5.0, float(kwargs['helix_growth'])))
-        if 'osc_speed' in kwargs:
-            self._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
-        if 'osc_line_dim' in kwargs:
-            self._osc_line_dim = bool(kwargs['osc_line_dim'])
-        if 'osc_line_offset_bias' in kwargs:
-            self._osc_line_offset_bias = max(0.0, min(1.0, float(kwargs['osc_line_offset_bias'])))
-        if 'osc_vertical_shift' in kwargs:
-            self._osc_vertical_shift = int(kwargs['osc_vertical_shift'])
-        if 'sine_wave_growth' in kwargs:
-            self._sine_wave_growth = max(0.5, min(5.0, float(kwargs['sine_wave_growth'])))
-        if 'sine_wave_travel' in kwargs:
-            self._sine_wave_travel = max(0, min(2, int(kwargs['sine_wave_travel'])))
-        if 'sine_travel_line2' in kwargs:
-            self._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
-        if 'sine_travel_line3' in kwargs:
-            self._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
-        if 'sine_wave_effect' in kwargs:
-            self._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
-        if 'sine_micro_wobble' in kwargs:
-            self._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
-        if 'sine_vertical_shift' in kwargs:
-            self._sine_vertical_shift = int(kwargs['sine_vertical_shift'])
-        if 'sine_card_adaptation' in kwargs:
-            self._sine_card_adaptation = max(0.05, min(1.0, float(kwargs['sine_card_adaptation'])))
-        if 'sine_glow_enabled' in kwargs:
-            self._sine_glow_enabled = bool(kwargs['sine_glow_enabled'])
-        if 'sine_glow_intensity' in kwargs:
-            self._sine_glow_intensity = max(0.0, float(kwargs['sine_glow_intensity']))
-        if 'sine_glow_color' in kwargs:
-            c = kwargs['sine_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._sine_glow_color = QColor(*c)
-        if 'sine_line_color' in kwargs:
-            c = kwargs['sine_line_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._sine_line_color = QColor(*c)
-        if 'sine_reactive_glow' in kwargs:
-            self._sine_reactive_glow = bool(kwargs['sine_reactive_glow'])
-        if 'sine_sensitivity' in kwargs:
-            self._sine_sensitivity = max(0.1, min(5.0, float(kwargs['sine_sensitivity'])))
-        if 'sine_speed' in kwargs:
-            self._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
-        if 'sine_line_count' in kwargs:
-            self._sine_line_count = max(1, min(3, int(kwargs['sine_line_count'])))
-        if 'sine_line_offset_bias' in kwargs:
-            self._sine_line_offset_bias = max(0.0, min(1.0, float(kwargs['sine_line_offset_bias'])))
-        if 'sine_line2_color' in kwargs:
-            c = kwargs['sine_line2_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._sine_line2_color = QColor(*c)
-        if 'sine_line2_glow_color' in kwargs:
-            c = kwargs['sine_line2_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._sine_line2_glow_color = QColor(*c)
-        if 'sine_line3_color' in kwargs:
-            c = kwargs['sine_line3_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._sine_line3_color = QColor(*c)
-        if 'sine_line3_glow_color' in kwargs:
-            c = kwargs['sine_line3_glow_color']
-            if isinstance(c, (list, tuple)) and len(c) >= 3:
-                self._sine_line3_glow_color = QColor(*c)
-
-        # Update widget height if mode changed
         self._apply_preferred_height()
 
         logger.debug("[SPOTIFY_VIS] Applied vis mode config: mode=%s", mode)
+
+    @property
+    def _vis_mode_str(self) -> str:
+        return self._vis_mode.name.lower()
 
     def get_preferred_height(self) -> int:
         """Return the ideal card height for the current visualizer mode."""
@@ -1257,28 +1061,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._widget_manager = wm
 
     def _cycle_mode(self) -> bool:
-        """Cycle to the next visualizer mode with a crossfade.
-
-        Returns True if a cycle was initiated, False if already transitioning.
-        """
-        if self._mode_transition_phase != 0:
-            return False
-        _CYCLE_MODES = [
-            VisualizerMode.SPECTRUM,
-            VisualizerMode.OSCILLOSCOPE,
-            VisualizerMode.SINE_WAVE,
-            VisualizerMode.BLOB,
-        ]
-        try:
-            idx = _CYCLE_MODES.index(self._vis_mode)
-        except ValueError:
-            idx = -1
-        next_mode = _CYCLE_MODES[(idx + 1) % len(_CYCLE_MODES)]
-        self._mode_transition_pending = next_mode
-        self._mode_transition_phase = 1  # start fade-out
-        self._mode_transition_ts = time.time()
-        logger.info("[SPOTIFY_VIS] Mode cycle requested: %s -> %s", self._vis_mode.name, next_mode.name)
-        return True
+        """Cycle to the next visualizer mode with a crossfade."""
+        from widgets.spotify_visualizer.mode_transition import cycle_mode
+        return cycle_mode(self)
 
     def handle_double_click(self, local_pos) -> bool:
         """Called by WidgetManager dispatch. Cycles visualizer mode."""
@@ -1300,76 +1085,14 @@ class SpotifyVisualizerWidget(QWidget):
         event.ignore()
 
     def _mode_transition_fade_factor(self, now_ts: float) -> float:
-        """Return a 0..1 fade multiplier for the mode crossfade.
-
-        Driven entirely from the existing tick — no timers or polling.
-        Returns 1.0 when no transition is active (zero cost).
-        """
-        phase = self._mode_transition_phase
-        if phase == 0:
-            return 1.0
-
-        elapsed = now_ts - self._mode_transition_ts
-        dur = self._mode_transition_duration
-
-        if phase == 1:
-            # Fading out
-            t = min(1.0, elapsed / dur) if dur > 0 else 1.0
-            if t >= 1.0:
-                # Fade-out complete: switch mode, begin fade-in
-                pending = self._mode_transition_pending
-                if pending is not None:
-                    # Reset bar data to prevent stale values from previous mode
-                    zero = [0.0] * self._bar_count
-                    self._display_bars = list(zero)
-                    self._target_bars = list(zero)
-                    self._visual_bars = list(zero)
-                    self._per_bar_energy = list(zero)
-                    # Invalidate geometry cache so paintEvent rebuilds for new dimensions
-                    self._geom_cache_rect = None
-                    self._last_gpu_geom = None
-                    self._has_pushed_first_frame = False
-                    self.set_visualization_mode(pending)
-                    self._apply_preferred_height()
-                    self._request_reposition()
-                    self._mode_transition_pending = None
-                self._mode_transition_phase = 2
-                self._mode_transition_ts = now_ts
-                return 0.0
-            return 1.0 - t
-
-        if phase == 2:
-            # Fading in
-            t = min(1.0, elapsed / dur) if dur > 0 else 1.0
-            if t >= 1.0:
-                # Transition complete — persist mode
-                self._mode_transition_phase = 0
-                self._mode_transition_ts = 0.0
-                self._persist_vis_mode()
-                return 1.0
-            return t
-
-        return 1.0
+        """Return a 0..1 fade multiplier for the mode crossfade."""
+        from widgets.spotify_visualizer.mode_transition import mode_transition_fade_factor
+        return mode_transition_fade_factor(self, now_ts)
 
     def _persist_vis_mode(self) -> None:
-        """Save the current visualizer mode to SettingsManager (if available)."""
-        wm = getattr(self, '_widget_manager', None)
-        if wm is None:
-            return
-        sm = getattr(wm, '_settings_manager', None)
-        if sm is None:
-            return
-        try:
-            mode_str = self._vis_mode_str
-            cfg = sm.get('widgets', {}) or {}
-            vis_cfg = cfg.get('spotify_visualizer', {}) or {}
-            if vis_cfg.get('mode') != mode_str:
-                vis_cfg['mode'] = mode_str
-                cfg['spotify_visualizer'] = vis_cfg
-                sm.set('widgets', cfg)
-                logger.debug("[SPOTIFY_VIS] Persisted vis mode: %s", mode_str)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to persist vis mode", exc_info=True)
+        """Save the current visualizer mode to SettingsManager."""
+        from widgets.spotify_visualizer.mode_transition import persist_vis_mode
+        persist_vis_mode(self)
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         if duration_ms <= 0:
@@ -1692,65 +1415,8 @@ class SpotifyVisualizerWidget(QWidget):
                 _gpu_push_start = time.time()
                 mode_str = self._vis_mode_str
 
-                # Build extra kwargs for non-spectrum modes
-                extra = {}
-                if mode_str != 'spectrum':
-                    engine = self._engine
-                    if engine is not None:
-                        extra['waveform'] = engine.get_waveform()
-                        extra['energy_bands'] = engine.get_energy_bands()
-
-                    # Per-mode settings: sine_wave uses its own attributes
-                    _is_sine = (mode_str == 'sine_wave')
-                    extra['glow_enabled'] = self._sine_glow_enabled if _is_sine else self._osc_glow_enabled
-                    extra['glow_intensity'] = self._sine_glow_intensity if _is_sine else self._osc_glow_intensity
-                    extra['glow_color'] = self._sine_glow_color if _is_sine else self._osc_glow_color
-                    extra['reactive_glow'] = self._sine_reactive_glow if _is_sine else self._osc_reactive_glow
-                    extra['osc_sensitivity'] = self._sine_sensitivity if _is_sine else self._osc_sensitivity
-                    extra['osc_smoothing'] = self._osc_smoothing
-                    extra['star_density'] = self._star_density
-                    extra['travel_speed'] = self._star_travel_speed
-                    extra['star_reactivity'] = self._star_reactivity
-                    extra['nebula_tint1'] = self._nebula_tint1
-                    extra['nebula_tint2'] = self._nebula_tint2
-                    extra['nebula_cycle_speed'] = self._nebula_cycle_speed
-                    extra['blob_color'] = self._blob_color
-                    extra['blob_glow_color'] = self._blob_glow_color
-                    extra['blob_edge_color'] = self._blob_edge_color
-                    extra['blob_outline_color'] = self._blob_outline_color
-                    extra['blob_pulse'] = self._blob_pulse
-                    extra['blob_width'] = self._blob_width
-                    extra['blob_size'] = self._blob_size
-                    extra['blob_glow_intensity'] = self._blob_glow_intensity
-                    extra['blob_reactive_glow'] = self._blob_reactive_glow
-                    extra['blob_reactive_deformation'] = self._blob_reactive_deformation
-                    extra['blob_constant_wobble'] = self._blob_constant_wobble
-                    extra['blob_reactive_wobble'] = self._blob_reactive_wobble
-                    extra['blob_stretch_tendency'] = self._blob_stretch_tendency
-                    extra['osc_speed'] = self._sine_speed if _is_sine else self._osc_speed
-                    extra['osc_line_dim'] = self._sine_line_dim if _is_sine else self._osc_line_dim
-                    extra['osc_line_offset_bias'] = self._sine_line_offset_bias if _is_sine else self._osc_line_offset_bias
-                    extra['osc_vertical_shift'] = self._osc_vertical_shift
-                    extra['osc_sine_travel'] = self._sine_wave_travel
-                    extra['sine_card_adaptation'] = self._sine_card_adaptation
-                    extra['sine_travel_line2'] = self._sine_travel_line2
-                    extra['sine_travel_line3'] = self._sine_travel_line3
-                    extra['sine_wave_effect'] = self._sine_wave_effect
-                    extra['sine_micro_wobble'] = self._sine_micro_wobble
-                    extra['sine_vertical_shift'] = self._sine_vertical_shift
-                    extra['helix_turns'] = self._helix_turns
-                    extra['helix_double'] = self._helix_double
-                    extra['helix_speed'] = self._helix_speed
-                    extra['helix_glow_enabled'] = self._helix_glow_enabled
-                    extra['helix_glow_intensity'] = self._helix_glow_intensity
-                    extra['helix_glow_color'] = self._helix_glow_color
-                    extra['helix_reactive_glow'] = self._helix_reactive_glow
-                    extra['line_color'] = self._sine_line_color if _is_sine else self._osc_line_color
-                    extra['osc_line_count'] = self._sine_line_count if _is_sine else self._osc_line_count
-                    extra['osc_line2_color'] = self._sine_line2_color if _is_sine else self._osc_line2_color
-                    extra['osc_line2_glow_color'] = self._sine_line2_glow_color if _is_sine else self._osc_line2_glow_color
-                    extra['osc_line3_color'] = self._sine_line3_color if _is_sine else self._osc_line3_color
-                    extra['osc_line3_glow_color'] = self._sine_line3_glow_color if _is_sine else self._osc_line3_glow_color
+                from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+                extra = build_gpu_push_extra_kwargs(self, mode_str, self._engine)
 
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),
@@ -1765,6 +1431,8 @@ class SpotifyVisualizerWidget(QWidget):
                     ghost_decay=self._ghost_decay_rate,
                     vis_mode=mode_str,
                     single_piece=self._spectrum_single_piece,
+                    slanted=(self._spectrum_bar_profile == 'slanted'),
+                    border_radius=self._spectrum_border_radius if self._spectrum_bar_profile == 'curved' else 0.0,
                     **extra,
                 )
                 _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
@@ -1953,7 +1621,6 @@ class SpotifyVisualizerWidget(QWidget):
         """Set the visualization display mode."""
         if mode != self._vis_mode:
             self._vis_mode = mode
-            self._vis_mode_str = mode.name.lower()
             # Reset display bars so returning modes start clean
             for i in range(len(self._display_bars)):
                 self._display_bars[i] = 0.0

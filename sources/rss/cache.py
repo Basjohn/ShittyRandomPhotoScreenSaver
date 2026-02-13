@@ -10,7 +10,6 @@ Responsibilities:
     - Report current cached count for dynamic download budget
 """
 import hashlib
-import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Set

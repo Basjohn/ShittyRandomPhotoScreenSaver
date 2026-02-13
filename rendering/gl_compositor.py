@@ -214,7 +214,7 @@ class GLCompositorWidget(QOpenGLWidget):
         
         # TIMER-BASED RENDERING: Pure timer strategy capped at display refresh rate.
         # VSync is completely disabled - we use timer for maximum performance.
-        self._render_timer_fps: int = 60  # Will be set from display refresh rate
+        self._render_timer_fps: int = 0  # 0 = not yet detected; set by _start_render_strategy
         self._render_timer_metrics: Optional[_RenderTimerMetrics] = None
         
         # Render strategy manager for timer-based rendering (primary method)
@@ -484,29 +484,41 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception:
             pass
         return display_hz
-    
-    def _calculate_target_fps(self, display_hz: int) -> int:
-        """Mirror DisplayWidget's adaptive ladder."""
 
+    def _calculate_target_fps(self, display_hz: int) -> int:
+        """Return target FPS matching the display refresh rate.
+        
+        Policy: cap to display refresh rate, never divide it down.
+        No adaptive ladders, no vsync — pure timer at display Hz.
+        """
         parent = self.parent()
         from rendering.display_widget import DisplayWidget  # local import to avoid cycle
         if isinstance(parent, DisplayWidget):
-            target = getattr(parent, "_target_fps", 60)
+            target = getattr(parent, "_target_fps", 0)
             if target > 0:
                 return target
+            # parent._target_fps is 0 (not yet detected) — force detection now
+            try:
+                detected = int(round(parent._detect_refresh_rate()))
+                if detected > 0:
+                    resolved = parent._resolve_display_target_fps(detected)
+                    parent._target_fps = resolved
+                    logger.info(
+                        "[GL COMPOSITOR] Late FPS detection: screen=%s detected=%dHz target=%d",
+                        getattr(parent, 'screen_index', '?'), detected, resolved,
+                    )
+                    return resolved
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Late FPS detection failed", exc_info=True)
 
+        # Final fallback: use display_hz from screen query
         if display_hz <= 0:
             display_hz = 60
-        if display_hz <= 60:
-            target = display_hz
-        elif display_hz <= 120:
-            target = max(30, display_hz // 2)
-        else:
-            target = max(30, display_hz // 3)
+        target = min(240, max(30, display_hz))
 
         if is_perf_metrics_enabled():
             logger.debug(
-                "[PERF] [GL COMPOSITOR] Target FPS fallback ladder -> %d (display=%dHz)",
+                "[PERF] [GL COMPOSITOR] Target FPS = %d (display=%dHz)",
                 target,
                 display_hz,
             )

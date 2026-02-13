@@ -257,6 +257,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         osc_line3_color: QColor | None = None,
         osc_line3_glow_color: QColor | None = None,
         single_piece: bool = False,
+        slanted: bool = False,
+        border_radius: float = 0.0,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -409,6 +411,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Spectrum: single piece (solid bars, no segments)
         self._single_piece = bool(single_piece)
+        # Spectrum: slanted bar edges and border radius
+        self._slanted = bool(slanted)
+        self._border_radius = max(0.0, float(border_radius))
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -804,13 +809,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_osc_sine_travel",
                     "u_card_adaptation",
                     "u_sine_travel_line2", "u_sine_travel_line3",
-                    "u_wobble_amount", "u_osc_vertical_shift",
+                    "u_wave_effect", "u_micro_wobble",
                     "u_helix_turns", "u_helix_double", "u_helix_speed",
                     "u_helix_glow_enabled", "u_helix_glow_intensity",
                     "u_helix_glow_color", "u_helix_reactive_glow",
                     "u_line_color", "u_line_count",
                     "u_line2_color", "u_line2_glow_color",
                     "u_line3_color", "u_line3_glow_color",
+                    "u_slanted", "u_border_radius",
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
 
@@ -1041,6 +1047,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_single_piece", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._single_piece else 0)
+
+                loc = u.get("u_slanted", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if getattr(self, '_slanted', False) else 0)
+
+                loc = u.get("u_border_radius", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(getattr(self, '_border_radius', 0.0)))
 
                 bars = list(self._bars)
                 if not bars:

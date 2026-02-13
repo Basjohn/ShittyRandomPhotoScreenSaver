@@ -18,7 +18,7 @@ from enum import Enum
 from typing import Optional, TYPE_CHECKING, ClassVar, Any
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QRect, QPoint
+from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QPoint
 from PySide6.QtGui import (
     QFont,
     QPixmap,

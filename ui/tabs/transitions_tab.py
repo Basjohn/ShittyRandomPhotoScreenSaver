@@ -10,21 +10,16 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QSlider, QCheckBox
+    QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QCheckBox
 )
 from PySide6.QtCore import Signal, Qt
 
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
-from ui.tabs.shared_styles import SPINBOX_STYLE
+from ui.tabs.shared_styles import SPINBOX_STYLE, NoWheelSlider
 
 logger = get_logger(__name__)
-
-
-class NoWheelSlider(QSlider):
-    def wheelEvent(self, event):  # type: ignore[override]
-        event.ignore()
 
 
 class TransitionsTab(QWidget):

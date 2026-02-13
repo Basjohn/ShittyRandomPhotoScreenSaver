@@ -101,12 +101,10 @@ class SpotifyVolumeWidget(QWidget):
         self._track_border_color = QColor(track_border)
         self._fill_color = QColor(fill)
 
-        # Enforce 100% opacity for the border and a slightly translucent
-        # (~55%) fill, regardless of the incoming colours.
+        # Enforce 100% opacity for the border; fill alpha is respected
+        # from the user's chosen colour (default [255,255,255,140]).
         try:
             self._track_border_color.setAlpha(255)
-            fill_alpha = int(0.55 * 255)
-            self._fill_color.setAlpha(fill_alpha)
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         try:

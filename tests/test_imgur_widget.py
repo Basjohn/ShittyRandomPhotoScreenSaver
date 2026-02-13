@@ -7,7 +7,7 @@ Tests cover:
 - Settings application
 """
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QRect, QPoint
 from PySide6.QtGui import QColor
@@ -220,7 +220,7 @@ class TestImgurWidget:
     def test_get_header_hit_rect(self, widget):
         """Test getting header hit rectangle."""
         # Initially may be None until painted
-        rect = widget.get_header_hit_rect()
+        widget.get_header_hit_rect()
         # Just verify it doesn't crash
 
 

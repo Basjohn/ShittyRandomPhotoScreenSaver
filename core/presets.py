@@ -5,7 +5,7 @@ statements continue to work.  New code should import from
 ``core.settings.presets`` directly.
 """
 from core.settings.presets import *  # noqa: F401,F403
-from core.settings.presets import (  # explicit re-exports for type checkers
+from core.settings.presets import (  # noqa: F401 — explicit re-exports for type checkers
     PresetDefinition,
     PRESET_DEFINITIONS,
     get_ordered_presets,

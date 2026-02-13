@@ -35,6 +35,7 @@ class MuteButtonWidget(QWidget):
         self._anchor_media: Optional[QWidget] = None
         self._thread_manager: Optional[ThreadManager] = None
         self._has_faded_in: bool = False
+        self._mute_poll_active: bool = False
 
         # Visual feedback on click
         self._feedback_alpha: float = 0.0
@@ -71,6 +72,7 @@ class MuteButtonWidget(QWidget):
     def set_thread_manager(self, tm: ThreadManager) -> None:
         """Inject the ThreadManager for async mute operations."""
         self._thread_manager = tm
+        self._start_mute_poll()
 
     def set_anchor(self, media_widget: Optional[QWidget]) -> None:
         """Set the media widget this button anchors to."""
@@ -149,7 +151,7 @@ class MuteButtonWidget(QWidget):
             if hasattr(anchor, '_last_artwork_rect'):
                 artwork_rect = getattr(anchor, '_last_artwork_rect', None)
         except Exception:
-            pass
+            logger.debug("[MUTE_BTN] Layout probe failed", exc_info=True)
 
         if controls_layout is not None and artwork_rect is not None:
             row_rect = controls_layout.get("row_rect")
@@ -178,6 +180,50 @@ class MuteButtonWidget(QWidget):
         x = anchor_geo.right() - right_margin - self._btn_width
         y = anchor_geo.bottom() + 6
         return x, y
+
+    # ------------------------------------------------------------------
+    # Periodic system mute polling (30s interval)
+    # ------------------------------------------------------------------
+
+    _MUTE_POLL_INTERVAL_S: float = 30.0
+
+    def _start_mute_poll(self) -> None:
+        """Start periodic mute state polling via ThreadManager."""
+        if self._mute_poll_active or not self._available:
+            return
+        tm = self._thread_manager
+        if tm is None:
+            return
+        self._mute_poll_active = True
+        self._schedule_next_poll()
+
+    def _stop_mute_poll(self) -> None:
+        """Cancel periodic mute polling."""
+        self._mute_poll_active = False
+
+    def _schedule_next_poll(self) -> None:
+        """Schedule the next poll using ThreadManager.single_shot (non-blocking)."""
+        if not self._mute_poll_active:
+            return
+        try:
+            delay_ms = int(self._MUTE_POLL_INTERVAL_S * 1000)
+            ThreadManager.single_shot(delay_ms, self._poll_mute_tick)
+        except Exception:
+            logger.debug("[MUTE_BTN] Failed to schedule mute poll", exc_info=True)
+            self._mute_poll_active = False
+
+    def _poll_mute_tick(self) -> None:
+        """Called on UI thread via single_shot: read mute state and reschedule."""
+        if not self._mute_poll_active:
+            return
+        state = system_mute.get_mute()
+        if state is not None:
+            self._apply_mute_state(state)
+        self._schedule_next_poll()
+
+    def cleanup(self) -> None:
+        """Stop polling and clean up resources."""
+        self._stop_mute_poll()
 
     # ------------------------------------------------------------------
     # Interaction (called by DisplayWidget)
@@ -216,7 +262,7 @@ class MuteButtonWidget(QWidget):
                 old_anim.stop()
                 old_anim.deleteLater()
             except Exception:
-                pass
+                logger.debug("[MUTE_BTN] Old animation cleanup failed", exc_info=True)
             self._feedback_anim = None
 
         self._feedback_alpha = 1.0

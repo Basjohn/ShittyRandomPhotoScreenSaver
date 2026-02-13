@@ -324,7 +324,10 @@ def detect_refresh_rate(widget) -> float:
 
 def configure_refresh_rate_sync(widget) -> None:
     detected = int(round(widget._detect_refresh_rate()))
-    widget._target_fps = widget._resolve_display_target_fps(detected, adaptive=False)
+    widget._target_fps = widget._resolve_display_target_fps(detected)
+    if widget._target_fps <= 0:
+        logger.warning("[REFRESH_DIAG] FPS detection failed for screen=%s, forcing 60", widget.screen_index)
+        widget._target_fps = 60
     if is_perf_metrics_enabled():
         logger.info(
             "[REFRESH_DIAG] source=settings:display.refresh_sync screen=%s detected_hz=%d target_fps=%d",

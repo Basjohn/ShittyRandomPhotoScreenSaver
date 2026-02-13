@@ -175,8 +175,8 @@ class RSSParser:
                 try:
                     from dateutil import parser as dp
                     created = dp.parse(published)
-                except Exception:
-                    pass
+                except (ValueError, TypeError, ImportError):
+                    logger.debug("[RSS_PARSER] Failed to parse date '%s'", published, exc_info=True)
 
             entries.append(ParsedEntry(
                 image_url=image_url,
@@ -212,7 +212,8 @@ class RSSParser:
                 path_lower = urlparse(image_url).path.lower()
                 if not any(path_lower.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
                     continue
-            except Exception:
+            except (ValueError, TypeError):
+                logger.debug("[RSS_PARSER] URL parse failed for entry, skipping", exc_info=True)
                 continue
 
             # Light high-res filter (prefer ≥ 2560 px wide when metadata available)
@@ -224,16 +225,16 @@ class RSSParser:
                     w = src.get("width")
                     if isinstance(w, (int, float)) and int(w) < 2560:
                         continue
-            except Exception:
-                pass
+            except (KeyError, IndexError, TypeError):
+                logger.debug("[RSS_PARSER] Metadata probe failed", exc_info=True)
 
             created = None
             ts = post.get("created_utc")
             if isinstance(ts, (int, float)):
                 try:
                     created = datetime.utcfromtimestamp(ts)
-                except Exception:
-                    pass
+                except (ValueError, OSError, OverflowError):
+                    logger.debug("[RSS_PARSER] Timestamp conversion failed for ts=%s", ts, exc_info=True)
 
             entries.append(ParsedEntry(
                 image_url=image_url,
@@ -292,6 +293,6 @@ class RSSParser:
             if ts:
                 try:
                     return datetime(*ts[:6])
-                except Exception:
-                    pass
+                except (ValueError, TypeError):
+                    logger.debug("[RSS_PARSER] _parse_date failed for ts=%s", ts, exc_info=True)
         return None

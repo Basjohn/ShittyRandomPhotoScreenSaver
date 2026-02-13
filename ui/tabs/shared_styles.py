@@ -1,7 +1,15 @@
-"""Shared QSS styles for settings dialog tabs.
+"""Shared QSS styles and widgets for settings dialog tabs.
 
-Centralises repeated styling blocks so individual tabs don't duplicate them.
+Centralises repeated styling blocks and common widgets so individual tabs
+don't duplicate them.
 """
+from PySide6.QtWidgets import QSlider
+
+
+class NoWheelSlider(QSlider):
+    """Slider that ignores mouse wheel events to prevent accidental changes."""
+    def wheelEvent(self, event):  # type: ignore[override]
+        event.ignore()
 
 SPINBOX_STYLE = """
 QSpinBox, QDoubleSpinBox {

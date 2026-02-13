@@ -12,6 +12,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/GL_PIPELINE_ANALYSIS.md | GPU/GL contention analysis |
 | Docs/TestSuite.md | Test documentation |
 | Docs/SETTINGS_MIGRATION.md | JSON settings migration guide |
+| Docs/QTIMER_POLICY.md | QTimer usage policy: when to use QTimer vs ThreadManager, intentional UI-thread timer locations |
 
 ## Entry Points
 
@@ -126,6 +127,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | FadeCoordinator | rendering/fade_coordinator.py | FadeCoordinator | Centralized lock-free fade synchronization |
 | WidgetPositioner | rendering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
 | WidgetFactories | rendering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |
+| SpotifyWidgetCreators | rendering/spotify_widget_creators.py | apply_spotify_vis_model_config() | Reusable vis config apply for init + live refresh |
 | WidgetSetup | rendering/widget_setup.py | parse_color_to_qcolor(), compute_expected_overlays() | Setup helpers |
 
 ## Rendering - Input & Control
@@ -254,6 +256,8 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, process_via_fft_worker, get_zero_bars | DSP/FFT bar computation pipeline (extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for blob/starfield/helix modes |
+| Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping (extracted from widget, ~250 LOC) |
+| Mode Transition | widgets/spotify_visualizer/mode_transition.py | cycle_mode, mode_transition_fade_factor, persist_vis_mode | Mode-cycling crossfade logic (extracted from widget, ~120 LOC) |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
 | Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | SHARED_VERTEX_SHADER, load_fragment_shader, load_all_fragment_shaders | GLSL shader source loading for multi-shader architecture |
 
@@ -261,9 +265,9 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 
 | Shader | File | Uniforms | Purpose |
 |--------|------|----------|---------|
-| Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha | Classic segmented bar analyzer with dynamic segment count based on card height |
-| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_osc_vertical_shift | Pure audio waveform with Catmull-Rom spline, per-band energy, equalized multi-line glow (3 lines: bass/mid/high), vertical shift mode |
-| Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy | Dedicated sine wave visualizer with audio-reactive amplitude, card adaptation (vertical stretch control), multi-line (up to 3) with per-line colors and per-line travel direction, playback-gated oscillation |
+| Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha, u_slanted, u_border_radius | Segmented bar analyzer; 3 profiles (Legacy/Curved/Slanted); slanted: diagonal inner edges + linchpin both-side slant; curved: border radius 0-12px |
+| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_osc_vertical_shift | Pure audio waveform with Catmull-Rom spline, per-band energy, equalized multi-line glow (3 lines: bass/mid/high), vertical shift slider (-50 to 200) |
+| Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_wave_effect, u_micro_wobble, u_osc_vertical_shift | Dedicated sine wave visualizer with audio-reactive amplitude, card adaptation (vertical stretch control), multi-line (up to 3) with per-line colors and per-line travel direction, playback-gated oscillation, wave effect (positional undulation), micro wobble (energy-reactive high-freq distortions), vertical shift slider (-50 to 200) |
 | Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity, u_travel_time, u_nebula_tint{1,2} | Point-star starfield with nebula background, CPU-accumulated monotonic travel (dev-gated) |
 | Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy, u_blob_reactive_deformation (0-3.0), u_blob_constant_wobble, u_blob_reactive_wobble | 2D SDF organic metaball with separated constant wobble (time-driven, zero when cw=0) and reactive wobble (energy-driven), vocal wobble, dip contraction, CPU-smoothed glow, quadratic reactive deformation (range 0-3.0) |
 | Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
@@ -374,10 +378,12 @@ value = settings.get("display.mode", "fill")
 | WidgetsTab | ui/tabs/widgets_tab.py | WidgetsTab, NoWheelSlider | Widget config orchestrator (965 LOC, refactored from ~3200) |
 | WidgetsTab Clock | ui/tabs/widgets_tab_clock.py | build_clock_ui(), load_clock_settings(), save_clock_settings(), _update_clock_mode_visibility() | Clock 1/2/3 UI, load, save; analog/digital mode visibility gating |
 | WidgetsTab Weather | ui/tabs/widgets_tab_weather.py | build_weather_ui(), load_weather_settings(), save_weather_settings(), _update_weather_icon_visibility(), _update_weather_bg_visibility() | Weather UI, load, save; icon + background visibility gating |
-| WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings(), _update_media_bg_visibility(), _update_ghost_visibility(), _update_osc_multi_line_visibility() | Spotify + Beat Visualizer UI, load, save; background/ghost/multiline visibility gating |
+| WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings() | Spotify + Beat Visualizer UI coordinator; per-viz builders extracted to ui/tabs/media/ |
+| Media Builders | ui/tabs/media/*.py | build_spectrum_ui(), build_oscilloscope_ui(), build_starfield_ui(), build_blob_ui(), build_helix_ui(), build_sine_wave_ui() | Per-visualizer UI builders (extracted from widgets_tab_media.py, ~1200 LOC) |
+| Color Utils | ui/color_utils.py | qcolor_to_list(), list_to_qcolor() | Centralized QColor ↔ list conversion (replaces inline helpers in widgets_tab_media + widget_setup) |
 | WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings(), _update_reddit_enabled_visibility() | Reddit 1/2 UI, load, save; all controls gated by enabled checkbox |
 | WidgetsTab Imgur | ui/tabs/widgets_tab_imgur.py | build_imgur_ui(), load_imgur_settings(), save_imgur_settings() | Imgur UI, load, save (dev-gated) |
-| Shared Styles | ui/tabs/shared_styles.py | SPINBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants for all settings tabs |
+| Shared Styles | ui/tabs/shared_styles.py | NoWheelSlider, SPINBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants and shared widgets (NoWheelSlider) for all settings tabs |
 | SourcesTab | ui/tabs/sources_tab.py | SourcesTab | Image source config |
 | TransitionsTab | ui/tabs/transitions_tab.py | TransitionsTab | Transition config |
 | DisplayTab | ui/tabs/display_tab.py | DisplayTab | Display settings |
@@ -404,6 +410,7 @@ value = settings.get("display.mode", "fill")
 | audits/AUDIT_SETTINGS_GUI.md | Settings GUI audit: visibility gating, defaults, healing, hardcoded violations |
 | audits/AUDIT_SETTINGS_SYSTEM.md | Settings system audit: models.py sync, migration, healing, hardcoded paths |
 | audits/AUDIT_RESOURCE_VRAM.md | ResourceManager/VRAM/memory audit: GL handles, QTimer lifecycle, leak risks |
+| audits/AUDIT_CODE_HYGIENE.md | Code hygiene: monoliths, unused imports, dead code, QTimer policy, bare exceptions, naming, save pattern bugs |
 
 ## Test Organization
 
@@ -423,4 +430,5 @@ value = settings.get("display.mode", "fill")
 | tests/test_slide_jitter.py | Slide transition frame timing (7 tests) |
 | tests/test_widget_manager.py | WidgetManager lifecycle, fade, factory |
 | tests/test_sine_wave_gl_fix.py | Sine wave GL overlay fix regression (mode validation, cycle, shader, card height) |
+| tests/test_micro_wobble_math.py | Micro wobble shader math: energy weighting, spatial freq, displacement bounds, smoothness (20 tests) |
 | tests/unit/test_policy_compliance.py | Threading/import policy enforcement |

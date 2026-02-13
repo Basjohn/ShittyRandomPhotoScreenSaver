@@ -593,7 +593,7 @@ class ResourceManager:
                 try:
                     pixmap.fill()  # Fill with transparent
                 except Exception as e:
-                    logger.debug("[RESOURCES] Exception suppressed: %s", e)
+                    _logger.debug("[RESOURCES] Exception suppressed: %s", e)
                 return pixmap
             self._pool_stats["pixmap_misses"] += 1
             return None
@@ -615,7 +615,7 @@ class ResourceManager:
                 return False
             key = (pixmap.width(), pixmap.height())
         except Exception as e:
-            logger.debug("[RESOURCES] Exception suppressed: %s", e)
+            _logger.debug("[RESOURCES] Exception suppressed: %s", e)
             return False
         
         with self._pool_lock:
@@ -647,7 +647,7 @@ class ResourceManager:
                 try:
                     image.fill(0)
                 except Exception as e:
-                    logger.debug("[RESOURCES] Exception suppressed: %s", e)
+                    _logger.debug("[RESOURCES] Exception suppressed: %s", e)
                 return image
             self._pool_stats["image_misses"] += 1
             return None
@@ -669,7 +669,7 @@ class ResourceManager:
                 return False
             key = (image.width(), image.height())
         except Exception as e:
-            logger.debug("[RESOURCES] Exception suppressed: %s", e)
+            _logger.debug("[RESOURCES] Exception suppressed: %s", e)
             return False
         
         with self._pool_lock:

@@ -33,7 +33,7 @@ class RenderStrategyType(Enum):
 @dataclass
 class RenderStrategyConfig:
     """Configuration for render strategies."""
-    target_fps: int = 60
+    target_fps: int = 0  # Always overridden by compositor; 0 = sentinel
     fallback_on_failure: bool = True
     min_frame_time_ms: float = 8.0  # Minimum time between frames
 

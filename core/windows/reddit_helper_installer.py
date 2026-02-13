@@ -2,7 +2,7 @@
 Install and trigger the Reddit helper worker executable.
 
 This is responsible for copying the embedded helper payload to
-``%ProgramData%\SRPSS\helper`` and launching it inside the interactive user
+``%ProgramData%\\SRPSS\\helper`` and launching it inside the interactive user
 session so it can drain the ProgramData queue.
 """
 
