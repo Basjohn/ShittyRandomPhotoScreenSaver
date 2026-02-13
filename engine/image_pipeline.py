@@ -537,6 +537,9 @@ def load_and_display_image_async(
                 else:
                     logger.info(f"[ASYNC] Different images displayed on {len(displayed_paths)} displays")
 
+            # Record per-display history for previous-image support
+            _record_display_history(engine, image_metas)
+
             schedule_prefetch(engine)
             engine._loading_in_progress = False
 
@@ -553,6 +556,175 @@ def load_and_display_image_async(
     except Exception as e:
         logger.warning(f"[ASYNC] Failed to submit task, falling back to sync: {e}")
         load_and_display_image(engine, image_meta, retry_count)
+
+
+# ------------------------------------------------------------------
+# Per-display history recording
+# ------------------------------------------------------------------
+
+def _record_display_history(engine: "ScreensaverEngine", image_metas: list) -> None:
+    """Push a per-display snapshot onto the engine's display history stack.
+
+    Args:
+        engine: ScreensaverEngine instance
+        image_metas: List of ImageMetadata, one per display
+    """
+    try:
+        history = engine._display_image_history
+        history.append(list(image_metas))
+        # Cap at 50 entries to bound memory
+        while len(history) > 50:
+            history.pop(0)
+    except Exception as e:
+        logger.debug("[HISTORY] Failed to record display history: %s", e)
+
+
+# ------------------------------------------------------------------
+# Async image loading with pre-resolved metas (for previous-image)
+# ------------------------------------------------------------------
+
+def load_and_display_image_async_with_metas(
+    engine: "ScreensaverEngine",
+    image_metas: list,
+) -> None:
+    """Load and display specific images on each display without advancing the queue.
+
+    This is used by the previous-image feature to show pre-resolved
+    ImageMetadata on each display.  The logic mirrors
+    load_and_display_image_async but skips queue advancement.
+    """
+    if not engine.thread_manager or not engine.display_manager:
+        # Sync fallback — show first image on all displays
+        if image_metas:
+            load_and_display_image(engine, image_metas[0])
+        return
+
+    displays = engine.display_manager.displays if engine.display_manager else []
+    # Pad metas to match display count
+    while len(image_metas) < len(displays):
+        image_metas.append(image_metas[-1] if image_metas else None)
+
+    def _do_load() -> Optional[Dict]:
+        try:
+            processed_images = {}
+            display_list = engine.display_manager.displays if engine.display_manager else []
+            sharpen = False
+            if engine.settings_manager:
+                sharpen = engine.settings_manager.get('display.sharpen_downscale', False)
+                if isinstance(sharpen, str):
+                    sharpen = sharpen.lower() == 'true'
+
+            for i, display in enumerate(display_list):
+                meta = image_metas[i] if i < len(image_metas) else None
+                if meta is None:
+                    continue
+                img_path = str(meta.local_path) if meta.local_path else (meta.url or "")
+                if not img_path:
+                    continue
+
+                qimage: Optional[QImage] = None
+                if engine._image_cache:
+                    cached = engine._image_cache.get(img_path)
+                    if isinstance(cached, QImage) and not cached.isNull():
+                        qimage = cached
+                    elif isinstance(cached, QPixmap) and not cached.isNull():
+                        qimage = cached.toImage()
+
+                if qimage is None or qimage.isNull():
+                    from pathlib import Path
+                    if not Path(img_path).exists():
+                        continue
+
+                try:
+                    if hasattr(display, 'get_target_size'):
+                        target_size = display.get_target_size()
+                    else:
+                        dpr = getattr(display, '_device_pixel_ratio', 1.0)
+                        target_size = QSize(int(display.width() * dpr), int(display.height() * dpr))
+
+                    display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
+                    display_mode_str = display_mode.value if hasattr(display_mode, 'value') else str(display_mode).lower()
+
+                    processed_qimage = None
+                    if engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
+                        worker_qimage = load_image_via_worker(
+                            engine, img_path, target_size.width(), target_size.height(),
+                            display_mode=display_mode_str, sharpen=sharpen, timeout_ms=3000,
+                        )
+                        if worker_qimage and not worker_qimage.isNull():
+                            processed_qimage = worker_qimage
+                        else:
+                            continue
+                    elif qimage is not None and not qimage.isNull():
+                        processed_qimage = AsyncImageProcessor.process_qimage(
+                            qimage, target_size, display_mode, use_lanczos=False, sharpen=sharpen,
+                        )
+                    else:
+                        continue
+
+                    processed_pixmap = QPixmap.fromImage(processed_qimage)
+                    processed_qimage = None
+                    original_pixmap = QPixmap.fromImage(qimage) if (qimage and not qimage.isNull()) else processed_pixmap
+
+                    processed_images[i] = {
+                        'pixmap': processed_pixmap,
+                        'original_pixmap': original_pixmap,
+                        'target_size': target_size,
+                        'path': img_path,
+                    }
+                except Exception as e:
+                    logger.debug("[ASYNC-PREV] Failed to process for display %d: %s", i, e)
+
+            return {'processed': processed_images} if processed_images else None
+        except Exception as e:
+            logger.exception("[ASYNC-PREV] Background processing failed: %s", e)
+            return None
+
+    def _on_complete(result) -> None:
+        try:
+            data = result.result if result and result.success else None
+            if data is None:
+                engine._loading_in_progress = False
+                return
+            processed = data['processed']
+            displays_list = engine.display_manager.displays if engine.display_manager else []
+            stagger_ms = TRANSITION_STAGGER_MS
+            displayed = []
+            for i, display in enumerate(displays_list):
+                if i not in processed:
+                    continue
+                proc = processed[i]
+                delay_ms = i * stagger_ms
+                if delay_ms > 0:
+                    def _delayed(d=display, pp=proc['pixmap'], op=proc['original_pixmap'], ip=proc['path']):
+                        if hasattr(d, 'set_processed_image'):
+                            d.set_processed_image(pp, op, ip)
+                        else:
+                            d.set_image(pp, ip)
+                    QTimer.singleShot(delay_ms, _delayed)
+                else:
+                    if hasattr(display, 'set_processed_image'):
+                        display.set_processed_image(proc['pixmap'], proc['original_pixmap'], proc['path'])
+                    else:
+                        display.set_image(proc['pixmap'], proc['path'])
+                displayed.append(proc['path'])
+            if displayed:
+                engine.image_changed.emit(displayed[0])
+                logger.info("[ASYNC-PREV] Previous images displayed on %d displays", len(displayed))
+            engine._loading_in_progress = False
+        except Exception as e:
+            logger.exception("[ASYNC-PREV] UI callback failed: %s", e)
+            engine._loading_in_progress = False
+
+    try:
+        engine.thread_manager.submit_compute_task(
+            _do_load,
+            callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_complete(r))
+        )
+    except Exception as e:
+        logger.warning("[ASYNC-PREV] Failed to submit task: %s", e)
+        if image_metas:
+            load_and_display_image(engine, image_metas[0])
 
 
 # ------------------------------------------------------------------

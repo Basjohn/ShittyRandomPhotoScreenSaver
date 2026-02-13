@@ -1495,6 +1495,16 @@ class DisplayWidget(QWidget):
             self._invalidate_overlay_effects("focus_in")
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        # SplashScreen windows lose internal Qt keyboard routing after a
+        # deactivate/reactivate cycle.  Force-reclaim keyboard focus so
+        # keyPressEvent keeps firing.
+        try:
+            if self._coordinator.is_focus_owner(self):
+                self.activateWindow()
+                self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+                self._focus_loss_logged = False  # allow re-logging next loss
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] focusIn re-claim error: %s", e)
         super().focusInEvent(event)
 
     def changeEvent(self, event: QEvent) -> None:  # type: ignore[override]

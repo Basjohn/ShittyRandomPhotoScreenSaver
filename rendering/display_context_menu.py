@@ -221,13 +221,13 @@ def on_context_transition_selected(widget, name: str) -> None:
                 widget._transition_random_enabled = False
                 widget._transition_fallback_type = name
 
-            # Clear any cached random selections when toggling modes
-            try:
-                widget.settings_manager.remove("transitions.random_choice")
-                widget.settings_manager.remove("transitions.last_random_choice")
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Failed clearing cached random choices: %s", e)
-            
+            # Clear cached random selections from the dict itself so the
+            # subsequent set("transitions", trans_cfg) doesn't re-introduce
+            # stale values (the old remove() calls on flat keys were
+            # immediately overwritten by the nested dict write).
+            trans_cfg.pop("random_choice", None)
+            trans_cfg.pop("last_random_choice", None)
+
             widget.settings_manager.set("transitions", trans_cfg)
             widget.settings_manager.save()
 

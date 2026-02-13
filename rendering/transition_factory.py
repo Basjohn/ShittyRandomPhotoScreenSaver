@@ -224,7 +224,9 @@ class TransitionFactory:
         requested_type = transition_type
         
         # Handle random mode
-        random_mode, random_choice_value = self._get_random_mode(transitions_settings)
+        random_mode, random_choice_value = self._get_random_mode(
+            transitions_settings, transition_type,
+        )
         if random_mode and random_choice_value:
             transition_type = random_choice_value
         
@@ -246,21 +248,83 @@ class TransitionFactory:
         
         return transition
     
-    def _get_random_mode(self, settings: dict) -> tuple[bool, Optional[str]]:
-        """Get random mode state and choice."""
+    # Concrete transition names the factory can instantiate directly.
+    _CONCRETE_TYPES = frozenset({
+        'Crossfade', 'Slide', 'Wipe', 'Peel', 'Shuffle', 'Claw Marks',
+        'Warp Dissolve', 'Diffuse', 'Rain Drops', 'Ripple',
+        'Block Puzzle Flip', '3D Block Spins', 'Blinds', 'Crumble', 'Particle',
+    })
+
+    def _get_random_mode(
+        self, settings: dict, transition_type: str,
+    ) -> tuple[bool, Optional[str]]:
+        """Get random mode state and choice.
+
+        Random mode is active when *either*:
+        - ``random_always`` is True in the transitions settings, **or**
+        - ``transition_type`` is literally ``"Random"`` (the canonical default
+          and the value stored when the user picks *Random* from the context
+          menu).
+
+        When random mode is active we first try to read a pre-resolved
+        ``transitions.random_choice`` (set by the engine before each
+        rotation).  If that key is missing we fall back to picking a
+        concrete type ourselves so the factory never passes the bare
+        string ``"Random"`` into ``_create_by_type``.
+        """
         try:
             rnd = settings.get('random_always', False)
             rnd = SettingsManager.to_bool(rnd, False)
-            random_mode = bool(rnd)
+            random_mode = bool(rnd) or transition_type == 'Random'
             random_choice_value = None
             if random_mode:
                 chosen = self._settings.get('transitions.random_choice', None)
-                if isinstance(chosen, str) and chosen:
+                if isinstance(chosen, str) and chosen and chosen != 'Random':
                     random_choice_value = chosen
+                else:
+                    # Engine didn't pre-resolve a choice — pick one now.
+                    random_choice_value = self._pick_random_transition(settings)
             return random_mode, random_choice_value
         except Exception as e:
             logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
             return False, None
+
+    def _pick_random_transition(self, settings: dict) -> str:
+        """Pick a concrete random transition type (factory-side fallback)."""
+        try:
+            hw = SettingsManager.to_bool(
+                self._settings.get('display.hw_accel', True), True,
+            )
+            base = ['Crossfade', 'Slide', 'Wipe', 'Diffuse', 'Block Puzzle Flip']
+            gl_only = [
+                'Blinds', 'Peel', '3D Block Spins', 'Ripple',
+                'Warp Dissolve', 'Crumble', 'Particle',
+            ]
+            pool_cfg = (
+                settings.get('pool', {})
+                if isinstance(settings.get('pool', {}), dict)
+                else {}
+            )
+
+            def _in_pool(name: str) -> bool:
+                if name == 'Ripple':
+                    raw = pool_cfg.get('Ripple', pool_cfg.get('Rain Drops', True))
+                else:
+                    raw = pool_cfg.get(name, True)
+                return bool(SettingsManager.to_bool(raw, True))
+
+            available = [n for n in base if _in_pool(n)]
+            if hw:
+                available.extend(n for n in gl_only if _in_pool(n))
+            if not available:
+                available = ['Crossfade']
+
+            last = self._settings.get('transitions.last_random_choice', None)
+            candidates = [t for t in available if t != last] or available
+            return random.choice(candidates)
+        except Exception as e:
+            logger.debug("[TRANSITION_FACTORY] _pick_random_transition error: %s", e)
+            return 'Crossfade'
     
     def _get_duration(self, settings: dict, transition_type: str) -> int:
         """Get duration for the transition type."""
@@ -367,9 +431,9 @@ class TransitionFactory:
         if transition_type == 'Particle':
             return self._create_particle(settings, duration_ms, use_compositor)
         
-        # Unknown type - fallback to Crossfade
+        # Unknown type - fallback to Crossfade (use same path as normal creation)
         logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
-        return CrossfadeTransition(duration_ms)
+        return self._create_crossfade(duration_ms, easing_str, use_compositor)
     
     # Individual transition creators
     

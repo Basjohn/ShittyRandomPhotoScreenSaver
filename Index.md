@@ -13,6 +13,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/TestSuite.md | Test documentation |
 | Docs/SETTINGS_MIGRATION.md | JSON settings migration guide |
 | Docs/QTIMER_POLICY.md | QTimer usage policy: when to use QTimer vs ThreadManager, intentional UI-thread timer locations |
+| Docs/Defaults_Guide.md | All default settings, storage locations, SettingsManager API, safe change procedures |
+| Docs/Visualizer_Debug.md | Authoritative Spotify visualizer architecture + per-mode defaults, debugging, regression harness |
 
 ## Entry Points
 
@@ -415,7 +417,6 @@ value = settings.get("display.mode", "fill")
 | audits/AUDIT_THREADING.md | time.sleep, raw QTimer, untracked deleteLater sites |
 | audits/AUDIT_DEAD_CODE.md | Dead/retired modules to clean up |
 | audits/AUDIT_THREADING_RACE_CONDITIONS_2026_02.md | Widget Shiboken guard audit, ThreadPoolExecutor fix |
-| audits/VISUALIZER_DEBUG.md | All 6 visualizer modes: architecture, uniforms, debugging |
 | audits/AUDIT_SETTINGS_GUI.md | Settings GUI audit: visibility gating, defaults, healing, hardcoded violations |
 | audits/AUDIT_SETTINGS_SYSTEM.md | Settings system audit: models.py sync, migration, healing, hardcoded paths |
 | audits/AUDIT_RESOURCE_VRAM.md | ResourceManager/VRAM/memory audit: GL handles, QTimer lifecycle, leak risks |

@@ -76,9 +76,11 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
         transitions_config = {}
     transitions_config['type'] = new_transition
     transitions_config['random_always'] = False
+    # Clear cached random selections from the dict itself so the
+    # subsequent set() doesn't re-introduce stale values.
+    transitions_config.pop('random_choice', None)
+    transitions_config.pop('last_random_choice', None)
     engine.settings_manager.set('transitions', transitions_config)
-    engine.settings_manager.remove('transitions.random_choice')
-    engine.settings_manager.remove('transitions.last_random_choice')
     engine.settings_manager.save()
 
     logger.info(f"Transition cycled to: {new_transition}")

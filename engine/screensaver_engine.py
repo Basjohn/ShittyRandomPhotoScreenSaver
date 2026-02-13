@@ -151,6 +151,10 @@ class ScreensaverEngine(QObject):
         self._current_image: Optional[ImageMetadata] = None
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
+        # Per-display image history for multi-monitor "previous" support.
+        # Each entry is a list of ImageMetadata, one per display, representing
+        # what was shown during that rotation.  Newest entry is at the end.
+        self._display_image_history: List[List[ImageMetadata]] = []
         # Canonical list of transition types used for C-key cycling. Legacy
         # "Claw Marks" entries have been fully removed from the engine and are
         # mapped to "Crossfade" at selection time for back-compat only. The
@@ -916,7 +920,9 @@ class ScreensaverEngine(QObject):
             transitions = self.settings_manager.get('transitions', {})
             raw_rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
             rnd = SettingsManager.to_bool(raw_rnd, False)
-            if not rnd:
+            # Also treat type="Random" (the canonical default) as random mode
+            trans_type = transitions.get('type', 'Random') if isinstance(transitions, dict) else 'Random'
+            if not rnd and trans_type != 'Random':
                 return
             # Available transition types; include GL-only when HW is enabled and
             # restrict to those enabled in the per-transition pool map.
@@ -1053,12 +1059,33 @@ class ScreensaverEngine(QObject):
         return sizes
     
     def _on_previous_requested(self) -> None:
-        """Handle previous image request (Z key)."""
+        """Handle previous image request (Z key).
+
+        Uses per-display history so each display reverts to its own
+        previous image instead of sharing a single queue pointer.
+        """
         logger.info("Previous image requested")
-        if self.image_queue:
+        if not self.image_queue:
+            return
+
+        # Pop the current rotation entry (what's on screen now)
+        if len(self._display_image_history) >= 2:
+            self._display_image_history.pop()  # discard current
+            prev_entry = self._display_image_history[-1]  # peek at previous
+            # Also step the queue history back so single-display code stays in sync
+            self.image_queue.previous()
+            self._current_image = prev_entry[0] if prev_entry else self.image_queue.current()
+            self._show_images_for_displays(prev_entry)
+        elif len(self._display_image_history) == 1:
+            # Only one entry — just redisplay it
+            self.image_queue.previous()
+            self._current_image = self._display_image_history[0][0] if self._display_image_history[0] else self.image_queue.current()
+            self._show_images_for_displays(self._display_image_history[0])
+        else:
+            # No per-display history yet — fall back to queue-based previous
             self.image_queue.previous()
             self._show_current_image()
-    
+
     def _on_next_requested(self) -> None:
         """Handle next image request (X key)."""
         logger.info("Next image requested")
@@ -1080,14 +1107,41 @@ class ScreensaverEngine(QObject):
         self.stop()
     
     def _show_current_image(self) -> bool:
-        """Show the current image from queue without advancing."""
+        """Show the current image from queue without advancing.
+
+        Uses the async path when a thread_manager is available to avoid
+        blocking the UI thread (matching _show_next_image behaviour).
+        """
         if not self.image_queue:
             return False
-        
+
         current = self.image_queue.current()
-        if current:
-            return self._load_and_display_image(current)
-        return False
+        if not current:
+            return False
+
+        if self.thread_manager:
+            self._load_and_display_image_async(current)
+            return True
+        return self._load_and_display_image(current)
+
+    def _show_images_for_displays(self, image_metas: "List[ImageMetadata]") -> None:
+        """Display specific images on each display (used by previous-image).
+
+        Delegates to the async pipeline with pre-resolved metas so no
+        queue advancement occurs.
+        """
+        if not self.display_manager:
+            return
+        if not image_metas:
+            self._show_current_image()
+            return
+
+        primary = image_metas[0]
+        if self.thread_manager:
+            from engine.image_pipeline import load_and_display_image_async_with_metas
+            load_and_display_image_async_with_metas(self, image_metas)
+        else:
+            self._load_and_display_image(primary)
     
     def _on_settings_changed(self, event) -> None:
         """Handle settings changed event."""

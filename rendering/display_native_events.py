@@ -27,6 +27,24 @@ from rendering.display_widget import (
 )
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
+# Windows message constants for media key interception
+WM_KEYDOWN = 0x0100
+WM_KEYUP = 0x0101
+WM_SYSKEYDOWN = 0x0104
+WM_SYSKEYUP = 0x0105
+
+# Media VK codes that must be forwarded to DefWindowProcW so Windows
+# generates WM_APPCOMMAND and propagates to the shell hook (Spotify etc.)
+_MEDIA_VK_CODES = {
+    0xAD,  # VK_VOLUME_MUTE
+    0xAE,  # VK_VOLUME_DOWN
+    0xAF,  # VK_VOLUME_UP
+    0xB0,  # VK_MEDIA_NEXT_TRACK
+    0xB1,  # VK_MEDIA_PREV_TRACK
+    0xB2,  # VK_MEDIA_STOP
+    0xB3,  # VK_MEDIA_PLAY_PAUSE
+}
+
 if TYPE_CHECKING:
     from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
 
@@ -47,6 +65,24 @@ else:
     _RAW_INPUT_AVAILABLE = False
 
 
+def _reclaim_keyboard_focus(widget) -> None:
+    """Force-reclaim Qt keyboard focus for a SplashScreen widget.
+
+    SplashScreen windows lose internal Qt keyboard routing after a
+    deactivate/reactivate cycle.  This helper is scheduled via
+    QTimer.singleShot(0, ...) from the WM_ACTIVATE handler so it
+    runs on the next event-loop tick (after Qt finishes processing
+    the activation).
+    """
+    try:
+        widget.activateWindow()
+        widget.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        widget._focus_loss_logged = False
+        logger.debug("[NATIVE] Keyboard focus re-claimed for screen %s", widget.screen_index)
+    except Exception as e:
+        logger.debug("[NATIVE] _reclaim_keyboard_focus error: %s", e)
+
+
 def handle_nativeEvent(widget, eventType, message):
     try:
         if sys.platform != "win32":
@@ -57,16 +93,34 @@ def handle_nativeEvent(widget, eventType, message):
             return QWidget.nativeEvent(widget, eventType, message)
 
         mid = int(getattr(msg, "message", 0) or 0)
-        
-        # DEBUG: Log WM_APPCOMMAND to verify it's being received
-        if mid == WM_APPCOMMAND:
-            logger.info("[DEBUG] WM_APPCOMMAND received in nativeEvent")
-            # For media keys, DON'T mark as handled - let Qt process normally
-            # Just dispatch for visual feedback but don't intercept
-            dispatch_appcommand_for_feedback(widget, msg)
-            # Return False to let Qt and Windows handle it normally
-            return False, 0
 
+        # -----------------------------------------------------------
+        # Media key WM_KEYDOWN / WM_KEYUP interception
+        # -----------------------------------------------------------
+        # Qt normally swallows WM_KEYDOWN for media VK codes and
+        # converts them to QKeyEvent *without* calling DefWindowProcW.
+        # That breaks the standard Windows chain:
+        #   WM_KEYDOWN → DefWindowProc → WM_APPCOMMAND → shell hook → Spotify
+        # Fix: intercept media VK key messages, call DefWindowProcW
+        # ourselves, and return True so Qt does NOT eat them.
+        if mid in (WM_KEYDOWN, WM_KEYUP, WM_SYSKEYDOWN, WM_SYSKEYUP):
+            try:
+                wparam = int(getattr(msg, "wParam", 0) or 0)
+                if wparam in _MEDIA_VK_CODES and _USER32 is not None:
+                    hwnd = int(getattr(msg, "hwnd", 0) or 0)
+                    lparam = int(getattr(msg, "lParam", 0) or 0)
+                    if hwnd:
+                        # Trigger UI feedback for key-down only
+                        if mid in (WM_KEYDOWN, WM_SYSKEYDOWN):
+                            _dispatch_media_vk_feedback(widget, wparam)
+                        result = int(_USER32.DefWindowProcW(hwnd, mid, wparam, lparam))
+                        return True, result
+            except Exception as e:
+                logger.debug("[NATIVE] Media VK interception error: %s", e)
+
+        # -----------------------------------------------------------
+        # WM_APPCOMMAND — dispatch feedback + propagate via DefWindowProcW
+        # -----------------------------------------------------------
         if mid == WM_APPCOMMAND:
             handled, result = handle_win_appcommand(widget, msg)
             if handled:
@@ -122,6 +176,60 @@ def handle_nativeEvent(widget, eventType, message):
             except Exception:
                 pass  # Ignore raw input errors
 
+        # -----------------------------------------------------------
+        # WM_ACTIVATE — MUST run in production (not debug-gated)
+        # SplashScreen windows lose Qt keyboard routing after a
+        # deactivate/reactivate cycle; force-reclaim focus here.
+        # -----------------------------------------------------------
+        WM_ACTIVATE = 0x0006
+        if mid == WM_ACTIVATE:
+            try:
+                wparam = int(getattr(msg, "wParam", 0) or 0)
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                wparam = 0
+            if wparam == 0:
+                # Deactivated — mark all instances for refresh on reactivation
+                try:
+                    for inst in DisplayWidget.get_all_instances():
+                        try:
+                            inst._pending_activation_refresh = True
+                            inst._last_deactivate_ts = time.monotonic()
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                    try:
+                        widget._pending_activation_refresh = True
+                        widget._last_deactivate_ts = time.monotonic()
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            elif wparam in (1, 2):
+                # Activated (1=click, 2=mouse) — reclaim keyboard focus
+                now_ts = time.monotonic()
+                try:
+                    for inst in DisplayWidget.get_all_instances():
+                        try:
+                            # Force keyboard focus re-claim for the focus owner
+                            coordinator = getattr(inst, "_coordinator", None)
+                            if coordinator is not None and coordinator.is_focus_owner(inst):
+                                QTimer.singleShot(0, lambda _inst=inst: _reclaim_keyboard_focus(_inst))
+                            if not getattr(inst, "_pending_activation_refresh", False):
+                                continue
+                            dt = now_ts - float(getattr(inst, "_last_deactivate_ts", 0.0) or 0.0)
+                            if dt <= 3.0:
+                                try:
+                                    QTimer.singleShot(0, lambda _inst=inst: _inst._perform_activation_refresh("wm_activate"))
+                                except Exception as e:
+                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                                    inst._perform_activation_refresh("wm_activate")
+                            else:
+                                inst._pending_activation_refresh = False
+                        except Exception as e:
+                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
         if not win_diag_logger.isEnabledFor(logging.DEBUG):
             return QWidget.nativeEvent(widget, eventType, message)
 
@@ -165,43 +273,6 @@ def handle_nativeEvent(widget, eventType, message):
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                 widget._debug_window_state("nativeEvent", extra=extra)
-
-            if name == "WM_ACTIVATE":
-                if wparam == 0:
-                    try:
-                        for inst in DisplayWidget.get_all_instances():
-                            try:
-                                inst._pending_activation_refresh = True
-                                inst._last_deactivate_ts = time.monotonic()
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        try:
-                            widget._pending_activation_refresh = True
-                            widget._last_deactivate_ts = time.monotonic()
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                elif wparam == 1:
-                    now_ts = time.monotonic()
-                    try:
-                        for inst in DisplayWidget.get_all_instances():
-                            try:
-                                if not getattr(inst, "_pending_activation_refresh", False):
-                                    continue
-                                dt = now_ts - float(getattr(inst, "_last_deactivate_ts", 0.0) or 0.0)
-                                if dt <= 3.0:
-                                    try:
-                                        QTimer.singleShot(0, lambda _inst=inst: _inst._perform_activation_refresh("wm_activate"))
-                                    except Exception as e:
-                                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                        inst._perform_activation_refresh("wm_activate")
-                                else:
-                                    inst._pending_activation_refresh = False
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
@@ -270,6 +341,48 @@ def handle_win_appcommand(widget, msg) -> tuple[bool, int]:
             target_logger.debug("[WIN_APPCOMMAND] DefWindowProcW failed", exc_info=True)
 
     return False, 0
+
+def _dispatch_media_vk_feedback(widget, vk_code: int) -> None:
+    """Trigger media widget UI feedback for a media VK key-down event."""
+    _VK_TO_COMMAND = {
+        0xB3: "play",   # VK_MEDIA_PLAY_PAUSE
+        0xB0: "next",   # VK_MEDIA_NEXT_TRACK
+        0xB1: "prev",   # VK_MEDIA_PREV_TRACK
+        0xB2: "play",   # VK_MEDIA_STOP  (treat as play/pause toggle for feedback)
+    }
+    command = _VK_TO_COMMAND.get(vk_code)
+    if command is None:
+        # Volume keys — refresh mute button state after a short delay
+        # (OS processes the volume change; we just update the UI)
+        if vk_code in (0xAD, 0xAE, 0xAF):
+            try:
+                mute_btn = getattr(widget, "mute_button_widget", None)
+                if mute_btn is not None and hasattr(mute_btn, "poll_mute_state"):
+                    QTimer.singleShot(80, mute_btn.poll_mute_state)
+            except Exception:
+                pass
+        return
+
+    media_widget = getattr(widget, "media_widget", None)
+    if media_widget is None:
+        return
+    try:
+        media_widget.handle_transport_command(
+            command, source=f"media_vk:{vk_code:#04x}", execute=False
+        )
+        logger.debug("[NATIVE] Media VK feedback: vk=%#04x cmd=%s", vk_code, command)
+    except Exception as e:
+        logger.debug("[NATIVE] Media VK feedback error: %s", e)
+
+    # Wake Spotify visualizer
+    try:
+        for vis_w in widget.findChildren(SpotifyVisualizerWidget):
+            if hasattr(vis_w, "_trigger_wake"):
+                vis_w._trigger_wake()
+                break
+    except Exception:
+        pass
+
 
 def dispatch_appcommand_for_feedback(widget, msg) -> None:
     """Lightweight appcommand handler that only triggers visual feedback without blocking."""
