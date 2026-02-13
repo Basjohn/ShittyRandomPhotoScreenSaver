@@ -69,16 +69,23 @@ def _reclaim_keyboard_focus(widget) -> None:
     """Force-reclaim Qt keyboard focus for a SplashScreen widget.
 
     SplashScreen windows lose internal Qt keyboard routing after a
-    deactivate/reactivate cycle.  This helper is scheduled via
-    QTimer.singleShot(0, ...) from the WM_ACTIVATE handler so it
-    runs on the next event-loop tick (after Qt finishes processing
-    the activation).
+    deactivate/reactivate cycle.  activateWindow()+setFocus() alone
+    is not enough — Qt's internal keyboard dispatch only rebinds
+    after a grab/release cycle (which is what QMenu::popup does
+    internally).  We replicate that here.
+
+    Scheduled via QTimer.singleShot(0, ...) from the WM_ACTIVATE
+    handler so it runs on the next event-loop tick.
     """
     try:
         widget.activateWindow()
         widget.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        # The grab→release cycle forces Qt to re-establish its internal
+        # keyboard routing, identical to what a popup menu does.
+        widget.grabKeyboard()
+        widget.releaseKeyboard()
         widget._focus_loss_logged = False
-        logger.debug("[NATIVE] Keyboard focus re-claimed for screen %s", widget.screen_index)
+        logger.debug("[NATIVE] Keyboard focus re-claimed (grab/release) for screen %s", widget.screen_index)
     except Exception as e:
         logger.debug("[NATIVE] _reclaim_keyboard_focus error: %s", e)
 

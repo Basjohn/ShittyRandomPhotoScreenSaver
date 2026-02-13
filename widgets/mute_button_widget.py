@@ -108,20 +108,55 @@ class MuteButtonWidget(QWidget):
         self.poll_mute_state()
 
     def _start_widget_fade_in(self, duration_ms: int = 1200) -> None:
-        """Fade the widget in using ShadowFadeProfile, matching other overlays."""
+        """Fade the widget in using a lightweight opacity effect.
+
+        The mute button paints its own inner shadow via QPainter so it
+        does NOT need a QGraphicsDropShadowEffect.  Using one on a tiny
+        40×36 widget creates a disproportionate cache area that is prone
+        to corruption artifacts visible as dark rectangles.
+        """
         if duration_ms <= 0:
             self.show()
             self.raise_()
             self._has_faded_in = True
             return
         try:
-            from widgets.shadow_utils import ShadowFadeProfile
-            ShadowFadeProfile.start_fade_in(
-                self,
-                None,
-                has_background_frame=False,
-                on_finished=lambda: setattr(self, '_has_faded_in', True),
-            )
+            from PySide6.QtWidgets import QGraphicsOpacityEffect
+            from PySide6.QtCore import QVariantAnimation, QEasingCurve
+
+            # Remove any stale graphics effect (e.g. leftover drop shadow)
+            if self.graphicsEffect() is not None:
+                self.setGraphicsEffect(None)
+
+            opacity_fx = QGraphicsOpacityEffect(self)
+            opacity_fx.setOpacity(0.0)
+            self.setGraphicsEffect(opacity_fx)
+            self.show()
+            self.raise_()
+
+            anim = QVariantAnimation(self)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setDuration(duration_ms)
+            anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+
+            def _on_value(val):
+                try:
+                    opacity_fx.setOpacity(float(val))
+                except Exception:
+                    pass
+
+            def _on_finished():
+                try:
+                    self.setGraphicsEffect(None)
+                except Exception:
+                    pass
+                self._has_faded_in = True
+
+            anim.valueChanged.connect(_on_value)
+            anim.finished.connect(_on_finished)
+            anim.start()
+            self._fade_anim = anim  # prevent GC
         except Exception:
             logger.debug("[MUTE_BTN] _start_widget_fade_in fallback", exc_info=True)
             self.show()
