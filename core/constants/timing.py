@@ -12,9 +12,6 @@ maintainability and easier performance tuning.
 WORKER_IMAGE_TIMEOUT_MS = 1500
 """Maximum time for image decode/scale operations in ImageWorker."""
 
-WORKER_FFT_TIMEOUT_MS = 15
-"""Maximum time for FFT processing in FFTWorker (real-time audio)."""
-
 WORKER_HEARTBEAT_INTERVAL_MS = 3000
 """Interval between worker health check heartbeats."""
 
@@ -130,7 +127,6 @@ PROCESS_TERMINATE_TIMEOUT_S = 1.0
 __all__ = [
     # Worker timeouts
     "WORKER_IMAGE_TIMEOUT_MS",
-    "WORKER_FFT_TIMEOUT_MS",
     "WORKER_HEARTBEAT_INTERVAL_MS",
     "WORKER_RESPONSE_POLL_INTERVAL_MS",
     # Retry/backoff

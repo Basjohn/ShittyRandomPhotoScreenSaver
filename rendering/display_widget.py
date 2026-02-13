@@ -686,8 +686,7 @@ class DisplayWidget(QWidget):
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on the WidgetManager and TransitionFactory.
         
-        This enables FFTWorker integration for the Spotify visualizer and
-        TransitionWorker integration for transition precomputation.
+        This enables worker integration for widgets that need process supervision.
         """
         if self._widget_manager is not None:
             self._widget_manager.set_process_supervisor(supervisor)

@@ -644,7 +644,7 @@ class SpotifyVisualizerFactory(WidgetFactory):
         self._process_supervisor = None
     
     def set_process_supervisor(self, supervisor) -> None:
-        """Set the ProcessSupervisor for FFTWorker integration."""
+        """Set the ProcessSupervisor for worker integration."""
         self._process_supervisor = supervisor
     
     def get_widget_name(self) -> str:
@@ -677,7 +677,7 @@ class SpotifyVisualizerFactory(WidgetFactory):
             if self._thread_manager:
                 widget.set_thread_manager(self._thread_manager)
             
-            # Set process supervisor for FFTWorker integration
+            # Set process supervisor for worker integration
             if self._process_supervisor:
                 widget.set_process_supervisor(self._process_supervisor)
             
@@ -974,7 +974,7 @@ class WidgetFactoryRegistry:
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on factories that support it.
         
-        Currently only SpotifyVisualizerFactory uses this for FFTWorker integration.
+        Currently only SpotifyVisualizerFactory uses this for worker integration.
         """
         spotify_factory = self._factories.get("spotify_visualizer")
         if spotify_factory and hasattr(spotify_factory, "set_process_supervisor"):

@@ -74,7 +74,7 @@ class _SpotifyBeatEngine(QObject):
         self._thread_manager = thread_manager
     
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
-        """Set the ProcessSupervisor for FFTWorker integration."""
+        """Set the ProcessSupervisor for worker integration."""
         try:
             self._audio_worker.set_process_supervisor(supervisor)
         except Exception:

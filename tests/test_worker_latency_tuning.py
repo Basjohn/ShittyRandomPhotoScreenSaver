@@ -65,14 +65,6 @@ class TestGetWorkerConfig:
         assert config.backpressure_policy == BackpressurePolicy.DROP_OLD
         assert config.target_latency_ms == 100
     
-    def test_fft_worker_config(self):
-        """Test FFT worker has low-latency config."""
-        config = get_worker_config(WorkerType.FFT)
-        assert config.request_queue_size == 128
-        assert config.poll_timeout_ms == 5
-        assert config.target_latency_ms == 16
-        assert config.max_latency_ms == 33
-    
     def test_rss_worker_config(self):
         """Test RSS worker has network-tolerant config."""
         config = get_worker_config(WorkerType.RSS)
@@ -181,22 +173,22 @@ class TestLatencyMonitor:
         
         monitor.register_alert_callback(on_alert)
         
-        # Record latency exceeding FFT max (33ms)
-        monitor.record_latency(WorkerType.FFT, 50.0)
+        # Record latency exceeding IMAGE max (500ms)
+        monitor.record_latency(WorkerType.IMAGE, 600.0)
         
         assert len(alerts) == 1
-        assert alerts[0][0] == WorkerType.FFT
-        assert alerts[0][1] == 50.0
+        assert alerts[0][0] == WorkerType.IMAGE
+        assert alerts[0][1] == 600.0
     
     def test_get_all_metrics(self):
         """Test getting all metrics."""
         monitor = LatencyMonitor()
         monitor.record_latency(WorkerType.IMAGE, 50.0)
-        monitor.record_latency(WorkerType.FFT, 10.0)
+        monitor.record_latency(WorkerType.RSS, 10.0)
         
         all_metrics = monitor.get_all_metrics()
         assert WorkerType.IMAGE in all_metrics
-        assert WorkerType.FFT in all_metrics
+        assert WorkerType.RSS in all_metrics
     
     def test_reset_all(self):
         """Test resetting all metrics."""

@@ -8,7 +8,6 @@ This package contains centralized constants for:
 # Re-export timing constants
 from core.constants.timing import (
     WORKER_IMAGE_TIMEOUT_MS,
-    WORKER_FFT_TIMEOUT_MS,
     WORKER_HEARTBEAT_INTERVAL_MS,
     WORKER_RESPONSE_POLL_INTERVAL_MS,
     RETRY_BASE_DELAY_MS,
@@ -66,7 +65,6 @@ from core.constants.sizes import (
 __all__ = [
     # Timing constants
     "WORKER_IMAGE_TIMEOUT_MS",
-    "WORKER_FFT_TIMEOUT_MS",
     "WORKER_HEARTBEAT_INTERVAL_MS",
     "WORKER_RESPONSE_POLL_INTERVAL_MS",
     "RETRY_BASE_DELAY_MS",

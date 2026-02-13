@@ -292,7 +292,7 @@ class DisplayManager(QObject):
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on all display widgets.
         
-        This enables FFTWorker integration for the Spotify visualizer.
+        This enables worker integration for widgets that need process supervision.
         """
         for display in self.displays:
             try:

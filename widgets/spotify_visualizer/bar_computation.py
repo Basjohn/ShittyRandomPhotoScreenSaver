@@ -33,11 +33,6 @@ def get_zero_bars(worker: "SpotifyVisualizerAudioWorker") -> List[float]:
 
 
 
-# NOTE: process_via_fft_worker was removed — all FFT processing is now inline.
-# The separate-process FFT worker had a 15ms IPC timeout that caused silent
-# fallback to inline computation on most frames. Maintaining two identical
-# code paths (worker + inline) was a debugging trap. See commit history.
-
 
 def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
     """Convert FFT magnitudes to visualizer bar heights.
@@ -182,14 +177,18 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             edge_boost = np.exp(-((frac_arr - 1.0) ** 2) / 0.08) * 0.20
             profile_shape = profile_shape + edge_boost
 
-            # Vocal peak at frac≈0.40 (offset 4 for 21 bars = "bar 7" from edge)
-            # Creates dual-peak: bass peak (edge) → dip → vocal peak → dip → center
+            # Vocal peak at frac≈0.40 (offset 4 for 21 bars)
             vocal_peak = np.exp(-((frac_arr - 0.40) ** 2) / 0.018) * 0.12
             vocal_dip = -np.exp(-((frac_arr - 0.30) ** 2) / 0.015) * 0.06
-            # Broad suppression for bars 7/8/9 (frac 0.20-0.40) to prevent top-pinning
-            # Bar 8 (frac=0.30) gets deepest cut; bar 7 and 9 get less
-            mid_suppress = -np.exp(-((frac_arr - 0.30) ** 2) / 0.025) * 0.14
-            profile_shape = profile_shape + vocal_peak + vocal_dip + mid_suppress
+            # Near-center suppression: bars 7-9 (frac 0.10-0.30) run too hot.
+            # Centered at frac=0.20 (bar 8) with wide sigma to cover 7 and 9.
+            # Bar 8 (frac=0.20) gets deepest cut; bar 7 (0.30) and 9 (0.10) less.
+            mid_suppress = -np.exp(-((frac_arr - 0.20) ** 2) / 0.030) * 0.16
+            # Extra targeted cut for bar 7 (frac=0.30) which still runs high
+            bar7_cut = -np.exp(-((frac_arr - 0.30) ** 2) / 0.008) * 0.06
+            # Smaller cut for bar 9 (frac=0.10)
+            bar9_cut = -np.exp(-((frac_arr - 0.10) ** 2) / 0.008) * 0.04
+            profile_shape = profile_shape + vocal_peak + vocal_dip + mid_suppress + bar7_cut + bar9_cut
 
             # Ensure minimum floor
             profile_shape = np.maximum(profile_shape, 0.12)

@@ -4,7 +4,6 @@ Process isolation module for SRPSS v2.0.
 Provides multiprocessing infrastructure for offloading heavy work:
 - ImageWorker: decode/prescale with shared-memory output
 - RSSWorker: fetch/parse/mirror with validated metadata
-- FFTWorker: loopback ingest + smoothing + ghost envelopes
 - TransitionPrepWorker: CPU precompute payloads
 
 All workers communicate via queues with immutable messages.
@@ -18,7 +17,6 @@ from .types import (
     WorkerResponse,
     SharedMemoryHeader,
     RGBAHeader,
-    FFTHeader,
     HealthStatus,
 )
 from .supervisor import ProcessSupervisor
@@ -31,7 +29,6 @@ __all__ = [
     "WorkerResponse",
     "SharedMemoryHeader",
     "RGBAHeader",
-    "FFTHeader",
     "HealthStatus",
     "ProcessSupervisor",
 ]

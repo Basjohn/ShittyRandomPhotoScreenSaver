@@ -519,15 +519,11 @@ class MediaWidget(BaseOverlayWidget):
         """Notify Spotify-related widgets to sync their visibility with this widget.
         
         Called when the media widget shows or hides so the visualizer and
-        volume widgets can show/hide accordingly. Also gates the FFT worker
-        to save compute when Spotify is not active.
+        volume widgets can show/hide accordingly.
         """
         parent = self.parent()
         if parent is None:
             return
-        
-        # Gate FFT worker based on media widget visibility
-        self._gate_fft_worker(self.isVisible())
         
         # Notify visualizer
         vis = getattr(parent, "spotify_visualizer_widget", None)
@@ -1303,50 +1299,6 @@ class MediaWidget(BaseOverlayWidget):
         from widgets.media.feedback import finalize_feedback_key
         finalize_feedback_key(self, key)
     
-    def _gate_fft_worker(self, should_run: bool) -> None:
-        """Start or stop the FFT worker based on media widget visibility.
-        
-        This saves compute when Spotify is not active by stopping the FFT
-        worker process entirely rather than just gating FFT processing.
-        """
-        parent = self.parent()
-        if parent is None:
-            return
-        
-        # Get ProcessSupervisor from parent chain
-        supervisor = None
-        try:
-            # Try display widget first
-            supervisor = getattr(parent, "_process_supervisor", None)
-            if supervisor is None:
-                # Try via widget manager
-                wm = getattr(parent, "_widget_manager", None)
-                if wm is not None:
-                    supervisor = getattr(wm, "_process_supervisor", None)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        
-        if supervisor is None:
-            return
-        
-        try:
-            from core.process import WorkerType
-            
-            is_running = supervisor.is_running(WorkerType.FFT)
-            
-            if should_run and not is_running:
-                # Media visible - start FFT worker
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Starting FFT worker (media widget visible)")
-                supervisor.start(WorkerType.FFT)
-            elif not should_run and is_running:
-                # Media hidden - stop FFT worker to save compute
-                if is_perf_metrics_enabled():
-                    logger.debug("[PERF] Stopping FFT worker (media widget hidden)")
-                supervisor.stop(WorkerType.FFT)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] FFT worker gating failed: %s", e)
-
     # ------------------------------------------------------------------
     # Painting
     # ------------------------------------------------------------------

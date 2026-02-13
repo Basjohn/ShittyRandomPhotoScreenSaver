@@ -45,7 +45,7 @@ class SpotifyVisualizerWidget(QWidget):
 
     The widget draws a rounded-rect card that inherits Spotify/Media
     styling from DisplayWidget and renders a row of vertical bars whose
-    heights are driven by FFT magnitudes published by
+    heights are driven by audio magnitudes published by
     SpotifyVisualizerAudioWorker.
     """
 
@@ -343,11 +343,7 @@ class SpotifyVisualizerWidget(QWidget):
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
 
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
-        """Set the ProcessSupervisor for FFTWorker integration.
-        
-        When set and FFTWorker is running, FFT processing is offloaded to a
-        separate process for better performance (avoids GIL contention).
-        """
+        """Set the ProcessSupervisor for worker integration."""
         try:
             engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
             if engine is not None:
@@ -687,7 +683,7 @@ class SpotifyVisualizerWidget(QWidget):
                 # Artwork changed while paused - likely a wake event
                 self._trigger_wake()
 
-        # CRITICAL: Pass playback state to beat engine for FFT processing gating
+        # CRITICAL: Pass playback state to beat engine for audio processing gating
         try:
             if self._engine is not None:
                 self._engine.set_playback_state(self._spotify_playing)
@@ -936,7 +932,7 @@ class SpotifyVisualizerWidget(QWidget):
             self._replay_engine_config(engine)
             
             # CRITICAL: Initialize beat engine with current playback state
-            # This ensures FFT gating is active from startup
+            # This ensures audio gating is active from startup
             engine.set_playback_state(self._spotify_playing)
             
             engine.ensure_started()
@@ -1334,7 +1330,7 @@ class SpotifyVisualizerWidget(QWidget):
         
         changed = False
         if engine is not None:
-            # Trigger engine tick (schedules FFT + smoothing on COMPUTE pool)
+            # Trigger engine tick (schedules audio processing + smoothing on COMPUTE pool)
             _engine_tick_start = time.time()
             engine.tick()
             _engine_tick_elapsed = (time.time() - _engine_tick_start) * 1000.0

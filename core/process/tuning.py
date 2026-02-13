@@ -71,14 +71,6 @@ _DEFAULT_CONFIGS: Dict[WorkerType, WorkerTuningConfig] = {
         target_latency_ms=1000,     # Network latency expected
         max_latency_ms=10000,
     ),
-    WorkerType.FFT: WorkerTuningConfig(
-        request_queue_size=128,     # High-frequency audio frames
-        response_queue_size=64,     # Bar data is small
-        backpressure_policy=BackpressurePolicy.DROP_OLD,
-        poll_timeout_ms=5,          # Low latency for audio
-        target_latency_ms=16,       # 60fps target
-        max_latency_ms=33,          # 30fps minimum
-    ),
     WorkerType.TRANSITION: WorkerTuningConfig(
         request_queue_size=8,       # Precompute requests are rare
         response_queue_size=8,      # Precomputed data cached

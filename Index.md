@@ -83,7 +83,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 |--------|------|---------|-------|
 | ImageWorker | core/process/workers/image_worker.py | Decode/prescale images in process | 	ests/test_image_worker.py |
 | RSSWorker | core/process/workers/rss_worker.py | Fetch/parse RSS feeds | 	ests/test_rss_worker.py |
-| FFTWorker | core/process/workers/fft_worker.py | FFT computation for visualizer | 	ests/test_fft_worker.py |
+| ~~FFTWorker~~ | ~~removed~~ | Deprecated: inline FFT replaced process worker | - |
 | TransitionWorker | core/process/workers/transition_worker.py | Precompute transition data | 	ests/test_transition_worker.py |
 | BaseWorker | core/process/workers/base.py | Base class for all workers | - |
 
@@ -233,6 +233,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Weather | widgets/weather_widget.py | WeatherWidget | widgets.weather |
 | Media | widgets/media_widget.py | MediaWidget | widgets.media |
 | Reddit | widgets/reddit_widget.py | RedditWidget | widgets.reddit, widgets.reddit2 |
+| RedditComponents | widgets/reddit_components.py | RedditPosition, RedditPost, smart_title_case, try_bring_reddit_window_to_front | Extracted helpers for reddit widget |
 | Imgur | widgets/imgur/ | ImgurWidget, ImgurScraper, ImgurImageCache | widgets.imgur |
 
 **Imgur Widget Details:**
@@ -253,7 +254,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
 | Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
 | Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction |
-| Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, process_via_fft_worker, get_zero_bars | DSP/FFT bar computation pipeline (extracted from audio_worker) |
+| Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars | DSP/FFT bar computation pipeline (inline, extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for blob/starfield/helix modes |
 | Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping (extracted from widget, ~250 LOC) |
@@ -278,7 +279,8 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| WeatherWidget | widgets/weather_widget.py | WeatherWidget, WeatherConditionIcon, WeatherDetailIcon, WeatherDetailRow | Weather display with icons, detail metrics, forecast |
+| WeatherWidget | widgets/weather_widget.py | WeatherWidget | Weather display with icons, detail metrics, forecast (1320 LOC) |
+| WeatherComponents | widgets/weather_components.py | WeatherConditionIcon, WeatherDetailIcon, WeatherDetailRow, WeatherPosition, WeatherFetcher | Extracted helper classes for weather widget |
 | OpenMeteoProvider | weather/open_meteo_provider.py | OpenMeteoProvider | Open-Meteo API integration, geocoding, caching |
 
 **Features:**
@@ -383,6 +385,7 @@ value = settings.get("display.mode", "fill")
 | Color Utils | ui/color_utils.py | qcolor_to_list(), list_to_qcolor() | Centralized QColor ↔ list conversion (replaces inline helpers in widgets_tab_media + widget_setup) |
 | WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings(), _update_reddit_enabled_visibility() | Reddit 1/2 UI, load, save; all controls gated by enabled checkbox |
 | WidgetsTab Imgur | ui/tabs/widgets_tab_imgur.py | build_imgur_ui(), load_imgur_settings(), save_imgur_settings() | Imgur UI, load, save (dev-gated) |
+| Settings Binding | ui/tabs/settings_binding.py | SliderBinding, CheckBinding, ComboDataBinding, ComboIndexBinding, ColorBinding, RawBinding, apply_bindings_load, collect_bindings_save | Declarative widget↔config key binding utility for reducing save/load boilerplate |
 | Shared Styles | ui/tabs/shared_styles.py | NoWheelSlider, SPINBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants and shared widgets (NoWheelSlider) for all settings tabs |
 | SourcesTab | ui/tabs/sources_tab.py | SourcesTab | Image source config |
 | TransitionsTab | ui/tabs/transitions_tab.py | TransitionsTab | Transition config |
@@ -418,7 +421,9 @@ value = settings.get("display.mode", "fill")
 |-----------|----------|
 | tests/test_process_supervisor.py | Worker process lifecycle |
 | tests/test_image_worker.py | Image decode/prescale |
-| tests/test_fft_worker.py | FFT computation |
+| ~~tests/test_fft_worker.py~~ | Removed (FFT worker deprecated) |
+| tests/test_settings_binding.py | Settings binding utility (26 tests) |
+| ~~tests/test_painter_shadow.py~~ | Removed (orphaned, superseded by shadow_utils) |
 | tests/test_settings_models.py | Settings dataclasses |
 | tests/test_widget_positioner.py | Widget positioning |
 | tests/test_gl_state_manager.py | GL state management |

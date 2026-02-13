@@ -72,7 +72,7 @@ vec4 eval_line(
     vec4 lineCol, vec4 glowCol, float glowSigmaBase, float band_energy,
     float mw_displacement
 ) {
-    float wave_y = 0.5 + wave_val * amplitude + mw_displacement;
+    float wave_y = clamp(0.5 + wave_val * amplitude + mw_displacement, 0.0, 1.0);
     float dist = abs(ny - wave_y);
     float dist_px = dist * inner_height;
 
@@ -152,15 +152,18 @@ void main() {
 
     int lines = clamp(u_line_count, 1, 3);
 
-    // Per-line energy: single mode uses vocal-led mix, multi-line splits by band
-    float e1 = (lines == 1)
-        ? (u_mid_energy * 0.70 + u_bass_energy * 0.18 + u_high_energy * 0.12)
-        : u_bass_energy * 1.15;
-    float e2_band = u_mid_energy * 1.15;
-    float e3_band = u_high_energy * 1.15;
-
-    // Sensitivity scales how much bass/energy affects pulsing amplitude
+    // Sensitivity: controls how much BASS drives pulsing amplitude
     float sens = clamp(u_sensitivity, 0.1, 5.0);
+
+    // Per-line energy: base mix + bass pulsing scaled by sensitivity
+    // Single mode: modest base + bass*sens for reactive pulsing
+    // Multi-line: each line driven by its own band + bass*sens
+    float bass_pulse = u_bass_energy * sens * 0.85;
+    float e1 = (lines == 1)
+        ? (u_mid_energy * 0.35 + u_high_energy * 0.10 + bass_pulse)
+        : (u_bass_energy * 0.4 + bass_pulse);
+    float e2_band = u_mid_energy * 0.5 + bass_pulse * 0.5;
+    float e3_band = u_high_energy * 0.5 + bass_pulse * 0.3;
 
     // Line Offset Bias: base vertical spread between lines (multi-line)
     float lob = clamp(u_osc_line_offset_bias, 0.0, 1.0);
@@ -193,13 +196,15 @@ void main() {
     // Micro wobble amount (energy-reactive micro distortions)
     float micro_wob = clamp(u_micro_wobble, 0.0, 1.0);
 
-    // Vertical shift: int value maps to fraction of default spacing
-    // 0 = no spread, 100 = default spread, 200 = 2x spread, -50 = crossed
+    // Vertical shift: purely Y-positioning of lines (does NOT affect amplitude/shape)
+    // 0 = no spread, 100 = default spread, 200 = 2x spread, negative = inverted
     float v_shift_pct = float(u_osc_vertical_shift) / 100.0;
     float v_spacing = 0.0;
     if (abs(v_shift_pct) > 0.001 && lines >= 2) {
         float base_spacing_px = clamp(inner_height * 0.25, 20.0, 80.0);
-        v_spacing = (base_spacing_px * v_shift_pct) / inner_height;
+        float raw_spacing = (base_spacing_px * v_shift_pct) / inner_height;
+        // Clamp so lines stay within card bounds (max ±0.35 normalized)
+        v_spacing = clamp(raw_spacing, -0.35, 0.35);
     }
 
     // =====================================================================
@@ -207,8 +212,8 @@ void main() {
     // =====================================================================
     // wave_val is raw sine in [-1, 1]. amplitude is the SOLE vertical scaler.
     // Energy adds a significant boost to amplitude so wave reacts to vocals.
-    // Sensitivity controls how much bass drives pulsing. Clamp to 0.48 to stay in card.
-    float amp1 = min(base_amplitude * (1.0 + e1 * 1.2 * sens), 0.48);
+    // Energy drives amplitude pulsing. Clamp to 0.48 to stay in card.
+    float amp1 = min(base_amplitude * (1.0 + e1 * 1.5), 0.48);
     float w1 = sin(nx * sine_freq + phase1);
 
     // Wave effect: vocal-led positional y-offset preserving sine shape
@@ -223,22 +228,23 @@ void main() {
     }
 
     // Micro wobble: high-frequency energy-reactive bumps/dents along the line
-    // These are small jagged distortions that make the line look "fuzzy" or "hairy"
+    // Bass-driven so it reacts to kick/bass hits. Higher scale for visible small bursts.
     // Added to wave_val BEFORE amplitude scaling so they distort the shape itself
     float mw1 = 0.0;
     if (micro_wob > 0.001 && play_gate > 0.5) {
-        float mw_energy = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
-        float mw_drive = clamp(mw_energy * 2.0, 0.0, 1.0);
+        // Bass-dominant energy drive for reactive wobble
+        float mw_energy = u_bass_energy * 0.65 + u_mid_energy * 0.25 + u_high_energy * 0.10;
+        float mw_drive = clamp(mw_energy * 2.5, 0.0, 1.0);
         if (mw_drive > 0.01) {
-            // HIGH spatial frequencies (120-280 cycles) = visible jagged bumps
-            // Multiple octaves for organic look, fast time for lively motion
-            float mw_raw = sin(nx * 127.0 + u_time * 3.1) * 0.30
-                         + sin(nx * 197.0 - u_time * 4.7) * 0.25
-                         + sin(nx * 283.0 + u_time * 2.3) * 0.20
-                         + sin(nx * 89.0 - u_time * 5.5) * 0.15
-                         + sin(nx * 163.0 + u_time * 1.9) * 0.10;
-            // Scale: at full slider, bumps are ~0.15 of wave amplitude
-            mw1 = mw_raw * mw_drive * micro_wob * 0.15;
+            // HIGH spatial frequencies for visible jagged bumps
+            // Moderate time speeds for smooth-ish motion (not choppy)
+            float mw_raw = sin(nx * 127.0 + u_time * 1.8) * 0.28
+                         + sin(nx * 197.0 - u_time * 2.5) * 0.24
+                         + sin(nx * 283.0 + u_time * 1.4) * 0.20
+                         + sin(nx * 89.0 - u_time * 3.0) * 0.16
+                         + sin(nx * 163.0 + u_time * 1.1) * 0.12;
+            // Scale: at full slider, bumps are ~0.25 of wave amplitude for visible bursts
+            mw1 = mw_raw * mw_drive * micro_wob * 0.25;
         }
     }
 
@@ -255,7 +261,7 @@ void main() {
     // LINE 2 — shifted above center when vertical shift enabled
     // =====================================================================
     if (lines >= 2) {
-        float amp2 = min(base_amplitude * (1.0 + e2_band * 1.2 * sens), 0.48);
+        float amp2 = min(base_amplitude * (1.0 + e2_band * 1.5), 0.48);
         float w2 = sin(nx * sine_freq + 2.094 + phase2);
 
         float wfx2 = 0.0;
@@ -269,22 +275,22 @@ void main() {
 
         float mw2 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
-            float mw_energy2 = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
-            float mw_drive2 = clamp(mw_energy2 * 2.0, 0.0, 1.0);
+            float mw_energy2 = u_bass_energy * 0.65 + u_mid_energy * 0.25 + u_high_energy * 0.10;
+            float mw_drive2 = clamp(mw_energy2 * 2.5, 0.0, 1.0);
             if (mw_drive2 > 0.01) {
-                float mw_raw2 = sin(nx * 139.0 + u_time * 3.5) * 0.30
-                              + sin(nx * 211.0 - u_time * 4.1) * 0.25
-                              + sin(nx * 271.0 + u_time * 2.7) * 0.20
-                              + sin(nx * 97.0 - u_time * 5.9) * 0.15
-                              + sin(nx * 173.0 + u_time * 2.1) * 0.10;
-                mw2 = mw_raw2 * mw_drive2 * micro_wob * 0.15;
+                float mw_raw2 = sin(nx * 139.0 + u_time * 2.0) * 0.28
+                              + sin(nx * 211.0 - u_time * 2.3) * 0.24
+                              + sin(nx * 271.0 + u_time * 1.6) * 0.20
+                              + sin(nx * 97.0 - u_time * 3.2) * 0.16
+                              + sin(nx * 173.0 + u_time * 1.3) * 0.12;
+                mw2 = mw_raw2 * mw_drive2 * micro_wob * 0.25;
             }
         }
 
         float ny2;
         if (abs(v_shift_pct) > 0.001) {
+            // Vertical shift is purely positional — do NOT override amplitude
             ny2 = ny + v_spacing;
-            amp2 = min(base_amplitude * (0.7 + e2_band * 0.15), 0.48);
         } else {
             ny2 = ny - lob * 0.12;
         }
@@ -301,7 +307,7 @@ void main() {
     // LINE 3 — shifted below center when vertical shift enabled
     // =====================================================================
     if (lines >= 3) {
-        float amp3 = min(base_amplitude * (1.0 + e3_band * 1.2 * sens), 0.48);
+        float amp3 = min(base_amplitude * (1.0 + e3_band * 1.5), 0.48);
         float w3 = sin(nx * sine_freq + 4.189 + phase3);
 
         float wfx3 = 0.0;
@@ -315,22 +321,22 @@ void main() {
 
         float mw3 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
-            float mw_energy3 = u_mid_energy * 0.65 + u_high_energy * 0.25 + u_bass_energy * 0.10;
-            float mw_drive3 = clamp(mw_energy3 * 2.0, 0.0, 1.0);
+            float mw_energy3 = u_bass_energy * 0.65 + u_mid_energy * 0.20 + u_high_energy * 0.15;
+            float mw_drive3 = clamp(mw_energy3 * 2.5, 0.0, 1.0);
             if (mw_drive3 > 0.01) {
-                float mw_raw3 = sin(nx * 151.0 - u_time * 3.9) * 0.30
-                              + sin(nx * 223.0 + u_time * 4.3) * 0.25
-                              + sin(nx * 293.0 - u_time * 2.5) * 0.20
-                              + sin(nx * 107.0 + u_time * 6.1) * 0.15
-                              + sin(nx * 181.0 - u_time * 1.7) * 0.10;
-                mw3 = mw_raw3 * mw_drive3 * micro_wob * 0.15;
+                float mw_raw3 = sin(nx * 151.0 - u_time * 2.2) * 0.28
+                              + sin(nx * 223.0 + u_time * 2.4) * 0.24
+                              + sin(nx * 293.0 - u_time * 1.5) * 0.20
+                              + sin(nx * 107.0 + u_time * 3.3) * 0.16
+                              + sin(nx * 181.0 - u_time * 1.0) * 0.12;
+                mw3 = mw_raw3 * mw_drive3 * micro_wob * 0.25;
             }
         }
 
         float ny3;
         if (abs(v_shift_pct) > 0.001) {
+            // Vertical shift is purely positional — do NOT override amplitude
             ny3 = ny - v_spacing;
-            amp3 = min(base_amplitude * (0.6 + e3_band * 0.18), 0.48);
         } else {
             ny3 = ny + lob * 0.12;
         }

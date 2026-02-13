@@ -139,7 +139,7 @@
 | `test_reddit_widget.py` | RedditWidget, fetch, display, clicks | Reddit widget issues |
 | `test_spotify_visualizer_widget.py` | SpotifyVisualizerWidget, BeatEngine, bar rendering | Visualizer widget changes |
 | `test_spotify_visualizer_integration.py` | Visualizer integration with DisplayWidget | Visualizer integration |
-| `test_painter_shadow.py` | Drop shadow rendering for all widgets | Shadow rendering changes |
+| ~~`test_painter_shadow.py`~~ | *(Removed — superseded by `shadow_utils.py`)* | — |
 
 ### Widget Behavior
 

@@ -22,7 +22,6 @@ class WorkerType(Enum):
     """Types of worker processes."""
     IMAGE = "image"           # decode/prescale with path|scaled:WxH cache keys
     RSS = "rss"               # fetch/parse/mirror with validated ImageMetadata
-    FFT = "fft"               # loopback ingest + smoothing + ghost envelopes
     TRANSITION = "transition" # CPU precompute payloads
 
 
@@ -57,11 +56,6 @@ class MessageType(Enum):
     RSS_REFRESH = "rss_refresh"
     RSS_RESULT = "rss_result"
     
-    # FFT worker messages
-    FFT_FRAME = "fft_frame"
-    FFT_BARS = "fft_bars"
-    FFT_CONFIG = "fft_config"
-    
     # Transition worker messages
     TRANSITION_PRECOMPUTE = "transition_precompute"
     TRANSITION_RESULT = "transition_result"
@@ -89,7 +83,6 @@ class WorkerMessage:
     # Size caps per channel (bytes)
     MAX_IMAGE_PAYLOAD = 50 * 1024 * 1024   # 50MB for large images
     MAX_RSS_PAYLOAD = 1 * 1024 * 1024      # 1MB for RSS data
-    MAX_FFT_PAYLOAD = 64 * 1024            # 64KB for FFT frames
     MAX_TRANSITION_PAYLOAD = 1 * 1024 * 1024  # 1MB for transition data
     
     def validate_size(self) -> bool:
@@ -100,7 +93,6 @@ class WorkerMessage:
         limits = {
             WorkerType.IMAGE: self.MAX_IMAGE_PAYLOAD,
             WorkerType.RSS: self.MAX_RSS_PAYLOAD,
-            WorkerType.FFT: self.MAX_FFT_PAYLOAD,
             WorkerType.TRANSITION: self.MAX_TRANSITION_PAYLOAD,
         }
         
@@ -279,57 +271,6 @@ class RGBAHeader(SharedMemoryHeader):
     
     HEADER_SIZE = SharedMemoryHeader.HEADER_SIZE + 28
 
-
-@dataclass
-class FFTHeader(SharedMemoryHeader):
-    """
-    Header for FFT data in shared memory.
-    
-    Extends base header with FFT-specific metadata.
-    """
-    bins_len: int = 0              # Number of FFT bins
-    window_size: int = 0           # FFT window size
-    sample_rate: int = 0           # Audio sample rate
-    smoothing_tau: float = 0.0     # Smoothing time constant
-    decay_rate: float = 0.0        # Decay rate for bars
-    
-    def to_bytes(self) -> bytes:
-        """Serialize FFT header to bytes."""
-        import struct
-        base = super().to_bytes()
-        return base + struct.pack(
-            'IIIdd',
-            self.bins_len,
-            self.window_size,
-            self.sample_rate,
-            self.smoothing_tau,
-            self.decay_rate,
-        )
-    
-    @classmethod
-    def from_bytes(cls, data: bytes) -> "FFTHeader":
-        """Deserialize FFT header from bytes."""
-        import struct
-        base = SharedMemoryHeader.from_bytes(data)
-        offset = SharedMemoryHeader.HEADER_SIZE
-        bins_len, window_size, sample_rate, smoothing_tau, decay_rate = struct.unpack(
-            'IIIdd', data[offset:offset + 32]
-        )
-        return cls(
-            handle=base.handle,
-            size_bytes=base.size_bytes,
-            producer_pid=base.producer_pid,
-            generation=base.generation,
-            timestamp=base.timestamp,
-            valid=base.valid,
-            bins_len=bins_len,
-            window_size=window_size,
-            sample_rate=sample_rate,
-            smoothing_tau=smoothing_tau,
-            decay_rate=decay_rate,
-        )
-    
-    HEADER_SIZE = SharedMemoryHeader.HEADER_SIZE + 32  # IIIdd with alignment padding
 
 
 @dataclass

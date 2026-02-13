@@ -1,9 +1,8 @@
-"""Spotify Visualizer Audio Worker - Audio capture and FFT processing.
+"""Spotify Visualizer Audio Worker - Audio capture and inline FFT processing.
 
 This module contains the SpotifyVisualizerAudioWorker class which handles:
 - Audio capture via loopback
-- FFT processing for visualizer bars
-- Integration with FFTWorker process for offloaded processing
+- Inline FFT processing for visualizer bars
 """
 
 from __future__ import annotations

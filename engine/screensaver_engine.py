@@ -38,7 +38,6 @@ from core.process.supervisor import ProcessSupervisor
 from core.process.workers import (
     image_worker_main,
     rss_worker_main,
-    fft_worker_main,
     transition_worker_main,
 )
 
@@ -381,9 +380,8 @@ class ScreensaverEngine(QObject):
             # Register worker factories
             self._process_supervisor.register_worker_factory(WorkerType.IMAGE, image_worker_main)
             self._process_supervisor.register_worker_factory(WorkerType.RSS, rss_worker_main)
-            self._process_supervisor.register_worker_factory(WorkerType.FFT, fft_worker_main)
             self._process_supervisor.register_worker_factory(WorkerType.TRANSITION, transition_worker_main)
-            logger.info("ProcessSupervisor initialized with 4 worker factories")
+            logger.info("ProcessSupervisor initialized with 3 worker factories")
             
             logger.info("Core systems initialized successfully")
             return True
@@ -650,7 +648,7 @@ class ScreensaverEngine(QObject):
             display_count = self.display_manager.initialize_displays()
             logger.info(f"Display initialized with {display_count} screens")
             
-            # Wire up ProcessSupervisor to displays for FFTWorker integration
+            # Wire up ProcessSupervisor to displays for worker integration
             if self._process_supervisor and display_count > 0:
                 self.display_manager.set_process_supervisor(self._process_supervisor)
                 logger.debug("ProcessSupervisor wired to display manager")
@@ -736,12 +734,11 @@ class ScreensaverEngine(QObject):
         workers_started = 0
         workers_failed = 0
         
-        # Priority order: Image > FFT only
-        # RSS and Transition workers removed - low value, use ThreadManager instead
-        # This reduces process overhead and improves performance
+        # Priority order: Image only
+        # FFT worker removed (deprecated, inline FFT used instead)
+        # RSS and Transition workers use ThreadManager
         worker_configs = [
             (WorkerType.IMAGE, 'workers.image.enabled', "ImageWorker", "ThreadManager fallback"),
-            (WorkerType.FFT, 'workers.fft.enabled', "FFTWorker", "local processing"),
         ]
         
         for worker_type, setting_key, name, fallback_msg in worker_configs:

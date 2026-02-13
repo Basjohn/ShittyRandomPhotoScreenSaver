@@ -11,7 +11,6 @@ Tests cover:
 import pytest
 
 from core.process.types import (
-    FFTHeader,
     HealthStatus,
     MessageType,
     RGBAHeader,
@@ -31,7 +30,6 @@ class TestWorkerTypes:
         """Verify all expected worker types are defined."""
         assert WorkerType.IMAGE.value == "image"
         assert WorkerType.RSS.value == "rss"
-        assert WorkerType.FFT.value == "fft"
         assert WorkerType.TRANSITION.value == "transition"
     
     def test_worker_types_unique(self):
@@ -67,7 +65,6 @@ class TestMessageType:
         """Verify worker-specific message types exist."""
         assert MessageType.IMAGE_DECODE.value == "image_decode"
         assert MessageType.RSS_FETCH.value == "rss_fetch"
-        assert MessageType.FFT_FRAME.value == "fft_frame"
         assert MessageType.TRANSITION_PRECOMPUTE.value == "transition_precompute"
 
 
@@ -112,11 +109,11 @@ class TestWorkerMessage:
     def test_message_size_validation(self):
         """Test message size validation."""
         small_msg = WorkerMessage(
-            msg_type=MessageType.FFT_FRAME,
+            msg_type=MessageType.IMAGE_DECODE,
             seq_no=1,
             correlation_id="test",
             payload={"data": [0.0] * 100},
-            worker_type=WorkerType.FFT,
+            worker_type=WorkerType.IMAGE,
         )
         assert small_msg.validate_size() is True
 
@@ -253,51 +250,6 @@ class TestRGBAHeader:
         assert restored.format == original.format
 
 
-class TestFFTHeader:
-    """Tests for FFTHeader serialization."""
-    
-    def test_fft_header_creation(self):
-        """Test creating an FFT header."""
-        header = FFTHeader(
-            handle="fft_test",
-            size_bytes=4096,
-            producer_pid=12345,
-            generation=1,
-            bins_len=512,
-            window_size=2048,
-            sample_rate=44100,
-            smoothing_tau=0.3,
-            decay_rate=0.7,
-        )
-        assert header.bins_len == 512
-        assert header.sample_rate == 44100
-        assert header.smoothing_tau == 0.3
-    
-    def test_fft_header_serialization(self):
-        """Test FFT header to_bytes and from_bytes."""
-        original = FFTHeader(
-            handle="fft_shm",
-            size_bytes=8192,
-            producer_pid=9876,
-            generation=5,
-            bins_len=1024,
-            window_size=4096,
-            sample_rate=48000,
-            smoothing_tau=0.35,
-            decay_rate=0.65,
-        )
-        
-        data = original.to_bytes()
-        assert len(data) == FFTHeader.HEADER_SIZE
-        
-        restored = FFTHeader.from_bytes(data)
-        assert restored.bins_len == original.bins_len
-        assert restored.window_size == original.window_size
-        assert restored.sample_rate == original.sample_rate
-        assert abs(restored.smoothing_tau - original.smoothing_tau) < 0.001
-        assert abs(restored.decay_rate - original.decay_rate) < 0.001
-
-
 class TestHealthStatus:
     """Tests for HealthStatus health monitoring."""
     
@@ -336,7 +288,7 @@ class TestHealthStatus:
     def test_heartbeat_recording(self):
         """Test heartbeat recording."""
         health = HealthStatus(
-            worker_type=WorkerType.FFT,
+            worker_type=WorkerType.IMAGE,
             state=WorkerState.RUNNING,
         )
         
@@ -513,23 +465,6 @@ class TestWorkerContracts:
         )
         assert "feeds" in msg.payload
         assert "max_items" in msg.payload
-    
-    def test_fft_worker_contract(self):
-        """Test FFTWorker message contract."""
-        msg = WorkerMessage(
-            msg_type=MessageType.FFT_CONFIG,
-            seq_no=1,
-            correlation_id="fft-001",
-            payload={
-                "window_size": 2048,
-                "smoothing_tau": 0.3,
-                "decay_rate": 0.7,
-                "ghosting_enabled": True,
-            },
-            worker_type=WorkerType.FFT,
-        )
-        assert "window_size" in msg.payload
-        assert "smoothing_tau" in msg.payload
     
     def test_transition_worker_contract(self):
         """Test TransitionPrepWorker message contract."""

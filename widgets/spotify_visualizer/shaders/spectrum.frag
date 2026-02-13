@@ -208,28 +208,43 @@ void main() {
             }
         }
 
-        // Border radius clip for single-piece bars (applies to both bar and ghost)
-        float br = clamp(u_border_radius, 0.0, min(bar_width * 0.5, active_height * 0.5));
-        // Ghost uses peak_height for its top rounding
-        float br_ghost = clamp(u_border_radius, 0.0, min(bar_width * 0.5, peak_height * 0.5));
+        // Border radius: FIXED radius based on bar_width so all bars look
+        // identical regardless of height.  Only shrink when the combined
+        // shape is extremely short (< 2*radius) to avoid visual artifacts.
+        float combined_h = max(active_height, peak_height);
+        float br_max = min(u_border_radius, bar_width * 0.5);
+        float br = (combined_h < br_max * 2.0) ? min(br_max, combined_h * 0.5) : br_max;
         if (br > 0.5 && (is_bar || is_ghost)) {
-            float eff_br = is_ghost ? br_ghost : br;
-            float eff_h = is_ghost ? peak_height : active_height;
             float bx_f = bar_local_x;
             float by_f = y_rel;
-            // Only round the top two corners (bottom stays flat)
-            if (by_f > eff_h - eff_br) {
-                // Top-left corner
-                if (bx_f < eff_br) {
-                    float dx = eff_br - bx_f;
-                    float dy = by_f - (eff_h - eff_br);
-                    if (dx * dx + dy * dy > eff_br * eff_br) discard;
+            // Round the TOP two corners of the combined shape
+            if (by_f > combined_h - br) {
+                if (bx_f < br) {
+                    float dx = br - bx_f;
+                    float dy = by_f - (combined_h - br);
+                    if (dx * dx + dy * dy > br * br) discard;
                 }
-                // Top-right corner
-                if (bx_f > bar_width - eff_br) {
-                    float dx = bx_f - (bar_width - eff_br);
-                    float dy = by_f - (eff_h - eff_br);
-                    if (dx * dx + dy * dy > eff_br * eff_br) discard;
+                if (bx_f > bar_width - br) {
+                    float dx = bx_f - (bar_width - br);
+                    float dy = by_f - (combined_h - br);
+                    if (dx * dx + dy * dy > br * br) discard;
+                }
+            }
+            // Round ghost bottom corners so the ghost rectangle doesn't
+            // protrude past the bar's rounded top corners.
+            if (is_ghost && active_height > 2.0) {
+                float br_bottom = (active_height < br_max * 2.0) ? min(br_max, active_height * 0.5) : br_max;
+                if (br_bottom > 0.5 && by_f < active_height + br_bottom) {
+                    if (bx_f < br_bottom) {
+                        float dx = br_bottom - bx_f;
+                        float dy = (active_height + br_bottom) - by_f;
+                        if (dx * dx + dy * dy > br_bottom * br_bottom) discard;
+                    }
+                    if (bx_f > bar_width - br_bottom) {
+                        float dx = bx_f - (bar_width - br_bottom);
+                        float dy = (active_height + br_bottom) - by_f;
+                        if (dx * dx + dy * dy > br_bottom * br_bottom) discard;
+                    }
                 }
             }
         }
