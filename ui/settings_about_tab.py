@@ -235,6 +235,13 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     dialog.reset_defaults_btn.clicked.connect(dialog._on_reset_to_defaults_clicked)
     button_row.addWidget(dialog.reset_defaults_btn)
 
+    dialog.reset_visualizers_btn = QPushButton("Reset Visualizers")
+    dialog.reset_visualizers_btn.setObjectName("resetVisualizersButton")
+    dialog.reset_visualizers_btn.setFixedHeight(24)
+    dialog.reset_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+    dialog.reset_visualizers_btn.clicked.connect(dialog._on_reset_visualizers_clicked)
+    button_row.addWidget(dialog.reset_visualizers_btn)
+
     button_row.addStretch()
 
     dialog.import_settings_btn = QPushButton("Import Settings…")

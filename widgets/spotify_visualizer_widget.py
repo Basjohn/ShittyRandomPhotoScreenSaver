@@ -170,10 +170,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_line_count: int = 1
         self._sine_line_offset_bias: float = 0.0
         self._sine_line_dim: bool = False
-        self._sine_line2_color: QColor = QColor(255, 120, 50, 230)
-        self._sine_line2_glow_color: QColor = QColor(255, 120, 50, 180)
-        self._sine_line3_color: QColor = QColor(50, 255, 120, 230)
-        self._sine_line3_glow_color: QColor = QColor(50, 255, 120, 180)
+        self._sine_line2_color: QColor = QColor(255, 255, 255, 230)
+        self._sine_line2_glow_color: QColor = QColor(7, 114, 255, 180)
+        self._sine_line3_color: QColor = QColor(255, 255, 255, 230)
+        self._sine_line3_glow_color: QColor = QColor(14, 159, 255, 180)
 
         # Behavioural gating
         self._spotify_playing: bool = False

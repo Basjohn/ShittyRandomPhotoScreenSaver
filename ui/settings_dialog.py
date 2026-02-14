@@ -968,6 +968,7 @@ class SettingsDialog(QDialog):
             try:
                 notice = getattr(self, "reset_notice_label", None)
                 if notice is not None:
+                    notice.setText("Settings reverted to defaults!")
                     notice.setVisible(True)
                     QTimer.singleShot(2000, lambda: notice.setVisible(False))
             except Exception:
@@ -978,6 +979,43 @@ class SettingsDialog(QDialog):
                 self,
                 "Error",
                 "Failed to reset settings to defaults.\nSee log for details.",
+            )
+
+    def _on_reset_visualizers_clicked(self) -> None:
+        """Reset only the visualizer settings back to defaults."""
+        confirmed = StyledPopup.question(
+            self,
+            "Reset Visualizers",
+            "Reset all Spotify visualizer settings to defaults?",
+            yes_text="Reset",
+            no_text="Cancel",
+        )
+        if not confirmed:
+            return
+
+        try:
+            self._settings.reset_visualizers_to_defaults()
+
+            try:
+                if hasattr(self, "widgets_tab"):
+                    self.widgets_tab._load_settings()  # type: ignore[attr-defined]
+            except Exception:
+                logger.debug("Failed to reload widgets tab after visualizer reset", exc_info=True)
+
+            try:
+                notice = getattr(self, "reset_notice_label", None)
+                if notice is not None:
+                    notice.setText("Visualizer settings reset to defaults!")
+                    notice.setVisible(True)
+                    QTimer.singleShot(2000, lambda: notice.setVisible(False))
+            except Exception:
+                logger.debug("Failed to show visualizer reset notice label", exc_info=True)
+        except Exception as exc:
+            logger.exception("Failed to reset visualizer settings: %s", exc)
+            StyledPopup.show_error(
+                self,
+                "Error",
+                "Failed to reset visualizer settings.\nSee log for details.",
             )
     
     def _show_more_options_menu(self) -> None:

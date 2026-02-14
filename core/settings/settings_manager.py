@@ -593,7 +593,24 @@ class SettingsManager(QObject):
     def set_spotify_visualizer_settings(self, model: SpotifyVisualizerSettings) -> None:
         """Persist Spotify visualizer settings from a typed model."""
         self.set_many(model.to_dict())
-    
+
+    def reset_visualizers_to_defaults(self) -> None:
+        """Reset only the spotify visualizer settings to canonical defaults."""
+        from core.settings.defaults import get_default_settings
+
+        defaults = get_default_settings()
+        widgets_defaults = defaults.get('widgets', {}) if isinstance(defaults, Mapping) else {}
+        vis_defaults = widgets_defaults.get('spotify_visualizer', {})
+        if not isinstance(vis_defaults, Mapping):
+            logger.debug("No spotify_visualizer defaults found during reset request")
+            return
+
+        flat_values = {
+            f"widgets.spotify_visualizer.{key}": value
+            for key, value in vis_defaults.items()
+        }
+        self.set_many(flat_values)
+
     def save(self) -> None:
         """Force save settings to persistent storage."""
         with self._lock:
