@@ -65,6 +65,9 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | SST I/O | core/settings/sst_io.py | export_to_sst(), import_from_sst(), preview_import_from_sst() | Settings snapshot transport (extracted from settings_manager.py) |
 | Lifecycle | core/lifecycle.py | Lifecycle, Cleanable | Runtime-checkable Protocols for start/stop/cleanup interface |
 | Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
+| Reddit Helper Bridge | core/windows/reddit_helper_bridge.py | enqueue_url(), enqueue_settings_request() | ProgramData file queue + helper trigger (URLs, interactive desktop settings launch) |
+| Reddit Helper Installer | core/windows/reddit_helper_installer.py | ensure_helper_installed(), trigger_helper_run() | Copies helper payload + launches in active user session (schtasks/token fallback) |
+| Reddit Helper Worker | helpers/reddit_helper_worker.py | main(), process_queue() | Interactive desktop worker: opens URLs, handles open_settings action + completion tokens |
 | Display Cleanup | rendering/display_cleanup.py | on_destroyed() | Widget destruction/cleanup logic (extracted from display_widget.py) |
 
 ## RSS Image Source (`sources/rss/`)
@@ -113,7 +116,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Display Image Ops | rendering/display_image_ops.py | set_processed_image, on_transition_finished, push_spotify_visualizer_frame | Image display pipeline, transition finish |
 | Display GL Init | rendering/display_gl_init.py | init_renderer_backend, ensure_gl_compositor, ensure_render_surface | GL compositor/surface setup, cleanup |
 | Display Context Menu | rendering/display_context_menu.py | show_context_menu, on_context_transition_selected | Context menu creation and handlers |
-| Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter |
+| Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter, media key passthrough (focus re-claim removed Feb 2026 to keep Settings responsive) |
 | Display Input | rendering/display_input.py | handle_mousePressEvent, show_ctrl_cursor_hint | Cursor halo, mouse press/move |
 | Display Overlays | rendering/display_overlays.py | start_overlay_fades, perform_activation_refresh | Overlay fades, window diagnostics |
 | GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (1891 lines, thin delegates) |

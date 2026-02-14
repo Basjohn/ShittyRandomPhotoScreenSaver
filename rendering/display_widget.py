@@ -1495,19 +1495,6 @@ class DisplayWidget(QWidget):
             self._invalidate_overlay_effects("focus_in")
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        # SplashScreen windows lose internal Qt keyboard routing after a
-        # deactivate/reactivate cycle.  activateWindow()+setFocus() alone
-        # is insufficient; a grab→release keyboard cycle (which is what
-        # QMenu::popup does internally) forces Qt to rebind its dispatch.
-        try:
-            if self._coordinator.is_focus_owner(self):
-                self.activateWindow()
-                self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-                self.grabKeyboard()
-                self.releaseKeyboard()
-                self._focus_loss_logged = False
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] focusIn re-claim error: %s", e)
         super().focusInEvent(event)
 
     def changeEvent(self, event: QEvent) -> None:  # type: ignore[override]

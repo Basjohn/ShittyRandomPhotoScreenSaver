@@ -11,7 +11,6 @@ import ctypes
 from ctypes import wintypes
 import logging
 import sys
-import time
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtCore import QTimer, Qt, QEvent
@@ -63,31 +62,6 @@ if sys.platform == "win32":
         _RAW_INPUT_AVAILABLE = False
 else:
     _RAW_INPUT_AVAILABLE = False
-
-
-def _reclaim_keyboard_focus(widget) -> None:
-    """Force-reclaim Qt keyboard focus for a SplashScreen widget.
-
-    SplashScreen windows lose internal Qt keyboard routing after a
-    deactivate/reactivate cycle.  activateWindow()+setFocus() alone
-    is not enough — Qt's internal keyboard dispatch only rebinds
-    after a grab/release cycle (which is what QMenu::popup does
-    internally).  We replicate that here.
-
-    Scheduled via QTimer.singleShot(0, ...) from the WM_ACTIVATE
-    handler so it runs on the next event-loop tick.
-    """
-    try:
-        widget.activateWindow()
-        widget.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-        # The grab→release cycle forces Qt to re-establish its internal
-        # keyboard routing, identical to what a popup menu does.
-        widget.grabKeyboard()
-        widget.releaseKeyboard()
-        widget._focus_loss_logged = False
-        logger.debug("[NATIVE] Keyboard focus re-claimed (grab/release) for screen %s", widget.screen_index)
-    except Exception as e:
-        logger.debug("[NATIVE] _reclaim_keyboard_focus error: %s", e)
 
 
 def handle_nativeEvent(widget, eventType, message):
@@ -182,60 +156,6 @@ def handle_nativeEvent(widget, eventType, message):
                 
             except Exception:
                 pass  # Ignore raw input errors
-
-        # -----------------------------------------------------------
-        # WM_ACTIVATE — MUST run in production (not debug-gated)
-        # SplashScreen windows lose Qt keyboard routing after a
-        # deactivate/reactivate cycle; force-reclaim focus here.
-        # -----------------------------------------------------------
-        WM_ACTIVATE = 0x0006
-        if mid == WM_ACTIVATE:
-            try:
-                wparam = int(getattr(msg, "wParam", 0) or 0)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                wparam = 0
-            if wparam == 0:
-                # Deactivated — mark all instances for refresh on reactivation
-                try:
-                    for inst in DisplayWidget.get_all_instances():
-                        try:
-                            inst._pending_activation_refresh = True
-                            inst._last_deactivate_ts = time.monotonic()
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    try:
-                        widget._pending_activation_refresh = True
-                        widget._last_deactivate_ts = time.monotonic()
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            elif wparam in (1, 2):
-                # Activated (1=click, 2=mouse) — reclaim keyboard focus
-                now_ts = time.monotonic()
-                try:
-                    for inst in DisplayWidget.get_all_instances():
-                        try:
-                            # Force keyboard focus re-claim for the focus owner
-                            coordinator = getattr(inst, "_coordinator", None)
-                            if coordinator is not None and coordinator.is_focus_owner(inst):
-                                QTimer.singleShot(0, lambda _inst=inst: _reclaim_keyboard_focus(_inst))
-                            if not getattr(inst, "_pending_activation_refresh", False):
-                                continue
-                            dt = now_ts - float(getattr(inst, "_last_deactivate_ts", 0.0) or 0.0)
-                            if dt <= 3.0:
-                                try:
-                                    QTimer.singleShot(0, lambda _inst=inst: _inst._perform_activation_refresh("wm_activate"))
-                                except Exception as e:
-                                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                                    inst._perform_activation_refresh("wm_activate")
-                            else:
-                                inst._pending_activation_refresh = False
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         if not win_diag_logger.isEnabledFor(logging.DEBUG):
             return QWidget.nativeEvent(widget, eventType, message)
@@ -435,6 +355,23 @@ def dispatch_appcommand(widget, command: int, command_name: str) -> bool:
 
 def handle_eventFilter(widget, watched, event):
     """Global event filter to keep the Ctrl halo responsive over children."""
+    try:
+        owning_display = None
+        if isinstance(watched, DisplayWidget):
+            owning_display = watched
+        elif isinstance(watched, QWidget):
+            try:
+                top_level = watched.window()
+            except Exception:
+                top_level = None
+            if isinstance(top_level, DisplayWidget):
+                owning_display = top_level
+        # Bail out for widgets that aren't part of any DisplayWidget tree (e.g. settings dialog)
+        if owning_display is None:
+            return QWidget.eventFilter(widget, watched, event)
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        return QWidget.eventFilter(widget, watched, event)
     try:
         coordinator = widget._coordinator
     except Exception as e:

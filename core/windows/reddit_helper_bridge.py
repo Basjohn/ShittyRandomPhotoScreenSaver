@@ -22,7 +22,7 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, List, Optional
 
 from core.logging.logger import get_logger
 
@@ -36,6 +36,7 @@ logger = get_logger(__name__)
 _PROGRAM_DATA = os.getenv("PROGRAMDATA", r"C:\ProgramData")
 _BASE_DIR = Path(_PROGRAM_DATA) / "SRPSS"
 _QUEUE_DIR = _BASE_DIR / "url_queue"
+_SIGNAL_DIR = _BASE_DIR / "helper_signals"
 _HELPER_TASK_NAME = os.getenv("SRPSS_REDDIT_HELPER_TASK", r"SRPSS\RedditHelper")
 _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _SPOOL_READY = False
@@ -43,6 +44,14 @@ _SPOOL_READY = False
 
 def get_queue_dir() -> Path:
     return _QUEUE_DIR
+
+
+def get_base_dir() -> Path:
+    return _BASE_DIR
+
+
+def get_signal_dir() -> Path:
+    return _SIGNAL_DIR
 
 
 def _ensure_queue_dir() -> bool:
@@ -70,42 +79,102 @@ def is_bridge_available() -> bool:
     return _ensure_queue_dir()
 
 
-def enqueue_url(url: str, *, source: str = "screensaver") -> bool:
-    """
-    Queue a Reddit URL for the interactive helper.
-    """
-    if not url:
-        return False
+def _coerce_command(command: Iterable[str] | str) -> List[str]:
+    if isinstance(command, str):
+        stripped = command.strip()
+        return [part for part in stripped.split() if part]
+    coerced: List[str] = []
+    for part in command:
+        text = str(part).strip()
+        if text:
+            coerced.append(text)
+    return coerced
+
+
+def _write_entry(entry: Dict[str, Any]) -> bool:
     if not is_bridge_available():
         return False
 
-    entry: Dict[str, Any] = {
-        "url": url,
-        "source": source,
-        "timestamp": time.time(),
-        "pid": os.getpid(),
-        "session": os.getenv("SESSIONNAME"),
-    }
-    token = f"{int(entry['timestamp'] * 1000)}_{entry['pid']}_{uuid.uuid4().hex}"
+    payload = dict(entry)
+    payload.setdefault("timestamp", time.time())
+    payload.setdefault("source", "screensaver")
+    payload.setdefault("pid", os.getpid())
+    payload.setdefault("session", os.getenv("SESSIONNAME"))
+
+    token = payload.get("token")
+    if not token:
+        token = f"{int(payload['timestamp'] * 1000)}_{payload['pid']}_{uuid.uuid4().hex}"
+        payload["token"] = token
+
     tmp_path = _QUEUE_DIR / f"{token}.tmp"
     final_path = _QUEUE_DIR / f"{token}.json"
 
     try:
-        tmp_path.write_text(json.dumps(entry), encoding="utf-8")
+        serialized = json.dumps(payload)
+        tmp_path.write_text(serialized, encoding="utf-8")
         tmp_path.replace(final_path)
-        logger.info("[REDDIT-BRIDGE] Queued deferred URL via ProgramData bridge: %s", url)
+        logger.info(
+            "[REDDIT-BRIDGE] Queued helper action '%s' (token=%s)",
+            payload.get("action", "open_url"),
+            token,
+        )
         triggered = _trigger_helper_process()
         if not triggered:
             _kick_helper()
+        return True
     except Exception as exc:
-        logger.warning("[REDDIT-BRIDGE] Failed to queue URL %s: %s", url, exc, exc_info=True)
+        logger.warning("[REDDIT-BRIDGE] Failed to queue helper entry: %s", exc, exc_info=True)
         try:
             if tmp_path.exists():
                 tmp_path.unlink()
         except Exception as e:
             logger.debug("[MISC] Exception suppressed: %s", e)
         return False
-    return True
+
+
+def enqueue_url(url: str, *, source: str = "screensaver") -> bool:
+    """
+    Queue a Reddit URL for the interactive helper.
+    """
+    if not url:
+        return False
+    entry: Dict[str, Any] = {
+        "action": "open_url",
+        "url": url,
+        "source": source,
+    }
+    return _write_entry(entry)
+
+
+def enqueue_settings_request(
+    command: Iterable[str] | str,
+    *,
+    completion_token: Path | str,
+    working_dir: Optional[Path | str] = None,
+    timeout_seconds: float = 900.0,
+    source: str = "screensaver",
+) -> bool:
+    """Queue a request for the helper to launch settings on the user desktop."""
+    cmd_parts = _coerce_command(command)
+    if not cmd_parts:
+        logger.warning("[REDDIT-BRIDGE] Settings request missing command")
+        return False
+
+    completion_path = Path(completion_token)
+    try:
+        completion_path.parent.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        logger.debug("[REDDIT-BRIDGE] Failed to prep completion path %s: %s", completion_path, exc)
+
+    entry: Dict[str, Any] = {
+        "action": "open_settings",
+        "command": cmd_parts,
+        "working_dir": str(Path(working_dir)) if working_dir else None,
+        "completion_token": str(completion_path),
+        "timeout_seconds": float(max(30.0, timeout_seconds)),
+        "source": source,
+    }
+    return _write_entry(entry)
 
 
 def _kick_helper() -> None:

@@ -111,6 +111,7 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     except Exception as e:
         logger.debug("[ENGINE] Failed to wake media widget from idle: %s", e)
 
+    coordinator = None
     # Set settings dialog active flag FIRST - this prevents halo from showing
     try:
         from rendering.multi_monitor_coordinator import get_coordinator
@@ -135,8 +136,9 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     # Stop the engine but DON'T exit the app
     engine.stop(exit_app=False)
 
+    app = QApplication.instance()
+
     try:
-        app = QApplication.instance()
         if app:
             animations = AnimationManager(resource_manager=engine.resource_manager)
             dialog = SettingsDialog(engine.settings_manager, animations)

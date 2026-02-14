@@ -26,7 +26,6 @@ yarn-error.log*
 temp/
 settings/
 docs/
-logs/
 bak/
 archive/
 *.log
