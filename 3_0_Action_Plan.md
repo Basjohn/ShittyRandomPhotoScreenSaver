@@ -52,7 +52,7 @@
 - [x] `_rainbow_per_bar` initialised in `__init__`.
 - [x] Full audit: all 102 config_applier attributes now have `__init__` defaults.
 - [ ] User to verify per-bar rainbow works with both checkboxes enabled.
-- User: STILL DOES NOT WORK PER BAR.
+- User: STILL DOES NOT WORK PER BAR. Colours for per bar work when checkbox is checked BUT they do not shift colours when taste the rainbow is enabled, that only works when individual bars is unselected.
 **Files:** `spotify_visualizer_widget.py`
 
 ---

@@ -471,9 +471,24 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     return container
 
 
-def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
-    """Load media + spotify visualizer settings from widgets config dict."""
-    media_config = widgets.get('media', {})
+def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
+    """Load media widget settings from the widgets config dict."""
+
+    def _apply_color_to_button(btn_attr: str, color_attr: str) -> None:
+        btn = getattr(tab, btn_attr, None)
+        color = getattr(tab, color_attr, None)
+        if btn is not None and color is not None and hasattr(btn, "set_color"):
+            try:
+                btn.set_color(color)
+            except Exception:
+                logger.debug(
+                    "[MEDIA_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
+                )
+
+    widgets = widgets or {}
+
+    media_config = widgets.get('media', {}) if isinstance(widgets, dict) else {}
+    spotify_vis_config = widgets.get('spotify_visualizer', {}) if isinstance(widgets, dict) else {}
     tab.media_enabled.setChecked(tab._config_bool('media', media_config, 'enabled', True))
 
     media_pos = tab._config_str('media', media_config, 'position', 'Bottom Left')
@@ -696,6 +711,10 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         except Exception:
             logger.debug("[MEDIA_TAB] Failed to set %s=%s", attr, data, exc_info=True)
             setattr(tab, attr, QColor(*fallback))
+    _apply_color_to_button('osc_line2_color_btn', '_osc_line2_color')
+    _apply_color_to_button('osc_line2_glow_btn', '_osc_line2_glow_color')
+    _apply_color_to_button('osc_line3_color_btn', '_osc_line3_color')
+    _apply_color_to_button('osc_line3_glow_btn', '_osc_line3_glow_color')
     _update_osc_multi_line_visibility(tab)
 
     # Per-mode settings: Starfield
@@ -898,6 +917,10 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         except Exception:
             logger.debug("[MEDIA_TAB] Failed to set %s=%s", attr, data, exc_info=True)
             setattr(tab, attr, QColor(*fallback))
+    _apply_color_to_button('sine_line2_color_btn', '_sine_line2_color')
+    _apply_color_to_button('sine_line2_glow_btn', '_sine_line2_glow_color')
+    _apply_color_to_button('sine_line3_color_btn', '_sine_line3_color')
+    _apply_color_to_button('sine_line3_glow_btn', '_sine_line3_glow_color')
     _update_sine_multi_line_visibility(tab)
     if hasattr(tab, 'sine_line_offset_bias'):
         sine_lob_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_line_offset_bias', 0.0) * 100)

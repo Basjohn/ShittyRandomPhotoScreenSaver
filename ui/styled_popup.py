@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QGraphicsDropShadowEffect, QColorDialog, QFrame,
 )
 from PySide6.QtCore import Qt, QTimer, QPoint, Signal
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QPalette, QPainter, QPen, QBrush, QLinearGradient
 
 from core.logging.logger import get_logger
 
@@ -390,15 +390,22 @@ class ColorSwatchButton(QPushButton):
         parent: Optional[QWidget] = None,
         title: str = "Choose Color",
         show_alpha: bool = True,
+        auto_picker: bool = True,
     ) -> None:
         super().__init__(parent)
         self._color: QColor = QColor(color) if color is not None else QColor(255, 255, 255, 255)
         self._title = title
         self._show_alpha = show_alpha
+        self._auto_picker = auto_picker
+        self._hovered = False
+        self._pressed = False
+
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setMinimumSize(self._MIN_WIDTH, self._MIN_HEIGHT)
         self.setMaximumHeight(self._MIN_HEIGHT + 6)
+        self.setStyleSheet("border: none; background: transparent;")
 
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(12)
@@ -406,8 +413,8 @@ class ColorSwatchButton(QPushButton):
         shadow.setColor(QColor(0, 0, 0, 110))
         self.setGraphicsEffect(shadow)
 
-        self._update_style()
-        self.clicked.connect(self._open_picker)
+        if self._auto_picker:
+            self.clicked.connect(self._open_picker)
 
     def color(self) -> QColor:
         return QColor(self._color)
@@ -416,10 +423,42 @@ class ColorSwatchButton(QPushButton):
         if color is None:
             return
         self._color = QColor(color)
-        self._update_style()
+        self.update()
 
-    def _rgba(self, color: QColor) -> str:
-        return f"rgba({color.red()},{color.green()},{color.blue()},{color.alpha()})"
+    # ----- state handling -------------------------------------------------
+    def enterEvent(self, event) -> None:
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event) -> None:
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed = True
+            self.update()
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed = False
+            self.update()
+        super().mouseReleaseEvent(event)
+
+    # ----- painting -------------------------------------------------------
+    def _current_fill(self) -> QColor:
+        base = QColor(self._color)
+        if not self.isEnabled():
+            base.setAlpha(int(base.alpha() * 0.4))
+            return base
+        if self._pressed:
+            return self._blend(base, QColor(0, 0, 0, base.alpha()), 0.18)
+        if self._hovered:
+            return self._blend(base, QColor(255, 255, 255, base.alpha()), 0.12)
+        return base
 
     def _blend(self, color: QColor, target: QColor, strength: float) -> QColor:
         strength = max(0.0, min(1.0, strength))
@@ -429,38 +468,46 @@ class ColorSwatchButton(QPushButton):
         a = color.alpha()
         return QColor(r, g, b, a)
 
-    def _update_style(self) -> None:
-        base = QColor(self._color)
-        hover = self._blend(base, QColor(255, 255, 255, base.alpha()), 0.12)
-        pressed = self._blend(base, QColor(0, 0, 0, base.alpha()), 0.12)
-        self.setStyleSheet(
-            f"""
-            ColorSwatchButton {{
-                background-color: {self._rgba(base)};
-                border: 1px solid rgba(255, 255, 255, 0.95);
-                border-radius: 6px;
-                min-width: {self._MIN_WIDTH}px;
-                min-height: {self._MIN_HEIGHT}px;
-                padding: 0;
-            }}
-            ColorSwatchButton::hover {{
-                background-color: {self._rgba(hover)};
-                border-color: rgba(255, 255, 255, 1.0);
-            }}
-            ColorSwatchButton::pressed {{
-                background-color: {self._rgba(pressed)};
-                border-color: rgba(255, 255, 255, 0.75);
-            }}
-            """
-        )
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        outer = self.rect().adjusted(2, 2, -2, -2)
+        radius = 7
+
+        fill = self._current_fill()
+        painter.setBrush(QBrush(fill))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(outer, radius, radius)
+
+        # Inner accent for contrast (helps white colours stand out)
+        inner = outer.adjusted(1, 1, -1, -1)
+        gradient = QLinearGradient(inner.topLeft(), inner.bottomLeft())
+        gradient.setColorAt(0, QColor(255, 255, 255, 30))
+        gradient.setColorAt(1, QColor(0, 0, 0, 35))
+        painter.setBrush(QBrush(gradient))
+        painter.drawRoundedRect(inner, radius - 1, radius - 1)
+
+        # Border (white) + inner stroke depending on luminance
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(255, 255, 255, 230), 1))
+        painter.drawRoundedRect(outer, radius, radius)
+
+        lum = 0.299 * fill.red() + 0.587 * fill.green() + 0.114 * fill.blue()
+        accent = QColor(0, 0, 0, 90) if lum > 180 else QColor(255, 255, 255, 70)
+        painter.setPen(QPen(accent, 1))
+        painter.drawRoundedRect(inner.adjusted(1, 1, -1, -1), radius - 2, radius - 2)
+
+        painter.end()
+
+    # ----- picker ---------------------------------------------------------
     def _open_picker(self) -> None:
         new_color = StyledColorPicker.get_color(
             self._color, self.parentWidget(), self._title, self._show_alpha
         )
         if new_color is not None:
             self._color = new_color
-            self._update_style()
+            self.update()
             self.color_changed.emit(new_color)
 
 
