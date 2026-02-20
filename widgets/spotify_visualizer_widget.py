@@ -1496,6 +1496,8 @@ class SpotifyVisualizerWidget(QWidget):
                 prev_ts = self._bubble_last_tick_ts
                 self._bubble_last_tick_ts = now_ts
                 dt_bubble = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
+                if not self._spotify_playing:
+                    dt_bubble = 0.0
                 eb_snap = {
                     'bass': getattr(eb, 'bass', 0.0) if eb else 0.0,
                     'mid': getattr(eb, 'mid', 0.0) if eb else 0.0,
@@ -1790,7 +1792,7 @@ class SpotifyVisualizerWidget(QWidget):
     def cycle_visualization_mode(self) -> VisualizerMode:
         """Cycle to the next visualization mode and return it.
 
-        Cycles through Spectrum → Oscilloscope → Blob only.
+        Cycles through Spectrum → Oscilloscope → Sine Wave → Blob → Bubble.
         Starfield and Helix are excluded from the quick-cycle.
         """
         _CYCLE_MODES = [
@@ -1798,6 +1800,7 @@ class SpotifyVisualizerWidget(QWidget):
             VisualizerMode.OSCILLOSCOPE,
             VisualizerMode.SINE_WAVE,
             VisualizerMode.BLOB,
+            VisualizerMode.BUBBLE,
         ]
         try:
             idx = _CYCLE_MODES.index(self._vis_mode)

@@ -29,6 +29,7 @@ def cycle_mode(widget: Any) -> bool:
         VisualizerMode.OSCILLOSCOPE,
         VisualizerMode.SINE_WAVE,
         VisualizerMode.BLOB,
+        VisualizerMode.BUBBLE,
     ]
     try:
         idx = _CYCLE_MODES.index(widget._vis_mode)

@@ -142,6 +142,21 @@ uniform float u_seed;               // random seed per-transition for variety
   - Glow colour picker.
   - Duration slider.
 
+### Implementation Status (Feb 2026)
+All Phase 1–3 code is complete:
+- [x] `rendering/gl_programs/burn_program.py` — BaseGLProgram subclass with GLSL vertex+fragment shaders
+- [x] `rendering/transition_state.py` — `BurnState` dataclass with all settings fields
+- [x] `rendering/gl_programs/program_cache.py` — `BURN` registered, lazy load, precompile
+- [x] `rendering/gl_compositor_pkg/shader_dispatch.py` — `can_use_burn_shader`, `prepare_burn_textures`, `paint_burn_shader`
+- [x] `rendering/gl_compositor_pkg/transitions.py` — `start_burn()` function
+- [x] `rendering/gl_compositor.py` — `start_burn()` method, `_on_burn_update`/`_on_burn_complete` callbacks, `_burn` in `__init__`/`_clear_all_transitions`/`_transition_program_map`/program_getters, `_can_use_burn_shader`/`_paint_burn_shader`/`_prepare_burn_textures` proxies
+- [x] `rendering/gl_compositor_pkg/paint.py` — burn in shader_paths dispatch
+- [x] `transitions/gl_compositor_burn_transition.py` — `GLCompositorBurnTransition` class
+- [x] `rendering/transition_factory.py` — `Burn` in `_CONCRETE_TYPES`, random pool, `_create_burn()` helper
+- [x] `core/settings/defaults.py` — burn defaults (direction, jaggedness, glow, char, smoke, ash) + duration + pool
+
+**Remaining:** Phase 3 UI controls (transitions_tab.py) and Phase 4 testing.
+
 ### Phase 4: Testing & Refinement
 - [ ] **Progress 1.0 Guarantee:** Verify that when `u_progress == 1.0`, the shader outputs *exactly* `texture(u_texture1, uv)` with zero noise, glow, smoke, ash, or any transitional artifacts remaining. Screenshot comparison test.
 - [ ] **Performance Profiling:** Run iterative cycling at 4K resolution. Target: transition renders at ≥60fps throughout. If smoke causes drops, reduce default puff count or disable by default.

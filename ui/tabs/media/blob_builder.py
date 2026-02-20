@@ -257,7 +257,7 @@ def build_blob_growth(tab: "WidgetsTab") -> None:
     blob_growth_row.addWidget(QLabel("Card Height:"))
     tab.blob_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_growth.setMinimum(100)
-    tab.blob_growth.setMaximum(400)
+    tab.blob_growth.setMaximum(500)
     blob_growth_val = int(tab._default_float('spotify_visualizer', 'blob_growth', 2.5) * 100)
     tab.blob_growth.setValue(blob_growth_val)
     tab.blob_growth.setTickPosition(QSlider.TickPosition.TicksBelow)

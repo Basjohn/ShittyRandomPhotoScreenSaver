@@ -20,8 +20,8 @@ uniform float u_high_energy;
 // xy = normalised position (0..1), z = radius (normalised), w = alpha
 uniform int u_bubble_count;
 uniform vec4 u_bubbles_pos[110];
-// x = specular_size_factor, y = rotation (unused in SDF but reserved)
-uniform vec2 u_bubbles_extra[110];
+// x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
+uniform vec4 u_bubbles_extra[110];
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
@@ -131,6 +131,8 @@ void main() {
         if (balpha < 0.01) continue;
         
         float spec_size_factor = u_bubbles_extra[i].x;
+        float spec_ox = u_bubbles_extra[i].z;
+        float spec_oy = u_bubbles_extra[i].w;
         
         // Distance from fragment to bubble center (aspect-corrected)
         vec2 delta = uv - bxy;
@@ -140,8 +142,12 @@ void main() {
         // Radius in aspect-corrected space
         float r = brad;
         
-        // Pixel-size stroke width: ~1.5px for big bubbles, ~1.0px for small
-        float stroke_px = mix(1.0, 1.5, smoothstep(0.01, 0.04, r));
+        // Stroke width scales proportionally to bubble radius
+        // Reference: 1.2px at radius 0.04 (mid-range big bubble)
+        float ref_radius = 0.04;
+        float base_stroke_px = 1.2;
+        float stroke_px = base_stroke_px * (r / ref_radius);
+        stroke_px = clamp(stroke_px, 0.5, 1.8);
         float stroke = stroke_px * px;
         
         // --- Tiny bubble shortcut (< ~4px radius) ---
@@ -165,9 +171,10 @@ void main() {
         result = mix(result, ring_col, ring_alpha * u_fade);
         
         // --- Specular highlight (small filled ellipse) ---
-        // Offset from bubble center toward light source
+        // Offset from bubble center toward light source, with per-bubble mutation
         float spec_offset = r * 0.35;
-        vec2 spec_center = bxy + vec2(-u_specular_dir.x / aspect, -u_specular_dir.y) * spec_offset;
+        vec2 spec_center = bxy + vec2(-u_specular_dir.x / aspect, -u_specular_dir.y) * spec_offset
+                         + vec2(spec_ox * r, spec_oy * r);
         
         vec2 spec_delta = uv - spec_center;
         spec_delta.x *= aspect;

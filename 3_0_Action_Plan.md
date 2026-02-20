@@ -377,9 +377,9 @@ bout 15% larger than now when bass is is
 - **Fix:** Swap spawn Y for UP and DOWN in `_spawn_position()`. UP should spawn at `y = 1.0 + margin`, DOWN at `y = -margin`.
 
 **Implementation Checklist:**
-- [ ] Fix `_spawn_position()` in `bubble_simulation.py`: UP → `y = 1.0 + margin`, DOWN → `y = -margin`.
-- [ ] Verify LEFT/RIGHT are correct (LEFT: spawn at `x = 1.0 + margin`, RIGHT: spawn at `x = -margin`).
-- [ ] Add a log line on first spawn to confirm spawn coordinates.
+- [x] Fix `_spawn_position()` in `bubble_simulation.py`: UP → `y = 1.0 + margin`, DOWN → `y = -margin`.
+- [x] Verify LEFT/RIGHT are correct (LEFT: spawn at `x = 1.0 + margin`, RIGHT: spawn at `x = -margin`).
+- [ ] Add a log line on first spawn to confirm spawn coordinates. *(Deferred — runtime verification needed)*
 
 ### 11.2 Clustering — Uniform Grouping, Large Gaps, Overlapping Bubbles
 
@@ -393,27 +393,33 @@ bout 15% larger than now when bass is is
 - **Stagger initial spawn:** Add a `spawn_delay` or `age` offset to newly spawned bubbles so they don't all appear at frame 0. Alternatively, pre-age them randomly on first fill.
 - **Overlap prevention:** In `_spawn_bubble_at()`, check distance from all existing bubbles. If `dist < r1 + r2 + min_gap`, reject and retry (up to N attempts). Use `min_gap = 0.005` (half a small bubble radius).
 - **Reduce cluster tightness:** Increase cluster spread from ±0.03 to ±0.06–0.08 UV.
-- **Randomise initial positions:** On first fill (when `len(self._bubbles) == 0`), scatter bubbles across the full card area rather than spawning from the edge.
+- **Randomise initial positions:** On first fill (when `len(self._bubbles) == 0`), scatter and fade in bubbles across the full card area rather than spawning from the edge.
 
 **Implementation Checklist:**
-- [ ] Add overlap check in `_spawn_bubble_at()` with retry loop (max 8 attempts).
-- [ ] Increase cluster spread to ±0.07 UV.
-- [ ] On first fill (age == 0, `_time < 0.5`), use random positions across card instead of edge spawn.
-- [ ] Pre-age bubbles randomly on first fill: `b.age = random.uniform(0, b.max_age * 0.3)`.
+- [x] Add overlap check in `_spawn_bubble_at()` with retry loop (max 8 attempts).
+- [x] Increase cluster spread to ±0.07 UV.
+- [x] On first fill (age == 0, `_time < 0.5`), use random positions across card instead of edge spawn.
+- [x] Pre-age bubbles randomly on first fill: `b.age = random.uniform(0, b.max_age * 0.3)`.
+- [x] Fade-in ramp for initial-fill bubbles (alpha 0→1 over 1.5s).
 
 ### 11.3 Big Bubble Pulsing Not Working + Slider Wiring Audit
 
-**Symptom:** Big bubble pulsing does not respond. Likely other sliders also broken.
+**Symptom:** Big bubble pulsing does not respond. At maximum slider value there is no noticeable pulse.
 
-**Root cause hypothesis:**
-- `snapshot()` in `bubble_simulation.py` reads `big_bass_pulse` and `small_freq_pulse` from kwargs. These must be passed from the overlay's `set_state()` call. If the overlay's `_bubble_big_bass_pulse` / `_bubble_small_freq_pulse` fields are not being set from `set_state()` kwargs, or not passed to `snapshot()`, the pulse stays at default 0.5.
-- Full wiring audit needed: every bubble setting must flow from UI → `save_media_settings()` → `spotify_vis_config` dict → `SpotifyVisualizerSettings.from_mapping()` → model field → creator kwargs → `apply_vis_mode_config()` → widget `_bubble_*` field → `extra` dict → overlay `set_state()` → `_bubble_*` on overlay → simulation `tick()`/`snapshot()`.
+**Root cause (confirmed):**
+- Wiring was correct end-to-end. The actual bug was that the pulse multipliers in `snapshot()` were far too weak: `1.0 + bass * pulse * 0.3` gives only 15–30% size increase at typical energy levels — imperceptible.
+- Additionally, the pulse used raw instantaneous energy (no smoothing), causing jitter rather than a smooth thump.
+
+**Fix:**
+- Added `pulse_energy: float` field to `BubbleState` — smoothed per-bubble energy with fast attack (8×/s) and slow decay (2×/s).
+- Raised multipliers: big bubbles `0.3 → 0.8`, small bubbles `0.2 → 0.6`. At `pulse_energy=0.5` (moderate bass) + max slider: 40% size increase. At loud bass: up to 64%.
+- `tick()` drives `pulse_energy` per bubble; `snapshot()` uses it instead of raw energy.
 
 **Implementation Checklist:**
-- [ ] Audit every `bubble_*` setting key end-to-end through all 8 layers.
-- [ ] Confirm `big_bass_pulse` and `small_freq_pulse` are passed to `snapshot()` in the overlay's bubble render path.
-- [ ] Confirm `bubble_stream_speed`, `bubble_stream_reactivity`, `bubble_drift_*`, `bubble_rotation_amount` all reach `tick()`.
-- [ ] Add a one-shot debug log in `set_state()` printing all received bubble kwargs when mode == 'bubble'.
+- [x] Audit every `bubble_*` setting key end-to-end through all 8 layers. **All wiring verified correct.**
+- [x] Confirm `big_bass_pulse` and `small_freq_pulse` are passed to `snapshot()` in the overlay's bubble render path.
+- [x] Confirm `bubble_stream_speed`, `bubble_stream_reactivity`, `bubble_drift_*`, `bubble_rotation_amount` all reach `tick()`.
+- [x] **Fix pulse strength:** raise multipliers 0.3→0.8 (big) / 0.2→0.6 (small), add smoothed `pulse_energy` per bubble with fast attack / slow decay.
 
 ### 11.4 Bubble Travels When Paused / Travel Speed Not Music-Reactive
 
@@ -429,9 +435,9 @@ bout 15% larger than now when bass is is
 - **Important user note:** Speed should instantly increase but have a longer decay period before slowing down so that if music is rapid it does not end up jerking, travel/speed must always appear smooth not jarring.
 
 **Implementation Checklist:**
-- [ ] Gate `dt` to 0.0 in bubble tick call when `self._playing` is False.
-- [ ] Verify `bubble_stream_reactivity` wiring end-to-end.
-- [ ] Verify energy bands (`overall`) are actually non-zero during playback and zero when paused.
+- [x] Gate `dt` to 0.0 in bubble tick call when `self._playing` is False.
+- [x] Verify `bubble_stream_reactivity` wiring end-to-end. **Confirmed wired through all 8 layers.**
+- [ ] Verify energy bands (`overall`) are actually non-zero during playback and zero when paused. *(Runtime verification needed)*
 
 ### 11.5 Border Thickness Scaling With Bubble Size
 
@@ -444,9 +450,9 @@ bout 15% larger than now when bass is is
 - Reduce the base outline thickness for big bubbles by ~0.5px equivalent in UV space.
 
 **Implementation Checklist:**
-- [ ] Read current outline thickness logic in `bubble.frag`.
-- [ ] Add radius-proportional thickness scaling.
-- [ ] Reduce big bubble base thickness by ~0.5px UV equivalent.
+- [x] Read current outline thickness logic in `bubble.frag`.
+- [x] Add radius-proportional thickness scaling: `stroke_px = 1.2 * (r / 0.04)`, clamped 0.5–1.8px.
+- [x] Reduce big bubble base thickness by ~0.3px (was 1.5px, now 1.2px at reference radius).
 
 ---
 
@@ -462,15 +468,22 @@ bout 15% larger than now when bass is is
 - **Fix:** Change the slider maximum from 400 → 500 (or equivalent) in the UI builder for each mode's growth factor slider.
 
 ### Implementation Checklist
-- [ ] Find growth factor slider(s) in `ui/tabs/media/` builders and change `setMaximum` from 400 to 500.
-- [ ] Verify `card_height.py` clamp already allows 5.0 (it does — line 73).
-- [ ] Verify `MAX_HEIGHT = 600` is sufficient for 5.0x at typical base heights (80px × 5.0 = 400px < 600 ✓).
-- [ ] Update any tooltip or label text that says "max 4.0x".
+- [x] Find growth factor slider(s) in `ui/tabs/media/` builders and change `setMaximum` from 400 to 500.
+  - Changed in: `spectrum_builder.py`, `oscilloscope_builder.py`, `sine_wave_builder.py`, `blob_builder.py`, `helix_builder.py`, `starfield_builder.py`
+  - Also updated config refresh clamps in `widgets_tab_media.py` (6 occurrences of `min(400,...)` → `min(500,...)`)
+- [x] Verify `card_height.py` clamp already allows 5.0 (it does — line 73).
+- [x] Verify `MAX_HEIGHT = 600` is sufficient for 5.0x at typical base heights (80px × 5.0 = 400px < 600 ✓).
+- [ ] Update any tooltip or label text that says "max 4.0x". (None found — sliders show dynamic labels.)
 
 Additional:
-1. Bubbles are not part of the double click visualizer swap, this is a mistake, they should be.
-2. Gl Compositor has had many edits and is large now, audit it and implement your suggested findings.
-(If reward is high do not skip or defer complex tasks!)
+1. ~~Bubbles are not part of the double click visualizer swap, this is a mistake, they should be.~~
+   **DONE:** Added `VisualizerMode.BUBBLE` to `_CYCLE_MODES` in both `mode_transition.py` and `spotify_visualizer_widget.py`.
+2. ~~Gl Compositor has had many edits and is large now, audit it and implement your suggested findings.~~
+   **DONE:** Extracted metrics to `gl_compositor_pkg/compositor_metrics.py` (−154 lines, 1926→1772). Added missing burn warmup. See `Audits/gl_compositor_audit.md`.
+3. ~~Bubble visualizer was missing Card Height slider.~~
+   **DONE:** Added `bubble_growth` slider to `bubble_builder.py`, wired save/refresh in `widgets_tab_media.py`. Pipeline was already complete (model, creators, config_applier, widget, card_height).
+4. ~~Burn transition missing from Settings GUI combo, context menu, and TransitionType enum.~~
+   **DONE:** Added `"Burn"` to `transitions_tab.py` (combo, type_keys, GL-only lists), `context_menu.py` (default list), `models.py` (`TransitionType.BURN`). Already present in `defaults.py` (pool=True, duration=8000ms), `transition_factory.py` (`_CONCRETE_TYPES`), and `Spec.md`.
 ---
 
 ## Upcoming: Feature Plans
@@ -479,7 +492,7 @@ Additional:
   - Key bug fix: simulation-only kwargs were being passed to `set_state()` causing TypeError fallback to spectrum.
   - Card height added (3.0x growth factor).
   - All card heights raised +1.0x across all modes.
-- [ ] **Burn Transition** — Plan exists in `Burn_Transition_Plan.md`. Not yet started.
+- [x] **Burn Transition** — Phases 1–3 code COMPLETE. Phase 3 UI controls + Phase 4 testing pending. See `Burn_Transition_Plan.md`.
 - [x] **Visualizer Presets System** — Phases 1–2 COMPLETE. Phase 3 (preset definitions) pending. See `Docs/Visualizer_Presets_Plan.md`.
   - `VisualizerPresetSlider` widget (4-notch slider) integrated into all 7 mode builders.
   - All mode controls wrapped in `_<mode>_advanced` container, shown only on Custom.

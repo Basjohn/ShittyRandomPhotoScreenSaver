@@ -113,7 +113,7 @@ def build_starfield_growth(tab: "WidgetsTab") -> None:
     star_growth_row.addWidget(QLabel("Card Height:"))
     tab.starfield_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.starfield_growth.setMinimum(100)
-    tab.starfield_growth.setMaximum(400)
+    tab.starfield_growth.setMaximum(500)
     star_growth_val = int(tab._default_float('spotify_visualizer', 'starfield_growth', 2.0) * 100)
     tab.starfield_growth.setValue(star_growth_val)
     tab.starfield_growth.setTickPosition(QSlider.TickPosition.TicksBelow)

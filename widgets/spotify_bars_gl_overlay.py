@@ -325,7 +325,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if self._last_time_ts > 0.0:
             dt = now_ts - self._last_time_ts
             if 0.0 < dt < 1.0:  # sanity clamp
-                self._accumulated_time += dt
+                # Gate rainbow hue rotation on playing state (issue 1.5)
+                if playing:
+                    self._accumulated_time += dt
                 # Starfield: integrate speed*dt so travel is monotonic (never reverses)
                 # Gate on overall energy so travel stops when music is paused
                 if self._vis_mode == 'starfield' and energy_bands is not None:
@@ -1113,12 +1115,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
             # --- Rainbow hue offset (all modes) ---
             loc = u.get("u_rainbow_hue_offset", -1)
-            if not getattr(self, '_rainbow_diag_logged', False):
+            # Log whenever rainbow is enabled so we can confirm loc is valid
+            if self._rainbow_enabled and not getattr(self, '_rainbow_active_logged', False):
                 logger.debug(
-                    "[SPOTIFY_VIS] Rainbow diag: enabled=%s speed=%.2f loc=%d mode=%s",
+                    "[SPOTIFY_VIS] Rainbow ACTIVE: enabled=%s speed=%.2f loc=%d mode=%s",
                     self._rainbow_enabled, self._rainbow_speed, loc, mode,
                 )
-                self._rainbow_diag_logged = True
+                self._rainbow_active_logged = True
+            if not self._rainbow_enabled:
+                self._rainbow_active_logged = False
             if loc >= 0:
                 if self._rainbow_enabled:
                     # Continuous hue rotation: fract() keeps it in 0..1
@@ -1126,6 +1131,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     _gl.glUniform1f(loc, float(hue_offset))
                 else:
                     _gl.glUniform1f(loc, 0.0)
+            elif self._rainbow_enabled:
+                logger.warning(
+                    "[SPOTIFY_VIS] Rainbow BROKEN: u_rainbow_hue_offset loc=-1 for mode=%s "
+                    "(uniform missing or optimized out in shader)", mode,
+                )
 
             # --- Spectrum-specific uniforms ---
             if mode == 'spectrum':
@@ -1525,15 +1535,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         pos_buf[i] = float(pos_data[i])
                     _gl.glUniform4fv(loc, 110, pos_buf)
 
-                # Bubble extra data (vec2 array: specular_size, rotation)
+                # Bubble extra data (vec4 array: spec_size, rotation, spec_ox, spec_oy)
                 loc = u.get("u_bubbles_extra", -1)
                 if loc >= 0 and bcount > 0:
                     extra_data = self._bubble_extra_data
-                    extra_buf = np.zeros(110 * 2, dtype="float32")
-                    copy_len = min(len(extra_data), 110 * 2)
+                    extra_buf = np.zeros(110 * 4, dtype="float32")
+                    copy_len = min(len(extra_data), 110 * 4)
                     for i in range(copy_len):
                         extra_buf[i] = float(extra_data[i])
-                    _gl.glUniform2fv(loc, 110, extra_buf)
+                    _gl.glUniform4fv(loc, 110, extra_buf)
 
                 # Specular direction (normalised vec2)
                 spec_dir_map = {

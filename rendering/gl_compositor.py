@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Callable
 
-import time
-
 # Import metrics classes from extracted package
 from rendering.gl_compositor_pkg.metrics import (
     _GLPipelineState,
@@ -23,6 +21,7 @@ from rendering.gl_compositor_pkg.metrics import (
     _PaintMetrics,
     _RenderTimerMetrics,
 )
+from rendering.gl_compositor_pkg.shader_dispatch import get_viewport_size
 from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     AdaptiveTimerConfig,
@@ -267,7 +266,7 @@ class GLCompositorWidget(QOpenGLWidget):
             get_pipeline=lambda: self._gl_pipeline,
             get_texture_manager=lambda: self._texture_manager,
             get_profiler=lambda: self._profiler,
-            get_viewport_size=self._get_viewport_size,
+            get_viewport_size=lambda: get_viewport_size(self),
             get_render_progress=lambda fallback: self._get_render_progress(fallback=fallback),
         )
         
@@ -818,194 +817,37 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_id = anim_id
         return anim_id
 
-    def _begin_animation_metrics(
-        self,
-        transition_label: str,
-        duration_ms: int,
-        animation_manager: AnimationManager,
-    ) -> Optional[_AnimationRunMetrics]:
-        """Start tracking per-frame dt metrics for the active animation."""
-        if not is_perf_metrics_enabled():
-            self._current_anim_metrics = None
-            return None
-        target_fps = getattr(animation_manager, "fps", 60)
-        metrics = _AnimationRunMetrics(
-            name=transition_label,
-            duration_ms=int(duration_ms),
-            target_fps=int(target_fps or 60),
-            dt_spike_threshold_ms=self._anim_dt_spike_threshold_ms,
-        )
-        self._current_anim_metrics = metrics
-        return metrics
+    def _begin_animation_metrics(self, transition_label, duration_ms, animation_manager):
+        from rendering.gl_compositor_pkg.compositor_metrics import begin_animation_metrics
+        return begin_animation_metrics(self, transition_label, duration_ms, animation_manager)
 
-    def _wrap_animation_update(
-        self,
-        update_callback: Callable[[float], None],
-        metrics: Optional[_AnimationRunMetrics],
-    ) -> Callable[[float], None]:
-        """Wrap the animation update callback to record timing metrics."""
-        if metrics is None:
-            return update_callback
-
-        def _instrumented(progress: float, *, _inner=update_callback) -> None:
-            dt = metrics.record_tick(progress)
-            if dt is not None and metrics.should_log_spike(dt):
-                self._log_animation_spike(metrics, dt)
-            _inner(progress)
-
-        return _instrumented
-
-    def _log_animation_spike(
-        self,
-        metrics: _AnimationRunMetrics,
-        dt_seconds: float,
-    ) -> None:
-        """Log a dt spike with transition context."""
-        if not is_perf_metrics_enabled():
-            return
-        dt_ms = dt_seconds * 1000.0
-        logger.warning(
-            "[PERF] [GL ANIM] Tick dt spike %.2fms (name=%s frame=%d progress=%.2f target_fps=%d)",
-            dt_ms,
-            metrics.name,
-            metrics.frame_count,
-            metrics.last_progress,
-            metrics.target_fps,
-        )
+    def _wrap_animation_update(self, update_callback, metrics):
+        from rendering.gl_compositor_pkg.compositor_metrics import wrap_animation_update
+        return wrap_animation_update(self, update_callback, metrics)
 
     def _finalize_animation_metrics(self, outcome: str) -> None:
-        """Emit summary metrics for the last animation run."""
-        metrics = self._current_anim_metrics
-        self._current_anim_metrics = None
-        if metrics is None or not is_perf_metrics_enabled():
-            return
-
-        elapsed_s = metrics.elapsed_seconds()
-        duration_ms = elapsed_s * 1000.0
-        avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
-        min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
-        max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
-
-        logger.info(
-            "[PERF] [GL ANIM] %s metrics: duration=%.1fms, frames=%d, avg_fps=%.1f, "
-            "dt_min=%.2fms, dt_max=%.2fms, spikes=%d, target_fps=%d, outcome=%s",
-            metrics.name.capitalize(),
-            duration_ms,
-            metrics.frame_count,
-            avg_fps,
-            min_dt_ms,
-            max_dt_ms,
-            metrics.dt_spike_count,
-            metrics.target_fps,
-            outcome,
-        )
+        from rendering.gl_compositor_pkg.compositor_metrics import finalize_animation_metrics
+        finalize_animation_metrics(self, outcome)
 
     def _begin_paint_metrics(self, label: str) -> None:
-        """Start tracking paintGL cadence for the current transition."""
-        if not is_perf_metrics_enabled():
-            self._paint_metrics = None
-            return
-        self._paint_metrics = _PaintMetrics(
-            label=label,
-            slow_threshold_ms=self._paint_slow_threshold_ms,
-        )
+        from rendering.gl_compositor_pkg.compositor_metrics import begin_paint_metrics
+        begin_paint_metrics(self, label)
 
     def _record_paint_metrics(self, paint_duration_ms: float) -> None:
-        """Record a paintGL duration and optionally log warnings."""
-        if not is_perf_metrics_enabled():
-            return
-        metrics = self._paint_metrics
-        if metrics is None:
-            return
-        dt_seconds = metrics.record(paint_duration_ms)
-        now = time.time()
-        if paint_duration_ms > self._paint_slow_threshold_ms:
-            if now - self._paint_warning_last_ts > 0.5:
-                logger.warning(
-                    "[PERF] [GL PAINT] Slow paintGL %.2fms (transition=%s)",
-                    paint_duration_ms,
-                    metrics.label,
-                )
-                self._paint_warning_last_ts = now
-        if dt_seconds is not None and dt_seconds * 1000.0 > 120.0:
-            if now - self._paint_warning_last_ts > 0.5:
-                logger.warning(
-                    "[PERF] [GL PAINT] Paint gap %.2fms (transition=%s)",
-                    dt_seconds * 1000.0,
-                    metrics.label,
-                )
-                self._paint_warning_last_ts = now
+        from rendering.gl_compositor_pkg.compositor_metrics import record_paint_metrics
+        record_paint_metrics(self, paint_duration_ms)
 
     def _finalize_paint_metrics(self, outcome: str = "stopped") -> None:
-        """Emit summary metrics for paintGL cadence."""
-        metrics = self._paint_metrics
-        self._paint_metrics = None
-        if metrics is None or not is_perf_metrics_enabled():
-            return
-        elapsed_s = metrics.elapsed_seconds()
-        avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
-        min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
-        max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
-        logger.info(
-            "[PERF] [GL PAINT] %s metrics: frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-            "dur_min=%.2fms, dur_max=%.2fms, slow_frames=%d, outcome=%s",
-            metrics.label.capitalize(),
-            metrics.frame_count,
-            avg_fps,
-            min_dt_ms,
-            max_dt_ms,
-            metrics.min_duration_ms,
-            metrics.max_duration_ms,
-            metrics.slow_count,
-            outcome,
-        )
+        from rendering.gl_compositor_pkg.compositor_metrics import finalize_paint_metrics
+        finalize_paint_metrics(self, outcome)
 
     def _record_render_timer_tick(self) -> None:
-        """Record render timer cadence telemetry."""
-        metrics = self._render_timer_metrics
-        if metrics is None or not is_perf_metrics_enabled():
-            return
-        dt = metrics.record_tick()
-        if dt is None:
-            return
-        if metrics.should_log_stall(dt):
-            self._log_render_timer_stall(dt, metrics)
-
-    def _log_render_timer_stall(self, dt_seconds: float, metrics: _RenderTimerMetrics) -> None:
-        """Emit a warning when render timer stalls exceed thresholds."""
-        if not is_perf_metrics_enabled():
-            return
-        anim_label = self._current_anim_metrics.name if self._current_anim_metrics else "idle"
-        logger.warning(
-            "[PERF] [GL RENDER] Render timer stall %.2fms (target=%dHz interval=%dms frames=%d anim=%s)",
-            dt_seconds * 1000.0,
-            metrics.target_fps,
-            metrics.interval_ms,
-            metrics.frame_count,
-            anim_label,
-        )
+        from rendering.gl_compositor_pkg.compositor_metrics import record_render_timer_tick
+        record_render_timer_tick(self)
 
     def _finalize_render_timer_metrics(self, outcome: str = "stopped") -> None:
-        """Summarize render timer cadence when it stops."""
-        metrics = self._render_timer_metrics
-        self._render_timer_metrics = None
-        if metrics is None or not is_perf_metrics_enabled():
-            return
-        elapsed_s = metrics.elapsed_seconds()
-        avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
-        min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
-        max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
-        logger.info(
-            "[PERF] [GL RENDER] Timer metrics: frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-            "stalls=%d, target=%dHz, outcome=%s",
-            metrics.frame_count,
-            avg_fps,
-            min_dt_ms,
-            max_dt_ms,
-            metrics.stall_count,
-            metrics.target_fps,
-            outcome,
-        )
+        from rendering.gl_compositor_pkg.compositor_metrics import finalize_render_timer_metrics
+        finalize_render_timer_metrics(self, outcome)
 
     def _complete_transition(
         self,
@@ -1115,6 +957,7 @@ class GLCompositorWidget(QOpenGLWidget):
             "GLCompositorRainDropsTransition": self._warm_raindrops_state,
             "GLCompositorCrumbleTransition": self._warm_crumble_state,
             "GLCompositorParticleTransition": self._warm_particle_state,
+            "GLCompositorBurnTransition": self._warm_burn_state,
         }
 
         warmer = warmers.get(transition_name)
@@ -1221,6 +1064,11 @@ class GLCompositorWidget(QOpenGLWidget):
             new_pixmap=new_pixmap,
         )
         return self._with_temp_state("_particle", state, self._prepare_particle_textures)
+
+    def _warm_burn_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+        from rendering.transition_state import BurnState
+        state = BurnState(old_pixmap=old_pixmap, new_pixmap=new_pixmap)
+        return self._with_temp_state("_burn", state, self._prepare_burn_textures)
 
     def _ensure_texture_manager(self) -> GLTextureManager:
         if self._texture_manager is None:

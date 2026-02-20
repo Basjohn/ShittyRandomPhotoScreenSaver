@@ -121,7 +121,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     helix_growth_row.addWidget(QLabel("Card Height:"))
     tab.helix_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.helix_growth.setMinimum(100)
-    tab.helix_growth.setMaximum(400)
+    tab.helix_growth.setMaximum(500)
     helix_growth_val = int(tab._default_float('spotify_visualizer', 'helix_growth', 2.0) * 100)
     tab.helix_growth.setValue(helix_growth_val)
     tab.helix_growth.setTickPosition(QSlider.TickPosition.TicksBelow)

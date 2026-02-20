@@ -124,13 +124,14 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter, media key passthrough (focus re-claim removed Feb 2026 to keep Settings responsive) |
 | Display Input | rendering/display_input.py | handle_mousePressEvent, show_ctrl_cursor_hint, ensure_ctrl_cursor_hint | Cursor halo (shape from `input.halo_shape`), mouse press/move, `_halo_forwarding` guard |
 | Display Overlays | rendering/display_overlays.py | start_overlay_fades, perform_activation_refresh | Overlay fades, window diagnostics |
-| GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (1891 lines, thin delegates) |
+| GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (1772 lines, thin delegates) |
 | GL Transitions | rendering/gl_compositor_pkg/transitions.py | start_crossfade, start_warp, etc. | 12 transition start methods |
 | GL Overlays | rendering/gl_compositor_pkg/overlays.py | paint_debug_overlay, paint_spotify_visualizer | Debug/Spotify/dimming overlays |
 | GL Lifecycle | rendering/gl_compositor_pkg/gl_lifecycle.py | handle_initializeGL, init_gl_pipeline | GL init, pipeline, shader creation |
 | GL Paint | rendering/gl_compositor_pkg/paint.py | handle_paintGL, paintGL_impl | Paint orchestration |
 | GL Shader Dispatch | rendering/gl_compositor_pkg/shader_dispatch.py | can_use_*_shader, prepare_*_textures, paint_*_shader, compile_shader, get_viewport_size | Shader capability checks, texture prep, paint dispatch |
 | GL Trans Lifecycle | rendering/gl_compositor_pkg/transition_lifecycle.py | cancel_current_transition | Transition cancel, Spotify state |
+| GL Compositor Metrics | rendering/gl_compositor_pkg/compositor_metrics.py | begin_animation_metrics, finalize_paint_metrics, etc. | Perf-gated animation/paint/render-timer instrumentation |
 | TransitionRenderer | rendering/gl_transition_renderer.py | GLTransitionRenderer | Centralized transition rendering |
 
 ## Rendering - Widget Management
@@ -208,6 +209,7 @@ endering/gl_programs/raindrops_program.py | RaindropsProgram | Ripple |
 endering/gl_programs/crumble_program.py | CrumbleProgram | Crumble |
 | Particle | 
 endering/gl_programs/particle_program.py | ParticleProgram | Particle |
+| Burn | rendering/gl_programs/burn_program.py | BurnProgram | Burn |
 
 ## Transitions
 
@@ -224,7 +226,8 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Raindrops | - | transitions/gl_compositor_raindrops_transition.py | GL only (Ripple), configurable ripple count 1-8, per-transition random seed for position variety |
 | Warp | - | 	ransitions/gl_compositor_warp_transition.py | GL only |
 | Crumble | - | 	ransitions/gl_compositor_crumble_transition.py | GL only |
-| Particle | - | 	ransitions/gl_compositor_particle_transition.py | GL only |
+| Particle | - | 	ransistions/gl_compositor_particle_transition.py | GL only |
+| Burn | - | transitions/gl_compositor_burn_transition.py | GL only, 5 directions, jaggedness/glow/smoke/ash params |
 | Base | 	ransitions/base_transition.py | - | Abstract base |
 | Overlay Manager | 	ransitions/overlay_manager.py | - | GL overlay helpers |
 

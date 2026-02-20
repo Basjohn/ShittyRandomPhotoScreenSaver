@@ -618,7 +618,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.osc_smoothing_label.setText(f"{osc_smooth_val}%")
     if hasattr(tab, 'osc_growth'):
         osc_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_growth', 1.0) * 100)
-        tab.osc_growth.setValue(max(100, min(400, osc_growth_val)))
+        tab.osc_growth.setValue(max(100, min(500, osc_growth_val)))
         tab.osc_growth_label.setText(f"{osc_growth_val / 100.0:.1f}x")
     if hasattr(tab, 'osc_speed'):
         osc_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_speed', 1.0) * 100)
@@ -638,7 +638,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.osc_vertical_shift_label.setText(f"{osc_vs}")
     if hasattr(tab, 'spectrum_growth'):
         spectrum_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_growth', 1.0) * 100)
-        tab.spectrum_growth.setValue(max(100, min(400, spectrum_growth_val)))
+        tab.spectrum_growth.setValue(max(100, min(500, spectrum_growth_val)))
         tab.spectrum_growth_label.setText(f"{spectrum_growth_val / 100.0:.1f}x")
     if hasattr(tab, 'spectrum_single_piece'):
         tab.spectrum_single_piece.setChecked(
@@ -706,7 +706,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.star_reactivity_label.setText(f"{star_react_val / 100.0:.2f}x")
     if hasattr(tab, 'starfield_growth'):
         star_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'starfield_growth', 2.0) * 100)
-        tab.starfield_growth.setValue(max(100, min(400, star_growth_val)))
+        tab.starfield_growth.setValue(max(100, min(500, star_growth_val)))
         tab.starfield_growth_label.setText(f"{star_growth_val / 100.0:.1f}x")
     # Nebula tint colours
     for attr, key, fallback in (
@@ -774,7 +774,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.blob_stretch_tendency_label.setText(f"{blob_st_val}%")
     if hasattr(tab, 'blob_growth'):
         blob_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_growth', 2.5) * 100)
-        tab.blob_growth.setValue(max(100, min(400, blob_growth_val)))
+        tab.blob_growth.setValue(max(100, min(500, blob_growth_val)))
         tab.blob_growth_label.setText(f"{blob_growth_val / 100.0:.1f}x")
 
     # Per-mode settings: Helix
@@ -810,7 +810,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         )
     if hasattr(tab, 'helix_growth'):
         helix_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_growth', 2.0) * 100)
-        tab.helix_growth.setValue(max(100, min(400, helix_growth_val)))
+        tab.helix_growth.setValue(max(100, min(500, helix_growth_val)))
         tab.helix_growth_label.setText(f"{helix_growth_val / 100.0:.1f}x")
 
     # Sine Wave settings
@@ -905,7 +905,7 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.sine_card_adaptation_label.setText(f"{sine_ca}%")
     if hasattr(tab, 'sine_wave_growth'):
         sine_gv = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wave_growth', 1.0) * 100)
-        tab.sine_wave_growth.setValue(max(100, min(400, sine_gv)))
+        tab.sine_wave_growth.setValue(max(100, min(500, sine_gv)))
         tab.sine_wave_growth_label.setText(f"{sine_gv / 100.0:.1f}x")
 
     # Update per-mode section visibility
@@ -1010,6 +1010,10 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         sd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_specular_direction', 'top_left').lower()
         sd_map = {"top_left": 0, "top_right": 1, "bottom_left": 2, "bottom_right": 3}
         tab.bubble_specular_direction.setCurrentIndex(sd_map.get(sd, 0))
+    if hasattr(tab, 'bubble_growth'):
+        bubble_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_growth', 3.0) * 100)
+        tab.bubble_growth.setValue(max(100, min(500, bubble_growth_val)))
+        tab.bubble_growth_label.setText(f"{bubble_growth_val / 100.0:.1f}x")
     # Bubble colours
     for attr, key, default in (
         ('_bubble_outline_color', 'bubble_outline_color', [255, 255, 255, 230]),
@@ -1204,6 +1208,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_gradient_dark': _qcolor_to_list(getattr(tab, '_bubble_gradient_dark', None), [80, 60, 50, 255]),
         'bubble_pop_color': _qcolor_to_list(getattr(tab, '_bubble_pop_color', None), [255, 255, 255, 180]),
         'bubble_specular_direction': (tab.bubble_specular_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_specular_direction') else 'top_left'),
+        'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
     }
     # Preset indices per mode
     _ps_map = {
