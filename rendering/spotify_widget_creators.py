@@ -70,6 +70,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         osc_line3_glow_color=model.osc_line3_glow_color,
         spectrum_growth=model.spectrum_growth,
         spectrum_single_piece=model.spectrum_single_piece,
+        spectrum_rainbow_per_bar=model.spectrum_rainbow_per_bar,
         starfield_growth=model.starfield_growth,
         blob_growth=model.blob_growth,
         helix_growth=model.helix_growth,
@@ -131,7 +132,11 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         bubble_gradient_dark=model.bubble_gradient_dark,
         bubble_pop_color=model.bubble_pop_color,
         bubble_specular_direction=model.bubble_specular_direction,
+        bubble_big_size_max=model.bubble_big_size_max,
+        bubble_small_size_max=model.bubble_small_size_max,
         bubble_growth=model.bubble_growth,
+        bubble_trail_strength=model.bubble_trail_strength,
+        sine_line_dim=model.sine_line_dim,
     )
 
 

@@ -74,30 +74,35 @@ uniform float u_heartbeat_intensity; // CPU-side decay envelope (1.0 → 0.0 ove
 // Encourages all lines to stretch wide in reaction to bass while still resembling a sine
 uniform float u_width_reaction;
 
-// Heartbeat bump: sharp triangular spikes along the line on bass transients.
-// travel: 0=none(symmetric), 1=left(peak shifted right), 2=right(peak shifted left)
-float heartbeat_bump(float nx, int travel) {
+// Heartbeat bump: localised triangular spikes at sine ZERO-CROSSINGS (slopes).
+// Spikes appear on the slopes of the wave, not at peaks/troughs.
+// The same bump positions are used for ALL lines so they fire in unison.
+// sine_freq_local: the sine frequency used for the wave (needed to find zero-crossings)
+// phase_local: the phase offset of this particular line
+float heartbeat_bump(float nx, float sine_freq_local, float phase_local) {
     if (u_heartbeat < 0.001 || u_heartbeat_intensity < 0.001) return 0.0;
-    // 5 bumps distributed across the line for strong visual impact
+
+    // Find the 6 zero-crossing x-positions of sin(x * freq + phase) in [0,1].
+    // Zero crossings occur at x*freq+phase = n*PI, so x = (n*PI - phase) / freq.
     float bump = 0.0;
     float intensity = u_heartbeat_intensity;
-    // Alternating up/down for triangular distortion feel
-    for (int i = 0; i < 5; i++) {
-        float center = 0.1 + float(i) * 0.2; // at 0.1, 0.3, 0.5, 0.7, 0.9
-        float half_w = 0.06 + float(i % 2) * 0.03; // vary width
-        float dx = nx - center;
-        // Asymmetry: shift peak in travel direction
-        if (travel == 1) dx += half_w * 0.4;
-        else if (travel == 2) dx -= half_w * 0.4;
-        float t = 1.0 - clamp(abs(dx) / half_w, 0.0, 1.0);
-        // Sharp triangular: square the falloff for pointier peaks
-        t = t * t;
-        // Alternate direction: odd bumps go down, even go up
-        float sign = (i % 2 == 0) ? 1.0 : -1.0;
-        bump += t * sign;
+    float half_w = 0.025;  // narrow spike width (2.5% of card width)
+
+    for (int n = 0; n < 8; n++) {
+        float zx = (float(n) * 3.14159265 - phase_local) / sine_freq_local;
+        if (zx < 0.02 || zx > 0.98) continue;  // skip edges
+
+        float dx = nx - zx;
+        float tri = 1.0 - clamp(abs(dx) / half_w, 0.0, 1.0);
+        tri = tri * tri;  // sharpen to triangular point
+
+        // Direction: alternate up/down based on which zero-crossing
+        float sign_dir = (n % 2 == 0) ? 1.0 : -1.0;
+        bump += tri * sign_dir;
     }
-    // Strong multiplier so heartbeat is clearly visible
-    return bump * u_heartbeat * intensity * 0.8;
+
+    // Moderate multiplier — visible spikes but not gross distortion
+    return bump * u_heartbeat * intensity * 0.35;
 }
 
 // Compute line + glow contribution for one sine line.
@@ -194,15 +199,19 @@ void main() {
 
     // Per-line energy: sensitivity only drives amplitude pulse, NOT glow.
     // bass_pulse = sensitivity-scaled bass for amplitude pulsing only.
-    float bass_pulse = u_bass_energy * sens * 0.85;
+    float bass_pulse = u_bass_energy * sens * 2.0;
+
+    // Line Offset Bias: declared early — used in energy and wfx/mw blends below.
+    float lob = clamp(u_sine_line_offset_bias, 0.0, 1.0);
 
     // Amplitude energy (includes sensitivity via bass_pulse)
-    float e1 = (lines == 1)
-        ? (u_mid_energy * 0.35 + u_high_energy * 0.10 + bass_pulse)
-        : (u_bass_energy * 0.4 + bass_pulse);
-    // Lines 2/3: 70% own band + 30% bass bleed (bass_pulse carries sensitivity)
-    float e2_band = u_mid_energy * 0.70 + bass_pulse * 0.30;
-    float e3_band = u_high_energy * 0.70 + bass_pulse * 0.30;
+    // All lines share the SAME base energy so they align at LOB=0/VShift=0.
+    float e_base = u_bass_energy * 0.4 + bass_pulse + u_mid_energy * 0.15 + u_high_energy * 0.05;
+    float e1 = e_base;
+    // Lines 2/3: same base energy + slight band tinting scaled by LOB
+    // At LOB=0 they are identical to line 1; at LOB=1 they diverge slightly.
+    float e2_band = mix(e_base, u_mid_energy * 0.50 + bass_pulse * 0.50, lob * 0.4);
+    float e3_band = mix(e_base, u_high_energy * 0.40 + bass_pulse * 0.60, lob * 0.4);
 
     // Glow energy: raw band energy WITHOUT sensitivity scaling.
     // Reactive glow should respond to actual audio levels, not the sensitivity knob.
@@ -211,9 +220,6 @@ void main() {
         : (u_bass_energy * 0.7 + u_mid_energy * 0.2 + u_high_energy * 0.1);
     float glow_e2 = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
     float glow_e3 = u_high_energy * 0.70 + u_bass_energy * 0.15 + u_mid_energy * 0.15;
-
-    // Line Offset Bias: base vertical spread between lines (multi-line)
-    float lob = clamp(u_sine_line_offset_bias, 0.0, 1.0);
 
     // Sine frequency: 3 full cycles across the card width
     float sine_freq = 6.2831853 * 3.0;
@@ -279,28 +285,28 @@ void main() {
         wfx1 = wfx_raw * we1 * wave_fx * base_amplitude;
     }
 
-    // Micro wobble: creates visible snake-like extra temporary lines that slink
-    // across the main line, reacting to the beat. High-frequency spatial noise
-    // modulated by bass/mid energy creates the "slinking" effect.
+    // Micro wobble: snake-like distortions along the line reacting to audio energy.
+    // Displacement is in normalised-Y space (0..1) so it is amplitude-independent.
     float mw1 = 0.0;
     if (micro_wob > 0.001 && play_gate > 0.5) {
         float mw_bass = u_bass_energy * 0.55 + u_mid_energy * 0.30 + u_high_energy * 0.15;
-        float mw_drive = clamp(mw_bass * 2.5, 0.0, 1.5);
-        if (mw_drive > 0.01) {
-            // Multiple frequency layers: fast-moving snake ripples
+        float mw_drive = clamp(mw_bass * 1.8, 0.0, 1.5);
+        if (mw_drive > 0.001) {
             float t_fast = u_time * 3.5;
             float t_med  = u_time * 1.8;
-            float mw_raw = sin(nx * 18.0 + t_fast) * 0.30           // fast ripple
-                         + sin(nx * 9.0 - t_med + 1.0) * 0.35      // medium snake
-                         + sin(nx * 4.0 + u_time * 0.9) * 0.25     // slow undulation
-                         + sin(nx * 25.0 - t_fast * 1.3) * 0.15;   // high-freq slink
-            // Strong multiplier — these should be clearly visible snake distortions
-            mw1 = mw_raw * mw_drive * micro_wob * 0.55;
+            float mw_raw = sin(nx * 18.0 + t_fast) * 0.30
+                         + sin(nx * 9.0 - t_med + 1.0) * 0.35
+                         + sin(nx * 4.0 + u_time * 0.9) * 0.25
+                         + sin(nx * 25.0 - t_fast * 1.3) * 0.15;
+            // Convert to normalised-Y displacement (divide by amp so eval_line sees
+            // the displacement in wave_val space, which it then multiplies by amp).
+            float amp1_safe = max(amp1, 0.01);
+            mw1 = (mw_raw * mw_drive * micro_wob * 0.18) / amp1_safe;
         }
     }
 
     float ny1 = ny;
-    float hb1 = heartbeat_bump(nx, u_sine_travel);
+    float hb1 = heartbeat_bump(nx, sine_freq, phase1);
     float w1_final = w1 + mw1 + hb1 + wfx1 / max(amp1, 0.001);
     vec4 c1 = eval_line(ny1, inner_height, w1_final, amp1,
                         u_line_color, u_glow_color, glow_sigma_base, glow_e1, 0.0, bass_width);
@@ -314,30 +320,36 @@ void main() {
     // =====================================================================
     if (lines >= 2) {
         float amp2 = min(base_amplitude * (1.0 + e2_band * 1.5), 0.48);
-        float lob_phase2 = lob * 2.094 * 0.7;  // X-axis separation from Line Offset
+        float lob_phase2 = lob * 0.45 * 0.7;  // X-axis separation — tight to line 1
         float w2 = sin(nx * sine_freq + lob_phase2 + phase2);
 
+        // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
+        // as LOB increases, blend toward line 2's unique pattern.
         float wfx2 = 0.0;
         if (wave_fx > 0.001) {
             float we2_raw = u_mid_energy * 0.7 + u_bass_energy * 0.15 + u_high_energy * 0.15;
             float we2 = sqrt(max(we2_raw, 0.0));
-            float wfx_raw2 = sin(nx * 7.7 + u_time * 2.1) * 0.45
-                           + sin(nx * 13.3 - u_time * 1.3) * 0.30;
-            wfx2 = wfx_raw2 * we2 * wave_fx * base_amplitude;
+            float wfx_raw2_own = sin(nx * 7.7 + u_time * 2.1) * 0.45
+                               + sin(nx * 13.3 - u_time * 1.3) * 0.30;
+            float wfx2_own = wfx_raw2_own * we2 * wave_fx * base_amplitude;
+            wfx2 = mix(wfx1, wfx2_own, lob);
         }
 
+        // Micro wobble: same LOB-blend approach
         float mw2 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
             float mw_energy2 = u_bass_energy * 0.50 + u_mid_energy * 0.35 + u_high_energy * 0.15;
-            float mw_drive2 = clamp(mw_energy2 * 2.5, 0.0, 1.5);
-            if (mw_drive2 > 0.01) {
+            float mw_drive2 = clamp(mw_energy2 * 1.8, 0.0, 1.5);
+            if (mw_drive2 > 0.001) {
                 float t_fast2 = u_time * 3.2;
                 float t_med2  = u_time * 1.6;
                 float mw_raw2 = sin(nx * 20.0 + t_fast2 + 1.2) * 0.30
                               + sin(nx * 10.5 - t_med2 + 0.7) * 0.35
                               + sin(nx * 5.0 + u_time * 0.7 + 2.1) * 0.25
                               + sin(nx * 27.0 - t_fast2 * 1.1 + 3.0) * 0.15;
-                mw2 = mw_raw2 * mw_drive2 * micro_wob * 0.55;
+                float amp2_safe = max(amp2, 0.01);
+                float mw2_own = (mw_raw2 * mw_drive2 * micro_wob * 0.18) / amp2_safe;
+                mw2 = mix(mw1, mw2_own, lob);
             }
         }
 
@@ -346,7 +358,7 @@ void main() {
         float ny2 = ny + v_spacing * 0.7;
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        float hb2 = heartbeat_bump(nx, u_sine_travel_line2);
+        float hb2 = heartbeat_bump(nx, sine_freq, lob_phase2 + phase2);
         float w2_final = w2 + mw2 + hb2 + wfx2 / max(amp2, 0.001);
         vec4 c2 = eval_line(ny2, inner_height, w2_final, amp2,
                             u_line2_color, u_line2_glow_color, sigma2, glow_e2, 0.0, bass_width);
@@ -360,30 +372,36 @@ void main() {
     // =====================================================================
     if (lines >= 3) {
         float amp3 = min(base_amplitude * (1.0 + e3_band * 1.5), 0.48);
-        float lob_phase3 = lob * 4.189;  // X-axis separation from Line Offset (full)
+        float lob_phase3 = lob * 0.90;  // X-axis separation — tight to line 1
         float w3 = sin(nx * sine_freq + lob_phase3 + phase3);
 
+        // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
+        // as LOB increases, blend toward line 3's unique pattern.
         float wfx3 = 0.0;
         if (wave_fx > 0.001) {
             float we3_raw = u_mid_energy * 0.65 + u_high_energy * 0.25 + u_bass_energy * 0.1;
             float we3 = sqrt(max(we3_raw, 0.0));
-            float wfx_raw3 = sin(nx * 4.3 - u_time * 1.9) * 0.40
-                           + sin(nx * 9.7 + u_time * 2.7) * 0.30;
-            wfx3 = wfx_raw3 * we3 * wave_fx * base_amplitude;
+            float wfx_raw3_own = sin(nx * 4.3 - u_time * 1.9) * 0.40
+                               + sin(nx * 9.7 + u_time * 2.7) * 0.30;
+            float wfx3_own = wfx_raw3_own * we3 * wave_fx * base_amplitude;
+            wfx3 = mix(wfx1, wfx3_own, lob);
         }
 
+        // Micro wobble: same LOB-blend approach
         float mw3 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
             float mw_energy3 = u_bass_energy * 0.45 + u_mid_energy * 0.30 + u_high_energy * 0.25;
-            float mw_drive3 = clamp(mw_energy3 * 2.5, 0.0, 1.5);
-            if (mw_drive3 > 0.01) {
+            float mw_drive3 = clamp(mw_energy3 * 1.8, 0.0, 1.5);
+            if (mw_drive3 > 0.001) {
                 float t_fast3 = u_time * 3.8;
                 float t_med3  = u_time * 2.0;
                 float mw_raw3 = sin(nx * 16.0 - t_fast3 + 2.5) * 0.30
                               + sin(nx * 8.0 + t_med3 + 1.8) * 0.35
                               + sin(nx * 3.5 - u_time * 0.6 + 3.3) * 0.25
                               + sin(nx * 22.0 + t_fast3 * 1.2 + 0.5) * 0.15;
-                mw3 = mw_raw3 * mw_drive3 * micro_wob * 0.55;
+                float amp3_safe = max(amp3, 0.01);
+                float mw3_own = (mw_raw3 * mw_drive3 * micro_wob * 0.18) / amp3_safe;
+                mw3 = mix(mw1, mw3_own, lob);
             }
         }
 
@@ -392,7 +410,7 @@ void main() {
         float ny3 = ny - v_spacing;
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        float hb3 = heartbeat_bump(nx, u_sine_travel_line3);
+        float hb3 = heartbeat_bump(nx, sine_freq, lob_phase3 + phase3);
         float w3_final = w3 + mw3 + hb3 + wfx3 / max(amp3, 0.001);
         vec4 c3 = eval_line(ny3, inner_height, w3_final, amp3,
                             u_line3_color, u_line3_glow_color, sigma3, glow_e3, 0.0, bass_width);

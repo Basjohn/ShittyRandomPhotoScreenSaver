@@ -15,6 +15,7 @@ from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider
 from PySide6.QtCore import Qt, Signal
+from ui.tabs.shared_styles import NoWheelSlider
 
 from core.logging.logger import get_logger
 from core.settings.visualizer_presets import (
@@ -62,7 +63,7 @@ class VisualizerPresetSlider(QWidget):
         lbl.setFixedWidth(48)
         row.addWidget(lbl)
 
-        self._slider = QSlider(Qt.Orientation.Horizontal)
+        self._slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(0)
         self._slider.setMaximum(PRESET_COUNT - 1)
         self._slider.setValue(0)

@@ -10,8 +10,9 @@ from urllib.parse import urlparse, urlunparse
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
     QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox,
-    QScrollArea, QDialog, QFrame, QSlider,
+    QScrollArea, QDialog, QFrame,
 )
+from ui.tabs.shared_styles import NoWheelSlider
 from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
@@ -123,7 +124,7 @@ class SourcesTab(QWidget):
         ratio_layout.addWidget(self.local_ratio_label)
         
         # Slider is the ONLY control for adjusting ratio
-        self.ratio_slider = QSlider(Qt.Orientation.Horizontal)
+        self.ratio_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.ratio_slider.setRange(0, 100)
         self.ratio_slider.setMinimumWidth(200)
         self.ratio_slider.setToolTip("Drag to adjust the balance between local and RSS sources")

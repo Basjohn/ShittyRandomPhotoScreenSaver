@@ -10,9 +10,11 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QCheckBox
+    QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QCheckBox,
+    QPushButton, QColorDialog
 )
 from PySide6.QtCore import Signal, Qt
+from PySide6.QtGui import QColor
 
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
@@ -481,7 +483,125 @@ class TransitionsTab(QWidget):
         particle_layout.addLayout(swirl_order_row)
         
         layout.addWidget(self.particle_group)
-        
+
+        # Burn specific settings
+        self.burn_group = QGroupBox("Burn Settings")
+        burn_layout = QVBoxLayout(self.burn_group)
+
+        burn_dir_row = QHBoxLayout()
+        burn_dir_row.addWidget(QLabel("Direction:"))
+        self.burn_direction_combo = QComboBox()
+        self.burn_direction_combo.addItems([
+            "Left to Right",
+            "Right to Left",
+            "Top to Bottom",
+            "Bottom to Top",
+            "Random",
+        ])
+        self.burn_direction_combo.currentIndexChanged.connect(self._save_settings)
+        burn_dir_row.addWidget(self.burn_direction_combo)
+        burn_dir_row.addStretch()
+        burn_layout.addLayout(burn_dir_row)
+
+        burn_jag_row = QHBoxLayout()
+        burn_jag_row.addWidget(QLabel("Jaggedness:"))
+        self.burn_jaggedness_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.burn_jaggedness_slider.setRange(0, 100)
+        self.burn_jaggedness_slider.setValue(50)
+        self.burn_jaggedness_slider.setToolTip("Edge noise amplitude (0 = smooth wipe, 100 = very jagged)")
+        self.burn_jaggedness_slider.valueChanged.connect(self._save_settings)
+        burn_jag_row.addWidget(self.burn_jaggedness_slider, 1)
+        self.burn_jaggedness_label = QLabel("50%")
+        burn_jag_row.addWidget(self.burn_jaggedness_label)
+        self.burn_jaggedness_slider.valueChanged.connect(
+            lambda v: self.burn_jaggedness_label.setText(f"{v}%")
+        )
+        burn_layout.addLayout(burn_jag_row)
+
+        burn_glow_row = QHBoxLayout()
+        burn_glow_row.addWidget(QLabel("Glow Intensity:"))
+        self.burn_glow_intensity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.burn_glow_intensity_slider.setRange(0, 100)
+        self.burn_glow_intensity_slider.setValue(70)
+        self.burn_glow_intensity_slider.setToolTip("Warm glow brightness on the burning edge")
+        self.burn_glow_intensity_slider.valueChanged.connect(self._save_settings)
+        burn_glow_row.addWidget(self.burn_glow_intensity_slider, 1)
+        self.burn_glow_intensity_label = QLabel("70%")
+        burn_glow_row.addWidget(self.burn_glow_intensity_label)
+        self.burn_glow_intensity_slider.valueChanged.connect(
+            lambda v: self.burn_glow_intensity_label.setText(f"{v}%")
+        )
+        burn_layout.addLayout(burn_glow_row)
+
+        burn_char_row = QHBoxLayout()
+        burn_char_row.addWidget(QLabel("Char Width:"))
+        self.burn_char_width_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.burn_char_width_slider.setRange(10, 100)
+        self.burn_char_width_slider.setValue(50)
+        self.burn_char_width_slider.setToolTip("Width of the charred/blackened zone behind the burn front")
+        self.burn_char_width_slider.valueChanged.connect(self._save_settings)
+        burn_char_row.addWidget(self.burn_char_width_slider, 1)
+        self.burn_char_width_label = QLabel("50%")
+        burn_char_row.addWidget(self.burn_char_width_label)
+        self.burn_char_width_slider.valueChanged.connect(
+            lambda v: self.burn_char_width_label.setText(f"{v}%")
+        )
+        burn_layout.addLayout(burn_char_row)
+
+        burn_color_row = QHBoxLayout()
+        burn_color_row.addWidget(QLabel("Glow Colour:"))
+        self.burn_glow_color_btn = QPushButton()
+        self._burn_glow_color = QColor(255, 140, 30, 255)
+        self._apply_burn_glow_color_btn()
+        self.burn_glow_color_btn.setFixedSize(60, 24)
+        self.burn_glow_color_btn.setToolTip("Primary glow colour on the burning edge")
+        self.burn_glow_color_btn.clicked.connect(self._pick_burn_glow_color)
+        burn_color_row.addWidget(self.burn_glow_color_btn)
+        burn_color_row.addStretch()
+        burn_layout.addLayout(burn_color_row)
+
+        self.burn_smoke_check = QCheckBox("Sparks")
+        self.burn_smoke_check.setChecked(True)
+        self.burn_smoke_check.setToolTip("Enable bright sparks flying off the burn front")
+        self.burn_smoke_check.stateChanged.connect(self._save_settings)
+        burn_layout.addWidget(self.burn_smoke_check)
+
+        burn_smoke_density_row = QHBoxLayout()
+        burn_smoke_density_row.addWidget(QLabel("  Spark Intensity:"))
+        self.burn_smoke_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.burn_smoke_density_slider.setRange(0, 100)
+        self.burn_smoke_density_slider.setValue(50)
+        self.burn_smoke_density_slider.valueChanged.connect(self._save_settings)
+        burn_smoke_density_row.addWidget(self.burn_smoke_density_slider, 1)
+        self.burn_smoke_density_label = QLabel("50%")
+        burn_smoke_density_row.addWidget(self.burn_smoke_density_label)
+        self.burn_smoke_density_slider.valueChanged.connect(
+            lambda v: self.burn_smoke_density_label.setText(f"{v}%")
+        )
+        burn_layout.addLayout(burn_smoke_density_row)
+
+        self.burn_ash_check = QCheckBox("Ash Particles")
+        self.burn_ash_check.setChecked(True)
+        self.burn_ash_check.setToolTip("Enable falling ash specks below the burn front")
+        self.burn_ash_check.stateChanged.connect(self._save_settings)
+        burn_layout.addWidget(self.burn_ash_check)
+
+        burn_ash_density_row = QHBoxLayout()
+        burn_ash_density_row.addWidget(QLabel("  Ash Density:"))
+        self.burn_ash_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self.burn_ash_density_slider.setRange(0, 100)
+        self.burn_ash_density_slider.setValue(50)
+        self.burn_ash_density_slider.valueChanged.connect(self._save_settings)
+        burn_ash_density_row.addWidget(self.burn_ash_density_slider, 1)
+        self.burn_ash_density_label = QLabel("50%")
+        burn_ash_density_row.addWidget(self.burn_ash_density_label)
+        self.burn_ash_density_slider.valueChanged.connect(
+            lambda v: self.burn_ash_density_label.setText(f"{v}%")
+        )
+        burn_layout.addLayout(burn_ash_density_row)
+
+        layout.addWidget(self.burn_group)
+
         layout.addStretch()
         
         # Set scroll area widget and add to main layout
@@ -605,6 +725,15 @@ class TransitionsTab(QWidget):
             getattr(self, 'particle_light_combo', None),
             getattr(self, 'particle_swirl_turns_spin', None),
             getattr(self, 'particle_swirl_order_combo', None),
+            # Burn widgets
+            getattr(self, 'burn_direction_combo', None),
+            getattr(self, 'burn_jaggedness_slider', None),
+            getattr(self, 'burn_glow_intensity_slider', None),
+            getattr(self, 'burn_char_width_slider', None),
+            getattr(self, 'burn_smoke_check', None),
+            getattr(self, 'burn_smoke_density_slider', None),
+            getattr(self, 'burn_ash_check', None),
+            getattr(self, 'burn_ash_density_slider', None),
         ]:
             if w is not None and hasattr(w, 'blockSignals'):
                 w.blockSignals(True)
@@ -756,6 +885,42 @@ class TransitionsTab(QWidget):
             if 0 <= swirl_order_idx < self.particle_swirl_order_combo.count():
                 self.particle_swirl_order_combo.setCurrentIndex(swirl_order_idx)
 
+            # Load burn settings
+            canonical_burn = canonical_transitions.get('burn', {})
+            burn = transitions_config.get('burn', {})
+            if not isinstance(burn, dict):
+                burn = {}
+            burn_dir = burn.get('direction', canonical_burn.get('direction', 'Left to Right')) or 'Left to Right'
+            try:
+                idx = self.burn_direction_combo.findText(burn_dir)
+                if idx < 0:
+                    idx = 0
+                self.burn_direction_combo.setCurrentIndex(idx)
+            except Exception as e:
+                logger.debug("[TRANSITIONS_TAB] Exception suppressed: %s", e)
+            jag = int(round(burn.get('jaggedness', canonical_burn.get('jaggedness', 0.5)) * 100))
+            self.burn_jaggedness_slider.setValue(max(0, min(100, jag)))
+            self.burn_jaggedness_label.setText(f"{self.burn_jaggedness_slider.value()}%")
+            glow_i = int(round(burn.get('glow_intensity', canonical_burn.get('glow_intensity', 0.7)) * 100))
+            self.burn_glow_intensity_slider.setValue(max(0, min(100, glow_i)))
+            self.burn_glow_intensity_label.setText(f"{self.burn_glow_intensity_slider.value()}%")
+            char_w = int(round(burn.get('char_width', canonical_burn.get('char_width', 0.5)) * 100))
+            self.burn_char_width_slider.setValue(max(10, min(100, char_w)))
+            self.burn_char_width_label.setText(f"{self.burn_char_width_slider.value()}%")
+            glow_col = burn.get('glow_color', canonical_burn.get('glow_color', [255, 140, 30, 255]))
+            if isinstance(glow_col, (list, tuple)) and len(glow_col) >= 3:
+                self._burn_glow_color = QColor(int(glow_col[0]), int(glow_col[1]), int(glow_col[2]),
+                                               int(glow_col[3]) if len(glow_col) > 3 else 255)
+                self._apply_burn_glow_color_btn()
+            self.burn_smoke_check.setChecked(bool(burn.get('smoke_enabled', canonical_burn.get('smoke_enabled', True))))
+            smoke_d = int(round(burn.get('smoke_density', canonical_burn.get('smoke_density', 0.5)) * 100))
+            self.burn_smoke_density_slider.setValue(max(0, min(100, smoke_d)))
+            self.burn_smoke_density_label.setText(f"{self.burn_smoke_density_slider.value()}%")
+            self.burn_ash_check.setChecked(bool(burn.get('ash_enabled', canonical_burn.get('ash_enabled', True))))
+            ash_d = int(round(burn.get('ash_density', canonical_burn.get('ash_density', 0.5)) * 100))
+            self.burn_ash_density_slider.setValue(max(0, min(100, ash_d)))
+            self.burn_ash_density_label.setText(f"{self.burn_ash_density_slider.value()}%")
+
             # Now that in-memory per-type directions are loaded, update the direction combo
             self._update_specific_settings()
 
@@ -879,6 +1044,9 @@ class TransitionsTab(QWidget):
         if transition == "Particle":
             self._update_particle_mode_visibility()
 
+        # Show/hide Burn settings
+        self.burn_group.setVisible(transition == "Burn")
+
     def _on_particle_mode_changed(self, index: int) -> None:
         """Handle particle mode change - show/hide direction vs swirl settings."""
         self._update_particle_mode_visibility()
@@ -894,6 +1062,24 @@ class TransitionsTab(QWidget):
         # Swirl settings only apply to Swirl mode (disabled for Random - auto-selected)
         self.particle_swirl_turns_spin.setEnabled(is_swirl)
         self.particle_swirl_order_combo.setEnabled(is_swirl)
+
+    def _apply_burn_glow_color_btn(self) -> None:
+        """Update the burn glow colour button background to reflect the current colour."""
+        c = self._burn_glow_color
+        self.burn_glow_color_btn.setStyleSheet(
+            f"background-color: rgba({c.red()},{c.green()},{c.blue()},{c.alpha()}); border: 1px solid #888;"
+        )
+
+    def _pick_burn_glow_color(self) -> None:
+        """Open colour picker for the burn glow colour."""
+        color = QColorDialog.getColor(
+            self._burn_glow_color, self, "Burn Glow Colour",
+            QColorDialog.ColorDialogOption.ShowAlphaChannel
+        )
+        if color.isValid():
+            self._burn_glow_color = color
+            self._apply_burn_glow_color_btn()
+            self._save_settings()
 
     def _refresh_hw_dependent_options(self) -> None:
         """Grey out GL-only transitions when HW acceleration is disabled."""
@@ -1023,6 +1209,22 @@ class TransitionsTab(QWidget):
                 'gloss_size': float(self.particle_gloss_spin.value()),
                 'light_direction': self.particle_light_combo.currentIndex(),
                 'swirl_order': self.particle_swirl_order_combo.currentIndex(),
+            },
+            'burn': {
+                'direction': self.burn_direction_combo.currentText(),
+                'jaggedness': self.burn_jaggedness_slider.value() / 100.0,
+                'glow_intensity': self.burn_glow_intensity_slider.value() / 100.0,
+                'char_width': self.burn_char_width_slider.value() / 100.0,
+                'glow_color': [
+                    self._burn_glow_color.red(),
+                    self._burn_glow_color.green(),
+                    self._burn_glow_color.blue(),
+                    self._burn_glow_color.alpha(),
+                ],
+                'smoke_enabled': self.burn_smoke_check.isChecked(),
+                'smoke_density': self.burn_smoke_density_slider.value() / 100.0,
+                'ash_enabled': self.burn_ash_check.isChecked(),
+                'ash_density': self.burn_ash_density_slider.value() / 100.0,
             },
             'durations': dict(self._duration_by_type),
             'pool': dict(self._pool_by_type),

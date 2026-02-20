@@ -91,8 +91,8 @@ class CursorHaloWidget(QWidget):
         return float(self._opacity)
 
     def set_shape(self, shape: str) -> None:
-        """Set the halo shape. Valid: circle, ring, crosshair, diamond, dot."""
-        valid = {"circle", "ring", "crosshair", "diamond", "dot"}
+        """Set the halo shape. Valid: circle, ring, crosshair, diamond, dot, cursor_triangle."""
+        valid = {"circle", "ring", "crosshair", "diamond", "dot", "cursor_triangle"}
         self._shape = shape if shape in valid else "circle"
         self.update()
 
@@ -119,6 +119,8 @@ class CursorHaloWidget(QWidget):
             self._paint_diamond(painter, cx, cy, r, color, shadow_color, shadow_offset)
         elif shape == "dot":
             self._paint_dot(painter, cx, cy, inner_radius * 2, color, shadow_color, shadow_offset)
+        elif shape == "cursor_triangle":
+            self._paint_cursor_triangle(painter, cx, cy, r, color, shadow_color, shadow_offset)
         else:
             self._paint_circle(painter, cx, cy, r, inner_radius, color, shadow_color, shadow_offset)
         painter.end()
@@ -181,6 +183,71 @@ class CursorHaloWidget(QWidget):
         p.drawEllipse(cx - r // 2 + so, cy - r // 2 + so, r, r)
         p.setBrush(color)
         p.drawEllipse(cx - r // 2, cy - r // 2, r, r)
+
+    def _paint_cursor_triangle(self, p, cx, cy, r, color, shadow, so):
+        """Three elongated arrow-tip triangles merged at center, slightly left-slanted.
+
+        Each triangle has a sharp outer tip and a wide inner base meeting at the
+        centre, creating a 3-pointed star.  The whole shape is rotated ~15 degrees
+        counter-clockwise so it reads as a left-leaning cursor.
+        """
+        import math
+        from PySide6.QtGui import QPolygonF
+        from PySide6.QtCore import QPointF as QPF
+
+        half = r / 2.0
+        # Outer tip distance from centre; inner base half-width
+        tip_r   = half * 0.95   # how far each tip extends
+        base_r  = half * 0.38   # radius of the inner base arc
+        base_hw = half * 0.28   # half-width of each triangle base
+
+        def rot(angle_deg):
+            a = math.radians(angle_deg)
+            return math.cos(a), math.sin(a)
+
+        # Three arms: primary tip at top-left (135°), then 120° apart
+        arm_angles = [135.0, 255.0, 15.0]
+        pts = []
+        for ang in arm_angles:
+            # Tip point
+            tx, ty = rot(ang)
+            tip = QPF(cx + tx * tip_r, cy - ty * tip_r)
+
+            # Base points: perpendicular to arm, centred at base_r behind the tip
+            perp_l = ang + 90.0
+            perp_r = ang - 90.0
+            lx, ly = rot(perp_l)
+            rx, ry = rot(perp_r)
+            back_x, back_y = rot(ang + 180.0)
+            bcx = cx + back_x * base_r
+            bcy = cy - back_y * base_r
+            bl = QPF(bcx + lx * base_hw, bcy - ly * base_hw)
+            br = QPF(bcx + rx * base_hw, bcy - ry * base_hw)
+
+            pts += [tip, bl, br]
+
+        # Build filled star: tip0, base0L, base0R, tip1, base1L, base1R, tip2, base2L, base2R
+        # Reorder to trace the outline: tip0 -> base0R -> base1L -> tip1 -> base1R -> base2L -> tip2 -> base2R -> base0L
+        outline = [
+            pts[0],  # tip0
+            pts[2],  # base0R
+            pts[4],  # base1L
+            pts[3],  # tip1
+            pts[5],  # base1R
+            pts[7],  # base2L
+            pts[6],  # tip2
+            pts[8],  # base2R
+            pts[1],  # base0L
+        ]
+
+        pen = p.pen()
+        pen.setWidth(2)
+        for col, dx, dy in ((shadow, so, so), (color, 0, 0)):
+            shifted = QPolygonF([QPF(pt.x() + dx, pt.y() + dy) for pt in outline])
+            pen.setColor(col)
+            p.setPen(pen)
+            p.setBrush(col)
+            p.drawPolygon(shifted)
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Forward mouse press to parent widget."""

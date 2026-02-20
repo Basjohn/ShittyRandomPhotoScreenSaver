@@ -22,6 +22,9 @@ uniform int u_bubble_count;
 uniform vec4 u_bubbles_pos[110];
 // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
 uniform vec4 u_bubbles_extra[110];
+// Trail: 3 previous (x,y) positions per bubble, oldest first
+uniform vec2 u_bubbles_trail[330];  // 110 * 3
+uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
@@ -67,11 +70,15 @@ void main() {
     float height = u_resolution.y;
     if (width <= 0.0 || height <= 0.0) discard;
 
-    // Card margins — keep bubble content inside the card border
-    float margin_x = 8.0;
-    float margin_y = 6.0;
-    float inner_w = width - margin_x * 2.0;
-    float inner_h = height - margin_y * 2.0;
+    // Card border: border-radius 8px, border-width 2px.
+    // Inset content by border width so gradient stays inside the border.
+    float border_w = 2.0;
+    float card_radius = 8.0;
+    // Inner content radius = card radius minus border width
+    float inner_radius = max(0.0, card_radius - border_w);
+
+    float inner_w = width - border_w * 2.0;
+    float inner_h = height - border_w * 2.0;
     if (inner_w <= 0.0 || inner_h <= 0.0) discard;
 
     // Map v_uv (0..1 over full overlay) to pixel coords, then to inner UV
@@ -79,14 +86,31 @@ void main() {
     float fb_h = height * dpr;
     vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_h - gl_FragCoord.y) / dpr);
 
-    // Discard outside inner card rect
-    if (fc.x < margin_x || fc.x > width - margin_x ||
-        fc.y < margin_y || fc.y > height - margin_y) {
+    // Discard outside inner content rect (rectangular pre-check)
+    if (fc.x < border_w || fc.x > width - border_w ||
+        fc.y < border_w || fc.y > height - border_w) {
         discard;
     }
 
+    // Rounded-rect SDF discard: discard pixels in the corner radius zone
+    // that fall outside the rounded inner rect
+    if (inner_radius > 0.5) {
+        // Position relative to inner rect origin
+        float ix = fc.x - border_w;
+        float iy = fc.y - border_w;
+        // Check each corner
+        float r = inner_radius;
+        vec2 d = vec2(0.0);
+        bool in_corner = false;
+        if (ix < r && iy < r) { d = vec2(r - ix, r - iy); in_corner = true; }
+        else if (ix > inner_w - r && iy < r) { d = vec2(ix - (inner_w - r), r - iy); in_corner = true; }
+        else if (ix < r && iy > inner_h - r) { d = vec2(r - ix, iy - (inner_h - r)); in_corner = true; }
+        else if (ix > inner_w - r && iy > inner_h - r) { d = vec2(ix - (inner_w - r), iy - (inner_h - r)); in_corner = true; }
+        if (in_corner && (d.x * d.x + d.y * d.y) > r * r) discard;
+    }
+
     // Remap to 0..1 within inner rect
-    vec2 uv = vec2((fc.x - margin_x) / inner_w, (fc.y - margin_y) / inner_h);
+    vec2 uv = vec2((fc.x - border_w) / inner_w, (fc.y - border_w) / inner_h);
     float aspect = inner_w / max(inner_h, 1.0);
     
     // Pixel size in normalised coords (for anti-aliasing)
@@ -121,7 +145,42 @@ void main() {
     pop_col.rgb = apply_rainbow(pop_col.rgb, u_rainbow_hue_offset);
     
     int count = min(u_bubble_count, 110);
-    
+
+    // --- Motion trail ghost rings (drawn before main bubbles so they appear behind) ---
+    if (u_trail_strength > 0.001) {
+        for (int i = 0; i < count; i++) {
+            vec4 bpos = u_bubbles_pos[i];
+            float brad = bpos.z;
+            float balpha = bpos.w;
+            if (balpha < 0.01 || brad < 4.0 * px) continue;
+
+            float r = brad;
+            float ref_radius = 0.04;
+            float base_stroke_px = 1.2;
+            float stroke_px = clamp(base_stroke_px * (r / ref_radius), 0.5, 1.8);
+            float stroke = stroke_px * px;
+
+            // 3 trail steps: oldest = index 0, newest = index 2
+            for (int s = 0; s < 3; s++) {
+                vec2 txy = u_bubbles_trail[i * 3 + s];
+                // Fade: oldest trail is most transparent; step 0 = 0.25, 1 = 0.45, 2 = 0.65
+                float step_fade = (float(s) + 1.0) / 4.0;
+                float trail_alpha = u_trail_strength * step_fade * balpha * 0.55;
+
+                vec2 tdelta = uv - txy;
+                tdelta.x *= aspect;
+                float tdist = length(tdelta);
+
+                float tring = abs(tdist - r);
+                float tring_alpha = smoothstep(stroke + px, stroke - px * 0.5, tring) * trail_alpha;
+
+                vec4 trail_col = outline_col;
+                trail_col.a *= trail_alpha;
+                result = mix(result, trail_col, tring_alpha * u_fade);
+            }
+        }
+    }
+
     for (int i = 0; i < count; i++) {
         vec4 bpos = u_bubbles_pos[i];
         vec2 bxy = bpos.xy;       // bubble center (normalised 0..1)

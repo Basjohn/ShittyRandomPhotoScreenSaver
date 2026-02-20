@@ -38,6 +38,7 @@ class _GLPipelineState:
     blinds_program: int = 0
     crumble_program: int = 0
     particle_program: int = 0
+    burn_program: int = 0
 
     # Uniform locations for basic card-flip program
     u_angle_loc: int = -1
@@ -58,6 +59,7 @@ class _GLPipelineState:
     blinds_uniforms: dict = field(default_factory=dict)
     crumble_uniforms: dict = field(default_factory=dict)
     particle_uniforms: dict = field(default_factory=dict)
+    burn_uniforms: dict = field(default_factory=dict)
     crossfade_uniforms: dict = field(default_factory=dict)
     slide_uniforms: dict = field(default_factory=dict)
     wipe_uniforms: dict = field(default_factory=dict)

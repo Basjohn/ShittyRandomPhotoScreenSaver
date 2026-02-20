@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QDialog, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, QWidget,
     QGraphicsDropShadowEffect, QColorDialog, QFrame,
 )
-from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtCore import Qt, QTimer, QPoint, Signal
 from PySide6.QtGui import QColor, QPalette
 
 from core.logging.logger import get_logger
@@ -374,6 +374,94 @@ class _ColorPickerDialog(QDialog):
         if event.buttons() & Qt.MouseButton.LeftButton:
             self.move(event.globalPosition().toPoint() - self._drag_pos)
             event.accept()
+
+
+class ColorSwatchButton(QPushButton):
+    """Burn-style colour chip with white border + drop shadow."""
+
+    color_changed = Signal(QColor)
+
+    _MIN_WIDTH = 78
+    _MIN_HEIGHT = 26
+
+    def __init__(
+        self,
+        color: Optional[QColor] = None,
+        parent: Optional[QWidget] = None,
+        title: str = "Choose Color",
+        show_alpha: bool = True,
+    ) -> None:
+        super().__init__(parent)
+        self._color: QColor = QColor(color) if color is not None else QColor(255, 255, 255, 255)
+        self._title = title
+        self._show_alpha = show_alpha
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setMinimumSize(self._MIN_WIDTH, self._MIN_HEIGHT)
+        self.setMaximumHeight(self._MIN_HEIGHT + 6)
+
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(12)
+        shadow.setOffset(0, 3)
+        shadow.setColor(QColor(0, 0, 0, 110))
+        self.setGraphicsEffect(shadow)
+
+        self._update_style()
+        self.clicked.connect(self._open_picker)
+
+    def color(self) -> QColor:
+        return QColor(self._color)
+
+    def set_color(self, color: Optional[QColor]) -> None:
+        if color is None:
+            return
+        self._color = QColor(color)
+        self._update_style()
+
+    def _rgba(self, color: QColor) -> str:
+        return f"rgba({color.red()},{color.green()},{color.blue()},{color.alpha()})"
+
+    def _blend(self, color: QColor, target: QColor, strength: float) -> QColor:
+        strength = max(0.0, min(1.0, strength))
+        r = round(color.red() + (target.red() - color.red()) * strength)
+        g = round(color.green() + (target.green() - color.green()) * strength)
+        b = round(color.blue() + (target.blue() - color.blue()) * strength)
+        a = color.alpha()
+        return QColor(r, g, b, a)
+
+    def _update_style(self) -> None:
+        base = QColor(self._color)
+        hover = self._blend(base, QColor(255, 255, 255, base.alpha()), 0.12)
+        pressed = self._blend(base, QColor(0, 0, 0, base.alpha()), 0.12)
+        self.setStyleSheet(
+            f"""
+            ColorSwatchButton {{
+                background-color: {self._rgba(base)};
+                border: 1px solid rgba(255, 255, 255, 0.95);
+                border-radius: 6px;
+                min-width: {self._MIN_WIDTH}px;
+                min-height: {self._MIN_HEIGHT}px;
+                padding: 0;
+            }}
+            ColorSwatchButton::hover {{
+                background-color: {self._rgba(hover)};
+                border-color: rgba(255, 255, 255, 1.0);
+            }}
+            ColorSwatchButton::pressed {{
+                background-color: {self._rgba(pressed)};
+                border-color: rgba(255, 255, 255, 0.75);
+            }}
+            """
+        )
+
+    def _open_picker(self) -> None:
+        new_color = StyledColorPicker.get_color(
+            self._color, self.parentWidget(), self._title, self._show_alpha
+        )
+        if new_color is not None:
+            self._color = new_color
+            self._update_style()
+            self.color_changed.emit(new_color)
 
 
 class StyledColorPicker:

@@ -247,21 +247,31 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_single_piece.stateChanged.connect(tab._save_settings)
     _adv_layout.addWidget(tab.spectrum_single_piece)
 
-    # Bar Profile selector (Legacy / Curved / Slanted)
+    # Unique Colours Per Bar (rainbow per-bar mode, only relevant when rainbow is on)
+    tab.spectrum_rainbow_per_bar = QCheckBox("Unique Colours Per Bar")
+    tab.spectrum_rainbow_per_bar.setChecked(
+        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_per_bar', False)
+    )
+    tab.spectrum_rainbow_per_bar.setToolTip(
+        "When 'Taste The Rainbow' is enabled: each bar gets its own unique colour "
+        "spread across the rainbow. Off = all bars share one shifting colour."
+    )
+    tab.spectrum_rainbow_per_bar.stateChanged.connect(tab._save_settings)
+    _adv_layout.addWidget(tab.spectrum_rainbow_per_bar)
+
+    # Bar Profile selector (Legacy / Curved)
     _profile_row = QHBoxLayout()
     _profile_row.addWidget(QLabel("Bar Profile:"))
     tab.spectrum_bar_profile = QComboBox()
     tab.spectrum_bar_profile.addItem("Legacy", "legacy")
     tab.spectrum_bar_profile.addItem("Curved Bar Profile", "curved")
-    tab.spectrum_bar_profile.addItem("Slanted Bar Profile", "slanted")
     _profile_default = tab._default_str('spotify_visualizer', 'spectrum_bar_profile', 'legacy')
     _profile_idx = tab.spectrum_bar_profile.findData(_profile_default)
     if _profile_idx >= 0:
         tab.spectrum_bar_profile.setCurrentIndex(_profile_idx)
     tab.spectrum_bar_profile.setToolTip(
         "Legacy: classic flat profile. "
-        "Curved: dual-peak wave profile with rounded bar corners. "
-        "Slanted: dual-peak wave profile with diagonal-sliced bar edges."
+        "Curved: dual-peak wave profile with rounded bar corners."
     )
     tab.spectrum_bar_profile.currentIndexChanged.connect(tab._save_settings)
     _profile_row.addWidget(tab.spectrum_bar_profile)
@@ -292,14 +302,10 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     _adv_layout.addWidget(tab._profile_sub_container)
 
-    # Conditional visibility + auto-uncheck single piece for slanted
+    # Conditional visibility for curved sub-options
     def _update_profile_sub_vis(_idx=None):
         profile = tab.spectrum_bar_profile.currentData()
         tab._profile_sub_container.setVisible(profile == 'curved')
-        # Slanted looks bad with single piece — auto-uncheck
-        if profile == 'slanted' and hasattr(tab, 'spectrum_single_piece'):
-            if tab.spectrum_single_piece.isChecked():
-                tab.spectrum_single_piece.setChecked(False)
     tab.spectrum_bar_profile.currentIndexChanged.connect(_update_profile_sub_vis)
     _update_profile_sub_vis()
 

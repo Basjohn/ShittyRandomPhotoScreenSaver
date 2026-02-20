@@ -388,7 +388,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rsc_layout.setContentsMargins(20, 0, 0, 0)
     _rsc_layout.setSpacing(4)
     _rsc_layout.addWidget(QLabel("Speed:"))
-    tab.rainbow_speed_slider = QSlider(Qt.Orientation.Horizontal)
+    tab.rainbow_speed_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.rainbow_speed_slider.setRange(1, 100)
     tab.rainbow_speed_slider.setValue(50)
     tab.rainbow_speed_slider.setToolTip("How fast the hue cycles through the spectrum.")
@@ -643,6 +643,10 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     if hasattr(tab, 'spectrum_single_piece'):
         tab.spectrum_single_piece.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_single_piece', False)
+        )
+    if hasattr(tab, 'spectrum_rainbow_per_bar'):
+        tab.spectrum_rainbow_per_bar.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_rainbow_per_bar', False)
         )
     if hasattr(tab, 'spectrum_bar_profile'):
         profile_val = spotify_vis_config.get('spectrum_bar_profile', 'legacy')
@@ -956,11 +960,11 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     # Bubble settings load
     if hasattr(tab, 'bubble_big_bass_pulse'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_bass_pulse', 0.5) * 100)
-        tab.bubble_big_bass_pulse.setValue(max(0, min(100, v)))
+        tab.bubble_big_bass_pulse.setValue(max(0, min(200, v)))
         tab.bubble_big_bass_pulse_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_small_freq_pulse'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_small_freq_pulse', 0.5) * 100)
-        tab.bubble_small_freq_pulse.setValue(max(0, min(100, v)))
+        tab.bubble_small_freq_pulse.setValue(max(0, min(200, v)))
         tab.bubble_small_freq_pulse_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_stream_direction'):
         sd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_stream_direction', 'up').lower()
@@ -1010,10 +1014,22 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         sd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_specular_direction', 'top_left').lower()
         sd_map = {"top_left": 0, "top_right": 1, "bottom_left": 2, "bottom_right": 3}
         tab.bubble_specular_direction.setCurrentIndex(sd_map.get(sd, 0))
+    if hasattr(tab, 'bubble_big_size_max'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_size_max', 0.038) * 1000)
+        tab.bubble_big_size_max.setValue(max(10, min(60, v)))
+        tab.bubble_big_size_max_label.setText(str(v))
+    if hasattr(tab, 'bubble_small_size_max'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_small_size_max', 0.018) * 1000)
+        tab.bubble_small_size_max.setValue(max(4, min(30, v)))
+        tab.bubble_small_size_max_label.setText(str(v))
     if hasattr(tab, 'bubble_growth'):
         bubble_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_growth', 3.0) * 100)
         tab.bubble_growth.setValue(max(100, min(500, bubble_growth_val)))
         tab.bubble_growth_label.setText(f"{bubble_growth_val / 100.0:.1f}x")
+    if hasattr(tab, 'bubble_trail_strength'):
+        trail_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_trail_strength', 0.0) * 100)
+        tab.bubble_trail_strength.setValue(max(0, min(100, trail_val)))
+        tab.bubble_trail_strength_label.setText(f"{trail_val}%")
     # Bubble colours
     for attr, key, default in (
         ('_bubble_outline_color', 'bubble_outline_color', [255, 255, 255, 230]),
@@ -1150,6 +1166,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'helix_reactive_glow': tab.helix_reactive_glow.isChecked() if hasattr(tab, 'helix_reactive_glow') else False,
         'spectrum_growth': (tab.spectrum_growth.value() if hasattr(tab, 'spectrum_growth') else 100) / 100.0,
         'spectrum_single_piece': tab.spectrum_single_piece.isChecked() if hasattr(tab, 'spectrum_single_piece') else False,
+        'spectrum_rainbow_per_bar': tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, 'spectrum_rainbow_per_bar') else False,
         'spectrum_bar_profile': tab.spectrum_bar_profile.currentData() if hasattr(tab, 'spectrum_bar_profile') else 'legacy',
         'spectrum_border_radius': float(tab.spectrum_border_radius.value()) if hasattr(tab, 'spectrum_border_radius') else 0.0,
         'starfield_growth': (tab.starfield_growth.value() if hasattr(tab, 'starfield_growth') else 200) / 100.0,
@@ -1208,7 +1225,10 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_gradient_dark': _qcolor_to_list(getattr(tab, '_bubble_gradient_dark', None), [80, 60, 50, 255]),
         'bubble_pop_color': _qcolor_to_list(getattr(tab, '_bubble_pop_color', None), [255, 255, 255, 180]),
         'bubble_specular_direction': (tab.bubble_specular_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_specular_direction') else 'top_left'),
+        'bubble_big_size_max': (tab.bubble_big_size_max.value() if hasattr(tab, 'bubble_big_size_max') else 38) / 1000.0,
+        'bubble_small_size_max': (tab.bubble_small_size_max.value() if hasattr(tab, 'bubble_small_size_max') else 18) / 1000.0,
         'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
+        'bubble_trail_strength': (tab.bubble_trail_strength.value() if hasattr(tab, 'bubble_trail_strength') else 0) / 100.0,
     }
     # Preset indices per mode
     _ps_map = {

@@ -5,8 +5,9 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QCheckBox, QPushButton, QSlider, QWidget,
+    QCheckBox, QSlider, QWidget,
 )
+from ui.styled_popup import ColorSwatchButton
 from PySide6.QtCore import Qt
 
 if TYPE_CHECKING:
@@ -75,8 +76,8 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     sine_glow_color_row = QHBoxLayout()
     sine_glow_color_row.addWidget(QLabel("Glow Color:"))
-    tab.sine_glow_color_btn = QPushButton("Choose Color...")
-    tab.sine_glow_color_btn.clicked.connect(tab._choose_sine_glow_color)
+    tab.sine_glow_color_btn = ColorSwatchButton(title="Choose Sine Wave Glow Color")
+    tab.sine_glow_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_glow_color', c), tab._save_settings()))
     sine_glow_color_row.addWidget(tab.sine_glow_color_btn)
     sine_glow_color_row.addStretch()
     _sine_glow_layout.addLayout(sine_glow_color_row)
@@ -95,8 +96,8 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     sine_line_color_row = QHBoxLayout()
     sine_line_color_row.addWidget(QLabel("Line Color:"))
-    tab.sine_line_color_btn = QPushButton("Choose Color...")
-    tab.sine_line_color_btn.clicked.connect(tab._choose_sine_line_color)
+    tab.sine_line_color_btn = ColorSwatchButton(title="Choose Sine Wave Line Color")
+    tab.sine_line_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line_color', c), tab._save_settings()))
     sine_line_color_row.addWidget(tab.sine_line_color_btn)
     sine_line_color_row.addStretch()
     _adv.addLayout(sine_line_color_row)
@@ -294,11 +295,11 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     sine_ml_layout.addWidget(QLabel("Line 2:"))
     sine_l2_row = QHBoxLayout()
-    tab.sine_line2_color_btn = QPushButton("Line Color...")
-    tab.sine_line2_color_btn.clicked.connect(tab._choose_sine_line2_color)
+    tab.sine_line2_color_btn = ColorSwatchButton(title="Line 2 Color")
+    tab.sine_line2_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line2_color', c), tab._save_settings()))
     sine_l2_row.addWidget(tab.sine_line2_color_btn)
-    tab.sine_line2_glow_btn = QPushButton("Glow Color...")
-    tab.sine_line2_glow_btn.clicked.connect(tab._choose_sine_line2_glow_color)
+    tab.sine_line2_glow_btn = ColorSwatchButton(title="Line 2 Glow Color")
+    tab.sine_line2_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line2_glow_color', c), tab._save_settings()))
     sine_l2_row.addWidget(tab.sine_line2_glow_btn)
     sine_l2_row.addWidget(QLabel("Travel:"))
     tab.sine_travel_line2 = QComboBox()
@@ -314,11 +315,11 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._sine_l3_row_widget = QWidget()
     sine_l3_row = QHBoxLayout(tab._sine_l3_row_widget)
     sine_l3_row.setContentsMargins(0, 0, 0, 0)
-    tab.sine_line3_color_btn = QPushButton("Line Color...")
-    tab.sine_line3_color_btn.clicked.connect(tab._choose_sine_line3_color)
+    tab.sine_line3_color_btn = ColorSwatchButton(title="Line 3 Color")
+    tab.sine_line3_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line3_color', c), tab._save_settings()))
     sine_l3_row.addWidget(tab.sine_line3_color_btn)
-    tab.sine_line3_glow_btn = QPushButton("Glow Color...")
-    tab.sine_line3_glow_btn.clicked.connect(tab._choose_sine_line3_glow_color)
+    tab.sine_line3_glow_btn = ColorSwatchButton(title="Line 3 Glow Color")
+    tab.sine_line3_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line3_glow_color', c), tab._save_settings()))
     sine_l3_row.addWidget(tab.sine_line3_glow_btn)
     sine_l3_row.addWidget(QLabel("Travel:"))
     tab.sine_travel_line3 = QComboBox()

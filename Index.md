@@ -227,7 +227,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Warp | - | 	ransitions/gl_compositor_warp_transition.py | GL only |
 | Crumble | - | 	ransitions/gl_compositor_crumble_transition.py | GL only |
 | Particle | - | 	ransistions/gl_compositor_particle_transition.py | GL only |
-| Burn | - | transitions/gl_compositor_burn_transition.py | GL only, 5 directions, jaggedness/glow/smoke/ash params |
+| Burn | - | transitions/gl_compositor_burn_transition.py | GL only, 4 directions (L→R, R→L, T→B, B→T; center-out removed), jaggedness/glow/char params |
 | Base | 	ransitions/base_transition.py | - | Abstract base |
 | Overlay Manager | 	ransitions/overlay_manager.py | - | GL overlay helpers |
 
@@ -241,7 +241,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Shadow Utils | widgets/shadow_utils.py | ShadowRenderer, ShadowFadeProfile | Drop shadow rendering |
 | Overlay Timers | widgets/overlay_timers.py | create_overlay_timer() | ThreadManager timer helper |
 | Context Menu | widgets/context_menu.py | ScreensaverContextMenu | Right-click menu |
-| Cursor Halo | widgets/cursor_halo.py | CursorHaloWidget | Ctrl-held indicator; 5 shapes (circle/ring/crosshair/diamond/dot); `_halo_forwarding` guard prevents jitter feedback loop |
+| Cursor Halo | widgets/cursor_halo.py | CursorHaloWidget | Ctrl-held indicator; 6 shapes (circle/ring/crosshair/diamond/dot/cursor_triangle); cursor_triangle primary point faces top-left (135°); `_halo_forwarding` guard prevents jitter feedback loop |
 | Pixel Shift | widgets/pixel_shift_manager.py | PixelShiftManager | Burn-in prevention |
 
 ### Widget Implementations
@@ -276,7 +276,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars | DSP/FFT bar computation pipeline (inline, extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); all defaults raised +1.0x |
-| Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread |
+| Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread; snapshot() returns (pos_data, extra_data, trail_data); trail records 3 previous positions per bubble (TRAIL_STEPS=3) |
 | Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping; passes rainbow, ghosting, heartbeat, bubble settings (extracted from widget, ~430 LOC) |
 | Mode Transition | widgets/spotify_visualizer/mode_transition.py | cycle_mode, mode_transition_fade_factor, persist_vis_mode | Mode-cycling crossfade logic (extracted from widget, ~120 LOC) |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
@@ -288,11 +288,11 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 |--------|------|----------|---------|
 | Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha, u_slanted, u_border_radius | Segmented bar analyzer; 3 profiles (Legacy/Curved/Slanted); slanted: diagonal inner edges + linchpin both-side slant; curved: border radius 0-12px |
 | Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_prev_waveform[256], u_osc_ghost_alpha, u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_osc_vertical_shift, u_rainbow_enabled, u_rainbow_hue_offset | Pure audio waveform with Catmull-Rom spline, per-band energy, equalized multi-line glow (3 lines: bass/mid/high), ghost trail (previous waveform overlay), rainbow hue cycling, vertical shift slider (-50 to 200) |
-| Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_wave_effect, u_micro_wobble, u_osc_vertical_shift, u_heartbeat, u_heartbeat_intensity, u_rainbow_enabled, u_rainbow_hue_offset | Sine wave visualizer: audio-reactive amplitude, card adaptation, multi-line (up to 3) with per-line colors/travel, playback-gated oscillation, wave effect, micro wobble (smooth snake-like bass-driven), heartbeat (transient triangular bumps), rainbow hue cycling, vertical shift, line positioning (LOB=X phase, VShift=Y, Line2@70%, Line3@100%) |
+| Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_wave_effect, u_micro_wobble, u_osc_vertical_shift, u_heartbeat, u_heartbeat_intensity, u_rainbow_enabled, u_rainbow_hue_offset, u_width_reaction | Sine wave visualizer: audio-reactive amplitude, card adaptation, multi-line (up to 3) with tight phase offsets (0.315/0.90 radians), playback-gated oscillation, wave effect, micro wobble (smooth snake-like bass-driven), heartbeat (localised triangular spikes at zero-crossings, same positions all lines), rainbow hue cycling, vertical shift, width reaction, bass_pulse×1.1 sensitivity |
 | Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity, u_travel_time, u_nebula_tint{1,2} | Point-star starfield with nebula background, CPU-accumulated monotonic travel (dev-gated) |
 | Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy, u_blob_reactive_deformation (0-3.0), u_blob_constant_wobble, u_blob_reactive_wobble | 2D SDF organic metaball with separated constant wobble (time-driven, zero when cw=0) and reactive wobble (energy-driven), vocal wobble, dip contraction, CPU-smoothed glow, quadratic reactive deformation (range 0-3.0) |
 | Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
-| Bubble | widgets/spotify_visualizer/shaders/bubble.frag | u_bubble_count, u_bubbles_pos[110], u_bubbles_extra[110], u_specular_dir, u_outline_color, u_specular_color, u_gradient_light, u_gradient_dark, u_pop_color | SDF-based bubble visualizer: thin outlines, crescent specular highlights, warm gradient background, pop flash, rainbow hue cycling; CPU simulation on COMPUTE pool |
+| Bubble | widgets/spotify_visualizer/shaders/bubble.frag | u_bubble_count, u_bubbles_pos[110], u_bubbles_extra[110], u_bubbles_trail[330], u_trail_strength, u_specular_dir, u_outline_color, u_specular_color, u_gradient_light, u_gradient_dark, u_pop_color | SDF-based bubble visualizer: thin outlines, crescent specular highlights, warm gradient background (edge-to-edge fill, 0px margins), pop flash, rainbow hue cycling, motion trail ghost rings (3 steps, adjustable strength); CPU simulation on COMPUTE pool |
 
 > **Default tweak (v2.75):** Spectrum mode now ships with Single Piece Mode enabled in `core/settings/defaults.py`, matching the preferred “pillar” presentation without manual toggles.
 
@@ -410,7 +410,7 @@ value = settings.get("display.mode", "fill")
 | Settings Binding | ui/tabs/settings_binding.py | SliderBinding, CheckBinding, ComboDataBinding, ComboIndexBinding, ColorBinding, RawBinding, apply_bindings_load, collect_bindings_save | Declarative widget↔config key binding utility for reducing save/load boilerplate |
 | Shared Styles | ui/tabs/shared_styles.py | NoWheelSlider, SPINBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants and shared widgets (NoWheelSlider) for all settings tabs |
 | SourcesTab | ui/tabs/sources_tab.py | SourcesTab | Image source config |
-| TransitionsTab | ui/tabs/transitions_tab.py | TransitionsTab | Transition config |
+| TransitionsTab | ui/tabs/transitions_tab.py | TransitionsTab | Transition config; Burn Settings group (direction 4-way, jaggedness, glow intensity, char width, glow colour picker, smoke/ash toggles + density sliders) shown conditionally when Burn is selected |
 | DisplayTab | ui/tabs/display_tab.py | DisplayTab | Display settings |
 | AccessibilityTab | ui/tabs/accessibility_tab.py | AccessibilityTab | Accessibility options |
 | PresetsTab | ui/tabs/presets_tab.py | PresetsTab | Setting presets |

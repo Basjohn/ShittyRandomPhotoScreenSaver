@@ -80,6 +80,21 @@ class _SpotifyBeatEngine(QObject):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set process supervisor", exc_info=True)
     
+    def reset_smoothing_state(self) -> None:
+        """Reset all smoothing/energy state for a clean mode switch.
+
+        Called when the visualizer mode changes so the new mode starts
+        with fresh data instead of inheriting stale smoothed bars and
+        energy bands from the previous mode.
+        """
+        for i in range(len(self._smoothed_bars)):
+            self._smoothed_bars[i] = 0.0
+        self._last_smooth_ts = -1.0
+        self._energy_bands = EnergyBands()
+        self._waveform = [0.0] * self._waveform_count
+        self._latest_bars = None
+        logger.debug("[SPOTIFY_VIS] Beat engine smoothing state reset")
+
     def set_smoothing(self, tau: float) -> None:
         """Set the base smoothing time constant."""
         self._smoothing_tau = max(0.05, float(tau))
@@ -369,6 +384,17 @@ class _SpotifyBeatEngine(QObject):
 
     def get_energy_bands(self) -> EnergyBands:
         """Get the latest frequency-band energy snapshot."""
+        return self._energy_bands
+
+    def get_raw_energy_bands(self) -> EnergyBands:
+        """Get energy bands from the latest RAW (unsmoothed) bars.
+
+        Unlike get_energy_bands() which uses smoothed bars, this uses
+        _latest_bars directly so bass transients from kicks/drums are sharp.
+        """
+        raw = self._latest_bars
+        if raw:
+            return extract_energy_bands(raw)
         return self._energy_bands
 
     def wake(self) -> None:

@@ -155,6 +155,7 @@ def init_gl_pipeline(widget) -> None:
             (GLProgramCache.BLINDS, "blinds_program", "blinds_uniforms"),
             (GLProgramCache.CRUMBLE, "crumble_program", "crumble_uniforms"),
             (GLProgramCache.PARTICLE, "particle_program", "particle_uniforms"),
+            (GLProgramCache.BURN, "burn_program", "burn_uniforms"),
         ]
         
         for program_name, program_attr, uniforms_attr in programs_to_compile:
@@ -233,7 +234,7 @@ def cleanup_gl_pipeline(widget) -> None:
         program_attrs = [
             "basic_program", "raindrops_program", "warp_program", "diffuse_program",
             "blockflip_program", "peel_program", "crossfade_program", "slide_program",
-            "wipe_program", "blinds_program", "crumble_program",
+            "wipe_program", "blinds_program", "crumble_program", "particle_program", "burn_program",
         ]
         try:
             for attr in program_attrs:

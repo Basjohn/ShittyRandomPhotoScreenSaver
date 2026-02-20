@@ -628,7 +628,7 @@ def start_burn(
         old_pixmap=old_pixmap,
         new_pixmap=new_pixmap,
         progress=0.0,
-        direction=max(0, min(4, int(direction))),
+        direction=max(0, min(3, int(direction))),
         jaggedness=max(0.0, min(1.0, float(jaggedness))),
         glow_intensity=max(0.0, min(1.0, float(glow_intensity))),
         glow_color=tuple(glow_color),

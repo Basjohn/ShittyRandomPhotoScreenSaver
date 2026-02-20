@@ -142,11 +142,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Rainbow (Taste The Rainbow) mode
         self._rainbow_enabled: bool = False
         self._rainbow_speed: float = 0.5
+        self._rainbow_per_bar: bool = False
 
         # Bubble settings
         self._bubble_count: int = 0
         self._bubble_pos_data: list = []
         self._bubble_extra_data: list = []
+        self._bubble_trail_data: list = []
+        self._bubble_trail_strength: float = 0.0
         self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
         self._bubble_specular_color: QColor = QColor(255, 255, 255, 255)
         self._bubble_gradient_light: QColor = QColor(210, 170, 120, 255)
@@ -284,6 +287,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         border_radius: float = 0.0,
         rainbow_enabled: bool = False,
         rainbow_speed: float = 0.5,
+        rainbow_per_bar: bool = False,
         osc_ghosting_enabled: bool = False,
         osc_ghost_intensity: float = 0.4,
         sine_heartbeat: float = 0.0,
@@ -292,6 +296,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_count: int = 0,
         bubble_pos_data: list | None = None,
         bubble_extra_data: list | None = None,
+        bubble_trail_data: list | None = None,
+        bubble_trail_strength: float = 0.0,
         bubble_outline_color: QColor | None = None,
         bubble_specular_color: QColor | None = None,
         bubble_gradient_light: QColor | None = None,
@@ -472,6 +478,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Rainbow (Taste The Rainbow) mode
         self._rainbow_enabled = bool(rainbow_enabled)
         self._rainbow_speed = max(0.01, min(5.0, float(rainbow_speed)))
+        self._rainbow_per_bar = bool(rainbow_per_bar)
 
         # Oscilloscope ghost trail
         self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
@@ -484,6 +491,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_count = max(0, min(110, int(bubble_count)))
         self._bubble_pos_data = bubble_pos_data or []
         self._bubble_extra_data = bubble_extra_data or []
+        self._bubble_trail_data = bubble_trail_data or []
+        self._bubble_trail_strength = max(0.0, min(1.0, float(bubble_trail_strength)))
         if bubble_outline_color is not None:
             self._bubble_outline_color = QColor(bubble_outline_color) if not isinstance(bubble_outline_color, QColor) else bubble_outline_color
         if bubble_specular_color is not None:
@@ -902,11 +911,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_line2_color", "u_line2_glow_color",
                     "u_line3_color", "u_line3_glow_color",
                     "u_slanted", "u_border_radius",
-                    "u_rainbow_hue_offset",
+                    "u_rainbow_hue_offset", "u_rainbow_per_bar",
                     "u_prev_waveform", "u_osc_ghost_alpha",
                     "u_heartbeat", "u_heartbeat_intensity",
                     # Bubble mode uniforms
                     "u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
+                    "u_bubbles_trail", "u_trail_strength",
                     "u_specular_dir", "u_outline_color", "u_specular_color",
                     "u_gradient_light", "u_gradient_dark", "u_pop_color",
                 ):
@@ -1113,21 +1123,40 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             if loc >= 0:
                 _gl.glUniform1f(loc, float(self._accumulated_time))
 
+            # --- Rainbow per-bar flag (spectrum only) ---
+            loc_pb = u.get("u_rainbow_per_bar", -1)
+            if loc_pb >= 0:
+                _gl.glUniform1i(loc_pb, 1 if self._rainbow_per_bar else 0)
+
             # --- Rainbow hue offset (all modes) ---
             loc = u.get("u_rainbow_hue_offset", -1)
-            # Log whenever rainbow is enabled so we can confirm loc is valid
-            if self._rainbow_enabled and not getattr(self, '_rainbow_active_logged', False):
-                logger.debug(
-                    "[SPOTIFY_VIS] Rainbow ACTIVE: enabled=%s speed=%.2f loc=%d mode=%s",
-                    self._rainbow_enabled, self._rainbow_speed, loc, mode,
+            # Log per-mode when rainbow is active so we can confirm loc is valid
+            _rainbow_logged_mode = getattr(self, '_rainbow_logged_mode', None)
+            if self._rainbow_enabled and _rainbow_logged_mode != mode:
+                hue_val = (self._accumulated_time * self._rainbow_speed * 0.1) % 1.0
+                logger.info(
+                    "[SPOTIFY_VIS] Rainbow ACTIVE: enabled=%s per_bar=%s speed=%.2f loc=%d pb_loc=%d mode=%s "
+                    "accum_time=%.2f hue=%.4f",
+                    self._rainbow_enabled, self._rainbow_per_bar, self._rainbow_speed, loc, loc_pb, mode,
+                    self._accumulated_time, hue_val,
                 )
-                self._rainbow_active_logged = True
+                self._rainbow_logged_mode = mode
             if not self._rainbow_enabled:
-                self._rainbow_active_logged = False
+                self._rainbow_logged_mode = None
             if loc >= 0:
                 if self._rainbow_enabled:
-                    # Continuous hue rotation: fract() keeps it in 0..1
-                    hue_offset = (self._accumulated_time * self._rainbow_speed * 0.1) % 1.0
+                    # Continuous hue rotation: fract() keeps it in 0..1.
+                    # Remap 0..1 to 0.002..1.002 then fract() so hue_offset
+                    # never hits the shader's <= 0.001 dead-zone guard, which
+                    # would cause a single-frame white flash at the wrap point.
+                    raw = (self._accumulated_time * self._rainbow_speed * 0.1) % 1.0
+                    hue_offset = (raw + 0.002) % 1.0 if raw < 0.001 else raw
+                    _gl.glUniform1f(loc, float(hue_offset))
+                elif self._rainbow_per_bar and mode == 'spectrum':
+                    # Per-bar unique colours: needs a non-zero hue offset to cycle
+                    # even when global rainbow is off. Use a slow independent cycle.
+                    raw = (self._accumulated_time * 0.05) % 1.0
+                    hue_offset = (raw + 0.002) % 1.0 if raw < 0.001 else raw
                     _gl.glUniform1f(loc, float(hue_offset))
                 else:
                     _gl.glUniform1f(loc, 0.0)
@@ -1545,12 +1574,30 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         extra_buf[i] = float(extra_data[i])
                     _gl.glUniform4fv(loc, 110, extra_buf)
 
-                # Specular direction (normalised vec2)
+                # Bubble trail data (vec2 array: TRAIL_STEPS xy pairs per bubble)
+                loc = u.get("u_bubbles_trail", -1)
+                if loc >= 0 and bcount > 0:
+                    trail_data = self._bubble_trail_data
+                    trail_buf = np.zeros(110 * 3 * 2, dtype="float32")  # TRAIL_STEPS=3, xy=2
+                    copy_len = min(len(trail_data), 110 * 3 * 2)
+                    for i in range(copy_len):
+                        trail_buf[i] = float(trail_data[i])
+                    _gl.glUniform2fv(loc, 110 * 3, trail_buf)
+
+                loc = u.get("u_trail_strength", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._bubble_trail_strength))
+
+                # Specular direction (normalised vec2).
+                # UV Y is inverted (0=top, 1=bottom), so screen "top" = low UV.y.
+                # The shader projects (uv - center) onto -u_specular_dir, so to put
+                # the highlight at screen-top-left we need u_specular_dir = (-x, -y)
+                # because -(-y) pushes the bright spot toward low UV.y (= screen top).
                 spec_dir_map = {
-                    "top_left": (-0.707, 0.707),
-                    "top_right": (0.707, 0.707),
-                    "bottom_left": (-0.707, -0.707),
-                    "bottom_right": (0.707, -0.707),
+                    "top_left":     ( 0.707,  0.707),
+                    "top_right":    (-0.707,  0.707),
+                    "bottom_left":  ( 0.707, -0.707),
+                    "bottom_right": (-0.707, -0.707),
                 }
                 sd = spec_dir_map.get(self._bubble_specular_direction, (-0.707, 0.707))
                 loc = u.get("u_specular_dir", -1)

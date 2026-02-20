@@ -75,7 +75,7 @@ class GLCompositorBurnTransition(BaseTransition):
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
 
-        self._direction: int = max(0, min(4, int(direction)))
+        self._direction: int = max(0, min(3, int(direction)))
         self._jaggedness: float = max(0.0, min(1.0, float(jaggedness)))
         self._glow_intensity: float = max(0.0, min(1.0, float(glow_intensity)))
         self._glow_color: tuple = tuple(glow_color)

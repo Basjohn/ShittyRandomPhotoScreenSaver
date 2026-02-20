@@ -126,13 +126,20 @@ class BubbleState:
     alpha: float      # current opacity (1.0 normal, fading on pop)
     drift_bias: float # directional drift bias (-1..1)
     rotation: float   # current rotation angle (radians)
+    vx: float         # current x velocity (for diagonal directions)
+    vy: float         # current y velocity
+    pulse_energy: float  # smoothed energy for pulse effect
+    popping: bool     # True when in pop/fade-out phase
+    trail: List[Tuple[float,float]]  # previous positions, max TRAIL_STEPS=3
 ```
 
 ### Shader Uniform Layout
 ```glsl
 uniform int u_bubble_count;           // active bubble count (0..110)
 uniform vec4 u_bubbles_pos[110];      // xy = position, z = radius, w = alpha
-uniform vec2 u_bubbles_extra[110];    // x = specular_size, y = rotation
+uniform vec4 u_bubbles_extra[110];    // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
+uniform vec2 u_bubbles_trail[330];    // 110 * TRAIL_STEPS(3) previous (x,y) positions, oldest first
+uniform float u_trail_strength;       // 0.0 = off, 1.0 = full ghost rings
 uniform vec2 u_specular_dir;          // normalised direction to light source
 uniform vec4 u_outline_color;         // bubble outline colour
 uniform vec4 u_specular_color;        // specular highlight colour
@@ -167,8 +174,12 @@ uniform float u_dpr;                  // device pixel ratio
 | `bubble_gradient_dark` | list[int] | [80,60,50,255] | RGBA | Gradient dark end |
 | `bubble_pop_color` | list[int] | [255,255,255,180] | RGBA | Pop flash colour |
 | `bubble_specular_direction` | str | "top_left" | top_left/top_right/bottom_left/bottom_right | Light source direction |
+| `bubble_trail_strength` | float | 0.0 | 0.0–1.0 | Motion trail ghost ring intensity (0 = off) |
+| `bubble_big_size_max` | float | 0.038 | 0.010–0.060 | Max radius for big bubbles (normalised) |
+| `bubble_small_size_max` | float | 0.018 | 0.004–0.030 | Max radius for small bubbles (normalised) |
+| `bubble_growth` | float | 3.0 | 1.0–5.0 | Card height multiplier |
 
-**Total: 19 settings** (9 sliders, 3 comboboxes, 5 colour pickers, 2 int sliders)
+**Total: 23 settings** (12 sliders, 3 comboboxes, 5 colour pickers, 2 int sliders, 1 float)
 
 ## Research & Implementation Steps
 
@@ -220,6 +231,9 @@ uniform float u_dpr;                  // device pixel ratio
 - [x] **Rainbow mode:** Verified compatible with bubble shader.
 - [x] **Card height:** Bubble added to `card_height.py` DEFAULT_GROWTH (3.0x).
 - [x] **Bug fix:** Simulation-only kwargs removed from GPU push to prevent TypeError fallback to spectrum.
+- [x] **Motion trails (Feb 2026):** Ghost rings at 3 previous positions per bubble (`TRAIL_STEPS=3`). `BubbleState.trail` stores `List[Tuple[float,float]]`. `snapshot()` returns 3-tuple `(pos_data, extra_data, trail_data)`. Trail data uploaded as `u_bubbles_trail[330]` (vec2 array) + `u_trail_strength` float. Shader renders faded outline rings at trail positions before the main bubble loop. `bubble_trail_strength` slider (0–100%) added to bubble UI and wired through all 8 settings layers.
+- [x] **Specular direction mapping fixed (Feb 2026):** All 4 directions (top_left/right/bottom_left/right) now map correctly in the overlay.
+- [x] **Diagonal movement fixed (Feb 2026):** All 4 diagonal variants work; vx/vy stored per-bubble.
 - [ ] **Performance:** Regression tests needed.
 - [ ] **Visual quality:** Compare against Logo.png reference.
 - [ ] **Edge cases:** Test with all sliders at 0/max, all stream directions.

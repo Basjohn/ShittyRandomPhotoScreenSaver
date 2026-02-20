@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from core.logging.logger import get_logger
@@ -21,6 +21,9 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 MAX_BUBBLES = 110
+
+
+TRAIL_STEPS = 3  # number of ghost trail positions stored per bubble
 
 
 @dataclass
@@ -44,6 +47,7 @@ class BubbleState:
     spec_size_mut: float = 1.0   # per-bubble specular size mutation (0.7–1.4)
     spec_ox: float = 0.0         # per-bubble specular offset X mutation (-0.08..0.08)
     spec_oy: float = 0.0         # per-bubble specular offset Y mutation (-0.08..0.08)
+    trail: List[Tuple[float, float]] = field(default_factory=list)  # previous (x, y) positions
 
 
 # Direction vectors for stream directions
@@ -53,8 +57,15 @@ _DIRECTION_VECTORS: Dict[str, Tuple[float, float]] = {
     "down": (0.0, -1.0),
     "left": (-1.0, 0.0),
     "right": (1.0, 0.0),
-    "diagonal": (0.707, 0.707),
+    "diagonal": (0.707, 0.707),  # placeholder; actual direction chosen per-spawn
 }
+
+_DIAGONAL_VECTORS: Tuple[Tuple[float, float], ...] = (
+    ( 0.707,  0.707),  # up-right
+    (-0.707,  0.707),  # up-left
+    ( 0.707, -0.707),  # down-right
+    (-0.707, -0.707),  # down-left
+)
 
 
 def _random_direction() -> Tuple[float, float]:
@@ -65,6 +76,8 @@ def _random_direction() -> Tuple[float, float]:
 def _get_stream_vector(direction: str) -> Tuple[float, float]:
     if direction == "random":
         return _random_direction()
+    if direction == "diagonal":
+        return random.choice(_DIAGONAL_VECTORS)
     return _DIRECTION_VECTORS.get(direction, (0.0, 1.0))
 
 
@@ -80,11 +93,18 @@ def _spawn_position(direction: str, is_big: bool) -> Tuple[float, float]:
     elif direction == "right":
         return (-margin, random.uniform(margin, 1.0 - margin))
     elif direction == "diagonal":
-        # Spawn at bottom-left edge
+        # Pick a random diagonal; spawn at the opposite corner/edge
+        diag = random.choice(_DIAGONAL_VECTORS)
+        dx, dy = diag
+        # Spawn on the edge opposite to the travel direction
         if random.random() < 0.5:
-            return (-margin, random.uniform(0.3, 1.0 + margin))
+            # Spawn on the horizontal edge opposite to dy
+            edge_y = (1.0 + margin) if dy > 0 else -margin
+            return (random.uniform(margin, 1.0 - margin), edge_y)
         else:
-            return (random.uniform(-margin, 0.7), 1.0 + margin)
+            # Spawn on the vertical edge opposite to dx
+            edge_x = (-margin) if dx > 0 else (1.0 + margin)
+            return (edge_x, random.uniform(margin, 1.0 - margin))
     elif direction == "none":
         return (random.uniform(0.1, 0.9), random.uniform(0.1, 0.9))
     else:  # random
@@ -100,6 +120,8 @@ class BubbleSimulation:
         self._big_size_max: float = 0.038
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
+        self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
+        self._trail_accumulator: float = 0.0  # time accumulator for trail sampling
 
     @property
     def count(self) -> int:
@@ -126,6 +148,7 @@ class BubbleSimulation:
         drift_dir = str(settings.get("bubble_drift_direction", "random"))
         self._big_size_max = float(settings.get("bubble_big_size_max", 0.038))
         self._small_size_max = float(settings.get("bubble_small_size_max", 0.018))
+        trail_strength = float(settings.get("bubble_trail_strength", 0.0))
         # big_bass_pulse / small_freq_pulse are read in snapshot(), not tick()
 
         # Energy — accept both object (EnergyBands) and dict snapshots
@@ -142,25 +165,34 @@ class BubbleSimulation:
             high = getattr(energy_bands, 'high', 0.0)
             overall = getattr(energy_bands, 'overall', 0.0)
 
-        # Diagnostic: log energy + key settings every 120 ticks (~2s at 60fps)
+        # Diagnostic: log energy values. First 10 ticks at INFO level, then every 60.
         self._diag_tick_count += 1
-        if self._diag_tick_count % 120 == 1:
-            logger.debug(
-                "[BUBBLE_SIM] diag tick=%d dt=%.3f bass=%.3f mid=%.3f high=%.3f overall=%.3f "
-                "speed=%.2f reactivity=%.2f",
-                self._diag_tick_count, dt, bass, mid, high, overall,
+        if self._diag_tick_count <= 10 or self._diag_tick_count % 60 == 0:
+            # Find max pulse_energy among existing bubbles
+            max_pe = max((b.pulse_energy for b in self._bubbles), default=0.0)
+            logger.info(
+                "[BUBBLE_SIM] tick=%d dt=%.3f bass=%.3f mid=%.3f overall=%.3f "
+                "bubbles=%d max_pe=%.3f spd_e=%.3f speed=%.2f react=%.2f",
+                self._diag_tick_count, dt, bass, mid, overall,
+                len(self._bubbles), max_pe, self._smoothed_speed_energy,
                 stream_speed, stream_reactivity,
             )
 
-        # Effective speed with reactivity
-        # overall from extract_energy_bands is RMS of 0-1 bars, typically 0.1-0.5 during music.
-        # Remap to 0-1 range for reactivity calculation.
-        overall_remapped = min(1.0, overall * 3.0)
-        # Reactivity: at max, speed scales from 0.2x (silence) to 1.0x (loud).
-        # At zero reactivity, speed is constant at stream_speed.
-        speed_scale = (1.0 - stream_reactivity) + stream_reactivity * (0.2 + 0.8 * overall_remapped)
+        # Travel speed uses SMOOTHED mid/high so it flows with the melody.
+        # Raw mid/high would jerk on every transient.
+        smooth_mid = float(energy_bands.get('smooth_mid', mid)) if isinstance(energy_bands, dict) else mid
+        smooth_high = float(energy_bands.get('smooth_high', high)) if isinstance(energy_bands, dict) else high
+        vocal_speed = smooth_mid * 0.7 + smooth_high * 0.3
+        if vocal_speed > self._smoothed_speed_energy:
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 18.0)
+        else:
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 1.5)
+        # At max reactivity: speed ranges from 0.15x (silence) to 1.0x (loud vocal).
+        # At zero reactivity: speed is constant at stream_speed.
+        speed_energy = min(1.0, self._smoothed_speed_energy)
+        speed_scale = (1.0 - stream_reactivity) + stream_reactivity * (0.15 + 0.85 * speed_energy)
         effective_speed = stream_speed * speed_scale
-        base_vel = effective_speed * 0.35  # normalised units/sec — raised from 0.15 for visible movement
+        base_vel = effective_speed * 0.35  # normalised units/sec
 
         # --- Update existing bubbles ---
         to_remove: List[int] = []
@@ -193,13 +225,19 @@ class BubbleSimulation:
                     continue
 
             # Stream velocity
-            sv = _get_stream_vector(stream_dir) if stream_dir != "random" else (b.vx, b.vy)
-            if stream_dir == "random" and b.vx == 0.0 and b.vy == 0.0:
-                rd = _random_direction()
-                b.vx, b.vy = rd
+            use_stored = stream_dir in ("random", "diagonal")
+            sv = _get_stream_vector(stream_dir) if not use_stored else (b.vx, b.vy)
+            if use_stored and b.vx == 0.0 and b.vy == 0.0:
+                if stream_dir == "diagonal":
+                    dv = random.choice(_DIAGONAL_VECTORS)
+                    b.vx, b.vy = dv
+                else:
+                    rd = _random_direction()
+                    b.vx, b.vy = rd
+                sv = (b.vx, b.vy)
 
-            move_x = (sv[0] if stream_dir != "random" else b.vx) * base_vel * dt
-            move_y = (sv[1] if stream_dir != "random" else b.vy) * base_vel * dt
+            move_x = sv[0] * base_vel * dt
+            move_y = sv[1] * base_vel * dt
 
             # Drift (sinusoidal lateral wander)
             drift_phase = b.phase + self._time * drift_speed * 2.0
@@ -216,14 +254,25 @@ class BubbleSimulation:
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
 
-            # Pulse energy: amplify raw bands then smooth (fast attack, slow decay)
-            # Bass from extract_energy_bands is avg of first 25% of 0-1 bars, typically 0.1-0.6.
-            # Amplify 2.5x so pulse_energy reaches 0.8-1.0 on strong beats.
-            raw_energy = min(1.0, bass * 2.5) if b.is_big else min(1.0, (mid * 0.6 + high * 0.4) * 2.5)
+            # Record trail position (sampled every ~80ms)
+            if trail_strength > 0.001 and not b.popping:
+                b.trail.append((b.x, b.y))
+                if len(b.trail) > TRAIL_STEPS:
+                    b.trail.pop(0)
+
+            # Pulse energy: smooth per-bubble energy for visible beat-sync thump.
+            raw_energy = bass if b.is_big else (mid * 0.6 + high * 0.4)
+            raw_energy = min(1.0, max(0.0, raw_energy))
+            # Small bubbles below ~6px rendered radius flicker between dot and
+            # outline when pulsing rapidly.  Use much slower decay for them.
+            is_tiny = (not b.is_big) and b.radius < 0.008
             if raw_energy > b.pulse_energy:
-                b.pulse_energy = b.pulse_energy + (raw_energy - b.pulse_energy) * min(1.0, dt * 15.0)
+                # Fast attack: ramp up in ~80ms (dt*12)
+                b.pulse_energy += (raw_energy - b.pulse_energy) * min(1.0, dt * 12.0)
             else:
-                b.pulse_energy = b.pulse_energy + (raw_energy - b.pulse_energy) * min(1.0, dt * 1.0)
+                # Decay: fast for big/normal, very slow for tiny to avoid flicker
+                decay_rate = 1.2 if is_tiny else 4.0
+                b.pulse_energy += (raw_energy - b.pulse_energy) * min(1.0, dt * decay_rate)
 
             # Rotation (wobble)
             vocal_energy = mid * 0.7 + bass * 0.2 + high * 0.1
@@ -328,11 +377,14 @@ class BubbleSimulation:
         else:  # none
             drift_bias = random.uniform(-0.3, 0.3)
 
-        # Random initial velocity for "random" stream direction
+        # Per-bubble velocity for random and diagonal stream directions
         vx, vy = 0.0, 0.0
         if stream_dir == "random":
             rd = _random_direction()
             vx, vy = rd
+        elif stream_dir == "diagonal":
+            dv = random.choice(_DIAGONAL_VECTORS)
+            vx, vy = dv
 
         # Initial fill: pre-age and start transparent for fade-in
         age = 0.0
@@ -358,30 +410,62 @@ class BubbleSimulation:
 
     def snapshot(self, bass: float = 0.0, mid_high: float = 0.0,
                  big_bass_pulse: float = 0.5,
-                 small_freq_pulse: float = 0.5) -> Tuple[List[float], List[float]]:
+                 small_freq_pulse: float = 0.5) -> Tuple[List[float], List[float], List[float]]:
         """Return flat lists for uniform upload.
 
         Returns:
-            pos_data: [x, y, radius, alpha, ...] × count (vec4 per bubble)
+            pos_data:   [x, y, radius, alpha] × count (vec4 per bubble)
             extra_data: [spec_size_factor, rotation, spec_ox, spec_oy] × count (vec4 per bubble)
+            trail_data: [x0,y0, x1,y1, x2,y2] × count (TRAIL_STEPS xy pairs per bubble, 0,0 if no history)
         """
         pos_data: List[float] = []
         extra_data: List[float] = []
+        trail_data: List[float] = []
+        _snap_diag = (self._diag_tick_count <= 5 or self._diag_tick_count % 60 == 0)
 
         for b in self._bubbles:
-            # Pulse: smoothed energy drives a large size thump.
-            # At pulse_energy=1.0, max slider: big bubbles grow 2.0x their base radius.
+            # Pulse: smoothed energy drives visible size thump.
+            # Multipliers: big 4.0x, small 3.0x at max slider (slider 0-1).
+            # Small bubbles below tiny threshold: suppress pulse to avoid
+            # flicker between dot and outline rendering.
+            is_tiny = (not b.is_big) and b.radius < 0.008
             if b.is_big:
-                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 2.0
+                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.0
+            elif is_tiny:
+                # Tiny bubbles: minimal pulse to avoid dot/outline flicker
+                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.5
             else:
-                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 1.5
+                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 3.0
 
             r = b.radius * pulse_factor
 
-            # Specular size: pulse + per-bubble mutation
-            spec_factor = pulse_factor * b.spec_size_mut
+            # Specular pulses at slightly less than half the bubble outline rate.
+            # Base specular size (spec_size_mut) is unchanged; only the
+            # pulse-driven delta is scaled (0.475 = half rate minus 5%).
+            spec_pulse = (pulse_factor - 1.0) * 0.475
+            spec_factor = b.spec_size_mut * (1.0 + spec_pulse)
 
             pos_data.extend([b.x, b.y, r, b.alpha])
             extra_data.extend([spec_factor, b.rotation, b.spec_ox, b.spec_oy])
 
-        return pos_data, extra_data
+            # Trail: emit TRAIL_STEPS (x, y) pairs; pad with (0, 0) if no history yet
+            trail = b.trail
+            for step in range(TRAIL_STEPS):
+                idx = len(trail) - TRAIL_STEPS + step
+                if idx >= 0 and idx < len(trail):
+                    trail_data.extend([trail[idx][0], trail[idx][1]])
+                else:
+                    trail_data.extend([b.x, b.y])
+
+        # Diagnostic: log first big bubble's pulse details
+        if _snap_diag and self._bubbles:
+            fb = next((b for b in self._bubbles if b.is_big), self._bubbles[0])
+            pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * (4.0 if fb.is_big else 3.0)
+            logger.info(
+                "[BUBBLE_SIM] snapshot: big_bass_pulse=%.2f small_freq_pulse=%.2f "
+                "first_big: pe=%.3f pf=%.3f base_r=%.4f final_r=%.4f",
+                big_bass_pulse, small_freq_pulse,
+                fb.pulse_energy, pf, fb.radius, fb.radius * pf,
+            )
+
+        return pos_data, extra_data, trail_data

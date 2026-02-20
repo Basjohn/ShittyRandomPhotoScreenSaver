@@ -148,7 +148,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
 
         # CENTER-OUT MIRRORED LAYOUT
-        _LEGACY_PROFILE = [0.10, 0.15, 0.25, 0.50, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.50, 0.25, 0.15, 0.10]
+        _LEGACY_PROFILE = [0.10, 0.14, 0.18, 0.40, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.40, 0.18, 0.14, 0.10]
         _use_curved = getattr(worker, '_use_curved_profile', False)
 
         overall_energy = (bass_energy * 0.9 + mid_energy * 0.6 + treble_energy * 0.35)

@@ -143,6 +143,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     # --- Spectrum -----------------------------------------------------
     if 'spectrum_single_piece' in kwargs:
         widget._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
+    if 'spectrum_rainbow_per_bar' in kwargs:
+        widget._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
 
     if 'spectrum_border_radius' in kwargs:
         widget._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
@@ -265,6 +267,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._rainbow_enabled = bool(kwargs['rainbow_enabled'])
     if 'rainbow_speed' in kwargs:
         widget._rainbow_speed = max(0.01, min(5.0, float(kwargs['rainbow_speed'])))
+    if 'rainbow_per_bar' in kwargs:
+        widget._rainbow_per_bar = bool(kwargs['rainbow_per_bar'])
 
     # --- Oscilloscope ghost trail ----------------------------------------
     if 'osc_ghosting_enabled' in kwargs:
@@ -334,8 +338,14 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if val not in ('top_left', 'top_right', 'bottom_left', 'bottom_right'):
             val = 'top_left'
         widget._bubble_specular_direction = val
+    if 'bubble_big_size_max' in kwargs:
+        widget._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
+    if 'bubble_small_size_max' in kwargs:
+        widget._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
     if 'bubble_growth' in kwargs:
         widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
+    if 'bubble_trail_strength' in kwargs:
+        widget._bubble_trail_strength = max(0.0, min(1.0, float(kwargs['bubble_trail_strength'])))
 
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
@@ -348,6 +358,7 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     # Rainbow applies to ALL modes (including spectrum)
     extra['rainbow_enabled'] = getattr(widget, '_rainbow_enabled', False)
     extra['rainbow_speed'] = getattr(widget, '_rainbow_speed', 0.5)
+    extra['rainbow_per_bar'] = getattr(widget, '_rainbow_per_bar', False)
     extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
     extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
     extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
@@ -425,6 +436,8 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
         extra['bubble_specular_direction'] = getattr(widget, '_bubble_specular_direction', 'top_left')
         extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
         extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
+        extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
+        extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
         extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
 
     return extra

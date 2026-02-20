@@ -18,6 +18,45 @@ uniform int u_single_piece;        // 1 = solid bars (no segment gaps)
 uniform int u_slanted;             // 1 = diagonal-sliced bar edges facing center
 uniform float u_border_radius;     // border radius in px (0 = square, ~6 = rounded)
 uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
+uniform int u_rainbow_per_bar;      // 1 = unique colour per bar, 0 = single shifting colour
+
+// Apply rainbow hue shift to a colour. Returns the shifted colour.
+// Called from both single-piece and segmented code paths.
+vec4 apply_spectrum_rainbow(vec4 col, int bidx) {
+    if (u_rainbow_hue_offset <= 0.001) return col;
+    // Per-bar: each bar gets a unique hue based on position + temporal rotation.
+    // Uniform: all bars share the same temporally-shifting hue.
+    float bar_frac = (u_rainbow_per_bar == 1)
+        ? float(bidx) / max(float(u_bar_count - 1), 1.0)
+        : 0.0;
+    vec3 rc = col.rgb;
+    float cmax = max(rc.r, max(rc.g, rc.b));
+    float cmin = min(rc.r, min(rc.g, rc.b));
+    float rb_d = cmax - cmin;
+    float h = 0.0;
+    if (rb_d > 0.0001) {
+        if (cmax == rc.r) h = mod((rc.g - rc.b) / rb_d, 6.0);
+        else if (cmax == rc.g) h = (rc.b - rc.r) / rb_d + 2.0;
+        else h = (rc.r - rc.g) / rb_d + 4.0;
+        h /= 6.0;
+        if (h < 0.0) h += 1.0;
+    }
+    float s = (cmax > 0.0001) ? rb_d / cmax : 0.0;
+    float v = cmax;
+    if (s < 0.05 && v > 0.05) s = 1.0;
+    h = fract(bar_frac + u_rainbow_hue_offset);
+    float c = v * s;
+    float rb_x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+    float m = v - c;
+    vec3 rgb;
+    if      (h < 1.0/6.0) rgb = vec3(c, rb_x, 0.0);
+    else if (h < 2.0/6.0) rgb = vec3(rb_x, c, 0.0);
+    else if (h < 3.0/6.0) rgb = vec3(0.0, c, rb_x);
+    else if (h < 4.0/6.0) rgb = vec3(0.0, rb_x, c);
+    else if (h < 5.0/6.0) rgb = vec3(rb_x, 0.0, c);
+    else                  rgb = vec3(c, 0.0, rb_x);
+    return vec4(rgb + m, col.a);
+}
 
 void main() {
     if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
@@ -125,22 +164,23 @@ void main() {
         peak = 1.0;
     }
 
-    // Blanket power reduction for Spectrum mode: scale all bars
-    // to match the visual intensity of Spotify at lower volumes.
-    value *= 0.70;
-    peak *= 0.85;
+    // Mild power curve: pushes quiet bars slightly down, loud bars reach top.
+    // pow(1.15): bar 0.3 → 0.26, bar 0.7 → 0.65, bar 1.0 → 1.0
+    float curved = pow(value, 1.15);
+    float curved_peak = pow(peak, 1.15);
 
-    // Apply height-aware visual boost: the CPU scales bars by 0.55 to prevent
-    // pinning at normal volume.  When the card grows beyond its default height,
-    // u_bar_height_scale > 1.0 stretches bars to fill the extra space while
-    // keeping the anti-pinning behaviour at default card size.
-    float height_scale = max(1.0, u_bar_height_scale);
-    float boosted = value * 1.2 * height_scale;
+    // height_scale compensates so bars fill taller cards without pinning.
+    // At 80px (default): scale=1.0  → bar 1.0 → 0.55 curved → ~0.72 boosted
+    // At 277px card:     scale=1.75 → bar 1.0 → 0.55 curved → ~0.96 boosted
+    float raw_hs = max(1.0, u_bar_height_scale);
+    float height_scale = 1.0 + (sqrt(raw_hs) - 1.0) * 1.0;
+    if (height_scale > 1.85) height_scale = 1.85;
+    float boosted = curved * height_scale;
     if (boosted > 0.95) {
         boosted = 0.95;
     }
 
-    float boosted_peak = peak * 1.2 * height_scale;
+    float boosted_peak = curved_peak * height_scale;
     if (boosted_peak > 0.95) {
         boosted_peak = 0.95;
     }
@@ -175,13 +215,11 @@ void main() {
         float active_height = boosted * inner_height;
         float peak_height = boosted_peak * inner_height;
 
-        // Ensure at least 1px visible baseline
-        if (active_height < 1.0 && (u_playing == 1 || value > 0.0)) {
-            active_height = 1.0;
-        }
 
         bool is_bar = (y_rel < active_height);
-        bool is_ghost = (!is_bar && peak_height > active_height && y_rel < peak_height);
+        // Suppress ghost when bar is silent (active_height < 1px) to prevent
+        // a white border flash from a decaying peak on a zero-height bar.
+        bool is_ghost = (!is_bar && active_height >= 1.0 && peak_height > active_height && y_rel < peak_height);
 
         if (!is_bar && !is_ghost) {
             discard;
@@ -278,6 +316,8 @@ void main() {
         float bw_px = floor(bar_width);
         float bx = floor(bar_local_x);
 
+        vec4 sp_color;
+        bool sp_is_border = false;
         if (is_ghost) {
             float ghost_alpha = clamp(u_ghost_alpha, 0.0, 1.0);
             if (ghost_alpha <= 0.0) {
@@ -290,7 +330,8 @@ void main() {
             float ghost_factor = mix(1.0, 0.15, t);
             vec4 ghost = border;
             ghost.a *= ghost_alpha * ghost_factor;
-            fragColor = ghost;
+            sp_color = ghost;
+            sp_is_border = true;
         } else {
             // Border on left/right edges and top edge of the bar
             bool on_border = false;
@@ -302,8 +343,11 @@ void main() {
                 bool on_bottom = (y_rel < 1.0);
                 on_border = on_side || on_top || on_bottom;
             }
-            fragColor = on_border ? border : fill;
+            sp_is_border = on_border;
+            sp_color = on_border ? border : fill;
         }
+        // Border and ghost pixels keep their original colour (white stays white).
+        fragColor = sp_is_border ? sp_color : apply_spectrum_rainbow(sp_color, bar_index);
         return;
     }
 
@@ -445,6 +489,7 @@ void main() {
     border.a *= u_fade;
 
     vec4 out_color;
+    bool seg_is_border = false;
     if (is_ghost_frag) {
         float ghost_alpha = clamp(u_ghost_alpha, 0.0, 1.0);
         if (ghost_alpha <= 0.0) {
@@ -467,41 +512,12 @@ void main() {
         vec4 ghost = border;
         ghost.a *= ghost_alpha * ghost_factor;
         out_color = ghost;
+        seg_is_border = true;
     } else {
+        seg_is_border = on_border;
         out_color = on_border ? border : fill;
     }
 
-    // Rainbow hue shift (Taste The Rainbow mode)
-    if (u_rainbow_hue_offset > 0.001) {
-        vec3 rc = out_color.rgb;
-        float cmax = max(rc.r, max(rc.g, rc.b));
-        float cmin = min(rc.r, min(rc.g, rc.b));
-        float delta = cmax - cmin;
-        float h = 0.0;
-        if (delta > 0.0001) {
-            if (cmax == rc.r) h = mod((rc.g - rc.b) / delta, 6.0);
-            else if (cmax == rc.g) h = (rc.b - rc.r) / delta + 2.0;
-            else h = (rc.r - rc.g) / delta + 4.0;
-            h /= 6.0;
-            if (h < 0.0) h += 1.0;
-        }
-        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
-        float v = cmax;
-        // Force saturation on greyscale so rainbow colouring is visible
-        if (s < 0.05 && v > 0.05) s = 1.0;
-        h = fract(h + u_rainbow_hue_offset);
-        float c = v * s;
-        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
-        float m = v - c;
-        vec3 rgb;
-        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
-        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
-        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
-        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
-        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
-        else                  rgb = vec3(c, 0.0, x);
-        out_color.rgb = rgb + m;
-    }
-
-    fragColor = out_color;
+    // Border and ghost pixels keep their original colour (white stays white).
+    fragColor = seg_is_border ? out_color : apply_spectrum_rainbow(out_color, bar_index);
 }

@@ -55,7 +55,7 @@ The burn front position is: `burn_x = u_progress * (1.0 + noise_amplitude) - noi
 
 | Setting Key | Type | Default | Range | Description |
 |---|---|---|---|---|
-| `burn_direction` | str | "left_to_right" | left_to_right/right_to_left/top_to_bottom/bottom_to_top/center_out | Burn direction |
+| `burn_direction` | str | "left_to_right" | left_to_right/right_to_left/top_to_bottom/bottom_to_top | Burn direction (**center_out removed** — direction clamped 0–3) |
 | `burn_jaggedness` | float | 0.5 | 0.0–1.0 | Edge noise amplitude (0=smooth wipe, 1=very jagged) |
 | `burn_glow_intensity` | float | 0.7 | 0.0–1.0 | Warm glow brightness on burning edge |
 | `burn_glow_color` | list[int] | [255,140,30,255] | RGBA | Primary glow colour (orange) |
@@ -75,72 +75,47 @@ uniform sampler2D u_texture1;       // new image
 uniform float u_progress;           // 0.0–1.0 transition progress
 uniform vec2 u_resolution;          // framebuffer size
 uniform float u_dpr;                // device pixel ratio
-uniform int u_direction;            // 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=center→out
+uniform int u_direction;            // 0=L→R, 1=R→L, 2=T→B, 3=B→T (clamped 0–3; center-out removed)
 uniform float u_jaggedness;         // noise amplitude (0–1)
 uniform float u_glow_intensity;     // glow brightness (0–1)
 uniform vec4 u_glow_color;          // glow colour (RGBA)
 uniform float u_char_width;         // char zone width (normalised)
-uniform int u_smoke_enabled;        // 1=on, 0=off
-uniform float u_smoke_density;      // smoke opacity multiplier
-uniform int u_ash_enabled;          // 1=on, 0=off
-uniform float u_ash_density;        // ash density multiplier
+uniform int u_smoke_enabled;        // 1=on, 0=off (kept for API compat, unused in current shader)
+uniform float u_smoke_density;      // smoke opacity multiplier (kept for API compat)
+uniform int u_ash_enabled;          // 1=on, 0=off (kept for API compat, unused in current shader)
+uniform float u_ash_density;        // ash density multiplier (kept for API compat)
 uniform float u_time;               // wall-clock time for animation
 uniform float u_seed;               // random seed per-transition for variety
 ```
 
 ## Research & Implementation Steps
 
-### Phase 1: Shader Development (`transitions/shaders/burn.frag`)
-- [ ] **Research:** Review existing GL compositor transition shaders (e.g., `gl_compositor_wipe_transition.py` and its shader) to understand the uniform interface and texture sampling pattern.
-- [ ] **Research:** Evaluate noise functions. Options:
-  - **Value noise + FBM:** Already used in `starfield.frag`. Cheap, good enough for jagged edges.
-  - **Simplex noise:** Smoother, slightly more expensive. Better for organic burn edges.
-  - **Decision:** Use value noise FBM (3 octaves) for the burn edge. It's already proven in the codebase and cheap.
-- [ ] **Base Wipe:** Implement directional wipe driven by `u_progress`. Support all 5 directions. For center→out, use radial distance from center.
-- [ ] **Jagged Edge:** Offset the wipe threshold using FBM noise. `burn_front = progress_at_pixel + noise(uv * 4.0 + u_progress * 0.3) * u_jaggedness * 0.15`. The `u_progress * 0.3` term makes the edge shape evolve as it burns.
-- [ ] **Edge Coloring (3 zones):**
-  - Glow zone: `exp(-dist / glow_width)` falloff, coloured with `u_glow_color`, intensity scaled by `u_glow_intensity`.
-  - Char zone: Old image darkened toward black using `mix(old_rgb, vec3(0.02), char_t)`.
-  - Clean transition at zone boundaries using `smoothstep`.
-- [ ] **Smoke Particles (in-shader):**
-  - Generate ~30–60 smoke puffs as hash-seeded positions that drift upward/away from the burn front.
-  - Each puff: position = `hash(seed + i) + drift * (u_time - spawn_time)`. Size grows over lifetime. Alpha fades.
-  - Only evaluate puffs within `smoke_band` pixels of the burn front (early discard optimization).
-  - Render as soft Gaussian blobs: `exp(-dist^2 / sigma^2)`. Colour: grey-white with low alpha.
-  - Gate behind `u_smoke_enabled`.
-- [ ] **Ash Particles (in-shader):**
-  - Generate ~20–40 falling ash specks using hash-seeded positions.
-  - Each speck: starts at the burn front, falls downward with slight lateral drift. Bright orange fading to dark.
-  - Render as 1–2px bright dots using `smoothstep(1.5, 0.0, dist_px)`.
-  - Gate behind `u_ash_enabled`.
-- [ ] **Progress 1.0 guarantee:** When `u_progress >= 1.0`, output exactly `texture(u_texture1, uv)` with zero effects. Hard `if` guard at the top of `main()`.
-- [ ] **Progress 0.0 guarantee:** When `u_progress <= 0.0`, output exactly `texture(u_texture0, uv)`.
+### Phase 1: Shader Development (`rendering/gl_programs/burn_program.py`) — COMPLETE (v2)
+- [x] **Research complete.** Value noise FBM used for jagged edge (3 octaves).
+- [x] **Base Wipe:** Directional wipe driven by `u_progress`. 4 directions (L→R, R→L, T→B, B→T). **Center→out removed** (was direction 4; clamped to 0–3).
+- [x] **Jagged Edge:** FBM noise offsets the wipe threshold. **Noise only recedes** the front (`front = t - noise * jag`), never advances it.
+- [x] **Edge Coloring (v2):** Thin bright receding line (~4–8px glow_half at 1080p). White-hot core fading to glow colour. Char zone ~8–30px behind the line fading to new image. `tail_fade = smoothstep(0.92, 1.0, t)` guarantees clean end.
+- [x] **Smoke/Ash uniforms:** Kept for API compatibility (`u_smoke_enabled`, `u_ash_enabled`, etc.) but not actively rendered.
+- [x] **Progress 1.0 guarantee:** Hard guard at top of `main()` outputs `texture(uNewTex, uv)` exactly.
+- [x] **Progress 0.0 guarantee:** Hard guard outputs `texture(uOldTex, uv)` exactly.
 
-### Phase 2: Transition Framework Integration
-- [ ] **Create `transitions/gl_compositor_burn_transition.py`:** Extend the GL compositor transition base class (follow `gl_compositor_wipe_transition.py` pattern).
-  - Load `burn.frag` shader.
-  - Set up all custom uniforms from settings.
-  - Pass `u_seed = random()` on transition start for per-transition variety.
-  - Pass `u_time` for smoke/ash animation.
-- [ ] **Register in `rendering/transition_factory.py`:**
-  - Import `GLCompositorBurnTransition`.
-  - Add to the transition type map and direction map.
-  - Add "Burn" to the available transitions list.
-- [ ] **Register in `rendering/transition_state.py`** if needed for state tracking.
+### Phase 2: Transition Framework Integration — COMPLETE
+- [x] **Create `transitions/gl_compositor_burn_transition.py`:** `GLCompositorBurnTransition` class implemented.
+- [x] **Register in `rendering/transition_factory.py`:** `Burn` in `_CONCRETE_TYPES`, random pool, `_create_burn()` helper.
+- [x] **Register in `rendering/transition_state.py`:** `BurnState` dataclass with all settings fields.
 
-### Phase 3: Settings Integration
-- [ ] **Add `Burn` to transition type enum/list** in `core/settings/models.py`.
-- [ ] **Add Burn-specific settings** to the transition model dataclass (all 10 settings from table above).
-- [ ] **Update `from_settings()`**, `from_mapping()`, `to_dict()` for all new settings.
-- [ ] **Update `core/settings/defaults.py`** with canonical default values.
-- [ ] **Update UI (`ui/tabs/transitions_tab.py`):**
-  - Add "Burn" to the transition type combobox.
-  - Show Burn-specific settings (direction, jaggedness, glow, smoke toggle, ash toggle, etc.) conditionally when Burn is selected.
-  - Direction combobox with 5 options.
-  - Jaggedness slider, glow intensity slider, char width slider.
+### Phase 3: Settings Integration — COMPLETE (UI pending)
+- [x] **`Burn` in transition type enum/list** (`core/settings/models.py`).
+- [x] **Burn-specific settings** in transition model dataclass.
+- [x] **`from_settings()`, `from_mapping()`, `to_dict()`** updated.
+- [x] **`core/settings/defaults.py`** burn defaults (direction, jaggedness, glow, char, smoke, ash, duration, pool).
+- [x] **Update UI (`ui/tabs/transitions_tab.py`):** Burn Settings group added.
+  - Direction combobox (4 options: L→R, R→L, T→B, B→T, Random).
+  - Jaggedness slider (0–100%), glow intensity slider (0–100%), char width slider (10–100%).
+  - Glow colour picker (QPushButton + QColorDialog, alpha-aware).
   - Smoke toggle + density slider, ash toggle + density slider.
-  - Glow colour picker.
-  - Duration slider.
+  - Load/save fully wired in `_load_settings()` / `_save_settings()`. Blockers list updated.
+  - Group shown/hidden in `_update_specific_settings()` when Burn is selected.
 
 ### Implementation Status (Feb 2026)
 All Phase 1–3 code is complete:
@@ -165,6 +140,6 @@ All Phase 1–3 code is complete:
   - Adjust noise scale so the jagged edge looks organic, not pixelated.
   - Ensure smoke rises naturally (not too fast, not too uniform).
   - Ensure ash falls with slight randomness (not perfectly vertical).
-- [ ] **Direction testing:** Verify all 5 directions work correctly. Center→out should burn radially from center.
+- [ ] **Direction testing:** Verify all 4 directions work correctly (L→R, R→L, T→B, B→T). Center→out has been removed.
 - [ ] **Edge cases:** Test with very short duration (1s), very long (6s), jaggedness at 0 (smooth wipe) and 1 (very jagged). Verify no artifacts.
 - [ ] **Overlay compliance:** Verify overlays (clock, media, visualizer) remain visible and correctly stacked during the burn transition. Follow `Docs/10_WIDGET_GUIDELINES.md`.

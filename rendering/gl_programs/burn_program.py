@@ -50,41 +50,27 @@ out vec4 FragColor;
 uniform sampler2D uOldTex;
 uniform sampler2D uNewTex;
 uniform float u_progress;
-uniform int   u_direction;      // 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=center→out
-uniform float u_jaggedness;     // 0.0–1.0  edge noise amplitude
-uniform float u_glow_intensity; // 0.0–1.0
-uniform vec4  u_glow_color;     // RGBA primary glow colour
-uniform float u_char_width;     // 0.1–1.0 normalised char zone width
-uniform int   u_smoke_enabled;  // 1=on
-uniform float u_smoke_density;  // 0.0–1.0
-uniform int   u_ash_enabled;    // 1=on
-uniform float u_ash_density;    // 0.0–1.0
-uniform float u_time;           // wall-clock seconds for animation
+uniform int   u_direction;      // 0=L->R, 1=R->L, 2=T->B, 3=B->T
+uniform float u_jaggedness;     // 0.0-1.0 edge waviness amplitude
+uniform float u_glow_intensity; // 0.0-1.0
+uniform vec4  u_glow_color;     // RGBA primary glow colour (warm orange)
+uniform float u_char_width;     // 0.1-1.0 controls dark zone width
+uniform int   u_smoke_enabled;  // unused, kept for API compat
+uniform float u_smoke_density;  // unused
+uniform int   u_ash_enabled;    // unused
+uniform float u_ash_density;    // unused
+uniform float u_time;           // wall-clock seconds
 uniform float u_seed;           // per-transition random seed
 
 // -----------------------------------------------------------------------
-// Hash / noise helpers
+// Smooth value noise
 // -----------------------------------------------------------------------
-float hash11(float p) {
-    p = fract(p * 0.1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return fract(p);
-}
-
 float hash21(vec2 p) {
     vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
     p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.x + p3.y) * p3.z);
 }
 
-vec2 hash22(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.xx + p3.yz) * p3.zy);
-}
-
-// Value noise 2D
 float vnoise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -96,205 +82,152 @@ float vnoise(vec2 p) {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// 3-octave FBM
+// 3-octave FBM — enough detail without being too jagged
 float fbm(vec2 p) {
-    float v = 0.0;
-    float a = 0.5;
+    float v = 0.0, a = 0.5;
     for (int i = 0; i < 3; i++) {
         v += a * vnoise(p);
-        p  = p * 2.1 + vec2(1.7, 9.2);
+        p  = p * 2.1 + vec2(1.7, 9.2 + u_seed * 0.1);
         a *= 0.5;
     }
     return v;
 }
 
 // -----------------------------------------------------------------------
-// Axis: maps UV → 0..1 progress coordinate for the chosen direction
+// Axis: returns the sweep coordinate [0..1] for this pixel.
+// The burn front advances from 0 toward 1 as progress goes 0->1.
+// Pixels where axis < front are "burned" (behind the line).
+// Pixels where axis > front are "unburned" (ahead of the line = old image).
 // -----------------------------------------------------------------------
 float burn_axis(vec2 uv) {
-    if (u_direction == 0) return uv.x;               // L→R
-    if (u_direction == 1) return 1.0 - uv.x;         // R→L
-    if (u_direction == 2) return uv.y;               // T→B
-    if (u_direction == 3) return 1.0 - uv.y;         // B→T
-    // center→out: radial distance from 0.5,0.5 scaled so corners = 1.0
-    vec2 d = abs(uv - 0.5) * 1.4142;
-    return max(d.x, d.y);
-}
-
-// -----------------------------------------------------------------------
-// Smoke puffs (Gaussian blobs near burn front)
-// -----------------------------------------------------------------------
-float smoke_contribution(vec2 uv, float front_axis, float axis_val) {
-    if (u_smoke_enabled == 0) return 0.0;
-
-    // Only evaluate within a narrow band behind the burn front
-    float behind = front_axis - axis_val;
-    if (behind < 0.0 || behind > 0.18) return 0.0;
-
-    float total = 0.0;
-    const int PUFFS = 24;
-    for (int i = 0; i < PUFFS; i++) {
-        float fi = float(i);
-        // Seed puff position along the burn front
-        float seed2 = u_seed + fi * 0.137;
-        vec2 puff_uv_base;
-        if (u_direction == 0 || u_direction == 1) {
-            puff_uv_base = vec2(front_axis, hash11(seed2 * 3.7));
-        } else if (u_direction == 2 || u_direction == 3) {
-            puff_uv_base = vec2(hash11(seed2 * 3.7), front_axis);
-        } else {
-            vec2 rnd = hash22(vec2(seed2, seed2 * 1.3));
-            puff_uv_base = vec2(0.5) + (rnd - 0.5) * 0.8;
-        }
-
-        // Drift upward (opposite to burn direction) over time
-        float lifetime = hash11(seed2 * 7.3) * 2.0 + 0.5;
-        float age = mod(u_time * 0.4 + hash11(seed2 * 2.1) * lifetime, lifetime);
-        float drift = age / lifetime;
-
-        vec2 drift_dir;
-        if (u_direction == 0) drift_dir = vec2(-1.0,  0.0);
-        else if (u_direction == 1) drift_dir = vec2( 1.0,  0.0);
-        else if (u_direction == 2) drift_dir = vec2( 0.0, -1.0);
-        else if (u_direction == 3) drift_dir = vec2( 0.0,  1.0);
-        else drift_dir = vec2(0.0, -1.0);
-
-        vec2 puff_pos = puff_uv_base + drift_dir * drift * 0.12;
-        // Lateral wobble
-        puff_pos += vec2(sin(u_time * 1.3 + fi), cos(u_time * 0.9 + fi)) * 0.008;
-
-        float sigma = (0.025 + hash11(seed2 * 5.1) * 0.02) * (1.0 + drift * 1.5);
-        float dist2 = dot(uv - puff_pos, uv - puff_pos);
-        float alpha = exp(-dist2 / (sigma * sigma));
-        alpha *= (1.0 - drift);  // fade out over lifetime
-        total += alpha;
-    }
-    return clamp(total * u_smoke_density * 0.35, 0.0, 0.6);
-}
-
-// -----------------------------------------------------------------------
-// Ash specks (tiny bright dots falling from burn front)
-// -----------------------------------------------------------------------
-float ash_contribution(vec2 uv, float front_axis, float axis_val) {
-    if (u_ash_enabled == 0) return 0.0;
-
-    float behind = front_axis - axis_val;
-    if (behind < 0.0 || behind > 0.30) return 0.0;
-
-    float total = 0.0;
-    const int SPECKS = 30;
-    for (int i = 0; i < SPECKS; i++) {
-        float fi = float(i);
-        float seed2 = u_seed + fi * 0.271 + 100.0;
-
-        vec2 speck_base;
-        if (u_direction == 0 || u_direction == 1) {
-            speck_base = vec2(front_axis, hash11(seed2 * 4.1));
-        } else if (u_direction == 2 || u_direction == 3) {
-            speck_base = vec2(hash11(seed2 * 4.1), front_axis);
-        } else {
-            vec2 rnd = hash22(vec2(seed2, seed2 * 1.7));
-            speck_base = vec2(0.5) + (rnd - 0.5) * 0.9;
-        }
-
-        float lifetime = hash11(seed2 * 3.3) * 1.5 + 0.5;
-        float age = mod(u_time * 0.6 + hash11(seed2 * 1.9) * lifetime, lifetime);
-        float drift = age / lifetime;
-
-        // Ash falls downward with slight lateral drift
-        vec2 fall_dir = vec2(
-            (hash11(seed2 * 6.7) - 0.5) * 0.06,
-            0.12
-        );
-        vec2 speck_pos = speck_base + fall_dir * drift;
-
-        float dist = length(uv - speck_pos);
-        float r = 0.003 + hash11(seed2 * 2.9) * 0.003;
-        float alpha = smoothstep(r, 0.0, dist);
-        alpha *= (1.0 - drift * 0.8);
-        total += alpha;
-    }
-    return clamp(total * u_ash_density * 0.9, 0.0, 1.0);
+    if (u_direction == 1) return 1.0 - uv.x;   // R->L: front starts at right
+    if (u_direction == 2) return 1.0 - uv.y;   // T->B: front starts at top (UV y=0=top)
+    if (u_direction == 3) return uv.y;          // B->T: front starts at bottom
+    return uv.x;                                // 0=L->R (default)
 }
 
 // -----------------------------------------------------------------------
 // Main
 // -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
+// Spark hash — cheap pseudo-random for spark positions
+// -----------------------------------------------------------------------
+float spark_hash(vec2 p, float s) {
+    return fract(sin(dot(p + s, vec2(127.1, 311.7))) * 43758.5453);
+}
+
 void main() {
     vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
-
     float t = clamp(u_progress, 0.0, 1.0);
 
-    // Hard guarantees at boundaries
+    // Hard guards — exact old/new at extremes (policy: no artifacts)
     if (t <= 0.0) { FragColor = texture(uOldTex, uv); return; }
     if (t >= 1.0) { FragColor = texture(uNewTex, uv); return; }
 
-    vec4 old_color = texture(uOldTex, uv);
-    vec4 new_color = texture(uNewTex, uv);
+    vec4 old_col = texture(uOldTex, uv);
+    vec4 new_col = texture(uNewTex, uv);
 
-    // Compute axis value for this pixel
-    float axis_val = burn_axis(uv);
+    // --- Thermite startup delay ---
+    // First 5% of progress: front stays at 0 while glow builds to max.
+    // Remaining 95%: front sweeps 0→1 normally.
+    float ignition = 0.05;
+    float glow_buildup = smoothstep(0.0, ignition, t);  // 0→1 during ignition
+    float move_t = (t < ignition) ? 0.0 : (t - ignition) / (1.0 - ignition);
 
-    // Noise-displaced burn front
-    // The noise coordinates evolve with progress so the edge shape changes as it burns
-    vec2 noise_uv = uv * 4.5 + vec2(u_seed * 0.1, t * 0.4);
-    float noise_val = fbm(noise_uv);
+    float axis = burn_axis(uv);
 
-    // Effective jaggedness amplitude (max ~15% of screen width)
-    float jag = u_jaggedness * 0.15;
-    float front = t - noise_val * jag;
+    // Perpendicular coordinate — noise runs ALONG the burn line
+    float perp = (u_direction <= 1) ? uv.y : uv.x;
+    vec2 noise_uv = vec2(perp * 6.0 + u_seed * 0.07, move_t * 3.0);
+    float noise = fbm(noise_uv);
 
-    // Signed distance from burn front: positive = revealed (new image side)
-    float dist = axis_val - front;
+    // Jagged offset: noise only RECEDES the front (never advances it).
+    float jag = u_jaggedness * 0.05;
+    float front = move_t - noise * jag;
 
-    // Zone widths (normalised to screen axis)
-    float glow_w = 0.04 + u_glow_intensity * 0.03;
-    float char_w = u_char_width * 0.06;
+    // Signed distance: positive = ahead of front (old), negative = behind (burned)
+    float sd = axis - front;
 
-    vec4 out_color;
+    // --- Zone widths (very thin) ---
+    float glow_half = 0.005 + u_glow_intensity * 0.006;  // ~5-11px at 1080p
+    float char_w    = 0.008 + u_char_width * 0.022;
 
-    if (dist > 0.0) {
-        // New image zone
-        out_color = new_color;
-    } else if (dist > -glow_w) {
-        // Glow zone: warm incandescent edge
-        float glow_t = 1.0 - (-dist / glow_w);  // 1.0 at edge, 0.0 at glow_w
-        float glow_falloff = exp(-(-dist / glow_w) * 3.0);
-        vec3 glow_rgb = u_glow_color.rgb * u_glow_intensity * glow_falloff;
-        // Blend: at the very edge, mostly glow; further in, mix with old image
-        out_color = vec4(mix(old_color.rgb, glow_rgb, glow_falloff * glow_t), 1.0);
-    } else if (dist > -(glow_w + char_w)) {
-        // Char zone: old image darkens to near-black
-        float char_t = (-dist - glow_w) / char_w;  // 0 at glow boundary, 1 at char end
-        char_t = smoothstep(0.0, 1.0, char_t);
-        vec3 char_color = mix(old_color.rgb * 0.3, vec3(0.01, 0.005, 0.0), char_t);
-        // Add faint orange ember glow at char/glow boundary
-        float ember = (1.0 - char_t) * 0.25 * u_glow_intensity;
-        char_color += u_glow_color.rgb * ember;
-        out_color = vec4(char_color, 1.0);
+    // Smooth fade-out near completion so the last pixels don't pop
+    float tail_fade = smoothstep(0.90, 1.0, move_t);
+
+    // Thermite brightness multiplier: peaks during ignition, stays high
+    float thermite = mix(1.4, 1.0, smoothstep(0.0, 0.15, move_t));
+    thermite *= glow_buildup;  // ramp up from 0 during ignition
+
+    vec3 out_rgb;
+
+    if (sd > glow_half) {
+        // Unburned — old image
+        out_rgb = old_col.rgb;
+
+    } else if (sd > 0.0) {
+        // Approaching glow — warm tint bleeding into old image
+        float f = 1.0 - sd / glow_half;
+        f = f * f;
+        vec3 warm_tint = mix(u_glow_color.rgb, vec3(1.0, 0.95, 0.8), 0.3);
+        vec3 warm = mix(old_col.rgb, warm_tint, f * 0.5 * u_glow_intensity * thermite);
+        out_rgb = warm;
+
+    } else if (sd > -glow_half) {
+        // Burn line core — thermite white-hot center
+        float f = 1.0 - (-sd) / glow_half;  // 1 at front, 0 at edge
+        f = f * f;
+        // Thermite: white-hot core with orange fringe
+        vec3 white_hot = vec3(1.0, 0.98, 0.9);
+        vec3 hot = mix(u_glow_color.rgb, white_hot, f * 0.9);
+        // Boost beyond 1.0 for HDR-like bloom (clamped at output)
+        float intensity = u_glow_intensity * thermite * (0.8 + f * 0.5);
+        out_rgb = mix(new_col.rgb, hot, min(intensity, 1.0));
+        // Additive bloom for thermite brightness
+        out_rgb += hot * max(0.0, intensity - 1.0) * 0.4;
+
+    } else if (sd > -(glow_half + char_w)) {
+        // Char zone — dark residue fading to new image
+        float behind = (-sd) - glow_half;
+        float ct = smoothstep(0.0, 1.0, behind / char_w);
+        float dark = mix(0.06, 1.0, ct);
+        vec3 charred = new_col.rgb * dark;
+        // Faint ember at boundary
+        float ember = (1.0 - ct) * 0.3 * u_glow_intensity * thermite;
+        charred += u_glow_color.rgb * ember;
+        out_rgb = charred;
+
     } else {
-        // Old image zone
-        out_color = old_color;
+        // Fully burned — new image
+        out_rgb = new_col.rgb;
     }
 
-    // Smoke overlay (grey-white puffs behind burn front)
-    float smoke = smoke_contribution(uv, front, axis_val);
-    if (smoke > 0.001) {
-        vec3 smoke_color = vec3(0.75, 0.72, 0.70);
-        out_color.rgb = mix(out_color.rgb, smoke_color, smoke);
+    // --- Optional sparks (reuses u_smoke_enabled as spark toggle) ---
+    if (u_smoke_enabled == 1 && move_t > 0.0 && move_t < 0.95) {
+        // Scatter sparks near the burn front
+        float spark_zone = glow_half * 6.0;
+        if (abs(sd) < spark_zone) {
+            // Grid of potential spark positions
+            vec2 spark_cell = floor(uv * vec2(80.0, 40.0));
+            float rnd = spark_hash(spark_cell, u_seed + floor(u_time * 8.0));
+            // Only ~8% of cells have a spark at any moment
+            if (rnd > 0.92) {
+                float spark_life = fract(rnd * 17.3 + u_time * 3.0);
+                float spark_bright = (1.0 - spark_life) * (1.0 - spark_life);
+                // Sparks closer to front are brighter
+                float proximity = 1.0 - abs(sd) / spark_zone;
+                proximity = proximity * proximity;
+                float spark_intensity = spark_bright * proximity * u_glow_intensity * thermite * u_smoke_density * 2.0;
+                vec3 spark_col = mix(u_glow_color.rgb, vec3(1.0, 1.0, 0.9), spark_bright * 0.7);
+                out_rgb += spark_col * spark_intensity * 0.6;
+            }
+        }
     }
 
-    // Ash overlay (bright orange-to-dark specks falling from burn front)
-    float ash = ash_contribution(uv, front, axis_val);
-    if (ash > 0.001) {
-        // Ash colour: bright orange near front, fades to dark
-        float behind = front - axis_val;
-        float ash_fade = clamp(behind / 0.30, 0.0, 1.0);
-        vec3 ash_color = mix(vec3(1.0, 0.55, 0.1), vec3(0.05, 0.02, 0.0), ash_fade);
-        out_color.rgb = mix(out_color.rgb, ash_color, ash);
-    }
+    // Near completion: lerp everything toward new image to guarantee clean end
+    out_rgb = mix(out_rgb, new_col.rgb, tail_fade);
 
-    FragColor = out_color;
+    FragColor = vec4(clamp(out_rgb, 0.0, 1.0), 1.0);
 }
 """
 
