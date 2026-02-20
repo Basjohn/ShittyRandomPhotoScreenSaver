@@ -53,6 +53,7 @@ class GLProgramCache:
     RAINDROPS = "raindrops"
     CRUMBLE = "crumble"
     PARTICLE = "particle"
+    BURN = "burn"
     
     def __init__(self):
         # Program instances (BaseGLProgram subclasses)
@@ -115,6 +116,9 @@ class GLProgramCache:
             elif name == self.PARTICLE:
                 from rendering.gl_programs.particle_program import particle_program
                 return particle_program
+            elif name == self.BURN:
+                from rendering.gl_programs.burn_program import burn_program
+                return burn_program
             else:
                 logger.warning("[GL CACHE] Unknown program name: %s", name)
                 return None
@@ -207,7 +211,7 @@ class GLProgramCache:
         all_names = [
             self.CROSSFADE, self.SLIDE, self.WIPE, self.BLOCK_FLIP,
             self.BLINDS, self.DIFFUSE, self.PEEL, self.WARP,
-            self.RAINDROPS, self.CRUMBLE, self.PARTICLE,
+            self.RAINDROPS, self.CRUMBLE, self.PARTICLE, self.BURN,
         ]
         results = {}
         for name in all_names:

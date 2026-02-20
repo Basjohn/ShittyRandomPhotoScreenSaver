@@ -840,6 +840,7 @@ class WidgetsTab(QWidget):
         """
         if getattr(self, "_loading", False):
             return
+        self._auto_switch_preset_to_custom()
         if not getattr(self, "_save_coalesce_pending", False):
             self._save_coalesce_pending = True
             from PySide6.QtCore import QTimer
@@ -912,6 +913,77 @@ class WidgetsTab(QWidget):
 
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
+
+    def _auto_switch_preset_to_custom(self) -> None:
+        """Auto-switch to Custom preset when a visualizer-specific setting changes.
+
+        Only fires when:
+        1. The change did NOT come from the preset slider itself.
+        2. The sender widget is a descendant of the current mode's advanced
+           container (so clock/weather/etc. changes never trigger this).
+        3. The current preset is NOT already Custom.
+        """
+        if getattr(self, '_preset_slider_changing', False):
+            return
+
+        # Identify the sender and the current mode's advanced container
+        _adv_map = {
+            'spectrum': '_spectrum_advanced',
+            'oscilloscope': '_osc_advanced',
+            'sine_wave': '_sine_advanced',
+            'blob': '_blob_advanced',
+            'helix': '_helix_advanced',
+            'starfield': '_starfield_advanced',
+            'bubble': '_bubble_advanced',
+        }
+        _slider_map = {
+            'spectrum': '_spectrum_preset_slider',
+            'oscilloscope': '_osc_preset_slider',
+            'sine_wave': '_sine_preset_slider',
+            'blob': '_blob_preset_slider',
+            'helix': '_helix_preset_slider',
+            'starfield': '_starfield_preset_slider',
+            'bubble': '_bubble_preset_slider',
+        }
+
+        try:
+            mode = self.spotify_vis_type_combo.currentData() or 'spectrum'
+        except Exception:
+            return
+
+        adv_attr = _adv_map.get(mode)
+        slider_attr = _slider_map.get(mode)
+        if not adv_attr or not slider_attr:
+            return
+
+        adv_container = getattr(self, adv_attr, None)
+        slider = getattr(self, slider_attr, None)
+        if adv_container is None or slider is None:
+            return
+
+        # If already on Custom, nothing to switch.
+        from core.settings.visualizer_presets import PRESET_COUNT
+        if slider.preset_index() == PRESET_COUNT - 1:
+            return
+
+        # Check sender is inside the advanced container
+        try:
+            sender = self.sender()
+        except Exception:
+            sender = None
+
+        if sender is not None:
+            w = sender
+            inside_adv = False
+            while w is not None:
+                if w is adv_container:
+                    inside_adv = True
+                    break
+                w = w.parent()
+            if not inside_adv:
+                return
+
+        slider.set_preset_index(PRESET_COUNT - 1)
 
     def _update_vis_mode_sections(self) -> None:
         """Show/hide per-mode settings containers based on selected visualizer type."""

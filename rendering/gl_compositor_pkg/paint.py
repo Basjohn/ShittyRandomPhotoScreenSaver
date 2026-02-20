@@ -123,6 +123,8 @@ def paintGL_impl(widget) -> None:
          widget._paint_crumble_shader, None),
         ("particle", widget._particle, widget._can_use_particle_shader,
          widget._paint_particle_shader, None),
+        ("burn", widget._burn, widget._can_use_burn_shader,
+         widget._paint_burn_shader, None),
         ("crossfade", widget._crossfade, widget._can_use_crossfade_shader,
          widget._paint_crossfade_shader, None),
         ("slide", widget._slide, widget._can_use_slide_shader,

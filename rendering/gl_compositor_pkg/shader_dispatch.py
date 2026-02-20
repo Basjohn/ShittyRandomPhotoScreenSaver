@@ -103,6 +103,10 @@ def can_use_crossfade_shader(comp: "GLCompositorWidget") -> bool:
     return can_use_simple_shader(comp, comp._crossfade, getattr(comp._gl_pipeline, "crossfade_program", 0))
 
 
+def can_use_burn_shader(comp: "GLCompositorWidget") -> bool:
+    return can_use_simple_shader(comp, comp._burn, getattr(comp._gl_pipeline, "burn_program", 0))
+
+
 def can_use_slide_shader(comp: "GLCompositorWidget") -> bool:
     return can_use_simple_shader(comp, comp._slide, getattr(comp._gl_pipeline, "slide_program", 0))
 
@@ -183,6 +187,9 @@ def prepare_particle_textures(comp: "GLCompositorWidget") -> bool:
 
 def prepare_crossfade_textures(comp: "GLCompositorWidget") -> bool:
     return prepare_transition_textures(comp, lambda: can_use_crossfade_shader(comp), comp._crossfade)
+
+def prepare_burn_textures(comp: "GLCompositorWidget") -> bool:
+    return prepare_transition_textures(comp, lambda: can_use_burn_shader(comp), comp._burn)
 
 def prepare_slide_textures(comp: "GLCompositorWidget") -> bool:
     return prepare_transition_textures(comp, lambda: can_use_slide_shader(comp), comp._slide)
@@ -347,6 +354,13 @@ def paint_raindrops_shader(comp: "GLCompositorWidget", target: QRect) -> None:
         comp, lambda: can_use_raindrops_shader(comp), comp._raindrops,
         lambda: prepare_raindrops_textures(comp),
         "raindrops_program", "raindrops_uniforms", "raindrops"
+    )
+
+def paint_burn_shader(comp: "GLCompositorWidget", target: QRect) -> None:
+    render_simple_shader(
+        comp, lambda: can_use_burn_shader(comp), comp._burn,
+        lambda: prepare_burn_textures(comp),
+        "burn_program", "burn_uniforms", "burn"
     )
 
 

@@ -170,6 +170,21 @@ class ParticleState(TransitionStateBase):
     swirl_order: int = 0  # 0=Typical, 1=Center Outward, 2=Edges Inward
 
 
+@dataclass
+class BurnState(TransitionStateBase):
+    """State for a compositor-driven burn transition."""
+    direction: int = 0        # 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=center→out
+    jaggedness: float = 0.5
+    glow_intensity: float = 0.7
+    glow_color: tuple = (1.0, 0.55, 0.12, 1.0)
+    char_width: float = 0.5
+    smoke_enabled: bool = True
+    smoke_density: float = 0.5
+    ash_enabled: bool = True
+    ash_density: float = 0.5
+    seed: float = 0.0
+
+
 class TransitionStateManager:
     """
     Manages active transition states.
@@ -191,6 +206,7 @@ class TransitionStateManager:
         self._raindrops: Optional[RaindropsState] = None
         self._crumble: Optional[CrumbleState] = None
         self._particle: Optional[ParticleState] = None
+        self._burn: Optional[BurnState] = None
         
         # Callbacks for state changes
         self._on_state_change: Optional[Callable[[str, bool], None]] = None
@@ -350,6 +366,18 @@ class TransitionStateManager:
         if was_active != is_active:
             self._notify("particle", is_active)
     
+    @property
+    def burn(self) -> Optional[BurnState]:
+        return self._burn
+    
+    @burn.setter
+    def burn(self, value: Optional[BurnState]) -> None:
+        was_active = self._burn is not None
+        self._burn = value
+        is_active = value is not None
+        if was_active != is_active:
+            self._notify("burn", is_active)
+    
     def get_active_transition(self) -> Optional[str]:
         """Get the name of the currently active transition, or None."""
         if self._crossfade is not None:
@@ -376,6 +404,8 @@ class TransitionStateManager:
             return "crumble"
         if self._particle is not None:
             return "particle"
+        if self._burn is not None:
+            return "burn"
         return None
     
     def clear_all(self) -> None:
@@ -392,3 +422,4 @@ class TransitionStateManager:
         self._raindrops = None
         self._crumble = None
         self._particle = None
+        self._burn = None

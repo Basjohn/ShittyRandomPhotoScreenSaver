@@ -16,10 +16,22 @@ if TYPE_CHECKING:
 def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Helix settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     tab._helix_settings_container = QWidget()
     helix_layout = QVBoxLayout(tab._helix_settings_container)
     helix_layout.setContentsMargins(0, 0, 0, 0)
+
+    # --- Preset slider ---
+    tab._helix_preset_slider = VisualizerPresetSlider("helix")
+    tab._helix_preset_slider.preset_changed.connect(tab._save_settings)
+    helix_layout.addWidget(tab._helix_preset_slider)
+
+    tab._helix_advanced = QWidget()
+    _adv = QVBoxLayout(tab._helix_advanced)
+    _adv.setContentsMargins(0, 0, 0, 0)
+    _adv.setSpacing(4)
+    tab._helix_preset_slider.set_advanced_container(tab._helix_advanced)
 
     helix_turns_row = QHBoxLayout()
     helix_turns_row.addWidget(QLabel("Turns:"))
@@ -30,13 +42,13 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.helix_turns.valueChanged.connect(tab._save_settings)
     helix_turns_row.addWidget(tab.helix_turns)
     helix_turns_row.addStretch()
-    helix_layout.addLayout(helix_turns_row)
+    _adv.addLayout(helix_turns_row)
 
     tab.helix_double = QCheckBox("Double Helix (DNA)")
     tab.helix_double.setChecked(tab._default_bool('spotify_visualizer', 'helix_double', True))
     tab.helix_double.setToolTip("Show a second strand and cross-rungs for a DNA-like appearance.")
     tab.helix_double.stateChanged.connect(tab._save_settings)
-    helix_layout.addWidget(tab.helix_double)
+    _adv.addWidget(tab.helix_double)
 
     helix_speed_row = QHBoxLayout()
     helix_speed_row.addWidget(QLabel("Rotation Speed:"))
@@ -54,13 +66,13 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.helix_speed_label.setText(f"{v / 100.0:.2f}x")
     )
     helix_speed_row.addWidget(tab.helix_speed_label)
-    helix_layout.addLayout(helix_speed_row)
+    _adv.addLayout(helix_speed_row)
 
     tab.helix_glow_enabled = QCheckBox("Enable Glow")
     tab.helix_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'helix_glow_enabled', True))
     tab.helix_glow_enabled.setToolTip("Draw a soft glow halo around the helix strands.")
     tab.helix_glow_enabled.stateChanged.connect(tab._save_settings)
-    helix_layout.addWidget(tab.helix_glow_enabled)
+    _adv.addWidget(tab.helix_glow_enabled)
 
     tab._helix_glow_sub_container = QWidget()
     _helix_glow_layout = QVBoxLayout(tab._helix_glow_sub_container)
@@ -98,7 +110,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.helix_reactive_glow.stateChanged.connect(tab._save_settings)
     _helix_glow_layout.addWidget(tab.helix_reactive_glow)
 
-    helix_layout.addWidget(tab._helix_glow_sub_container)
+    _adv.addWidget(tab._helix_glow_sub_container)
 
     def _update_helix_glow_vis(_s=None):
         tab._helix_glow_sub_container.setVisible(tab.helix_glow_enabled.isChecked())
@@ -121,6 +133,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.helix_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     helix_growth_row.addWidget(tab.helix_growth_label)
-    helix_layout.addLayout(helix_growth_row)
+    _adv.addLayout(helix_growth_row)
 
+    helix_layout.addWidget(tab._helix_advanced)
     parent_layout.addWidget(tab._helix_settings_container)

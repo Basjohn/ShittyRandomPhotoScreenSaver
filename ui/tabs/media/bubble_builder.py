@@ -16,13 +16,25 @@ if TYPE_CHECKING:
 def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Bubble visualizer settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     tab._bubble_settings_container = QWidget()
     layout = QVBoxLayout(tab._bubble_settings_container)
     layout.setContentsMargins(0, 0, 0, 0)
 
-    # ── Audio Reactivity ──────────────────────────────────────────
-    layout.addWidget(QLabel("<b>Audio Reactivity</b>"))
+    # --- Preset slider ---
+    tab._bubble_preset_slider = VisualizerPresetSlider("bubble")
+    tab._bubble_preset_slider.preset_changed.connect(tab._save_settings)
+    layout.addWidget(tab._bubble_preset_slider)
+
+    tab._bubble_advanced = QWidget()
+    _adv = QVBoxLayout(tab._bubble_advanced)
+    _adv.setContentsMargins(0, 0, 0, 0)
+    _adv.setSpacing(4)
+    tab._bubble_preset_slider.set_advanced_container(tab._bubble_advanced)
+
+    # ── Audio Reactivity ──────────────────────────────────────────────
+    _adv.addWidget(QLabel("<b>Audio Reactivity</b>"))
 
     # Big Bubble Bass Pulse
     row = QHBoxLayout()
@@ -41,7 +53,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_big_bass_pulse_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_big_bass_pulse_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Small Bubble Freq Pulse
     row = QHBoxLayout()
@@ -60,10 +72,10 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_small_freq_pulse_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_small_freq_pulse_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # ── Stream Controls ───────────────────────────────────────────
-    layout.addWidget(QLabel("<b>Stream Controls</b>"))
+    _adv.addWidget(QLabel("<b>Stream Controls</b>"))
 
     # Stream Direction
     row = QHBoxLayout()
@@ -76,7 +88,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_stream_direction.currentIndexChanged.connect(tab._save_settings)
     row.addWidget(tab.bubble_stream_direction)
     row.addStretch()
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Stream Speed
     row = QHBoxLayout()
@@ -95,7 +107,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_stream_speed_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_stream_speed_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Stream Speed Reactivity
     row = QHBoxLayout()
@@ -114,10 +126,10 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_stream_reactivity_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_stream_reactivity_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # ── Drift & Rotation ──────────────────────────────────────────
-    layout.addWidget(QLabel("<b>Drift & Rotation</b>"))
+    _adv.addWidget(QLabel("<b>Drift & Rotation</b>"))
 
     # Rotation Amount
     row = QHBoxLayout()
@@ -134,7 +146,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_rotation_amount_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_rotation_amount_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Drift Amount
     row = QHBoxLayout()
@@ -151,7 +163,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_drift_amount_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_drift_amount_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Drift Speed
     row = QHBoxLayout()
@@ -168,7 +180,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_drift_speed_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_drift_speed_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Drift Frequency
     row = QHBoxLayout()
@@ -185,7 +197,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_drift_frequency_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_drift_frequency_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Drift Direction
     row = QHBoxLayout()
@@ -198,10 +210,10 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_direction.currentIndexChanged.connect(tab._save_settings)
     row.addWidget(tab.bubble_drift_direction)
     row.addStretch()
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # ── Bubble Count & Lifecycle ──────────────────────────────────
-    layout.addWidget(QLabel("<b>Bubble Count & Lifecycle</b>"))
+    _adv.addWidget(QLabel("<b>Bubble Count & Lifecycle</b>"))
 
     # Big Bubble Count
     row = QHBoxLayout()
@@ -218,7 +230,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_big_count_label.setText(str(v))
     )
     row.addWidget(tab.bubble_big_count_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Small Bubble Count
     row = QHBoxLayout()
@@ -235,7 +247,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_small_count_label.setText(str(v))
     )
     row.addWidget(tab.bubble_small_count_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Surface Reach %
     row = QHBoxLayout()
@@ -252,10 +264,10 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.bubble_surface_reach_label.setText(f"{v}%")
     )
     row.addWidget(tab.bubble_surface_reach_label)
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # ── Styling ───────────────────────────────────────────────────
-    layout.addWidget(QLabel("<b>Styling</b>"))
+    _adv.addWidget(QLabel("<b>Styling</b>"))
 
     # Specular Direction
     row = QHBoxLayout()
@@ -268,7 +280,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_specular_direction.currentIndexChanged.connect(tab._save_settings)
     row.addWidget(tab.bubble_specular_direction)
     row.addStretch()
-    layout.addLayout(row)
+    _adv.addLayout(row)
 
     # Colour pickers
     for attr_name, label_text in (
@@ -286,6 +298,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         btn.clicked.connect(lambda checked=False, m=method_name: getattr(tab, m, lambda: None)())
         row.addWidget(btn)
         row.addStretch()
-        layout.addLayout(row)
+        _adv.addLayout(row)
 
+    layout.addWidget(tab._bubble_advanced)
     parent_layout.addWidget(tab._bubble_settings_container)

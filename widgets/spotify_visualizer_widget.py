@@ -593,6 +593,7 @@ class SpotifyVisualizerWidget(QWidget):
         if self._bubble_simulation is None:
             from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
             self._bubble_simulation = BubbleSimulation()
+            logger.debug("[SPOTIFY_VIS] Bubble simulation created on COMPUTE thread")
         self._bubble_simulation.tick(dt, eb_snap, sim_settings)
         pos_data, extra_data = self._bubble_simulation.snapshot(
             bass=pulse_params['bass'],
@@ -600,16 +601,34 @@ class SpotifyVisualizerWidget(QWidget):
             big_bass_pulse=pulse_params['big_bass_pulse'],
             small_freq_pulse=pulse_params['small_freq_pulse'],
         )
-        return (pos_data, extra_data, self._bubble_simulation.count)
+        count = self._bubble_simulation.count
+        if not getattr(self, '_bubble_worker_logged', False):
+            logger.debug(
+                "[SPOTIFY_VIS] Bubble worker: count=%d pos_len=%d extra_len=%d dt=%.3f",
+                count, len(pos_data), len(extra_data), dt,
+            )
+            self._bubble_worker_logged = True
+        return (pos_data, extra_data, count)
 
     def _bubble_compute_done(self, task_result) -> None:
         """Callback from COMPUTE thread — post results to UI thread."""
         self._bubble_compute_pending = False
         if task_result.success and task_result.result is not None:
             pos_data, extra_data, count = task_result.result
+            if not getattr(self, '_bubble_done_logged', False):
+                logger.debug(
+                    "[SPOTIFY_VIS] Bubble compute done: success=%s count=%d",
+                    task_result.success, count,
+                )
+                self._bubble_done_logged = True
             from core.threading.manager import ThreadManager
             ThreadManager.run_on_ui_thread(
                 self._bubble_apply_result, pos_data, extra_data, count
+            )
+        elif not task_result.success:
+            logger.warning(
+                "[SPOTIFY_VIS] Bubble compute FAILED: %s",
+                task_result.error,
             )
 
     def _bubble_apply_result(self, pos_data: list, extra_data: list, count: int) -> None:
@@ -1539,7 +1558,12 @@ class SpotifyVisualizerWidget(QWidget):
                 need_card_update = True
 
             transitioning = self._mode_transition_phase != 0
-            should_push = changed or fade_changed or first_frame or geom_changed or transitioning
+            # Animated modes must push every tick because their visuals change
+            # continuously (bubble sim, waveform, starfield travel, blob pulse,
+            # rainbow hue rotation, etc.) independent of bar data.
+            # Spectrum only needs pushes when bars change, UNLESS rainbow is on.
+            animated_mode = (self._vis_mode_str != 'spectrum') or getattr(self, '_rainbow_enabled', False)
+            should_push = changed or fade_changed or first_frame or geom_changed or transitioning or animated_mode
             if should_push:
                 _gpu_push_start = time.time()
                 mode_str = self._vis_mode_str

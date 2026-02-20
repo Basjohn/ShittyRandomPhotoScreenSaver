@@ -334,6 +334,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if val not in ('top_left', 'top_right', 'bottom_left', 'bottom_right'):
             val = 'top_left'
         widget._bubble_specular_direction = val
+    if 'bubble_growth' in kwargs:
+        widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
 
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:

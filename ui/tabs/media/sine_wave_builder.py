@@ -28,16 +28,28 @@ def _update_sine_multi_line_visibility(tab) -> None:
 def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Sine Wave settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     tab._sine_wave_settings_container = QWidget()
     sine_layout = QVBoxLayout(tab._sine_wave_settings_container)
     sine_layout.setContentsMargins(0, 0, 0, 0)
 
+    # --- Preset slider ---
+    tab._sine_preset_slider = VisualizerPresetSlider("sine_wave")
+    tab._sine_preset_slider.preset_changed.connect(tab._save_settings)
+    sine_layout.addWidget(tab._sine_preset_slider)
+
+    tab._sine_advanced = QWidget()
+    _adv = QVBoxLayout(tab._sine_advanced)
+    _adv.setContentsMargins(0, 0, 0, 0)
+    _adv.setSpacing(4)
+    tab._sine_preset_slider.set_advanced_container(tab._sine_advanced)
+
     # Glow
     tab.sine_glow_enabled = QCheckBox("Enable Glow")
     tab.sine_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'sine_glow_enabled', True))
     tab.sine_glow_enabled.stateChanged.connect(tab._save_settings)
-    sine_layout.addWidget(tab.sine_glow_enabled)
+    _adv.addWidget(tab.sine_glow_enabled)
 
     tab._sine_glow_sub_container = QWidget()
     _sine_glow_layout = QVBoxLayout(tab._sine_glow_sub_container)
@@ -74,7 +86,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_reactive_glow.stateChanged.connect(tab._save_settings)
     _sine_glow_layout.addWidget(tab.sine_reactive_glow)
 
-    sine_layout.addWidget(tab._sine_glow_sub_container)
+    _adv.addWidget(tab._sine_glow_sub_container)
 
     def _update_sine_glow_vis(_s=None):
         tab._sine_glow_sub_container.setVisible(tab.sine_glow_enabled.isChecked())
@@ -87,7 +99,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line_color_btn.clicked.connect(tab._choose_sine_line_color)
     sine_line_color_row.addWidget(tab.sine_line_color_btn)
     sine_line_color_row.addStretch()
-    sine_layout.addLayout(sine_line_color_row)
+    _adv.addLayout(sine_line_color_row)
 
     sine_sens_row = QHBoxLayout()
     sine_sens_row.addWidget(QLabel("Sensitivity:"))
@@ -106,7 +118,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_sensitivity_label.setText(f"{v / 100.0:.2f}x")
     )
     sine_sens_row.addWidget(tab.sine_sensitivity_label)
-    sine_layout.addLayout(sine_sens_row)
+    _adv.addLayout(sine_sens_row)
 
     sine_speed_row = QHBoxLayout()
     sine_speed_row.addWidget(QLabel("Speed:"))
@@ -125,7 +137,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_speed_label.setText(f"{v / 100.0:.2f}x")
     )
     sine_speed_row.addWidget(tab.sine_speed_label)
-    sine_layout.addLayout(sine_speed_row)
+    _adv.addLayout(sine_speed_row)
 
     sine_travel_row = QHBoxLayout()
     sine_travel_row.addWidget(QLabel("Travel:"))
@@ -137,7 +149,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_travel.currentIndexChanged.connect(tab._save_settings)
     sine_travel_row.addWidget(tab.sine_travel)
     sine_travel_row.addStretch()
-    sine_layout.addLayout(sine_travel_row)
+    _adv.addLayout(sine_travel_row)
 
     # Wave Effect
     sine_wave_fx_row = QHBoxLayout()
@@ -158,7 +170,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_wave_effect_label.setText(f"{v}%")
     )
     sine_wave_fx_row.addWidget(tab.sine_wave_effect_label)
-    sine_layout.addLayout(sine_wave_fx_row)
+    _adv.addLayout(sine_wave_fx_row)
 
     # Micro Wobble
     sine_mw_row = QHBoxLayout()
@@ -178,7 +190,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_micro_wobble_label.setText(f"{v}%")
     )
     sine_mw_row.addWidget(tab.sine_micro_wobble_label)
-    sine_layout.addLayout(sine_mw_row)
+    _adv.addLayout(sine_mw_row)
 
     # Width Reaction
     sine_wr_row = QHBoxLayout()
@@ -202,7 +214,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_width_reaction_label.setText(f"{v}%")
     )
     sine_wr_row.addWidget(tab.sine_width_reaction_label)
-    sine_layout.addLayout(sine_wr_row)
+    _adv.addLayout(sine_wr_row)
 
     # Heartbeat
     sine_hb_row = QHBoxLayout()
@@ -226,7 +238,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_heartbeat_label.setText(f"{v}%")
     )
     sine_hb_row.addWidget(tab.sine_heartbeat_label)
-    sine_layout.addLayout(sine_hb_row)
+    _adv.addLayout(sine_hb_row)
 
     # Vertical Shift
     sine_vshift_row = QHBoxLayout()
@@ -246,7 +258,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_vertical_shift_label.setText(f"{v}")
     )
     sine_vshift_row.addWidget(tab.sine_vertical_shift_label)
-    sine_layout.addLayout(sine_vshift_row)
+    _adv.addLayout(sine_vshift_row)
 
     # Multi-line
     tab.sine_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
@@ -256,7 +268,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_multi_line.setToolTip("Enable additional sine waves with different frequency distributions.")
     tab.sine_multi_line.stateChanged.connect(tab._save_settings)
     tab.sine_multi_line.stateChanged.connect(lambda: _update_sine_multi_line_visibility(tab))
-    sine_layout.addWidget(tab.sine_multi_line)
+    _adv.addWidget(tab.sine_multi_line)
 
     tab._sine_multi_container = QWidget()
     sine_ml_layout = QVBoxLayout(tab._sine_multi_container)
@@ -317,7 +329,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l3_row.addStretch()
     sine_ml_layout.addWidget(tab._sine_l3_row_widget)
 
-    sine_layout.addWidget(tab._sine_multi_container)
+    _adv.addWidget(tab._sine_multi_container)
     _update_sine_multi_line_visibility(tab)
 
     # Line Offset Bias
@@ -338,7 +350,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_line_offset_bias_label.setText(f"{v}%")
     )
     sine_lob_row.addWidget(tab.sine_line_offset_bias_label)
-    sine_layout.addLayout(sine_lob_row)
+    _adv.addLayout(sine_lob_row)
 
     # Card Adaptation
     sine_adapt_row = QHBoxLayout()
@@ -358,7 +370,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_card_adaptation_label.setText(f"{v}%")
     )
     sine_adapt_row.addWidget(tab.sine_card_adaptation_label)
-    sine_layout.addLayout(sine_adapt_row)
+    _adv.addLayout(sine_adapt_row)
 
     # Card Height
     sine_growth_row = QHBoxLayout()
@@ -378,6 +390,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_wave_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     sine_growth_row.addWidget(tab.sine_wave_growth_label)
-    sine_layout.addLayout(sine_growth_row)
+    _adv.addLayout(sine_growth_row)
 
+    sine_layout.addWidget(tab._sine_advanced)
     parent_layout.addWidget(tab._sine_wave_settings_container)

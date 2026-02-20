@@ -1025,6 +1025,22 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
             logger.debug("[MEDIA_TAB] Failed to set %s=%s", attr, cd, exc_info=True)
             setattr(tab, attr, QColor(*default))
 
+    # Preset indices per mode
+    _preset_slider_map = {
+        'spectrum': '_spectrum_preset_slider',
+        'oscilloscope': '_osc_preset_slider',
+        'sine_wave': '_sine_preset_slider',
+        'blob': '_blob_preset_slider',
+        'helix': '_helix_preset_slider',
+        'starfield': '_starfield_preset_slider',
+        'bubble': '_bubble_preset_slider',
+    }
+    for mode_key, slider_attr in _preset_slider_map.items():
+        slider = getattr(tab, slider_attr, None)
+        if slider is not None:
+            idx = int(spotify_vis_config.get(f'preset_{mode_key}', 0))
+            slider.set_preset_index(idx)
+
     _update_media_enabled_visibility(tab)
     _update_spotify_vis_enabled_visibility(tab)
 
@@ -1189,6 +1205,21 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_pop_color': _qcolor_to_list(getattr(tab, '_bubble_pop_color', None), [255, 255, 255, 180]),
         'bubble_specular_direction': (tab.bubble_specular_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_specular_direction') else 'top_left'),
     }
+    # Preset indices per mode
+    _ps_map = {
+        'spectrum': '_spectrum_preset_slider',
+        'oscilloscope': '_osc_preset_slider',
+        'sine_wave': '_sine_preset_slider',
+        'blob': '_blob_preset_slider',
+        'helix': '_helix_preset_slider',
+        'starfield': '_starfield_preset_slider',
+        'bubble': '_bubble_preset_slider',
+    }
+    for mk, sa in _ps_map.items():
+        s = getattr(tab, sa, None)
+        spotify_vis_config[f'preset_{mk}'] = (
+            s.preset_index() if s is not None else 0
+        )
 
     tab._update_spotify_vis_sensitivity_enabled_state()
     tab._update_spotify_vis_floor_enabled_state()

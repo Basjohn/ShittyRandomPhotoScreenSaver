@@ -123,6 +123,10 @@ def _get_raindrops_program():
     """Get the RaindropsProgram instance via cache."""
     return get_program_cache().get_program_instance(GLProgramCache.RAINDROPS)
 
+def _get_burn_program():
+    """Get the BurnProgram instance via cache."""
+    return get_program_cache().get_program_instance(GLProgramCache.BURN)
+
 
 def cleanup_global_shader_programs() -> None:
     """Clear all shader program instances via the centralized cache.
@@ -201,6 +205,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._peel: Optional[PeelState] = None
         self._crumble: Optional[CrumbleState] = None
         self._particle: Optional[ParticleState] = None
+        self._burn = None  # BurnState — imported lazily in transitions.py
         # NOTE: _shuffle and _shooting_stars removed - these transitions are retired.
 
         # Centralized profiler for all compositor-driven transitions.
@@ -283,6 +288,7 @@ class GLCompositorWidget(QOpenGLWidget):
             "raindrops": _get_raindrops_program,
             "crumble": _get_crumble_program,
             "particle": _get_particle_program,
+            "burn": _get_burn_program,
         })
 
         # Optional ResourceManager hook so higher-level code can track this
@@ -328,6 +334,7 @@ class GLCompositorWidget(QOpenGLWidget):
             "GLCompositorWarpTransition": GLProgramCache.WARP,
             "GLCompositorCrumbleTransition": GLProgramCache.CRUMBLE,
             "GLCompositorParticleTransition": GLProgramCache.PARTICLE,
+            "GLCompositorBurnTransition": GLProgramCache.BURN,
         }
 
     # ------------------------------------------------------------------
@@ -706,6 +713,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._raindrops = None
         self._crumble = None
         self._particle = None
+        self._burn = None
         self._current_transition_name = None
         self._finalize_animation_metrics(outcome="cleared")
 
@@ -1468,6 +1476,16 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.transitions import start_particle
         return start_particle(self, old_pixmap, new_pixmap, **kwargs)
 
+    def start_burn(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+        **kwargs,
+    ) -> Optional[str]:
+        """Delegates to gl_compositor_pkg.transitions."""
+        from rendering.gl_compositor_pkg.transitions import start_burn
+        return start_burn(self, old_pixmap, new_pixmap, **kwargs)
+
     def _update_transition_progress(self, state_attr: str, profiler_name: str, progress: float) -> None:
         """Generic progress update for transitions."""
         state = getattr(self, state_attr, None)
@@ -1534,6 +1552,12 @@ class GLCompositorWidget(QOpenGLWidget):
     def _on_particle_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         self._complete_transition("particle", "_particle", on_finished)
 
+    def _on_burn_update(self, progress: float) -> None:
+        self._update_transition_progress("_burn", "burn", progress)
+
+    def _on_burn_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
+        self._complete_transition("burn", "_burn", on_finished, release_textures=True)
+
     def _set_transition_region(self, state_attr: str, region: Optional[QRegion]) -> None:
         """Generic region setter for region-based transitions."""
         state = getattr(self, state_attr, None)
@@ -1575,6 +1599,7 @@ class GLCompositorWidget(QOpenGLWidget):
             "basic_program", "raindrops_program", "warp_program", "diffuse_program",
             "blockflip_program", "peel_program", "crossfade_program", "slide_program",
             "wipe_program", "blinds_program", "crumble_program", "particle_program",
+            "burn_program",
         ]
         for attr in program_attrs:
             setattr(self._gl_pipeline, attr, 0)
@@ -1686,6 +1711,10 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.shader_dispatch import can_use_wipe_shader
         return can_use_wipe_shader(self)
 
+    def _can_use_burn_shader(self) -> bool:
+        from rendering.gl_compositor_pkg.shader_dispatch import can_use_burn_shader
+        return can_use_burn_shader(self)
+
     def warm_shader_textures(self, old_pixmap: Optional[QPixmap], new_pixmap: Optional[QPixmap]) -> None:
         """Best-effort prewarm of shader textures for a pixmap pair."""
         if not self._ensure_gl_pipeline_ready():
@@ -1776,21 +1805,9 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_crossfade_textures
         return prepare_crossfade_textures(self)
 
-    def _prepare_slide_textures(self) -> bool:
-        from rendering.gl_compositor_pkg.shader_dispatch import prepare_slide_textures
-        return prepare_slide_textures(self)
-
-    def _prepare_wipe_textures(self) -> bool:
-        from rendering.gl_compositor_pkg.shader_dispatch import prepare_wipe_textures
-        return prepare_wipe_textures(self)
-
-    # ------------------------------------------------------------------
-    # Viewport — delegates to shader_dispatch
-    # ------------------------------------------------------------------
-
-    def _get_viewport_size(self) -> tuple[int, int]:
-        from rendering.gl_compositor_pkg.shader_dispatch import get_viewport_size
-        return get_viewport_size(self)
+    def _prepare_burn_textures(self) -> bool:
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_burn_textures
+        return prepare_burn_textures(self)
 
     # ------------------------------------------------------------------
     # Paint shader dispatch — delegates to shader_dispatch
@@ -1847,6 +1864,10 @@ class GLCompositorWidget(QOpenGLWidget):
     def _paint_raindrops_shader(self, target: QRect) -> None:
         from rendering.gl_compositor_pkg.shader_dispatch import paint_raindrops_shader
         paint_raindrops_shader(self, target)
+
+    def _paint_burn_shader(self, target: QRect) -> None:
+        from rendering.gl_compositor_pkg.shader_dispatch import paint_burn_shader
+        paint_burn_shader(self, target)
 
     def _paint_debug_overlay(self, painter: QPainter) -> None:
         """Delegates to gl_compositor_pkg.overlays."""

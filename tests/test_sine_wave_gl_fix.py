@@ -62,11 +62,11 @@ class TestSineWaveGLOverlayFix:
         assert len(source) > 100
 
     def test_card_height_growth_factor_defaults(self):
-        """Oscilloscope and sine_wave should have default growth of 1.0."""
+        """Verify default growth factors per mode."""
         from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
-        assert DEFAULT_GROWTH['oscilloscope'] == 1.0
-        assert DEFAULT_GROWTH['sine_wave'] == 1.0
-        assert DEFAULT_GROWTH['blob'] == 2.5
+        assert DEFAULT_GROWTH['oscilloscope'] == 2.0
+        assert DEFAULT_GROWTH['sine_wave'] == 2.0
+        assert DEFAULT_GROWTH['blob'] == 3.5
 
     def test_card_height_expansion_works(self):
         """Setting growth > 1.0 should expand the card height."""

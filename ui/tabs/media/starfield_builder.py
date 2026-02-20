@@ -16,10 +16,22 @@ if TYPE_CHECKING:
 def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Starfield settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     tab._starfield_settings_container = QWidget()
     star_layout = QVBoxLayout(tab._starfield_settings_container)
     star_layout.setContentsMargins(0, 0, 0, 0)
+
+    # --- Preset slider ---
+    tab._starfield_preset_slider = VisualizerPresetSlider("starfield")
+    tab._starfield_preset_slider.preset_changed.connect(tab._save_settings)
+    star_layout.addWidget(tab._starfield_preset_slider)
+
+    tab._starfield_advanced = QWidget()
+    _adv = QVBoxLayout(tab._starfield_advanced)
+    _adv.setContentsMargins(0, 0, 0, 0)
+    _adv.setSpacing(4)
+    tab._starfield_preset_slider.set_advanced_container(tab._starfield_advanced)
 
     star_speed_row = QHBoxLayout()
     star_speed_row.addWidget(QLabel("Travel Speed:"))
@@ -37,7 +49,7 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.star_travel_speed_label.setText(f"{v / 100.0:.2f}")
     )
     star_speed_row.addWidget(tab.star_travel_speed_label)
-    star_layout.addLayout(star_speed_row)
+    _adv.addLayout(star_speed_row)
 
     star_react_row = QHBoxLayout()
     star_react_row.addWidget(QLabel("Bass Reactivity:"))
@@ -55,7 +67,7 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.star_reactivity_label.setText(f"{v / 100.0:.2f}x")
     )
     star_react_row.addWidget(tab.star_reactivity_label)
-    star_layout.addLayout(star_react_row)
+    _adv.addLayout(star_react_row)
 
     nebula_tint_row = QHBoxLayout()
     nebula_tint_row.addWidget(QLabel("Nebula Tint 1:"))
@@ -67,7 +79,7 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.nebula_tint2_btn.clicked.connect(tab._choose_nebula_tint2)
     nebula_tint_row.addWidget(tab.nebula_tint2_btn)
     nebula_tint_row.addStretch()
-    star_layout.addLayout(nebula_tint_row)
+    _adv.addLayout(nebula_tint_row)
 
     nebula_speed_row = QHBoxLayout()
     nebula_speed_row.addWidget(QLabel("Nebula Cycle:"))
@@ -86,16 +98,17 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.nebula_cycle_speed_label.setText(f"{v}%")
     )
     nebula_speed_row.addWidget(tab.nebula_cycle_speed_label)
-    star_layout.addLayout(nebula_speed_row)
+    _adv.addLayout(nebula_speed_row)
 
+    star_layout.addWidget(tab._starfield_advanced)
     parent_layout.addWidget(tab._starfield_settings_container)
 
 
 def build_starfield_growth(tab: "WidgetsTab") -> None:
-    """Append height growth slider to the starfield container (called after sine section)."""
+    """Append height growth slider to the starfield advanced container."""
     from ui.tabs.widgets_tab import NoWheelSlider
 
-    star_layout = tab._starfield_settings_container.layout()
+    star_layout = tab._starfield_advanced.layout()
     star_growth_row = QHBoxLayout()
     star_growth_row.addWidget(QLabel("Card Height:"))
     tab.starfield_growth = NoWheelSlider(Qt.Orientation.Horizontal)

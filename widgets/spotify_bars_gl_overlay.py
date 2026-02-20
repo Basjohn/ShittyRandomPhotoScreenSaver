@@ -1113,6 +1113,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
             # --- Rainbow hue offset (all modes) ---
             loc = u.get("u_rainbow_hue_offset", -1)
+            if not getattr(self, '_rainbow_diag_logged', False):
+                logger.debug(
+                    "[SPOTIFY_VIS] Rainbow diag: enabled=%s speed=%.2f loc=%d mode=%s",
+                    self._rainbow_enabled, self._rainbow_speed, loc, mode,
+                )
+                self._rainbow_diag_logged = True
             if loc >= 0:
                 if self._rainbow_enabled:
                     # Continuous hue rotation: fract() keeps it in 0..1

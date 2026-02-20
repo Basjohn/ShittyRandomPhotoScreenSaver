@@ -36,6 +36,7 @@ from transitions.gl_compositor_raindrops_transition import GLCompositorRainDrops
 from transitions.gl_compositor_warp_transition import GLCompositorWarpTransition
 from transitions.gl_compositor_crumble_transition import GLCompositorCrumbleTransition
 from transitions.gl_compositor_particle_transition import GLCompositorParticleTransition
+from transitions.gl_compositor_burn_transition import GLCompositorBurnTransition
 
 if TYPE_CHECKING:
     pass  # Future type hints if needed
@@ -252,7 +253,7 @@ class TransitionFactory:
     _CONCRETE_TYPES = frozenset({
         'Crossfade', 'Slide', 'Wipe', 'Peel', 'Shuffle', 'Claw Marks',
         'Warp Dissolve', 'Diffuse', 'Rain Drops', 'Ripple',
-        'Block Puzzle Flip', '3D Block Spins', 'Blinds', 'Crumble', 'Particle',
+        'Block Puzzle Flip', '3D Block Spins', 'Blinds', 'Crumble', 'Particle', 'Burn',
     })
 
     def _get_random_mode(
@@ -298,7 +299,7 @@ class TransitionFactory:
             base = ['Crossfade', 'Slide', 'Wipe', 'Diffuse', 'Block Puzzle Flip']
             gl_only = [
                 'Blinds', 'Peel', '3D Block Spins', 'Ripple',
-                'Warp Dissolve', 'Crumble', 'Particle',
+                'Warp Dissolve', 'Crumble', 'Particle', 'Burn',
             ]
             pool_cfg = (
                 settings.get('pool', {})
@@ -431,6 +432,9 @@ class TransitionFactory:
         if transition_type == 'Particle':
             return self._create_particle(settings, duration_ms, use_compositor)
         
+        if transition_type == 'Burn':
+            return self._create_burn(settings, duration_ms, easing_str, use_compositor)
+        
         # Unknown type - fallback to Crossfade (use same path as normal creation)
         logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
         return self._create_crossfade(duration_ms, easing_str, use_compositor)
@@ -562,6 +566,41 @@ class TransitionFactory:
             return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, False, weight_mode)
         return CrossfadeTransition(duration_ms)
     
+    def _create_burn(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+        burn_cfg = settings.get('burn', {})
+        if not isinstance(burn_cfg, dict):
+            burn_cfg = {}
+        dir_str = burn_cfg.get('direction', 'Random') or 'Random'
+        dir_map = {
+            'Left to Right': 0, 'Right to Left': 1,
+            'Top to Bottom': 2, 'Bottom to Top': 3, 'Center Out': 4,
+        }
+        if dir_str == 'Random':
+            direction = random.randint(0, 4)
+        else:
+            direction = dir_map.get(dir_str, 0)
+        jaggedness = self._safe_float(burn_cfg.get('jaggedness', 0.5), 0.5)
+        glow_intensity = self._safe_float(burn_cfg.get('glow_intensity', 0.7), 0.7)
+        char_width = self._safe_float(burn_cfg.get('char_width', 0.5), 0.5)
+        smoke_enabled = SettingsManager.to_bool(burn_cfg.get('smoke_enabled', True), True)
+        smoke_density = self._safe_float(burn_cfg.get('smoke_density', 0.5), 0.5)
+        ash_enabled = SettingsManager.to_bool(burn_cfg.get('ash_enabled', True), True)
+        ash_density = self._safe_float(burn_cfg.get('ash_density', 0.5), 0.5)
+        if use_compositor:
+            return GLCompositorBurnTransition(
+                duration_ms=duration_ms,
+                direction=direction,
+                jaggedness=jaggedness,
+                glow_intensity=glow_intensity,
+                char_width=char_width,
+                smoke_enabled=smoke_enabled,
+                smoke_density=smoke_density,
+                ash_enabled=ash_enabled,
+                ash_density=ash_density,
+                easing=easing_str,
+            )
+        return CrossfadeTransition(duration_ms, easing_str)
+
     def _create_particle(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
         # Get canonical defaults from defaults.py
         from core.settings.defaults import get_default_settings

@@ -29,6 +29,7 @@ from rendering.transition_state import (
     DiffuseState,
     CrumbleState,
     ParticleState,
+    BurnState,
 )
 
 try:
@@ -585,6 +586,68 @@ def start_particle(
         lambda: widget._on_particle_complete(on_finished),
         transition_label="particle",
     )
+
+def start_burn(
+    widget,
+    old_pixmap: Optional[QPixmap],
+    new_pixmap: QPixmap,
+    *,
+    duration_ms: int,
+    easing: EasingCurve,
+    animation_manager: AnimationManager,
+    on_finished: Optional[Callable[[], None]] = None,
+    direction: int = 0,
+    jaggedness: float = 0.5,
+    glow_intensity: float = 0.7,
+    glow_color: tuple = (1.0, 0.55, 0.12, 1.0),
+    char_width: float = 0.5,
+    smoke_enabled: bool = True,
+    smoke_density: float = 0.5,
+    ash_enabled: bool = True,
+    ash_density: float = 0.5,
+    seed: Optional[float] = None,
+) -> Optional[str]:
+    """Begin a burn transition between two pixmaps using the compositor."""
+    import random as _rng
+
+    if not new_pixmap or new_pixmap.isNull():
+        logger.error("[GL COMPOSITOR] Invalid new pixmap for burn")
+        return None
+
+    if (widget._gl_disabled_for_session or gl is None or widget._gl_pipeline is None
+            or not widget._gl_pipeline.initialized):
+        return None
+
+    if old_pixmap is None or old_pixmap.isNull():
+        if widget._handle_no_old_image(new_pixmap, on_finished, "burn"):
+            return None
+
+    actual_seed = seed if seed is not None else _rng.random() * 1000.0
+    widget._clear_all_transitions()
+    widget._burn = BurnState(
+        old_pixmap=old_pixmap,
+        new_pixmap=new_pixmap,
+        progress=0.0,
+        direction=max(0, min(4, int(direction))),
+        jaggedness=max(0.0, min(1.0, float(jaggedness))),
+        glow_intensity=max(0.0, min(1.0, float(glow_intensity))),
+        glow_color=tuple(glow_color),
+        char_width=max(0.1, min(1.0, float(char_width))),
+        smoke_enabled=bool(smoke_enabled),
+        smoke_density=max(0.0, min(1.0, float(smoke_density))),
+        ash_enabled=bool(ash_enabled),
+        ash_density=max(0.0, min(1.0, float(ash_density))),
+        seed=float(actual_seed),
+    )
+    widget._pre_upload_textures(widget._prepare_burn_textures)
+    widget._profiler.start("burn")
+    return widget._start_transition_animation(
+        duration_ms, easing, animation_manager,
+        widget._on_burn_update,
+        lambda: widget._on_burn_complete(on_finished),
+        transition_label="burn",
+    )
+
 
 # ------------------------------------------------------------------
 # Animation callbacks

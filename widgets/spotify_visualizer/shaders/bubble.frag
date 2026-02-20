@@ -63,11 +63,34 @@ vec3 apply_rainbow(vec3 rgb, float hue_offset) {
 // =====================================================================
 
 void main() {
-    vec2 uv = v_uv;
-    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
+    float width = u_resolution.x;
+    float height = u_resolution.y;
+    if (width <= 0.0 || height <= 0.0) discard;
+
+    // Card margins — keep bubble content inside the card border
+    float margin_x = 8.0;
+    float margin_y = 6.0;
+    float inner_w = width - margin_x * 2.0;
+    float inner_h = height - margin_y * 2.0;
+    if (inner_w <= 0.0 || inner_h <= 0.0) discard;
+
+    // Map v_uv (0..1 over full overlay) to pixel coords, then to inner UV
+    float dpr = max(u_dpr, 1.0);
+    float fb_h = height * dpr;
+    vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_h - gl_FragCoord.y) / dpr);
+
+    // Discard outside inner card rect
+    if (fc.x < margin_x || fc.x > width - margin_x ||
+        fc.y < margin_y || fc.y > height - margin_y) {
+        discard;
+    }
+
+    // Remap to 0..1 within inner rect
+    vec2 uv = vec2((fc.x - margin_x) / inner_w, (fc.y - margin_y) / inner_h);
+    float aspect = inner_w / max(inner_h, 1.0);
     
     // Pixel size in normalised coords (for anti-aliasing)
-    float px = 1.0 / max(u_resolution.y, 1.0);
+    float px = 1.0 / max(inner_h, 1.0);
     
     // --- Background gradient ---
     // Gradient direction follows specular direction: lightest where light is,

@@ -313,6 +313,166 @@ bout 15% larger than now when bass is is
 
 ---
 
+---
+
+## Task 9: Spectrum Rainbow ("Taste The Rainbow") Not Working
+
+**Goal:** Spectrum bars must respond to the Taste The Rainbow hue-rotation exactly like all other visualizer modes do.
+
+> *User:* "Spectrum still is not affected by Taste The Rainbow at all. This needs to be a deep investigative task following the full flow chain as the problem has persisted through several fixes."
+
+### Complexity Analysis
+- **Shader side:** `spectrum.frag` has `u_rainbow_hue_offset` declared and the hue-shift block is present (lines ~474–495). The shader code is correct.
+- **Uniform push side:** `_render_with_shader()` in `spotify_bars_gl_overlay.py` pushes `u_rainbow_hue_offset` in the **common uniforms** block (lines ~1114–1128) before the mode-specific blocks. The push reads `self._rainbow_enabled` and `self._accumulated_time`. This looks correct at first glance.
+- **Tick gate:** `spotify_visualizer_widget.py` line ~1565 sets `animated_mode = (self._vis_mode_str != 'spectrum') or getattr(self, '_rainbow_enabled', False)`. So when rainbow is on, spectrum should still push every tick. This also looks correct.
+- **Root cause hypotheses (in priority order):**
+  1. **`_accumulated_time` is not advancing for spectrum.** Spectrum is not in the `animated_mode` list unless rainbow is on. If `_rainbow_enabled` is `False` on the widget at the time the tick check runs (i.e. the flag was set on the overlay but not on the widget), `should_push` will be False and `_accumulated_time` will never advance → `hue_offset` stays 0.
+  2. **`_rainbow_enabled` is set on `SpotifyVisualizerWidget` but not propagated to `SpotifyBarsGLOverlay`.** The `set_state()` call path must pass `rainbow_enabled` through `extra` dict → overlay `set_state()`. If the key is missing from the extra dict for spectrum mode, the overlay's `_rainbow_enabled` stays False.
+  3. **`_rainbow_diag_logged` one-shot guard** fires on the first frame (when rainbow may be off) and never logs again, masking the real state.
+  4. **`_accumulated_time` is only advanced in `set_state()` for animated modes.** If spectrum's `set_state()` path skips the time accumulation when `playing=False`, the hue offset stays frozen.
+
+### Investigation Checklist
+- [ ] **Trace the `extra` dict:** In `spotify_visualizer/config_applier.py` `_build_extra_dict()`, confirm `rainbow_enabled` and `rainbow_speed` are unconditionally added (not gated on mode). Current code at line ~348 looks correct — verify it actually runs for spectrum.
+- [ ] **Trace `set_state()` on overlay:** Confirm `SpotifyBarsGLOverlay.set_state()` receives and stores `rainbow_enabled=True` when the toggle is on. Add a one-shot log.
+- [ ] **Trace `_accumulated_time` advancement:** Confirm `_accumulated_time` is incremented in `set_state()` regardless of mode. If it's only incremented inside an `if mode != 'spectrum'` guard, that's the bug.
+- [ ] **Check `should_push` gate:** In `spotify_visualizer_widget.py` `_on_tick()`, log `animated_mode` and `should_push` when rainbow is enabled and mode is spectrum. If `should_push` is False, the overlay never gets a new frame.
+- [ ] **Fix:** Ensure `_accumulated_time` advances for all modes when rainbow is enabled. Ensure `rainbow_enabled` reaches the overlay's `set_state()` for spectrum. Remove the `_rainbow_diag_logged` one-shot guard or make it re-fire when state changes.
+- [ ] **Key files:** `widgets/spotify_bars_gl_overlay.py` (`set_state`, `_render_with_shader`), `widgets/spotify_visualizer/config_applier.py` (`_build_extra_dict`), `widgets/spotify_visualizer_widget.py` (`_on_tick`, `should_push` logic).
+
+---
+
+## Task 10: Taste The Rainbow — Gate on Music Playing / Visualizer Animating
+
+**Goal:** Rainbow hue rotation should only advance while music is playing OR the visualizer is actively animating. When paused/idle, the hue freezes at its current value.
+
+> *User:* "Taste the rainbow should only colour change while music is playing OR the visualizer is animating, whatever is more performant/reliable to gate behind. Otherwise it sticks with the colour it is on."
+
+### Complexity Analysis
+- **Current behaviour:** `hue_offset = (self._accumulated_time * self._rainbow_speed * 0.1) % 1.0` — `_accumulated_time` advances every frame regardless of `_playing`.
+- **Preferred gate:** `self._playing` (already stored on the overlay as `self._playing: bool`). This is the most reliable signal — it's set from the `playing` kwarg in `set_state()` which comes from the Spotify playback state.
+- **Alternative gate:** Check if any animated visualizer mode is running (non-spectrum, or spectrum with active bars). Less reliable since bars can be non-zero even when paused (decay).
+- **Implementation:** In `_render_with_shader()`, only advance the hue accumulator when `self._playing` is True. Store a `_rainbow_hue_accum: float` field separate from `_accumulated_time` so it doesn't affect other time-based animations. Freeze it when not playing.
+
+### Implementation Checklist
+- [ ] **Add `_rainbow_hue_accum: float = 0.0`** to `SpotifyBarsGLOverlay.__init__()`.
+- [ ] **Advance `_rainbow_hue_accum`** only when `self._playing` is True, using the same `dt` that `_accumulated_time` uses (derived from `set_state()` timestamp delta).
+- [ ] **Use `_rainbow_hue_accum`** instead of `_accumulated_time` for the `u_rainbow_hue_offset` push.
+- [ ] **Key files:** `widgets/spotify_bars_gl_overlay.py` (`__init__`, `set_state`, `_render_with_shader`).
+
+---
+
+## Task 11: Bubble Visualizer — Multiple Bugs
+
+**Goal:** Fix 5 distinct bugs in the Bubble visualizer mode to reach the reference visual quality shown in the goal image.
+
+> *User:* "Bubble is currently very problematic." (See sub-issues below.)
+
+### 11.1 UP/DOWN Direction — No Visible Bubbles
+
+**Symptom:** When UP or DOWN direction is selected, only slight white bumps appear at the top/bottom occasionally. Bubbles do not flow.
+
+**Root cause hypothesis:**
+- `_spawn_position("up", ...)` returns `y = -margin` (just off the bottom edge in UV space). But in the shader, UV Y=0 is top and Y=1 is bottom. The simulation uses `b.y -= move_y` (line ~188 in `bubble_simulation.py`), meaning positive `vy` moves UP in UV space (decreasing Y). For direction "up", `sv = (0.0, 1.0)` so `move_y = 1.0 * base_vel * dt > 0`, meaning `b.y` decreases — bubbles move toward Y=0 (top). Spawn at `y = -margin` (above the card in UV) means they start off-screen and immediately exit. **The spawn edge is wrong for UP direction** — bubbles should spawn at `y = 1.0 + margin` (bottom) and travel toward `y = 0` (top).
+- Similarly for DOWN: spawn at `y = 1.0 + margin` but `sv = (0.0, -1.0)` → `move_y = -base_vel * dt` → `b.y -= (-base_vel * dt)` = `b.y += base_vel * dt` → Y increases → moves toward bottom. Spawn should be at `y = -margin`.
+- **Fix:** Swap spawn Y for UP and DOWN in `_spawn_position()`. UP should spawn at `y = 1.0 + margin`, DOWN at `y = -margin`.
+
+**Implementation Checklist:**
+- [ ] Fix `_spawn_position()` in `bubble_simulation.py`: UP → `y = 1.0 + margin`, DOWN → `y = -margin`.
+- [ ] Verify LEFT/RIGHT are correct (LEFT: spawn at `x = 1.0 + margin`, RIGHT: spawn at `x = -margin`).
+- [ ] Add a log line on first spawn to confirm spawn coordinates.
+
+### 11.2 Clustering — Uniform Grouping, Large Gaps, Overlapping Bubbles
+
+**Symptom:** Bubbles cluster uniformly at spawn, leaving large gaps. Bubbles overlap each other.
+
+**Root cause:**
+- Cluster spawning (20% chance, 2–3 bubbles within ±0.03 UV) fires at the same time for all small bubbles during the initial fill, creating a visible uniform grid of clusters.
+- No overlap prevention: `_spawn_bubble_at()` does not check if the new bubble's radius overlaps any existing bubble.
+
+**Fix:**
+- **Stagger initial spawn:** Add a `spawn_delay` or `age` offset to newly spawned bubbles so they don't all appear at frame 0. Alternatively, pre-age them randomly on first fill.
+- **Overlap prevention:** In `_spawn_bubble_at()`, check distance from all existing bubbles. If `dist < r1 + r2 + min_gap`, reject and retry (up to N attempts). Use `min_gap = 0.005` (half a small bubble radius).
+- **Reduce cluster tightness:** Increase cluster spread from ±0.03 to ±0.06–0.08 UV.
+- **Randomise initial positions:** On first fill (when `len(self._bubbles) == 0`), scatter bubbles across the full card area rather than spawning from the edge.
+
+**Implementation Checklist:**
+- [ ] Add overlap check in `_spawn_bubble_at()` with retry loop (max 8 attempts).
+- [ ] Increase cluster spread to ±0.07 UV.
+- [ ] On first fill (age == 0, `_time < 0.5`), use random positions across card instead of edge spawn.
+- [ ] Pre-age bubbles randomly on first fill: `b.age = random.uniform(0, b.max_age * 0.3)`.
+
+### 11.3 Big Bubble Pulsing Not Working + Slider Wiring Audit
+
+**Symptom:** Big bubble pulsing does not respond. Likely other sliders also broken.
+
+**Root cause hypothesis:**
+- `snapshot()` in `bubble_simulation.py` reads `big_bass_pulse` and `small_freq_pulse` from kwargs. These must be passed from the overlay's `set_state()` call. If the overlay's `_bubble_big_bass_pulse` / `_bubble_small_freq_pulse` fields are not being set from `set_state()` kwargs, or not passed to `snapshot()`, the pulse stays at default 0.5.
+- Full wiring audit needed: every bubble setting must flow from UI → `save_media_settings()` → `spotify_vis_config` dict → `SpotifyVisualizerSettings.from_mapping()` → model field → creator kwargs → `apply_vis_mode_config()` → widget `_bubble_*` field → `extra` dict → overlay `set_state()` → `_bubble_*` on overlay → simulation `tick()`/`snapshot()`.
+
+**Implementation Checklist:**
+- [ ] Audit every `bubble_*` setting key end-to-end through all 8 layers.
+- [ ] Confirm `big_bass_pulse` and `small_freq_pulse` are passed to `snapshot()` in the overlay's bubble render path.
+- [ ] Confirm `bubble_stream_speed`, `bubble_stream_reactivity`, `bubble_drift_*`, `bubble_rotation_amount` all reach `tick()`.
+- [ ] Add a one-shot debug log in `set_state()` printing all received bubble kwargs when mode == 'bubble'.
+
+### 11.4 Bubble Travels When Paused / Travel Speed Not Music-Reactive
+
+**Symptom:** Bubbles continue moving when playback is paused. Travel speed is not affected by music at all.
+
+**Root cause:**
+- `tick()` is called with `dt` derived from wall-clock time, not gated on `self._playing`. When paused, `dt` is still positive and bubbles move.
+- `stream_reactivity` is read from settings but `effective_speed = stream_speed * (1.0 - stream_reactivity + stream_reactivity * overall)`. If `overall` energy is always 0 when paused (correct) but `stream_reactivity` is 0.0 (default or mis-wired), then `effective_speed = stream_speed * 1.0` — always full speed regardless of music.
+
+**Fix:**
+- **Pause gate:** In the overlay's bubble tick call, pass `dt = 0.0` when `self._playing` is False. This freezes all bubble positions.
+- **Reactivity wiring:** Confirm `bubble_stream_reactivity` is wired through all 8 layers and reaches `tick()` settings dict.
+- **Important user note:** Speed should instantly increase but have a longer decay period before slowing down so that if music is rapid it does not end up jerking, travel/speed must always appear smooth not jarring.
+
+**Implementation Checklist:**
+- [ ] Gate `dt` to 0.0 in bubble tick call when `self._playing` is False.
+- [ ] Verify `bubble_stream_reactivity` wiring end-to-end.
+- [ ] Verify energy bands (`overall`) are actually non-zero during playback and zero when paused.
+
+### 11.5 Border Thickness Scaling With Bubble Size
+
+**Symptom:** Small bubbles have border that is too thick relative to their size. Big bubbles are ~0.5px too thick overall.
+
+**Root cause:** `bubble.frag` uses a fixed `u_outline_thickness` (or hardcoded value) for all bubble sizes regardless of radius.
+
+**Fix:**
+- In `bubble.frag`, scale the outline thickness proportionally to the bubble's radius: `float thickness = base_thickness * (r / reference_radius)` where `reference_radius` is the mid-range big bubble radius (~0.04).
+- Reduce the base outline thickness for big bubbles by ~0.5px equivalent in UV space.
+
+**Implementation Checklist:**
+- [ ] Read current outline thickness logic in `bubble.frag`.
+- [ ] Add radius-proportional thickness scaling.
+- [ ] Reduce big bubble base thickness by ~0.5px UV equivalent.
+
+---
+
+## Task 12: All Visualizers — Maximum Height 5.0x
+
+**Goal:** Raise the maximum user-configurable growth factor from 4.0x to 5.0x for all visualizer modes.
+
+> *User:* "All visualizers should have their maximum height at 5.0x not 4.0x."
+
+### Complexity Analysis
+- **Current code:** `card_height.py` line 73: `growth_factor = max(0.5, min(5.0, float(growth_factor)))` — the clamp already allows 5.0. The `MAX_HEIGHT = 600` hard cap may be the real limiter.
+- **UI slider:** The growth factor slider in `widgets_tab_media.py` likely has a `setMaximum(400)` (representing 4.0x with 0.01 step). This is the actual constraint.
+- **Fix:** Change the slider maximum from 400 → 500 (or equivalent) in the UI builder for each mode's growth factor slider.
+
+### Implementation Checklist
+- [ ] Find growth factor slider(s) in `ui/tabs/media/` builders and change `setMaximum` from 400 to 500.
+- [ ] Verify `card_height.py` clamp already allows 5.0 (it does — line 73).
+- [ ] Verify `MAX_HEIGHT = 600` is sufficient for 5.0x at typical base heights (80px × 5.0 = 400px < 600 ✓).
+- [ ] Update any tooltip or label text that says "max 4.0x".
+
+Additional:
+1. Bubbles are not part of the double click visualizer swap, this is a mistake, they should be.
+2. Gl Compositor has had many edits and is large now, audit it and implement your suggested findings.
+(If reward is high do not skip or defer complex tasks!)
+---
+
 ## Upcoming: Feature Plans
 
 - [x] **Bubble Visualizer** — Phases 1–5 COMPLETE. Phase 6 (testing) in progress. See `Bubble_Vizualiser_Plan.md`.
@@ -320,4 +480,8 @@ bout 15% larger than now when bass is is
   - Card height added (3.0x growth factor).
   - All card heights raised +1.0x across all modes.
 - [ ] **Burn Transition** — Plan exists in `Burn_Transition_Plan.md`. Not yet started.
-- [ ] **Visualizer Presets System** — Comprehensive plan to be drafted. Users pick from set presets or custom (Advanced). Must preserve current defaults as a preset on every visualizer.
+- [x] **Visualizer Presets System** — Phases 1–2 COMPLETE. Phase 3 (preset definitions) pending. See `Docs/Visualizer_Presets_Plan.md`.
+  - `VisualizerPresetSlider` widget (4-notch slider) integrated into all 7 mode builders.
+  - All mode controls wrapped in `_<mode>_advanced` container, shown only on Custom.
+  - Save/load wired in `widgets_tab_media.py`. Preset overlay applied in `from_mapping()`.
+  - Auto-switch to Custom: only fires from advanced container sender, not already Custom.

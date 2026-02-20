@@ -15,6 +15,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/QTIMER_POLICY.md | QTimer usage policy: when to use QTimer vs ThreadManager, intentional UI-thread timer locations |
 | Docs/Defaults_Guide.md | All default settings, storage locations, SettingsManager API, safe change procedures |
 | Docs/Visualizer_Debug.md | Authoritative Spotify visualizer architecture + per-mode defaults, debugging, regression harness |
+| Docs/Visualizer_Presets_Plan.md | Comprehensive plan for per-visualizer-mode preset system with Advanced toggle |
+| Bubble_Vizualiser_Plan.md | Bubble visualizer implementation plan (Phases 1-5 COMPLETE, Phase 6 in progress) |
+| Burn_Transition_Plan.md | Burn transition implementation plan (not started) |
 
 ## Entry Points
 
@@ -62,6 +65,8 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Media | core/media/system_mute.py | is_available(), get_mute(), set_mute(), toggle_mute() | System-wide mute via IAudioEndpointVolume (pycaw) |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
 | Presets | core/settings/presets.py | PresetDefinition, apply_preset() | Widget presets system (moved from core/presets.py) |
+| Vis Presets | core/settings/visualizer_presets.py | VisualizerPreset, get_presets(), apply_preset_to_config() | Per-visualizer-mode preset registry (4 presets per mode incl. Custom) |
+| Vis Preset Slider | ui/tabs/media/preset_slider.py | VisualizerPresetSlider | Reusable 4-notch slider widget with Advanced toggle for per-mode presets |
 | SST I/O | core/settings/sst_io.py | export_to_sst(), import_from_sst(), preview_import_from_sst() | Settings snapshot transport (extracted from settings_manager.py) |
 | Lifecycle | core/lifecycle.py | Lifecycle, Cleanable | Runtime-checkable Protocols for start/stop/cleanup interface |
 | Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
@@ -267,7 +272,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars | DSP/FFT bar computation pipeline (inline, extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
-| Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for blob/starfield/helix modes |
+| Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); all defaults raised +1.0x |
 | Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread |
 | Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping; passes rainbow, ghosting, heartbeat, bubble settings (extracted from widget, ~430 LOC) |
 | Mode Transition | widgets/spotify_visualizer/mode_transition.py | cycle_mode, mode_transition_fade_factor, persist_vis_mode | Mode-cycling crossfade logic (extracted from widget, ~120 LOC) |
@@ -450,4 +455,5 @@ value = settings.get("display.mode", "fill")
 | tests/test_sine_wave_gl_fix.py | Sine wave GL overlay fix regression (mode validation, cycle, shader, card height) |
 | tests/test_micro_wobble_math.py | Micro wobble shader math: energy weighting, spatial freq, displacement bounds, smoothness (20 tests) |
 | tests/test_action_plan_3_0.py | Action Plan 3.0: heartbeat settings/math, artwork double-click fix, halo forwarding guard, halo shapes, sine line positioning, rainbow/ghosting roundtrip, shader source validation (37 tests) |
+| tests/test_visualizer_settings_plumbing.py | Visualizer settings plumbing: bubble kwargs, card height, rainbow greyscale, model/creator/applier/overlay/shader/UI plumbing, bubble simulation thread safety (30 tests) |
 | tests/unit/test_policy_compliance.py | Threading/import policy enforcement |

@@ -28,16 +28,28 @@ def _update_osc_multi_line_visibility(tab) -> None:
 def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Oscilloscope settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     tab._osc_settings_container = QWidget()
     osc_layout = QVBoxLayout(tab._osc_settings_container)
     osc_layout.setContentsMargins(0, 0, 0, 0)
 
+    # --- Preset slider ---
+    tab._osc_preset_slider = VisualizerPresetSlider("oscilloscope")
+    tab._osc_preset_slider.preset_changed.connect(tab._save_settings)
+    osc_layout.addWidget(tab._osc_preset_slider)
+
+    tab._osc_advanced = QWidget()
+    _adv = QVBoxLayout(tab._osc_advanced)
+    _adv.setContentsMargins(0, 0, 0, 0)
+    _adv.setSpacing(4)
+    tab._osc_preset_slider.set_advanced_container(tab._osc_advanced)
+
     tab.osc_glow_enabled = QCheckBox("Enable Glow")
     tab.osc_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_glow_enabled', True))
     tab.osc_glow_enabled.setToolTip("Draw a soft glow halo around the waveform line.")
     tab.osc_glow_enabled.stateChanged.connect(tab._save_settings)
-    osc_layout.addWidget(tab.osc_glow_enabled)
+    _adv.addWidget(tab.osc_glow_enabled)
 
     tab._osc_glow_sub_container = QWidget()
     _osc_glow_layout = QVBoxLayout(tab._osc_glow_sub_container)
@@ -67,7 +79,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_reactive_glow.stateChanged.connect(tab._save_settings)
     _osc_glow_layout.addWidget(tab.osc_reactive_glow)
 
-    osc_layout.addWidget(tab._osc_glow_sub_container)
+    _adv.addWidget(tab._osc_glow_sub_container)
 
     def _update_osc_glow_vis(_s=None):
         tab._osc_glow_sub_container.setVisible(tab.osc_glow_enabled.isChecked())
@@ -79,7 +91,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_ghost_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_ghosting_enabled', False))
     tab.osc_ghost_enabled.setToolTip("Show a faded trail of the previous waveform behind the current one.")
     tab.osc_ghost_enabled.stateChanged.connect(tab._save_settings)
-    osc_layout.addWidget(tab.osc_ghost_enabled)
+    _adv.addWidget(tab.osc_ghost_enabled)
 
     tab._osc_ghost_sub_container = QWidget()
     _osc_ghost_layout = QVBoxLayout(tab._osc_ghost_sub_container)
@@ -102,7 +114,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     )
     osc_ghost_row.addWidget(tab.osc_ghost_intensity_label)
     _osc_ghost_layout.addLayout(osc_ghost_row)
-    osc_layout.addWidget(tab._osc_ghost_sub_container)
+    _adv.addWidget(tab._osc_ghost_sub_container)
 
     def _update_osc_ghost_vis(_s=None):
         tab._osc_ghost_sub_container.setVisible(tab.osc_ghost_enabled.isChecked())
@@ -125,7 +137,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_sensitivity_label.setText(f"{v / 10.0:.1f}x")
     )
     osc_sens_row.addWidget(tab.osc_sensitivity_label)
-    osc_layout.addLayout(osc_sens_row)
+    _adv.addLayout(osc_sens_row)
 
     osc_smooth_row = QHBoxLayout()
     osc_smooth_row.addWidget(QLabel("Smoothing:"))
@@ -143,7 +155,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_smoothing_label.setText(f"{v}%")
     )
     osc_smooth_row.addWidget(tab.osc_smoothing_label)
-    osc_layout.addLayout(osc_smooth_row)
+    _adv.addLayout(osc_smooth_row)
 
     osc_speed_row = QHBoxLayout()
     osc_speed_row.addWidget(QLabel("Speed:"))
@@ -162,13 +174,13 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_speed_label.setText(f"{v}%")
     )
     osc_speed_row.addWidget(tab.osc_speed_label)
-    osc_layout.addLayout(osc_speed_row)
+    _adv.addLayout(osc_speed_row)
 
     tab.osc_line_dim = QCheckBox("Dim Lines 2/3 Glow")
     tab.osc_line_dim.setChecked(tab._default_bool('spotify_visualizer', 'osc_line_dim', False))
     tab.osc_line_dim.setToolTip("When enabled, lines 2 and 3 have slightly reduced glow to let the primary line stand out.")
     tab.osc_line_dim.stateChanged.connect(tab._save_settings)
-    osc_layout.addWidget(tab.osc_line_dim)
+    _adv.addWidget(tab.osc_line_dim)
 
     osc_lob_row = QHBoxLayout()
     osc_lob_row.addWidget(QLabel("Line Offset Bias:"))
@@ -191,7 +203,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_line_offset_bias_label.setText(f"{v}%")
     )
     osc_lob_row.addWidget(tab.osc_line_offset_bias_label)
-    osc_layout.addLayout(osc_lob_row)
+    _adv.addLayout(osc_lob_row)
 
     osc_vshift_row = QHBoxLayout()
     osc_vshift_row.addWidget(QLabel("Vertical Shift:"))
@@ -213,7 +225,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_vertical_shift_label.setText(f"{v}")
     )
     osc_vshift_row.addWidget(tab.osc_vertical_shift_label)
-    osc_layout.addLayout(osc_vshift_row)
+    _adv.addLayout(osc_vshift_row)
 
     osc_line_color_row = QHBoxLayout()
     osc_line_color_row.addWidget(QLabel("Line Color:"))
@@ -221,7 +233,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_line_color_btn.clicked.connect(tab._choose_osc_line_color)
     osc_line_color_row.addWidget(tab.osc_line_color_btn)
     osc_line_color_row.addStretch()
-    osc_layout.addLayout(osc_line_color_row)
+    _adv.addLayout(osc_line_color_row)
 
     osc_glow_color_row = QHBoxLayout()
     osc_glow_color_row.addWidget(QLabel("Glow Color:"))
@@ -229,14 +241,14 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_glow_color_btn.clicked.connect(tab._choose_osc_glow_color)
     osc_glow_color_row.addWidget(tab.osc_glow_color_btn)
     osc_glow_color_row.addStretch()
-    osc_layout.addLayout(osc_glow_color_row)
+    _adv.addLayout(osc_glow_color_row)
 
     tab.osc_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
     tab.osc_multi_line.setChecked(tab._default_int('spotify_visualizer', 'osc_line_count', 1) > 1)
     tab.osc_multi_line.setToolTip("Enable additional waveform lines with different oscillation distributions.")
     tab.osc_multi_line.stateChanged.connect(tab._save_settings)
     tab.osc_multi_line.stateChanged.connect(lambda: _update_osc_multi_line_visibility(tab))
-    osc_layout.addWidget(tab.osc_multi_line)
+    _adv.addWidget(tab.osc_multi_line)
 
     tab._osc_multi_container = QWidget()
     ml_layout = QVBoxLayout(tab._osc_multi_container)
@@ -285,7 +297,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     osc_l3_row.addStretch()
     ml_layout.addWidget(tab._osc_l3_row_widget)
 
-    osc_layout.addWidget(tab._osc_multi_container)
+    _adv.addWidget(tab._osc_multi_container)
     _update_osc_multi_line_visibility(tab)
 
     osc_growth_row = QHBoxLayout()
@@ -305,6 +317,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     osc_growth_row.addWidget(tab.osc_growth_label)
-    osc_layout.addLayout(osc_growth_row)
+    _adv.addLayout(osc_growth_row)
 
+    osc_layout.addWidget(tab._osc_advanced)
     parent_layout.addWidget(tab._osc_settings_container)

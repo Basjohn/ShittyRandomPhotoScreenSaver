@@ -16,10 +16,22 @@ if TYPE_CHECKING:
 def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Blob settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     tab._blob_settings_container = QWidget()
     blob_layout = QVBoxLayout(tab._blob_settings_container)
     blob_layout.setContentsMargins(0, 0, 0, 0)
+
+    # --- Preset slider ---
+    tab._blob_preset_slider = VisualizerPresetSlider("blob")
+    tab._blob_preset_slider.preset_changed.connect(tab._save_settings)
+    blob_layout.addWidget(tab._blob_preset_slider)
+
+    tab._blob_advanced = QWidget()
+    _adv = QVBoxLayout(tab._blob_advanced)
+    _adv.setContentsMargins(0, 0, 0, 0)
+    _adv.setSpacing(4)
+    tab._blob_preset_slider.set_advanced_container(tab._blob_advanced)
 
     blob_pulse_row = QHBoxLayout()
     blob_pulse_row.addWidget(QLabel("Pulse Intensity:"))
@@ -37,13 +49,13 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_pulse_label.setText(f"{v / 100.0:.2f}x")
     )
     blob_pulse_row.addWidget(tab.blob_pulse_label)
-    blob_layout.addLayout(blob_pulse_row)
+    _adv.addLayout(blob_pulse_row)
 
     tab.blob_reactive_glow = QCheckBox("Reactive Glow")
     tab.blob_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'blob_reactive_glow', True))
     tab.blob_reactive_glow.setToolTip("Outer glow pulses with audio energy.")
     tab.blob_reactive_glow.stateChanged.connect(tab._save_settings)
-    blob_layout.addWidget(tab.blob_reactive_glow)
+    _adv.addWidget(tab.blob_reactive_glow)
 
     tab._blob_glow_sub_container = QWidget()
     _blob_glow_layout = QVBoxLayout(tab._blob_glow_sub_container)
@@ -57,7 +69,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     blob_glow_color_row.addStretch()
     _blob_glow_layout.addLayout(blob_glow_color_row)
 
-    blob_layout.addWidget(tab._blob_glow_sub_container)
+    _adv.addWidget(tab._blob_glow_sub_container)
 
     def _update_blob_glow_vis(_s=None):
         tab._blob_glow_sub_container.setVisible(tab.blob_reactive_glow.isChecked())
@@ -70,7 +82,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_fill_color_btn.clicked.connect(tab._choose_blob_fill_color)
     blob_fill_color_row.addWidget(tab.blob_fill_color_btn)
     blob_fill_color_row.addStretch()
-    blob_layout.addLayout(blob_fill_color_row)
+    _adv.addLayout(blob_fill_color_row)
 
     blob_edge_color_row = QHBoxLayout()
     blob_edge_color_row.addWidget(QLabel("Edge Color:"))
@@ -78,7 +90,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_edge_color_btn.clicked.connect(tab._choose_blob_edge_color)
     blob_edge_color_row.addWidget(tab.blob_edge_color_btn)
     blob_edge_color_row.addStretch()
-    blob_layout.addLayout(blob_edge_color_row)
+    _adv.addLayout(blob_edge_color_row)
 
     blob_outline_color_row = QHBoxLayout()
     blob_outline_color_row.addWidget(QLabel("Outline Color:"))
@@ -86,7 +98,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_outline_color_btn.clicked.connect(tab._choose_blob_outline_color)
     blob_outline_color_row.addWidget(tab.blob_outline_color_btn)
     blob_outline_color_row.addStretch()
-    blob_layout.addLayout(blob_outline_color_row)
+    _adv.addLayout(blob_outline_color_row)
 
     blob_width_row = QHBoxLayout()
     blob_width_row.addWidget(QLabel("Card Width:"))
@@ -104,7 +116,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_width_label.setText(f"{v}%")
     )
     blob_width_row.addWidget(tab.blob_width_label)
-    blob_layout.addLayout(blob_width_row)
+    _adv.addLayout(blob_width_row)
 
     blob_size_row = QHBoxLayout()
     blob_size_row.addWidget(QLabel("Blob Size:"))
@@ -123,7 +135,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_size_label.setText(f"{v}%")
     )
     blob_size_row.addWidget(tab.blob_size_label)
-    blob_layout.addLayout(blob_size_row)
+    _adv.addLayout(blob_size_row)
 
     blob_gi_row = QHBoxLayout()
     blob_gi_row.addWidget(QLabel("Glow Intensity:"))
@@ -142,7 +154,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_glow_intensity_label.setText(f"{v}%")
     )
     blob_gi_row.addWidget(tab.blob_glow_intensity_label)
-    blob_layout.addLayout(blob_gi_row)
+    _adv.addLayout(blob_gi_row)
 
     blob_rd_row = QHBoxLayout()
     blob_rd_row.addWidget(QLabel("Reactive Deformation:"))
@@ -164,7 +176,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_reactive_deformation_label.setText(f"{v}%")
     )
     blob_rd_row.addWidget(tab.blob_reactive_deformation_label)
-    blob_layout.addLayout(blob_rd_row)
+    _adv.addLayout(blob_rd_row)
 
     blob_cw_row = QHBoxLayout()
     blob_cw_row.addWidget(QLabel("Constant Wobble:"))
@@ -186,7 +198,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_constant_wobble_label.setText(f"{v}%")
     )
     blob_cw_row.addWidget(tab.blob_constant_wobble_label)
-    blob_layout.addLayout(blob_cw_row)
+    _adv.addLayout(blob_cw_row)
 
     blob_rw_row = QHBoxLayout()
     blob_rw_row.addWidget(QLabel("Reactive Wobble:"))
@@ -208,7 +220,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_reactive_wobble_label.setText(f"{v}%")
     )
     blob_rw_row.addWidget(tab.blob_reactive_wobble_label)
-    blob_layout.addLayout(blob_rw_row)
+    _adv.addLayout(blob_rw_row)
 
     blob_st_row = QHBoxLayout()
     blob_st_row.addWidget(QLabel("Stretch Tendency:"))
@@ -230,16 +242,17 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.blob_stretch_tendency_label.setText(f"{v}%")
     )
     blob_st_row.addWidget(tab.blob_stretch_tendency_label)
-    blob_layout.addLayout(blob_st_row)
+    _adv.addLayout(blob_st_row)
 
+    blob_layout.addWidget(tab._blob_advanced)
     parent_layout.addWidget(tab._blob_settings_container)
 
 
 def build_blob_growth(tab: "WidgetsTab") -> None:
-    """Append height growth slider to the blob container (called after sine section)."""
+    """Append height growth slider to the blob advanced container."""
     from ui.tabs.widgets_tab import NoWheelSlider
 
-    blob_layout = tab._blob_settings_container.layout()
+    blob_layout = tab._blob_advanced.layout()
     blob_growth_row = QHBoxLayout()
     blob_growth_row.addWidget(QLabel("Card Height:"))
     tab.blob_growth = NoWheelSlider(Qt.Orientation.Horizontal)

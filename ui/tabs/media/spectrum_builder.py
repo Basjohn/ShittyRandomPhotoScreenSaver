@@ -23,10 +23,23 @@ def _update_ghost_visibility(tab) -> None:
 def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Spectrum-only settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     tab._spectrum_settings_container = QWidget()
     spectrum_layout = QVBoxLayout(tab._spectrum_settings_container)
     spectrum_layout.setContentsMargins(0, 0, 0, 0)
+
+    # --- Preset slider (always visible) ---
+    tab._spectrum_preset_slider = VisualizerPresetSlider("spectrum")
+    tab._spectrum_preset_slider.preset_changed.connect(tab._save_settings)
+    spectrum_layout.addWidget(tab._spectrum_preset_slider)
+
+    # --- Advanced container (shown only when Custom preset is selected) ---
+    tab._spectrum_advanced = QWidget()
+    _adv_layout = QVBoxLayout(tab._spectrum_advanced)
+    _adv_layout.setContentsMargins(0, 0, 0, 0)
+    _adv_layout.setSpacing(4)
+    tab._spectrum_preset_slider.set_advanced_container(tab._spectrum_advanced)
 
     spotify_vis_bar_row = QHBoxLayout()
     spotify_vis_bar_row.addWidget(QLabel("Bar Count:"))
@@ -39,7 +52,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_bar_row.addWidget(tab.spotify_vis_bar_count)
     spotify_vis_bar_row.addWidget(QLabel("bars"))
     spotify_vis_bar_row.addStretch()
-    spectrum_layout.addLayout(spotify_vis_bar_row)
+    _adv_layout.addLayout(spotify_vis_bar_row)
 
     spotify_vis_block_row = QHBoxLayout()
     spotify_vis_block_row.addWidget(QLabel("Audio Block Size:"))
@@ -56,7 +69,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     if block_idx >= 0:
         tab.spotify_vis_block_size.setCurrentIndex(block_idx)
     spotify_vis_block_row.addStretch()
-    spectrum_layout.addLayout(spotify_vis_block_row)
+    _adv_layout.addLayout(spotify_vis_block_row)
 
     spotify_vis_fill_row = QHBoxLayout()
     spotify_vis_fill_row.addWidget(QLabel("Bar Fill Color:"))
@@ -64,7 +77,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spotify_vis_fill_color_btn.clicked.connect(tab._choose_spotify_vis_fill_color)
     spotify_vis_fill_row.addWidget(tab.spotify_vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
-    spectrum_layout.addLayout(spotify_vis_fill_row)
+    _adv_layout.addLayout(spotify_vis_fill_row)
 
     spotify_vis_border_color_row = QHBoxLayout()
     spotify_vis_border_color_row.addWidget(QLabel("Bar Border Color:"))
@@ -72,7 +85,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spotify_vis_border_color_btn.clicked.connect(tab._choose_spotify_vis_border_color)
     spotify_vis_border_color_row.addWidget(tab.spotify_vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
-    spectrum_layout.addLayout(spotify_vis_border_color_row)
+    _adv_layout.addLayout(spotify_vis_border_color_row)
 
     spotify_vis_border_opacity_row = QHBoxLayout()
     spotify_vis_border_opacity_row.addWidget(QLabel("Bar Border Opacity:"))
@@ -92,7 +105,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.spotify_vis_border_opacity_label.setText(f"{v}%")
     )
     spotify_vis_border_opacity_row.addWidget(tab.spotify_vis_border_opacity_label)
-    spectrum_layout.addLayout(spotify_vis_border_opacity_row)
+    _adv_layout.addLayout(spotify_vis_border_opacity_row)
 
     tab.spotify_vis_recommended = QCheckBox("Adaptive")
     tab.spotify_vis_recommended.setChecked(
@@ -103,7 +116,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     tab.spotify_vis_recommended.stateChanged.connect(tab._save_settings)
     tab.spotify_vis_recommended.stateChanged.connect(lambda _: tab._update_spotify_vis_sensitivity_enabled_state())
-    spectrum_layout.addWidget(tab.spotify_vis_recommended)
+    _adv_layout.addWidget(tab.spotify_vis_recommended)
 
     spotify_vis_sensitivity_slider_row = QHBoxLayout()
     spotify_vis_sensitivity_slider_row.addWidget(QLabel("Sensitivity:"))
@@ -121,7 +134,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.spotify_vis_sensitivity_label.setText(f"{v / 100.0:.2f}x")
     )
     spotify_vis_sensitivity_slider_row.addWidget(tab.spotify_vis_sensitivity_label)
-    spectrum_layout.addLayout(spotify_vis_sensitivity_slider_row)
+    _adv_layout.addLayout(spotify_vis_sensitivity_slider_row)
 
     tab.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
     tab.spotify_vis_dynamic_floor.setChecked(
@@ -135,7 +148,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spotify_vis_dynamic_floor.stateChanged.connect(
         lambda _: tab._update_spotify_vis_floor_enabled_state()
     )
-    spectrum_layout.addWidget(tab.spotify_vis_dynamic_floor)
+    _adv_layout.addWidget(tab.spotify_vis_dynamic_floor)
 
     tab._manual_floor_container = QWidget()
     _mf_layout = QVBoxLayout(tab._manual_floor_container)
@@ -159,7 +172,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_manual_floor_row.addWidget(tab.spotify_vis_manual_floor_label)
     _mf_layout.addLayout(spotify_vis_manual_floor_row)
 
-    spectrum_layout.addWidget(tab._manual_floor_container)
+    _adv_layout.addWidget(tab._manual_floor_container)
 
     def _update_manual_floor_vis(_s=None):
         tab._manual_floor_container.setVisible(not tab.spotify_vis_dynamic_floor.isChecked())
@@ -175,7 +188,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "When enabled, the visualizer draws trailing ghost bars above the current height."
     )
     tab.spotify_vis_ghost_enabled.stateChanged.connect(tab._save_settings)
-    spectrum_layout.addWidget(tab.spotify_vis_ghost_enabled)
+    _adv_layout.addWidget(tab.spotify_vis_ghost_enabled)
 
     tab._ghost_sub_container = QWidget()
     _ghost_layout = QVBoxLayout(tab._ghost_sub_container)
@@ -218,7 +231,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_ghost_decay_row.addWidget(tab.spotify_vis_ghost_decay_label)
     _ghost_layout.addLayout(spotify_vis_ghost_decay_row)
 
-    spectrum_layout.addWidget(tab._ghost_sub_container)
+    _adv_layout.addWidget(tab._ghost_sub_container)
     tab.spotify_vis_ghost_enabled.stateChanged.connect(lambda: _update_ghost_visibility(tab))
     _update_ghost_visibility(tab)
 
@@ -232,7 +245,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Produces a clean pillar look while keeping all other bar behaviour."
     )
     tab.spectrum_single_piece.stateChanged.connect(tab._save_settings)
-    spectrum_layout.addWidget(tab.spectrum_single_piece)
+    _adv_layout.addWidget(tab.spectrum_single_piece)
 
     # Bar Profile selector (Legacy / Curved / Slanted)
     _profile_row = QHBoxLayout()
@@ -253,7 +266,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_bar_profile.currentIndexChanged.connect(tab._save_settings)
     _profile_row.addWidget(tab.spectrum_bar_profile)
     _profile_row.addStretch()
-    spectrum_layout.addLayout(_profile_row)
+    _adv_layout.addLayout(_profile_row)
 
     # --- Profile sub-options: border radius (Curved only) ---
     tab._profile_sub_container = QWidget()
@@ -277,7 +290,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _br_row.addWidget(tab.spectrum_border_radius_label)
     _profile_sub_layout.addLayout(_br_row)
 
-    spectrum_layout.addWidget(tab._profile_sub_container)
+    _adv_layout.addWidget(tab._profile_sub_container)
 
     # Conditional visibility + auto-uncheck single piece for slanted
     def _update_profile_sub_vis(_idx=None):
@@ -308,6 +321,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.spectrum_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     spectrum_growth_row.addWidget(tab.spectrum_growth_label)
-    spectrum_layout.addLayout(spectrum_growth_row)
+    _adv_layout.addLayout(spectrum_growth_row)
 
+    spectrum_layout.addWidget(tab._spectrum_advanced)
     parent_layout.addWidget(tab._spectrum_settings_container)
