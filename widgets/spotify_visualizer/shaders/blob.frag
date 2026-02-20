@@ -29,10 +29,13 @@ uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.
 uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
 uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.0)
 uniform int u_playing;                 // 1 = audio playing, 0 = stopped
+uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 
 // 2D SDF organic blob with audio-reactive deformation
 float blob_sdf(vec2 p, float time) {
     float r = 0.44 * clamp(u_blob_size, 0.1, 2.5);  // 10% larger minimum
+    // Bass-driven core size boost: ~15% larger base at intense bass (quadratic ramp)
+    r += u_bass_energy * u_bass_energy * 0.066;
     // Bass pulse — breathe the radius (+15% drum reactivity: 0.084 → 0.097)
     r += u_bass_energy * 0.077 * u_blob_pulse;
     // Subtle contraction on energy dips (~10% of pulse range, smoothed to avoid flicker)
@@ -213,6 +216,40 @@ void main() {
     } else {
         // Outside: glow colour
         final_rgb = glow_rgb;
+    }
+
+    // Rainbow hue shift (Taste The Rainbow mode)
+    if (u_rainbow_hue_offset > 0.001) {
+        // RGB → HSV
+        float cmax = max(final_rgb.r, max(final_rgb.g, final_rgb.b));
+        float cmin = min(final_rgb.r, min(final_rgb.g, final_rgb.b));
+        float delta = cmax - cmin;
+        float h = 0.0;
+        if (delta > 0.0001) {
+            if (cmax == final_rgb.r) h = mod((final_rgb.g - final_rgb.b) / delta, 6.0);
+            else if (cmax == final_rgb.g) h = (final_rgb.b - final_rgb.r) / delta + 2.0;
+            else h = (final_rgb.r - final_rgb.g) / delta + 4.0;
+            h /= 6.0;
+            if (h < 0.0) h += 1.0;
+        }
+        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
+        float v = cmax;
+        // Force saturation on greyscale so rainbow colouring is visible
+        if (s < 0.05 && v > 0.05) s = 1.0;
+        // Shift hue
+        h = fract(h + u_rainbow_hue_offset);
+        // HSV → RGB
+        float c = v * s;
+        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+        float m = v - c;
+        vec3 rgb;
+        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
+        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
+        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
+        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
+        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
+        else                  rgb = vec3(c, 0.0, x);
+        final_rgb = rgb + m;
     }
 
     fragColor = vec4(final_rgb, total_alpha * u_fade);

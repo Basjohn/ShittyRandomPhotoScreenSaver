@@ -213,6 +213,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
     if 'sine_micro_wobble' in kwargs:
         widget._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
+    if 'sine_width_reaction' in kwargs:
+        widget._sine_width_reaction = max(0.0, min(1.0, float(kwargs['sine_width_reaction'])))
     if 'sine_vertical_shift' in kwargs:
         widget._sine_vertical_shift = int(kwargs['sine_vertical_shift'])
     if 'sine_card_adaptation' in kwargs:
@@ -258,6 +260,81 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if c is not None:
             widget._sine_line3_glow_color = c
 
+    # --- Rainbow (global, all modes) -----------------------------------
+    if 'rainbow_enabled' in kwargs:
+        widget._rainbow_enabled = bool(kwargs['rainbow_enabled'])
+    if 'rainbow_speed' in kwargs:
+        widget._rainbow_speed = max(0.01, min(5.0, float(kwargs['rainbow_speed'])))
+
+    # --- Oscilloscope ghost trail ----------------------------------------
+    if 'osc_ghosting_enabled' in kwargs:
+        widget._osc_ghosting_enabled = bool(kwargs['osc_ghosting_enabled'])
+    if 'osc_ghost_intensity' in kwargs:
+        widget._osc_ghost_intensity = max(0.0, min(1.0, float(kwargs['osc_ghost_intensity'])))
+
+    # --- Sine Wave Heartbeat -----------------------------------------------
+    if 'sine_heartbeat' in kwargs:
+        widget._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
+
+    # --- Bubble -----------------------------------------------------------
+    if 'bubble_big_bass_pulse' in kwargs:
+        widget._bubble_big_bass_pulse = max(0.0, min(1.0, float(kwargs['bubble_big_bass_pulse'])))
+    if 'bubble_small_freq_pulse' in kwargs:
+        widget._bubble_small_freq_pulse = max(0.0, min(1.0, float(kwargs['bubble_small_freq_pulse'])))
+    if 'bubble_stream_direction' in kwargs:
+        val = str(kwargs['bubble_stream_direction']).lower()
+        if val not in ('none', 'up', 'down', 'left', 'right', 'diagonal', 'random'):
+            val = 'up'
+        widget._bubble_stream_direction = val
+    if 'bubble_stream_speed' in kwargs:
+        widget._bubble_stream_speed = max(0.0, min(1.5, float(kwargs['bubble_stream_speed'])))
+    if 'bubble_stream_reactivity' in kwargs:
+        widget._bubble_stream_reactivity = max(0.0, min(1.0, float(kwargs['bubble_stream_reactivity'])))
+    if 'bubble_rotation_amount' in kwargs:
+        widget._bubble_rotation_amount = max(0.0, min(1.0, float(kwargs['bubble_rotation_amount'])))
+    if 'bubble_drift_amount' in kwargs:
+        widget._bubble_drift_amount = max(0.0, min(1.0, float(kwargs['bubble_drift_amount'])))
+    if 'bubble_drift_speed' in kwargs:
+        widget._bubble_drift_speed = max(0.0, min(1.0, float(kwargs['bubble_drift_speed'])))
+    if 'bubble_drift_frequency' in kwargs:
+        widget._bubble_drift_frequency = max(0.0, min(1.0, float(kwargs['bubble_drift_frequency'])))
+    if 'bubble_drift_direction' in kwargs:
+        val = str(kwargs['bubble_drift_direction']).lower()
+        if val not in ('none', 'left', 'right', 'diagonal', 'random'):
+            val = 'random'
+        widget._bubble_drift_direction = val
+    if 'bubble_big_count' in kwargs:
+        widget._bubble_big_count = max(1, min(30, int(kwargs['bubble_big_count'])))
+    if 'bubble_small_count' in kwargs:
+        widget._bubble_small_count = max(5, min(80, int(kwargs['bubble_small_count'])))
+    if 'bubble_surface_reach' in kwargs:
+        widget._bubble_surface_reach = max(0.0, min(1.0, float(kwargs['bubble_surface_reach'])))
+    if 'bubble_outline_color' in kwargs:
+        c = _color_or_none(kwargs['bubble_outline_color'])
+        if c is not None:
+            widget._bubble_outline_color = c
+    if 'bubble_specular_color' in kwargs:
+        c = _color_or_none(kwargs['bubble_specular_color'])
+        if c is not None:
+            widget._bubble_specular_color = c
+    if 'bubble_gradient_light' in kwargs:
+        c = _color_or_none(kwargs['bubble_gradient_light'])
+        if c is not None:
+            widget._bubble_gradient_light = c
+    if 'bubble_gradient_dark' in kwargs:
+        c = _color_or_none(kwargs['bubble_gradient_dark'])
+        if c is not None:
+            widget._bubble_gradient_dark = c
+    if 'bubble_pop_color' in kwargs:
+        c = _color_or_none(kwargs['bubble_pop_color'])
+        if c is not None:
+            widget._bubble_pop_color = c
+    if 'bubble_specular_direction' in kwargs:
+        val = str(kwargs['bubble_specular_direction']).lower()
+        if val not in ('top_left', 'top_right', 'bottom_left', 'bottom_right'):
+            val = 'top_left'
+        widget._bubble_specular_direction = val
+
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
     """Build the extra kwargs dict for non-spectrum GPU push.
@@ -266,6 +343,13 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     ``push_spotify_visualizer_frame(**extra)``.
     """
     extra: Dict[str, Any] = {}
+    # Rainbow applies to ALL modes (including spectrum)
+    extra['rainbow_enabled'] = getattr(widget, '_rainbow_enabled', False)
+    extra['rainbow_speed'] = getattr(widget, '_rainbow_speed', 0.5)
+    extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
+    extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
+    extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
+    extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
     if mode_str == 'spectrum':
         return extra
 
@@ -309,6 +393,7 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['sine_travel_line3'] = widget._sine_travel_line3
     extra['sine_wave_effect'] = widget._sine_wave_effect
     extra['sine_micro_wobble'] = widget._sine_micro_wobble
+    extra['sine_width_reaction'] = widget._sine_width_reaction
     extra['sine_vertical_shift'] = widget._sine_vertical_shift
     extra['helix_turns'] = widget._helix_turns
     extra['helix_double'] = widget._helix_double
@@ -323,4 +408,21 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['osc_line2_glow_color'] = widget._sine_line2_glow_color if _is_sine else widget._osc_line2_glow_color
     extra['osc_line3_color'] = widget._sine_line3_color if _is_sine else widget._osc_line3_color
     extra['osc_line3_glow_color'] = widget._sine_line3_glow_color if _is_sine else widget._osc_line3_glow_color
+
+    # --- Bubble -----------------------------------------------------------
+    # Only pass GL-relevant keys to set_state (colours, simulation snapshot).
+    # Simulation settings (counts, speeds, directions) stay on the widget for
+    # the COMPUTE-thread simulation and must NOT be forwarded to set_state
+    # which would reject them as unexpected kwargs.
+    if mode_str == 'bubble':
+        extra['bubble_outline_color'] = getattr(widget, '_bubble_outline_color', None)
+        extra['bubble_specular_color'] = getattr(widget, '_bubble_specular_color', None)
+        extra['bubble_gradient_light'] = getattr(widget, '_bubble_gradient_light', None)
+        extra['bubble_gradient_dark'] = getattr(widget, '_bubble_gradient_dark', None)
+        extra['bubble_pop_color'] = getattr(widget, '_bubble_pop_color', None)
+        extra['bubble_specular_direction'] = getattr(widget, '_bubble_specular_direction', 'top_left')
+        extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
+        extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
+        extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
+
     return extra

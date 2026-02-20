@@ -117,7 +117,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Display GL Init | rendering/display_gl_init.py | init_renderer_backend, ensure_gl_compositor, ensure_render_surface | GL compositor/surface setup, cleanup |
 | Display Context Menu | rendering/display_context_menu.py | show_context_menu, on_context_transition_selected | Context menu creation and handlers |
 | Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter, media key passthrough (focus re-claim removed Feb 2026 to keep Settings responsive) |
-| Display Input | rendering/display_input.py | handle_mousePressEvent, show_ctrl_cursor_hint | Cursor halo, mouse press/move |
+| Display Input | rendering/display_input.py | handle_mousePressEvent, show_ctrl_cursor_hint, ensure_ctrl_cursor_hint | Cursor halo (shape from `input.halo_shape`), mouse press/move, `_halo_forwarding` guard |
 | Display Overlays | rendering/display_overlays.py | start_overlay_fades, perform_activation_refresh | Overlay fades, window diagnostics |
 | GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (1891 lines, thin delegates) |
 | GL Transitions | rendering/gl_compositor_pkg/transitions.py | start_crossfade, start_warp, etc. | 12 transition start methods |
@@ -233,7 +233,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Shadow Utils | widgets/shadow_utils.py | ShadowRenderer, ShadowFadeProfile | Drop shadow rendering |
 | Overlay Timers | widgets/overlay_timers.py | create_overlay_timer() | ThreadManager timer helper |
 | Context Menu | widgets/context_menu.py | ScreensaverContextMenu | Right-click menu |
-| Cursor Halo | widgets/cursor_halo.py | CursorHaloWidget | Ctrl-held indicator |
+| Cursor Halo | widgets/cursor_halo.py | CursorHaloWidget | Ctrl-held indicator; 5 shapes (circle/ring/crosshair/diamond/dot); `_halo_forwarding` guard prevents jitter feedback loop |
 | Pixel Shift | widgets/pixel_shift_manager.py | PixelShiftManager | Burn-in prevention |
 
 ### Widget Implementations
@@ -242,7 +242,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 |--------|------|-----------|-----------------|
 | Clock | widgets/clock_widget.py | ClockWidget | widgets.clock, widgets.clock2, widgets.clock3 |
 | Weather | widgets/weather_widget.py | WeatherWidget | widgets.weather |
-| Media | widgets/media_widget.py | MediaWidget | widgets.media |
+| Media | widgets/media_widget.py | MediaWidget | widgets.media (double-click artwork refresh: resets diff gating) |
 | Reddit | widgets/reddit_widget.py | RedditWidget | widgets.reddit, widgets.reddit2 |
 | RedditComponents | widgets/reddit_components.py | RedditPosition, RedditPost, smart_title_case, try_bring_reddit_window_to_front | Extracted helpers for reddit widget |
 | Imgur | widgets/imgur/ | ImgurWidget, ImgurScraper, ImgurImageCache | widgets.imgur |
@@ -263,12 +263,13 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Module | File | Key Classes/Functions | Purpose |
 |--------|------|-------------|---------|
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
-| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
+| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE/BUBBLE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
 | Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars | DSP/FFT bar computation pipeline (inline, extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for blob/starfield/helix modes |
-| Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping (extracted from widget, ~250 LOC) |
+| Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread |
+| Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping; passes rainbow, ghosting, heartbeat, bubble settings (extracted from widget, ~430 LOC) |
 | Mode Transition | widgets/spotify_visualizer/mode_transition.py | cycle_mode, mode_transition_fade_factor, persist_vis_mode | Mode-cycling crossfade logic (extracted from widget, ~120 LOC) |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
 | Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | SHARED_VERTEX_SHADER, load_fragment_shader, load_all_fragment_shaders | GLSL shader source loading for multi-shader architecture |
@@ -278,11 +279,12 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Shader | File | Uniforms | Purpose |
 |--------|------|----------|---------|
 | Spectrum | widgets/spotify_visualizer/shaders/spectrum.frag | u_bars[64], u_peaks[64], u_fill_color, u_border_color, u_ghost_alpha, u_slanted, u_border_radius | Segmented bar analyzer; 3 profiles (Legacy/Curved/Slanted); slanted: diagonal inner edges + linchpin both-side slant; curved: border radius 0-12px |
-| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_osc_vertical_shift | Pure audio waveform with Catmull-Rom spline, per-band energy, equalized multi-line glow (3 lines: bass/mid/high), vertical shift slider (-50 to 200) |
-| Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_wave_effect, u_micro_wobble, u_osc_vertical_shift | Dedicated sine wave visualizer with audio-reactive amplitude, card adaptation (vertical stretch control), multi-line (up to 3) with per-line colors and per-line travel direction, playback-gated oscillation, wave effect (positional undulation), micro wobble (energy-reactive high-freq distortions), vertical shift slider (-50 to 200) |
+| Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_prev_waveform[256], u_osc_ghost_alpha, u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_osc_vertical_shift, u_rainbow_enabled, u_rainbow_hue_offset | Pure audio waveform with Catmull-Rom spline, per-band energy, equalized multi-line glow (3 lines: bass/mid/high), ghost trail (previous waveform overlay), rainbow hue cycling, vertical shift slider (-50 to 200) |
+| Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_wave_effect, u_micro_wobble, u_osc_vertical_shift, u_heartbeat, u_heartbeat_intensity, u_rainbow_enabled, u_rainbow_hue_offset | Sine wave visualizer: audio-reactive amplitude, card adaptation, multi-line (up to 3) with per-line colors/travel, playback-gated oscillation, wave effect, micro wobble (smooth snake-like bass-driven), heartbeat (transient triangular bumps), rainbow hue cycling, vertical shift, line positioning (LOB=X phase, VShift=Y, Line2@70%, Line3@100%) |
 | Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity, u_travel_time, u_nebula_tint{1,2} | Point-star starfield with nebula background, CPU-accumulated monotonic travel (dev-gated) |
 | Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy, u_blob_reactive_deformation (0-3.0), u_blob_constant_wobble, u_blob_reactive_wobble | 2D SDF organic metaball with separated constant wobble (time-driven, zero when cw=0) and reactive wobble (energy-driven), vocal wobble, dip contraction, CPU-smoothed glow, quadratic reactive deformation (range 0-3.0) |
 | Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
+| Bubble | widgets/spotify_visualizer/shaders/bubble.frag | u_bubble_count, u_bubbles_pos[110], u_bubbles_extra[110], u_specular_dir, u_outline_color, u_specular_color, u_gradient_light, u_gradient_dark, u_pop_color | SDF-based bubble visualizer: thin outlines, crescent specular highlights, warm gradient background, pop flash, rainbow hue cycling; CPU simulation on COMPUTE pool |
 
 > **Default tweak (v2.75):** Spectrum mode now ships with Single Piece Mode enabled in `core/settings/defaults.py`, matching the preferred “pillar” presentation without manual toggles.
 
@@ -326,6 +328,7 @@ endering/display_modes.py | DisplayMode | FILL/FIT/SHRINK enums |
 | 	transitions.type | enum | Random | Transition type selected when Random pool disabled |
 | 	transitions.duration_ms | int | 4000 | Baseline transition duration (per-type overrides exist) |
 | input.hard_exit | bool | true | Require ESC/Q to exit (matches user profile) |
+| input.halo_shape | str | circle | Cursor halo shape: circle, ring, crosshair, diamond, dot |
 | cache.prefetch_ahead | int | 5 | Images to prefetch |
 | cache.max_items | int | 24 | Max cache entries |
 
@@ -392,7 +395,7 @@ value = settings.get("display.mode", "fill")
 | WidgetsTab Clock | ui/tabs/widgets_tab_clock.py | build_clock_ui(), load_clock_settings(), save_clock_settings(), _update_clock_mode_visibility() | Clock 1/2/3 UI, load, save; analog/digital mode visibility gating |
 | WidgetsTab Weather | ui/tabs/widgets_tab_weather.py | build_weather_ui(), load_weather_settings(), save_weather_settings(), _update_weather_icon_visibility(), _update_weather_bg_visibility() | Weather UI, load, save; icon + background visibility gating |
 | WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings() | Spotify + Beat Visualizer UI coordinator; per-viz builders extracted to ui/tabs/media/ |
-| Media Builders | ui/tabs/media/*.py | build_spectrum_ui(), build_oscilloscope_ui(), build_starfield_ui(), build_blob_ui(), build_helix_ui(), build_sine_wave_ui() | Per-visualizer UI builders (extracted from widgets_tab_media.py, ~1200 LOC) |
+| Media Builders | ui/tabs/media/*.py | build_spectrum_ui(), build_oscilloscope_ui(), build_starfield_ui(), build_blob_ui(), build_helix_ui(), build_sine_wave_ui(), build_bubble_ui() | Per-visualizer UI builders (extracted from widgets_tab_media.py, ~1400 LOC) |
 | Color Utils | ui/color_utils.py | qcolor_to_list(), list_to_qcolor() | Centralized QColor ↔ list conversion (replaces inline helpers in widgets_tab_media + widget_setup) |
 | WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings(), _update_reddit_enabled_visibility() | Reddit 1/2 UI, load, save; all controls gated by enabled checkbox |
 | WidgetsTab Imgur | ui/tabs/widgets_tab_imgur.py | build_imgur_ui(), load_imgur_settings(), save_imgur_settings() | Imgur UI, load, save (dev-gated) |
@@ -446,4 +449,5 @@ value = settings.get("display.mode", "fill")
 | tests/test_widget_manager.py | WidgetManager lifecycle, fade, factory |
 | tests/test_sine_wave_gl_fix.py | Sine wave GL overlay fix regression (mode validation, cycle, shader, card height) |
 | tests/test_micro_wobble_math.py | Micro wobble shader math: energy weighting, spatial freq, displacement bounds, smoothness (20 tests) |
+| tests/test_action_plan_3_0.py | Action Plan 3.0: heartbeat settings/math, artwork double-click fix, halo forwarding guard, halo shapes, sine line positioning, rainbow/ghosting roundtrip, shader source validation (37 tests) |
 | tests/unit/test_policy_compliance.py | Threading/import policy enforcement |

@@ -247,6 +247,7 @@ class DisplayWidget(QWidget):
         self._transitions_enabled: bool = True
         self._ctrl_held: bool = False
         self._ctrl_cursor_hint: Optional[CursorHaloWidget] = None
+        self._halo_forwarding: bool = False  # Guard flag: True when halo is forwarding events
         self._last_halo_activity_ts: float = 0.0
         self._halo_last_local_pos: Optional[QPoint] = None
         self._halo_activity_timeout: float = 2.0

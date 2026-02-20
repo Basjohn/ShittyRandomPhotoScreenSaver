@@ -29,12 +29,13 @@ MAX_HEIGHT: int = 600
 
 # Default growth factors per mode (multiplied against base_height)
 DEFAULT_GROWTH: dict[str, float] = {
-    "spectrum": 1.0,
-    "oscilloscope": 1.0,
-    "starfield": 2.0,
-    "blob": 2.5,
-    "helix": 2.0,
-    "sine_wave": 1.0,
+    "spectrum": 2.0,
+    "oscilloscope": 2.0,
+    "starfield": 3.0,
+    "blob": 3.5,
+    "helix": 3.0,
+    "sine_wave": 2.0,
+    "bubble": 3.0,
 }
 
 

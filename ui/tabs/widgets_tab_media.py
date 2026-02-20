@@ -366,6 +366,42 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _svctl.setContentsMargins(0, 0, 0, 0)
     _svctl.setSpacing(4)
 
+    # --- Taste The Rainbow (global hue shift) ---
+    rainbow_row = QHBoxLayout()
+    tab.rainbow_enabled = QCheckBox("Taste The Rainbow")
+    tab.rainbow_enabled.setToolTip(
+        "Slowly shift the hue of all visualizer colours through the spectrum. "
+        "Retains state across mode switches."
+    )
+    tab.rainbow_enabled.setChecked(False)
+    tab.rainbow_enabled.stateChanged.connect(tab._save_settings)
+    tab.rainbow_enabled.stateChanged.connect(
+        lambda _: tab._update_rainbow_visibility()
+    )
+    rainbow_row.addWidget(tab.rainbow_enabled)
+    rainbow_row.addStretch()
+    _svctl.addLayout(rainbow_row)
+
+    # Rainbow speed slider (conditional on checkbox)
+    tab._rainbow_speed_container = QWidget()
+    _rsc_layout = QHBoxLayout(tab._rainbow_speed_container)
+    _rsc_layout.setContentsMargins(20, 0, 0, 0)
+    _rsc_layout.setSpacing(4)
+    _rsc_layout.addWidget(QLabel("Speed:"))
+    tab.rainbow_speed_slider = QSlider(Qt.Orientation.Horizontal)
+    tab.rainbow_speed_slider.setRange(1, 100)
+    tab.rainbow_speed_slider.setValue(50)
+    tab.rainbow_speed_slider.setToolTip("How fast the hue cycles through the spectrum.")
+    tab.rainbow_speed_slider.valueChanged.connect(tab._save_settings)
+    tab.rainbow_speed_label = QLabel("0.50")
+    tab.rainbow_speed_slider.valueChanged.connect(
+        lambda v: tab.rainbow_speed_label.setText(f"{v / 100.0:.2f}")
+    )
+    _rsc_layout.addWidget(tab.rainbow_speed_slider)
+    _rsc_layout.addWidget(tab.rainbow_speed_label)
+    _svctl.addWidget(tab._rainbow_speed_container)
+    tab._rainbow_speed_container.setVisible(False)
+
     # --- Visualizer Type Selector ---
     vis_type_row = QHBoxLayout()
     vis_type_row.addWidget(QLabel("Visualizer Type:"))
@@ -379,6 +415,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab.spotify_vis_type_combo.addItem("Starfield", "starfield")
     tab.spotify_vis_type_combo.addItem("Blob", "blob")
     tab.spotify_vis_type_combo.addItem("Sine Waves", "sine_wave")
+    tab.spotify_vis_type_combo.addItem("Bubble", "bubble")
 
     default_mode = tab._default_str('spotify_visualizer', 'mode', 'spectrum')
     mode_idx = tab.spotify_vis_type_combo.findData(default_mode)
@@ -404,6 +441,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     from ui.tabs.media.blob_builder import build_blob_ui, build_blob_growth
     from ui.tabs.media.helix_builder import build_helix_ui
     from ui.tabs.media.sine_wave_builder import build_sine_wave_ui
+    from ui.tabs.media.bubble_builder import build_bubble_ui
 
     build_spectrum_ui(tab, _svctl)
     build_oscilloscope_ui(tab, _svctl)
@@ -411,6 +449,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     build_blob_ui(tab, _svctl)
     build_helix_ui(tab, _svctl)
     build_sine_wave_ui(tab, _svctl)
+    build_bubble_ui(tab, _svctl)
 
     # Append growth sliders that were originally added after sine section
     build_starfield_growth(tab)
@@ -816,6 +855,10 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
         sine_mw = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_micro_wobble', 0.0) * 100)
         tab.sine_micro_wobble.setValue(max(0, min(100, sine_mw)))
         tab.sine_micro_wobble_label.setText(f"{sine_mw}%")
+    if hasattr(tab, 'sine_width_reaction'):
+        sine_wr = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_width_reaction', 0.0) * 100)
+        tab.sine_width_reaction.setValue(max(0, min(100, sine_wr)))
+        tab.sine_width_reaction_label.setText(f"{sine_wr}%")
     if hasattr(tab, 'sine_vertical_shift'):
         sine_vs = int(spotify_vis_config.get('sine_vertical_shift', 0))
         if isinstance(spotify_vis_config.get('sine_vertical_shift'), bool):
@@ -882,6 +925,106 @@ def load_media_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.spotify_vis_ghost_decay.setValue(ghost_decay_slider)
     tab.spotify_vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
     _update_ghost_visibility(tab)
+
+    # Sine Heartbeat
+    if hasattr(tab, 'sine_heartbeat'):
+        shb = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_heartbeat', 0.0) * 100)
+        tab.sine_heartbeat.setValue(max(0, min(100, shb)))
+        tab.sine_heartbeat_label.setText(f"{shb}%")
+
+    # Oscilloscope ghost trail
+    if hasattr(tab, 'osc_ghost_enabled'):
+        tab.osc_ghost_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_ghosting_enabled', False)
+        )
+    if hasattr(tab, 'osc_ghost_intensity'):
+        gi = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_ghost_intensity', 0.4) * 100)
+        tab.osc_ghost_intensity.setValue(max(5, min(100, gi)))
+        tab.osc_ghost_intensity_label.setText(f"{gi}%")
+
+    # Rainbow (Taste The Rainbow)
+    if hasattr(tab, 'rainbow_enabled'):
+        tab.rainbow_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'rainbow_enabled', False)
+        )
+    if hasattr(tab, 'rainbow_speed_slider'):
+        rs = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'rainbow_speed', 0.5) * 100)
+        tab.rainbow_speed_slider.setValue(max(1, min(100, rs)))
+        tab.rainbow_speed_label.setText(f"{rs / 100.0:.2f}")
+    tab._update_rainbow_visibility()
+
+    # Bubble settings load
+    if hasattr(tab, 'bubble_big_bass_pulse'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_bass_pulse', 0.5) * 100)
+        tab.bubble_big_bass_pulse.setValue(max(0, min(100, v)))
+        tab.bubble_big_bass_pulse_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_small_freq_pulse'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_small_freq_pulse', 0.5) * 100)
+        tab.bubble_small_freq_pulse.setValue(max(0, min(100, v)))
+        tab.bubble_small_freq_pulse_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_stream_direction'):
+        sd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_stream_direction', 'up').lower()
+        sd_map = {"none": 0, "up": 1, "down": 2, "left": 3, "right": 4, "diagonal": 5, "random": 6}
+        tab.bubble_stream_direction.setCurrentIndex(sd_map.get(sd, 1))
+    if hasattr(tab, 'bubble_stream_speed'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_speed', 1.0) * 100)
+        tab.bubble_stream_speed.setValue(max(0, min(150, v)))
+        tab.bubble_stream_speed_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_stream_reactivity'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_reactivity', 0.5) * 100)
+        tab.bubble_stream_reactivity.setValue(max(0, min(100, v)))
+        tab.bubble_stream_reactivity_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_rotation_amount'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_rotation_amount', 0.5) * 100)
+        tab.bubble_rotation_amount.setValue(max(0, min(100, v)))
+        tab.bubble_rotation_amount_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_drift_amount'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_drift_amount', 0.5) * 100)
+        tab.bubble_drift_amount.setValue(max(0, min(100, v)))
+        tab.bubble_drift_amount_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_drift_speed'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_drift_speed', 0.5) * 100)
+        tab.bubble_drift_speed.setValue(max(0, min(100, v)))
+        tab.bubble_drift_speed_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_drift_frequency'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_drift_frequency', 0.5) * 100)
+        tab.bubble_drift_frequency.setValue(max(0, min(100, v)))
+        tab.bubble_drift_frequency_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_drift_direction'):
+        dd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_drift_direction', 'random').lower()
+        dd_map = {"none": 0, "left": 1, "right": 2, "diagonal": 3, "random": 4}
+        tab.bubble_drift_direction.setCurrentIndex(dd_map.get(dd, 4))
+    if hasattr(tab, 'bubble_big_count'):
+        v = tab._config_int('spotify_visualizer', spotify_vis_config, 'bubble_big_count', 8)
+        tab.bubble_big_count.setValue(max(1, min(30, v)))
+        tab.bubble_big_count_label.setText(str(v))
+    if hasattr(tab, 'bubble_small_count'):
+        v = tab._config_int('spotify_visualizer', spotify_vis_config, 'bubble_small_count', 25)
+        tab.bubble_small_count.setValue(max(5, min(80, v)))
+        tab.bubble_small_count_label.setText(str(v))
+    if hasattr(tab, 'bubble_surface_reach'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_surface_reach', 0.6) * 100)
+        tab.bubble_surface_reach.setValue(max(0, min(100, v)))
+        tab.bubble_surface_reach_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_specular_direction'):
+        sd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_specular_direction', 'top_left').lower()
+        sd_map = {"top_left": 0, "top_right": 1, "bottom_left": 2, "bottom_right": 3}
+        tab.bubble_specular_direction.setCurrentIndex(sd_map.get(sd, 0))
+    # Bubble colours
+    for attr, key, default in (
+        ('_bubble_outline_color', 'bubble_outline_color', [255, 255, 255, 230]),
+        ('_bubble_specular_color', 'bubble_specular_color', [255, 255, 255, 255]),
+        ('_bubble_gradient_light', 'bubble_gradient_light', [210, 170, 120, 255]),
+        ('_bubble_gradient_dark', 'bubble_gradient_dark', [80, 60, 50, 255]),
+        ('_bubble_pop_color', 'bubble_pop_color', [255, 255, 255, 180]),
+    ):
+        cd = spotify_vis_config.get(key, default)
+        try:
+            setattr(tab, attr, QColor(*cd))
+        except Exception:
+            logger.debug("[MEDIA_TAB] Failed to set %s=%s", attr, cd, exc_info=True)
+            setattr(tab, attr, QColor(*default))
+
     _update_media_enabled_visibility(tab)
     _update_spotify_vis_enabled_visibility(tab)
 
@@ -1006,6 +1149,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_speed': (tab.sine_speed.value() if hasattr(tab, 'sine_speed') else 100) / 100.0,
         'sine_wave_effect': (tab.sine_wave_effect.value() if hasattr(tab, 'sine_wave_effect') else 0) / 100.0,
         'sine_micro_wobble': (tab.sine_micro_wobble.value() if hasattr(tab, 'sine_micro_wobble') else 0) / 100.0,
+        'sine_width_reaction': (tab.sine_width_reaction.value() if hasattr(tab, 'sine_width_reaction') else 0) / 100.0,
         'sine_vertical_shift': tab.sine_vertical_shift.value() if hasattr(tab, 'sine_vertical_shift') else 0,
         'sine_wave_travel': tab.sine_travel.currentIndex() if hasattr(tab, 'sine_travel') else 0,
         'sine_travel_line2': tab.sine_travel_line2.currentIndex() if hasattr(tab, 'sine_travel_line2') else 0,
@@ -1019,6 +1163,31 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_line2_glow_color': _qcolor_to_list(getattr(tab, '_sine_line2_glow_color', None), [255, 120, 50, 180]),
         'sine_line3_color': _qcolor_to_list(getattr(tab, '_sine_line3_color', None), [50, 255, 120, 230]),
         'sine_line3_glow_color': _qcolor_to_list(getattr(tab, '_sine_line3_glow_color', None), [50, 255, 120, 180]),
+        'rainbow_enabled': tab.rainbow_enabled.isChecked() if hasattr(tab, 'rainbow_enabled') else False,
+        'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
+        'osc_ghosting_enabled': tab.osc_ghost_enabled.isChecked() if hasattr(tab, 'osc_ghost_enabled') else False,
+        'osc_ghost_intensity': (tab.osc_ghost_intensity.value() if hasattr(tab, 'osc_ghost_intensity') else 40) / 100.0,
+        'sine_heartbeat': (tab.sine_heartbeat.value() if hasattr(tab, 'sine_heartbeat') else 0) / 100.0,
+        # Bubble
+        'bubble_big_bass_pulse': (tab.bubble_big_bass_pulse.value() if hasattr(tab, 'bubble_big_bass_pulse') else 50) / 100.0,
+        'bubble_small_freq_pulse': (tab.bubble_small_freq_pulse.value() if hasattr(tab, 'bubble_small_freq_pulse') else 50) / 100.0,
+        'bubble_stream_direction': (tab.bubble_stream_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_stream_direction') else 'up'),
+        'bubble_stream_speed': (tab.bubble_stream_speed.value() if hasattr(tab, 'bubble_stream_speed') else 100) / 100.0,
+        'bubble_stream_reactivity': (tab.bubble_stream_reactivity.value() if hasattr(tab, 'bubble_stream_reactivity') else 50) / 100.0,
+        'bubble_rotation_amount': (tab.bubble_rotation_amount.value() if hasattr(tab, 'bubble_rotation_amount') else 50) / 100.0,
+        'bubble_drift_amount': (tab.bubble_drift_amount.value() if hasattr(tab, 'bubble_drift_amount') else 50) / 100.0,
+        'bubble_drift_speed': (tab.bubble_drift_speed.value() if hasattr(tab, 'bubble_drift_speed') else 50) / 100.0,
+        'bubble_drift_frequency': (tab.bubble_drift_frequency.value() if hasattr(tab, 'bubble_drift_frequency') else 50) / 100.0,
+        'bubble_drift_direction': (tab.bubble_drift_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_drift_direction') else 'random'),
+        'bubble_big_count': tab.bubble_big_count.value() if hasattr(tab, 'bubble_big_count') else 8,
+        'bubble_small_count': tab.bubble_small_count.value() if hasattr(tab, 'bubble_small_count') else 25,
+        'bubble_surface_reach': (tab.bubble_surface_reach.value() if hasattr(tab, 'bubble_surface_reach') else 60) / 100.0,
+        'bubble_outline_color': _qcolor_to_list(getattr(tab, '_bubble_outline_color', None), [255, 255, 255, 230]),
+        'bubble_specular_color': _qcolor_to_list(getattr(tab, '_bubble_specular_color', None), [255, 255, 255, 255]),
+        'bubble_gradient_light': _qcolor_to_list(getattr(tab, '_bubble_gradient_light', None), [210, 170, 120, 255]),
+        'bubble_gradient_dark': _qcolor_to_list(getattr(tab, '_bubble_gradient_dark', None), [80, 60, 50, 255]),
+        'bubble_pop_color': _qcolor_to_list(getattr(tab, '_bubble_pop_color', None), [255, 255, 255, 180]),
+        'bubble_specular_direction': (tab.bubble_specular_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_specular_direction') else 'top_left'),
     }
 
     tab._update_spotify_vis_sensitivity_enabled_state()

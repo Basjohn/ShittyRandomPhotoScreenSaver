@@ -143,16 +143,17 @@ class SpotifyVisualizerWidget(QWidget):
 
         # Card height expansion (per-mode growth factors, user-customizable)
         self._base_height: int = 80
-        self._spectrum_growth: float = 1.0
-        self._starfield_growth: float = 2.0
-        self._blob_growth: float = 2.5
-        self._helix_growth: float = 2.0
-        self._osc_growth: float = 1.0
+        self._spectrum_growth: float = 2.0
+        self._starfield_growth: float = 3.0
+        self._blob_growth: float = 3.5
+        self._helix_growth: float = 3.0
+        self._osc_growth: float = 2.0
+        self._bubble_growth: float = 3.0
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False
         self._osc_line_offset_bias: float = 0.0
         self._osc_vertical_shift: int = 0
-        self._sine_wave_growth: float = 1.0
+        self._sine_wave_growth: float = 2.0
         self._sine_wave_travel: int = 0  # 0=none, 1=left, 2=right
         self._sine_travel_line2: int = 0  # per-line travel for line 2
         self._sine_travel_line3: int = 0  # per-line travel for line 3
@@ -160,6 +161,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
         self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
+        self._sine_width_reaction: float = 0.0  # 0.0-1.0, bass-driven line width stretching
         self._sine_glow_enabled: bool = True
         self._sine_glow_intensity: float = 0.5
         self._sine_glow_color: QColor = QColor(0, 200, 255, 230)
@@ -174,6 +176,46 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_line2_glow_color: QColor = QColor(7, 114, 255, 180)
         self._sine_line3_color: QColor = QColor(255, 255, 255, 230)
         self._sine_line3_glow_color: QColor = QColor(14, 159, 255, 180)
+
+        # Rainbow (Taste The Rainbow) mode — global, applies to all visualizers
+        self._rainbow_enabled: bool = False
+        self._rainbow_speed: float = 0.5
+
+        # Oscilloscope ghost trail
+        self._osc_ghosting_enabled: bool = False
+        self._osc_ghost_intensity: float = 0.4
+
+        # Sine Wave Heartbeat
+        self._sine_heartbeat: float = 0.0
+        self._heartbeat_intensity: float = 0.0  # CPU-side decay envelope
+        self._heartbeat_avg_bass: float = 0.0   # rolling average for transient detection
+
+        # Bubble visualizer
+        self._bubble_big_bass_pulse: float = 0.5
+        self._bubble_small_freq_pulse: float = 0.5
+        self._bubble_stream_direction: str = "up"
+        self._bubble_stream_speed: float = 1.0
+        self._bubble_stream_reactivity: float = 0.5
+        self._bubble_rotation_amount: float = 0.5
+        self._bubble_drift_amount: float = 0.5
+        self._bubble_drift_speed: float = 0.5
+        self._bubble_drift_frequency: float = 0.5
+        self._bubble_drift_direction: str = "random"
+        self._bubble_big_count: int = 8
+        self._bubble_small_count: int = 25
+        self._bubble_surface_reach: float = 0.6
+        self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
+        self._bubble_specular_color: QColor = QColor(255, 255, 255, 255)
+        self._bubble_gradient_light: QColor = QColor(210, 170, 120, 255)
+        self._bubble_gradient_dark: QColor = QColor(80, 60, 50, 255)
+        self._bubble_pop_color: QColor = QColor(255, 255, 255, 180)
+        self._bubble_specular_direction: str = "top_left"
+        self._bubble_simulation: Optional[object] = None  # lazy init (owned by compute thread)
+        self._bubble_pos_data: list = []
+        self._bubble_extra_data: list = []
+        self._bubble_count: int = 0
+        self._bubble_compute_pending: bool = False  # coalescing flag
+        self._bubble_last_tick_ts: float = 0.0
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -403,6 +445,7 @@ class SpotifyVisualizerWidget(QWidget):
             'blob': VisualizerMode.BLOB,
             'helix': VisualizerMode.HELIX,
             'sine_wave': VisualizerMode.SINE_WAVE,
+            'bubble': VisualizerMode.BUBBLE,
         }
         vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
         self.set_visualization_mode(vm)
@@ -429,6 +472,7 @@ class SpotifyVisualizerWidget(QWidget):
             'blob': self._blob_growth,
             'helix': self._helix_growth,
             'sine_wave': self._sine_wave_growth,
+            'bubble': self._bubble_growth,
         }.get(mode)
         return preferred_height(mode, self._base_height, growth)
 
@@ -542,6 +586,37 @@ class SpotifyVisualizerWidget(QWidget):
         self._animation_manager = None
         self._anim_listener_id = None
         self._ensure_tick_source()
+
+    def _bubble_compute_worker(self, dt: float, eb_snap: dict,
+                               sim_settings: dict, pulse_params: dict):
+        """Run bubble simulation on COMPUTE thread pool. Returns snapshot data."""
+        if self._bubble_simulation is None:
+            from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
+            self._bubble_simulation = BubbleSimulation()
+        self._bubble_simulation.tick(dt, eb_snap, sim_settings)
+        pos_data, extra_data = self._bubble_simulation.snapshot(
+            bass=pulse_params['bass'],
+            mid_high=pulse_params['mid_high'],
+            big_bass_pulse=pulse_params['big_bass_pulse'],
+            small_freq_pulse=pulse_params['small_freq_pulse'],
+        )
+        return (pos_data, extra_data, self._bubble_simulation.count)
+
+    def _bubble_compute_done(self, task_result) -> None:
+        """Callback from COMPUTE thread — post results to UI thread."""
+        self._bubble_compute_pending = False
+        if task_result.success and task_result.result is not None:
+            pos_data, extra_data, count = task_result.result
+            from core.threading.manager import ThreadManager
+            ThreadManager.run_on_ui_thread(
+                self._bubble_apply_result, pos_data, extra_data, count
+            )
+
+    def _bubble_apply_result(self, pos_data: list, extra_data: list, count: int) -> None:
+        """Apply bubble simulation results on UI thread (atomic swap)."""
+        self._bubble_pos_data = pos_data
+        self._bubble_extra_data = extra_data
+        self._bubble_count = count
 
     def _ensure_tick_source(self) -> None:
         """Ensure the visualizer has a tick source for continuous updates.
@@ -1375,6 +1450,64 @@ class SpotifyVisualizerWidget(QWidget):
             # Force update during decay (when bars are non-zero but Spotify stopped)
             if any_nonzero and not self._spotify_playing:
                 changed = True
+
+        # --- Heartbeat transient detection (CPU-side) ---
+        # Compare current bass to rolling average; spike triggers heartbeat.
+        # Decay envelope: ~250ms full decay (4.0/s).
+        if self._sine_heartbeat > 0.001 and self._engine is not None:
+            eb = self._engine.get_energy_bands()
+            bass_now = getattr(eb, 'bass', 0.0) if eb else 0.0
+            # Rolling average with ~0.3s window
+            dt_hb = max(0.001, min(0.1, now_ts - self._last_media_state_ts if self._last_media_state_ts > 0 else 0.033))
+            alpha_avg = min(1.0, dt_hb / 0.3)
+            self._heartbeat_avg_bass += (bass_now - self._heartbeat_avg_bass) * alpha_avg
+            # Transient: current bass exceeds average by threshold scaled by slider
+            threshold = 0.15 * (1.1 - self._sine_heartbeat)  # lower threshold at higher slider
+            if bass_now - self._heartbeat_avg_bass > threshold:
+                self._heartbeat_intensity = 1.0
+            # Decay
+            self._heartbeat_intensity = max(0.0, self._heartbeat_intensity - dt_hb * 4.0)
+
+        # --- Bubble simulation tick (dispatched to COMPUTE thread pool) ---
+        if self._vis_mode_str == 'bubble' and not self._bubble_compute_pending:
+            if self._thread_manager is not None:
+                self._bubble_compute_pending = True
+                # Snapshot energy bands and settings on UI thread (cheap reads)
+                eb = self._engine.get_energy_bands() if self._engine else None
+                prev_ts = self._bubble_last_tick_ts
+                self._bubble_last_tick_ts = now_ts
+                dt_bubble = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
+                eb_snap = {
+                    'bass': getattr(eb, 'bass', 0.0) if eb else 0.0,
+                    'mid': getattr(eb, 'mid', 0.0) if eb else 0.0,
+                    'high': getattr(eb, 'high', 0.0) if eb else 0.0,
+                    'overall': getattr(eb, 'overall', 0.0) if eb else 0.0,
+                }
+                sim_settings = {
+                    "bubble_big_count": self._bubble_big_count,
+                    "bubble_small_count": self._bubble_small_count,
+                    "bubble_surface_reach": self._bubble_surface_reach,
+                    "bubble_stream_direction": self._bubble_stream_direction,
+                    "bubble_stream_speed": self._bubble_stream_speed,
+                    "bubble_stream_reactivity": self._bubble_stream_reactivity,
+                    "bubble_rotation_amount": self._bubble_rotation_amount,
+                    "bubble_drift_amount": self._bubble_drift_amount,
+                    "bubble_drift_speed": self._bubble_drift_speed,
+                    "bubble_drift_frequency": self._bubble_drift_frequency,
+                    "bubble_drift_direction": self._bubble_drift_direction,
+                }
+                pulse_params = {
+                    'bass': eb_snap['bass'],
+                    'mid_high': (eb_snap['mid'] + eb_snap['high']) * 0.5,
+                    'big_bass_pulse': self._bubble_big_bass_pulse,
+                    'small_freq_pulse': self._bubble_small_freq_pulse,
+                }
+                self._thread_manager.submit_compute_task(
+                    self._bubble_compute_worker,
+                    dt_bubble, eb_snap, sim_settings, pulse_params,
+                    callback=self._bubble_compute_done,
+                    task_id=f"bubble_sim_{id(self)}",
+                )
 
         # Always push at least one frame so the visualiser baseline is
         # visible as soon as the widget fades in, even before audio arrives.

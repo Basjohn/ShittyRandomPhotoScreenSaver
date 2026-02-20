@@ -17,6 +17,7 @@ uniform float u_bar_height_scale;  // visual boost for taller cards (1.0 = defau
 uniform int u_single_piece;        // 1 = solid bars (no segment gaps)
 uniform int u_slanted;             // 1 = diagonal-sliced bar edges facing center
 uniform float u_border_radius;     // border radius in px (0 = square, ~6 = rounded)
+uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 
 void main() {
     if (u_fade <= 0.0 || u_bar_count <= 0 || u_segments <= 0) {
@@ -443,6 +444,7 @@ void main() {
     fill.a *= u_fade;
     border.a *= u_fade;
 
+    vec4 out_color;
     if (is_ghost_frag) {
         float ghost_alpha = clamp(u_ghost_alpha, 0.0, 1.0);
         if (ghost_alpha <= 0.0) {
@@ -464,8 +466,42 @@ void main() {
 
         vec4 ghost = border;
         ghost.a *= ghost_alpha * ghost_factor;
-        fragColor = ghost;
+        out_color = ghost;
     } else {
-        fragColor = on_border ? border : fill;
+        out_color = on_border ? border : fill;
     }
+
+    // Rainbow hue shift (Taste The Rainbow mode)
+    if (u_rainbow_hue_offset > 0.001) {
+        vec3 rc = out_color.rgb;
+        float cmax = max(rc.r, max(rc.g, rc.b));
+        float cmin = min(rc.r, min(rc.g, rc.b));
+        float delta = cmax - cmin;
+        float h = 0.0;
+        if (delta > 0.0001) {
+            if (cmax == rc.r) h = mod((rc.g - rc.b) / delta, 6.0);
+            else if (cmax == rc.g) h = (rc.b - rc.r) / delta + 2.0;
+            else h = (rc.r - rc.g) / delta + 4.0;
+            h /= 6.0;
+            if (h < 0.0) h += 1.0;
+        }
+        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
+        float v = cmax;
+        // Force saturation on greyscale so rainbow colouring is visible
+        if (s < 0.05 && v > 0.05) s = 1.0;
+        h = fract(h + u_rainbow_hue_offset);
+        float c = v * s;
+        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+        float m = v - c;
+        vec3 rgb;
+        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
+        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
+        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
+        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
+        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
+        else                  rgb = vec3(c, 0.0, x);
+        out_color.rgb = rgb + m;
+    }
+
+    fragColor = out_color;
 }

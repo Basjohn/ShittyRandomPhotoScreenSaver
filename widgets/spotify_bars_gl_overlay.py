@@ -72,7 +72,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Waveform data for oscilloscope (256 samples, -1..1)
         self._waveform: List[float] = []
+        self._prev_waveform: List[float] = []  # delayed ghost trail waveform
+        self._ghost_waveform_ring: List[List[float]] = []  # ring buffer for delay
+        self._ghost_ring_idx: int = 0
+        _GHOST_DELAY_FRAMES = 6  # ~100ms at 60fps — enough spatial separation
+        self._ghost_delay_frames: int = _GHOST_DELAY_FRAMES
         self._waveform_count: int = 0
+        self._osc_ghost_alpha: float = 0.0  # 0 = disabled
 
         # Energy bands for starfield / blob / helix
         self._energy_bands: EnergyBands = EnergyBands()
@@ -128,9 +134,25 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
         self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
+        self._sine_width_reaction: float = 0.0  # 0.0-1.0, bass-driven line width stretching
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
+
+        # Rainbow (Taste The Rainbow) mode
+        self._rainbow_enabled: bool = False
+        self._rainbow_speed: float = 0.5
+
+        # Bubble settings
+        self._bubble_count: int = 0
+        self._bubble_pos_data: list = []
+        self._bubble_extra_data: list = []
+        self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
+        self._bubble_specular_color: QColor = QColor(255, 255, 255, 255)
+        self._bubble_gradient_light: QColor = QColor(210, 170, 120, 255)
+        self._bubble_gradient_dark: QColor = QColor(80, 60, 50, 255)
+        self._bubble_pop_color: QColor = QColor(255, 255, 255, 180)
+        self._bubble_specular_direction: str = "top_left"
 
         # Helix settings
         self._helix_turns: int = 4
@@ -243,6 +265,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         sine_wave_effect: float = 0.0,
         sine_micro_wobble: float = 0.0,
         sine_vertical_shift: int = 0,
+        sine_width_reaction: float = 0.0,
         helix_turns: int = 4,
         helix_double: bool = True,
         helix_speed: float = 1.0,
@@ -259,6 +282,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         single_piece: bool = False,
         slanted: bool = False,
         border_radius: float = 0.0,
+        rainbow_enabled: bool = False,
+        rainbow_speed: float = 0.5,
+        osc_ghosting_enabled: bool = False,
+        osc_ghost_intensity: float = 0.4,
+        sine_heartbeat: float = 0.0,
+        heartbeat_intensity: float = 0.0,
+        # Bubble mode
+        bubble_count: int = 0,
+        bubble_pos_data: list | None = None,
+        bubble_extra_data: list | None = None,
+        bubble_outline_color: QColor | None = None,
+        bubble_specular_color: QColor | None = None,
+        bubble_gradient_light: QColor | None = None,
+        bubble_gradient_dark: QColor | None = None,
+        bubble_pop_color: QColor | None = None,
+        bubble_specular_direction: str = "top_left",
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -278,7 +317,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Set active visualizer mode
         self._vis_mode = vis_mode if vis_mode in (
-            'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave'
+            'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave', 'bubble'
         ) else 'spectrum'
 
         # Update accumulated time for animated modes
@@ -319,6 +358,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Store waveform data (oscilloscope) with temporal smoothing via osc_speed
         if waveform is not None:
+            # Push current waveform into ghost ring buffer before updating
+            if self._waveform and self._osc_ghost_alpha > 0.001:
+                ring = self._ghost_waveform_ring
+                delay = self._ghost_delay_frames
+                if len(ring) < delay:
+                    ring.append(list(self._waveform))
+                else:
+                    ring[self._ghost_ring_idx % delay] = list(self._waveform)
+                # Read the oldest entry as the ghost waveform
+                oldest_idx = (self._ghost_ring_idx + 1) % max(1, len(ring))
+                self._prev_waveform = ring[oldest_idx] if len(ring) > 0 else []
+                self._ghost_ring_idx = (self._ghost_ring_idx + 1) % max(1, delay)
             new_wf = list(waveform)
             speed = self._osc_speed
             if speed < 0.99 and len(self._waveform) == len(new_wf) and len(new_wf) > 0:
@@ -398,6 +449,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_wave_effect = max(0.0, min(1.0, float(sine_wave_effect)))
         self._sine_micro_wobble = max(0.0, min(1.0, float(sine_micro_wobble)))
         self._sine_vertical_shift = max(-50, min(200, int(sine_vertical_shift)))
+        self._sine_width_reaction = max(0.0, min(1.0, float(sine_width_reaction)))
 
         # Helix settings
         self._helix_turns = max(2, int(helix_turns))
@@ -414,6 +466,33 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Spectrum: slanted bar edges and border radius
         self._slanted = bool(slanted)
         self._border_radius = max(0.0, float(border_radius))
+
+        # Rainbow (Taste The Rainbow) mode
+        self._rainbow_enabled = bool(rainbow_enabled)
+        self._rainbow_speed = max(0.01, min(5.0, float(rainbow_speed)))
+
+        # Oscilloscope ghost trail
+        self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
+
+        # Sine Wave Heartbeat
+        self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
+        self._heartbeat_intensity = max(0.0, min(1.0, float(heartbeat_intensity)))
+
+        # Bubble settings
+        self._bubble_count = max(0, min(110, int(bubble_count)))
+        self._bubble_pos_data = bubble_pos_data or []
+        self._bubble_extra_data = bubble_extra_data or []
+        if bubble_outline_color is not None:
+            self._bubble_outline_color = QColor(bubble_outline_color) if not isinstance(bubble_outline_color, QColor) else bubble_outline_color
+        if bubble_specular_color is not None:
+            self._bubble_specular_color = QColor(bubble_specular_color) if not isinstance(bubble_specular_color, QColor) else bubble_specular_color
+        if bubble_gradient_light is not None:
+            self._bubble_gradient_light = QColor(bubble_gradient_light) if not isinstance(bubble_gradient_light, QColor) else bubble_gradient_light
+        if bubble_gradient_dark is not None:
+            self._bubble_gradient_dark = QColor(bubble_gradient_dark) if not isinstance(bubble_gradient_dark, QColor) else bubble_gradient_dark
+        if bubble_pop_color is not None:
+            self._bubble_pop_color = QColor(bubble_pop_color) if not isinstance(bubble_pop_color, QColor) else bubble_pop_color
+        self._bubble_specular_direction = str(bubble_specular_direction)
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -813,7 +892,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_sine_travel",
                     "u_card_adaptation",
                     "u_sine_travel_line2", "u_sine_travel_line3",
-                    "u_wave_effect", "u_micro_wobble",
+                    "u_wave_effect", "u_micro_wobble", "u_width_reaction",
                     "u_helix_turns", "u_helix_double", "u_helix_speed",
                     "u_helix_glow_enabled", "u_helix_glow_intensity",
                     "u_helix_glow_color", "u_helix_reactive_glow",
@@ -821,6 +900,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_line2_color", "u_line2_glow_color",
                     "u_line3_color", "u_line3_glow_color",
                     "u_slanted", "u_border_radius",
+                    "u_rainbow_hue_offset",
+                    "u_prev_waveform", "u_osc_ghost_alpha",
+                    "u_heartbeat", "u_heartbeat_intensity",
+                    # Bubble mode uniforms
+                    "u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
+                    "u_specular_dir", "u_outline_color", "u_specular_color",
+                    "u_gradient_light", "u_gradient_dark", "u_pop_color",
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
 
@@ -1025,6 +1111,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             if loc >= 0:
                 _gl.glUniform1f(loc, float(self._accumulated_time))
 
+            # --- Rainbow hue offset (all modes) ---
+            loc = u.get("u_rainbow_hue_offset", -1)
+            if loc >= 0:
+                if self._rainbow_enabled:
+                    # Continuous hue rotation: fract() keeps it in 0..1
+                    hue_offset = (self._accumulated_time * self._rainbow_speed * 0.1) % 1.0
+                    _gl.glUniform1f(loc, float(hue_offset))
+                else:
+                    _gl.glUniform1f(loc, 0.0)
+
             # --- Spectrum-specific uniforms ---
             if mode == 'spectrum':
                 count = int(self._bar_count)
@@ -1138,6 +1234,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     for i in range(wf_count):
                         wf_buf[i] = float(wf[i])
                     _gl.glUniform1fv(loc, 256, wf_buf)
+
+                # Ghost waveform (previous frame trail)
+                loc = u.get("u_osc_ghost_alpha", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._osc_ghost_alpha))
+                loc = u.get("u_prev_waveform", -1)
+                if loc >= 0 and self._osc_ghost_alpha > 0.001:
+                    prev_wf = self._prev_waveform
+                    prev_count = min(len(prev_wf), 256) if prev_wf else 0
+                    prev_buf = np.zeros(256, dtype="float32")
+                    for i in range(prev_count):
+                        prev_buf[i] = float(prev_wf[i])
+                    _gl.glUniform1fv(loc, 256, prev_buf)
 
             # --- Shared line/glow uniforms (oscilloscope + sine_wave) ---
             if mode in ('oscilloscope', 'sine_wave'):
@@ -1338,6 +1447,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_sine_vertical_shift", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, int(self._sine_vertical_shift))
+                loc = u.get("u_heartbeat", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_heartbeat))
+                loc = u.get("u_heartbeat_intensity", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._heartbeat_intensity))
+                loc = u.get("u_width_reaction", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_width_reaction))
 
             # --- Helix uniforms ---
             if mode == 'helix':
@@ -1364,6 +1482,77 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_helix_reactive_glow", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, 1 if self._helix_reactive_glow else 0)
+
+            # --- Bubble uniforms ---
+            if mode == 'bubble':
+                # Energy bands for bubble mode
+                eb = self._energy_bands
+                loc = u.get("u_overall_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.overall))
+                loc = u.get("u_bass_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.bass))
+                loc = u.get("u_mid_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.mid))
+                loc = u.get("u_high_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(eb.high))
+                loc = u.get("u_playing", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, 1 if self._playing else 0)
+
+                # Bubble count
+                bcount = min(self._bubble_count, 110)
+                loc = u.get("u_bubble_count", -1)
+                if loc >= 0:
+                    _gl.glUniform1i(loc, bcount)
+
+                # Bubble position data (vec4 array: x, y, radius, alpha)
+                loc = u.get("u_bubbles_pos", -1)
+                if loc >= 0 and bcount > 0:
+                    pos_data = self._bubble_pos_data
+                    pos_buf = np.zeros(110 * 4, dtype="float32")
+                    copy_len = min(len(pos_data), 110 * 4)
+                    for i in range(copy_len):
+                        pos_buf[i] = float(pos_data[i])
+                    _gl.glUniform4fv(loc, 110, pos_buf)
+
+                # Bubble extra data (vec2 array: specular_size, rotation)
+                loc = u.get("u_bubbles_extra", -1)
+                if loc >= 0 and bcount > 0:
+                    extra_data = self._bubble_extra_data
+                    extra_buf = np.zeros(110 * 2, dtype="float32")
+                    copy_len = min(len(extra_data), 110 * 2)
+                    for i in range(copy_len):
+                        extra_buf[i] = float(extra_data[i])
+                    _gl.glUniform2fv(loc, 110, extra_buf)
+
+                # Specular direction (normalised vec2)
+                spec_dir_map = {
+                    "top_left": (-0.707, 0.707),
+                    "top_right": (0.707, 0.707),
+                    "bottom_left": (-0.707, -0.707),
+                    "bottom_right": (0.707, -0.707),
+                }
+                sd = spec_dir_map.get(self._bubble_specular_direction, (-0.707, 0.707))
+                loc = u.get("u_specular_dir", -1)
+                if loc >= 0:
+                    _gl.glUniform2f(loc, float(sd[0]), float(sd[1]))
+
+                # Colour uniforms
+                for uname, qc in (
+                    ("u_outline_color", self._bubble_outline_color),
+                    ("u_specular_color", self._bubble_specular_color),
+                    ("u_gradient_light", self._bubble_gradient_light),
+                    ("u_gradient_dark", self._bubble_gradient_dark),
+                    ("u_pop_color", self._bubble_pop_color),
+                ):
+                    loc = u.get(uname, -1)
+                    if loc >= 0:
+                        _gl.glUniform4f(loc, float(qc.redF()), float(qc.greenF()),
+                                        float(qc.blueF()), float(qc.alphaF()))
 
             # --- Draw ---
             _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)

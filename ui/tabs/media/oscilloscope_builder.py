@@ -74,6 +74,41 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_glow_enabled.stateChanged.connect(_update_osc_glow_vis)
     _update_osc_glow_vis()
 
+    # --- Ghost Trail ---
+    tab.osc_ghost_enabled = QCheckBox("Ghost Trail")
+    tab.osc_ghost_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_ghosting_enabled', False))
+    tab.osc_ghost_enabled.setToolTip("Show a faded trail of the previous waveform behind the current one.")
+    tab.osc_ghost_enabled.stateChanged.connect(tab._save_settings)
+    osc_layout.addWidget(tab.osc_ghost_enabled)
+
+    tab._osc_ghost_sub_container = QWidget()
+    _osc_ghost_layout = QVBoxLayout(tab._osc_ghost_sub_container)
+    _osc_ghost_layout.setContentsMargins(16, 0, 0, 0)
+    osc_ghost_row = QHBoxLayout()
+    osc_ghost_row.addWidget(QLabel("Ghost Intensity:"))
+    tab.osc_ghost_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_ghost_intensity.setMinimum(5)
+    tab.osc_ghost_intensity.setMaximum(100)
+    osc_gi_val = int(tab._default_float('spotify_visualizer', 'osc_ghost_intensity', 0.4) * 100)
+    tab.osc_ghost_intensity.setValue(max(5, min(100, osc_gi_val)))
+    tab.osc_ghost_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_ghost_intensity.setTickInterval(10)
+    tab.osc_ghost_intensity.setToolTip("How visible the ghost trail is. Higher = more opaque trail.")
+    tab.osc_ghost_intensity.valueChanged.connect(tab._save_settings)
+    osc_ghost_row.addWidget(tab.osc_ghost_intensity)
+    tab.osc_ghost_intensity_label = QLabel(f"{osc_gi_val}%")
+    tab.osc_ghost_intensity.valueChanged.connect(
+        lambda v: tab.osc_ghost_intensity_label.setText(f"{v}%")
+    )
+    osc_ghost_row.addWidget(tab.osc_ghost_intensity_label)
+    _osc_ghost_layout.addLayout(osc_ghost_row)
+    osc_layout.addWidget(tab._osc_ghost_sub_container)
+
+    def _update_osc_ghost_vis(_s=None):
+        tab._osc_ghost_sub_container.setVisible(tab.osc_ghost_enabled.isChecked())
+    tab.osc_ghost_enabled.stateChanged.connect(_update_osc_ghost_vis)
+    _update_osc_ghost_vis()
+
     osc_sens_row = QHBoxLayout()
     osc_sens_row.addWidget(QLabel("Sensitivity:"))
     tab.osc_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)

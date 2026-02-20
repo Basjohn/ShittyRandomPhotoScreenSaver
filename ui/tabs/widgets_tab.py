@@ -723,6 +723,46 @@ class WidgetsTab(QWidget):
         if color is not None:
             self._helix_glow_color = color
 
+    def _choose_bubble_outline_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_bubble_outline_color', QColor(255, 255, 255, 230)),
+            self, "Choose Bubble Outline Color")
+        if color is not None:
+            self._bubble_outline_color = color
+            self._save_settings()
+
+    def _choose_bubble_specular_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_bubble_specular_color', QColor(255, 255, 255, 255)),
+            self, "Choose Bubble Specular Color")
+        if color is not None:
+            self._bubble_specular_color = color
+            self._save_settings()
+
+    def _choose_bubble_gradient_light(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_bubble_gradient_light', QColor(210, 170, 120, 255)),
+            self, "Choose Bubble Gradient Light")
+        if color is not None:
+            self._bubble_gradient_light = color
+            self._save_settings()
+
+    def _choose_bubble_gradient_dark(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_bubble_gradient_dark', QColor(80, 60, 50, 255)),
+            self, "Choose Bubble Gradient Dark")
+        if color is not None:
+            self._bubble_gradient_dark = color
+            self._save_settings()
+
+    def _choose_bubble_pop_color(self) -> None:
+        color = StyledColorPicker.get_color(
+            getattr(self, '_bubble_pop_color', QColor(255, 255, 255, 180)),
+            self, "Choose Bubble Pop Color")
+        if color is not None:
+            self._bubble_pop_color = color
+            self._save_settings()
+
     def _choose_nebula_tint1(self) -> None:
         color = StyledColorPicker.get_color(
             getattr(self, '_nebula_tint1', QColor(20, 40, 120)),
@@ -887,10 +927,21 @@ class WidgetsTab(QWidget):
             'blob': getattr(self, '_blob_settings_container', None),
             'helix': getattr(self, '_helix_settings_container', None),
             'sine_wave': getattr(self, '_sine_wave_settings_container', None),
+            'bubble': getattr(self, '_bubble_settings_container', None),
         }
         for m, container in containers.items():
             if container is not None:
                 container.setVisible(m == mode)
+
+    def _update_rainbow_visibility(self) -> None:
+        """Show/hide rainbow speed slider based on checkbox state."""
+        try:
+            enabled = self.rainbow_enabled.isChecked()
+            container = getattr(self, '_rainbow_speed_container', None)
+            if container is not None:
+                container.setVisible(enabled)
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
     def _update_spotify_vis_sensitivity_enabled_state(self) -> None:
         try:

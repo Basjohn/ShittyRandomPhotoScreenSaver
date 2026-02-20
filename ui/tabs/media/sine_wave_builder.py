@@ -180,6 +180,54 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_mw_row.addWidget(tab.sine_micro_wobble_label)
     sine_layout.addLayout(sine_mw_row)
 
+    # Width Reaction
+    sine_wr_row = QHBoxLayout()
+    sine_wr_row.addWidget(QLabel("Width Reaction:"))
+    tab.sine_width_reaction = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_width_reaction.setMinimum(0)
+    tab.sine_width_reaction.setMaximum(100)
+    sine_wr_val = int(tab._default_float('spotify_visualizer', 'sine_width_reaction', 0.0) * 100)
+    tab.sine_width_reaction.setValue(max(0, min(100, sine_wr_val)))
+    tab.sine_width_reaction.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_width_reaction.setTickInterval(10)
+    tab.sine_width_reaction.setToolTip(
+        "Bass-driven line width stretching. All lines stretch wider in reaction to bass. "
+        "0 = off (2px lines), higher = thicker lines on bass hits (up to ~8px). "
+        "Lines still resemble a sine wave at maximum."
+    )
+    tab.sine_width_reaction.valueChanged.connect(tab._save_settings)
+    sine_wr_row.addWidget(tab.sine_width_reaction)
+    tab.sine_width_reaction_label = QLabel(f"{sine_wr_val}%")
+    tab.sine_width_reaction.valueChanged.connect(
+        lambda v: tab.sine_width_reaction_label.setText(f"{v}%")
+    )
+    sine_wr_row.addWidget(tab.sine_width_reaction_label)
+    sine_layout.addLayout(sine_wr_row)
+
+    # Heartbeat
+    sine_hb_row = QHBoxLayout()
+    sine_hb_row.addWidget(QLabel("Heartbeat:"))
+    tab.sine_heartbeat = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_heartbeat.setMinimum(0)
+    tab.sine_heartbeat.setMaximum(100)
+    sine_hb_val = int(tab._default_float('spotify_visualizer', 'sine_heartbeat', 0.0) * 100)
+    tab.sine_heartbeat.setValue(max(0, min(100, sine_hb_val)))
+    tab.sine_heartbeat.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_heartbeat.setTickInterval(10)
+    tab.sine_heartbeat.setToolTip(
+        "Bass transient-triggered triangular bumps along the line. "
+        "Bumps are largest in the travel direction, smallest opposite. "
+        "0 = off, higher = more prominent bumps."
+    )
+    tab.sine_heartbeat.valueChanged.connect(tab._save_settings)
+    sine_hb_row.addWidget(tab.sine_heartbeat)
+    tab.sine_heartbeat_label = QLabel(f"{sine_hb_val}%")
+    tab.sine_heartbeat.valueChanged.connect(
+        lambda v: tab.sine_heartbeat_label.setText(f"{v}%")
+    )
+    sine_hb_row.addWidget(tab.sine_heartbeat_label)
+    sine_layout.addLayout(sine_hb_row)
+
     # Vertical Shift
     sine_vshift_row = QHBoxLayout()
     sine_vshift_row.addWidget(QLabel("Vertical Shift:"))

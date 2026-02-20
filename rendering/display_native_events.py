@@ -157,6 +157,45 @@ def handle_nativeEvent(widget, eventType, message):
             except Exception:
                 pass  # Ignore raw input errors
 
+        # -----------------------------------------------------------
+        # WM_DISPLAYCHANGE — monitor sleep/wake, resolution change
+        # Qt's screenChanged signal is unreliable on Windows when
+        # multiple monitors sleep/wake simultaneously. Force all
+        # DisplayWidget instances to re-evaluate their geometry and
+        # refresh overlay state (fixes compositor stuck between
+        # displays and media widget fade-out on wake).
+        # -----------------------------------------------------------
+        WM_DISPLAYCHANGE = 0x007E
+        if mid == WM_DISPLAYCHANGE:
+            try:
+                logger.info("[NATIVE] WM_DISPLAYCHANGE received — re-anchoring all displays")
+                for inst in DisplayWidget.get_all_instances():
+                    try:
+                        screen = getattr(inst, "_screen", None)
+                        if screen is None:
+                            screens = QApplication.screens()
+                            idx = getattr(inst, "screen_index", 0)
+                            if idx < len(screens):
+                                screen = screens[idx]
+                        if screen is not None:
+                            inst._handle_screen_change(screen)
+                        # Force overlay visibility re-evaluation (fixes media widget fade on wake)
+                        try:
+                            inst._invalidate_overlay_effects("wm_displaychange")
+                        except Exception:
+                            pass
+                        # Force Spotify playback state refresh if media widget exists
+                        mw = getattr(inst, "media_widget", None)
+                        if mw is not None and hasattr(mw, "refresh_playback_state"):
+                            try:
+                                mw.refresh_playback_state()
+                            except Exception:
+                                pass
+                    except Exception as e:
+                        logger.debug("[NATIVE] WM_DISPLAYCHANGE re-anchor error for instance: %s", e)
+            except Exception as e:
+                logger.debug("[NATIVE] WM_DISPLAYCHANGE handler error: %s", e)
+
         if not win_diag_logger.isEnabledFor(logging.DEBUG):
             return QWidget.nativeEvent(widget, eventType, message)
 

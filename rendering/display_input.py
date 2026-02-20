@@ -27,6 +27,14 @@ def ensure_ctrl_cursor_hint(widget) -> None:
     if widget._ctrl_cursor_hint is not None:
         return
     widget._ctrl_cursor_hint = CursorHaloWidget(widget)
+    # Apply saved halo shape from settings
+    sm = getattr(widget, "settings_manager", None)
+    if sm is not None:
+        try:
+            shape = str(sm.get("input.halo_shape", "circle")).lower()
+            widget._ctrl_cursor_hint.set_shape(shape)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     if widget._resource_manager:
         try:
             widget._resource_manager.register_qt(
@@ -316,16 +324,19 @@ def handle_mouseMoveEvent(widget, event: QMouseEvent) -> None:
     ctrl_mode_active = widget._coordinator.ctrl_held
     hard_exit = widget._is_hard_exit_enabled()
     if hard_exit or ctrl_mode_active:
-        # Show/update halo position
-        local_pos = event.pos()
-        hint = widget._ctrl_cursor_hint
-        if hint is not None:
-            halo_hidden = not hint.isVisible()
-            if halo_hidden:
-                widget._coordinator.set_halo_owner(widget)
-                show_ctrl_cursor_hint(widget, local_pos, mode="fade_in")
-            else:
-                show_ctrl_cursor_hint(widget, local_pos, mode="none")
+        # Show/update halo position — but skip repositioning when the event
+        # was forwarded FROM the halo itself (prevents jitter feedback loop).
+        halo_forwarding = getattr(widget, "_halo_forwarding", False)
+        if not halo_forwarding:
+            local_pos = event.pos()
+            hint = widget._ctrl_cursor_hint
+            if hint is not None:
+                halo_hidden = not hint.isVisible()
+                if halo_hidden:
+                    widget._coordinator.set_halo_owner(widget)
+                    show_ctrl_cursor_hint(widget, local_pos, mode="fade_in")
+                else:
+                    show_ctrl_cursor_hint(widget, local_pos, mode="none")
         
         # Delegate volume drag to InputHandler
         if widget._input_handler is not None:

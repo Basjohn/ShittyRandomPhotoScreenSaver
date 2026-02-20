@@ -45,6 +45,11 @@ uniform float u_osc_line_offset_bias;
 
 // Vertical Shift: when 1, disables offset and places lines at fixed top/middle/bottom positions
 uniform int u_osc_vertical_shift;
+uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
+
+// Ghost waveform (previous frame trail)
+uniform float u_prev_waveform[256];
+uniform float u_osc_ghost_alpha; // 0 = no ghost, >0 = ghost trail intensity
 
 float get_waveform_sample(int idx) {
     // Modular wrap so offset lines read valid circular-buffer data
@@ -53,12 +58,19 @@ float get_waveform_sample(int idx) {
     return u_waveform[wrapped];
 }
 
+float get_prev_waveform_sample(int idx) {
+    int n = max(u_waveform_count, 1);
+    int wrapped = ((idx % n) + n) % n;
+    return u_prev_waveform[wrapped];
+}
+
 // Gaussian-weighted multi-tap smoothing around a sample index.
 // The smoothing uniform controls the kernel radius: 0 = single sample, 1 = wide blur.
-float smoothed_sample(int center) {
+// use_prev: false = current waveform, true = previous (ghost) waveform
+float smoothed_sample_impl(int center, bool use_prev) {
     float eff_smooth = u_smoothing;
     if (eff_smooth <= 0.01) {
-        return get_waveform_sample(center);
+        return use_prev ? get_prev_waveform_sample(center) : get_waveform_sample(center);
     }
     // Kernel half-width scales from 1 to 12 taps based on smoothing
     int half_w = int(1.0 + eff_smooth * 11.0);
@@ -68,10 +80,19 @@ float smoothed_sample(int center) {
     for (int i = -12; i <= 12; i++) {
         if (i < -half_w || i > half_w) continue;
         float w = exp(-float(i * i) / (2.0 * sigma * sigma));
-        total += get_waveform_sample(center + i) * w;
+        float s = use_prev ? get_prev_waveform_sample(center + i) : get_waveform_sample(center + i);
+        total += s * w;
         weight_sum += w;
     }
     return total / max(weight_sum, 0.001);
+}
+
+float smoothed_sample(int center) {
+    return smoothed_sample_impl(center, false);
+}
+
+float smoothed_sample_prev(int center) {
+    return smoothed_sample_impl(center, true);
 }
 
 // Catmull-Rom spline for sub-sample interpolation between smoothed values.
@@ -106,6 +127,22 @@ float sample_waveform(float nx, int offset) {
     float sv = val * u_sensitivity;
     float e2 = exp(2.0 * sv);
     return (e2 - 1.0) / (e2 + 1.0);
+}
+
+// Sample previous (ghost) waveform
+float sample_prev_waveform(float nx, int offset) {
+    int wf_count = max(u_waveform_count, 2);
+    float sample_pos = nx * float(wf_count - 1);
+    int idx = int(floor(sample_pos)) + offset;
+    float frac = sample_pos - floor(sample_pos);
+    float s0 = smoothed_sample_prev(idx - 1);
+    float s1 = smoothed_sample_prev(idx);
+    float s2 = smoothed_sample_prev(idx + 1);
+    float s3 = smoothed_sample_prev(idx + 2);
+    float val = catmull_rom(s0, s1, s2, s3, frac);
+    float sv = val * u_sensitivity;
+    float e2p = exp(2.0 * sv);
+    return (e2p - 1.0) / (e2p + 1.0);
 }
 
 // Compute line + glow contribution for one waveform line.
@@ -207,14 +244,53 @@ void main() {
     float lob = clamp(u_osc_line_offset_bias, 0.0, 1.0);
     float band_boost = 1.0 + lob * 1.5;  // up to 2.5x per-band reliance
 
+    // --- Ghost lines (previous frame trail, rendered first/behind) ---
+    vec3 ghost_rgb = vec3(0.0);
+    float ghost_a = 0.0;
+    if (u_osc_ghost_alpha > 0.001) {
+        float ga = u_osc_ghost_alpha;
+        float gamp1 = amplitude * (1.0 + e1 * 0.13);
+        float gw1 = sample_prev_waveform(nx, 0);
+        vec4 gc1 = eval_line(ny, inner_height, gw1, gamp1,
+                             u_line_color, u_glow_color, glow_sigma_base * 0.6, e1);
+        ghost_rgb = gc1.rgb * gc1.a * ga;
+        ghost_a = gc1.a * ga;
+
+        if (lines >= 2) {
+            int gwf_count = max(u_waveform_count, 2);
+            int goffset2 = max(1, gwf_count / 3);
+            float gamp2 = amplitude * (0.88 + e2_band * 0.22 * band_boost);
+            float gw2 = sample_prev_waveform(nx, goffset2);
+            float gny2 = ny - lob * 0.18;
+            float gsigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.55 : glow_sigma_base * 0.6;
+            vec4 gc2 = eval_line(gny2, inner_height, gw2, gamp2,
+                                 u_line2_color, u_line2_glow_color, gsigma2, e2_band);
+            ghost_rgb = ghost_rgb * (1.0 - gc2.a * ga * 0.5) + gc2.rgb * gc2.a * ga;
+            ghost_a = max(ghost_a, gc2.a * ga);
+        }
+        if (lines >= 3) {
+            int gwf_count3 = max(u_waveform_count, 2);
+            int goffset3 = max(1, gwf_count3 * 2 / 3);
+            float gamp3 = amplitude * (0.75 + e3_band * 0.28 * band_boost);
+            float gw3 = sample_prev_waveform(nx, goffset3);
+            float gny3 = ny + lob * 0.18;
+            float gsigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.5 : glow_sigma_base * 0.6;
+            vec4 gc3 = eval_line(gny3, inner_height, gw3, gamp3,
+                                 u_line3_color, u_line3_glow_color, gsigma3, e3_band);
+            ghost_rgb = ghost_rgb * (1.0 - gc3.a * ga * 0.4) + gc3.rgb * gc3.a * ga;
+            ghost_a = max(ghost_a, gc3.a * ga);
+        }
+    }
+
     // Primary line — bass-reactive in multi-line, overall in single
     float amp1 = amplitude * (1.0 + e1 * 0.13);
     float w1 = sample_waveform(nx, 0);
     vec4 c1 = eval_line(ny, inner_height, w1, amp1,
                         u_line_color, u_glow_color, glow_sigma_base, e1);
 
-    vec3 final_rgb = c1.rgb * c1.a;
-    float final_a = c1.a;
+    // Composite: ghost behind, current on top
+    vec3 final_rgb = ghost_rgb * (1.0 - c1.a) + c1.rgb * c1.a;
+    float final_a = max(ghost_a, c1.a);
 
     if (lines >= 2) {
         // Line 2: mid-frequency reactive — responds to vocals, guitars, keys
@@ -273,6 +349,37 @@ void main() {
     // Normalise RGB by alpha to prevent over-brightening
     if (final_a > 0.001) {
         final_rgb = clamp(final_rgb / final_a, 0.0, 1.0);
+    }
+
+    // Rainbow hue shift (Taste The Rainbow mode)
+    if (u_rainbow_hue_offset > 0.001) {
+        float cmax = max(final_rgb.r, max(final_rgb.g, final_rgb.b));
+        float cmin = min(final_rgb.r, min(final_rgb.g, final_rgb.b));
+        float delta = cmax - cmin;
+        float h = 0.0;
+        if (delta > 0.0001) {
+            if (cmax == final_rgb.r) h = mod((final_rgb.g - final_rgb.b) / delta, 6.0);
+            else if (cmax == final_rgb.g) h = (final_rgb.b - final_rgb.r) / delta + 2.0;
+            else h = (final_rgb.r - final_rgb.g) / delta + 4.0;
+            h /= 6.0;
+            if (h < 0.0) h += 1.0;
+        }
+        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
+        float v = cmax;
+        // Force saturation on greyscale so rainbow colouring is visible
+        if (s < 0.05 && v > 0.05) s = 1.0;
+        h = fract(h + u_rainbow_hue_offset);
+        float c = v * s;
+        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+        float m = v - c;
+        vec3 rgb;
+        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
+        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
+        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
+        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
+        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
+        else                  rgb = vec3(c, 0.0, x);
+        final_rgb = rgb + m;
     }
 
     fragColor = vec4(final_rgb, final_a * u_fade);

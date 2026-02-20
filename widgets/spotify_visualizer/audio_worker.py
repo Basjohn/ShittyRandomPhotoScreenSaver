@@ -39,6 +39,7 @@ class VisualizerMode(Enum):
     BLOB = auto()           # Organic reactive metaball
     HELIX = auto()          # DNA / double-helix spiral
     SINE_WAVE = auto()      # Pure sine wave with audio-reactive amplitude
+    BUBBLE = auto()         # Sound-reactive bubble/water tank flow
 
 
 @dataclass

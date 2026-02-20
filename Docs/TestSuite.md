@@ -293,6 +293,7 @@
 | `test_visualizer_preservation.py` | Visualizer state preservation | Visualizer reset bugs |
 | `test_visualizer_playback_gating.py` | Visualizer playback state gating | Bars when paused |
 | `test_visualizer_modes.py` | Visualizer direction/swirl/converge modes | Mode switching |
+| `test_action_plan_3_0.py` | Action Plan 3.0: heartbeat settings/math, artwork double-click fix, halo forwarding guard, halo shapes, sine line positioning, rainbow/ghosting roundtrip, shader source validation (37 tests) | Tasks 5/6.1/6.2/7/8 |
 
 ---
 
@@ -360,9 +361,9 @@ python tests\pytest.py tests\test_frame_timing_workload.py -v
 | Integration & Workflow | 7 | End-to-end, Reddit, lifecycle |
 | Performance & Telemetry | 7 | Timing, logging, perf |
 | MC | 4 | Manual Controller specific |
-| Regression | 6 | Specific bug fix tests |
-| **Total** | **100** | |
+| Regression | 7 | Specific bug fix tests |
+| **Total** | **101** | |
 
 ---
 
-**Last Updated**: Feb 1, 2026 (post cleanup: removed 4 outdated worker test files)
+**Last Updated**: Feb 20, 2026 (added test_action_plan_3_0.py: 37 tests for Tasks 5/6.1/6.2/7/8)

@@ -880,6 +880,9 @@ class MediaWidget(BaseOverlayWidget):
             # Clear scaled artwork cache so new artwork is rendered fresh
             self._scaled_artwork_cache = None
             self._scaled_artwork_cache_key = None
+            # Reset diff gating so update_display doesn't skip the refresh
+            self._last_track_identity = None
+            self._skipped_identity_updates = 0
             # Force clear in-flight guard so the refresh actually runs
             self._refresh_in_flight = False
             if self._thread_manager is not None:
@@ -908,6 +911,20 @@ class MediaWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
     # Polling and display
     # ------------------------------------------------------------------
+    def refresh_playback_state(self) -> None:
+        """Public entry point to force a playback state refresh.
+
+        Called externally (e.g. on WM_DISPLAYCHANGE wake) to ensure the
+        widget re-evaluates Spotify state and doesn't stay faded out.
+        """
+        if not self._enabled:
+            return
+        self._is_idle = False
+        self._reset_poll_stage()
+        self._refresh_in_flight = False
+        if self._thread_manager is not None:
+            self._refresh_async()
+
     def _refresh(self) -> None:
         if not self._enabled:
             return

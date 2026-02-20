@@ -64,19 +64,56 @@ uniform float u_micro_wobble;
 // Vertical shift: -50 to 200, controls line spread.
 // 0 = all lines on same center, 100 = default spread, 200 = max spread
 uniform int u_sine_vertical_shift;
+uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
+
+// Heartbeat: transient-triggered triangular bumps along the line
+uniform float u_heartbeat;           // slider amount (0 = off, 1 = max)
+uniform float u_heartbeat_intensity; // CPU-side decay envelope (1.0 → 0.0 over ~250ms)
+
+// Width Reaction: bass-driven horizontal stretching of the sine wave (0.0-1.0)
+// Encourages all lines to stretch wide in reaction to bass while still resembling a sine
+uniform float u_width_reaction;
+
+// Heartbeat bump: sharp triangular spikes along the line on bass transients.
+// travel: 0=none(symmetric), 1=left(peak shifted right), 2=right(peak shifted left)
+float heartbeat_bump(float nx, int travel) {
+    if (u_heartbeat < 0.001 || u_heartbeat_intensity < 0.001) return 0.0;
+    // 5 bumps distributed across the line for strong visual impact
+    float bump = 0.0;
+    float intensity = u_heartbeat_intensity;
+    // Alternating up/down for triangular distortion feel
+    for (int i = 0; i < 5; i++) {
+        float center = 0.1 + float(i) * 0.2; // at 0.1, 0.3, 0.5, 0.7, 0.9
+        float half_w = 0.06 + float(i % 2) * 0.03; // vary width
+        float dx = nx - center;
+        // Asymmetry: shift peak in travel direction
+        if (travel == 1) dx += half_w * 0.4;
+        else if (travel == 2) dx -= half_w * 0.4;
+        float t = 1.0 - clamp(abs(dx) / half_w, 0.0, 1.0);
+        // Sharp triangular: square the falloff for pointier peaks
+        t = t * t;
+        // Alternate direction: odd bumps go down, even go up
+        float sign = (i % 2 == 0) ? 1.0 : -1.0;
+        bump += t * sign;
+    }
+    // Strong multiplier so heartbeat is clearly visible
+    return bump * u_heartbeat * intensity * 0.8;
+}
 
 // Compute line + glow contribution for one sine line.
 // mw_displacement: reserved (pass 0.0; micro wobble is now applied to wave_val before calling)
+// bass_width_boost: extra line width from width reaction (0.0 = none)
 vec4 eval_line(
     float ny, float inner_height, float wave_val, float amplitude,
     vec4 lineCol, vec4 glowCol, float glowSigmaBase, float band_energy,
-    float mw_displacement
+    float mw_displacement, float bass_width_boost
 ) {
     float wave_y = clamp(0.5 + wave_val * amplitude + mw_displacement, 0.0, 1.0);
     float dist = abs(ny - wave_y);
     float dist_px = dist * inner_height;
 
-    float line_width = 2.0;
+    // Base width 2px, bass reaction can push it up to ~8px while still looking like a sine
+    float line_width = 2.0 + bass_width_boost * 6.0;
     float line_alpha = 1.0 - smoothstep(0.0, line_width, dist_px);
 
     float glow_alpha = 0.0;
@@ -203,8 +240,15 @@ void main() {
     // Wave effect amount (positional undulation)
     float wave_fx = clamp(u_wave_effect, 0.0, 1.0);
 
-    // Micro wobble amount (energy-reactive micro distortions)
+    // Micro wobble amount (energy-reactive snake lines)
     float micro_wob = clamp(u_micro_wobble, 0.0, 1.0);
+
+    // Width Reaction: bass-driven line width boost (0 = off, 1 = max)
+    float wr = clamp(u_width_reaction, 0.0, 1.0);
+    float bass_width = 0.0;
+    if (wr > 0.001) {
+        bass_width = clamp(u_bass_energy * 1.5, 0.0, 1.0) * wr;
+    }
 
     // Vertical shift: purely Y-positioning of lines (does NOT affect amplitude/shape)
     // 0 = no spread, 100 = default spread, 200 = 2x spread, negative = inverted
@@ -220,8 +264,6 @@ void main() {
     // =====================================================================
     // LINE 1 (primary) — always centered vertically
     // =====================================================================
-    // wave_val is raw sine in [-1, 1]. amplitude is the SOLE vertical scaler.
-    // Energy adds a significant boost to amplitude so wave reacts to vocals.
     // Energy drives amplitude pulsing. Clamp to 0.48 to stay in card.
     float amp1 = min(base_amplitude * (1.0 + e1 * 1.5), 0.48);
     float w1 = sin(nx * sine_freq + phase1);
@@ -237,42 +279,43 @@ void main() {
         wfx1 = wfx_raw * we1 * wave_fx * base_amplitude;
     }
 
-    // Micro wobble: high-frequency energy-reactive bumps/dents along the line
-    // Vocal/mid-driven so it reacts to vocals and melodic content.
-    // Added to wave_val BEFORE amplitude scaling so they distort the shape itself
+    // Micro wobble: creates visible snake-like extra temporary lines that slink
+    // across the main line, reacting to the beat. High-frequency spatial noise
+    // modulated by bass/mid energy creates the "slinking" effect.
     float mw1 = 0.0;
     if (micro_wob > 0.001 && play_gate > 0.5) {
-        // Vocal/mid-dominant energy drive for reactive wobble
-        float mw_energy = u_mid_energy * 0.60 + u_high_energy * 0.25 + u_bass_energy * 0.15;
-        float mw_drive = clamp(mw_energy * 2.5, 0.0, 1.0);
+        float mw_bass = u_bass_energy * 0.55 + u_mid_energy * 0.30 + u_high_energy * 0.15;
+        float mw_drive = clamp(mw_bass * 2.5, 0.0, 1.5);
         if (mw_drive > 0.01) {
-            // HIGH spatial frequencies for visible jagged bumps
-            // Moderate time speeds for smooth-ish motion (not choppy)
-            float mw_raw = sin(nx * 127.0 + u_time * 1.8) * 0.28
-                         + sin(nx * 197.0 - u_time * 2.5) * 0.24
-                         + sin(nx * 283.0 + u_time * 1.4) * 0.20
-                         + sin(nx * 89.0 - u_time * 3.0) * 0.16
-                         + sin(nx * 163.0 + u_time * 1.1) * 0.12;
-            // Scale: at full slider, bumps are ~0.25 of wave amplitude for visible bursts
-            mw1 = mw_raw * mw_drive * micro_wob * 0.25;
+            // Multiple frequency layers: fast-moving snake ripples
+            float t_fast = u_time * 3.5;
+            float t_med  = u_time * 1.8;
+            float mw_raw = sin(nx * 18.0 + t_fast) * 0.30           // fast ripple
+                         + sin(nx * 9.0 - t_med + 1.0) * 0.35      // medium snake
+                         + sin(nx * 4.0 + u_time * 0.9) * 0.25     // slow undulation
+                         + sin(nx * 25.0 - t_fast * 1.3) * 0.15;   // high-freq slink
+            // Strong multiplier — these should be clearly visible snake distortions
+            mw1 = mw_raw * mw_drive * micro_wob * 0.55;
         }
     }
 
     float ny1 = ny;
-    // Micro wobble added to wave value (distorts shape), wave effect added as position shift
-    float w1_final = w1 + mw1 + wfx1 / max(amp1, 0.001);
+    float hb1 = heartbeat_bump(nx, u_sine_travel);
+    float w1_final = w1 + mw1 + hb1 + wfx1 / max(amp1, 0.001);
     vec4 c1 = eval_line(ny1, inner_height, w1_final, amp1,
-                        u_line_color, u_glow_color, glow_sigma_base, glow_e1, 0.0);
+                        u_line_color, u_glow_color, glow_sigma_base, glow_e1, 0.0, bass_width);
 
     vec3 final_rgb = c1.rgb * c1.a;
     float final_a = c1.a;
 
     // =====================================================================
-    // LINE 2 — shifted above center when vertical shift enabled
+    // LINE 2 — overlaps line 1 at LOB=0/VShift=0; LOB drives X phase, VShift drives Y
+    // Line 2 is affected 70% as much as Line 3
     // =====================================================================
     if (lines >= 2) {
         float amp2 = min(base_amplitude * (1.0 + e2_band * 1.5), 0.48);
-        float w2 = sin(nx * sine_freq + 2.094 + phase2);
+        float lob_phase2 = lob * 2.094 * 0.7;  // X-axis separation from Line Offset
+        float w2 = sin(nx * sine_freq + lob_phase2 + phase2);
 
         float wfx2 = 0.0;
         if (wave_fx > 0.001) {
@@ -285,40 +328,40 @@ void main() {
 
         float mw2 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
-            float mw_energy2 = u_mid_energy * 0.60 + u_high_energy * 0.25 + u_bass_energy * 0.15;
-            float mw_drive2 = clamp(mw_energy2 * 2.5, 0.0, 1.0);
+            float mw_energy2 = u_bass_energy * 0.50 + u_mid_energy * 0.35 + u_high_energy * 0.15;
+            float mw_drive2 = clamp(mw_energy2 * 2.5, 0.0, 1.5);
             if (mw_drive2 > 0.01) {
-                float mw_raw2 = sin(nx * 139.0 + u_time * 2.0) * 0.28
-                              + sin(nx * 211.0 - u_time * 2.3) * 0.24
-                              + sin(nx * 271.0 + u_time * 1.6) * 0.20
-                              + sin(nx * 97.0 - u_time * 3.2) * 0.16
-                              + sin(nx * 173.0 + u_time * 1.3) * 0.12;
-                mw2 = mw_raw2 * mw_drive2 * micro_wob * 0.25;
+                float t_fast2 = u_time * 3.2;
+                float t_med2  = u_time * 1.6;
+                float mw_raw2 = sin(nx * 20.0 + t_fast2 + 1.2) * 0.30
+                              + sin(nx * 10.5 - t_med2 + 0.7) * 0.35
+                              + sin(nx * 5.0 + u_time * 0.7 + 2.1) * 0.25
+                              + sin(nx * 27.0 - t_fast2 * 1.1 + 3.0) * 0.15;
+                mw2 = mw_raw2 * mw_drive2 * micro_wob * 0.55;
             }
         }
 
-        float ny2;
-        if (abs(v_shift_pct) > 0.001) {
-            // Vertical shift is purely positional — do NOT override amplitude
-            ny2 = ny + v_spacing;
-        } else {
-            ny2 = ny - lob * 0.12;
-        }
+        // Y-axis separation: Line 2 at +70% of vertical shift
+        // At v_spacing=0 (VShift=0), ny2 == ny — perfectly aligned with Line 1
+        float ny2 = ny + v_spacing * 0.7;
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        float w2_final = w2 + mw2 + wfx2 / max(amp2, 0.001);
+        float hb2 = heartbeat_bump(nx, u_sine_travel_line2);
+        float w2_final = w2 + mw2 + hb2 + wfx2 / max(amp2, 0.001);
         vec4 c2 = eval_line(ny2, inner_height, w2_final, amp2,
-                            u_line2_color, u_line2_glow_color, sigma2, glow_e2, 0.0);
+                            u_line2_color, u_line2_glow_color, sigma2, glow_e2, 0.0, bass_width);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
         final_a = max(final_a, c2.a);
     }
 
     // =====================================================================
-    // LINE 3 — shifted below center when vertical shift enabled
+    // LINE 3 — overlaps line 1 at LOB=0/VShift=0; LOB drives X phase, VShift drives Y
+    // Line 3 is affected 100% (full factor)
     // =====================================================================
     if (lines >= 3) {
         float amp3 = min(base_amplitude * (1.0 + e3_band * 1.5), 0.48);
-        float w3 = sin(nx * sine_freq + 4.189 + phase3);
+        float lob_phase3 = lob * 4.189;  // X-axis separation from Line Offset (full)
+        float w3 = sin(nx * sine_freq + lob_phase3 + phase3);
 
         float wfx3 = 0.0;
         if (wave_fx > 0.001) {
@@ -331,30 +374,28 @@ void main() {
 
         float mw3 = 0.0;
         if (micro_wob > 0.001 && play_gate > 0.5) {
-            float mw_energy3 = u_mid_energy * 0.55 + u_high_energy * 0.30 + u_bass_energy * 0.15;
-            float mw_drive3 = clamp(mw_energy3 * 2.5, 0.0, 1.0);
+            float mw_energy3 = u_bass_energy * 0.45 + u_mid_energy * 0.30 + u_high_energy * 0.25;
+            float mw_drive3 = clamp(mw_energy3 * 2.5, 0.0, 1.5);
             if (mw_drive3 > 0.01) {
-                float mw_raw3 = sin(nx * 151.0 - u_time * 2.2) * 0.28
-                              + sin(nx * 223.0 + u_time * 2.4) * 0.24
-                              + sin(nx * 293.0 - u_time * 1.5) * 0.20
-                              + sin(nx * 107.0 + u_time * 3.3) * 0.16
-                              + sin(nx * 181.0 - u_time * 1.0) * 0.12;
-                mw3 = mw_raw3 * mw_drive3 * micro_wob * 0.25;
+                float t_fast3 = u_time * 3.8;
+                float t_med3  = u_time * 2.0;
+                float mw_raw3 = sin(nx * 16.0 - t_fast3 + 2.5) * 0.30
+                              + sin(nx * 8.0 + t_med3 + 1.8) * 0.35
+                              + sin(nx * 3.5 - u_time * 0.6 + 3.3) * 0.25
+                              + sin(nx * 22.0 + t_fast3 * 1.2 + 0.5) * 0.15;
+                mw3 = mw_raw3 * mw_drive3 * micro_wob * 0.55;
             }
         }
 
-        float ny3;
-        if (abs(v_shift_pct) > 0.001) {
-            // Vertical shift is purely positional — do NOT override amplitude
-            ny3 = ny - v_spacing;
-        } else {
-            ny3 = ny + lob * 0.12;
-        }
+        // Y-axis separation: Line 3 at -100% of vertical shift (opposite direction)
+        // At v_spacing=0 (VShift=0), ny3 == ny — perfectly aligned with Line 1
+        float ny3 = ny - v_spacing;
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        float w3_final = w3 + mw3 + wfx3 / max(amp3, 0.001);
+        float hb3 = heartbeat_bump(nx, u_sine_travel_line3);
+        float w3_final = w3 + mw3 + hb3 + wfx3 / max(amp3, 0.001);
         vec4 c3 = eval_line(ny3, inner_height, w3_final, amp3,
-                            u_line3_color, u_line3_glow_color, sigma3, glow_e3, 0.0);
+                            u_line3_color, u_line3_glow_color, sigma3, glow_e3, 0.0, bass_width);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;
         final_a = max(final_a, c3.a);
     }
@@ -365,6 +406,37 @@ void main() {
 
     if (final_a > 0.001) {
         final_rgb = clamp(final_rgb / final_a, 0.0, 1.0);
+    }
+
+    // Rainbow hue shift (Taste The Rainbow mode)
+    if (u_rainbow_hue_offset > 0.001) {
+        float cmax = max(final_rgb.r, max(final_rgb.g, final_rgb.b));
+        float cmin = min(final_rgb.r, min(final_rgb.g, final_rgb.b));
+        float delta = cmax - cmin;
+        float h = 0.0;
+        if (delta > 0.0001) {
+            if (cmax == final_rgb.r) h = mod((final_rgb.g - final_rgb.b) / delta, 6.0);
+            else if (cmax == final_rgb.g) h = (final_rgb.b - final_rgb.r) / delta + 2.0;
+            else h = (final_rgb.r - final_rgb.g) / delta + 4.0;
+            h /= 6.0;
+            if (h < 0.0) h += 1.0;
+        }
+        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
+        float v = cmax;
+        // Force saturation on greyscale so rainbow colouring is visible
+        if (s < 0.05 && v > 0.05) s = 1.0;
+        h = fract(h + u_rainbow_hue_offset);
+        float c = v * s;
+        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+        float m = v - c;
+        vec3 rgb;
+        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
+        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
+        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
+        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
+        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
+        else                  rgb = vec3(c, 0.0, x);
+        final_rgb = rgb + m;
     }
 
     fragColor = vec4(final_rgb, final_a * u_fade);

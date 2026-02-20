@@ -27,6 +27,7 @@ uniform int u_helix_glow_enabled;
 uniform float u_helix_glow_intensity;
 uniform vec4 u_helix_glow_color;
 uniform int u_helix_reactive_glow;
+uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 
 const float PI  = 3.14159265;
 const float TAU = 6.28318530;
@@ -233,6 +234,37 @@ void main() {
     }
 
     if (out_a < 0.001) discard;
+
+    // Rainbow hue shift (Taste The Rainbow mode)
+    if (u_rainbow_hue_offset > 0.001) {
+        float cmax = max(out_rgb.r, max(out_rgb.g, out_rgb.b));
+        float cmin = min(out_rgb.r, min(out_rgb.g, out_rgb.b));
+        float delta = cmax - cmin;
+        float h = 0.0;
+        if (delta > 0.0001) {
+            if (cmax == out_rgb.r) h = mod((out_rgb.g - out_rgb.b) / delta, 6.0);
+            else if (cmax == out_rgb.g) h = (out_rgb.b - out_rgb.r) / delta + 2.0;
+            else h = (out_rgb.r - out_rgb.g) / delta + 4.0;
+            h /= 6.0;
+            if (h < 0.0) h += 1.0;
+        }
+        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
+        float v = cmax;
+        // Force saturation on greyscale so rainbow colouring is visible
+        if (s < 0.05 && v > 0.05) s = 1.0;
+        h = fract(h + u_rainbow_hue_offset);
+        float c = v * s;
+        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+        float m = v - c;
+        vec3 rgb;
+        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
+        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
+        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
+        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
+        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
+        else                  rgb = vec3(c, 0.0, x);
+        out_rgb = rgb + m;
+    }
 
     fragColor = vec4(out_rgb, out_a * u_fade);
 }

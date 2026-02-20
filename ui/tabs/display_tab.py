@@ -209,6 +209,17 @@ class DisplayTab(QWidget):
         self.hard_exit_check.setChecked(False)
         self.hard_exit_check.stateChanged.connect(self._save_settings)
         input_layout.addWidget(self.hard_exit_check)
+
+        # Cursor Halo Shape
+        halo_row = QHBoxLayout()
+        halo_row.addWidget(QLabel("Cursor Halo Shape:"))
+        self.halo_shape_combo = QComboBox()
+        self.halo_shape_combo.addItems(["Circle", "Ring", "Crosshair", "Diamond", "Dot"])
+        self.halo_shape_combo.setToolTip("Visual shape of the cursor halo in Hard Exit / Ctrl-click mode.")
+        self.halo_shape_combo.currentIndexChanged.connect(self._save_settings)
+        halo_row.addWidget(self.halo_shape_combo)
+        halo_row.addStretch()
+        input_layout.addLayout(halo_row)
         
         layout.addWidget(input_group)
         
@@ -320,6 +331,13 @@ class DisplayTab(QWidget):
             hard_exit = SettingsManager.to_bool(hard_exit_raw, False)
             self.hard_exit_check.setChecked(hard_exit)
 
+            # Cursor Halo Shape
+            halo_shape = str(self._settings.get('input.halo_shape', 'circle')).lower()
+            shape_map = {'circle': 0, 'ring': 1, 'crosshair': 2, 'diamond': 3, 'dot': 4}
+            self.halo_shape_combo.blockSignals(True)
+            self.halo_shape_combo.setCurrentIndex(shape_map.get(halo_shape, 0))
+            self.halo_shape_combo.blockSignals(False)
+
             # Renderer backend preferences
             backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')
             backend_mode = str(backend_mode_raw).lower()
@@ -386,6 +404,11 @@ class DisplayTab(QWidget):
 
         # Input / Exit
         self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())
+
+        # Cursor Halo Shape
+        shape_names = ['circle', 'ring', 'crosshair', 'diamond', 'dot']
+        halo_idx = self.halo_shape_combo.currentIndex()
+        self._settings.set('input.halo_shape', shape_names[halo_idx] if 0 <= halo_idx < len(shape_names) else 'circle')
 
         # Renderer backend
         backend_value = self.backend_combo.currentData() or 'opengl'

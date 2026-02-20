@@ -66,6 +66,7 @@ class CursorHaloWidget(QWidget):
         # Match the 2.6 reference footprint (48px * 0.8 scale).
         self.resize(HALO_DIAMETER, HALO_DIAMETER)
         self._opacity = 1.0
+        self._shape: str = "circle"  # circle, ring, crosshair, diamond, dot
         self._animation_id: Optional[str] = None
         self._animation_manager = AnimationManager()
         self._is_fading_out = False  # Track fade state to prevent interference
@@ -89,57 +90,97 @@ class CursorHaloWidget(QWidget):
         """Get the current opacity."""
         return float(self._opacity)
 
+    def set_shape(self, shape: str) -> None:
+        """Set the halo shape. Valid: circle, ring, crosshair, diamond, dot."""
+        valid = {"circle", "ring", "crosshair", "diamond", "dot"}
+        self._shape = shape if shape in valid else "circle"
+        self.update()
+
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
-        """Paint the halo ring and center dot with drop shadow."""
+        """Paint the halo in the configured shape with drop shadow."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        
-        # No background fill needed - WA_TranslucentBackground handles it
-        
-        # Use full alpha in paint - window opacity handles fading
-        base_alpha = 200
-        alpha = base_alpha  # Don't multiply by self._opacity - window opacity handles it
-        color = QColor(255, 255, 255, alpha)
-        
-        # Shadow parameters - also use full alpha, window opacity handles fading
+
+        color = QColor(255, 255, 255, 200)
         shadow_offset = 2
-        shadow_alpha = 80  # Don't multiply by self._opacity - window opacity handles it
-        shadow_color = QColor(0, 0, 0, shadow_alpha)
+        shadow_color = QColor(0, 0, 0, 80)
 
         r = min(self.width(), self.height()) - 8
         cx = self.width() // 2
         cy = self.height() // 2
         inner_radius = max(2, r // 6)
+        shape = self._shape
 
-        # Draw shadow ring (offset down-right)
-        pen = painter.pen()
-        pen.setColor(shadow_color)
-        pen.setWidth(5)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(4 + shadow_offset, 4 + shadow_offset, r, r)
-        
-        # Draw shadow dot
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(shadow_color)
-        painter.drawEllipse(
-            cx - inner_radius + shadow_offset,
-            cy - inner_radius + shadow_offset,
-            inner_radius * 2, inner_radius * 2
-        )
-
-        # Draw main outer ring
-        pen.setColor(color)
-        pen.setWidth(3)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawEllipse(4, 4, r, r)
-
-        # Draw main inner dot
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(color)
-        painter.drawEllipse(cx - inner_radius, cy - inner_radius, inner_radius * 2, inner_radius * 2)
+        if shape == "ring":
+            self._paint_ring(painter, cx, cy, r, color, shadow_color, shadow_offset)
+        elif shape == "crosshair":
+            self._paint_crosshair(painter, cx, cy, r, color, shadow_color, shadow_offset)
+        elif shape == "diamond":
+            self._paint_diamond(painter, cx, cy, r, color, shadow_color, shadow_offset)
+        elif shape == "dot":
+            self._paint_dot(painter, cx, cy, inner_radius * 2, color, shadow_color, shadow_offset)
+        else:
+            self._paint_circle(painter, cx, cy, r, inner_radius, color, shadow_color, shadow_offset)
         painter.end()
+
+    def _paint_circle(self, p, cx, cy, r, ir, color, shadow, so):
+        """Default circle: ring + center dot."""
+        pen = p.pen()
+        pen.setColor(shadow); pen.setWidth(5)
+        p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(4 + so, 4 + so, r, r)
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(shadow)
+        p.drawEllipse(cx - ir + so, cy - ir + so, ir * 2, ir * 2)
+        pen.setColor(color); pen.setWidth(3)
+        p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(4, 4, r, r)
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(color)
+        p.drawEllipse(cx - ir, cy - ir, ir * 2, ir * 2)
+
+    def _paint_ring(self, p, cx, cy, r, color, shadow, so):
+        """Ring only — no center dot."""
+        pen = p.pen()
+        pen.setColor(shadow); pen.setWidth(5)
+        p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(4 + so, 4 + so, r, r)
+        pen.setColor(color); pen.setWidth(3)
+        p.setPen(pen)
+        p.drawEllipse(4, 4, r, r)
+
+    def _paint_crosshair(self, p, cx, cy, r, color, shadow, so):
+        """Crosshair: two perpendicular lines with a gap in the center."""
+        from PySide6.QtCore import QLineF
+        half = r // 2
+        gap = max(3, r // 8)
+        pen = p.pen()
+        pen.setWidth(3)
+        for col, dx, dy in ((shadow, so, so), (color, 0, 0)):
+            pen.setColor(col); p.setPen(pen)
+            p.drawLine(QLineF(cx - half + dx, cy + dy, cx - gap + dx, cy + dy))
+            p.drawLine(QLineF(cx + gap + dx, cy + dy, cx + half + dx, cy + dy))
+            p.drawLine(QLineF(cx + dx, cy - half + dy, cx + dx, cy - gap + dy))
+            p.drawLine(QLineF(cx + dx, cy + gap + dy, cx + dx, cy + half + dy))
+
+    def _paint_diamond(self, p, cx, cy, r, color, shadow, so):
+        """Diamond (rotated square)."""
+        from PySide6.QtGui import QPolygonF
+        from PySide6.QtCore import QPointF as QPF
+        half = r // 2
+        pts = [QPF(cx, cy - half), QPF(cx + half, cy), QPF(cx, cy + half), QPF(cx - half, cy)]
+        pen = p.pen()
+        pen.setWidth(3)
+        for col, dx, dy in ((shadow, so, so), (color, 0, 0)):
+            pen.setColor(col); p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
+            shifted = QPolygonF([QPF(pt.x() + dx, pt.y() + dy) for pt in pts])
+            p.drawPolygon(shifted)
+
+    def _paint_dot(self, p, cx, cy, d, color, shadow, so):
+        """Dot only — filled circle, no ring."""
+        r = max(4, d)
+        p.setPen(Qt.PenStyle.NoPen); p.setBrush(shadow)
+        p.drawEllipse(cx - r // 2 + so, cy - r // 2 + so, r, r)
+        p.setBrush(color)
+        p.drawEllipse(cx - r // 2, cy - r // 2, r, r)
     
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Forward mouse press to parent widget."""
@@ -214,8 +255,13 @@ class CursorHaloWidget(QWidget):
                 event.modifiers()
             )
             
-            # Post the event to the parent widget
-            QApplication.sendEvent(parent, new_event)
+            # Set guard so DisplayWidget skips halo repositioning for this event
+            # (prevents feedback loop: halo forward → reposition halo → jitter)
+            parent._halo_forwarding = True
+            try:
+                QApplication.sendEvent(parent, new_event)
+            finally:
+                parent._halo_forwarding = False
         except Exception:
             logger.debug("Failed to forward mouse event to parent", exc_info=True)
     

@@ -1309,6 +1309,13 @@ class SettingsDialog(QDialog):
                 pass
         self._move_timer.start(500)  # Save 500ms after move stops
     
+    def keyPressEvent(self, event):
+        """Intercept Enter/Return so it closes the dialog instead of minimizing."""
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.close()
+            return
+        super().keyPressEvent(event)
+
     def mousePressEvent(self, event):
         """Handle mouse press for window dragging."""
         if event.button() == Qt.MouseButton.LeftButton:
