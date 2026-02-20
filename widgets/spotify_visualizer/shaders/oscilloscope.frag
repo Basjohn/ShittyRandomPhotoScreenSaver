@@ -64,6 +64,39 @@ float get_prev_waveform_sample(int idx) {
     return u_prev_waveform[wrapped];
 }
 
+// Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
+vec3 apply_rainbow_shift(vec3 rgb) {
+    if (u_rainbow_hue_offset <= 0.001) {
+        return rgb;
+    }
+    float cmax = max(rgb.r, max(rgb.g, rgb.b));
+    float cmin = min(rgb.r, min(rgb.g, rgb.b));
+    float delta = cmax - cmin;
+    float h = 0.0;
+    if (delta > 0.0001) {
+        if (cmax == rgb.r)      h = mod((rgb.g - rgb.b) / delta, 6.0);
+        else if (cmax == rgb.g) h = (rgb.b - rgb.r) / delta + 2.0;
+        else                    h = (rgb.r - rgb.g) / delta + 4.0;
+        h /= 6.0;
+        if (h < 0.0) h += 1.0;
+    }
+    float s = (cmax > 0.0001) ? delta / cmax : 0.0;
+    float v = cmax;
+    if (s < 0.05 && v > 0.05) s = 1.0;
+    h = fract(h + u_rainbow_hue_offset);
+    float c = v * s;
+    float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+    float m = v - c;
+    vec3 shifted;
+    if      (h < 1.0/6.0) shifted = vec3(c, x, 0.0);
+    else if (h < 2.0/6.0) shifted = vec3(x, c, 0.0);
+    else if (h < 3.0/6.0) shifted = vec3(0.0, c, x);
+    else if (h < 4.0/6.0) shifted = vec3(0.0, x, c);
+    else if (h < 5.0/6.0) shifted = vec3(x, 0.0, c);
+    else                   shifted = vec3(c, 0.0, x);
+    return shifted + vec3(m);
+}
+
 // Gaussian-weighted multi-tap smoothing around a sample index.
 // The smoothing uniform controls the kernel radius: 0 = single sample, 1 = wide blur.
 // use_prev: false = current waveform, true = previous (ghost) waveform
@@ -244,6 +277,16 @@ void main() {
     float lob = clamp(u_osc_line_offset_bias, 0.0, 1.0);
     float band_boost = 1.0 + lob * 1.5;  // up to 2.5x per-band reliance
 
+    vec4 glowColor1 = u_glow_color;
+    vec4 glowColor2 = u_line2_glow_color;
+    vec4 glowColor3 = u_line3_glow_color;
+    bool rainbow_active = (u_rainbow_hue_offset > 0.001);
+    if (rainbow_active) {
+        glowColor1.rgb = apply_rainbow_shift(glowColor1.rgb);
+        glowColor2.rgb = apply_rainbow_shift(glowColor2.rgb);
+        glowColor3.rgb = apply_rainbow_shift(glowColor3.rgb);
+    }
+
     // --- Ghost lines (previous frame trail, rendered first/behind) ---
     vec3 ghost_rgb = vec3(0.0);
     float ghost_a = 0.0;
@@ -252,7 +295,7 @@ void main() {
         float gamp1 = amplitude * (1.0 + e1 * 0.13);
         float gw1 = sample_prev_waveform(nx, 0);
         vec4 gc1 = eval_line(ny, inner_height, gw1, gamp1,
-                             u_line_color, u_glow_color, glow_sigma_base * 0.6, e1);
+                             u_line_color, glowColor1, glow_sigma_base * 0.6, e1);
         ghost_rgb = gc1.rgb * gc1.a * ga;
         ghost_a = gc1.a * ga;
 
@@ -264,7 +307,7 @@ void main() {
             float gny2 = ny - lob * 0.18;
             float gsigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.55 : glow_sigma_base * 0.6;
             vec4 gc2 = eval_line(gny2, inner_height, gw2, gamp2,
-                                 u_line2_color, u_line2_glow_color, gsigma2, e2_band);
+                                 u_line2_color, glowColor2, gsigma2, e2_band);
             ghost_rgb = ghost_rgb * (1.0 - gc2.a * ga * 0.5) + gc2.rgb * gc2.a * ga;
             ghost_a = max(ghost_a, gc2.a * ga);
         }
@@ -276,7 +319,7 @@ void main() {
             float gny3 = ny + lob * 0.18;
             float gsigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.5 : glow_sigma_base * 0.6;
             vec4 gc3 = eval_line(gny3, inner_height, gw3, gamp3,
-                                 u_line3_color, u_line3_glow_color, gsigma3, e3_band);
+                                 u_line3_color, glowColor3, gsigma3, e3_band);
             ghost_rgb = ghost_rgb * (1.0 - gc3.a * ga * 0.4) + gc3.rgb * gc3.a * ga;
             ghost_a = max(ghost_a, gc3.a * ga);
         }
@@ -286,7 +329,7 @@ void main() {
     float amp1 = amplitude * (1.0 + e1 * 0.13);
     float w1 = sample_waveform(nx, 0);
     vec4 c1 = eval_line(ny, inner_height, w1, amp1,
-                        u_line_color, u_glow_color, glow_sigma_base, e1);
+                        u_line_color, glowColor1, glow_sigma_base, e1);
 
     // Composite: ghost behind, current on top
     vec3 final_rgb = ghost_rgb * (1.0 - c1.a) + c1.rgb * c1.a;
@@ -311,7 +354,7 @@ void main() {
         }
         float sigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
         vec4 c2 = eval_line(ny2, inner_height, w2, amp2,
-                            u_line2_color, u_line2_glow_color,
+                            u_line2_color, glowColor2,
                             sigma2, e2_band);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
         final_a = max(final_a, c2.a);
@@ -336,7 +379,7 @@ void main() {
         }
         float sigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
         vec4 c3 = eval_line(ny3, inner_height, w3, amp3,
-                            u_line3_color, u_line3_glow_color,
+                            u_line3_color, glowColor3,
                             sigma3, e3_band);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;
         final_a = max(final_a, c3.a);
@@ -349,37 +392,6 @@ void main() {
     // Normalise RGB by alpha to prevent over-brightening
     if (final_a > 0.001) {
         final_rgb = clamp(final_rgb / final_a, 0.0, 1.0);
-    }
-
-    // Rainbow hue shift (Taste The Rainbow mode)
-    if (u_rainbow_hue_offset > 0.001) {
-        float cmax = max(final_rgb.r, max(final_rgb.g, final_rgb.b));
-        float cmin = min(final_rgb.r, min(final_rgb.g, final_rgb.b));
-        float delta = cmax - cmin;
-        float h = 0.0;
-        if (delta > 0.0001) {
-            if (cmax == final_rgb.r) h = mod((final_rgb.g - final_rgb.b) / delta, 6.0);
-            else if (cmax == final_rgb.g) h = (final_rgb.b - final_rgb.r) / delta + 2.0;
-            else h = (final_rgb.r - final_rgb.g) / delta + 4.0;
-            h /= 6.0;
-            if (h < 0.0) h += 1.0;
-        }
-        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
-        float v = cmax;
-        // Force saturation on greyscale so rainbow colouring is visible
-        if (s < 0.05 && v > 0.05) s = 1.0;
-        h = fract(h + u_rainbow_hue_offset);
-        float c = v * s;
-        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
-        float m = v - c;
-        vec3 rgb;
-        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
-        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
-        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
-        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
-        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
-        else                  rgb = vec3(c, 0.0, x);
-        final_rgb = rgb + m;
     }
 
     fragColor = vec4(final_rgb, final_a * u_fade);

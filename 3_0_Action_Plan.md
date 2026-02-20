@@ -76,7 +76,7 @@
 - [ ] Microwobble does not cause extra line snake like effect desires whatsoever, fix.
 - [ ] Width reaction does NOTHING visually at any setting, fix.
 
-- [ ] Exempt Sine Wave Line Colours from Taste The Rainbow. Glows etc still effected. Also Exclude Blob Outline only.
+- [ ] Exempt Sine Wave Line Colours from Taste The Rainbow. Glows etc still effected. Also Exclude Blob Outline only. Occiloscope line colour only. Bubbles/Spectrum are fine as is currently.
 
 **Files:** `sine_wave.frag`
 

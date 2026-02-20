@@ -31,6 +31,39 @@ uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward
 uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 
+// Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
+vec3 apply_rainbow_shift(vec3 rgb) {
+    if (u_rainbow_hue_offset <= 0.001) {
+        return rgb;
+    }
+    float cmax = max(rgb.r, max(rgb.g, rgb.b));
+    float cmin = min(rgb.r, min(rgb.g, rgb.b));
+    float delta = cmax - cmin;
+    float h = 0.0;
+    if (delta > 0.0001) {
+        if (cmax == rgb.r)      h = mod((rgb.g - rgb.b) / delta, 6.0);
+        else if (cmax == rgb.g) h = (rgb.b - rgb.r) / delta + 2.0;
+        else                    h = (rgb.r - rgb.g) / delta + 4.0;
+        h /= 6.0;
+        if (h < 0.0) h += 1.0;
+    }
+    float s = (cmax > 0.0001) ? delta / cmax : 0.0;
+    float v = cmax;
+    if (s < 0.05 && v > 0.05) s = 1.0;
+    h = fract(h + u_rainbow_hue_offset);
+    float c = v * s;
+    float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
+    float m = v - c;
+    vec3 shifted;
+    if      (h < 1.0/6.0) shifted = vec3(c, x, 0.0);
+    else if (h < 2.0/6.0) shifted = vec3(x, c, 0.0);
+    else if (h < 3.0/6.0) shifted = vec3(0.0, c, x);
+    else if (h < 4.0/6.0) shifted = vec3(0.0, x, c);
+    else if (h < 5.0/6.0) shifted = vec3(x, 0.0, c);
+    else                   shifted = vec3(c, 0.0, x);
+    return shifted + vec3(m);
+}
+
 // 2D SDF organic blob with audio-reactive deformation
 float blob_sdf(vec2 p, float time) {
     float r = 0.44 * clamp(u_blob_size, 0.1, 2.5);  // 10% larger minimum
@@ -192,13 +225,19 @@ void main() {
 
     // Colour blending using configurable colours
     vec3 blob_rgb = u_blob_color.rgb;
-    vec3 edge_rgb = u_blob_edge_color.rgb;
+    vec3 edge_rgb = u_blob_edge_color.rgb;      // EDGE stays exempt
     vec3 glow_rgb = u_blob_glow_color.rgb;
+    vec3 outline_rgb = u_blob_outline_color.rgb;
+    bool rainbow_active = (u_rainbow_hue_offset > 0.001);
+    if (rainbow_active) {
+        blob_rgb = apply_rainbow_shift(blob_rgb);
+        glow_rgb = apply_rainbow_shift(glow_rgb);
+        outline_rgb = apply_rainbow_shift(outline_rgb);
+    }
     // Bright core: blend fill toward white
     vec3 core_rgb = mix(blob_rgb, vec3(1.0), 0.55);
 
     // Outline band colour (the dark/grey area between fill edge and glow)
-    vec3 outline_rgb = u_blob_outline_color.rgb;
 
     vec3 final_rgb;
     if (d < -0.02) {
@@ -216,40 +255,6 @@ void main() {
     } else {
         // Outside: glow colour
         final_rgb = glow_rgb;
-    }
-
-    // Rainbow hue shift (Taste The Rainbow mode)
-    if (u_rainbow_hue_offset > 0.001) {
-        // RGB → HSV
-        float cmax = max(final_rgb.r, max(final_rgb.g, final_rgb.b));
-        float cmin = min(final_rgb.r, min(final_rgb.g, final_rgb.b));
-        float delta = cmax - cmin;
-        float h = 0.0;
-        if (delta > 0.0001) {
-            if (cmax == final_rgb.r) h = mod((final_rgb.g - final_rgb.b) / delta, 6.0);
-            else if (cmax == final_rgb.g) h = (final_rgb.b - final_rgb.r) / delta + 2.0;
-            else h = (final_rgb.r - final_rgb.g) / delta + 4.0;
-            h /= 6.0;
-            if (h < 0.0) h += 1.0;
-        }
-        float s = (cmax > 0.0001) ? delta / cmax : 0.0;
-        float v = cmax;
-        // Force saturation on greyscale so rainbow colouring is visible
-        if (s < 0.05 && v > 0.05) s = 1.0;
-        // Shift hue
-        h = fract(h + u_rainbow_hue_offset);
-        // HSV → RGB
-        float c = v * s;
-        float x = c * (1.0 - abs(mod(h * 6.0, 2.0) - 1.0));
-        float m = v - c;
-        vec3 rgb;
-        if      (h < 1.0/6.0) rgb = vec3(c, x, 0.0);
-        else if (h < 2.0/6.0) rgb = vec3(x, c, 0.0);
-        else if (h < 3.0/6.0) rgb = vec3(0.0, c, x);
-        else if (h < 4.0/6.0) rgb = vec3(0.0, x, c);
-        else if (h < 5.0/6.0) rgb = vec3(x, 0.0, c);
-        else                  rgb = vec3(c, 0.0, x);
-        final_rgb = rgb + m;
     }
 
     fragColor = vec4(final_rgb, total_alpha * u_fade);

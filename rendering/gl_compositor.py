@@ -1645,19 +1645,41 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_crumble_textures
         return prepare_crumble_textures(self)
 
-    def _prepare_particle_textures(self) -> bool:
-        from rendering.gl_compositor_pkg.shader_dispatch import prepare_particle_textures
-        return prepare_particle_textures(self)
-
     def _prepare_crossfade_textures(self) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_crossfade_textures
         return prepare_crossfade_textures(self)
+
+    def _prepare_wipe_textures(self) -> bool:
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_wipe_textures
+        return prepare_wipe_textures(self)
+
+    def _prepare_slide_textures(self) -> bool:
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_slide_textures
+        return prepare_slide_textures(self)
+
+    def _prepare_particle_textures(self) -> bool:
+        from rendering.gl_compositor_pkg.shader_dispatch import prepare_particle_textures
+        return prepare_particle_textures(self)
 
     def _prepare_burn_textures(self) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_burn_textures
         return prepare_burn_textures(self)
 
-    # ------------------------------------------------------------------
+        def _can_use_particle_shader(self) -> bool:
+            from rendering.gl_compositor_pkg.shader_dispatch import can_use_particle_shader
+            return can_use_particle_shader(self)
+
+        def _can_use_crossfade_shader(self) -> bool:
+            from rendering.gl_compositor_pkg.shader_dispatch import can_use_crossfade_shader
+            return can_use_crossfade_shader(self)
+
+        def _can_use_slide_shader(self) -> bool:
+            from rendering.gl_compositor_pkg.shader_dispatch import can_use_slide_shader
+            return can_use_slide_shader(self)
+
+        def _can_use_wipe_shader(self) -> bool:
+            from rendering.gl_compositor_pkg.shader_dispatch import can_use_wipe_shader
+            return can_use_wipe_shader(self)
     # Paint shader dispatch — delegates to shader_dispatch
     # ------------------------------------------------------------------
 
