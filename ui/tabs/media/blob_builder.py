@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QCheckBox, QPushButton, QSlider, QWidget,
+    QCheckBox, QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
+
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -63,8 +65,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     blob_glow_color_row = QHBoxLayout()
     blob_glow_color_row.addWidget(QLabel("Glow Color:"))
-    tab.blob_glow_color_btn = QPushButton("Choose Color...")
-    tab.blob_glow_color_btn.clicked.connect(tab._choose_blob_glow_color)
+    tab.blob_glow_color_btn = ColorSwatchButton(title="Choose Blob Glow Color")
+    tab.blob_glow_color_btn.set_color(getattr(tab, '_blob_glow_color', None))
+    tab.blob_glow_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_blob_glow_color', c), tab._save_settings())
+    )
     blob_glow_color_row.addWidget(tab.blob_glow_color_btn)
     blob_glow_color_row.addStretch()
     _blob_glow_layout.addLayout(blob_glow_color_row)
@@ -78,24 +83,33 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     blob_fill_color_row = QHBoxLayout()
     blob_fill_color_row.addWidget(QLabel("Fill Color:"))
-    tab.blob_fill_color_btn = QPushButton("Choose Color...")
-    tab.blob_fill_color_btn.clicked.connect(tab._choose_blob_fill_color)
+    tab.blob_fill_color_btn = ColorSwatchButton(title="Choose Blob Fill Color")
+    tab.blob_fill_color_btn.set_color(getattr(tab, '_blob_color', None))
+    tab.blob_fill_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_blob_color', c), tab._save_settings())
+    )
     blob_fill_color_row.addWidget(tab.blob_fill_color_btn)
     blob_fill_color_row.addStretch()
     _adv.addLayout(blob_fill_color_row)
 
     blob_edge_color_row = QHBoxLayout()
     blob_edge_color_row.addWidget(QLabel("Edge Color:"))
-    tab.blob_edge_color_btn = QPushButton("Choose Color...")
-    tab.blob_edge_color_btn.clicked.connect(tab._choose_blob_edge_color)
+    tab.blob_edge_color_btn = ColorSwatchButton(title="Choose Blob Edge Color")
+    tab.blob_edge_color_btn.set_color(getattr(tab, '_blob_edge_color', None))
+    tab.blob_edge_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_blob_edge_color', c), tab._save_settings())
+    )
     blob_edge_color_row.addWidget(tab.blob_edge_color_btn)
     blob_edge_color_row.addStretch()
     _adv.addLayout(blob_edge_color_row)
 
     blob_outline_color_row = QHBoxLayout()
     blob_outline_color_row.addWidget(QLabel("Outline Color:"))
-    tab.blob_outline_color_btn = QPushButton("Choose Color...")
-    tab.blob_outline_color_btn.clicked.connect(tab._choose_blob_outline_color)
+    tab.blob_outline_color_btn = ColorSwatchButton(title="Choose Blob Outline Color")
+    tab.blob_outline_color_btn.set_color(getattr(tab, '_blob_outline_color', None))
+    tab.blob_outline_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_blob_outline_color', c), tab._save_settings())
+    )
     blob_outline_color_row.addWidget(tab.blob_outline_color_btn)
     blob_outline_color_row.addStretch()
     _adv.addLayout(blob_outline_color_row)

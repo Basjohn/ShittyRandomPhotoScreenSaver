@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QSpinBox,
-    QCheckBox, QPushButton, QSlider, QWidget,
+    QCheckBox, QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
+
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -98,8 +100,11 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     helix_glow_color_row = QHBoxLayout()
     helix_glow_color_row.addWidget(QLabel("Glow Color:"))
-    tab.helix_glow_color_btn = QPushButton("Choose Color...")
-    tab.helix_glow_color_btn.clicked.connect(tab._choose_helix_glow_color)
+    tab.helix_glow_color_btn = ColorSwatchButton(title="Choose Helix Glow Color")
+    tab.helix_glow_color_btn.set_color(getattr(tab, '_helix_glow_color', None))
+    tab.helix_glow_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_helix_glow_color', c), tab._save_settings())
+    )
     helix_glow_color_row.addWidget(tab.helix_glow_color_btn)
     helix_glow_color_row.addStretch()
     _helix_glow_layout.addLayout(helix_glow_color_row)

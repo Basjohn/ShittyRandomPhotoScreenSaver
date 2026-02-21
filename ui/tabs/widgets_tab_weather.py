@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QPushButton,
+    QSpinBox, QGroupBox, QCheckBox, QLineEdit,
     QSlider, QFontComboBox, QWidget, QCompleter,
 )
 from PySide6.QtCore import Qt
@@ -17,6 +17,7 @@ from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from widgets.timezone_utils import get_local_timezone
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -38,6 +39,19 @@ def _update_weather_icon_visibility(tab: WidgetsTab) -> None:
     container = getattr(tab, '_weather_icon_container', None)
     if container is not None:
         container.setVisible(bool(show))
+
+
+def _sync_weather_swatch(tab: WidgetsTab, btn_attr: str, color_attr: str) -> None:
+    btn = getattr(tab, btn_attr, None)
+    color = getattr(tab, color_attr, None)
+    if btn is None or color is None or not hasattr(btn, "set_color"):
+        return
+    try:
+        btn.set_color(color)
+    except Exception:  # pragma: no cover
+        logger.debug(
+            "[WEATHER_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
+        )
 
 
 def _update_weather_bg_visibility(tab: WidgetsTab) -> None:
@@ -176,8 +190,11 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Text color
     weather_color_row = QHBoxLayout()
     weather_color_row.addWidget(QLabel("Text Color:"))
-    tab.weather_color_btn = QPushButton("Choose Color...")
-    tab.weather_color_btn.clicked.connect(tab._choose_weather_color)
+    tab.weather_color_btn = ColorSwatchButton(title="Choose Weather Text Color")
+    tab.weather_color_btn.set_color(tab._weather_color)
+    tab.weather_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_weather_color', c), tab._save_settings())
+    )
     weather_color_row.addWidget(tab.weather_color_btn)
     weather_color_row.addStretch()
     _weather_ctrl_layout.addLayout(weather_color_row)
@@ -274,16 +291,22 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     weather_bg_color_row = QHBoxLayout()
     weather_bg_color_row.addWidget(QLabel("Background Color:"))
-    tab.weather_bg_color_btn = QPushButton("Choose Color...")
-    tab.weather_bg_color_btn.clicked.connect(tab._choose_weather_bg_color)
+    tab.weather_bg_color_btn = ColorSwatchButton(title="Choose Weather Background Color")
+    tab.weather_bg_color_btn.set_color(tab._weather_bg_color)
+    tab.weather_bg_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_weather_bg_color', c), tab._save_settings())
+    )
     weather_bg_color_row.addWidget(tab.weather_bg_color_btn)
     weather_bg_color_row.addStretch()
     _bg_layout.addLayout(weather_bg_color_row)
 
     weather_border_color_row = QHBoxLayout()
     weather_border_color_row.addWidget(QLabel("Border Color:"))
-    tab.weather_border_color_btn = QPushButton("Choose Color...")
-    tab.weather_border_color_btn.clicked.connect(tab._choose_weather_border_color)
+    tab.weather_border_color_btn = ColorSwatchButton(title="Choose Weather Border Color")
+    tab.weather_border_color_btn.set_color(tab._weather_border_color)
+    tab.weather_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_weather_border_color', c), tab._save_settings())
+    )
     weather_border_color_row.addWidget(tab.weather_border_color_btn)
     weather_border_color_row.addStretch()
     _bg_layout.addLayout(weather_border_color_row)
@@ -391,6 +414,9 @@ def load_weather_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab._weather_border_color = QColor(*weather_border_color_data)
     except Exception:
         tab._weather_border_color = QColor(255, 255, 255, 255)
+    _sync_weather_swatch(tab, 'weather_color_btn', '_weather_color')
+    _sync_weather_swatch(tab, 'weather_bg_color_btn', '_weather_bg_color')
+    _sync_weather_swatch(tab, 'weather_border_color_btn', '_weather_border_color')
     weather_border_opacity_pct = int(tab._config_float('weather', weather_config, 'border_opacity', 1.0) * 100)
     tab.weather_border_opacity.setValue(weather_border_opacity_pct)
     tab.weather_border_opacity_label.setText(f"{weather_border_opacity_pct}%")

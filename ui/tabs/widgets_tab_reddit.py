@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QPushButton,
+    QSpinBox, QGroupBox, QCheckBox, QLineEdit,
     QSlider, QFontComboBox, QWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -182,8 +183,11 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Text color
     reddit_color_row = QHBoxLayout()
     reddit_color_row.addWidget(QLabel("Text Color:"))
-    tab.reddit_color_btn = QPushButton("Choose Color...")
-    tab.reddit_color_btn.clicked.connect(tab._choose_reddit_color)
+    tab.reddit_color_btn = ColorSwatchButton(title="Choose Reddit Text Color")
+    tab.reddit_color_btn.set_color(tab._reddit_color)
+    tab.reddit_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_reddit_color', c), tab._save_settings())
+    )
     reddit_color_row.addWidget(tab.reddit_color_btn)
     reddit_color_row.addStretch()
     _rc_layout.addLayout(reddit_color_row)
@@ -230,8 +234,11 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background color
     reddit_bg_color_row = QHBoxLayout()
     reddit_bg_color_row.addWidget(QLabel("Background Color:"))
-    tab.reddit_bg_color_btn = QPushButton("Choose Color...")
-    tab.reddit_bg_color_btn.clicked.connect(tab._choose_reddit_bg_color)
+    tab.reddit_bg_color_btn = ColorSwatchButton(title="Choose Reddit Background Color")
+    tab.reddit_bg_color_btn.set_color(tab._reddit_bg_color)
+    tab.reddit_bg_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_reddit_bg_color', c), tab._save_settings())
+    )
     reddit_bg_color_row.addWidget(tab.reddit_bg_color_btn)
     reddit_bg_color_row.addStretch()
     _rc_layout.addLayout(reddit_bg_color_row)
@@ -239,8 +246,11 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Border color
     reddit_border_color_row = QHBoxLayout()
     reddit_border_color_row.addWidget(QLabel("Border Color:"))
-    tab.reddit_border_color_btn = QPushButton("Choose Color...")
-    tab.reddit_border_color_btn.clicked.connect(tab._choose_reddit_border_color)
+    tab.reddit_border_color_btn = ColorSwatchButton(title="Choose Reddit Border Color")
+    tab.reddit_border_color_btn.set_color(tab._reddit_border_color)
+    tab.reddit_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_reddit_border_color', c), tab._save_settings())
+    )
     reddit_border_color_row.addWidget(tab.reddit_border_color_btn)
     reddit_border_color_row.addStretch()
     _rc_layout.addLayout(reddit_border_color_row)
@@ -328,6 +338,17 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
 def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
     """Load reddit settings from widgets config dict."""
+    def _apply_color_to_button(btn_attr: str, color_attr: str) -> None:
+        btn = getattr(tab, btn_attr, None)
+        color = getattr(tab, color_attr, None)
+        if btn is not None and color is not None and hasattr(btn, "set_color"):
+            try:
+                btn.set_color(color)
+            except Exception:
+                logger.debug(
+                    "[REDDIT_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
+                )
+
     reddit_config = widgets.get('reddit', {})
     if not isinstance(reddit_config, dict) or not reddit_config:
         try:
@@ -394,6 +415,9 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab._reddit_border_color = QColor(*reddit_border_color_data)
     except Exception:
         tab._reddit_border_color = QColor(255, 255, 255, 255)
+    _apply_color_to_button('reddit_color_btn', '_reddit_color')
+    _apply_color_to_button('reddit_bg_color_btn', '_reddit_bg_color')
+    _apply_color_to_button('reddit_border_color_btn', '_reddit_border_color')
 
     # Reddit 2
     reddit2_config = widgets.get('reddit2', {})

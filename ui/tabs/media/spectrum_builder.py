@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QCheckBox, QPushButton, QSlider, QWidget,
+    QSpinBox, QCheckBox, QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
+
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -73,16 +75,22 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     spotify_vis_fill_row = QHBoxLayout()
     spotify_vis_fill_row.addWidget(QLabel("Bar Fill Color:"))
-    tab.spotify_vis_fill_color_btn = QPushButton("Choose Color...")
-    tab.spotify_vis_fill_color_btn.clicked.connect(tab._choose_spotify_vis_fill_color)
+    tab.spotify_vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
+    tab.spotify_vis_fill_color_btn.set_color(tab._spotify_vis_fill_color)
+    tab.spotify_vis_fill_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_spotify_vis_fill_color', c), tab._save_settings())
+    )
     spotify_vis_fill_row.addWidget(tab.spotify_vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
     _adv_layout.addLayout(spotify_vis_fill_row)
 
     spotify_vis_border_color_row = QHBoxLayout()
     spotify_vis_border_color_row.addWidget(QLabel("Bar Border Color:"))
-    tab.spotify_vis_border_color_btn = QPushButton("Choose Color...")
-    tab.spotify_vis_border_color_btn.clicked.connect(tab._choose_spotify_vis_border_color)
+    tab.spotify_vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
+    tab.spotify_vis_border_color_btn.set_color(tab._spotify_vis_border_color)
+    tab.spotify_vis_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_spotify_vis_border_color', c), tab._save_settings())
+    )
     spotify_vis_border_color_row.addWidget(tab.spotify_vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
     _adv_layout.addLayout(spotify_vis_border_color_row)

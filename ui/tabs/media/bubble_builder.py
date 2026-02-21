@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QPushButton, QSlider, QWidget,
+    QComboBox, QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
+
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -323,19 +325,21 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(row)
 
     # Colour pickers
-    for attr_name, label_text in (
-        ("bubble_outline_color_btn", "Outline Colour"),
-        ("bubble_specular_color_btn", "Specular Colour"),
-        ("bubble_gradient_light_btn", "Gradient Light"),
-        ("bubble_gradient_dark_btn", "Gradient Dark"),
-        ("bubble_pop_color_btn", "Pop Colour"),
+    for attr_name, label_text, color_attr, title in (
+        ("bubble_outline_color_btn", "Outline Colour", "_bubble_outline_color", "Choose Bubble Outline Color"),
+        ("bubble_specular_color_btn", "Specular Colour", "_bubble_specular_color", "Choose Bubble Specular Color"),
+        ("bubble_gradient_light_btn", "Gradient Light", "_bubble_gradient_light", "Choose Bubble Gradient Light"),
+        ("bubble_gradient_dark_btn", "Gradient Dark", "_bubble_gradient_dark", "Choose Bubble Gradient Dark"),
+        ("bubble_pop_color_btn", "Pop Colour", "_bubble_pop_color", "Choose Bubble Pop Color"),
     ):
         row = QHBoxLayout()
         row.addWidget(QLabel(f"{label_text}:"))
-        btn = QPushButton("Choose...")
+        btn = ColorSwatchButton(title=title)
+        btn.set_color(getattr(tab, color_attr, None))
+        btn.color_changed.connect(
+            lambda c, attr=color_attr: (setattr(tab, attr, c), tab._save_settings())
+        )
         setattr(tab, attr_name, btn)
-        method_name = f"_choose_{attr_name.replace('_btn', '')}"
-        btn.clicked.connect(lambda checked=False, m=method_name: getattr(tab, m, lambda: None)())
         row.addWidget(btn)
         row.addStretch()
         _adv.addLayout(row)

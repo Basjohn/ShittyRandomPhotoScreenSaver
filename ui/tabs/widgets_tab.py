@@ -566,28 +566,6 @@ class WidgetsTab(QWidget):
             self._media_volume_fill_color = color
             self._save_settings()
 
-    def _choose_spotify_vis_fill_color(self) -> None:
-        """Choose Spotify Beat Visualizer bar fill color."""
-        color = StyledColorPicker.get_color(
-            self._spotify_vis_fill_color,
-            self,
-            "Choose Beat Bar Fill Color",
-        )
-        if color is not None:
-            self._spotify_vis_fill_color = color
-            self._save_settings()
-
-    def _choose_spotify_vis_border_color(self) -> None:
-        """Choose Spotify Beat Visualizer bar border color."""
-        color = StyledColorPicker.get_color(
-            self._spotify_vis_border_color,
-            self,
-            "Choose Beat Bar Border Color",
-        )
-        if color is not None:
-            self._spotify_vis_border_color = color
-            self._save_settings()
-
     def _choose_osc_line_color(self) -> None:
         color = StyledColorPicker.get_color(
             getattr(self, '_osc_line_color', QColor(255, 255, 255, 255)),
@@ -684,100 +662,12 @@ class WidgetsTab(QWidget):
             self._osc_line3_glow_color = color
             self._save_settings()
 
-    def _choose_blob_fill_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_blob_color', QColor(0, 180, 255, 230)),
-            self, "Choose Blob Fill Color")
-        if color is not None:
-            self._blob_color = color
-            self._save_settings()
-
-    def _choose_blob_glow_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_blob_glow_color', QColor(0, 140, 255, 180)),
-            self, "Choose Blob Glow Color")
-        if color is not None:
-            self._blob_glow_color = color
-            self._save_settings()
-
-    def _choose_blob_edge_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_blob_edge_color', QColor(100, 220, 255, 230)),
-            self, "Choose Blob Edge Color")
-        if color is not None:
-            self._blob_edge_color = color
-            self._save_settings()
-
-    def _choose_blob_outline_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_blob_outline_color', QColor(0, 0, 0, 0)),
-            self, "Choose Blob Outline Color")
-        if color is not None:
-            self._blob_outline_color = color
-            self._save_settings()
-
     def _choose_helix_glow_color(self) -> None:
         color = StyledColorPicker.get_color(
             getattr(self, '_helix_glow_color', QColor(0, 200, 255, 180)),
             self, "Choose Helix Glow Color")
         if color is not None:
             self._helix_glow_color = color
-
-    def _choose_bubble_outline_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_bubble_outline_color', QColor(255, 255, 255, 230)),
-            self, "Choose Bubble Outline Color")
-        if color is not None:
-            self._bubble_outline_color = color
-            self._save_settings()
-
-    def _choose_bubble_specular_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_bubble_specular_color', QColor(255, 255, 255, 255)),
-            self, "Choose Bubble Specular Color")
-        if color is not None:
-            self._bubble_specular_color = color
-            self._save_settings()
-
-    def _choose_bubble_gradient_light(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_bubble_gradient_light', QColor(210, 170, 120, 255)),
-            self, "Choose Bubble Gradient Light")
-        if color is not None:
-            self._bubble_gradient_light = color
-            self._save_settings()
-
-    def _choose_bubble_gradient_dark(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_bubble_gradient_dark', QColor(80, 60, 50, 255)),
-            self, "Choose Bubble Gradient Dark")
-        if color is not None:
-            self._bubble_gradient_dark = color
-            self._save_settings()
-
-    def _choose_bubble_pop_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_bubble_pop_color', QColor(255, 255, 255, 180)),
-            self, "Choose Bubble Pop Color")
-        if color is not None:
-            self._bubble_pop_color = color
-            self._save_settings()
-
-    def _choose_nebula_tint1(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_nebula_tint1', QColor(20, 40, 120)),
-            self, "Choose Nebula Tint 1")
-        if color is not None:
-            self._nebula_tint1 = color
-            self._save_settings()
-
-    def _choose_nebula_tint2(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_nebula_tint2', QColor(80, 20, 100)),
-            self, "Choose Nebula Tint 2")
-        if color is not None:
-            self._nebula_tint2 = color
-            self._save_settings()
 
     def _choose_reddit_color(self) -> None:
         """Choose Reddit text color."""

@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QSlider, QWidget,
+    QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
+
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -71,12 +73,18 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     nebula_tint_row = QHBoxLayout()
     nebula_tint_row.addWidget(QLabel("Nebula Tint 1:"))
-    tab.nebula_tint1_btn = QPushButton("Choose Color...")
-    tab.nebula_tint1_btn.clicked.connect(tab._choose_nebula_tint1)
+    tab.nebula_tint1_btn = ColorSwatchButton(title="Choose Nebula Tint 1")
+    tab.nebula_tint1_btn.set_color(getattr(tab, '_nebula_tint1', None))
+    tab.nebula_tint1_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_nebula_tint1', c), tab._save_settings())
+    )
     nebula_tint_row.addWidget(tab.nebula_tint1_btn)
     nebula_tint_row.addWidget(QLabel("Tint 2:"))
-    tab.nebula_tint2_btn = QPushButton("Choose Color...")
-    tab.nebula_tint2_btn.clicked.connect(tab._choose_nebula_tint2)
+    tab.nebula_tint2_btn = ColorSwatchButton(title="Choose Nebula Tint 2")
+    tab.nebula_tint2_btn.set_color(getattr(tab, '_nebula_tint2', None))
+    tab.nebula_tint2_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_nebula_tint2', c), tab._save_settings())
+    )
     nebula_tint_row.addWidget(tab.nebula_tint2_btn)
     nebula_tint_row.addStretch()
     _adv.addLayout(nebula_tint_row)

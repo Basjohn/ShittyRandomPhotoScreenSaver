@@ -10,8 +10,8 @@ Allows users to configure transition settings:
 from typing import Optional
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QDoubleSpinBox, QGroupBox, QScrollArea, QCheckBox,
-    QPushButton, QColorDialog
+    QCheckBox, QGroupBox, QScrollArea,
+    QSpinBox, QDoubleSpinBox,
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
@@ -20,6 +20,7 @@ from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
 from ui.tabs.shared_styles import SPINBOX_STYLE, NoWheelSlider
+from ui.styled_popup import ColorSwatchButton, StyledColorPicker
 
 logger = get_logger(__name__)
 
@@ -550,7 +551,9 @@ class TransitionsTab(QWidget):
 
         burn_color_row = QHBoxLayout()
         burn_color_row.addWidget(QLabel("Glow Colour:"))
-        self.burn_glow_color_btn = QPushButton()
+        self.burn_glow_color_btn = ColorSwatchButton(
+            title="Choose Burn Glow Colour", show_alpha=True, auto_picker=False
+        )
         self._burn_glow_color = QColor(255, 140, 30, 255)
         self._apply_burn_glow_color_btn()
         self.burn_glow_color_btn.setFixedSize(60, 24)
@@ -1066,17 +1069,20 @@ class TransitionsTab(QWidget):
     def _apply_burn_glow_color_btn(self) -> None:
         """Update the burn glow colour button background to reflect the current colour."""
         c = self._burn_glow_color
-        self.burn_glow_color_btn.setStyleSheet(
-            f"background-color: rgba({c.red()},{c.green()},{c.blue()},{c.alpha()}); border: 1px solid #888;"
-        )
+        try:
+            self.burn_glow_color_btn.set_color(c)
+        except Exception:
+            pass
 
     def _pick_burn_glow_color(self) -> None:
         """Open colour picker for the burn glow colour."""
-        color = QColorDialog.getColor(
-            self._burn_glow_color, self, "Burn Glow Colour",
-            QColorDialog.ColorDialogOption.ShowAlphaChannel
+        color = StyledColorPicker.get_color(
+            self._burn_glow_color,
+            self,
+            "Burn Glow Colour",
+            show_alpha=True,
         )
-        if color.isValid():
+        if color is not None:
             self._burn_glow_color = color
             self._apply_burn_glow_color_btn()
             self._save_settings()

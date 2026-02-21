@@ -76,7 +76,7 @@
 - [ ] Microwobble does not cause extra line snake like effect desires whatsoever, fix.
 - [ ] Width reaction does NOTHING visually at any setting, fix.
 
-- [ ] Exempt Sine Wave Line Colours from Taste The Rainbow. Glows etc still effected. Also Exclude Blob Outline only. Occiloscope line colour only. Bubbles/Spectrum are fine as is currently.
+- [x] Exempt Sine Wave line colours from Taste The Rainbow (glows still rainbow-shifted) and keep Oscilloscope line colour fixed. Blob shader now rainbow-shifts fill/glow/outline but leaves the edge highlight exempt so the bright rim stays user-selected. (shader fixes in `sine_wave.frag`, `oscilloscope.frag`, `blob.frag`)
 
 **Files:** `sine_wave.frag`
 
@@ -133,8 +133,8 @@
 - All Burn settings wired: direction (4 + Random), jaggedness, glow intensity, char width, glow colour picker, sparks toggle + intensity, ash toggle + density.
 
 **Remaining:**
-- [ ] User to confirm thermite glow looks correct (bright white-hot ignition, then receding line).
-- [ ] User to confirm sparks are visible and controllable.
+- [ ] User to confirm thermite glow looks correct (bright white-hot ignition, then receding line no, not bright at all.).
+- [ ] User to confirm sparks are visible and controllable. (No, nothing visible)
 - [ ] User to confirm Burn Settings panel appears when Burn is selected.
 
 **Files:** `burn_program.py`, `transitions_tab.py`, `transition_factory.py`
@@ -165,9 +165,9 @@
 **Goal:** Replace all colour picker buttons across the settings GUI with the Burn-style preview swatch (coloured rectangle that opens QColorDialog on click). All should have white outlines and subtle drop shadows.
 
 **Scope:**
-- [ ] Audit all colour picker usages across all settings tabs.
-- [ ] Create a reusable `ColourSwatchButton` widget (white outline, drop shadow, opens QColorDialog).
-- [ ] Replace existing colour buttons with `ColourSwatchButton` everywhere.
+- [x] Audit all colour picker usages across all settings tabs.
+- [x] Create a reusable `ColourSwatchButton` widget (white outline, drop shadow, opens QColorDialog).
+- [x] Replace existing colour buttons with `ColourSwatchButton` everywhere.
 - [ ] Verify Burn glow colour picker already matches this pattern (it does — use as reference).
 - [ ] Give all widget cards 1px thicker borders (that already have borders)
 

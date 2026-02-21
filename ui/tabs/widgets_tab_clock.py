@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -40,6 +41,20 @@ def _update_clock_mode_visibility(tab: WidgetsTab) -> None:
         analog_container.setVisible(bool(is_analog))
     if digital_container is not None:
         digital_container.setVisible(not bool(is_analog))
+
+
+def _sync_clock_swatch(tab: WidgetsTab, btn_attr: str, color_attr: str) -> None:
+    """Safely push a QColor attribute into its ColorSwatchButton."""
+    btn = getattr(tab, btn_attr, None)
+    color = getattr(tab, color_attr, None)
+    if btn is None or color is None or not hasattr(btn, "set_color"):
+        return
+    try:
+        btn.set_color(color)
+    except Exception:  # pragma: no cover - defensive
+        logger.debug(
+            "[CLOCK_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
+        )
 
 
 def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
@@ -229,8 +244,11 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Text color
     color_row = QHBoxLayout()
     color_row.addWidget(QLabel("Text Color:"))
-    tab.clock_color_btn = QPushButton("Choose Color...")
-    tab.clock_color_btn.clicked.connect(tab._choose_clock_color)
+    tab.clock_color_btn = ColorSwatchButton(title="Choose Clock Color")
+    tab.clock_color_btn.set_color(tab._clock_color)
+    tab.clock_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_clock_color', c), tab._save_settings())
+    )
     color_row.addWidget(tab.clock_color_btn)
     color_row.addStretch()
     _clock_ctrl_layout.addLayout(color_row)
@@ -274,8 +292,11 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background color
     clock_bg_color_row = QHBoxLayout()
     clock_bg_color_row.addWidget(QLabel("Background Color:"))
-    tab.clock_bg_color_btn = QPushButton("Choose Color...")
-    tab.clock_bg_color_btn.clicked.connect(tab._choose_clock_bg_color)
+    tab.clock_bg_color_btn = ColorSwatchButton(title="Choose Clock Background Color")
+    tab.clock_bg_color_btn.set_color(tab._clock_bg_color)
+    tab.clock_bg_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_clock_bg_color', c), tab._save_settings())
+    )
     clock_bg_color_row.addWidget(tab.clock_bg_color_btn)
     clock_bg_color_row.addStretch()
     _clock_ctrl_layout.addLayout(clock_bg_color_row)
@@ -283,8 +304,11 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background border color
     clock_border_color_row = QHBoxLayout()
     clock_border_color_row.addWidget(QLabel("Border Color:"))
-    tab.clock_border_color_btn = QPushButton("Choose Color...")
-    tab.clock_border_color_btn.clicked.connect(tab._choose_clock_border_color)
+    tab.clock_border_color_btn = ColorSwatchButton(title="Choose Clock Border Color")
+    tab.clock_border_color_btn.set_color(tab._clock_border_color)
+    tab.clock_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_clock_border_color', c), tab._save_settings())
+    )
     clock_border_color_row.addWidget(tab.clock_border_color_btn)
     clock_border_color_row.addStretch()
     _clock_ctrl_layout.addLayout(clock_border_color_row)
@@ -423,6 +447,9 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab._clock_border_color = QColor(*border_color_data)
     except Exception:
         tab._clock_border_color = QColor(128, 128, 128, 255)
+    _sync_clock_swatch(tab, 'clock_color_btn', '_clock_color')
+    _sync_clock_swatch(tab, 'clock_bg_color_btn', '_clock_bg_color')
+    _sync_clock_swatch(tab, 'clock_border_color_btn', '_clock_border_color')
     border_opacity_pct = int(clock_config.get('border_opacity', tab._default_float('clock', 'border_opacity', 0.8)) * 100)
     tab.clock_border_opacity.setValue(border_opacity_pct)
     tab.clock_border_opacity_label.setText(f"{border_opacity_pct}%")

@@ -21,25 +21,25 @@ Central reference for replacing legacy `QPushButton("Choose Color...")` pickers 
 - [ ] Border Color – `tab.clock_border_color_btn` (`_clock_border_color`). Ensure save/load pipe remains intact.
 
 ### Weather (`ui/tabs/widgets_tab_weather.py`)
-- [ ] Text Color – `tab.weather_color_btn` (`_weather_color`). Need helper in `load_weather_settings` to sync swatch.
-- [ ] Background Color – `tab.weather_bg_color_btn` (`_weather_bg_color`). Shares `_weather_bg_container`; keep layout.
-- [ ] Border Color – `tab.weather_border_color_btn` (`_weather_border_color`). Make sure `_weather_border_color` is set before syncing button.
+- [x] Text Color – `tab.weather_color_btn` (`_weather_color`). Swatch uses `ColorSwatchButton` and `_sync_weather_swatch` helper.
+- [x] Background Color – `tab.weather_bg_color_btn` (`_weather_bg_color`). Swatch in `_weather_bg_container`.
+- [x] Border Color – `tab.weather_border_color_btn` (`_weather_border_color`). Synced via `_sync_weather_swatch`.
 
 ### Media widget (`ui/tabs/widgets_tab_media.py` – media section)
-- [ ] Text Color – `tab.media_color_btn` (`_media_color`). Use existing `_apply_color_to_button` helper.
-- [ ] Background Color – `tab.media_bg_color_btn` (`_media_bg_color`). Swatch lives inside `_media_bg_container`.
-- [ ] Border Color – `tab.media_border_color_btn` (`_media_border_color`).
-- [ ] Volume Fill Color – `tab.media_volume_fill_color_btn` (`_media_volume_fill_color`). Remember fallback uses `_media_color` if unset; keep behaviour.
+- [x] Text Color – `tab.media_color_btn` (`_media_color`). Uses `ColorSwatchButton` with `_apply_color_to_button` sync.
+- [x] Background Color – `tab.media_bg_color_btn` (`_media_bg_color`). Swatch in `_media_bg_container`.
+- [x] Border Color – `tab.media_border_color_btn` (`_media_border_color`). Synced via `_apply_color_to_button`.
+- [x] Volume Fill Color – `tab.media_volume_fill_color_btn` (`_media_volume_fill_color`). Initializes from saved fill colour or `_media_color` fallback.
 
 ### Reddit widget (`ui/tabs/widgets_tab_reddit.py`)
-- [ ] Text Color – `tab.reddit_color_btn` (`_reddit_color`). Add helper in `load_reddit_settings` to sync.
-- [ ] Background Color – `tab.reddit_bg_color_btn` (`_reddit_bg_color`). Swatch gated by `reddit_show_background` visibility.
-- [ ] Border Color – `tab.reddit_border_color_btn` (`_reddit_border_color`).
+- [x] Text Color – `tab.reddit_color_btn` (`_reddit_color`). Uses `ColorSwatchButton` and `_apply_color_to_button` sync helper.
+- [x] Background Color – `tab.reddit_bg_color_btn` (`_reddit_bg_color`). Swatch gated by `reddit_show_background` visibility.
+- [x] Border Color – `tab.reddit_border_color_btn` (`_reddit_border_color`). Synced via helper for load reliability.
 
 ### Imgur widget (`ui/tabs/widgets_tab_imgur.py`)
-- [ ] Text Color – `tab.imgur_color_btn` (`_imgur_color`). Some `_choose_imgur_*` handlers guard with `hasattr`; ensure attributes exist before migration.
-- [ ] Background Color – `tab.imgur_bg_color_btn` (`_imgur_bg_color`).
-- [ ] Border Color – `tab.imgur_border_color_btn` (`_imgur_border_color`).
+- [x] Text Color – `tab.imgur_color_btn` (`_imgur_color`). Uses `ColorSwatchButton` via `_apply_color_to_button` helper in loader.
+- [x] Background Color – `tab.imgur_bg_color_btn` (`_imgur_bg_color`).
+- [x] Border Color – `tab.imgur_border_color_btn` (`_imgur_border_color`).
 
 ### Additional widgets (if re-enabled later)
 - Gmail/archive sections still contain `_choose_*` helpers; if resurrected, follow this playbook. Document any legacy paths in `archive/` before migrating.
@@ -49,12 +49,12 @@ Central reference for replacing legacy `QPushButton("Choose Color...")` pickers 
 ## Spotify Visualizer build tabs
 
 ### Spectrum (`ui/tabs/media/spectrum_builder.py`)
-- [ ] Bar Fill Color – `tab.spotify_vis_fill_color_btn` (`_spotify_vis_fill_color`, `_choose_spotify_vis_fill_color`). Swatch should sit inline with label.
-- [ ] Bar Border Color – `tab.spotify_vis_border_color_btn` (`_spotify_vis_border_color`).
+- [x] Bar Fill Color – `tab.spotify_vis_fill_color_btn` (`_spotify_vis_fill_color`). Swatch sits inline with label and syncs via existing loader.
+- [x] Bar Border Color – `tab.spotify_vis_border_color_btn` (`_spotify_vis_border_color`).
 
 ### Starfield (`ui/tabs/media/starfield_builder.py`)
-- [ ] Nebula Tint 1 – `tab.nebula_tint1_btn` (`_nebula_tint1`). Two swatches share one row; keep labels “Tint 1 / Tint 2”.
-- [ ] Nebula Tint 2 – `tab.nebula_tint2_btn` (`_nebula_tint2`). Ensure `load_media_settings` already sets these attrs; reuse `_apply_color_to_button` helper (currently used for sine/oscillator – extend list).
+- [x] Nebula Tint 1 – `tab.nebula_tint1_btn` (`_nebula_tint1`). Two swatches share one row; labels “Tint 1 / Tint 2”.
+- [x] Nebula Tint 2 – `tab.nebula_tint2_btn` (`_nebula_tint2`). Loader now reuses `_apply_color_to_button` helper.
 
 ### Blob (`ui/tabs/media/blob_builder.py`)
 - [ ] Glow Color – `tab.blob_glow_color_btn` (`_blob_glow_color`). Located inside `_blob_glow_sub_container` that is gated by `blob_reactive_glow`.
@@ -63,7 +63,7 @@ Central reference for replacing legacy `QPushButton("Choose Color...")` pickers 
 - [ ] Outline Color – `tab.blob_outline_color_btn` (`_blob_outline_color`).
 
 ### Helix (`ui/tabs/media/helix_builder.py`)
-- [ ] Glow Color – `tab.helix_glow_color_btn` (`_helix_glow_color`). Add `_apply_color_to_button('helix_glow_color_btn', '_helix_glow_color')` in loader after attr set.
+- [x] Glow Color – `tab.helix_glow_color_btn` (`_helix_glow_color`). Loader syncs via `_apply_color_to_button`.
 
 ### Other modes
 - Bubble & sine/osc multi-line already migrated. Re-check `bubble_builder` later; if new color controls are added, follow same rules.
@@ -73,13 +73,21 @@ Central reference for replacing legacy `QPushButton("Choose Color...")` pickers 
 ## Transitions tab
 
 ### Burn transition (`ui/tabs/transitions_tab.py`)
-- [ ] Glow Colour – `self.burn_glow_color_btn` (custom sized button). Replace with `ColorSwatchButton(auto_picker=False)` so existing `_pick_burn_glow_color` logic can be reused, or refactor to direct `color_changed` callback. Keep white border adaptation consistent with burn style.
+- [x] Glow Colour – `self.burn_glow_color_btn` (custom sized button). Uses `ColorSwatchButton(auto_picker=False)` but keeps `_pick_burn_glow_color` dialog for consistency.
 
 ---
 
 ## Tracking & verification
 
 - When a swatch migration is completed, tick the corresponding checkbox above and append a brief note (date + summary) below the section.
+- **2026-02-21:** Weather widget swatches migrated (text/bg/border) with `_sync_weather_swatch` helper for load-time sync.
+- **2026-02-21:** Media widget swatches migrated (text/bg/border/volume fill) using `ColorSwatchButton` + `_apply_color_to_button` loader sync.
+- **2026-02-21:** Reddit widget swatches migrated (text/bg/border) using `ColorSwatchButton` + `_apply_color_to_button` loader sync.
+- **2026-02-21:** Imgur widget swatches migrated (text/bg/border) with `ColorSwatchButton` + `_apply_color_to_button` helper gated behind dev flag.
+- **2026-02-21:** Spectrum visualizer swatches migrated (bar fill/border) using `ColorSwatchButton`; `widgets_tab_media.load_media_settings` already syncs `_spotify_vis_*` colors.
+- **2026-02-21:** Starfield nebula tint swatches migrated with `ColorSwatchButton` + `_apply_color_to_button` loader sync (shared row maintained).
+- **2026-02-21:** Helix glow swatch migrated with `ColorSwatchButton`; loader now syncs `_helix_glow_color` into the swatch.
+- **2026-02-21:** Burn transition glow swatch migrated using `ColorSwatchButton(auto_picker=False)` while retaining `_pick_burn_glow_color` for the styled dialog.
 - If a migration requires new helpers (e.g., `_apply_color_to_button` in other tabs), document the helper name and file/line references in this doc for future maintainers.
 - Regression risks to watch:
   - Missing `_apply_color_to_button` call → swatch loads with default colour each time.

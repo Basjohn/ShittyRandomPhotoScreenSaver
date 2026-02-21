@@ -10,13 +10,14 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QLineEdit, QPushButton,
+    QSpinBox, QGroupBox, QCheckBox, QLineEdit,
     QSlider, QFontComboBox, QWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -191,8 +192,11 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Text color
     imgur_color_row = QHBoxLayout()
     imgur_color_row.addWidget(QLabel("Text Color:"))
-    tab.imgur_color_btn = QPushButton("Choose Color...")
-    tab.imgur_color_btn.clicked.connect(tab._choose_imgur_color)
+    tab.imgur_color_btn = ColorSwatchButton(title="Choose Imgur Text Color")
+    tab.imgur_color_btn.set_color(tab._imgur_color)
+    tab.imgur_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_imgur_color', c), tab._save_settings())
+    )
     imgur_color_row.addWidget(tab.imgur_color_btn)
     imgur_color_row.addStretch()
     _imgur_ctl.addLayout(imgur_color_row)
@@ -233,8 +237,11 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background color
     imgur_bg_color_row = QHBoxLayout()
     imgur_bg_color_row.addWidget(QLabel("Background Color:"))
-    tab.imgur_bg_color_btn = QPushButton("Choose Color...")
-    tab.imgur_bg_color_btn.clicked.connect(tab._choose_imgur_bg_color)
+    tab.imgur_bg_color_btn = ColorSwatchButton(title="Choose Imgur Background Color")
+    tab.imgur_bg_color_btn.set_color(tab._imgur_bg_color)
+    tab.imgur_bg_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_imgur_bg_color', c), tab._save_settings())
+    )
     imgur_bg_color_row.addWidget(tab.imgur_bg_color_btn)
     imgur_bg_color_row.addStretch()
     _imgur_ctl.addLayout(imgur_bg_color_row)
@@ -242,8 +249,11 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Border color
     imgur_border_color_row = QHBoxLayout()
     imgur_border_color_row.addWidget(QLabel("Border Color:"))
-    tab.imgur_border_color_btn = QPushButton("Choose Color...")
-    tab.imgur_border_color_btn.clicked.connect(tab._choose_imgur_border_color)
+    tab.imgur_border_color_btn = ColorSwatchButton(title="Choose Imgur Border Color")
+    tab.imgur_border_color_btn.set_color(tab._imgur_border_color)
+    tab.imgur_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_imgur_border_color', c), tab._save_settings())
+    )
     imgur_border_color_row.addWidget(tab.imgur_border_color_btn)
     imgur_border_color_row.addStretch()
     _imgur_ctl.addLayout(imgur_border_color_row)
@@ -289,6 +299,17 @@ def load_imgur_settings(tab: WidgetsTab, widgets: dict) -> None:
     """Load imgur settings from widgets config dict."""
     if not hasattr(tab, 'imgur_enabled'):
         return
+
+    def _apply_color_to_button(btn_attr: str, color_attr: str) -> None:
+        btn = getattr(tab, btn_attr, None)
+        color = getattr(tab, color_attr, None)
+        if btn is not None and color is not None and hasattr(btn, "set_color"):
+            try:
+                btn.set_color(color)
+            except Exception:
+                logger.debug(
+                    "[IMGUR_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
+                )
 
     imgur_config = widgets.get('imgur', {})
     tab.imgur_enabled.setChecked(tab._config_bool('imgur', imgur_config, 'enabled', False))
@@ -338,6 +359,9 @@ def load_imgur_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab._imgur_border_color = QColor(*imgur_border_color_data)
     except Exception:
         logger.debug("[WIDGETS_TAB] Exception suppressed: invalid imgur border color", exc_info=True)
+    _apply_color_to_button('imgur_color_btn', '_imgur_color')
+    _apply_color_to_button('imgur_bg_color_btn', '_imgur_bg_color')
+    _apply_color_to_button('imgur_border_color_btn', '_imgur_border_color')
 
     tab._on_imgur_tag_changed(imgur_tag)
     tab._update_imgur_grid_total()

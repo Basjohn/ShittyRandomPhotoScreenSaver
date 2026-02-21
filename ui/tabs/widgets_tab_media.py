@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QPushButton,
+    QSpinBox, QGroupBox, QCheckBox,
     QSlider, QFontComboBox, QWidget,
 )
 from PySide6.QtCore import Qt
@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
+from ui.styled_popup import ColorSwatchButton
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -186,8 +187,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     media_color_row = QHBoxLayout()
     media_color_row.addWidget(QLabel("Text Color:"))
-    tab.media_color_btn = QPushButton("Choose Color...")
-    tab.media_color_btn.clicked.connect(tab._choose_media_color)
+    tab.media_color_btn = ColorSwatchButton(title="Choose Spotify Text Color")
+    tab.media_color_btn.set_color(tab._media_color)
+    tab.media_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_color', c), tab._save_settings())
+    )
     media_color_row.addWidget(tab.media_color_btn)
     media_color_row.addStretch()
     _media_ctrl_layout.addLayout(media_color_row)
@@ -231,16 +235,22 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     media_bg_color_row = QHBoxLayout()
     media_bg_color_row.addWidget(QLabel("Background Color:"))
-    tab.media_bg_color_btn = QPushButton("Choose Color...")
-    tab.media_bg_color_btn.clicked.connect(tab._choose_media_bg_color)
+    tab.media_bg_color_btn = ColorSwatchButton(title="Choose Spotify Background Color")
+    tab.media_bg_color_btn.set_color(tab._media_bg_color)
+    tab.media_bg_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_bg_color', c), tab._save_settings())
+    )
     media_bg_color_row.addWidget(tab.media_bg_color_btn)
     media_bg_color_row.addStretch()
     _mbg_layout.addLayout(media_bg_color_row)
 
     media_border_color_row = QHBoxLayout()
     media_border_color_row.addWidget(QLabel("Border Color:"))
-    tab.media_border_color_btn = QPushButton("Choose Color...")
-    tab.media_border_color_btn.clicked.connect(tab._choose_media_border_color)
+    tab.media_border_color_btn = ColorSwatchButton(title="Choose Spotify Border Color")
+    tab.media_border_color_btn.set_color(tab._media_border_color)
+    tab.media_border_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_border_color', c), tab._save_settings())
+    )
     media_border_color_row.addWidget(tab.media_border_color_btn)
     media_border_color_row.addStretch()
     _mbg_layout.addLayout(media_border_color_row)
@@ -269,8 +279,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     media_volume_fill_row = QHBoxLayout()
     media_volume_fill_row.addWidget(QLabel("Volume Fill Color:"))
-    tab.media_volume_fill_color_btn = QPushButton("Choose Color...")
-    tab.media_volume_fill_color_btn.clicked.connect(tab._choose_media_volume_fill_color)
+    tab.media_volume_fill_color_btn = ColorSwatchButton(title="Choose Spotify Volume Fill Color")
+    tab.media_volume_fill_color_btn.set_color(getattr(tab, '_media_volume_fill_color', tab._media_color))
+    tab.media_volume_fill_color_btn.color_changed.connect(
+        lambda c: (setattr(tab, '_media_volume_fill_color', c), tab._save_settings())
+    )
     media_volume_fill_row.addWidget(tab.media_volume_fill_color_btn)
     media_volume_fill_row.addStretch()
     _media_ctrl_layout.addLayout(media_volume_fill_row)
@@ -542,6 +555,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_fill_color=%s", volume_fill_data, exc_info=True)
         tab._media_volume_fill_color = QColor(255, 255, 255, 140)
+    _apply_color_to_button('media_color_btn', '_media_color')
+    _apply_color_to_button('media_bg_color_btn', '_media_bg_color')
+    _apply_color_to_button('media_border_color_btn', '_media_border_color')
+    _apply_color_to_button('media_volume_fill_color_btn', '_media_volume_fill_color')
 
     m_monitor_sel = media_config.get('monitor', tab._widget_default('media', 'monitor', 'ALL'))
     m_mon_text = str(m_monitor_sel) if isinstance(m_monitor_sel, (int, str)) else 'ALL'
@@ -741,6 +758,8 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
             setattr(tab, attr, QColor(*c))
         else:
             setattr(tab, attr, QColor(*fallback))
+    _apply_color_to_button('nebula_tint1_btn', '_nebula_tint1')
+    _apply_color_to_button('nebula_tint2_btn', '_nebula_tint2')
     if hasattr(tab, 'nebula_cycle_speed'):
         ncs_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'nebula_cycle_speed', 0.3) * 100)
         tab.nebula_cycle_speed.setValue(max(0, min(100, ncs_val)))
@@ -763,6 +782,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         except Exception:
             logger.debug("[MEDIA_TAB] Failed to set %s=%s", attr, data, exc_info=True)
             setattr(tab, attr, QColor(*fallback))
+    _apply_color_to_button('blob_fill_color_btn', '_blob_color')
+    _apply_color_to_button('blob_glow_color_btn', '_blob_glow_color')
+    _apply_color_to_button('blob_edge_color_btn', '_blob_edge_color')
+    _apply_color_to_button('blob_outline_color_btn', '_blob_outline_color')
     if hasattr(tab, 'blob_width'):
         blob_width_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_width', 1.0) * 100)
         tab.blob_width.setValue(max(30, min(100, blob_width_val)))
@@ -827,6 +850,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set helix_glow_color=%s", helix_glow_color_data, exc_info=True)
         tab._helix_glow_color = QColor(0, 200, 255, 180)
+    _apply_color_to_button('helix_glow_color_btn', '_helix_glow_color')
     if hasattr(tab, 'helix_reactive_glow'):
         tab.helix_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'helix_reactive_glow', True)
@@ -1067,6 +1091,11 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         except Exception:
             logger.debug("[MEDIA_TAB] Failed to set %s=%s", attr, cd, exc_info=True)
             setattr(tab, attr, QColor(*default))
+    _apply_color_to_button('bubble_outline_color_btn', '_bubble_outline_color')
+    _apply_color_to_button('bubble_specular_color_btn', '_bubble_specular_color')
+    _apply_color_to_button('bubble_gradient_light_btn', '_bubble_gradient_light')
+    _apply_color_to_button('bubble_gradient_dark_btn', '_bubble_gradient_dark')
+    _apply_color_to_button('bubble_pop_color_btn', '_bubble_pop_color')
 
     # Preset indices per mode
     _preset_slider_map = {
