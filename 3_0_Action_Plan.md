@@ -11,18 +11,27 @@
 
 ---
 
-## Completed (Archived)
+## Completed Snapshot (Archived)
 
-31 tasks completed through v3.0 development. Key milestones:
-- Taste The Rainbow (global hue-shift), Spectrum rainbow per-bar, Oscilloscope ghosting
-- Sine Wave: micro-wobble, heartbeat (localised spikes at zero-crossings), width-reaction, line positioning
-- Bubble: spawn fix, clustering, pulse, specular, diagonal movement, motion trails
-- Burn transition: shader v2 (thin receding line), UI panel, factory cleanup
-- Control halo shapes, volume slider fix, media double-click refresh
-- Settings GUI: NoWheelSlider, viz preset defaults (Custom=3), multi-monitor sleep/wake fix
-- All visualizer max height raised to 5.0x
+Key wins locked in for v3.0:
+- **Visualizer polish:** Taste The Rainbow exemptions, Spectrum per-bar hues, Oscilloscope ghosting, Sine Wave amplitude/micro-wobble fixes, Bubble spawn/stream upgrades.
+- **Transitions:** Burn v2 shader + new UI, ripple/rain-drip parity, crumble/particle cleanups.
+- **UI platform:** NoWheelSlider adoption, multi-monitor wake fixes, Spotify visualizer settings audit, ColorSwatchButton migration (all widget tabs + burn glow).
 
-*(See git history for full details of tasks #1–31)*
+*(See git history for full details of tasks #1–31.)*
+
+---
+
+## Priority Focus (High ROI / Next Up)
+
+1. **Widget Card Border Refresh (1px enhancement)**  
+   Goal: visually align every widget/transition card with a consistent 1px border that reads on both light/dark content.  
+   Scope: update shared card styles (Clock/Weather/Media/Visualizer tabs, transitions tab) to use a theme token for border width + color, ensure drop shadows survive DPI scaling, add regression checklists in `Docs/Widget_Style.md`.
+
+2. **Control Halo Polish (PF-2)**  
+   Goal: make the interaction halos feel purposeful and accurate.  
+   Scope: cursor triangle hotspot alignment, drop-shadow consistency across all six shapes, diamond inner-dot indicator, shadow/fade verification pass.  
+   Suggested execution order: (a) hotspot math in `cursor_halo.py`, (b) shared shadow constants in `display_input.py`, (c) visual QA on all shapes with logging screenshot refs.
 
 ---
 
@@ -120,6 +129,34 @@
 
 ---
 
+### BUG-5: White Flash in Rainbow Mode (Spectrum / Oscilloscope)
+
+**Status:** FIXED
+
+**Root cause:** `u_rainbow_hue_offset` is computed as `(accumulated_time * speed * 0.1) % 1.0`. At the exact wrap-around point (value = 0.0), the shader's `<= 0.001` dead-zone guard fires and returns the original colour (white) for one frame — causing a brief white flash.
+
+**Fix:** When rainbow is enabled, if `raw < 0.001` push `(raw + 0.002) % 1.0` instead, skipping the dead zone. Same fix applied to per-bar slow cycle.
+
+- [x] Dead-zone skip applied in `spotify_bars_gl_overlay.py` for both rainbow and per-bar paths.
+- [ ] User to confirm white flash no longer occurs.
+
+**Files:** `spotify_bars_gl_overlay.py`
+
+---
+
+### BUG-6: Bubble Motion Trails Slider Has No Visible Effect
+
+**Status:** OPEN — slider currently changes JSON but yields no noticeable change on-screen.
+
+**Scope:**
+- [ ] Confirm uniforms from settings map into `bubble.frag` (trail strength, length) and that shader uses them.
+- [ ] Add logging/assert once to ensure CPU-side stream applies factors.
+- [ ] Adjust shader or GPU pipeline so slider produces obvious fade trails.
+
+**Files:** `bubble.frag`, `bubble_program.py`, `widgets_tab_media.py`
+
+---
+
 ## Active Features (HIGH PRIORITY)
 
 ### FEAT-1: Burn Transition — Thermite Glow + Sparks
@@ -158,20 +195,19 @@
 
 ## Pending Features (MEDIUM PRIORITY)
 
-### PF-1: Colour Picker Button Standardisation
+### PF-1: Widget Card Border Refresh
 
-**Status:** PLANNED
+**Status:** PLANNED — top priority.
 
-**Goal:** Replace all colour picker buttons across the settings GUI with the Burn-style preview swatch (coloured rectangle that opens QColorDialog on click). All should have white outlines and subtle drop shadows.
+**Goal:** Give every widget/transition card a consistent 1px border + drop shadow so the UI feels cohesive after the swatch migration.
 
 **Scope:**
-- [x] Audit all colour picker usages across all settings tabs.
-- [x] Create a reusable `ColourSwatchButton` widget (white outline, drop shadow, opens QColorDialog).
-- [x] Replace existing colour buttons with `ColourSwatchButton` everywhere.
-- [ ] Verify Burn glow colour picker already matches this pattern (it does — use as reference).
-- [ ] Give all widget cards 1px thicker borders (that already have borders)
+- [ ] Define border tokens (color + width) in `shared_styles.py` and propagate to Clock/Weather/Media/Reddit/Imgur tabs.
+- [ ] Apply the same styling to visualizer builder cards (Spectrum → Bubble) and transitions tab group boxes.
+- [ ] Regression pass for DPI scaling: ensure 1px border renders crisp at 125%/150%.
+- [x] Bump existing widget card border width by +1px via `BaseOverlayWidget.DEFAULT_BORDER_WIDTH = 3` so all overlays inherit the change.
 
-**Files:** All `*_tab.py` files, `shared_styles.py`
+**Files:** `ui/tabs/shared_styles.py`, all `ui/tabs/*_tab*.py`, `ui/themes/*`
 
 ---
 
@@ -189,6 +225,36 @@
 
 ---
 
+### PF-3: Settings Export/Import Coverage Audit
+
+**Status:** PLANNED
+
+**Goal:** Ensure the preset export/import pipeline captures every new setting introduced post-v2.5 (bubble stream knobs, swatch migrations, Burn extras, etc.).
+
+**Scope:**
+- [ ] Diff `save_*_settings()` outputs against `settings_v2.json` exports to confirm keys exist.
+- [ ] Run export/import round-trip; confirm Spotify visualizer, transitions, widgets all restore latest options.
+- [ ] Document verified keys + remaining gaps in `Docs/Visualizer_Presets_Plan.md`.
+
+**Files:** `settings_manager.py`, `ui/tabs/widgets_tab_media.py`, `Docs/Visualizer_Presets_Plan.md`
+
+---
+
+### PF-4: Logging Noise Cleanup (Bubble Debug + Other Spam)
+
+**Status:** PLANNED
+
+**Goal:** Remove leftover debug spam (bubble stream/trail logs, redundant timing prints) so `screensaver.log` stays actionable.
+
+**Scope:**
+- [ ] Grep for `bubble_debug` / `[BUBBLE]` / `print(` in bubble modules; gate behind verbose logger or remove.
+- [ ] Audit other spammy tags (Spectrum, Spotify BTS) and gate behind `SRPSS_PERF_METRICS` where appropriate.
+- [ ] Update logging guidelines in `Docs/Logging.md`.
+
+**Files:** `bubble_program.py`, `spotify_visualizer_widget.py`, `core/logging/logger.py`, `Docs/Logging.md`
+
+---
+
 ### PF-3: Visualizer Presets — Phase 3 (Preset Definitions)
 (Deferred, developer/user will supply json exports of settings later on, simply make sure our export feature works to include relevant settings)
 Preset slider infrastructure complete (phases 1–2). Phase 3 pending:
@@ -197,7 +263,7 @@ Preset slider infrastructure complete (phases 1–2). Phase 3 pending:
 
 ---
 
-### PF-4: Multi-Monitor Sleep/Wake — Needs Live Test
+### PF-5: Multi-Monitor Sleep/Wake — Needs Live Test
 
 **Status:** Fix implemented (Tasks 2.1 + 2.2). Not yet verified on hardware.
 

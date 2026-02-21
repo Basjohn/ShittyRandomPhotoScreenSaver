@@ -63,6 +63,7 @@ class WidgetsTab(QWidget):
         self._media_color = self._color_from_default('media', 'color', [255, 255, 255, 230])
         self._media_bg_color = self._color_from_default('media', 'bg_color', [64, 64, 64, 255])
         self._media_border_color = self._color_from_default('media', 'border_color', [128, 128, 128, 255])
+        self._media_volume_fill_color = self._color_from_default('media', 'spotify_volume_fill_color', [66, 66, 66, 255])
         # Spotify Beat Visualizer frame defaults inherit Spotify/media styling
         self._spotify_vis_fill_color = self._color_from_default(
             'spotify_visualizer', 'bar_fill_color', [255, 255, 255, 230]
@@ -558,7 +559,7 @@ class WidgetsTab(QWidget):
     def _choose_media_volume_fill_color(self) -> None:
         """Choose Spotify volume slider fill color."""
         color = StyledColorPicker.get_color(
-            getattr(self, "_media_volume_fill_color", self._media_color),
+            getattr(self, "_media_volume_fill_color", self._media_volume_fill_color),
             self,
             "Choose Spotify Volume Fill Color",
         )

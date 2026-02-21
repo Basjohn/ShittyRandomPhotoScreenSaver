@@ -549,12 +549,12 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_border_opacity.setValue(media_border_opacity_pct)
     tab.media_border_opacity_label.setText(f"{media_border_opacity_pct}%")
 
-    volume_fill_data = media_config.get('spotify_volume_fill_color', tab._widget_default('media', 'spotify_volume_fill_color', [255, 255, 255, 140]))
+    volume_fill_data = media_config.get('spotify_volume_fill_color', tab._widget_default('media', 'spotify_volume_fill_color', [66, 66, 66, 255]))
     try:
         tab._media_volume_fill_color = QColor(*volume_fill_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set volume_fill_color=%s", volume_fill_data, exc_info=True)
-        tab._media_volume_fill_color = QColor(255, 255, 255, 140)
+        tab._media_volume_fill_color = QColor(66, 66, 66, 255)
     _apply_color_to_button('media_color_btn', '_media_color')
     _apply_color_to_button('media_bg_color_btn', '_media_bg_color')
     _apply_color_to_button('media_border_color_btn', '_media_border_color')
