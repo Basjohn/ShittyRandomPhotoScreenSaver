@@ -16,7 +16,7 @@ import random
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
 
@@ -182,18 +182,19 @@ class BubbleSimulation:
             high = getattr(energy_bands, 'high', 0.0)
             overall = getattr(energy_bands, 'overall', 0.0)
 
-        # Diagnostic: log energy values. First 10 ticks at INFO level, then every 60.
+        # Diagnostic: only log during verbose runs to avoid spamming main logs.
         self._diag_tick_count += 1
-        if self._diag_tick_count <= 10 or self._diag_tick_count % 60 == 0:
-            # Find max pulse_energy among existing bubbles
-            max_pe = max((b.pulse_energy for b in self._bubbles), default=0.0)
-            logger.info(
-                "[BUBBLE_SIM] tick=%d dt=%.3f bass=%.3f mid=%.3f overall=%.3f "
-                "bubbles=%d max_pe=%.3f spd_e=%.3f base=%.2f cap=%.2f react=%.2f",
-                self._diag_tick_count, dt, bass, mid, overall,
-                len(self._bubbles), max_pe, self._smoothed_speed_energy,
-                stream_const, stream_cap, stream_reactivity,
-            )
+        if is_verbose_logging():
+            should_log = self._diag_tick_count <= 10 or self._diag_tick_count % 60 == 0
+            if should_log:
+                max_pe = max((b.pulse_energy for b in self._bubbles), default=0.0)
+                logger.debug(
+                    "[BUBBLE_SIM] tick=%d dt=%.3f bass=%.3f mid=%.3f overall=%.3f "
+                    "bubbles=%d max_pe=%.3f spd_e=%.3f base=%.2f cap=%.2f react=%.2f",
+                    self._diag_tick_count, dt, bass, mid, overall,
+                    len(self._bubbles), max_pe, self._smoothed_speed_energy,
+                    stream_const, stream_cap, stream_reactivity,
+                )
 
         # Travel speed uses SMOOTHED mid/high so it flows with the melody.
         # Raw mid/high would jerk on every transient.
@@ -553,10 +554,10 @@ class BubbleSimulation:
                     trail_data.extend([b.x, b.y, 0.0])
 
         # Diagnostic: log first big bubble's pulse details
-        if _snap_diag and self._bubbles:
+        if _snap_diag and self._bubbles and is_verbose_logging():
             fb = next((b for b in self._bubbles if b.is_big), self._bubbles[0])
             pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * (4.0 if fb.is_big else 3.0)
-            logger.info(
+            logger.debug(
                 "[BUBBLE_SIM] snapshot: big_bass_pulse=%.2f small_freq_pulse=%.2f "
                 "first_big: pe=%.3f pf=%.3f base_r=%.4f final_r=%.4f",
                 big_bass_pulse, small_freq_pulse,

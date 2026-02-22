@@ -1661,6 +1661,8 @@ class SpotifyVisualizerWidget(QWidget):
                 from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
                 extra = build_gpu_push_extra_kwargs(self, mode_str, self._engine)
 
+                border_width_px = float(self._border_width)
+
                 used_gpu = parent.push_spotify_visualizer_frame(
                     bars=list(self._display_bars),
                     bar_count=self._bar_count,
@@ -1676,6 +1678,7 @@ class SpotifyVisualizerWidget(QWidget):
                     single_piece=self._spectrum_single_piece,
                     slanted=(self._spectrum_bar_profile == 'slanted'),
                     border_radius=self._spectrum_border_radius if self._spectrum_bar_profile == 'curved' else 0.0,
+                    border_width_px=border_width_px,
                     **extra,
                 )
                 _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0

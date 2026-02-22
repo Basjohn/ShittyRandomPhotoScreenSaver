@@ -70,7 +70,8 @@ def setup_all_widgets(
         except Exception:
             return BaseOverlayWidget.get_global_border_width()
 
-    BaseOverlayWidget.set_global_border_width(_resolve_card_border_width(widgets_config))
+    border_width = _resolve_card_border_width(widgets_config)
+    BaseOverlayWidget.set_global_border_width(border_width)
 
     base_clock_settings = widgets_config.get('clock', {}) if isinstance(widgets_config, dict) else {}
     base_reddit_settings = widgets_config.get('reddit', {}) if isinstance(widgets_config, dict) else {}

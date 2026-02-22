@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Sequence
+from typing import List, Sequence, Optional
 
 import numpy as np
 import time
@@ -196,13 +196,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # ResourceManager resource IDs for GL handles (for cleanup tracking)
         self._gl_program_rids: _Dict[str, _Any] = {}
         self._gl_vao_rid = None
-        self._gl_vbo_rid = None
+        self._gl_vbo: Optional[int] = None
         # Legacy single-program aliases for backward compat with ResourceManager
         self._gl_program = None
         self._gl_program_rid = None
         self._gl_disabled: bool = False
         self._debug_bars_logged: bool = False
         self._debug_paint_logged: bool = False
+        self._border_width_px: float = 0.0
         
         # Pre-allocated uniform buffers to reduce GC pressure (avoid per-frame allocation)
         self._bars_buffer: np.ndarray = np.zeros(64, dtype="float32")
@@ -304,6 +305,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_gradient_dark: QColor | None = None,
         bubble_pop_color: QColor | None = None,
         bubble_specular_direction: str = "top_left",
+        border_width_px: float = 0.0,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -325,6 +327,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._vis_mode = vis_mode if vis_mode in (
             'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave', 'bubble'
         ) else 'spectrum'
+        try:
+            self._border_width_px = max(0.0, float(border_width_px))
+        except Exception:
+            self._border_width_px = 0.0
 
         # Update accumulated time for animated modes
         now_ts = time.time()
@@ -879,6 +885,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 uniforms = {}
                 for uname in (
                     "u_resolution", "u_dpr", "u_fade", "u_time",
+                    "u_border_width",
                     "u_bar_count", "u_segments", "u_bar_height_scale", "u_single_piece",
                     "u_bars", "u_peaks",
                     "u_fill_color", "u_border_color", "u_playing", "u_ghost_alpha",
@@ -1122,6 +1129,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             loc = u.get("u_time", -1)
             if loc >= 0:
                 _gl.glUniform1f(loc, float(self._accumulated_time))
+
+            loc = u.get("u_border_width", -1)
+            if loc >= 0:
+                _gl.glUniform1f(loc, float(max(0.0, self._border_width_px)))
 
             # --- Rainbow per-bar flag (spectrum only) ---
             loc_pb = u.get("u_rainbow_per_bar", -1)

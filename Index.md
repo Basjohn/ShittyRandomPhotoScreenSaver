@@ -262,7 +262,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 - **Features**: Concurrent downloads (4 at a time), cell pixmap caching, click-to-browser, header with logo colorization, fade coordination
 - **Limitation**: Only 160x160 thumbnails available - Imgur deprecated size suffixes and gallery parsing requires JS rendering
 | Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer |
-| Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | - |
+| Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | Receives global card border width each frame (u_border_width) so bubble shader matches BaseOverlayWidget immediately |
 | Spotify Volume | widgets/spotify_volume_widget.py | SpotifyVolumeWidget | widgets.spotify_volume |
 | Mute Button | widgets/mute_button_widget.py | MuteButtonWidget | widgets.media.mute_button_enabled |
 
@@ -277,7 +277,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); all defaults raised +1.0x |
 | Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread; snapshot() returns (pos_data, extra_data, trail_data); trail records 3 previous positions per bubble (TRAIL_STEPS=3) |
-| Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping; passes rainbow, ghosting, heartbeat, bubble settings (extracted from widget, ~430 LOC) |
+| Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping; caches the last applied settings snapshot for `_reset_visualizer_state()` and passes rainbow/ghost/bubble uniforms |
 | Mode Transition | widgets/spotify_visualizer/mode_transition.py | cycle_mode, mode_transition_fade_factor, persist_vis_mode | Mode-cycling crossfade logic (extracted from widget, ~120 LOC) |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
 | Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | SHARED_VERTEX_SHADER, load_fragment_shader, load_all_fragment_shaders | GLSL shader source loading for multi-shader architecture |

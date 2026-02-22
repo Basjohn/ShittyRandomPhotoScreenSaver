@@ -6,6 +6,7 @@ out vec4 fragColor;
 // --- Card / overlay ---
 uniform vec2 u_resolution;
 uniform float u_dpr;
+uniform float u_border_width;
 uniform float u_fade;
 uniform float u_time;
 uniform float u_playing;
@@ -70,9 +71,8 @@ void main() {
     float height = u_resolution.y;
     if (width <= 0.0 || height <= 0.0) discard;
 
-    // Card border: border-radius 8px, border-width 2px.
-    // Inset content by border width so gradient stays inside the border.
-    float border_w = 2.0;
+    // Card border matches the widget card frame thickness (global control).
+    float border_w = max(1.0, u_border_width);
     float card_radius = 8.0;
     // Inner content radius = card radius minus border width
     float inner_radius = max(0.0, card_radius - border_w);

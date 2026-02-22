@@ -322,7 +322,6 @@ def create_spotify_visualizer_widget(
                 bg_color=bg_qcolor,
                 bg_opacity=bg_opacity,
                 border_color=border_qcolor,
-                border_width=2,
                 show_background=show_background,
             )
         except Exception as e:
