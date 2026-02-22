@@ -100,12 +100,14 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     Debug flags (ignored here, handled earlier):
     - --debug, -d - Enable debug logging
     - --viz - Enable visualizer logging
+    - --viz-diagnostics (or --viz-diag) - Enable Spotify visualizer diagnostics
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
     """
     # Filter out debug/viz flags
-    args = [arg for arg in sys.argv if arg not in ('--debug', '-d', '--viz')]
+    _filtered = {"--debug", "-d", "--viz", "--viz-diagnostics", "--viz-diag"}
+    args = [arg for arg in sys.argv if arg not in _filtered]
     
     logger.debug(f"Command-line arguments: {sys.argv}")
     logger.debug(f"Filtered arguments: {args}")
@@ -387,7 +389,8 @@ def main():
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
     viz_mode = '--viz' in sys.argv
-    setup_logging(debug=debug_mode, verbose=verbose_mode, viz=viz_mode)
+    viz_diag_mode = '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
+    setup_logging(debug=debug_mode, verbose=verbose_mode, viz=viz_mode, viz_diag=viz_diag_mode)
     
     # GC tracking for performance debugging
     if os.environ.get('SRPSS_PERF_METRICS') == '1':

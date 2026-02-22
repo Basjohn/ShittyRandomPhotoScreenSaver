@@ -49,6 +49,10 @@ uniform int u_sine_travel;
 // Per-line travel overrides for multi-line mode (same encoding: 0/1/2)
 uniform int u_sine_travel_line2;
 uniform int u_sine_travel_line3;
+// Per-line horizontal shifts expressed as cycles (-1.0 .. 1.0)
+uniform float u_sine_line1_shift;
+uniform float u_sine_line2_shift;
+uniform float u_sine_line3_shift;
 
 // Playback state: 1 = playing, 0 = paused
 uniform int u_playing;
@@ -318,7 +322,7 @@ void main() {
     // =====================================================================
     // Energy drives amplitude pulsing. Clamp to 0.48 to stay in card.
     float amp1 = min(base_amplitude * (1.0 + e1 * 1.5), 0.48);
-    float w1 = sin(nx * sine_freq + phase1);
+    float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * 6.2831853);
 
     // Wave effect: vocal-led positional y-offset preserving sine shape
     float wfx1 = 0.0;
@@ -367,7 +371,8 @@ void main() {
     if (lines >= 2) {
         float amp2 = min(base_amplitude * (1.0 + e2_band * 1.5), 0.48);
         float lob_phase2 = lob * 0.45 * 0.7;  // X-axis separation — tight to line 1
-        float w2 = sin(nx * sine_freq + lob_phase2 + phase2);
+        float add_shift2 = u_sine_line2_shift * 6.2831853;
+        float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
         // as LOB increases, blend toward line 2's unique pattern.
@@ -419,7 +424,8 @@ void main() {
     if (lines >= 3) {
         float amp3 = min(base_amplitude * (1.0 + e3_band * 1.5), 0.48);
         float lob_phase3 = lob * 0.90;  // X-axis separation — tight to line 1
-        float w3 = sin(nx * sine_freq + lob_phase3 + phase3);
+        float add_shift3 = u_sine_line3_shift * 6.2831853;
+        float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
         // as LOB increases, blend toward line 3's unique pattern.

@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Callable
 import os
 import time
-import logging
 import copy
 
 from PySide6.QtCore import QRect, Qt
@@ -11,10 +10,15 @@ from PySide6.QtGui import QColor, QPainter, QPaintEvent
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_verbose_logging,
+    is_perf_metrics_enabled,
+    is_viz_logging_enabled,
+)
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes, clear_cached_shadow_for_widget
 from widgets.base_overlay_widget import BaseOverlayWidget
 
 
@@ -180,6 +184,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_line2_glow_color: QColor = QColor(7, 114, 255, 180)
         self._sine_line3_color: QColor = QColor(255, 255, 255, 230)
         self._sine_line3_glow_color: QColor = QColor(14, 159, 255, 180)
+        self._sine_line1_shift: float = 0.0
+        self._sine_line2_shift: float = 0.0
+        self._sine_line3_shift: float = 0.0
 
         # Rainbow (Taste The Rainbow) mode — global, applies to all visualizers
         self._rainbow_enabled: bool = False
@@ -195,6 +202,17 @@ class SpotifyVisualizerWidget(QWidget):
         self._heartbeat_intensity: float = 0.0  # CPU-side decay envelope
         self._heartbeat_avg_bass: float = 0.0   # rolling average for transient detection
         self._heartbeat_last_ts: float = 0.0    # dedicated tick timestamp for dt_hb
+
+        # Audio latency instrumentation (viz debug)
+        self._latency_last_log_ts: float = 0.0
+        self._latency_log_interval: float = 10.0
+        self._latency_warn_ms: float = 80.0
+        self._latency_error_ms: float = 150.0
+        self._latency_pending_probe: List[str] = []
+        self._latency_last_signature: Optional[
+            tuple[str, float, str, int, Optional[str], Optional[str]]
+        ] = None
+        self._last_transition_running: bool = False
 
         # Bubble visualizer
         self._bubble_big_bass_pulse: float = 0.5
@@ -336,9 +354,15 @@ class SpotifyVisualizerWidget(QWidget):
 
         # Mode transition driven by double-click (no timers, tick-driven)
         self._mode_transition_ts: float = 0.0   # 0 = no transition active
-        self._mode_transition_phase: int = 0     # 0=idle, 1=fading out, 2=fading in
+        self._mode_transition_phase: int = 0     # 0=idle, 1=fading out, 3=waiting, 2=fading in
         self._mode_transition_duration: float = 0.25  # seconds per half (out/in)
         self._mode_transition_pending: Optional[VisualizerMode] = None
+        # When non-zero, indicates a transition resume timestamp captured just
+        # before the visualizer state is cold-reset mid-cycle (double-click).
+        self._mode_transition_resume_ts: float = 0.0
+        self._mode_transition_apply_height_on_resume: bool = False
+        self._pending_shadow_cache_invalidation: bool = False
+        self._reset_teardown_bookkeeping()
 
         # When GPU overlay rendering is available, we disable the
         # widget's own bar drawing and instead push frames up to the
@@ -472,7 +496,10 @@ class SpotifyVisualizerWidget(QWidget):
             self._cached_vis_kwargs = dict(kwargs)
 
         self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
-        self._apply_preferred_height()
+        self._mode_transition_apply_height_on_resume = True
+
+        if self._mode_transition_phase == 0:
+            self._apply_pending_mode_transition_layout()
 
         logger.debug("[SPOTIFY_VIS] Applied vis mode config: mode=%s", mode)
 
@@ -805,20 +832,6 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set beat engine playback state", exc_info=True)
 
-        if logger.isEnabledFor(logging.INFO):
-            try:
-                track = payload.get("track_name") or payload.get("title") or ""
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                track = ""
-            logger.info(
-                "[SPOTIFY_VIS] media_update state=%s -> playing=%s (prev=%s) track=%s",
-                state or "<unset>",
-                self._spotify_playing,
-                prev,
-                track,
-            )
-
         first_media = not self._has_seen_media
         if first_media:
             # Track that we have seen at least one Spotify media state update
@@ -854,36 +867,71 @@ class SpotifyVisualizerWidget(QWidget):
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
     
-    def _clear_gl_overlay(self) -> None:
-        """Clear the GL bars overlay when visualizer hides."""
+    def _destroy_parent_overlay(self, *, reason: str) -> None:
         parent = self.parent()
-        if parent is not None:
-            # Clear the SpotifyBarsGLOverlay by pushing an invisible state
-            overlay = getattr(parent, "_spotify_bars_overlay", None)
-            if overlay is not None and hasattr(overlay, "set_state"):
-                try:
-                    from PySide6.QtCore import QRect
-                    from PySide6.QtGui import QColor
-                    overlay.set_state(
-                        QRect(0, 0, 0, 0),
-                        [],
-                        0,
-                        0,
-                        QColor(0, 0, 0, 0),
-                        QColor(0, 0, 0, 0),
-                        0.0,
-                        False,
-                        visible=False,
-                    )
-                    # Force overlay to repaint to clear any artifacts
-                    if hasattr(overlay, 'update'):
-                        overlay.update()
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            
-            # Request parent repaint to ensure artifacts are cleared
-            if hasattr(parent, 'update'):
-                parent.update()
+        if parent is None:
+            logger.warning("[SPOTIFY_VIS] Overlay destroy requested without parent (reason=%s)", reason)
+            return
+
+        overlay = getattr(parent, "_spotify_bars_overlay", None)
+        if overlay is None:
+            logger.debug("[SPOTIFY_VIS] No overlay to destroy (reason=%s)", reason)
+            return
+
+        logger.debug(
+            "[SPOTIFY_VIS] Destroying SpotifyBarsGLOverlay (reason=%s id=%s)",
+            reason,
+            hex(id(overlay)),
+        )
+
+        pixel_shift_manager = getattr(parent, "_pixel_shift_manager", None)
+        if pixel_shift_manager is not None:
+            try:
+                pixel_shift_manager.unregister_widget(overlay)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to unregister overlay from PixelShiftManager", exc_info=True)
+
+        try:
+            overlay.hide()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to hide overlay before destroy", exc_info=True)
+
+        try:
+            if hasattr(overlay, "clear_overlay_buffer"):
+                overlay.clear_overlay_buffer()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to blank overlay buffer before destroy", exc_info=True)
+
+        try:
+            overlay.update()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to schedule overlay update before destroy", exc_info=True)
+
+        try:
+            if hasattr(overlay, "cleanup_gl"):
+                overlay.cleanup_gl()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to cleanup overlay GL state", exc_info=True)
+
+        try:
+            overlay.deleteLater()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to schedule overlay delete", exc_info=True)
+
+        try:
+            setattr(parent, "_spotify_bars_overlay", None)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to clear parent overlay reference", exc_info=True)
+
+        # Fully detach drop shadows and cached pixmaps so other widgets don't inherit corruption.
+        self._pending_shadow_cache_invalidation = True
+        self._invalidate_shadow_cache_if_needed()
+        self._shadow_config_missing = True
+        self._waiting_for_fresh_frame = True
+
+    def _clear_gl_overlay(self) -> None:
+        """Destroy the GL bars overlay when visualizer hides."""
+        self._destroy_parent_overlay(reason="clear_gl_overlay")
         
     def _is_media_state_stale(self) -> bool:
         """Return True if Spotify state has not updated within fallback timeout."""
@@ -929,7 +977,7 @@ class SpotifyVisualizerWidget(QWidget):
             elif (now - self._fallback_mismatch_start) >= 3.0:
                 if not self._is_fallback_forced():
                     self._fallback_forced_until = now + 20.0
-                    logger.info(
+                    logger.warning(
                         "[SPOTIFY_VIS] Forcing audio fallback for 20s (bridge reports paused but audio active)",
                     )
         else:
@@ -1012,13 +1060,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._deactivate_impl()
         self._engine = None
         # Free GL handles on the bars overlay to prevent VRAM leaks
-        try:
-            parent = self.parent()
-            overlay = getattr(parent, "_spotify_bars_overlay", None) if parent else None
-            if overlay is not None and hasattr(overlay, "cleanup_gl"):
-                overlay.cleanup_gl()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed during GL cleanup: %s", e)
+        self._destroy_parent_overlay(reason="cleanup_impl")
         logger.debug("[LIFECYCLE] SpotifyVisualizerWidget cleaned up")
 
     # ------------------------------------------------------------------
@@ -1174,7 +1216,15 @@ class SpotifyVisualizerWidget(QWidget):
     def _cycle_mode(self) -> bool:
         """Cycle to the next visualizer mode with a crossfade."""
         from widgets.spotify_visualizer.mode_transition import cycle_mode
-        return cycle_mode(self)
+
+        result = cycle_mode(self)
+        if result:
+            try:
+                self._on_mode_cycle_requested()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Mode cycle hook failed", exc_info=True)
+            self._request_latency_probe("mode_cycle")
+        return result
 
     def handle_double_click(self, local_pos) -> bool:
         """Called by WidgetManager dispatch. Cycles visualizer mode."""
@@ -1224,7 +1274,11 @@ class SpotifyVisualizerWidget(QWidget):
         self._has_pushed_first_frame = False
         self._last_gpu_geom = None
         self._last_gpu_fade_sent = -1.0
-        self._mode_transition_ts = 0.0
+        resume_ts = 0.0
+        if getattr(self, "_mode_transition_phase", 0) != 0:
+            resume_ts = float(getattr(self, "_mode_transition_resume_ts", 0.0) or 0.0)
+        self._mode_transition_ts = resume_ts if resume_ts > 0.0 else 0.0
+        self._mode_transition_resume_ts = 0.0
         self._perf_tick_start_ts = None
         self._perf_tick_last_ts = None
         self._perf_tick_frame_count = 0
@@ -1237,20 +1291,21 @@ class SpotifyVisualizerWidget(QWidget):
         self._perf_paint_max_dt = 0.0
         self._perf_audio_lag_last_ms = 0.0
         self._perf_audio_lag_min_ms = 0.0
-        self._perf_audio_lag_max_ms = 0.0
-        self._perf_last_log_ts = None
-        self._last_tick_spike_log_ts = 0.0
-        self._fallback_mismatch_start = 0.0
-        self._fallback_forced_until = 0.0
-        self._bubble_pos_data = []
-        self._bubble_extra_data = []
-        self._bubble_trail_data = []
-        self._bubble_count = 0
-        self._bubble_compute_pending = False
-        self._bubble_last_tick_ts = 0.0
-        self._heartbeat_intensity = 0.0
-        self._heartbeat_avg_bass = 0.0
-        self._heartbeat_last_ts = 0.0
+        self._perf_audio_lag_max_ms: float = 0.0
+        self._perf_last_log_ts: Optional[float] = None
+        self._last_tick_spike_log_ts: float = 0.0
+        self._fallback_mismatch_start: float = 0.0
+        self._fallback_forced_until: float = 0.0
+        self._bubble_pos_data: List[float] = []
+        self._bubble_extra_data: List[float] = []
+        self._bubble_trail_data: List[float] = []
+        self._bubble_count: int = 0
+        self._bubble_compute_pending: bool = False
+        self._bubble_last_tick_ts: float = 0.0
+        self._heartbeat_intensity: float = 0.0
+        self._heartbeat_avg_bass: float = 0.0
+        self._heartbeat_last_ts: float = 0.0
+        self._waiting_for_fresh_frame: bool = False
         if clear_overlay:
             self._clear_gl_overlay()
         if replay_cached and self._cached_vis_kwargs:
@@ -1306,6 +1361,165 @@ class SpotifyVisualizerWidget(QWidget):
                         "[SPOTIFY_VIS] Failed to apply widget shadow in fallback path",
                         exc_info=True,
                     )
+
+    def _start_widget_fade_out(self, duration_ms: int = 1200, on_complete: Optional[Callable[[], None]] = None) -> None:
+        try:
+            ShadowFadeProfile.start_fade_out(
+                self,
+                duration_ms=duration_ms,
+                on_complete=on_complete,
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] _start_widget_fade_out fallback triggered", exc_info=True)
+            try:
+                self.hide()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            if on_complete is not None:
+                try:
+                    on_complete()
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed in fade-out callback: %s", e)
+
+    def _reset_teardown_bookkeeping(self) -> None:
+        self._mode_transition_ready = False
+        self._mode_transition_phase = 0
+        self._mode_transition_resume_ts = 0.0
+        self._mode_transition_apply_height_on_resume = False
+        self._pending_shadow_cache_invalidation = False
+        self._mode_teardown_state = "idle"
+        self._mode_teardown_target_generation = -1
+        self._mode_teardown_wait_started_ts = 0.0
+        self._mode_teardown_block_until_ready = False
+
+    def _on_mode_cycle_requested(self) -> None:
+        self._mode_transition_ready = False
+        if self._mode_teardown_state == 'fading_out':
+            return
+        self._mode_teardown_state = 'fading_out'
+        self._mode_teardown_block_until_ready = False
+        self._mode_teardown_target_generation = -1
+        self._mode_teardown_wait_started_ts = 0.0
+        self._start_widget_fade_out(on_complete=self._on_mode_fade_out_complete)
+
+    def _on_mode_fade_out_complete(self) -> None:
+        if not Shiboken.isValid(self):
+            return
+        self._clear_gl_overlay()
+        self._mode_teardown_state = 'waiting_bars'
+        self._mode_teardown_block_until_ready = True
+        self._mode_teardown_wait_started_ts = time.time()
+        self._pending_shadow_cache_invalidation = True
+        self._prepare_engine_for_mode_reset()
+
+    def _prepare_engine_for_mode_reset(self) -> None:
+        self._mode_teardown_target_generation = -1
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            engine = None
+        if engine is None:
+            return
+        try:
+            engine.cancel_pending_compute_tasks()
+            engine.reset_smoothing_state()
+            engine.reset_floor_state()
+            engine.set_smoothing(self._smoothing)
+            self._replay_engine_config(engine)
+            engine.ensure_started()
+            self._mode_teardown_target_generation = engine.get_generation_id()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to prepare engine for mode reset", exc_info=True)
+
+    def _begin_mode_fade_in(self, now_ts: float) -> None:
+        if self._mode_transition_phase == 3:
+            self._mode_transition_phase = 2
+            self._mode_transition_ts = now_ts
+        elif self._mode_transition_phase == 0:
+            self._mode_transition_phase = 2
+            self._mode_transition_ts = now_ts
+        self._mode_transition_ready = True
+        self._mode_teardown_state = 'fading_in'
+        self._mode_teardown_block_until_ready = False
+        self._invalidate_shadow_cache_if_needed()
+        self._apply_pending_mode_transition_layout()
+        try:
+            self._start_widget_fade_in(1500)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Mode fade-in fallback path", exc_info=True)
+
+    def _check_mode_teardown_ready(self, engine: Optional[_SpotifyBeatEngine], now_ts: float) -> None:
+        if self._mode_teardown_state != 'waiting_bars':
+            return
+        ready = False
+        if engine is not None and self._mode_teardown_target_generation > 0:
+            try:
+                latest = engine.get_latest_generation_with_frame()
+            except Exception:
+                latest = -1
+            if latest >= self._mode_teardown_target_generation:
+                ready = True
+        elif (now_ts - self._mode_teardown_wait_started_ts) >= 0.75:
+            ready = True
+        if ready and not self._mode_transition_ready:
+            self._mode_teardown_state = 'ready'
+            self._begin_mode_fade_in(now_ts)
+
+    def _apply_pending_mode_transition_layout(self) -> None:
+        if not self._mode_transition_apply_height_on_resume:
+            return
+        self._mode_transition_apply_height_on_resume = False
+        try:
+            self._apply_preferred_height()
+            self._request_reposition()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Deferred card height apply failed", exc_info=True)
+
+    def _invalidate_shadow_cache_if_needed(self) -> None:
+        if not self._pending_shadow_cache_invalidation:
+            return
+        self._pending_shadow_cache_invalidation = False
+        try:
+            effect = self.graphicsEffect()
+        except Exception:
+            effect = None
+        if effect is not None:
+            try:
+                self.setGraphicsEffect(None)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to clear graphics effect during shadow reset", exc_info=True)
+        try:
+            clear_cached_shadow_for_widget(self)
+            logger.debug("[SPOTIFY_VIS] Shadow cache cleared for widget=%s", hex(id(self)))
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to clear cached shadow entry", exc_info=True)
+        # Ensure ShadowFadeProfile internal bookkeeping doesn't hold stale references
+        try:
+            setattr(self, "_shadowfade_effect", None)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to reset shadowfade effect handle", exc_info=True)
+        try:
+            setattr(self, "_shadowfade_anim", None)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to reset shadowfade anim handle", exc_info=True)
+
+    def _on_first_frame_after_cold_start(self) -> None:
+        if not getattr(self, "_waiting_for_fresh_frame", False):
+            return
+        self._waiting_for_fresh_frame = False
+        if getattr(self, "_shadow_config_missing", False):
+            if self._shadow_config is not None:
+                try:
+                    ShadowFadeProfile.attach_shadow(
+                        self,
+                        self._shadow_config,
+                        has_background_frame=self._show_background,
+                    )
+                    logger.debug("[SPOTIFY_VIS] Shadow reattached after fresh frame")
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to reattach shadow after fresh frame", exc_info=True)
+            self._shadow_config_missing = False
 
     def _get_gpu_fade_factor(self, now_ts: float) -> float:
         """Return fade factor for GPU bars based on ShadowFadeProfile.
@@ -1410,6 +1624,67 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.tick_helpers import log_tick_spike
         log_tick_spike(self, dt, transition_ctx)
 
+    def _request_latency_probe(self, reason: str) -> None:
+        if reason not in self._latency_pending_probe:
+            self._latency_pending_probe.append(reason)
+
+    def _log_audio_latency_metrics(
+        self,
+        engine: _SpotifyBeatEngine | None,
+        now_ts: float,
+        force_reason: Optional[str] = None,
+    ) -> None:
+        """Emit viz-only latency diagnostics when enabled via --viz."""
+
+        if engine is None or not is_viz_logging_enabled():
+            return
+
+        last_audio_ts = float(getattr(engine, "_last_audio_ts", 0.0) or 0.0)
+        last_smooth_ts = float(getattr(engine, "_last_smooth_ts", -1.0) or -1.0)
+        source_ts = max(last_audio_ts, last_smooth_ts)
+        if source_ts <= 0.0:
+            return
+
+        force_logging = bool(force_reason)
+        if (
+            not force_logging
+            and (now_ts - self._latency_last_log_ts) < self._latency_log_interval
+        ):
+            return
+
+        lag_ms = max(0.0, (now_ts - source_ts) * 1000.0)
+        phase = self._mode_transition_phase
+        mode = getattr(self, "_vis_mode_str", "unknown")
+        pending = getattr(self, "_mode_transition_pending", None)
+        pending_mode = getattr(pending, "name", None) if pending is not None else None
+
+        level: Optional[str] = None
+        if lag_ms >= self._latency_error_ms:
+            level = "error"
+        elif lag_ms >= self._latency_warn_ms:
+            level = "warning"
+
+        if level is None:
+            return
+
+        rounded = round(lag_ms, 1)
+        signature = (level, rounded, mode, phase, pending_mode, force_reason)
+        if signature == self._latency_last_signature:
+            return
+        self._latency_last_signature = signature
+
+        trigger_suffix = f" trigger={force_reason}" if force_reason else ""
+        msg = (
+            "[SPOTIFY_VIS][LATENCY] lag_ms=%.1f mode=%s transition_phase=%d pending=%s%s"
+            % (lag_ms, mode, phase, pending_mode or "<none>", trigger_suffix)
+        )
+        if level == "error":
+            logger.error(msg)
+        else:
+            logger.warning(msg)
+
+        self._latency_last_log_ts = now_ts
+
     def _on_tick(self) -> None:
         """Periodic UI tick - PERFORMANCE OPTIMIZED.
 
@@ -1437,6 +1712,12 @@ class SpotifyVisualizerWidget(QWidget):
         parent = self.parent()
         transition_ctx = self._get_transition_context(parent)
         is_transition_active = transition_ctx.get("running", False)
+        was_transition_active = self._last_transition_running
+        if is_transition_active and not was_transition_active:
+            self._request_latency_probe("transition_start")
+        elif not is_transition_active and was_transition_active:
+            self._request_latency_probe("transition_end")
+        self._last_transition_running = is_transition_active
         
         # PERFORMANCE: Pause dedicated timer during transitions when AnimationManager is active
         # This prevents timer contention that causes 50-100ms dt spikes
@@ -1507,16 +1788,10 @@ class SpotifyVisualizerWidget(QWidget):
             if _engine_tick_elapsed > 20.0 and is_perf_metrics_enabled():
                 logger.warning("[PERF] [SPOTIFY_VIS] Slow engine.tick(): %.2fms", _engine_tick_elapsed)
             
-            # Track audio lag for PERF logs
-            if is_perf_metrics_enabled():
-                last_audio_ts = getattr(engine, "_last_audio_ts", 0.0)
-                if last_audio_ts > 0.0:
-                    lag_ms = (now_ts - last_audio_ts) * 1000.0
-                    self._perf_audio_lag_last_ms = lag_ms
-                    if self._perf_audio_lag_min_ms == 0.0 or lag_ms < self._perf_audio_lag_min_ms:
-                        self._perf_audio_lag_min_ms = lag_ms
-                    if lag_ms > self._perf_audio_lag_max_ms:
-                        self._perf_audio_lag_max_ms = lag_ms
+            pending_reasons = list(self._latency_pending_probe)
+            self._latency_pending_probe.clear()
+            probe_reason = ",".join(pending_reasons) if pending_reasons else None
+            self._log_audio_latency_metrics(engine, now_ts, force_reason=probe_reason)
             
             # Get pre-smoothed bars from engine (smoothing done on COMPUTE pool)
             smoothed = engine.get_smoothed_bars()
@@ -1566,8 +1841,16 @@ class SpotifyVisualizerWidget(QWidget):
             # Decay: ~300ms full decay (3.3/s) — slower so effect is visible
             self._heartbeat_intensity = max(0.0, self._heartbeat_intensity - dt_hb * 3.3)
 
+        self._check_mode_teardown_ready(engine, now_ts)
+        if self._mode_teardown_block_until_ready and not self._mode_transition_ready:
+            return
+
         # --- Bubble simulation tick (dispatched to COMPUTE thread pool) ---
-        if self._vis_mode_str == 'bubble' and not self._bubble_compute_pending:
+        if (
+            self._vis_mode_str == 'bubble'
+            and not self._bubble_compute_pending
+            and not self._mode_teardown_block_until_ready
+        ):
             if self._thread_manager is not None:
                 self._bubble_compute_pending = True
                 # Snapshot energy bands and settings on UI thread (cheap reads)
@@ -1699,6 +1982,7 @@ class SpotifyVisualizerWidget(QWidget):
                 # Only request QWidget repaint when fade changes
                 if need_card_update:
                     self.update()
+                self._on_first_frame_after_cold_start()
             else:
                 # Fallback: when there is no DisplayWidget/GPU bridge
                 has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
@@ -1706,6 +1990,7 @@ class SpotifyVisualizerWidget(QWidget):
                     self._cpu_bars_enabled = True
                     self.update()
                     self._has_pushed_first_frame = True
+                    self._on_first_frame_after_cold_start()
 
         # PERF: Log slow ticks to identify blocking operations
         _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
@@ -1881,7 +2166,7 @@ class SpotifyVisualizerWidget(QWidget):
                     self._engine.reset_smoothing_state()
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            logger.info("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
+            logger.debug("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
 
     def get_visualization_mode(self) -> VisualizerMode:
         """Get the current visualization display mode."""

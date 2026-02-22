@@ -20,7 +20,12 @@ try:
 except ImportError:
     np = None  # type: ignore[assignment]
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_verbose_logging,
+    is_perf_metrics_enabled,
+    is_viz_diagnostics_enabled,
+)
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
@@ -45,10 +50,13 @@ class _SpotifyBeatEngine(QObject):
         self._audio_worker = SpotifyVisualizerAudioWorker(self._bar_count, self._audio_buffer, parent=self)
         self._bars_result_buffer: TripleBuffer[List[float]] = TripleBuffer()
         self._compute_task_active: bool = False
+        self._compute_gate_token: int = 0
         self._thread_manager: Optional[ThreadManager] = None
         self._ref_count: int = 0
         self._latest_bars: Optional[List[float]] = None
         self._last_audio_ts: float = 0.0
+        self._generation_id: int = 0
+        self._latest_generation_with_frame: int = 0
 
         # Waveform buffer for oscilloscope visualizer (last 256 raw samples)
         self._waveform: List[float] = [0.0] * 256
@@ -93,7 +101,24 @@ class _SpotifyBeatEngine(QObject):
         self._energy_bands = EnergyBands()
         self._waveform = [0.0] * self._waveform_count
         self._latest_bars = None
-        logger.debug("[SPOTIFY_VIS] Beat engine smoothing state reset")
+        self._generation_id += 1
+        logger.debug("[SPOTIFY_VIS] Beat engine smoothing state reset (generation=%d)", self._generation_id)
+
+    def reset_floor_state(self) -> None:
+        """Reset dynamic/manual floor accumulator state."""
+        try:
+            aw = self._audio_worker
+            aw._raw_bass_avg = aw._manual_floor
+            aw._last_floor_config = (aw._use_dynamic_floor, aw._manual_floor)
+            aw._last_bass_drop_ratio = 0.0
+            aw._bass_drop_accum = 0.0
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to reset floor state", exc_info=True)
+
+    def cancel_pending_compute_tasks(self) -> None:
+        """Invalidate outstanding compute callbacks before restarting."""
+        self._compute_gate_token += 1
+        self._compute_task_active = False
 
     def set_smoothing(self, tau: float) -> None:
         """Set the base smoothing time constant."""
@@ -218,6 +243,7 @@ class _SpotifyBeatEngine(QObject):
             return
 
         self._compute_task_active = True
+        token = self._compute_gate_token
         
         smoothed_copy = list(self._smoothed_bars)
         last_smooth_ts = self._last_smooth_ts
@@ -280,6 +306,8 @@ class _SpotifyBeatEngine(QObject):
 
         def _on_result(result) -> None:
             try:
+                if token != self._compute_gate_token:
+                    return
                 self._compute_task_active = False
                 success = getattr(result, "success", True)
                 data = getattr(result, "result", None)
@@ -294,6 +322,7 @@ class _SpotifyBeatEngine(QObject):
                 if isinstance(smoothed_bars, list):
                     self._smoothed_bars = smoothed_bars
                     self._last_smooth_ts = ts
+                    self._latest_generation_with_frame = self._generation_id
                 energy = data.get('energy')
                 if isinstance(energy, EnergyBands):
                     self._energy_bands = energy
@@ -305,12 +334,19 @@ class _SpotifyBeatEngine(QObject):
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
         try:
-            if is_perf_metrics_enabled():
+            if is_perf_metrics_enabled() and is_viz_diagnostics_enabled():
                 logger.debug("[PERF] FFT task submitted")
             tm.submit_compute_task(_job, callback=_on_result)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            self._compute_task_active = False
+            if token == self._compute_gate_token:
+                self._compute_task_active = False
+
+    def get_generation_id(self) -> int:
+        return self._generation_id
+
+    def get_latest_generation_with_frame(self) -> int:
+        return self._latest_generation_with_frame
 
     def tick(self) -> Optional[List[float]]:
         tm = self._thread_manager

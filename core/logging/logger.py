@@ -51,9 +51,13 @@ _VERBOSE: bool = False
 # PERF metrics default to False for production builds. Script mode (development)
 # can enable via SRPSS_PERF_METRICS=1 env var; Nuitka builds use .perf.cfg files.
 _PERF_METRICS_ENABLED: bool = False
+# Widget PERF verbosity flag controls whether per-call summaries land in main log
+_WIDGET_PERF_VERBOSE: bool = False
 # Visualizer logging defaults to False (opt-in via --viz or SRPSS_VIZ_LOGGING=1).
 # When enabled, logs [SPOTIFY_VIS] and [SPOTIFY_VOL] detailed metrics.
 _VIZ_LOGGING_ENABLED: bool = False
+# Spotify visualizer diagnostics flag (high-volume DSP traces)
+_VIZ_DIAGNOSTICS_ENABLED: bool = False
 # Logging defaults to disabled for frozen builds unless explicitly enabled via
 # env vars or .logging.cfg files next to the executable.
 _LOGGING_DISABLED: bool = _IS_FROZEN
@@ -98,6 +102,15 @@ if _env_perf is not None:
         pass  # Keep default (False) on parse failure
 
 # Parse visualizer logging flag from environment
+_env_widget_perf_verbose = os.getenv("SRPSS_WIDGET_PERF_VERBOSE")
+if _env_widget_perf_verbose is not None:
+    try:
+        parsed = _parse_bool_token(str(_env_widget_perf_verbose))
+        if parsed is not None:
+            _WIDGET_PERF_VERBOSE = parsed
+    except Exception:
+        pass
+
 _env_viz = os.getenv("SRPSS_VIZ_LOGGING")
 if _env_viz is not None:
     try:
@@ -107,6 +120,15 @@ if _env_viz is not None:
             _VIZ_LOGGING_ENABLED = True
     except Exception:
         pass  # Keep default (False) on parse failure
+
+_env_viz_diag = os.getenv("SRPSS_VIZ_DIAGNOSTICS")
+if _env_viz_diag is not None:
+    try:
+        parsed_diag = _parse_bool_token(str(_env_viz_diag))
+        if parsed_diag is not None:
+            _VIZ_DIAGNOSTICS_ENABLED = parsed_diag
+    except Exception:
+        pass
 
 _env_log_dir = os.getenv("SRPSS_FORCE_LOG_DIR")
 if _env_log_dir:
@@ -526,6 +548,19 @@ class WidgetPerfLogFilter(logging.Filter):
         return "[PERF_WIDGET]" in msg
 
 
+class WidgetPerfVisibilityFilter(logging.Filter):
+    """Blocks widget PERF records from a handler unless verbose mode is enabled."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        if "[PERF_WIDGET]" not in msg:
+            return True
+        return is_widget_perf_verbose()
+
+
 class SpotifyVisLogFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
         try:
@@ -617,7 +652,12 @@ def _select_log_dir(
     return fallback
 
 
-def setup_logging(debug: bool = False, verbose: bool = False, viz: bool = False) -> None:
+def setup_logging(
+    debug: bool = False,
+    verbose: bool = False,
+    viz: bool = False,
+    viz_diag: bool = False,
+) -> None:
     """
     Configure application logging with file rotation.
     
@@ -628,6 +668,8 @@ def setup_logging(debug: bool = False, verbose: bool = False, viz: bool = False)
             etc.). Verbose mode also implies debug-level logging.
         viz: When True, enables visualizer-specific logging ([SPOTIFY_VIS],
             [SPOTIFY_VOL]). High-volume, only useful for visualizer debugging.
+        viz_diag: Enables Spotify visualizer DSP diagnostics (noise floor,
+            FFT scheduling, raw bar dumps). Off by default to avoid log spam.
     """
     global _VERBOSE, _PERF_METRICS_ENABLED, _VIZ_LOGGING_ENABLED, _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
 
@@ -691,6 +733,8 @@ def setup_logging(debug: bool = False, verbose: bool = False, viz: bool = False)
     # Command-line flag overrides config file
     if viz:
         _VIZ_LOGGING_ENABLED = True
+    if viz_diag:
+        _VIZ_DIAGNOSTICS_ENABLED = True
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     global _LOGGING_DISABLED
@@ -748,6 +792,7 @@ def setup_logging(debug: bool = False, verbose: bool = False, viz: bool = False)
     # per-run logs smaller and easier to inspect.
     main_handler.addFilter(NonPerfFilter())
     main_handler.addFilter(NonSpotifyFilter())
+    main_handler.addFilter(WidgetPerfVisibilityFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
     if debug_enabled and sys.stdout.isatty():
@@ -765,6 +810,7 @@ def setup_logging(debug: bool = False, verbose: bool = False, viz: bool = False)
     console_handler.setLevel(main_level)
     console_handler.addFilter(NonPerfFilter())
     console_handler.addFilter(NonSpotifyFilter())
+    console_handler.addFilter(WidgetPerfVisibilityFilter())
     
     # Configure root logger
     root_logger = logging.getLogger()
@@ -1098,6 +1144,12 @@ def is_perf_metrics_enabled() -> bool:
     return _PERF_METRICS_ENABLED
 
 
+def is_widget_perf_verbose() -> bool:
+    """Return True when per-widget PERF logging should stay verbose."""
+
+    return _WIDGET_PERF_VERBOSE
+
+
 def is_viz_logging_enabled() -> bool:
     """Return True when visualizer logging is enabled globally.
     
@@ -1106,3 +1158,9 @@ def is_viz_logging_enabled() -> bool:
     SRPSS_VIZ_LOGGING=1 to enable.
     """
     return _VIZ_LOGGING_ENABLED
+
+
+def is_viz_diagnostics_enabled() -> bool:
+    """Return True when Spotify visualizer diagnostics logging is enabled."""
+
+    return _VIZ_DIAGNOSTICS_ENABLED

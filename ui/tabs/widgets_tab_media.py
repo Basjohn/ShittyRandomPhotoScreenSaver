@@ -914,6 +914,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
             sine_vs = 100 if spotify_vis_config.get('sine_vertical_shift') else 0
         tab.sine_vertical_shift.setValue(max(-50, min(200, sine_vs)))
         tab.sine_vertical_shift_label.setText(f"{sine_vs}")
+    if hasattr(tab, 'sine_line1_shift'):
+        sine_l1_shift = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_line1_shift', 0.0) * 100)
+        tab.sine_line1_shift.setValue(max(-100, min(100, sine_l1_shift)))
+        tab.sine_line1_shift_label.setText(f"{sine_l1_shift / 100.0:.2f} cycles")
     if hasattr(tab, 'sine_travel'):
         sine_travel_val = int(spotify_vis_config.get('sine_wave_travel', 0) or 0)
         tab.sine_travel.setCurrentIndex(max(0, min(2, sine_travel_val)))
@@ -948,6 +952,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _apply_color_to_button('sine_line3_color_btn', '_sine_line3_color')
     _apply_color_to_button('sine_line3_glow_btn', '_sine_line3_glow_color')
     _update_sine_multi_line_visibility(tab)
+    if hasattr(tab, 'sine_line2_shift'):
+        sine_l2_shift = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_line2_shift', 0.0) * 100)
+        tab.sine_line2_shift.setValue(max(-100, min(100, sine_l2_shift)))
+        tab.sine_line2_shift_label.setText(f"{sine_l2_shift / 100.0:.2f} cycles")
+    if hasattr(tab, 'sine_line3_shift'):
+        sine_l3_shift = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_line3_shift', 0.0) * 100)
+        tab.sine_line3_shift.setValue(max(-100, min(100, sine_l3_shift)))
+        tab.sine_line3_shift_label.setText(f"{sine_l3_shift / 100.0:.2f} cycles")
     if hasattr(tab, 'sine_line_offset_bias'):
         sine_lob_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_line_offset_bias', 0.0) * 100)
         tab.sine_line_offset_bias.setValue(max(0, min(100, sine_lob_val)))
@@ -1243,6 +1255,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_micro_wobble': (tab.sine_micro_wobble.value() if hasattr(tab, 'sine_micro_wobble') else 0) / 100.0,
         'sine_width_reaction': (tab.sine_width_reaction.value() if hasattr(tab, 'sine_width_reaction') else 0) / 100.0,
         'sine_vertical_shift': tab.sine_vertical_shift.value() if hasattr(tab, 'sine_vertical_shift') else 0,
+        'sine_line1_shift': (tab.sine_line1_shift.value() if hasattr(tab, 'sine_line1_shift') else 0) / 100.0,
         'sine_wave_travel': tab.sine_travel.currentIndex() if hasattr(tab, 'sine_travel') else 0,
         'sine_travel_line2': tab.sine_travel_line2.currentIndex() if hasattr(tab, 'sine_travel_line2') else 0,
         'sine_travel_line3': tab.sine_travel_line3.currentIndex() if hasattr(tab, 'sine_travel_line3') else 0,
@@ -1255,6 +1268,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_line2_glow_color': _qcolor_to_list(getattr(tab, '_sine_line2_glow_color', None), [255, 120, 50, 180]),
         'sine_line3_color': _qcolor_to_list(getattr(tab, '_sine_line3_color', None), [50, 255, 120, 230]),
         'sine_line3_glow_color': _qcolor_to_list(getattr(tab, '_sine_line3_glow_color', None), [50, 255, 120, 180]),
+        'sine_line2_shift': (tab.sine_line2_shift.value() if hasattr(tab, 'sine_line2_shift') else 0) / 100.0,
+        'sine_line3_shift': (tab.sine_line3_shift.value() if hasattr(tab, 'sine_line3_shift') else 0) / 100.0,
         'rainbow_enabled': tab.rainbow_enabled.isChecked() if hasattr(tab, 'rainbow_enabled') else False,
         'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
         'osc_ghosting_enabled': tab.osc_ghost_enabled.isChecked() if hasattr(tab, 'osc_ghost_enabled') else False,

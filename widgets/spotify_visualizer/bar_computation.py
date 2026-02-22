@@ -10,7 +10,12 @@ import math
 import time
 from typing import List, Optional, TYPE_CHECKING
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_verbose_logging,
+    is_perf_metrics_enabled,
+    is_viz_diagnostics_enabled,
+)
 
 if TYPE_CHECKING:
     from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker
@@ -289,7 +294,10 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         now = 0.0
     last_snapshot = getattr(worker, "_bars_log_last_ts", 0.0)
     min_interval = max(1.0, float(getattr(worker, "_bars_log_interval", 5.0) or 5.0))
-    if now <= 0.0 or (now - last_snapshot) >= min_interval:
+    if (
+        now <= 0.0
+        or (now - last_snapshot) >= min_interval
+    ) and is_viz_diagnostics_enabled():
         bar_str = " ".join(f"{v:.2f}" for v in arr)
         logger.info("[SPOTIFY_VIS][BARS] raw_bass=%.3f Bars=[%s]", float(raw_bass), bar_str)
         try:
@@ -682,7 +690,7 @@ def maybe_log_floor_state(
     if not state_changed and last_ts and (now - last_ts) < throttle:
         return
 
-    if not is_perf_metrics_enabled():
+    if not (is_perf_metrics_enabled() and is_viz_diagnostics_enabled()):
         return
 
     try:

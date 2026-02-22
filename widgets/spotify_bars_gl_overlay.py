@@ -135,6 +135,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
         self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
         self._sine_width_reaction: float = 0.0  # 0.0-1.0, bass-driven line width stretching
+        self._sine_line1_shift: float = 0.0
+        self._sine_line2_shift: float = 0.0
+        self._sine_line3_shift: float = 0.0
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
@@ -269,6 +272,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         sine_wave_effect: float = 0.0,
         sine_micro_wobble: float = 0.0,
         sine_vertical_shift: int = 0,
+        sine_line1_shift: float = 0.0,
+        sine_line2_shift: float = 0.0,
+        sine_line3_shift: float = 0.0,
         sine_width_reaction: float = 0.0,
         helix_turns: int = 4,
         helix_double: bool = True,
@@ -315,12 +321,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         """
 
         if not visible:
-            self._enabled = False
-            # PERF: Don't call hide() - it's expensive (25ms+) and causes show() to be
-            # called again on next visible frame. Instead, paintGL checks _enabled flag
-            # and skips rendering when disabled. The overlay stays "visible" to Qt but
-            # renders nothing.
-            self.update()  # Trigger repaint to clear the bars
+            self.clear_overlay_buffer()
             return
 
         # Set active visualizer mode
@@ -463,6 +464,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_wave_effect = max(0.0, min(1.0, float(sine_wave_effect)))
         self._sine_micro_wobble = max(0.0, min(1.0, float(sine_micro_wobble)))
         self._sine_vertical_shift = max(-50, min(200, int(sine_vertical_shift)))
+        self._sine_line1_shift = max(-1.0, min(1.0, float(sine_line1_shift)))
+        self._sine_line2_shift = max(-1.0, min(1.0, float(sine_line2_shift)))
+        self._sine_line3_shift = max(-1.0, min(1.0, float(sine_line3_shift)))
         self._sine_width_reaction = max(0.0, min(1.0, float(sine_width_reaction)))
 
         # Helix settings
@@ -552,30 +556,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             segs = 0
 
         if count <= 0 or segs <= 0:
-            self._enabled = False
-            try:
-                self.hide()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            self.clear_overlay_buffer()
             return
 
         try:
             bars_seq = list(bars)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            self._enabled = False
-            try:
-                self.hide()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            self.clear_overlay_buffer()
             return
 
         if not bars_seq:
-            self._enabled = False
-            try:
-                self.hide()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            self.clear_overlay_buffer()
             return
 
         if len(bars_seq) > count:
@@ -597,11 +589,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             clamped.append(f)
 
         if not clamped:
-            self._enabled = False
-            try:
-                self.hide()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            self.clear_overlay_buffer()
             return
 
         # Update per-bar peak state using the latest clamped values.
@@ -698,6 +686,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._playing = bool(playing)
 
         _geom_start = time.time()
+        if not clamped:
+            self.clear_overlay_buffer()
+            return
         try:
             cur_geom = None
             try:
@@ -738,6 +729,37 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if is_perf_metrics_enabled() and (_geom_elapsed > 5.0 or _show_elapsed > 5.0 or _update_elapsed > 5.0):
             logger.warning("[PERF] [SPOTIFY_BARS_GL] set_state breakdown: geom=%.2fms, show=%.2fms, update=%.2fms",
                           _geom_elapsed, _show_elapsed, _update_elapsed)
+
+    def clear_overlay_buffer(self) -> None:
+        """Reset overlay state and clear the GL backing buffer."""
+
+        self._enabled = False
+        self._bars = []
+        self._bar_count = 0
+        self._segments = 0
+        self._peaks = []
+        self._fade = 0.0
+        self._waveform = []
+        self._prev_waveform = []
+        self._bubble_pos_data = []
+        self._bubble_extra_data = []
+        self._bubble_trail_data = []
+
+        if self._gl_state.is_ready():
+            try:
+                self.makeCurrent()
+                gl.glDisable(gl.GL_SCISSOR_TEST)
+                gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+                gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to clear overlay buffer", exc_info=True)
+            finally:
+                try:
+                    self.doneCurrent()
+                except Exception:
+                    pass
+
+        self.update()
 
     # ------------------------------------------------------------------
     # GL State Management Helpers
@@ -782,7 +804,20 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Use GLStateManager for proper state tracking
         if not self._gl_state.is_ready() and not self._gl_state.is_error():
             return
-        
+
+        rect = self.rect()
+        if rect.width() <= 0 or rect.height() <= 0:
+            return
+
+        # Always clear the backing buffer so stale frames do not linger when
+        # the overlay is disabled between mode switches.
+        try:
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+
         if not self._enabled:
             return
 
@@ -793,19 +828,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             fade = 0.0
         if fade <= 0.0:
             return
-
-        rect = self.rect()
-        if rect.width() <= 0 or rect.height() <= 0:
-            return
-
-        # Start from a clean transparent buffer each frame so that decaying
-        # bars do not leave ghost outlines or coloured speckles behind.
-        try:
-            gl.glDisable(gl.GL_SCISSOR_TEST)
-            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         # Prefer the shader path when available; fall back to QPainter when
         # the GL program or buffers are not ready or fail at runtime.
@@ -926,6 +948,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_bubbles_trail", "u_trail_strength",
                     "u_specular_dir", "u_outline_color", "u_specular_color",
                     "u_gradient_light", "u_gradient_dark", "u_pop_color",
+                    "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
 
@@ -1004,38 +1027,53 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         )
 
     def cleanup_gl(self) -> None:
-        """Delete all GL handles (programs, VAO, VBO) to prevent VRAM leaks.
+        """Delete all GL handles (programs, VAO, VBO) to prevent VRAM leaks."""
 
-        Must be called with a valid GL context (e.g. from the widget's
-        destroy path while the context is still current).
-        """
         try:
             from OpenGL import GL as _gl
         except ImportError:
             return
 
-        for mode, prog in list(self._gl_programs.items()):
+        ctx_acquired = False
+        if self._gl_state.is_ready():
             try:
-                _gl.glDeleteProgram(prog)
+                self.makeCurrent()
+                ctx_acquired = True
             except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Failed to delete %s program: %s", mode, e)
-        self._gl_programs.clear()
-        self._gl_uniforms.clear()
-        self._gl_program = None
+                logger.debug("[SPOTIFY_VIS] Failed to make GL context current for cleanup: %s", e)
 
-        if self._gl_vbo is not None:
-            try:
-                _gl.glDeleteBuffers(1, [self._gl_vbo])
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Failed to delete VBO: %s", e)
-            self._gl_vbo = None
+        try:
+            for mode, prog in list(self._gl_programs.items()):
+                try:
+                    if ctx_acquired:
+                        _gl.glDeleteProgram(prog)
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Failed to delete %s program: %s", mode, e)
+            self._gl_programs.clear()
+            self._gl_uniforms.clear()
+            self._gl_program = None
 
-        if self._gl_vao is not None:
-            try:
-                _gl.glDeleteVertexArrays(1, [self._gl_vao])
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Failed to delete VAO: %s", e)
-            self._gl_vao = None
+            if self._gl_vbo is not None:
+                try:
+                    if ctx_acquired:
+                        _gl.glDeleteBuffers(1, [self._gl_vbo])
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Failed to delete VBO: %s", e)
+                self._gl_vbo = None
+
+            if self._gl_vao is not None:
+                try:
+                    if ctx_acquired:
+                        _gl.glDeleteVertexArrays(1, [self._gl_vao])
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Failed to delete VAO: %s", e)
+                self._gl_vao = None
+        finally:
+            if ctx_acquired:
+                try:
+                    self.doneCurrent()
+                except Exception:
+                    pass
 
         self._gl_program_rids.clear()
         self._gl_vao_rid = None
@@ -1512,6 +1550,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_width_reaction", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._sine_width_reaction))
+                loc = u.get("u_sine_line1_shift", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_line1_shift))
+                loc = u.get("u_sine_line2_shift", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_line2_shift))
+                loc = u.get("u_sine_line3_shift", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_line3_shift))
 
             # --- Helix uniforms ---
             if mode == 'helix':

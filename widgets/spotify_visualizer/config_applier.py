@@ -211,6 +211,12 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
     if 'sine_travel_line3' in kwargs:
         widget._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
+    if 'sine_line1_shift' in kwargs:
+        widget._sine_line1_shift = max(-1.0, min(1.0, float(kwargs['sine_line1_shift'])))
+    if 'sine_line2_shift' in kwargs:
+        widget._sine_line2_shift = max(-1.0, min(1.0, float(kwargs['sine_line2_shift'])))
+    if 'sine_line3_shift' in kwargs:
+        widget._sine_line3_shift = max(-1.0, min(1.0, float(kwargs['sine_line3_shift'])))
     if 'sine_wave_effect' in kwargs:
         widget._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
     if 'sine_micro_wobble' in kwargs:
@@ -411,6 +417,9 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['sine_card_adaptation'] = widget._sine_card_adaptation
     extra['sine_travel_line2'] = widget._sine_travel_line2
     extra['sine_travel_line3'] = widget._sine_travel_line3
+    extra['sine_line1_shift'] = getattr(widget, '_sine_line1_shift', 0.0)
+    extra['sine_line2_shift'] = getattr(widget, '_sine_line2_shift', 0.0)
+    extra['sine_line3_shift'] = getattr(widget, '_sine_line3_shift', 0.0)
     extra['sine_wave_effect'] = widget._sine_wave_effect
     extra['sine_micro_wobble'] = widget._sine_micro_wobble
     extra['sine_width_reaction'] = widget._sine_width_reaction

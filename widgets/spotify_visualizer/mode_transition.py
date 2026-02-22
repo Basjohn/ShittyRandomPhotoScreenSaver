@@ -64,17 +64,26 @@ def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
             pending = widget._mode_transition_pending
             if pending is not None:
                 try:
-                    widget._reset_visualizer_state(clear_overlay=False, replay_cached=False)
+                    setattr(widget, "_mode_transition_resume_ts", now_ts)
+                except Exception:
+                    setattr(widget, "_mode_transition_resume_ts", 0.0)
+                try:
+                    widget._reset_visualizer_state(
+                        clear_overlay=False,
+                        replay_cached=bool(getattr(widget, "_cached_vis_kwargs", None)),
+                    )
                 except Exception:
                     logger.debug("[SPOTIFY_VIS] Mode reset helper failed", exc_info=True)
                 widget.set_visualization_mode(pending)
-                widget._apply_preferred_height()
-                widget._request_reposition()
                 widget._mode_transition_pending = None
-            widget._mode_transition_phase = 2
+            widget._mode_transition_phase = 3  # waiting-for-ready
             widget._mode_transition_ts = now_ts
             return 0.0
         return 1.0 - t
+
+    if phase == 3:
+        # Waiting for teardown → reinit pipeline to finish. Bars stay hidden.
+        return 0.0
 
     if phase == 2:
         # Fading in
@@ -83,6 +92,10 @@ def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
             # Transition complete — persist mode
             widget._mode_transition_phase = 0
             widget._mode_transition_ts = 0.0
+            try:
+                widget._mode_transition_resume_ts = 0.0
+            except Exception:
+                pass
             persist_vis_mode(widget)
             return 1.0
         return t

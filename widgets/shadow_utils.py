@@ -19,7 +19,7 @@ from typing import Any, Mapping, Callable, Optional
 
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmapCache
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
@@ -600,6 +600,22 @@ class ShadowFadeProfile:
                     on_complete()
                 except Exception as inner:
                     logger.debug("[SHADOW] Exception suppressed in on_complete: %s", inner)
+
+
+def clear_cached_shadow_for_widget(widget: QWidget) -> None:
+    """Best-effort helper to flush cached shadow pixmaps before reapplying.
+
+    Qt caches drop-shadow pixmaps globally via QPixmapCache. When widgets reuse
+    the same size/configuration, Qt may recycle stale textures that now contain
+    GL artifacts. We currently clear the global cache because Qt does not
+    expose per-widget invalidation, but this helper centralises the policy so we
+    can tighten the scope later (e.g. by keying cached entries ourselves).
+    """
+
+    try:
+        QPixmapCache.clear()
+    except Exception:
+        logger.debug("[SHADOW] Failed to clear QPixmapCache during shadow reset", exc_info=True)
 
 
 # ---------------------------------------------------------------------------

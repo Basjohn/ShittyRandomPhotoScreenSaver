@@ -261,8 +261,8 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 - **image_cache.py**: ImgurImageCache - LRU disk cache (100MB max), GIF-to-first-frame conversion, high-DPI pixmap loading, **metadata persistence after every put**, **auto-rebuild from files if metadata missing**
 - **Features**: Concurrent downloads (4 at a time), cell pixmap caching, click-to-browser, header with logo colorization, fade coordination
 - **Limitation**: Only 160x160 thumbnails available - Imgur deprecated size suffixes and gallery parsing requires JS rendering
-| Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer |
-| Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | Receives global card border width each frame (u_border_width) so bubble shader matches BaseOverlayWidget immediately |
+| Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer (tracks `_sine_line{1,2,3}_shift` + `line_offset_bias`; teardown pipeline now drives ShadowFadeProfile fade-out → engine cancel/reset → wait-for-fresh-bars gate before fade-in; card height changes are deferred until fade-in to avoid resize-before-fade flicker) |
+| Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | Receives global card border width each frame (u_border_width); sine-line shift uniforms now upload only when `mode == 'sine_wave'` (audit §8) |
 | Spotify Volume | widgets/spotify_volume_widget.py | SpotifyVolumeWidget | widgets.spotify_volume |
 | Mute Button | widgets/mute_button_widget.py | MuteButtonWidget | widgets.media.mute_button_enabled |
 
@@ -272,7 +272,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 |--------|------|-------------|---------|
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
 | Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE/BUBBLE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
-| Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction |
+| Shared Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction; `_compute_gate_token` invalidates stale FFT tasks; `generation_id` + `latest_generation_with_frame` let widgets await fresh frames before resuming |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars | DSP/FFT bar computation pipeline (inline, extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); all defaults raised +1.0x |

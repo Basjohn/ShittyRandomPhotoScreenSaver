@@ -8,8 +8,9 @@ All functions accept the widget instance as the first parameter.
 from __future__ import annotations
 
 import logging
+import sys
 import time
-from typing import Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 import weakref
 
@@ -429,37 +430,63 @@ def push_spotify_visualizer_frame(
                     pixel_shift_manager.register_widget(overlay)
                 except Exception:
                     logger.debug("[SPOTIFY_VIS] Failed to register GL overlay with PixelShiftManager", exc_info=True)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to initialize SpotifyBarsGLOverlay", exc_info=True)
             widget._widget._spotify_bars_overlay = None
             return False
 
     if overlay is None:
+        logger.warning("[SPOTIFY_VIS] Missing SpotifyBarsGLOverlay after initialization; visualizer bars will be blank")
         return False
 
-    try:
-        overlay.set_state(
-            geom,
-            bars,
-            bar_count,
-            segments,
-            fill_color,
-            border_color,
-            fade,
-            playing,
-            visible=True,
-            ghosting_enabled=ghosting_enabled,
-            ghost_alpha=ghost_alpha,
-            ghost_decay=ghost_decay,
-            vis_mode=vis_mode,
-            **extra_kwargs,
+    if not hasattr(overlay, "clear_overlay_buffer"):
+        module_name = type(overlay).__module__
+        module = sys.modules.get(module_name)
+        module_path = getattr(module, "__file__", "<unknown>")
+        logger.critical(
+            "[SPOTIFY_VIS] SpotifyBarsGLOverlay missing clear_overlay_buffer (module=%s path=%s). "
+            "Ensure code reload or delete stale pyc files.",
+            module_name,
+            module_path,
         )
-        pixel_shift_manager = getattr(widget, "_pixel_shift_manager", None)
-        if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
-            try:
-                pixel_shift_manager.update_original_position(overlay)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to sync GL overlay baseline with PixelShiftManager", exc_info=True)
+        raise RuntimeError("SpotifyBarsGLOverlay missing clear_overlay_buffer; stale build detected")
+
+    try:
+        overlay_kwargs = {
+            "rect": geom,
+            "bars": bars,
+            "bar_count": bar_count,
+            "segments": segments,
+            "fill_color": fill_color,
+            "border_color": border_color,
+            "fade": fade,
+            "playing": playing,
+            "visible": True,
+            "ghosting_enabled": ghosting_enabled,
+            "ghost_alpha": ghost_alpha,
+            "ghost_decay": ghost_decay,
+            "vis_mode": vis_mode,
+        }
+        overlay_kwargs.update(extra_kwargs)
+
+        try:
+            overlay.set_state(**overlay_kwargs)
+        except TypeError as exc:
+            # Fallback: strip keys the current overlay implementation does not accept.
+            unexpected = []
+            msg = str(exc)
+            if "got an unexpected keyword argument" in msg:
+                # extract the offending arg name to remove it and retry.
+                start = msg.find("'")
+                end = msg.find("'", start + 1)
+                if start != -1 and end != -1:
+                    unexpected.append(msg[start + 1:end])
+            if unexpected:
+                for key in unexpected:
+                    overlay_kwargs.pop(key, None)
+                overlay.set_state(**overlay_kwargs)
+            else:
+                raise
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)
         return False

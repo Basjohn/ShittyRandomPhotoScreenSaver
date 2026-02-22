@@ -261,6 +261,28 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_vshift_row.addWidget(tab.sine_vertical_shift_label)
     _adv.addLayout(sine_vshift_row)
 
+    # Line 1 Horizontal Shift
+    sine_l1_shift_row = QHBoxLayout()
+    sine_l1_shift_row.addWidget(QLabel("Line 1 Horizontal Shift:"))
+    tab.sine_line1_shift = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_line1_shift.setMinimum(-100)
+    tab.sine_line1_shift.setMaximum(100)
+    sine_l1_shift_val = int(tab._default_float('spotify_visualizer', 'sine_line1_shift', 0.0) * 100)
+    tab.sine_line1_shift.setValue(max(-100, min(100, sine_l1_shift_val)))
+    tab.sine_line1_shift.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_line1_shift.setTickInterval(10)
+    tab.sine_line1_shift.setToolTip(
+        "Phase offset for the primary sine line. Negative values lead, positive values lag."
+    )
+    tab.sine_line1_shift.valueChanged.connect(tab._save_settings)
+    sine_l1_shift_row.addWidget(tab.sine_line1_shift)
+    tab.sine_line1_shift_label = QLabel(f"{sine_l1_shift_val / 100.0:.2f} cycles")
+    tab.sine_line1_shift.valueChanged.connect(
+        lambda v: tab.sine_line1_shift_label.setText(f"{v / 100.0:.2f} cycles")
+    )
+    sine_l1_shift_row.addWidget(tab.sine_line1_shift_label)
+    _adv.addLayout(sine_l1_shift_row)
+
     # Multi-line
     tab.sine_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
     tab.sine_multi_line.setChecked(
@@ -321,6 +343,29 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_travel_line2.currentIndexChanged.connect(tab._save_settings)
     sine_l2_row.addWidget(tab.sine_travel_line2)
     sine_l2_row.addStretch()
+    # Line 2 horizontal shift (visible when multi-line enabled)
+    sine_l2_shift_col = QVBoxLayout()
+    sine_l2_shift_label = QLabel("Horizontal Shift")
+    sine_l2_shift_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    sine_l2_shift_col.addWidget(sine_l2_shift_label)
+    tab.sine_line2_shift = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_line2_shift.setMinimum(-100)
+    tab.sine_line2_shift.setMaximum(100)
+    sine_l2_shift_val = int(tab._default_float('spotify_visualizer', 'sine_line2_shift', 0.0) * 100)
+    tab.sine_line2_shift.setValue(max(-100, min(100, sine_l2_shift_val)))
+    tab.sine_line2_shift.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_line2_shift.setTickInterval(10)
+    tab.sine_line2_shift.setToolTip(
+        "Phase offset for line 2 relative to card width (negative = lead, positive = lag)."
+    )
+    tab.sine_line2_shift.valueChanged.connect(tab._save_settings)
+    tab.sine_line2_shift_label = QLabel(f"{sine_l2_shift_val / 100.0:.2f} cycles")
+    tab.sine_line2_shift.valueChanged.connect(
+        lambda v: tab.sine_line2_shift_label.setText(f"{v / 100.0:.2f} cycles")
+    )
+    sine_l2_shift_col.addWidget(tab.sine_line2_shift)
+    sine_l2_shift_col.addWidget(tab.sine_line2_shift_label)
+    sine_l2_row.addLayout(sine_l2_shift_col)
     sine_ml_layout.addLayout(sine_l2_row)
 
     tab._sine_line3_label = QLabel("Line 3:")
@@ -355,6 +400,28 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_travel_line3.currentIndexChanged.connect(tab._save_settings)
     sine_l3_row.addWidget(tab.sine_travel_line3)
     sine_l3_row.addStretch()
+    sine_l3_shift_col = QVBoxLayout()
+    sine_l3_shift_label = QLabel("Horizontal Shift")
+    sine_l3_shift_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    sine_l3_shift_col.addWidget(sine_l3_shift_label)
+    tab.sine_line3_shift = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_line3_shift.setMinimum(-100)
+    tab.sine_line3_shift.setMaximum(100)
+    sine_l3_shift_val = int(tab._default_float('spotify_visualizer', 'sine_line3_shift', 0.0) * 100)
+    tab.sine_line3_shift.setValue(max(-100, min(100, sine_l3_shift_val)))
+    tab.sine_line3_shift.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_line3_shift.setTickInterval(10)
+    tab.sine_line3_shift.setToolTip(
+        "Phase offset for line 3 relative to card width (negative = lead, positive = lag)."
+    )
+    tab.sine_line3_shift.valueChanged.connect(tab._save_settings)
+    tab.sine_line3_shift_label = QLabel(f"{sine_l3_shift_val / 100.0:.2f} cycles")
+    tab.sine_line3_shift.valueChanged.connect(
+        lambda v: tab.sine_line3_shift_label.setText(f"{v / 100.0:.2f} cycles")
+    )
+    sine_l3_shift_col.addWidget(tab.sine_line3_shift)
+    sine_l3_shift_col.addWidget(tab.sine_line3_shift_label)
+    sine_l3_row.addLayout(sine_l3_shift_col)
     sine_ml_layout.addWidget(tab._sine_l3_row_widget)
 
     _adv.addWidget(tab._sine_multi_container)

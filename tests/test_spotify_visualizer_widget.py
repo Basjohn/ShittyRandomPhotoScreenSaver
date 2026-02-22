@@ -6,13 +6,14 @@ from typing import Callable
 import pytest
 
 from utils.lockfree import TripleBuffer
+from widgets.spotify_visualizer import mode_transition
 from widgets.spotify_visualizer_widget import (
     SpotifyVisualizerAudioWorker,
     SpotifyVisualizerWidget,
     _AudioFrame,
 )
 import widgets.spotify_visualizer_widget as vis_mod
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect
 
 
 def _require_numpy() -> "Callable[[], object]":
@@ -133,6 +134,7 @@ class _FakeEngine:
         self.thread_manager = None
         self.acquired = 0
         self.started = 0
+        self.reset_calls = 0
 
     def set_floor_config(self, dyn: bool, floor: float) -> None:
         self.last_floor_config = (dyn, floor)
@@ -151,6 +153,9 @@ class _FakeEngine:
 
     def ensure_started(self) -> None:
         self.started += 1
+
+    def reset_smoothing_state(self) -> None:
+        self.reset_calls += 1
 
 
 @pytest.mark.qt
@@ -180,6 +185,29 @@ def test_spotify_visualizer_replays_config_on_start(qt_app, qtbot, monkeypatch):
 
     assert fake_engine.last_floor_config == (False, 0.3)
     assert fake_engine.last_sensitivity_config == (False, 2.4)
+
+
+@pytest.mark.qt
+def test_mode_cycle_resets_engine_smoothing(qt_app, qtbot, monkeypatch):
+    fake_engine = _FakeEngine()
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=12)
+    qtbot.addWidget(widget)
+
+    widget._cached_vis_kwargs = {"spectrum_single_piece": True}  # type: ignore[attr-defined]
+
+    assert mode_transition.cycle_mode(widget) is True
+
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(widget, now)
+
+    assert fake_engine.reset_calls >= 1
 
 @pytest.mark.qt
 def test_spotify_visualizer_widgets_share_audio_engine(qt_app, qtbot):
@@ -235,41 +263,199 @@ def test_compute_bars_returns_list_or_none(np_module):
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_media_update_requires_visible_anchor(qt_app, qtbot, monkeypatch):
-    """Visualizer should only fade in when anchor media widget is visible."""
+def test_mode_cycle_replays_cached_config(qt_app, qtbot, monkeypatch):
+    """Double-click mode cycle should replay cached kwargs for parity with settings apply."""
 
-    vis = SpotifyVisualizerWidget(parent=None, bar_count=12)
-    qtbot.addWidget(vis)
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=12)
+    qtbot.addWidget(widget)
 
-    anchor = QWidget()
-    qtbot.addWidget(anchor)
-    anchor.resize(200, 80)
-    anchor.hide()
+    widget._cached_vis_kwargs = {"sine_travel_line2": 0.42}  # type: ignore[attr-defined]
 
-    vis.set_anchor_media_widget(anchor)
-    vis.hide()
+    original_reset = SpotifyVisualizerWidget._reset_visualizer_state
+    replay_flags: dict[str, bool | None] = {"replay": None}
 
-    fade_calls: list[int] = []
+    def _patched_reset(self, *, clear_overlay: bool = False, replay_cached: bool = False):
+        replay_flags["replay"] = replay_cached
+        return original_reset(self, clear_overlay=clear_overlay, replay_cached=replay_cached)
 
-    def _fake_fade(duration_ms: int = 1500) -> None:
-        fade_calls.append(duration_ms)
-        vis.show()
+    monkeypatch.setattr(SpotifyVisualizerWidget, "_reset_visualizer_state", _patched_reset)
 
-    monkeypatch.setattr(vis, "_start_widget_fade_in", _fake_fade)
+    assert mode_transition.cycle_mode(widget) is True
+    # Fast-forward fade-out completion (phase 1 → phase 2)
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(widget, now)
 
-    vis.handle_media_update({"state": "playing"})
-    qt_app.processEvents()
+    assert (
+        replay_flags["replay"] is True
+    ), "Mode cycle should cold-reset and replay cached kwargs for reactivity parity"
 
-    assert fade_calls == []
-    assert not vis.isVisible()
 
-    anchor.show()
-    qt_app.processEvents()
+@pytest.mark.qt
+def test_mode_transition_reset_preserves_timestamp(qt_app, qtbot, monkeypatch):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    qtbot.addWidget(widget)
 
-    vis.handle_media_update({"state": "playing"})
-    qt_app.processEvents()
+    widget._mode_transition_phase = 1
+    widget._mode_transition_ts = 123.456
+    widget._cached_vis_kwargs = {"spectrum_single_piece": True}  # type: ignore[attr-defined]
 
-    assert fade_calls == [1500]
+    applied = {"called": False}
+
+    def _fake_apply(target, kwargs):
+        applied["called"] = True
+
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.config_applier.apply_vis_mode_kwargs",
+        _fake_apply,
+    )
+
+    widget._reset_visualizer_state(clear_overlay=False, replay_cached=True)
+
+    assert applied["called"] is True
+    assert widget._mode_transition_phase == 1
+    assert widget._mode_transition_ts == pytest.approx(123.456)
+
+
+@pytest.mark.qt
+def test_mode_cycle_without_transitions_behaves_like_cold_start(qt_app, qtbot, monkeypatch):
+    """Disabling transitions should still make double-click cycles match a full reset."""
+
+    fake_engine = _FakeEngine()
+    fake_engine._smoothed_bars = [0.5] * 8  # type: ignore[attr-defined]
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
+    qtbot.addWidget(widget)
+
+    # Seed bars so we can measure parity after cycling
+    widget._display_bars = [0.25] * 8  # type: ignore[attr-defined]
+    widget._target_bars = [0.5] * 8  # type: ignore[attr-defined]
+    widget._last_smooth_ts = 123.0  # type: ignore[attr-defined]
+
+    # Execute cycle directly (simulates double-click when transitions off)
+    mode_transition.cycle_mode(widget)
+
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    fade = mode_transition.mode_transition_fade_factor(widget, now)
+
+    # Cold reset should run while transition remains mid-fade (phase 3 waiting).
+    assert widget._mode_transition_phase == 3
+    assert fade == pytest.approx(0.0)
+    assert widget._mode_transition_ts == pytest.approx(now)
+    assert widget._display_bars == [0.0] * 8
+    assert widget._target_bars == [0.0] * 8
+    assert widget._last_smooth_ts == pytest.approx(0.0)
+
+
+@pytest.mark.qt
+def test_mode_cycle_preserves_transition_resume_ts(qt_app, qtbot):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    qtbot.addWidget(widget)
+
+    # Initiate a mode cycle
+    assert mode_transition.cycle_mode(widget) is True
+
+    prev_ts = widget._mode_transition_ts
+    assert prev_ts > 0.0
+
+    # Fast-forward fade-out completion
+    now = prev_ts + widget._mode_transition_duration + 0.05
+    fade = mode_transition.mode_transition_fade_factor(widget, now)
+
+    assert fade == pytest.approx(0.0)
+    assert widget._mode_transition_phase == 3
+    assert widget._mode_transition_ts == pytest.approx(now)
+    assert widget._mode_transition_resume_ts == 0.0
+
+
+@pytest.mark.qt
+def test_cold_reset_ignores_transition_resume(qt_app, qtbot):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=6)
+    qtbot.addWidget(widget)
+
+    widget._mode_transition_phase = 0
+    widget._mode_transition_ts = 0.0
+    widget._mode_transition_resume_ts = 42.0
+
+    widget._reset_visualizer_state(clear_overlay=False, replay_cached=False)
+
+    assert widget._mode_transition_ts == 0.0
+    assert widget._mode_transition_resume_ts == 0.0
+
+
+@pytest.mark.qt
+def test_clear_gl_overlay_destroys_overlay(qt_app, qtbot):
+    class _PixelShiftStub:
+        def __init__(self) -> None:
+            self.unregistered: list[QWidget] = []
+
+        def unregister_widget(self, widget: QWidget) -> None:
+            self.unregistered.append(widget)
+
+    class _OverlayStub(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.hide_calls = 0
+            self.cleanup_calls = 0
+            self.delete_calls = 0
+
+        def hide(self) -> None:  # type: ignore[override]
+            self.hide_calls += 1
+
+        def cleanup_gl(self) -> None:
+            self.cleanup_calls += 1
+
+        def deleteLater(self) -> None:  # type: ignore[override]
+            self.delete_calls += 1
+
+    class _OverlayParent(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self._spotify_bars_overlay = _OverlayStub()
+            self._pixel_shift_manager = _PixelShiftStub()
+
+    parent = _OverlayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+    widget.setGraphicsEffect(QGraphicsDropShadowEffect(widget))
+
+    widget._clear_gl_overlay()
+
+    assert parent._spotify_bars_overlay is None
+    stub: _OverlayStub = parent._pixel_shift_manager.unregistered[0]  # type: ignore[index]
+    assert stub.hide_calls == 1
+    assert stub.cleanup_calls == 1
+    assert stub.delete_calls == 1
+
+
+@pytest.mark.qt
+def test_shadow_cache_invalidated_once_per_cycle(qt_app, qtbot, monkeypatch):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget._pending_shadow_cache_invalidation = True  # type: ignore[attr-defined]
+    widget.setGraphicsEffect(QGraphicsDropShadowEffect(widget))
+
+    called = {"count": 0}
+
+    def _fake_clear_cache(target_widget: QWidget) -> None:
+        called["count"] += 1
+        assert target_widget is widget
+
+    monkeypatch.setattr(vis_mod, "clear_cached_shadow_for_widget", _fake_clear_cache)
+
+    widget._invalidate_shadow_cache_if_needed()
+
+    assert called["count"] == 1
+    assert widget.graphicsEffect() is None
+    assert widget._pending_shadow_cache_invalidation is False  # type: ignore[attr-defined]
 
 
 @pytest.mark.qt
