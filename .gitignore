@@ -33,6 +33,7 @@ audits/
 htmlcov/
 .coverage
 .coverage.*
+Current_Plan.md
 
 # IDE and editor files
 .vscode/

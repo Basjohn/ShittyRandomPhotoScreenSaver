@@ -492,7 +492,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_pos_data = bubble_pos_data or []
         self._bubble_extra_data = bubble_extra_data or []
         self._bubble_trail_data = bubble_trail_data or []
-        self._bubble_trail_strength = max(0.0, min(1.0, float(bubble_trail_strength)))
+        self._bubble_trail_strength = max(0.0, min(1.5, float(bubble_trail_strength)))
         if bubble_outline_color is not None:
             self._bubble_outline_color = QColor(bubble_outline_color) if not isinstance(bubble_outline_color, QColor) else bubble_outline_color
         if bubble_specular_color is not None:
@@ -1574,15 +1574,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         extra_buf[i] = float(extra_data[i])
                     _gl.glUniform4fv(loc, 110, extra_buf)
 
-                # Bubble trail data (vec2 array: TRAIL_STEPS xy pairs per bubble)
+                # Bubble trail data (vec3 array: TRAIL_STEPS xy + strength per bubble)
                 loc = u.get("u_bubbles_trail", -1)
                 if loc >= 0 and bcount > 0:
                     trail_data = self._bubble_trail_data
-                    trail_buf = np.zeros(110 * 3 * 2, dtype="float32")  # TRAIL_STEPS=3, xy=2
-                    copy_len = min(len(trail_data), 110 * 3 * 2)
+                    trail_buf = np.zeros(110 * 3 * 3, dtype="float32")  # TRAIL_STEPS=3, xyz
+                    copy_len = min(len(trail_data), 110 * 3 * 3)
                     for i in range(copy_len):
                         trail_buf[i] = float(trail_data[i])
-                    _gl.glUniform2fv(loc, 110 * 3, trail_buf)
+                    _gl.glUniform3fv(loc, 110 * 3, trail_buf)
 
                 loc = u.get("u_trail_strength", -1)
                 if loc >= 0:

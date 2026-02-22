@@ -290,8 +290,14 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if val not in ('none', 'up', 'down', 'left', 'right', 'diagonal', 'random'):
             val = 'up'
         widget._bubble_stream_direction = val
-    if 'bubble_stream_speed' in kwargs:
-        widget._bubble_stream_speed = max(0.0, min(1.5, float(kwargs['bubble_stream_speed'])))
+    if 'bubble_stream_constant_speed' in kwargs:
+        widget._bubble_stream_constant_speed = max(
+            0.0, min(2.0, float(kwargs['bubble_stream_constant_speed']))
+        )
+    if 'bubble_stream_speed_cap' in kwargs:
+        widget._bubble_stream_speed_cap = max(
+            0.1, min(2.5, float(kwargs['bubble_stream_speed_cap']))
+        )
     if 'bubble_stream_reactivity' in kwargs:
         widget._bubble_stream_reactivity = max(0.0, min(1.0, float(kwargs['bubble_stream_reactivity'])))
     if 'bubble_rotation_amount' in kwargs:
@@ -345,7 +351,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'bubble_growth' in kwargs:
         widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
     if 'bubble_trail_strength' in kwargs:
-        widget._bubble_trail_strength = max(0.0, min(1.0, float(kwargs['bubble_trail_strength'])))
+        # Trails are temporarily disabled until the gradient taper rework lands.
+        widget._bubble_trail_strength = 0.0
 
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:

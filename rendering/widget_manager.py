@@ -25,6 +25,7 @@ from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings,
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_factories import WidgetFactoryRegistry
+from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
@@ -485,18 +486,14 @@ class WidgetManager:
         border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=border_opacity)
 
         show_background = SettingsManager.to_bool(settings_map.get("show_background", True), True)
-        try:
-            border_width = int(settings_map.get("border_width", 2) or 2)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            border_width = 2
+        border_width = BaseOverlayWidget.get_global_border_width()
 
         try:
             vis_widget.set_bar_style(
                 bg_color=bg_qcolor or parse_color_to_qcolor([64, 64, 64, 255]),
                 bg_opacity=bg_opacity,
                 border_color=border_qcolor or parse_color_to_qcolor([128, 128, 128, 255]),
-                border_width=max(0, border_width),
+                border_width=border_width,
                 show_background=show_background,
             )
         except Exception:
@@ -618,7 +615,8 @@ class WidgetManager:
             if hasattr(media_widget, 'set_background_border'):
                 border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=model.border_opacity)
                 if border_qcolor:
-                    media_widget.set_background_border(2, border_qcolor)
+                    current_width = getattr(media_widget, '_bg_border_width', None)
+                    media_widget.set_background_border(current_width if current_width is not None else media_widget.get_global_border_width(), border_qcolor)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply media background/border", exc_info=True)
 
@@ -696,7 +694,8 @@ class WidgetManager:
                 if hasattr(widget, 'set_background_border'):
                     border_qcolor = parse_color_to_qcolor(border_color_value, opacity_override=border_opacity_value)
                     if border_qcolor:
-                        widget.set_background_border(2, border_qcolor)
+                        current_width = getattr(widget, '_bg_border_width', None)
+                        widget.set_background_border(current_width if current_width is not None else widget.get_global_border_width(), border_qcolor)
                 if hasattr(widget, 'set_margin'):
                     widget.set_margin(int(margin))
             except Exception:

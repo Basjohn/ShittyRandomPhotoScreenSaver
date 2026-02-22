@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QWidget
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
 from rendering.widget_setup import parse_color_to_qcolor
+from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
@@ -109,6 +110,8 @@ class ClockWidgetFactory(WidgetFactory):
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
         
+        border_width = BaseOverlayWidget.get_global_border_width()
+
         try:
             # Style inheritance helper for secondary clocks
             def _resolve_style(key: str, default):
@@ -188,7 +191,7 @@ class ClockWidgetFactory(WidgetFactory):
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
             if border_qcolor and hasattr(widget, "set_background_border"):
-                widget.set_background_border(2, border_qcolor)
+                widget.set_background_border(border_width, border_qcolor)
             
             widget.set_show_background(show_background)
             widget.set_background_opacity(bg_opacity)
@@ -266,6 +269,8 @@ class WeatherWidgetFactory(WidgetFactory):
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
         
+        border_width = BaseOverlayWidget.get_global_border_width()
+
         try:
             # Position mapping
             position_map = {
@@ -325,7 +330,7 @@ class WeatherWidgetFactory(WidgetFactory):
                 bo = 1.0
             border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
             if border_qcolor:
-                widget.set_background_border(2, border_qcolor)
+                widget.set_background_border(border_width, border_qcolor)
             
             # Forecast
             show_forecast = SettingsManager.to_bool(config.get('show_forecast', False), False)
@@ -406,6 +411,8 @@ class MediaWidgetFactory(WidgetFactory):
         if not SettingsManager.to_bool(model.enabled, False):
             return None
         
+        border_width = BaseOverlayWidget.get_global_border_width()
+
         try:
             # Position mapping
             position_map = {
@@ -459,7 +466,7 @@ class MediaWidgetFactory(WidgetFactory):
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(model.border_color, opacity_override=bo)
             if border_qcolor:
-                widget.set_background_border(2, border_qcolor)
+                widget.set_background_border(border_width, border_qcolor)
             
             # Controls and header
             show_controls = SettingsManager.to_bool(model.show_controls, True)
@@ -512,6 +519,8 @@ class RedditWidgetFactory(WidgetFactory):
         if not SettingsManager.to_bool(model.enabled, False):
             return None
         
+        border_width = BaseOverlayWidget.get_global_border_width()
+
         try:
             # Style inheritance helper for reddit2
             style_fallback = base_reddit_settings if (settings_key == 'reddit2' and isinstance(base_reddit_settings, dict)) else None
@@ -599,7 +608,7 @@ class RedditWidgetFactory(WidgetFactory):
                 bo = 0.8
             border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
             if border_qcolor and hasattr(widget, 'set_background_border'):
-                widget.set_background_border(2, border_qcolor)
+                widget.set_background_border(border_width, border_qcolor)
             
             # Reddit-specific settings
             subreddit = model.subreddit or 'pics'
@@ -742,6 +751,8 @@ class ImgurWidgetFactory(WidgetFactory):
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
         
+        border_width = BaseOverlayWidget.get_global_border_width()
+
         try:
             # Position mapping
             position_map = {
@@ -815,7 +826,7 @@ class ImgurWidgetFactory(WidgetFactory):
                 bo = 1.0
             border_qcolor = parse_color_to_qcolor(border_color, opacity_override=bo)
             if border_qcolor and hasattr(widget, 'set_background_border'):
-                widget.set_background_border(2, border_qcolor)
+                widget.set_background_border(border_width, border_qcolor)
             
             # Imgur-specific settings
             custom_tag = config.get('custom_tag', '')

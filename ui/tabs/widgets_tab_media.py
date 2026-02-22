@@ -19,11 +19,24 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.settings_binding import (
+    ColorBinding,
+    apply_bindings_load,
+    collect_bindings_save,
+)
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
 
 logger = get_logger(__name__)
+
+
+_OSC_MULTI_LINE_COLOR_BINDINGS = [
+    ColorBinding('osc_line2_color', '_osc_line2_color', [255, 120, 50, 230]),
+    ColorBinding('osc_line2_glow_color', '_osc_line2_glow_color', [255, 120, 50, 180]),
+    ColorBinding('osc_line3_color', '_osc_line3_color', [50, 255, 120, 230]),
+    ColorBinding('osc_line3_glow_color', '_osc_line3_glow_color', [50, 255, 120, 180]),
+]
 
 
 def _update_media_enabled_visibility(tab) -> None:
@@ -716,18 +729,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     if hasattr(tab, 'osc_line_count'):
         tab.osc_line_count.setValue(max(2, min(3, osc_line_count)))
         tab.osc_line_count_label.setText(str(max(2, min(3, osc_line_count))))
-    for attr, key, fallback in (
-        ('_osc_line2_color', 'osc_line2_color', [255, 120, 50, 230]),
-        ('_osc_line2_glow_color', 'osc_line2_glow_color', [255, 120, 50, 180]),
-        ('_osc_line3_color', 'osc_line3_color', [50, 255, 120, 230]),
-        ('_osc_line3_glow_color', 'osc_line3_glow_color', [50, 255, 120, 180]),
-    ):
-        data = spotify_vis_config.get(key, fallback)
-        try:
-            setattr(tab, attr, QColor(*data))
-        except Exception:
-            logger.debug("[MEDIA_TAB] Failed to set %s=%s", attr, data, exc_info=True)
-            setattr(tab, attr, QColor(*fallback))
+    apply_bindings_load(tab, spotify_vis_config, _OSC_MULTI_LINE_COLOR_BINDINGS)
     _apply_color_to_button('osc_line2_color_btn', '_osc_line2_color')
     _apply_color_to_button('osc_line2_glow_btn', '_osc_line2_glow_color')
     _apply_color_to_button('osc_line3_color_btn', '_osc_line3_color')
@@ -1017,10 +1019,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         sd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_stream_direction', 'up').lower()
         sd_map = {"none": 0, "up": 1, "down": 2, "left": 3, "right": 4, "diagonal": 5, "random": 6}
         tab.bubble_stream_direction.setCurrentIndex(sd_map.get(sd, 1))
-    if hasattr(tab, 'bubble_stream_speed'):
-        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_speed', 1.0) * 100)
-        tab.bubble_stream_speed.setValue(max(0, min(150, v)))
-        tab.bubble_stream_speed_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_stream_constant_speed'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_constant_speed', 0.5) * 100)
+        tab.bubble_stream_constant_speed.setValue(max(0, min(200, v)))
+        tab.bubble_stream_constant_speed_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_stream_speed_cap'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_speed_cap', 2.0) * 100)
+        tab.bubble_stream_speed_cap.setValue(max(50, min(250, v)))
+        tab.bubble_stream_speed_cap_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_stream_reactivity'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_reactivity', 0.5) * 100)
         tab.bubble_stream_reactivity.setValue(max(0, min(100, v)))
@@ -1074,9 +1080,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_growth.setValue(max(100, min(500, bubble_growth_val)))
         tab.bubble_growth_label.setText(f"{bubble_growth_val / 100.0:.1f}x")
     if hasattr(tab, 'bubble_trail_strength'):
-        trail_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_trail_strength', 0.0) * 100)
-        tab.bubble_trail_strength.setValue(max(0, min(100, trail_val)))
-        tab.bubble_trail_strength_label.setText(f"{trail_val}%")
+        tab.bubble_trail_strength.setValue(0)
+        tab.bubble_trail_strength.setEnabled(False)
+        tab.bubble_trail_strength_label.setText("0%")
+        tab.bubble_trail_strength_label.setEnabled(False)
     # Bubble colours
     for attr, key, default in (
         ('_bubble_outline_color', 'bubble_outline_color', [255, 255, 255, 230]),
@@ -1186,10 +1193,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_line_color': _qcolor_to_list(getattr(tab, '_osc_line_color', None), [255, 255, 255, 255]),
         'osc_glow_color': _qcolor_to_list(getattr(tab, '_osc_glow_color', None), [0, 200, 255, 230]),
         'osc_line_count': (tab.osc_line_count.value() if hasattr(tab, 'osc_line_count') and hasattr(tab, 'osc_multi_line') and tab.osc_multi_line.isChecked() else 1),
-        'osc_line2_color': _qcolor_to_list(getattr(tab, '_osc_line2_color', None), [255, 120, 50, 230]),
-        'osc_line2_glow_color': _qcolor_to_list(getattr(tab, '_osc_line2_glow_color', None), [255, 120, 50, 180]),
-        'osc_line3_color': _qcolor_to_list(getattr(tab, '_osc_line3_color', None), [50, 255, 120, 230]),
-        'osc_line3_glow_color': _qcolor_to_list(getattr(tab, '_osc_line3_glow_color', None), [50, 255, 120, 180]),
         'star_density': getattr(tab, '_star_density_value', 1.0),
         'star_travel_speed': (tab.star_travel_speed.value() if hasattr(tab, 'star_travel_speed') else 50) / 100.0,
         'star_reactivity': (tab.star_reactivity.value() if hasattr(tab, 'star_reactivity') else 100) / 100.0,
@@ -1261,7 +1264,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_big_bass_pulse': (tab.bubble_big_bass_pulse.value() if hasattr(tab, 'bubble_big_bass_pulse') else 50) / 100.0,
         'bubble_small_freq_pulse': (tab.bubble_small_freq_pulse.value() if hasattr(tab, 'bubble_small_freq_pulse') else 50) / 100.0,
         'bubble_stream_direction': (tab.bubble_stream_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_stream_direction') else 'up'),
-        'bubble_stream_speed': (tab.bubble_stream_speed.value() if hasattr(tab, 'bubble_stream_speed') else 100) / 100.0,
+        'bubble_stream_constant_speed': (tab.bubble_stream_constant_speed.value() if hasattr(tab, 'bubble_stream_constant_speed') else 50) / 100.0,
+        'bubble_stream_speed_cap': (tab.bubble_stream_speed_cap.value() if hasattr(tab, 'bubble_stream_speed_cap') else 200) / 100.0,
         'bubble_stream_reactivity': (tab.bubble_stream_reactivity.value() if hasattr(tab, 'bubble_stream_reactivity') else 50) / 100.0,
         'bubble_rotation_amount': (tab.bubble_rotation_amount.value() if hasattr(tab, 'bubble_rotation_amount') else 50) / 100.0,
         'bubble_drift_amount': (tab.bubble_drift_amount.value() if hasattr(tab, 'bubble_drift_amount') else 50) / 100.0,
@@ -1282,6 +1286,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
         'bubble_trail_strength': (tab.bubble_trail_strength.value() if hasattr(tab, 'bubble_trail_strength') else 0) / 100.0,
     }
+    spotify_vis_config.update(collect_bindings_save(tab, _OSC_MULTI_LINE_COLOR_BINDINGS))
     # Preset indices per mode
     _ps_map = {
         'spectrum': '_spectrum_preset_slider',

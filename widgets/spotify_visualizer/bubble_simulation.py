@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from core.logging.logger import get_logger
@@ -23,7 +23,13 @@ logger = get_logger(__name__)
 MAX_BUBBLES = 110
 
 
-TRAIL_STEPS = 3  # number of ghost trail positions stored per bubble
+TRAIL_STEPS = 3  # uniform layout still reserves 3 vec3 slots per bubble
+# Smear tail behaviour: trail_tail slowly chases each bubble, forming a streak
+TRAIL_SMEAR_FOLLOW_RATE = 1.4   # how quickly tails chase heads (per second)
+TRAIL_SMEAR_FOLLOW_MAX = 0.35   # clamp per-tick lerp to keep visible lag
+TRAIL_SMEAR_DECAY_PER_SEC = 1.6  # how fast strength fades when slowing
+TRAIL_SMEAR_STRENGTH_FROM_DISTANCE = 22.0  # convert offset distance → brightness
+TRAIL_SMEAR_MAX_LENGTH = 0.55   # cap streak length to avoid card wrap
 
 
 @dataclass
@@ -47,7 +53,10 @@ class BubbleState:
     spec_size_mut: float = 1.0   # per-bubble specular size mutation (0.7–1.4)
     spec_ox: float = 0.0         # per-bubble specular offset X mutation (-0.08..0.08)
     spec_oy: float = 0.0         # per-bubble specular offset Y mutation (-0.08..0.08)
-    trail: List[Tuple[float, float]] = field(default_factory=list)  # previous (x, y) positions
+    trail_tail_x: float = 0.5
+    trail_tail_y: float = 0.5
+    trail_strength: float = 0.0
+    trail_ready: bool = False
 
 
 # Direction vectors for stream directions
@@ -121,7 +130,6 @@ class BubbleSimulation:
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
         self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
-        self._trail_accumulator: float = 0.0  # time accumulator for trail sampling
 
     @property
     def count(self) -> int:
@@ -139,7 +147,14 @@ class BubbleSimulation:
         small_target = int(settings.get("bubble_small_count", 25))
         surface_reach = float(settings.get("bubble_surface_reach", 0.6))
         stream_dir = str(settings.get("bubble_stream_direction", "up"))
-        stream_speed = float(settings.get("bubble_stream_speed", 1.0))
+        stream_const = float(settings.get(
+            "bubble_stream_constant_speed",
+            settings.get("bubble_stream_speed", 0.5),
+        ))
+        stream_cap = float(settings.get(
+            "bubble_stream_speed_cap",
+            settings.get("bubble_stream_speed", 2.0),
+        ))
         stream_reactivity = float(settings.get("bubble_stream_reactivity", 0.5))
         rotation_amount = float(settings.get("bubble_rotation_amount", 0.5))
         drift_amount = float(settings.get("bubble_drift_amount", 0.5))
@@ -150,6 +165,8 @@ class BubbleSimulation:
         self._small_size_max = float(settings.get("bubble_small_size_max", 0.018))
         trail_strength = float(settings.get("bubble_trail_strength", 0.0))
         # big_bass_pulse / small_freq_pulse are read in snapshot(), not tick()
+
+        trail_enabled = trail_strength > 0.001
 
         # Energy — accept both object (EnergyBands) and dict snapshots
         if energy_bands is None:
@@ -172,10 +189,10 @@ class BubbleSimulation:
             max_pe = max((b.pulse_energy for b in self._bubbles), default=0.0)
             logger.info(
                 "[BUBBLE_SIM] tick=%d dt=%.3f bass=%.3f mid=%.3f overall=%.3f "
-                "bubbles=%d max_pe=%.3f spd_e=%.3f speed=%.2f react=%.2f",
+                "bubbles=%d max_pe=%.3f spd_e=%.3f base=%.2f cap=%.2f react=%.2f",
                 self._diag_tick_count, dt, bass, mid, overall,
                 len(self._bubbles), max_pe, self._smoothed_speed_energy,
-                stream_speed, stream_reactivity,
+                stream_const, stream_cap, stream_reactivity,
             )
 
         # Travel speed uses SMOOTHED mid/high so it flows with the melody.
@@ -187,11 +204,19 @@ class BubbleSimulation:
             self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 18.0)
         else:
             self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 1.5)
-        # At max reactivity: speed ranges from 0.15x (silence) to 1.0x (loud vocal).
-        # At zero reactivity: speed is constant at stream_speed.
+        # Baseline + reactive cap (0 ≤ bubble speeds ≤ cap)
         speed_energy = min(1.0, self._smoothed_speed_energy)
-        speed_scale = (1.0 - stream_reactivity) + stream_reactivity * (0.15 + 0.85 * speed_energy)
-        effective_speed = stream_speed * speed_scale
+        cap = max(0.1, stream_cap)
+        baseline = max(0.05, min(cap, stream_const))
+        reactivity = max(0.0, min(1.0, stream_reactivity))
+        energy_scale = 0.15 + 0.85 * speed_energy
+        cap_mix = baseline if reactivity <= 0.0 else (
+            baseline + (cap - baseline) * (reactivity * speed_energy)
+        )
+        speed_scale = baseline if reactivity <= 0.0 else (
+            baseline * (1.0 - reactivity) + cap_mix * reactivity
+        )
+        effective_speed = speed_scale * energy_scale
         base_vel = effective_speed * 0.35  # normalised units/sec
 
         # --- Update existing bubbles ---
@@ -254,11 +279,10 @@ class BubbleSimulation:
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
 
-            # Record trail position (sampled every ~80ms)
-            if trail_strength > 0.001 and not b.popping:
-                b.trail.append((b.x, b.y))
-                if len(b.trail) > TRAIL_STEPS:
-                    b.trail.pop(0)
+            if trail_enabled:
+                self._update_trail_smear(b, dt, move_x, -move_y)
+            else:
+                self._bleed_trail_smear(b, dt)
 
             # Pulse energy: smooth per-bubble energy for visible beat-sync thump.
             raw_energy = bass if b.is_big else (mid * 0.6 + high * 0.4)
@@ -405,8 +429,71 @@ class BubbleSimulation:
             drift_bias=drift_bias, rotation=0.0,
             vx=vx, vy=vy,
             spec_size_mut=spec_size_mut, spec_ox=spec_ox, spec_oy=spec_oy,
+            trail_tail_x=x, trail_tail_y=y,
         )
         self._bubbles.append(b)
+
+    def _bleed_trail_smear(self, b: BubbleState, dt: float) -> None:
+        if b.trail_strength <= 0.0:
+            b.trail_tail_x = b.x
+            b.trail_tail_y = b.y
+            b.trail_ready = False
+            return
+        decay = TRAIL_SMEAR_DECAY_PER_SEC * 3.0 * dt
+        b.trail_strength = max(0.0, b.trail_strength - decay)
+        if b.trail_strength <= 0.0:
+            b.trail_tail_x = b.x
+            b.trail_tail_y = b.y
+            b.trail_ready = False
+
+    def _update_trail_smear(self, b: BubbleState, dt: float,
+                             move_dx: float, move_dy: float) -> None:
+        if b.popping:
+            self._bleed_trail_smear(b, dt)
+            return
+
+        if not b.trail_ready:
+            init_len = min(TRAIL_SMEAR_MAX_LENGTH,
+                           math.hypot(move_dx, move_dy) * 22.0)
+            if init_len > 1e-4:
+                mv = math.hypot(move_dx, move_dy)
+                inv = 1.0 / mv if mv > 1e-4 else 0.0
+                dir_x = move_dx * inv
+                dir_y = move_dy * inv
+                b.trail_tail_x = b.x - dir_x * init_len
+                b.trail_tail_y = b.y - dir_y * init_len
+            else:
+                b.trail_tail_x = b.x
+                b.trail_tail_y = b.y
+            b.trail_ready = True
+
+        dx = b.x - b.trail_tail_x
+        dy = b.y - b.trail_tail_y
+        dist = math.hypot(dx, dy)
+        if dist > TRAIL_SMEAR_MAX_LENGTH and dist > 1e-4:
+            excess = dist - TRAIL_SMEAR_MAX_LENGTH
+            shrink = excess / dist
+            b.trail_tail_x += dx * shrink
+            b.trail_tail_y += dy * shrink
+            dx = b.x - b.trail_tail_x
+            dy = b.y - b.trail_tail_y
+            dist = TRAIL_SMEAR_MAX_LENGTH
+
+        follow = min(TRAIL_SMEAR_FOLLOW_MAX, TRAIL_SMEAR_FOLLOW_RATE * dt)
+        b.trail_tail_x += dx * follow
+        b.trail_tail_y += dy * follow
+
+        dx = b.x - b.trail_tail_x
+        dy = b.y - b.trail_tail_y
+        dist = math.hypot(dx, dy)
+
+        target_strength = min(1.0, dist * TRAIL_SMEAR_STRENGTH_FROM_DISTANCE)
+        if target_strength > b.trail_strength:
+            attack = min(1.0, dt * 9.0)
+            b.trail_strength += (target_strength - b.trail_strength) * attack
+        else:
+            decay = TRAIL_SMEAR_DECAY_PER_SEC * dt
+            b.trail_strength = max(0.0, b.trail_strength - decay)
 
     def snapshot(self, bass: float = 0.0, mid_high: float = 0.0,
                  big_bass_pulse: float = 0.5,
@@ -416,7 +503,7 @@ class BubbleSimulation:
         Returns:
             pos_data:   [x, y, radius, alpha] × count (vec4 per bubble)
             extra_data: [spec_size_factor, rotation, spec_ox, spec_oy] × count (vec4 per bubble)
-            trail_data: [x0,y0, x1,y1, x2,y2] × count (TRAIL_STEPS xy pairs per bubble, 0,0 if no history)
+            trail_data: [tail.xy,str, mid.xy,str, head.xy,str] × count representing smear streak samples
         """
         pos_data: List[float] = []
         extra_data: List[float] = []
@@ -448,14 +535,22 @@ class BubbleSimulation:
             pos_data.extend([b.x, b.y, r, b.alpha])
             extra_data.extend([spec_factor, b.rotation, b.spec_ox, b.spec_oy])
 
-            # Trail: emit TRAIL_STEPS (x, y) pairs; pad with (0, 0) if no history yet
-            trail = b.trail
-            for step in range(TRAIL_STEPS):
-                idx = len(trail) - TRAIL_STEPS + step
-                if idx >= 0 and idx < len(trail):
-                    trail_data.extend([trail[idx][0], trail[idx][1]])
-                else:
-                    trail_data.extend([b.x, b.y])
+            # Smear trail: emit interpolated samples from tail -> head
+            if b.trail_strength > 0.001 and b.trail_ready:
+                dx = b.x - b.trail_tail_x
+                dy = b.y - b.trail_tail_y
+                for step in range(TRAIL_STEPS):
+                    if TRAIL_STEPS > 1:
+                        seg_t = float(step) / float(TRAIL_STEPS - 1)
+                    else:
+                        seg_t = 1.0
+                    sample_x = b.trail_tail_x + dx * seg_t
+                    sample_y = b.trail_tail_y + dy * seg_t
+                    falloff = 0.45 + 0.55 * seg_t
+                    trail_data.extend([sample_x, sample_y, b.trail_strength * falloff])
+            else:
+                for _ in range(TRAIL_STEPS):
+                    trail_data.extend([b.x, b.y, 0.0])
 
         # Diagnostic: log first big bubble's pulse details
         if _snap_diag and self._bubbles:

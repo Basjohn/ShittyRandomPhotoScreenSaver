@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
+from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
@@ -60,6 +61,16 @@ def setup_all_widgets(
     widgets_config = settings_manager.get('widgets', {})
     if not isinstance(widgets_config, dict):
         widgets_config = {}
+
+    def _resolve_card_border_width(config: dict) -> int:
+        try:
+            global_cfg = config.get('global', {}) if isinstance(config, dict) else {}
+            value = int(global_cfg.get('card_border_width_px', BaseOverlayWidget.get_global_border_width()))
+            return max(0, min(12, value))
+        except Exception:
+            return BaseOverlayWidget.get_global_border_width()
+
+    BaseOverlayWidget.set_global_border_width(_resolve_card_border_width(widgets_config))
 
     base_clock_settings = widgets_config.get('clock', {}) if isinstance(widgets_config, dict) else {}
     base_reddit_settings = widgets_config.get('reddit', {}) if isinstance(widgets_config, dict) else {}

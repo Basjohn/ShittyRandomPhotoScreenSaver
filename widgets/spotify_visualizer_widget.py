@@ -14,6 +14,7 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.base_overlay_widget import BaseOverlayWidget
 
 
 from utils.profiler import profile
@@ -77,7 +78,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bg_color = QColor(16, 16, 16, 255)
         self._bg_opacity: float = 0.7
         self._card_border_color = QColor(255, 255, 255, 230)
-        self._border_width: int = 2
+        self._border_width: int = BaseOverlayWidget.get_global_border_width()
 
         # Bar styling
         self._bar_fill_color = QColor(200, 200, 200, 230)
@@ -196,7 +197,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_big_bass_pulse: float = 0.5
         self._bubble_small_freq_pulse: float = 0.5
         self._bubble_stream_direction: str = "up"
-        self._bubble_stream_speed: float = 1.0
+        self._bubble_stream_constant_speed: float = 0.5
+        self._bubble_stream_speed_cap: float = 2.0
         self._bubble_stream_reactivity: float = 0.5
         self._bubble_rotation_amount: float = 0.5
         self._bubble_drift_amount: float = 0.5
@@ -692,12 +694,13 @@ class SpotifyVisualizerWidget(QWidget):
                 """
             )
 
-    def set_bar_style(self, *, bg_color: QColor, bg_opacity: float, border_color: QColor, border_width: int = 2,
+    def set_bar_style(self, *, bg_color: QColor, bg_opacity: float, border_color: QColor, border_width: Optional[int] = None,
                       show_background: bool = True) -> None:
         self._bg_color = QColor(bg_color)
         self._bg_opacity = max(0.0, min(1.0, float(bg_opacity)))
         self._card_border_color = QColor(border_color)
-        self._border_width = max(0, int(border_width))
+        resolved_width = BaseOverlayWidget.get_global_border_width() if border_width is None else int(border_width)
+        self._border_width = max(0, resolved_width)
         self._show_background = bool(show_background)
         self._update_card_style()
         self.update()
@@ -1524,7 +1527,8 @@ class SpotifyVisualizerWidget(QWidget):
                     "bubble_small_count": self._bubble_small_count,
                     "bubble_surface_reach": self._bubble_surface_reach,
                     "bubble_stream_direction": self._bubble_stream_direction,
-                    "bubble_stream_speed": self._bubble_stream_speed,
+                    "bubble_stream_constant_speed": self._bubble_stream_constant_speed,
+                    "bubble_stream_speed_cap": self._bubble_stream_speed_cap,
                     "bubble_stream_reactivity": self._bubble_stream_reactivity,
                     "bubble_rotation_amount": self._bubble_rotation_amount,
                     "bubble_drift_amount": self._bubble_drift_amount,

@@ -15,7 +15,7 @@ Per-widget UI, load, and save logic is delegated to extraction modules:
 from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QCheckBox, QPushButton,
+    QComboBox, QCheckBox, QPushButton, QSpinBox,
     QScrollArea, QButtonGroup,
 )
 from PySide6.QtCore import Signal, Qt
@@ -52,6 +52,7 @@ class WidgetsTab(QWidget):
         self._widget_defaults = self._load_widget_defaults()
         self._current_subtab = 0
         self._scroll_area: Optional[QScrollArea] = None
+        self._global_card_border_width = int(self._widget_default('global', 'card_border_width_px', 3))
         self._clock_color = self._color_from_default('clock', 'color', [255, 255, 255, 230])
         self._weather_color = self._color_from_default('weather', 'color', [255, 255, 255, 230])
         self._clock_border_color = self._color_from_default('clock', 'border_color', [128, 128, 128, 255])
@@ -243,6 +244,21 @@ class WidgetsTab(QWidget):
         )
         self.widget_shadows_enabled.stateChanged.connect(self._save_settings)
         global_row.addWidget(self.widget_shadows_enabled)
+
+        global_row.addSpacing(20)
+        border_label = QLabel("Card Border Width (px)")
+        border_label.setStyleSheet("color: #ffffff;")
+        global_row.addWidget(border_label)
+
+        self.card_border_width_spin = QSpinBox()
+        self.card_border_width_spin.setRange(0, 12)
+        self.card_border_width_spin.setValue(self._global_card_border_width)
+        self.card_border_width_spin.setToolTip(
+            "Controls the border thickness for all widget cards (media, clock, Reddit, etc.)."
+        )
+        self.card_border_width_spin.valueChanged.connect(self._on_global_border_width_changed)
+        global_row.addWidget(self.card_border_width_spin)
+
         global_row.addStretch()
         layout.addLayout(global_row)
 
@@ -426,6 +442,7 @@ class WidgetsTab(QWidget):
             # Collect all widget controls that need signal blocking
             _widget_attrs = [
                 'widget_shadows_enabled',
+                'card_border_width_spin',
                 'clock_enabled', 'clock_format', 'clock_seconds', 'clock_timezone',
                 'clock_show_tz', 'clock_position', 'clock_font_combo', 'clock_font_size',
                 'clock_margin', 'clock_show_background', 'clock_bg_opacity',
@@ -469,6 +486,16 @@ class WidgetsTab(QWidget):
             else:
                 self.widget_shadows_enabled.setChecked(True)
 
+            global_cfg = widgets.get('global', {}) if isinstance(widgets, dict) else {}
+            try:
+                border_width = int(global_cfg.get('card_border_width_px', self._widget_default('global', 'card_border_width_px', 3)))
+            except Exception:
+                border_width = self._widget_default('global', 'card_border_width_px', 3)
+            border_width = max(0, min(12, border_width))
+            self._global_card_border_width = border_width
+            if hasattr(self, 'card_border_width_spin'):
+                self.card_border_width_spin.setValue(border_width)
+
             # Delegate per-widget loading to extraction modules
             load_clock_settings(self, widgets)
             load_weather_settings(self, widgets)
@@ -499,6 +526,10 @@ class WidgetsTab(QWidget):
         if color is not None:
             self._clock_color = color
             self._save_settings()
+
+    def _on_global_border_width_changed(self, value: int) -> None:
+        self._global_card_border_width = int(value)
+        self._save_settings()
     
     def _choose_clock_bg_color(self) -> None:
         """Choose clock background color."""
@@ -773,6 +804,13 @@ class WidgetsTab(QWidget):
             shadows_config = {}
         shadows_config['enabled'] = self.widget_shadows_enabled.isChecked()
         existing_widgets['shadows'] = shadows_config
+
+        global_config = existing_widgets.get('global', {})
+        if not isinstance(global_config, dict):
+            global_config = {}
+        global_config['card_border_width_px'] = int(self._global_card_border_width)
+        existing_widgets['global'] = global_config
+
         existing_widgets['clock'] = clock_config
         existing_widgets['clock2'] = clock2_config
         existing_widgets['clock3'] = clock3_config

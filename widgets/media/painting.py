@@ -109,12 +109,14 @@ def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
     rect = QRect(left, top, width, height)
     radius = min(widget._bg_corner_radius + 1, min(rect.width(), rect.height()) / 2)
 
+    outer_width = max(1, widget._bg_border_width)
+    inner_width = max(2, outer_width - 3)
     draw_rounded_rect_with_shadow(
         painter,
         rect,
         radius,
         widget._bg_border_color,
-        max(1, widget._bg_border_width),
+        inner_width,
     )
 
 

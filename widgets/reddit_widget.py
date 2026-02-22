@@ -1489,12 +1489,14 @@ class RedditWidget(BaseOverlayWidget):
         radius = min(self._bg_corner_radius + 1, min(rect.width(), rect.height()) / 2)
 
         # Use shadow helper for border with drop shadow
+        outer_width = max(1, self._bg_border_width)
+        inner_width = max(2, outer_width - 3)
         draw_rounded_rect_with_shadow(
             painter,
             rect,
             radius,
             self._bg_border_color,
-            max(1, self._bg_border_width),
+            inner_width,
         )
 
     def _update_stylesheet(self) -> None:

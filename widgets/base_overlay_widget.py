@@ -158,6 +158,7 @@ class BaseOverlayWidget(QLabel):
     DEFAULT_BORDER_WIDTH = 3
     DEFAULT_BORDER_COLOR = QColor(128, 128, 128, 200)
     DEFAULT_TEXT_COLOR = QColor(255, 255, 255, 230)
+    _global_border_width: int = DEFAULT_BORDER_WIDTH
     
     def __init__(
         self,
@@ -189,7 +190,7 @@ class BaseOverlayWidget(QLabel):
         self._show_background = False
         self._bg_opacity = self.DEFAULT_BG_OPACITY
         self._bg_color = QColor(self.DEFAULT_BG_COLOR)
-        self._bg_border_width = self.DEFAULT_BORDER_WIDTH
+        self._bg_border_width = self.get_global_border_width()
         self._bg_border_color = QColor(self.DEFAULT_BORDER_COLOR)
         self._bg_corner_radius = 8
         
@@ -289,12 +290,39 @@ class BaseOverlayWidget(QLabel):
         self._bg_color.setAlpha(int(255 * self._bg_opacity))
         self._update_stylesheet()
     
+    @classmethod
+    def set_global_border_width(cls, width: int) -> None:
+        """Set the shared border width applied to all overlay cards."""
+        clamped = max(0, int(width))
+        if clamped == cls._global_border_width:
+            return
+        cls._global_border_width = clamped
+
+    @classmethod
+    def get_global_border_width(cls) -> int:
+        return cls._global_border_width
+
+    def _apply_border_width(self, width: int) -> bool:
+        new_width = max(0, int(width))
+        if new_width == self._bg_border_width:
+            return False
+        self._bg_border_width = new_width
+        return True
+
+    def set_card_border_width(self, width: int) -> None:
+        """Update the widget's border width while respecting global policy."""
+        if self._apply_border_width(width):
+            self._update_stylesheet()
+
     def set_background_border(self, width: int, color: QColor) -> None:
         """Set background border width and color."""
-        self._bg_border_width = max(0, int(width))
+        changed = self._apply_border_width(width)
         if isinstance(color, QColor):
-            self._bg_border_color = color
-        self._update_stylesheet()
+            if color != self._bg_border_color:
+                self._bg_border_color = color
+                changed = True
+        if changed:
+            self._update_stylesheet()
     
     def set_background_corner_radius(self, radius: int) -> None:
         """Set background corner radius."""

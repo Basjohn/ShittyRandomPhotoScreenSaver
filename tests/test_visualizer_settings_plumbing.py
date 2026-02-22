@@ -56,8 +56,8 @@ class TestBubbleGpuPushKwargs:
         """Simulation-only keys must NOT be in the GPU push."""
         sim_only_keys = {
             "bubble_big_bass_pulse", "bubble_small_freq_pulse",
-            "bubble_stream_direction", "bubble_stream_speed",
-            "bubble_stream_reactivity", "bubble_rotation_amount",
+            "bubble_stream_direction", "bubble_stream_constant_speed",
+            "bubble_stream_speed_cap", "bubble_stream_reactivity", "bubble_rotation_amount",
             "bubble_drift_amount", "bubble_drift_speed",
             "bubble_drift_frequency", "bubble_drift_direction",
             "bubble_big_count", "bubble_small_count",
@@ -327,7 +327,8 @@ class TestBubbleSimulationThreadSafety:
             "bubble_small_count": 10,
             "bubble_surface_reach": 0.6,
             "bubble_stream_direction": "up",
-            "bubble_stream_speed": 1.0,
+            "bubble_stream_constant_speed": 0.5,
+            "bubble_stream_speed_cap": 2.0,
             "bubble_stream_reactivity": 0.5,
             "bubble_rotation_amount": 0.5,
             "bubble_drift_amount": 0.5,
@@ -349,7 +350,9 @@ class TestBubbleSimulationThreadSafety:
         settings = {
             "bubble_big_count": 3, "bubble_small_count": 5,
             "bubble_surface_reach": 0.6, "bubble_stream_direction": "none",
-            "bubble_stream_speed": 1.0, "bubble_stream_reactivity": 0.0,
+            "bubble_stream_constant_speed": 0.5,
+            "bubble_stream_speed_cap": 0.5,
+            "bubble_stream_reactivity": 0.0,
             "bubble_rotation_amount": 0.0, "bubble_drift_amount": 0.0,
             "bubble_drift_speed": 0.0, "bubble_drift_frequency": 0.0,
             "bubble_drift_direction": "none",

@@ -22,8 +22,8 @@ uniform int u_bubble_count;
 uniform vec4 u_bubbles_pos[110];
 // x = specular_size_factor, y = rotation (reserved), z = spec_ox, w = spec_oy
 uniform vec4 u_bubbles_extra[110];
-// Trail: 3 previous (x,y) positions per bubble, oldest first
-uniform vec2 u_bubbles_trail[330];  // 110 * 3
+// Trail: 3 previous (x,y,strength) samples per bubble, oldest first
+uniform vec3 u_bubbles_trail[330];  // 110 * 3
 uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 
 // --- Styling ---
@@ -146,38 +146,65 @@ void main() {
     
     int count = min(u_bubble_count, 110);
 
-    // --- Motion trail ghost rings (drawn before main bubbles so they appear behind) ---
+    // --- Motion trail smear (stretched glow following each bubble) ---
     if (u_trail_strength > 0.001) {
+        float trail_strength = clamp(u_trail_strength, 0.0, 1.0);
+        float trail_boost = max(0.0, u_trail_strength - 1.0); // extra headroom up to 1.5
+        vec2 uv_aspect = vec2(uv.x * aspect, uv.y);
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
             float brad = bpos.z;
             float balpha = bpos.w;
-            if (balpha < 0.01 || brad < 4.0 * px) continue;
+            if (balpha < 0.01 || brad < 2.5 * px) continue;
 
-            float r = brad;
-            float ref_radius = 0.04;
-            float base_stroke_px = 1.2;
-            float stroke_px = clamp(base_stroke_px * (r / ref_radius), 0.5, 1.8);
-            float stroke = stroke_px * px;
+            vec3 tail_sample = u_bubbles_trail[i * 3 + 0];
+            vec3 mid_sample  = u_bubbles_trail[i * 3 + 1];
+            vec3 head_sample = u_bubbles_trail[i * 3 + 2];
+            float max_strength = max(tail_sample.z, max(mid_sample.z, head_sample.z));
+            if (max_strength < 0.001) continue;
 
-            // 3 trail steps: oldest = index 0, newest = index 2
-            for (int s = 0; s < 3; s++) {
-                vec2 txy = u_bubbles_trail[i * 3 + s];
-                // Fade: oldest trail is most transparent; step 0 = 0.25, 1 = 0.45, 2 = 0.65
-                float step_fade = (float(s) + 1.0) / 4.0;
-                float trail_alpha = u_trail_strength * step_fade * balpha * 0.55;
+            vec2 tail_aspect = vec2(tail_sample.x * aspect, tail_sample.y);
+            vec2 head_aspect = vec2(head_sample.x * aspect, head_sample.y);
+            vec2 dir = head_aspect - tail_aspect;
+            float seg_len = length(dir);
+            if (seg_len < 0.0005) continue;
+            vec2 axis = dir / seg_len;
+            vec2 rel = uv_aspect - tail_aspect;
 
-                vec2 tdelta = uv - txy;
-                tdelta.x *= aspect;
-                float tdist = length(tdelta);
+            float along = dot(rel, axis);
+            if (along < -brad * 2.5 || along > seg_len + brad * 3.0) continue;
 
-                float tring = abs(tdist - r);
-                float tring_alpha = smoothstep(stroke + px, stroke - px * 0.5, tring) * trail_alpha;
+            float along_t = clamp(along / seg_len, 0.0, 1.0);
+            vec2 perp = vec2(-axis.y, axis.x);
+            float across = dot(rel, perp);
+            float width_base = clamp(brad * 1.45, 0.012, 0.08);
+            float width = mix(width_base * 0.6, width_base, pow(along_t, 0.65));
+            float radial = 1.0 - smoothstep(0.0, width, abs(across));
+            if (radial <= 0.0) continue;
 
-                vec4 trail_col = outline_col;
-                trail_col.a *= trail_alpha;
-                result = mix(result, trail_col, tring_alpha * u_fade);
+            float segment_alpha;
+            if (along_t < 0.5) {
+                float local_t = smoothstep(0.0, 0.5, along_t);
+                segment_alpha = mix(tail_sample.z, mid_sample.z, local_t);
+            } else {
+                float local_t = smoothstep(0.5, 1.0, along_t);
+                segment_alpha = mix(mid_sample.z, head_sample.z, local_t);
             }
+
+            float longitudinal = smoothstep(0.02, 0.25, along_t) * smoothstep(1.05, 0.6, along_t);
+            float base_alpha = trail_strength * balpha * segment_alpha * radial * longitudinal;
+            float trail_alpha = base_alpha * (1.0 + trail_boost * 0.9);
+            if (trail_alpha <= 0.0005) continue;
+
+            vec3 trail_rgb = mix(
+                outline_col.rgb,
+                pop_col.rgb,
+                clamp(0.35 + along_t * 0.55 + trail_boost * 0.8, 0.0, 1.0)
+            );
+
+            float blend = clamp(trail_alpha * u_fade, 0.0, 1.0);
+            result.rgb = mix(result.rgb, trail_rgb, blend);
+            result.a = max(result.a, blend * 0.85 + balpha * 0.15);
         }
     }
 
