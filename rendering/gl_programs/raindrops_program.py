@@ -139,7 +139,8 @@ void main() {
     float newMix = clamp(max(bestLocalMix, globalMix), 0.0, 1.0);
 
     vec4 mixed = mix(base, newColor, newMix);
-    mixed.rgb += vec3(0.08) * bestRingMask;
+    float ringIntensity = (1.0 - newMix) * bestRingMask;
+    mixed.rgb += vec3(0.08) * ringIntensity;
 
     FragColor = mixed;
 }

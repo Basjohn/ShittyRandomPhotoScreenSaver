@@ -106,54 +106,9 @@ Key wins locked in for v3.0:
 
 ---
 
-### BUG-4: Settings Audit & Normalisation (SYSTEMIC)
-
-**Status:** COMPLETE — both phases done.
-
-**Phase 1 result:** Automated audit of all 102 attributes set by `config_applier.py` against `SpotifyVisualizerWidget.__init__`. Only 1 was missing: `_rainbow_per_bar` (now fixed).
-
-**Phase 2 result:** Cross-referenced `save_media_settings()` ↔ `config_applier` ↔ `models.py` ↔ `spotify_widget_creators.py`. Found 3 pipeline gaps where settings were saved/loaded by the UI but never reached the widget at startup:
-
-| Setting | Gap | Fix |
-|---|---|---|
-| `spectrum_rainbow_per_bar` | Missing from `apply_spotify_vis_model_config()` creator call | Added `spectrum_rainbow_per_bar=model.spectrum_rainbow_per_bar` |
-| `bubble_trail_strength` | Missing from model dataclass, `from_settings`, `from_mapping`, `to_dict`, and creator | Added to all 5 locations |
-| `sine_line_dim` | Same as above — missing from model entirely | Added to all 5 locations |
-
-- [x] All 102 `config_applier` keys have `__init__` defaults.
-- [x] `save_media_settings()` ↔ `config_applier` cross-referenced — no orphaned save keys.
-- [x] `build_gpu_push_extra_kwargs()` — all 64 direct widget attrs confirmed to have `__init__` defaults.
-- [x] 3 pipeline gaps fixed in `models.py` and `spotify_widget_creators.py`.
-
-**Files:** `spotify_visualizer_widget.py`, `config_applier.py`, `widgets_tab_media.py`, `models.py`, `spotify_widget_creators.py`
-
 ---
 
-### BUG-5: White Flash in Rainbow Mode (Spectrum / Oscilloscope)
 
-**Status:** FIXED
-
-**Root cause:** `u_rainbow_hue_offset` is computed as `(accumulated_time * speed * 0.1) % 1.0`. At the exact wrap-around point (value = 0.0), the shader's `<= 0.001` dead-zone guard fires and returns the original colour (white) for one frame — causing a brief white flash.
-
-**Fix:** When rainbow is enabled, if `raw < 0.001` push `(raw + 0.002) % 1.0` instead, skipping the dead zone. Same fix applied to per-bar slow cycle.
-
-- [x] Dead-zone skip applied in `spotify_bars_gl_overlay.py` for both rainbow and per-bar paths.
-- [ ] User to confirm white flash no longer occurs.
-
-**Files:** `spotify_bars_gl_overlay.py`
-
----
-
-### BUG-6: Bubble Motion Trails Slider Has No Visible Effect
-
-**Status:** OPEN — slider currently changes JSON but yields no noticeable change on-screen.
-
-**Scope:**
-- [ ] Confirm uniforms from settings map into `bubble.frag` (trail strength, length) and that shader uses them.
-- [ ] Add logging/assert once to ensure CPU-side stream applies factors.
-- [ ] Adjust shader or GPU pipeline so slider produces obvious fade trails.
-
-**Files:** `bubble.frag`, `bubble_program.py`, `widgets_tab_media.py`
 
 ---
 
@@ -173,41 +128,14 @@ Key wins locked in for v3.0:
 - [ ] User to confirm thermite glow looks correct (bright white-hot ignition, then receding line no, not bright at all.).
 - [ ] User to confirm sparks are visible and controllable. (No, nothing visible)
 - [ ] User to confirm Burn Settings panel appears when Burn is selected.
+No sparks, no ash, dull pathetic glow.
 
 **Files:** `burn_program.py`, `transitions_tab.py`, `transition_factory.py`
 
 ---
 
-### FEAT-2: Visualizer Mode Switch vs Launch-Start Reactivity Difference
 
-**Status:** FIXED — beat engine smoothing state now resets on mode switch.
 
-**Root cause:** `set_visualization_mode()` only reset display bars and GPU geometry cache. The shared `_SpotifyBeatEngine` retained stale `_smoothed_bars`, `_energy_bands`, and `_waveform` from the previous mode, dampening the new mode's initial reactivity.
-
-**Fix:**
-- [x] Added `reset_smoothing_state()` to `_SpotifyBeatEngine` — clears smoothed bars, energy bands, waveform, and resets smoothing timestamp.
-- [x] `set_visualization_mode()` now calls `engine.reset_smoothing_state()` on mode change.
-- [ ] User to verify Oscilloscope/Blob are equally reactive when switched to at runtime vs launch.
-
-**Files:** `beat_engine.py`, `spotify_visualizer_widget.py`
-
----
-
-## Pending Features (MEDIUM PRIORITY)
-
-### PF-1: Widget Card Border Refresh
-
-**Status:** PLANNED — top priority.
-
-**Goal:** Give every widget/transition card a consistent 1px border + drop shadow so the UI feels cohesive after the swatch migration.
-
-**Scope:**
-- [ ] Define border tokens (color + width) in `shared_styles.py` and propagate to Clock/Weather/Media/Reddit/Imgur tabs.
-- [ ] Apply the same styling to visualizer builder cards (Spectrum → Bubble) and transitions tab group boxes.
-- [ ] Regression pass for DPI scaling: ensure 1px border renders crisp at 125%/150%.
-- [x] Bump existing widget card border width by +1px via `BaseOverlayWidget.DEFAULT_BORDER_WIDTH = 3` so all overlays inherit the change.
-
-**Files:** `ui/tabs/shared_styles.py`, all `ui/tabs/*_tab*.py`, `ui/themes/*`
 
 ---
 
@@ -240,18 +168,13 @@ Key wins locked in for v3.0:
 
 ---
 
-### PF-4: Logging Noise Cleanup (Bubble Debug + Other Spam)
+### PF-4: Logging Noise Cleanup (Spam)
 
 **Status:** PLANNED
 
-**Goal:** Remove leftover debug spam (bubble stream/trail logs, redundant timing prints) so `screensaver.log` stays actionable.
+**Goal:** Reduce amount of logging for simply --debug runs, identify spamming sources, minimize to most useful metrics.
 
-**Scope:**
-- [ ] Grep for `bubble_debug` / `[BUBBLE]` / `print(` in bubble modules; gate behind verbose logger or remove.
-- [ ] Audit other spammy tags (Spectrum, Spotify BTS) and gate behind `SRPSS_PERF_METRICS` where appropriate.
-- [ ] Update logging guidelines in `Docs/Logging.md`.
 
-**Files:** `bubble_program.py`, `spotify_visualizer_widget.py`, `core/logging/logger.py`, `Docs/Logging.md`
 
 ---
 
