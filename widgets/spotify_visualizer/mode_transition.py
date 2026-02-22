@@ -63,16 +63,10 @@ def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
             # Fade-out complete: switch mode, begin fade-in
             pending = widget._mode_transition_pending
             if pending is not None:
-                # Reset bar data to prevent stale values from previous mode
-                zero = [0.0] * widget._bar_count
-                widget._display_bars = list(zero)
-                widget._target_bars = list(zero)
-                widget._visual_bars = list(zero)
-                widget._per_bar_energy = list(zero)
-                # Invalidate geometry cache so paintEvent rebuilds for new dimensions
-                widget._geom_cache_rect = None
-                widget._last_gpu_geom = None
-                widget._has_pushed_first_frame = False
+                try:
+                    widget._reset_visualizer_state(clear_overlay=False, replay_cached=False)
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Mode reset helper failed", exc_info=True)
                 widget.set_visualization_mode(pending)
                 widget._apply_preferred_height()
                 widget._request_reposition()

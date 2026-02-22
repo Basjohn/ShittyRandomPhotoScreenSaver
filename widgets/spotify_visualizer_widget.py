@@ -4,6 +4,7 @@ from typing import List, Optional, Dict, Any
 import os
 import time
 import logging
+import copy
 
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent
@@ -59,6 +60,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._per_bar_energy: List[float] = [0.0] * self._bar_count
         self._visual_bars: List[float] = [0.0] * self._bar_count
         self._visual_smoothing_tau: float = 0.055
+        self._cached_vis_kwargs: Dict[str, Any] = {}
+
         self._last_visual_smooth_ts: float = 0.0
         # Base smoothing time constant in seconds; actual per-tick blend
         # factor is derived from this and the real dt between ticks so that
@@ -286,6 +289,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._perf_audio_lag_last_ms: float = 0.0
         self._perf_audio_lag_min_ms: float = 0.0
         self._perf_audio_lag_max_ms: float = 0.0
+        self._fallback_mismatch_start: float = 0.0
+        self._fallback_forced_until: float = 0.0
 
         # Last time we emitted a PERF snapshot while running. This allows us
         # to log Spotify visualiser activity periodically even if the widget
@@ -461,6 +466,12 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         apply_vis_mode_kwargs(self, kwargs)
 
+        try:
+            self._cached_vis_kwargs = copy.deepcopy(kwargs)
+        except Exception:
+            self._cached_vis_kwargs = dict(kwargs)
+
+        self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
         self._apply_preferred_height()
 
         logger.debug("[SPOTIFY_VIS] Applied vis mode config: mode=%s", mode)
@@ -1193,6 +1204,61 @@ class SpotifyVisualizerWidget(QWidget):
         """Save the current visualizer mode to SettingsManager."""
         from widgets.spotify_visualizer.mode_transition import persist_vis_mode
         persist_vis_mode(self)
+
+    def _reset_visualizer_state(self, *, clear_overlay: bool = False, replay_cached: bool = False) -> None:
+        """Clear runtime visualizer state so the next mode behaves like a cold start."""
+        zeros = [0.0] * self._bar_count
+        self._display_bars = list(zeros)
+        self._target_bars = list(zeros)
+        self._visual_bars = list(zeros)
+        self._per_bar_energy = list(zeros)
+        self._geom_cache_rect = None
+        self._geom_cache_bar_count = self._bar_count
+        self._geom_cache_segments = self._bar_segments_base
+        self._geom_bar_x = []
+        self._geom_seg_y = []
+        self._geom_bar_width = 0
+        self._geom_seg_height = 0
+        self._last_update_ts = -1.0
+        self._last_smooth_ts = 0.0
+        self._has_pushed_first_frame = False
+        self._last_gpu_geom = None
+        self._last_gpu_fade_sent = -1.0
+        self._mode_transition_ts = 0.0
+        self._perf_tick_start_ts = None
+        self._perf_tick_last_ts = None
+        self._perf_tick_frame_count = 0
+        self._perf_tick_min_dt = 0.0
+        self._perf_tick_max_dt = 0.0
+        self._perf_paint_start_ts = None
+        self._perf_paint_last_ts = None
+        self._perf_paint_frame_count = 0
+        self._perf_paint_min_dt = 0.0
+        self._perf_paint_max_dt = 0.0
+        self._perf_audio_lag_last_ms = 0.0
+        self._perf_audio_lag_min_ms = 0.0
+        self._perf_audio_lag_max_ms = 0.0
+        self._perf_last_log_ts = None
+        self._last_tick_spike_log_ts = 0.0
+        self._fallback_mismatch_start = 0.0
+        self._fallback_forced_until = 0.0
+        self._bubble_pos_data = []
+        self._bubble_extra_data = []
+        self._bubble_trail_data = []
+        self._bubble_count = 0
+        self._bubble_compute_pending = False
+        self._bubble_last_tick_ts = 0.0
+        self._heartbeat_intensity = 0.0
+        self._heartbeat_avg_bass = 0.0
+        self._heartbeat_last_ts = 0.0
+        if clear_overlay:
+            self._clear_gl_overlay()
+        if replay_cached and self._cached_vis_kwargs:
+            from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+            try:
+                apply_vis_mode_kwargs(self, copy.deepcopy(self._cached_vis_kwargs))
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to replay cached settings during reset", exc_info=True)
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         if duration_ms <= 0:
