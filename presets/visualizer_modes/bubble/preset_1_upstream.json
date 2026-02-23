@@ -1,0 +1,31 @@
+{
+  "name": "Preset 1 (Upstream)",
+  "description": "Warm champagne stream with aggressive cap and rainbow sway.",
+  "preset_index": 0,
+  "settings": {
+    "bubble_big_bass_pulse": 0.85,
+    "bubble_small_freq_pulse": 1.0,
+    "bubble_stream_direction": "up",
+    "bubble_stream_constant_speed": 0.45,
+    "bubble_stream_speed_cap": 2.5,
+    "bubble_stream_reactivity": 1.0,
+    "bubble_rotation_amount": 0.6,
+    "bubble_drift_amount": 0.6,
+    "bubble_drift_speed": 0.2,
+    "bubble_drift_frequency": 0.35,
+    "bubble_drift_direction": "random",
+    "bubble_big_count": 12,
+    "bubble_small_count": 40,
+    "bubble_surface_reach": 0.7,
+    "bubble_outline_color": [255, 255, 255, 255],
+    "bubble_specular_color": [255, 255, 255, 255],
+    "bubble_gradient_light": [210, 114, 77, 255],
+    "bubble_gradient_dark": [80, 60, 50, 255],
+    "bubble_pop_color": [255, 255, 255, 150],
+    "bubble_specular_direction": "top_left",
+    "bubble_big_size_max": 0.028,
+    "bubble_small_size_max": 0.016,
+    "bubble_growth": 5.0,
+    "bubble_trail_strength": 0.0
+  }
+}

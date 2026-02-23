@@ -55,13 +55,17 @@ class VisualizerPresetSlider(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.setSpacing(2)
 
-        # Row: label + slider + value label
+        # Row: label + slider column
         row = QHBoxLayout()
         row.setSpacing(6)
 
         lbl = QLabel("Preset:")
         lbl.setFixedWidth(48)
         row.addWidget(lbl)
+
+        slider_column = QVBoxLayout()
+        slider_column.setContentsMargins(0, 0, 0, 0)
+        slider_column.setSpacing(2)
 
         self._slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(0)
@@ -101,12 +105,14 @@ class VisualizerPresetSlider(QWidget):
             "Choose a visualizer preset. Custom (rightmost) shows all settings."
         )
         self._slider.valueChanged.connect(self._on_slider_changed)
-        row.addWidget(self._slider, 1)
+        slider_column.addWidget(self._slider)
 
         self._value_label = QLabel(self._preset_names[0])
-        self._value_label.setFixedWidth(60)
-        self._value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        row.addWidget(self._value_label)
+        self._value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._value_label.setWordWrap(True)
+        slider_column.addWidget(self._value_label)
+
+        row.addLayout(slider_column, 1)
 
         layout.addLayout(row)
 

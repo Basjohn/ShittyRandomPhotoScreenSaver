@@ -115,6 +115,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
     if 'blob_reactive_deformation' in kwargs:
         widget._blob_reactive_deformation = max(0.0, min(3.0, float(kwargs['blob_reactive_deformation'])))
+    if 'blob_intensity_reserve' in kwargs:
+        widget._blob_intensity_reserve = max(0.0, min(2.0, float(kwargs['blob_intensity_reserve'])))
     if 'blob_constant_wobble' in kwargs:
         widget._blob_constant_wobble = max(0.0, min(2.0, float(kwargs['blob_constant_wobble'])))
     if 'blob_reactive_wobble' in kwargs:
@@ -302,7 +304,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         )
     if 'bubble_stream_speed_cap' in kwargs:
         widget._bubble_stream_speed_cap = max(
-            0.1, min(2.5, float(kwargs['bubble_stream_speed_cap']))
+            0.1, min(4.0, float(kwargs['bubble_stream_speed_cap']))
         )
     if 'bubble_stream_reactivity' in kwargs:
         widget._bubble_stream_reactivity = max(0.0, min(1.0, float(kwargs['bubble_stream_reactivity'])))
@@ -316,7 +318,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_drift_frequency = max(0.0, min(1.0, float(kwargs['bubble_drift_frequency'])))
     if 'bubble_drift_direction' in kwargs:
         val = str(kwargs['bubble_drift_direction']).lower()
-        if val not in ('none', 'left', 'right', 'diagonal', 'random'):
+        valid_dirs = ('none', 'left', 'right', 'diagonal', 'swish_horizontal', 'swish_vertical', 'random')
+        if val not in valid_dirs:
             val = 'random'
         widget._bubble_drift_direction = val
     if 'bubble_big_count' in kwargs:
@@ -406,6 +409,7 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['blob_glow_intensity'] = widget._blob_glow_intensity
     extra['blob_reactive_glow'] = widget._blob_reactive_glow
     extra['blob_reactive_deformation'] = widget._blob_reactive_deformation
+    extra['blob_intensity_reserve'] = widget._blob_intensity_reserve
     extra['blob_constant_wobble'] = widget._blob_constant_wobble
     extra['blob_reactive_wobble'] = widget._blob_reactive_wobble
     extra['blob_stretch_tendency'] = widget._blob_stretch_tendency

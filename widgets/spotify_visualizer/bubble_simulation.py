@@ -210,13 +210,30 @@ class BubbleSimulation:
         cap = max(0.1, stream_cap)
         baseline = max(0.05, min(cap, stream_const))
         reactivity = max(0.0, min(1.0, stream_reactivity))
-        energy_scale = 0.15 + 0.85 * speed_energy
-        cap_mix = baseline if reactivity <= 0.0 else (
-            baseline + (cap - baseline) * (reactivity * speed_energy)
-        )
-        speed_scale = baseline if reactivity <= 0.0 else (
-            baseline * (1.0 - reactivity) + cap_mix * reactivity
-        )
+
+        if speed_energy <= 0.0:
+            energy_gate = 0.0
+            energy_curve = 0.0
+        else:
+            cap_span = max(0.0, cap - baseline)
+            hardness = 1.0 + cap_span * (0.18 + 0.32 * (1.0 - reactivity))
+            gate_exp = max(0.45, 1.25 - 0.6 * reactivity)
+            gated = speed_energy ** gate_exp
+            energy_gate = min(1.0, gated ** hardness)
+            curve_exp = 0.58 + 0.22 * (1.0 - reactivity)
+            energy_curve = min(1.0, speed_energy ** curve_exp)
+
+        cap_mix = baseline + (cap - baseline) * energy_gate
+        if reactivity <= 0.0:
+            reactivity_weight = 0.0
+        else:
+            reactivity_weight = reactivity * (0.55 + 0.45 * energy_gate)
+        if reactivity_weight <= 0.0:
+            speed_scale = baseline
+        else:
+            speed_scale = baseline * (1.0 - reactivity_weight) + cap_mix * reactivity_weight
+
+        energy_scale = 0.10 + 0.82 * energy_curve
         effective_speed = speed_scale * energy_scale
         base_vel = effective_speed * 0.35  # normalised units/sec
 
@@ -271,11 +288,16 @@ class BubbleSimulation:
             drift_bias_val = b.drift_bias * drift_amount * 0.05
             drift_offset = drift_noise * drift_amount * 0.03 + drift_bias_val
 
-            # Apply drift perpendicular to stream direction
-            if abs(sv[0]) > abs(sv[1]) if stream_dir != "random" else True:
+            # Apply drift; Swish modes force an axis, otherwise stay perpendicular to stream
+            if drift_dir == "swish_horizontal":
+                move_x += drift_offset * dt
+            elif drift_dir == "swish_vertical":
                 move_y += drift_offset * dt
             else:
-                move_x += drift_offset * dt
+                if abs(sv[0]) > abs(sv[1]) if stream_dir != "random" else True:
+                    move_y += drift_offset * dt
+                else:
+                    move_x += drift_offset * dt
 
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
@@ -399,6 +421,10 @@ class BubbleSimulation:
             drift_bias = 0.7 + random.uniform(-0.3, 0.3)
         elif drift_dir == "diagonal":
             drift_bias = 0.5 + random.uniform(-0.3, 0.3)
+        elif drift_dir == "swish_horizontal":
+            drift_bias = random.uniform(-0.9, 0.9)
+        elif drift_dir == "swish_vertical":
+            drift_bias = random.uniform(-0.9, 0.9)
         else:  # none
             drift_bias = random.uniform(-0.3, 0.3)
 

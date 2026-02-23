@@ -1,0 +1,31 @@
+{
+  "name": "Preset 2 (Blue Madness)",
+  "description": "Cool-toned random stream with slower cap and diagonal gleam.",
+  "preset_index": 1,
+  "settings": {
+    "bubble_big_bass_pulse": 0.85,
+    "bubble_small_freq_pulse": 0.9,
+    "bubble_stream_direction": "random",
+    "bubble_stream_constant_speed": 0.15,
+    "bubble_stream_speed_cap": 1.25,
+    "bubble_stream_reactivity": 1.0,
+    "bubble_rotation_amount": 0.6,
+    "bubble_drift_amount": 0.6,
+    "bubble_drift_speed": 0.2,
+    "bubble_drift_frequency": 0.35,
+    "bubble_drift_direction": "random",
+    "bubble_big_count": 11,
+    "bubble_small_count": 35,
+    "bubble_surface_reach": 0.7,
+    "bubble_outline_color": [255, 255, 255, 255],
+    "bubble_specular_color": [255, 255, 255, 255],
+    "bubble_gradient_light": [43, 153, 255, 255],
+    "bubble_gradient_dark": [35, 35, 62, 255],
+    "bubble_pop_color": [255, 255, 255, 150],
+    "bubble_specular_direction": "bottom_left",
+    "bubble_big_size_max": 0.028,
+    "bubble_small_size_max": 0.016,
+    "bubble_growth": 5.0,
+    "bubble_trail_strength": 0.0
+  }
+}

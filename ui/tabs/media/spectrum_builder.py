@@ -115,18 +115,20 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_border_opacity_row.addWidget(tab.spotify_vis_border_opacity_label)
     _adv_layout.addLayout(spotify_vis_border_opacity_row)
 
-    tab.spotify_vis_recommended = QCheckBox("Adaptive")
+    tab.spotify_vis_recommended = QCheckBox("Suggest Sensitivity")
     tab.spotify_vis_recommended.setChecked(
         tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
     )
     tab.spotify_vis_recommended.setToolTip(
-        "When enabled, the visualizer uses the adaptive (v1.4) sensitivity baseline. Disable to adjust manually."
+        "Let the visualizer suggest a safe baseline sensitivity. Uncheck to tune the multiplier manually."
     )
     tab.spotify_vis_recommended.stateChanged.connect(tab._save_settings)
     tab.spotify_vis_recommended.stateChanged.connect(lambda _: tab._update_spotify_vis_sensitivity_enabled_state())
     _adv_layout.addWidget(tab.spotify_vis_recommended)
 
-    spotify_vis_sensitivity_slider_row = QHBoxLayout()
+    tab._spotify_vis_sensitivity_container = QWidget()
+    spotify_vis_sensitivity_slider_row = QHBoxLayout(tab._spotify_vis_sensitivity_container)
+    spotify_vis_sensitivity_slider_row.setContentsMargins(0, 0, 0, 0)
     spotify_vis_sensitivity_slider_row.addWidget(QLabel("Sensitivity:"))
     tab.spotify_vis_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spotify_vis_sensitivity.setMinimum(25)
@@ -142,7 +144,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.spotify_vis_sensitivity_label.setText(f"{v / 100.0:.2f}x")
     )
     spotify_vis_sensitivity_slider_row.addWidget(tab.spotify_vis_sensitivity_label)
-    _adv_layout.addLayout(spotify_vis_sensitivity_slider_row)
+    _adv_layout.addWidget(tab._spotify_vis_sensitivity_container)
 
     tab.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
     tab.spotify_vis_dynamic_floor.setChecked(

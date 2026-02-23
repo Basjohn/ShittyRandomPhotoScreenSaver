@@ -8,7 +8,12 @@ from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
-from core.logging.logger import get_logger, get_throttled_logger, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    get_throttled_logger,
+    is_perf_metrics_enabled,
+    is_viz_diagnostics_enabled,
+)
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
@@ -120,6 +125,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_reactive_glow: bool = True
         self._blob_smoothed_energy: float = 0.0  # CPU-side smoothed energy for glow decay
         self._blob_reactive_deformation: float = 1.0
+        self._blob_intensity_reserve: float = 0.0
         self._blob_constant_wobble: float = 1.0
         self._blob_reactive_wobble: float = 1.0
         self._blob_stretch_tendency: float = 0.0
@@ -141,6 +147,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
+
+        # Blob diagnostics (reserve/radius instrumentation)
+        self._blob_diag_last_log_ts: float = 0.0
+        self._blob_diag_radius_min: Optional[float] = None
+        self._blob_diag_radius_max: Optional[float] = None
 
         # Rainbow (Taste The Rainbow) mode
         self._rainbow_enabled: bool = False
@@ -258,6 +269,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_glow_intensity: float = 0.5,
         blob_reactive_glow: bool = True,
         blob_reactive_deformation: float = 1.0,
+        blob_intensity_reserve: float = 0.0,
         blob_constant_wobble: float = 1.0,
         blob_reactive_wobble: float = 1.0,
         blob_stretch_tendency: float = 0.0,
@@ -328,6 +340,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._vis_mode = vis_mode if vis_mode in (
             'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave', 'bubble'
         ) else 'spectrum'
+        if self._vis_mode != 'blob':
+            self._blob_diag_radius_min = None
+            self._blob_diag_radius_max = None
         try:
             self._border_width_px = max(0.0, float(border_width_px))
         except Exception:
@@ -403,6 +418,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if energy_bands is not None:
             self._energy_bands = energy_bands
 
+        self._maybe_log_blob_diagnostics()
+
         # Oscilloscope glow settings
         self._glow_enabled = bool(glow_enabled)
         self._glow_intensity = max(0.0, float(glow_intensity))
@@ -450,6 +467,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_intensity = max(0.0, min(1.0, float(blob_glow_intensity)))
         self._blob_reactive_glow = bool(blob_reactive_glow)
         self._blob_reactive_deformation = max(0.0, min(2.0, float(blob_reactive_deformation)))
+        self._blob_intensity_reserve = max(0.0, min(2.0, float(blob_intensity_reserve)))
         self._blob_constant_wobble = max(0.0, min(2.0, float(blob_constant_wobble)))
         self._blob_reactive_wobble = max(0.0, min(2.0, float(blob_reactive_wobble)))
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
@@ -835,18 +853,68 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if not used_shader:
             self._render_with_qpainter(rect, fade)
 
-        if not getattr(self, "_debug_paint_logged", False):
-            try:
-                logger.debug(
-                    "[SPOTIFY_VIS] paintGL path: %s",
-                    "shader" if used_shader else "qpainter",
-                )
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            try:
-                self._debug_paint_logged = True
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        self._maybe_log_blob_diagnostics()
+
+        self.update()
+
+    def _maybe_log_blob_diagnostics(self) -> None:
+        """Emit blob reserve diagnostics when viz diagnostics + perf metrics on."""
+
+        if self._vis_mode != 'blob':
+            return
+        if not (is_perf_metrics_enabled() and is_viz_diagnostics_enabled()):
+            return
+
+        bands = self._energy_bands or EnergyBands()
+        high = float(getattr(bands, 'high', 0.0) or 0.0)
+        bass = float(getattr(bands, 'bass', 0.0) or 0.0)
+        overall = float(getattr(bands, 'overall', 0.0) or 0.0)
+        reserve = float(self._blob_intensity_reserve or 0.0)
+        se = float(self._blob_smoothed_energy or 0.0)
+        pulse = float(self._blob_pulse or 0.0)
+        base_size = float(self._blob_size or 1.0)
+        playing = bool(self._playing)
+
+        r = 0.44 * max(0.1, min(2.5, base_size))
+        r += bass * bass * 0.066
+        r += bass * 0.077 * pulse
+        se_clamped = max(0.0, min(1.0, se))
+        r -= (1.0 - se_clamped) * 0.053 * pulse
+        if reserve > 0.0001:
+            spike = max(0.0, min(1.0, high) - 0.45)
+            gate = 0.0
+            if spike > 0.0:
+                # smoothstep(0, 0.25, spike)
+                t = max(0.0, min(1.0, spike / 0.25))
+                gate = t * t * (3.0 - 2.0 * t)
+            r += spike * spike * 0.25 * reserve * gate
+        if not playing:
+            r *= 0.45 + se_clamped * 0.25
+
+        current_min = self._blob_diag_radius_min
+        current_max = self._blob_diag_radius_max
+        self._blob_diag_radius_min = r if current_min is None else min(current_min, r)
+        self._blob_diag_radius_max = r if current_max is None else max(current_max, r)
+
+        now = time.time()
+        threshold = 0.5  # seconds between logs
+        if (now - self._blob_diag_last_log_ts) < threshold:
+            return
+        self._blob_diag_last_log_ts = now
+
+        logger.info(
+            "[SPOTIFY_VIS][BLOB][DIAG] reserve=%.2f high=%.3f bass=%.3f overall=%.3f se=%.3f pulse=%.2f playing=%s radius=%.4f radius_min=%.4f radius_max=%.4f",
+            reserve,
+            high,
+            bass,
+            overall,
+            se_clamped,
+            pulse,
+            playing,
+            r,
+            self._blob_diag_radius_min or r,
+            self._blob_diag_radius_max or r,
+        )
 
     # ------------------------------------------------------------------
     # Internal rendering helpers
@@ -920,7 +988,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity",
                     "u_blob_reactive_glow", "u_blob_smoothed_energy",
-                    "u_blob_reactive_deformation", "u_blob_constant_wobble", "u_blob_reactive_wobble",
+                    "u_blob_reactive_deformation", "u_blob_intensity_reserve", "u_blob_constant_wobble", "u_blob_reactive_wobble",
                     "u_blob_stretch_tendency",
                     "u_osc_speed", "u_osc_line_dim",
                     "u_osc_line_offset_bias",
@@ -1481,6 +1549,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_blob_reactive_deformation", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_reactive_deformation))
+                loc = u.get("u_blob_intensity_reserve", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_intensity_reserve))
                 loc = u.get("u_blob_constant_wobble", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_constant_wobble))

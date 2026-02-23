@@ -199,18 +199,6 @@ endering/gl_programs/diffuse_program.py | DiffuseProgram | Diffuse |
 | BlockFlip | 
 endering/gl_programs/blockflip_program.py | BlockFlipProgram | Block Puzzle Flip |
 | BlockSpin | 
-endering/gl_programs/blockspin_program.py | BlockSpinProgram | 3D Block Spins |
-| Peel | 
-endering/gl_programs/peel_program.py | PeelProgram | Peel |
-| Warp | 
-endering/gl_programs/warp_program.py | WarpProgram | Warp Dissolve |
-| Raindrops | 
-endering/gl_programs/raindrops_program.py | RaindropsProgram | Ripple |
-| Crumble | 
-endering/gl_programs/crumble_program.py | CrumbleProgram | Crumble |
-| Particle | 
-endering/gl_programs/particle_program.py | ParticleProgram | Particle |
-| Burn | rendering/gl_programs/burn_program.py | BurnProgram | Burn |
 
 ## Transitions
 
@@ -224,7 +212,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Blinds | - | 	ransitions/gl_compositor_blinds_transition.py | GL only |
 | Peel | - | 	ransitions/gl_compositor_peel_transition.py | GL only |
 | Block Spin | - | 	ransitions/gl_compositor_blockspin_transition.py | GL only, 3D, 6 directions incl. diagonals |
-| Raindrops | - | transitions/gl_compositor_raindrops_transition.py | GL only (Ripple), configurable ripple count 1-8, per-transition random seed for position variety |
+| Raindrops | - | transitions/gl_compositor_raindrops_transition.py | GL only (Ripple), configurable ripple count 1-8, per-transition random seed for position variety; Feb 2026 shader hotfix fades the additive ring highlight out once pixels finish blending, eliminating the brightness spike at T=1.0 |
 | Warp | - | 	ransitions/gl_compositor_warp_transition.py | GL only |
 | Crumble | - | 	ransitions/gl_compositor_crumble_transition.py | GL only |
 | Particle | - | 	ransistions/gl_compositor_particle_transition.py | GL only |
@@ -262,7 +250,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 - **image_cache.py**: ImgurImageCache - LRU disk cache (100MB max), GIF-to-first-frame conversion, high-DPI pixmap loading, **metadata persistence after every put**, **auto-rebuild from files if metadata missing**
 - **Features**: Concurrent downloads (4 at a time), cell pixmap caching, click-to-browser, header with logo colorization, fade coordination
 - **Limitation**: Only 160x160 thumbnails available - Imgur deprecated size suffixes and gallery parsing requires JS rendering
-| Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer (tracks `_sine_line{1,2,3}_shift` + `line_offset_bias`; teardown pipeline now drives ShadowFadeProfile fade-out → engine cancel/reset → wait-for-fresh-bars gate before fade-in; `_destroy_parent_overlay()` blank-clears and deletes the GL overlay, unregisters from PixelShift, clears shadows, and defers shadow reattach until `_on_first_frame_after_cold_start()` fires; card height changes defer until fade-in) |
+| Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer (tracks `_sine_line{1,2,3}_shift` + `line_offset_bias`; teardown pipeline now drives ShadowFadeProfile fade-out → engine cancel/reset → wait-for-fresh-bars gate before fade-in; `_destroy_parent_overlay()` blank-clears and deletes the GL overlay, unregisters from PixelShift, clears shadows, and defers shadow reattach until `_on_first_frame_after_cold_start()` fires; card height changes defer until fade-in; settings dialog exposes **Suggest Sensitivity** (renamed from Adaptive) which hides the manual slider while the curated multiplier is active and reveals it when unchecked.) |
 | Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | Receives global card border width each frame (`u_border_width`); always clears its framebuffer even when disabled; `cleanup_gl()` now guarantees the GL context is current before deleting programs/VAO/VBO so mode cycles cannot leave stale silhouettes |
 | Spotify Volume | widgets/spotify_volume_widget.py | SpotifyVolumeWidget | widgets.spotify_volume |
 | Mute Button | widgets/mute_button_widget.py | MuteButtonWidget | widgets.media.mute_button_enabled |
@@ -277,7 +265,7 @@ endering/gl_programs/particle_program.py | ParticleProgram | Particle |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars | DSP/FFT bar computation pipeline (inline, extracted from audio_worker) |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); all defaults raised +1.0x |
-| Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread; snapshot() returns (pos_data, extra_data, trail_data); trail records 3 previous positions per bubble (TRAIL_STEPS=3) |
+| Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread; snapshot() returns (pos_data, extra_data, trail_data); trail records 3 previous positions per bubble (TRAIL_STEPS=3); drift system now includes **Swish (Horizontal/Vertical)** modes that lock wobble to a chosen axis so up/down streams can sway sideways and vice versa. |
 | Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping; caches the last applied settings snapshot for `_reset_visualizer_state()` and passes rainbow/ghost/bubble uniforms |
 | Mode Transition | widgets/spotify_visualizer/mode_transition.py | cycle_mode, mode_transition_fade_factor, persist_vis_mode | Mode-cycling crossfade logic (extracted from widget, ~120 LOC) |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |

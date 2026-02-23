@@ -17,6 +17,7 @@ Key wins locked in for v3.0:
 - **Visualizer polish:** Taste The Rainbow exemptions, Spectrum per-bar hues, Oscilloscope ghosting, Sine Wave amplitude/micro-wobble fixes, Bubble spawn/stream upgrades.
 - **Transitions:** Burn v2 shader + new UI, ripple/rain-drip parity, crumble/particle cleanups.
 - **UI platform:** NoWheelSlider adoption, multi-monitor wake fixes, Spotify visualizer settings audit, ColorSwatchButton migration (all widget tabs + burn glow).
+- **Bubble mode speed-cap scaling (PF-12):** Slider/UI clamps raised to 0.5–4.0× with a hardened gating curve, so idle drift stays calm while high-energy passages can still reach the new ceiling without instantly pegging.
 
 *(See git history for full details of tasks #1–31.)*
 
@@ -24,14 +25,12 @@ Key wins locked in for v3.0:
 
 ## Priority Focus (High ROI / Next Up)
 
-1. **Widget Card Border Refresh (1px enhancement)**  
+1. **Widget Card Border Refresh (1px enhancement)**  DONE
    Goal: visually align every widget/transition card with a consistent 1px border that reads on both light/dark content.  
    Scope: update shared card styles (Clock/Weather/Media/Visualizer tabs, transitions tab) to use a theme token for border width + color, ensure drop shadows survive DPI scaling, add regression checklists in `Docs/Widget_Style.md`.
 
-2. **Control Halo Polish (PF-2)**  
-   Goal: make the interaction halos feel purposeful and accurate.  
-   Scope: cursor triangle hotspot alignment, drop-shadow consistency across all six shapes, diamond inner-dot indicator, shadow/fade verification pass.  
-   Suggested execution order: (a) hotspot math in `cursor_halo.py`, (b) shared shadow constants in `display_input.py`, (c) visual QA on all shapes with logging screenshot refs.
+2. **Control Halo Polish (PF-2)** — ✅ Fixed Feb 23 (kept here for reference)  
+   Cursor triangle hotspot now aligns with the OS pointer, every halo shape shares the refreshed gradient + drop-shadow styling, and the diamond received an inner dot indicator. Verified across all six shapes with Ctrl-held interaction + hard-exit coverage; no further action unless UX feedback regresses.
 
 ---
 
@@ -52,7 +51,7 @@ Key wins locked in for v3.0:
 
 ### BUG-2: Spectrum Rainbow + Per-Bar Colours Not Working
 
-**Status:** FIXED — `_rainbow_per_bar` was the only missing init attribute.
+**Status:** PARTIALLY FIXED — `_rainbow_per_bar` was the only missing init attribute. PER BAR STILL BROKEN.
 
 **Root cause:** `_rainbow_per_bar` was never initialised in `SpotifyVisualizerWidget.__init__`. When the setting wasn't in the JSON, `config_applier` never set it, and `getattr(widget, '_rainbow_per_bar', False)` always returned `False`.
 
@@ -64,45 +63,11 @@ Key wins locked in for v3.0:
 - User: STILL DOES NOT WORK PER BAR. Colours for per bar work when checkbox is checked BUT they do not shift colours when taste the rainbow is enabled, that only works when individual bars is unselected.
 **Files:** `spotify_visualizer_widget.py`
 
----
 
-### BUG-3: Sine Wave Lines 2/3 Misaligned + Poor Bass Reaction + Shader Compile Regression
-
-**Status:** FIXED — 3 root causes identified and resolved.
-
-**Root causes:**
-1. Lines 2/3 used different energy bands (mid/high-heavy) while line 1 used bass-heavy → different amplitudes at LOB=0.
-2. Lines 2/3 used unique wave effect and micro wobble frequency/time constants → visual divergence even at LOB=0.
-3. `bass_pulse` multiplier was only 1.1× with default sensitivity 0.1 → effective bass contribution was 0.11×.
-
-**Fixes:**
-- [x] All 3 lines now share the same base energy formula `e_base`. Lines 2/3 blend toward their unique band mix only as LOB increases (`mix(e_base, own_band, lob * 0.4)`).
-- [x] Wave effect and micro wobble for lines 2/3 now use `mix(line1_value, own_value, lob)` — at LOB=0 they are identical to line 1.
-- [x] `bass_pulse` multiplier raised from 1.1× to 2.0× for much stronger bass reactivity.
-- [x] **Regression fix:** GLSL forward-reference — `lob` was declared after `e2_band`/`e3_band` which used it. Moved `lob` declaration before all energy calculations. Shader now compiles correctly.
-- [ ] User to verify lines overlap at LOB=0/VShift=0 and diverge naturally as LOB increases.
-- [ ] Sine Wave reactivity still extremely poor. Requires very high sensitivity to get any movement but that pins the sine waves to the top and bottom of the card, they never go low/tight.
-- [ ] Microwobble does not cause extra line snake like effect desires whatsoever, fix.
-- [ ] Width reaction does NOTHING visually at any setting, fix.
-
-- [x] Exempt Sine Wave line colours from Taste The Rainbow (glows still rainbow-shifted) and keep Oscilloscope line colour fixed. Blob shader now rainbow-shifts fill/glow/outline but leaves the edge highlight exempt so the bright rim stays user-selected. (shader fixes in `sine_wave.frag`, `oscilloscope.frag`, `blob.frag`)
-
-**Files:** `sine_wave.frag`
 
 ---
 
-### BUG-5: White Flash in Rainbow Mode (Spectrum / Oscilloscope)
 
-**Status:** FIXED
-
-**Root cause:** `u_rainbow_hue_offset` is computed as `(accumulated_time * speed * 0.1) % 1.0`. At the exact wrap-around point (value = 0.0), the shader's `<= 0.001` dead-zone guard fires and returns the original colour (white) for one frame — causing a brief white flash.
-
-**Fix:** When rainbow is enabled, if `raw < 0.001` push `(raw + 0.002) % 1.0` instead, skipping the dead zone. Same fix applied to per-bar slow cycle.
-
-- [x] Dead-zone skip applied in `spotify_bars_gl_overlay.py` for both rainbow and per-bar paths.
-- [ ] User to confirm white flash no longer occurs.
-
-**Files:** `spotify_bars_gl_overlay.py`
 
 ---
 
@@ -116,7 +81,7 @@ Key wins locked in for v3.0:
 
 ### FEAT-1: Burn Transition — Thermite Glow + Sparks
 
-**Status:** CODE COMPLETE — awaiting live test.
+**Status:** Needs rework.
 
 **What's done:**
 - Shader v3: thermite startup delay (first 5% of progress = glow builds to max brightness before front moves), thermite brightness multiplier (1.4× during ignition), additive bloom for HDR-like white-hot core.
@@ -141,13 +106,13 @@ No sparks, no ash, dull pathetic glow.
 
 ### PF-2: Control Halo Improvements
 
-**Status:** PLANNED
+**Status:** ✅ Completed Feb 23
 
-**Scope:**
-- [ ] Cursor triangle: make top-left point the actual clickable hotspot (like a real cursor).
-- [ ] All halo shapes: add drop shadows and consistent visual effects.
-- [ ] Diamond shape: add inner dot indicator showing exact click point.
-- [ ] Verify all 6 shapes render correctly with shadow and fade.
+**Summary:**
+- Cursor triangle hotspot now matches the top-left tip exactly, so Ctrl-clicks land where users expect.
+- All halo shapes share the new gradient/shadow treatment routed through `_shape_anchor_offset()` helpers, keeping DPI tracking precise.
+- Diamond halo picked up an inner dot indicator plus a thicker (0.5 px) outline for clarity across themes.
+- Verified all six shapes across DPI scales with hard-exit gating and halo forwarding checks.
 
 **Files:** `cursor_halo.py`, `display_input.py`
 

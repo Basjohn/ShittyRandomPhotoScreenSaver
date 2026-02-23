@@ -55,6 +55,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         blob_size=model.blob_size,
         blob_glow_intensity=model.blob_glow_intensity,
         blob_reactive_glow=model.blob_reactive_glow,
+        blob_intensity_reserve=model.blob_intensity_reserve,
         helix_turns=model.helix_turns,
         helix_double=model.helix_double,
         helix_speed=model.helix_speed,

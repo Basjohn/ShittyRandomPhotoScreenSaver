@@ -192,6 +192,28 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     blob_rd_row.addWidget(tab.blob_reactive_deformation_label)
     _adv.addLayout(blob_rd_row)
 
+    blob_reserve_row = QHBoxLayout()
+    blob_reserve_row.addWidget(QLabel("Intensity Reserve:"))
+    tab.blob_intensity_reserve = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_intensity_reserve.setMinimum(0)
+    tab.blob_intensity_reserve.setMaximum(200)
+    blob_reserve_val = int(tab._default_float('spotify_visualizer', 'blob_intensity_reserve', 0.0) * 100)
+    tab.blob_intensity_reserve.setValue(max(0, min(200, blob_reserve_val)))
+    tab.blob_intensity_reserve.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_intensity_reserve.setTickInterval(25)
+    tab.blob_intensity_reserve.setToolTip(
+        "Amount of hidden headroom held back for high-energy spikes. "
+        "0% = disabled, 100% = baseline reserve, 200% = extreme."
+    )
+    tab.blob_intensity_reserve.valueChanged.connect(tab._save_settings)
+    blob_reserve_row.addWidget(tab.blob_intensity_reserve)
+    tab.blob_intensity_reserve_label = QLabel(f"{blob_reserve_val}%")
+    tab.blob_intensity_reserve.valueChanged.connect(
+        lambda v: tab.blob_intensity_reserve_label.setText(f"{v}%")
+    )
+    blob_reserve_row.addWidget(tab.blob_intensity_reserve_label)
+    _adv.addLayout(blob_reserve_row)
+
     blob_cw_row = QHBoxLayout()
     blob_cw_row.addWidget(QLabel("Constant Wobble:"))
     tab.blob_constant_wobble = NoWheelSlider(Qt.Orientation.Horizontal)

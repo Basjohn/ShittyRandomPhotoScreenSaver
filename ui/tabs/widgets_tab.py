@@ -951,6 +951,9 @@ class WidgetsTab(QWidget):
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
             recommended = True
         try:
+            container = getattr(self, '_spotify_vis_sensitivity_container', None)
+            if container is not None:
+                container.setVisible(not recommended)
             self.spotify_vis_sensitivity.setEnabled(not recommended)
             self.spotify_vis_sensitivity_label.setEnabled(not recommended)
         except Exception as e:

@@ -13,10 +13,18 @@ with GL widgets that have their own native window handles.
 Mouse events are forwarded to the parent widget so context menus and clicks
 still work. The mouse cursor is hidden when the halo is visible.
 """
+import math
 from typing import Optional
 
 from PySide6.QtCore import Qt, QPointF
-from PySide6.QtGui import QPainter, QColor, QPaintEvent, QMouseEvent, QWheelEvent
+from PySide6.QtGui import (
+    QColor,
+    QMouseEvent,
+    QPaintEvent,
+    QPainter,
+    QRadialGradient,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import QApplication, QWidget
 from shiboken6 import Shiboken
 
@@ -31,6 +39,11 @@ logger = get_logger(__name__)
 HALO_BASE_DIAMETER = 48
 HALO_SCALE = 0.8
 HALO_DIAMETER = int(round(HALO_BASE_DIAMETER * HALO_SCALE))
+
+PRIMARY_COLOR = QColor(246, 248, 255, 235)
+ACCENT_COLOR = QColor(130, 205, 255, 200)
+SHADOW_COLOR = QColor(12, 14, 28, 160)
+INNER_DOT_COLOR = QColor(255, 255, 255, 240)
 
 
 class CursorHaloWidget(QWidget):
@@ -101,10 +114,6 @@ class CursorHaloWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        color = QColor(255, 255, 255, 200)
-        shadow_offset = 2
-        shadow_color = QColor(0, 0, 0, 80)
-
         r = min(self.width(), self.height()) - 8
         cx = self.width() // 2
         cy = self.height() // 2
@@ -112,143 +121,149 @@ class CursorHaloWidget(QWidget):
         shape = self._shape
 
         if shape == "ring":
-            self._paint_ring(painter, cx, cy, r, color, shadow_color, shadow_offset)
+            self._paint_ring(painter, cx, cy, r)
         elif shape == "crosshair":
-            self._paint_crosshair(painter, cx, cy, r, color, shadow_color, shadow_offset)
+            self._paint_crosshair(painter, cx, cy, r)
         elif shape == "diamond":
-            self._paint_diamond(painter, cx, cy, r, color, shadow_color, shadow_offset)
+            self._paint_diamond(painter, cx, cy, r)
         elif shape == "dot":
-            self._paint_dot(painter, cx, cy, inner_radius * 2, color, shadow_color, shadow_offset)
+            self._paint_dot(painter, cx, cy, inner_radius * 2)
         elif shape == "cursor_triangle":
-            self._paint_cursor_triangle(painter, cx, cy, r, color, shadow_color, shadow_offset)
+            self._paint_cursor_triangle(painter, cx, cy, r)
         else:
-            self._paint_circle(painter, cx, cy, r, inner_radius, color, shadow_color, shadow_offset)
+            self._paint_circle(painter, cx, cy, r, inner_radius)
         painter.end()
 
-    def _paint_circle(self, p, cx, cy, r, ir, color, shadow, so):
+    def _paint_circle(self, painter: QPainter, cx: int, cy: int, r: int, inner_r: int) -> None:
         """Default circle: ring + center dot."""
-        pen = p.pen()
-        pen.setColor(shadow); pen.setWidth(5)
-        p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(4 + so, 4 + so, r, r)
-        p.setPen(Qt.PenStyle.NoPen); p.setBrush(shadow)
-        p.drawEllipse(cx - ir + so, cy - ir + so, ir * 2, ir * 2)
-        pen.setColor(color); pen.setWidth(3)
-        p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(4, 4, r, r)
-        p.setPen(Qt.PenStyle.NoPen); p.setBrush(color)
-        p.drawEllipse(cx - ir, cy - ir, ir * 2, ir * 2)
+        self._paint_shadow_ring(painter, cx, cy, r)
+        pen = painter.pen()
+        pen.setWidth(3)
+        pen.setColor(PRIMARY_COLOR)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(4, 4, r, r)
 
-    def _paint_ring(self, p, cx, cy, r, color, shadow, so):
-        """Ring only — no center dot."""
-        pen = p.pen()
-        pen.setColor(shadow); pen.setWidth(5)
-        p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawEllipse(4 + so, 4 + so, r, r)
-        pen.setColor(color); pen.setWidth(3)
-        p.setPen(pen)
-        p.drawEllipse(4, 4, r, r)
+        highlight = QRadialGradient(QPointF(cx, cy), float(inner_r) * 1.6)
+        highlight.setColorAt(0.0, INNER_DOT_COLOR)
+        highlight.setColorAt(1.0, ACCENT_COLOR)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(highlight)
+        painter.drawEllipse(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2)
 
-    def _paint_crosshair(self, p, cx, cy, r, color, shadow, so):
-        """Crosshair: two perpendicular lines with a gap in the center."""
+    def _paint_ring(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
+        self._paint_shadow_ring(painter, cx, cy, r)
+        pen = painter.pen()
+        pen.setColor(PRIMARY_COLOR)
+        pen.setWidth(3)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(4, 4, r, r)
+
+    def _paint_crosshair(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
         from PySide6.QtCore import QLineF
+
         half = r // 2
         gap = max(3, r // 8)
-        pen = p.pen()
+        pen = painter.pen()
         pen.setWidth(3)
-        for col, dx, dy in ((shadow, so, so), (color, 0, 0)):
-            pen.setColor(col); p.setPen(pen)
-            p.drawLine(QLineF(cx - half + dx, cy + dy, cx - gap + dx, cy + dy))
-            p.drawLine(QLineF(cx + gap + dx, cy + dy, cx + half + dx, cy + dy))
-            p.drawLine(QLineF(cx + dx, cy - half + dy, cx + dx, cy - gap + dy))
-            p.drawLine(QLineF(cx + dx, cy + gap + dy, cx + dx, cy + half + dy))
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        for color in (SHADOW_COLOR, PRIMARY_COLOR):
+            pen.setColor(color)
+            painter.setPen(pen)
+            offset = 2 if color == SHADOW_COLOR else 0
+            painter.drawLine(QLineF(cx - half + offset, cy + offset, cx - gap + offset, cy + offset))
+            painter.drawLine(QLineF(cx + gap + offset, cy + offset, cx + half + offset, cy + offset))
+            painter.drawLine(QLineF(cx + offset, cy - half + offset, cx + offset, cy - gap + offset))
+            painter.drawLine(QLineF(cx + offset, cy + gap + offset, cx + offset, cy + half + offset))
 
-    def _paint_diamond(self, p, cx, cy, r, color, shadow, so):
-        """Diamond (rotated square)."""
+    def _paint_diamond(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
         from PySide6.QtGui import QPolygonF
         from PySide6.QtCore import QPointF as QPF
+
         half = r // 2
-        pts = [QPF(cx, cy - half), QPF(cx + half, cy), QPF(cx, cy + half), QPF(cx - half, cy)]
-        pen = p.pen()
-        pen.setWidth(3)
-        for col, dx, dy in ((shadow, so, so), (color, 0, 0)):
-            pen.setColor(col); p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
-            shifted = QPolygonF([QPF(pt.x() + dx, pt.y() + dy) for pt in pts])
-            p.drawPolygon(shifted)
+        points = [QPF(cx, cy - half), QPF(cx + half, cy), QPF(cx, cy + half), QPF(cx - half, cy)]
+        pen = painter.pen()
+        pen.setWidthF(max(1.0, pen.widthF()) + 0.5)
+        for color in (SHADOW_COLOR, PRIMARY_COLOR):
+            offset = 2 if color == SHADOW_COLOR else 0
+            shifted = QPolygonF([QPF(pt.x() + offset, pt.y() + offset) for pt in points])
+            pen.setColor(QColor(color))
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPolygon(shifted)
 
-    def _paint_dot(self, p, cx, cy, d, color, shadow, so):
-        """Dot only — filled circle, no ring."""
-        r = max(4, d)
-        p.setPen(Qt.PenStyle.NoPen); p.setBrush(shadow)
-        p.drawEllipse(cx - r // 2 + so, cy - r // 2 + so, r, r)
-        p.setBrush(color)
-        p.drawEllipse(cx - r // 2, cy - r // 2, r, r)
+        self._paint_center_indicator(painter, cx, cy)
 
-    def _paint_cursor_triangle(self, p, cx, cy, r, color, shadow, so):
+    def _paint_dot(self, painter: QPainter, cx: int, cy: int, diameter: int) -> None:
+        radius = max(4, diameter)
+        gradient = QRadialGradient(QPointF(cx, cy), float(radius))
+        gradient.setColorAt(0.0, PRIMARY_COLOR)
+        gradient.setColorAt(1.0, ACCENT_COLOR)
+        painter.setBrush(gradient)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(cx - radius // 2, cy - radius // 2, radius, radius)
+
+    def _paint_cursor_triangle(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
         """Three elongated arrow-tip triangles merged at center, slightly left-slanted.
 
         Each triangle has a sharp outer tip and a wide inner base meeting at the
         centre, creating a 3-pointed star.  The whole shape is rotated ~15 degrees
         counter-clockwise so it reads as a left-leaning cursor.
         """
-        import math
         from PySide6.QtGui import QPolygonF
         from PySide6.QtCore import QPointF as QPF
 
         half = r / 2.0
-        # Outer tip distance from centre; inner base half-width
-        tip_r   = half * 0.95   # how far each tip extends
-        base_r  = half * 0.38   # radius of the inner base arc
-        base_hw = half * 0.28   # half-width of each triangle base
+        tip_r = half * 0.95
+        base_r = half * 0.38
+        base_hw = half * 0.28
 
-        def rot(angle_deg):
-            a = math.radians(angle_deg)
-            return math.cos(a), math.sin(a)
+        def rot(angle_deg: float) -> tuple[float, float]:
+            angle = math.radians(angle_deg)
+            return math.cos(angle), math.sin(angle)
 
-        # Three arms: primary tip at top-left (135°), then 120° apart
         arm_angles = [135.0, 255.0, 15.0]
-        pts = []
-        for ang in arm_angles:
-            # Tip point
-            tx, ty = rot(ang)
+        points: list[QPF] = []
+        for angle in arm_angles:
+            tx, ty = rot(angle)
             tip = QPF(cx + tx * tip_r, cy - ty * tip_r)
 
-            # Base points: perpendicular to arm, centred at base_r behind the tip
-            perp_l = ang + 90.0
-            perp_r = ang - 90.0
+            perp_l = angle + 90.0
+            perp_r = angle - 90.0
             lx, ly = rot(perp_l)
             rx, ry = rot(perp_r)
-            back_x, back_y = rot(ang + 180.0)
-            bcx = cx + back_x * base_r
-            bcy = cy - back_y * base_r
-            bl = QPF(bcx + lx * base_hw, bcy - ly * base_hw)
-            br = QPF(bcx + rx * base_hw, bcy - ry * base_hw)
+            back_x, back_y = rot(angle + 180.0)
+            base_cx = cx + back_x * base_r
+            base_cy = cy - back_y * base_r
+            base_left = QPF(base_cx + lx * base_hw, base_cy - ly * base_hw)
+            base_right = QPF(base_cx + rx * base_hw, base_cy - ry * base_hw)
 
-            pts += [tip, bl, br]
+            points += [tip, base_left, base_right]
 
-        # Build filled star: tip0, base0L, base0R, tip1, base1L, base1R, tip2, base2L, base2R
-        # Reorder to trace the outline: tip0 -> base0R -> base1L -> tip1 -> base1R -> base2L -> tip2 -> base2R -> base0L
         outline = [
-            pts[0],  # tip0
-            pts[2],  # base0R
-            pts[4],  # base1L
-            pts[3],  # tip1
-            pts[5],  # base1R
-            pts[7],  # base2L
-            pts[6],  # tip2
-            pts[8],  # base2R
-            pts[1],  # base0L
+            points[0],
+            points[2],
+            points[4],
+            points[3],
+            points[5],
+            points[7],
+            points[6],
+            points[8],
+            points[1],
         ]
 
-        pen = p.pen()
+        pen = painter.pen()
         pen.setWidth(2)
-        for col, dx, dy in ((shadow, so, so), (color, 0, 0)):
-            shifted = QPolygonF([QPF(pt.x() + dx, pt.y() + dy) for pt in outline])
-            pen.setColor(col)
-            p.setPen(pen)
-            p.setBrush(col)
-            p.drawPolygon(shifted)
-    
+        for color in (SHADOW_COLOR, PRIMARY_COLOR):
+            offset = 2 if color == SHADOW_COLOR else 0
+            shifted = QPolygonF([QPF(pt.x() + offset, pt.y() + offset) for pt in outline])
+            pen.setColor(color)
+            painter.setPen(pen)
+            painter.setBrush(color)
+            painter.drawPolygon(shifted)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Forward mouse press to parent widget."""
         self._forward_mouse_event(event)
@@ -481,24 +496,7 @@ class CursorHaloWidget(QWidget):
         except Exception as e:
             logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
         
-        size = self.size()
-        # Convert local coordinates to global screen coordinates
-        if self._parent_widget is not None:
-            try:
-                global_pos = self._parent_widget.mapToGlobal(
-                    self._parent_widget.rect().topLeft()
-                )
-                global_x = global_pos.x() + x - size.width() // 2
-                global_y = global_pos.y() + y - size.height() // 2
-            except Exception as e:
-                logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
-                global_x = x - size.width() // 2
-                global_y = y - size.height() // 2
-        else:
-            global_x = x - size.width() // 2
-            global_y = y - size.height() // 2
-        
-        self.move(global_x, global_y)
+        self._move_internal(x, y)
         self.show()
     
     def move_to(self, x: int, y: int) -> None:
@@ -507,23 +505,57 @@ class CursorHaloWidget(QWidget):
         Args:
             x, y: Position in parent widget coordinates (will be mapped to global)
         """
+        self._move_internal(x, y)
+
+    # --- Helpers ---------------------------------------------------------
+
+    def _shape_anchor_offset(self) -> QPointF:
+        width = max(1, self.width())
+        height = max(1, self.height())
+        if self._shape != "cursor_triangle":
+            return QPointF(0.0, 0.0)
+
+        r = min(width, height) - 8
+        half = r / 2.0
+        tip_r = half * 0.95
+        tx = math.cos(math.radians(135.0)) * tip_r
+        ty = -math.sin(math.radians(135.0)) * tip_r
+        return QPointF(tx, ty)
+
+    def _move_internal(self, x: int, y: int) -> None:
         size = self.size()
+        anchor = self._shape_anchor_offset()
+        anchor_x = int(round(anchor.x()))
+        anchor_y = int(round(anchor.y()))
+
         if self._parent_widget is not None:
             try:
-                global_pos = self._parent_widget.mapToGlobal(
-                    self._parent_widget.rect().topLeft()
-                )
-                global_x = global_pos.x() + x - size.width() // 2
-                global_y = global_pos.y() + y - size.height() // 2
+                global_origin = self._parent_widget.mapToGlobal(self._parent_widget.rect().topLeft())
+                global_x = global_origin.x() + x - size.width() // 2 - anchor_x
+                global_y = global_origin.y() + y - size.height() // 2 - anchor_y
             except Exception as e:
                 logger.debug("[CURSOR_HALO] Exception suppressed: %s", e)
-                global_x = x - size.width() // 2
-                global_y = y - size.height() // 2
+                global_x = x - size.width() // 2 - anchor_x
+                global_y = y - size.height() // 2 - anchor_y
         else:
-            global_x = x - size.width() // 2
-            global_y = y - size.height() // 2
-        
+            global_x = x - size.width() // 2 - anchor_x
+            global_y = y - size.height() // 2 - anchor_y
+
         self.move(global_x, global_y)
+
+    def _paint_shadow_ring(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
+        gradient = QRadialGradient(QPointF(cx + 2, cy + 2), float(r))
+        gradient.setColorAt(0.0, QColor(0, 0, 0, 0))
+        gradient.setColorAt(1.0, SHADOW_COLOR)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(gradient)
+        painter.drawEllipse(4, 4, r, r)
+
+    def _paint_center_indicator(self, painter: QPainter, cx: int, cy: int) -> None:
+        size = max(4, self.width() // 12)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(INNER_DOT_COLOR)
+        painter.drawEllipse(cx - size // 2, cy - size // 2, size, size)
     
     def closeEvent(self, event) -> None:  # type: ignore[override]
         """Ensure halo fades out when destroyed."""

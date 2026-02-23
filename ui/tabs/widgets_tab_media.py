@@ -808,6 +808,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         blob_rd_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_reactive_deformation', 1.0) * 100)
         tab.blob_reactive_deformation.setValue(max(0, min(300, blob_rd_val)))
         tab.blob_reactive_deformation_label.setText(f"{blob_rd_val}%")
+    if hasattr(tab, 'blob_intensity_reserve'):
+        blob_reserve_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_intensity_reserve', 0.0) * 100)
+        tab.blob_intensity_reserve.setValue(max(0, min(200, blob_reserve_val)))
+        tab.blob_intensity_reserve_label.setText(f"{blob_reserve_val}%")
     if hasattr(tab, 'blob_constant_wobble'):
         blob_cw_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_constant_wobble', 1.0) * 100)
         tab.blob_constant_wobble.setValue(max(0, min(200, blob_cw_val)))
@@ -1037,7 +1041,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_stream_constant_speed_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_stream_speed_cap'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_speed_cap', 2.0) * 100)
-        tab.bubble_stream_speed_cap.setValue(max(50, min(250, v)))
+        tab.bubble_stream_speed_cap.setValue(max(50, min(400, v)))
         tab.bubble_stream_speed_cap_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_stream_reactivity'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_reactivity', 0.5) * 100)
@@ -1061,8 +1065,13 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_drift_frequency_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_drift_direction'):
         dd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_drift_direction', 'random').lower()
-        dd_map = {"none": 0, "left": 1, "right": 2, "diagonal": 3, "random": 4}
-        tab.bubble_drift_direction.setCurrentIndex(dd_map.get(dd, 4))
+        combo = tab.bubble_drift_direction
+        idx = combo.findData(dd)
+        if idx < 0:
+            idx = combo.findData('random')
+        if idx < 0:
+            idx = 0
+        combo.setCurrentIndex(idx)
     if hasattr(tab, 'bubble_big_count'):
         v = tab._config_int('spotify_visualizer', spotify_vis_config, 'bubble_big_count', 8)
         tab.bubble_big_count.setValue(max(1, min(30, v)))
@@ -1221,6 +1230,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_glow_intensity': (tab.blob_glow_intensity.value() if hasattr(tab, 'blob_glow_intensity') else 50) / 100.0,
         'blob_reactive_glow': tab.blob_reactive_glow.isChecked() if hasattr(tab, 'blob_reactive_glow') else False,
         'blob_reactive_deformation': (tab.blob_reactive_deformation.value() if hasattr(tab, 'blob_reactive_deformation') else 100) / 100.0,
+        'blob_intensity_reserve': (tab.blob_intensity_reserve.value() if hasattr(tab, 'blob_intensity_reserve') else 0) / 100.0,
         'blob_constant_wobble': (tab.blob_constant_wobble.value() if hasattr(tab, 'blob_constant_wobble') else 100) / 100.0,
         'blob_reactive_wobble': (tab.blob_reactive_wobble.value() if hasattr(tab, 'blob_reactive_wobble') else 100) / 100.0,
         'blob_stretch_tendency': (tab.blob_stretch_tendency.value() if hasattr(tab, 'blob_stretch_tendency') else 0) / 100.0,
@@ -1286,7 +1296,10 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_drift_amount': (tab.bubble_drift_amount.value() if hasattr(tab, 'bubble_drift_amount') else 50) / 100.0,
         'bubble_drift_speed': (tab.bubble_drift_speed.value() if hasattr(tab, 'bubble_drift_speed') else 50) / 100.0,
         'bubble_drift_frequency': (tab.bubble_drift_frequency.value() if hasattr(tab, 'bubble_drift_frequency') else 50) / 100.0,
-        'bubble_drift_direction': (tab.bubble_drift_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_drift_direction') else 'random'),
+        'bubble_drift_direction': (
+            (tab.bubble_drift_direction.currentData() or 'random')
+            if hasattr(tab, 'bubble_drift_direction') else 'random'
+        ),
         'bubble_big_count': tab.bubble_big_count.value() if hasattr(tab, 'bubble_big_count') else 8,
         'bubble_small_count': tab.bubble_small_count.value() if hasattr(tab, 'bubble_small_count') else 25,
         'bubble_surface_reach': (tab.bubble_surface_reach.value() if hasattr(tab, 'bubble_surface_reach') else 60) / 100.0,

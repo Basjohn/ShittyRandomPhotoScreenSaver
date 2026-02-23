@@ -116,7 +116,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     row.addWidget(QLabel("Stream Speed Cap:"))
     tab.bubble_stream_speed_cap = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_speed_cap.setMinimum(50)
-    tab.bubble_stream_speed_cap.setMaximum(250)
+    tab.bubble_stream_speed_cap.setMaximum(400)
     val = int(tab._default_float('spotify_visualizer', 'bubble_stream_speed_cap', 2.0) * 100)
     tab.bubble_stream_speed_cap.setValue(val)
     tab.bubble_stream_speed_cap.setTickPosition(QSlider.TickPosition.TicksBelow)
@@ -224,10 +224,22 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     row = QHBoxLayout()
     row.addWidget(QLabel("Drift Direction:"))
     tab.bubble_drift_direction = QComboBox()
-    tab.bubble_drift_direction.addItems(["None", "Left", "Right", "Diagonal", "Random"])
+    drift_options = [
+        ("None", "none"),
+        ("Left", "left"),
+        ("Right", "right"),
+        ("Diagonal", "diagonal"),
+        ("Swish (Horizontal)", "swish_horizontal"),
+        ("Swish (Vertical)", "swish_vertical"),
+        ("Random", "random"),
+    ]
+    for label, value in drift_options:
+        tab.bubble_drift_direction.addItem(label, value)
     saved_dd = tab._default_str('spotify_visualizer', 'bubble_drift_direction', 'random').lower()
-    dd_map = {"none": 0, "left": 1, "right": 2, "diagonal": 3, "random": 4}
-    tab.bubble_drift_direction.setCurrentIndex(dd_map.get(saved_dd, 4))
+    dd_index = tab.bubble_drift_direction.findData(saved_dd)
+    if dd_index < 0:
+        dd_index = tab.bubble_drift_direction.findData('random')
+    tab.bubble_drift_direction.setCurrentIndex(max(0, dd_index))
     tab.bubble_drift_direction.currentIndexChanged.connect(tab._save_settings)
     row.addWidget(tab.bubble_drift_direction)
     row.addStretch()

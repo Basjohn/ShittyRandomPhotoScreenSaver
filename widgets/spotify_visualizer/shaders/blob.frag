@@ -25,6 +25,7 @@ uniform int u_blob_reactive_glow;  // 0 = static glow, 1 = energy-reactive
 uniform vec4 u_blob_outline_color;  // colour for the dark band between fill and glow
 uniform float u_blob_smoothed_energy;  // CPU-side smoothed energy (reduces flicker)
 uniform float u_blob_reactive_deformation;  // 0..2 scales outward energy growth (default 1.0)
+uniform float u_blob_intensity_reserve;  // 0..2 hidden headroom held for high-energy spikes
 uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.0)
 uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
 uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.0)
@@ -74,6 +75,18 @@ float blob_sdf(vec2 p, float time) {
     // Subtle contraction on energy dips (~10% of pulse range, smoothed to avoid flicker)
     float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
     r -= (1.0 - se) * 0.053 * u_blob_pulse;
+
+    // Headroom reserve — kicks in on high-frequency spikes so reserve=0 is a no-op.
+    float reserve = clamp(u_blob_intensity_reserve, 0.0, 2.0);
+    if (reserve > 0.0001) {
+        float high = clamp(u_high_energy, 0.0, 1.0);
+        // Trigger slightly earlier (≈45% hi-hat energy) so the boost is noticeable in busy tracks.
+        float spike = max(0.0, high - 0.45);
+        float gate = smoothstep(0.0, 0.25, spike);
+        // Quadratic response keeps sustain tame while letting spikes expand the core dramatically.
+        float reserve_boost = spike * spike * 0.25 * reserve;
+        r += reserve_boost * gate;
+    }
 
     // Shrink significantly when playback is stopped (to ~45% of normal)
     if (u_playing == 0) {
