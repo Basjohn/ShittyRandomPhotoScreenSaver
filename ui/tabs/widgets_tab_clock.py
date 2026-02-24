@@ -64,6 +64,22 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """
     from ui.tabs.widgets_tab import NoWheelSlider
 
+    LABEL_WIDTH = 140
+
+    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        label = QLabel(label_text)
+        label.setFixedWidth(LABEL_WIDTH)
+        row.addWidget(label)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content
+
     clock_group = QGroupBox("Clock Widget")
     clock_layout = QVBoxLayout(clock_group)
 
@@ -81,17 +97,16 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _clock_ctrl_layout.setSpacing(4)
 
     # Time format
-    format_row = QHBoxLayout()
-    format_row.addWidget(QLabel("Format:"))
+    format_row = _aligned_row(_clock_ctrl_layout, "Format:")
     tab.clock_format = QComboBox()
     tab.clock_format.addItems(["12 Hour", "24 Hour"])
     tab.clock_format.currentTextChanged.connect(tab._save_settings)
     default_format = tab._default_str('clock', 'format', '24h').lower()
     format_map = {'12h': "12 Hour", '24h': "24 Hour"}
     tab._set_combo_text(tab.clock_format, format_map.get(default_format, "24 Hour"))
+    tab.clock_format.setMinimumWidth(140)
     format_row.addWidget(tab.clock_format)
     format_row.addStretch()
-    _clock_ctrl_layout.addLayout(format_row)
 
     # Show seconds
     tab.clock_seconds = QCheckBox("Show Seconds")
@@ -101,8 +116,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _clock_ctrl_layout.addWidget(tab.clock_seconds)
 
     # Timezone
-    tz_row = QHBoxLayout()
-    tz_row.addWidget(QLabel("Timezone:"))
+    tz_row = _aligned_row(_clock_ctrl_layout, "Timezone:")
     tab.clock_timezone = QComboBox()
     tab.clock_timezone.setMinimumWidth(200)
     tab._populate_timezones()
@@ -115,7 +129,6 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.tz_auto_btn.clicked.connect(tab._auto_detect_timezone)
     tz_row.addWidget(tab.tz_auto_btn)
     tz_row.addStretch()
-    _clock_ctrl_layout.addLayout(tz_row)
 
     # Show timezone abbreviation
     tab.clock_show_tz = QCheckBox("Show Timezone Abbreviation")
@@ -184,8 +197,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _update_clock_mode_visibility(tab)
 
     # Position
-    position_row = QHBoxLayout()
-    position_row.addWidget(QLabel("Position:"))
+    position_row = _aligned_row(_clock_ctrl_layout, "Position:")
     tab.clock_position = QComboBox()
     tab.clock_position.addItems([
         "Top Left", "Top Center", "Top Right",
@@ -194,30 +206,28 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     ])
     tab.clock_position.currentTextChanged.connect(tab._save_settings)
     tab.clock_position.currentTextChanged.connect(tab._update_stack_status)
+    tab.clock_position.setMinimumWidth(150)
     position_row.addWidget(tab.clock_position)
     tab._set_combo_text(tab.clock_position, tab._default_str('clock', 'position', 'Top Right'))
     tab.clock_stack_status = QLabel("")
     tab.clock_stack_status.setMinimumWidth(100)
     position_row.addWidget(tab.clock_stack_status)
     position_row.addStretch()
-    _clock_ctrl_layout.addLayout(position_row)
 
     # Display (monitor selection)
-    clock_disp_row = QHBoxLayout()
-    clock_disp_row.addWidget(QLabel("Display:"))
+    clock_disp_row = _aligned_row(_clock_ctrl_layout, "Display:")
     tab.clock_monitor_combo = QComboBox()
     tab.clock_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.clock_monitor_combo.currentTextChanged.connect(tab._save_settings)
     tab.clock_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
+    tab.clock_monitor_combo.setMinimumWidth(120)
     clock_disp_row.addWidget(tab.clock_monitor_combo)
     clock_monitor_default = tab._widget_default('clock', 'monitor', 'ALL')
     tab._set_combo_text(tab.clock_monitor_combo, str(clock_monitor_default))
     clock_disp_row.addStretch()
-    _clock_ctrl_layout.addLayout(clock_disp_row)
 
     # Font family
-    font_family_row = QHBoxLayout()
-    font_family_row.addWidget(QLabel("Font:"))
+    font_family_row = _aligned_row(_clock_ctrl_layout, "Font:")
     tab.clock_font_combo = QFontComboBox()
     default_clock_font = tab._default_str('clock', 'font_family', 'Segoe UI')
     tab.clock_font_combo.setCurrentFont(QFont(default_clock_font))
@@ -225,11 +235,9 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_font_combo.currentFontChanged.connect(tab._save_settings)
     font_family_row.addWidget(tab.clock_font_combo)
     font_family_row.addStretch()
-    _clock_ctrl_layout.addLayout(font_family_row)
 
     # Font size
-    font_row = QHBoxLayout()
-    font_row.addWidget(QLabel("Font Size:"))
+    font_row = _aligned_row(_clock_ctrl_layout, "Font Size:" )
     tab.clock_font_size = QSpinBox()
     tab.clock_font_size.setRange(12, 144)
     tab.clock_font_size.setValue(tab._default_int('clock', 'font_size', 48))
@@ -237,13 +245,13 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_font_size.valueChanged.connect(tab._save_settings)
     tab.clock_font_size.valueChanged.connect(tab._update_stack_status)
     font_row.addWidget(tab.clock_font_size)
-    font_row.addWidget(QLabel("px"))
+    font_px = QLabel("px")
+    font_px.setMinimumWidth(24)
+    font_row.addWidget(font_px)
     font_row.addStretch()
-    _clock_ctrl_layout.addLayout(font_row)
 
     # Text color
-    color_row = QHBoxLayout()
-    color_row.addWidget(QLabel("Text Color:"))
+    color_row = _aligned_row(_clock_ctrl_layout, "Text Color:")
     tab.clock_color_btn = ColorSwatchButton(title="Choose Clock Color")
     tab.clock_color_btn.set_color(tab._clock_color)
     tab.clock_color_btn.color_changed.connect(
@@ -251,20 +259,19 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     color_row.addWidget(tab.clock_color_btn)
     color_row.addStretch()
-    _clock_ctrl_layout.addLayout(color_row)
 
     # Margin
-    margin_row = QHBoxLayout()
-    margin_row.addWidget(QLabel("Margin:"))
+    margin_row = _aligned_row(_clock_ctrl_layout, "Margin:")
     tab.clock_margin = QSpinBox()
     tab.clock_margin.setRange(0, 100)
     tab.clock_margin.setValue(tab._default_int('clock', 'margin', 30))
     tab.clock_margin.setAccelerated(True)
     tab.clock_margin.valueChanged.connect(tab._save_settings)
     margin_row.addWidget(tab.clock_margin)
-    margin_row.addWidget(QLabel("px"))
+    margin_px = QLabel("px")
+    margin_px.setMinimumWidth(24)
+    margin_row.addWidget(margin_px)
     margin_row.addStretch()
-    _clock_ctrl_layout.addLayout(margin_row)
 
     # Background frame
     tab.clock_show_background = QCheckBox("Show Background Frame")
@@ -273,8 +280,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _clock_ctrl_layout.addWidget(tab.clock_show_background)
 
     # Background opacity
-    opacity_row = QHBoxLayout()
-    opacity_row.addWidget(QLabel("Background Opacity:"))
+    opacity_row = _aligned_row(_clock_ctrl_layout, "Background Opacity:")
     tab.clock_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.clock_bg_opacity.setMinimum(0)
     tab.clock_bg_opacity.setMaximum(100)
@@ -286,12 +292,11 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     opacity_row.addWidget(tab.clock_bg_opacity)
     tab.clock_opacity_label = QLabel(f"{clock_bg_opacity_pct}%")
     tab.clock_bg_opacity.valueChanged.connect(lambda v: tab.clock_opacity_label.setText(f"{v}%"))
+    tab.clock_opacity_label.setMinimumWidth(50)
     opacity_row.addWidget(tab.clock_opacity_label)
-    _clock_ctrl_layout.addLayout(opacity_row)
 
     # Background color
-    clock_bg_color_row = QHBoxLayout()
-    clock_bg_color_row.addWidget(QLabel("Background Color:"))
+    clock_bg_color_row = _aligned_row(_clock_ctrl_layout, "Background Color:")
     tab.clock_bg_color_btn = ColorSwatchButton(title="Choose Clock Background Color")
     tab.clock_bg_color_btn.set_color(tab._clock_bg_color)
     tab.clock_bg_color_btn.color_changed.connect(
@@ -299,11 +304,9 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     clock_bg_color_row.addWidget(tab.clock_bg_color_btn)
     clock_bg_color_row.addStretch()
-    _clock_ctrl_layout.addLayout(clock_bg_color_row)
 
     # Background border color
-    clock_border_color_row = QHBoxLayout()
-    clock_border_color_row.addWidget(QLabel("Border Color:"))
+    clock_border_color_row = _aligned_row(_clock_ctrl_layout, "Border Color:")
     tab.clock_border_color_btn = ColorSwatchButton(title="Choose Clock Border Color")
     tab.clock_border_color_btn.set_color(tab._clock_border_color)
     tab.clock_border_color_btn.color_changed.connect(
@@ -311,11 +314,9 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     clock_border_color_row.addWidget(tab.clock_border_color_btn)
     clock_border_color_row.addStretch()
-    _clock_ctrl_layout.addLayout(clock_border_color_row)
 
     # Background border opacity
-    clock_border_opacity_row = QHBoxLayout()
-    clock_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+    clock_border_opacity_row = _aligned_row(_clock_ctrl_layout, "Border Opacity:")
     tab.clock_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.clock_border_opacity.setMinimum(0)
     tab.clock_border_opacity.setMaximum(100)
@@ -329,8 +330,8 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_border_opacity.valueChanged.connect(
         lambda v: tab.clock_border_opacity_label.setText(f"{v}%")
     )
+    tab.clock_border_opacity_label.setMinimumWidth(50)
     clock_border_opacity_row.addWidget(tab.clock_border_opacity_label)
-    _clock_ctrl_layout.addLayout(clock_border_opacity_row)
 
     extra_label = QLabel("Additional clocks (optional, share style with main clock)")
     extra_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")

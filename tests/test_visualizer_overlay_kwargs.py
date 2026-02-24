@@ -43,6 +43,8 @@ def test_overlay_accepts_all_gpu_kwargs(qt_app):
         "ghost_alpha",
         "ghost_decay",
         "vis_mode",
+        "sine_density",
+        "sine_displacement",
     }
     assert base_keys <= overlay_params
 

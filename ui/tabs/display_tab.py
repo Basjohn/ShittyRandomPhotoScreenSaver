@@ -70,6 +70,23 @@ class DisplayTab(QWidget):
             QScrollArea QWidget { background: transparent; }
         """)
         
+        # Shared alignment helper (fixed-width label column)
+        LABEL_WIDTH = 150
+
+        def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(8)
+            label = QLabel(label_text)
+            label.setFixedWidth(LABEL_WIDTH)
+            row.addWidget(label)
+            content = QHBoxLayout()
+            content.setContentsMargins(0, 0, 0, 0)
+            content.setSpacing(8)
+            row.addLayout(content, 1)
+            parent_layout.addLayout(row)
+            return content
+
         # Create content widget
         content = QWidget()
         layout = QVBoxLayout(content)
@@ -84,11 +101,10 @@ class DisplayTab(QWidget):
         # Monitor selection group
         monitor_group = QGroupBox("Monitor Configuration")
         monitor_layout = QVBoxLayout(monitor_group)
+        monitor_layout.setSpacing(6)
 
         # Show On section (per-monitor checkboxes)
-        monitor_layout.addWidget(QLabel("Show screensaver on:"))
-
-        show_row = QHBoxLayout()
+        show_row = _aligned_row(monitor_layout, "Show screensaver on:")
         self.show_all_check = QCheckBox("All")
         self.monitor_checks: List[QCheckBox] = [
             QCheckBox("Monitor 1"),
@@ -102,13 +118,14 @@ class DisplayTab(QWidget):
             cb.stateChanged.connect(self._on_show_on_changed)
             show_row.addWidget(cb)
         show_row.addStretch()
-        monitor_layout.addLayout(show_row)
 
         # Same image toggle
+        same_image_row = _aligned_row(monitor_layout, "")
         self.same_image_check = QCheckBox("Show same image on all monitors")
         self.same_image_check.setChecked(True)
         self.same_image_check.stateChanged.connect(self._save_settings)
-        monitor_layout.addWidget(self.same_image_check)
+        same_image_row.addWidget(self.same_image_check)
+        same_image_row.addStretch()
         
         layout.addWidget(monitor_group)
         
@@ -116,17 +133,16 @@ class DisplayTab(QWidget):
         mode_group = QGroupBox("Display Mode")
         mode_layout = QVBoxLayout(mode_group)
         
-        mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Mode:"))
+        mode_row = _aligned_row(mode_layout, "Mode:")
         self.mode_combo = QComboBox()
         self.mode_combo.addItems([
             "Fill - Scale to fill screen (crop if needed)",
             "Fit - Scale to fit screen (show all, may have bars)",
             "Shrink - Only shrink large images (never enlarge)"
         ])
+        self.mode_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.mode_combo.currentIndexChanged.connect(self._save_settings)
         mode_row.addWidget(self.mode_combo, 1)
-        mode_layout.addLayout(mode_row)
         
         layout.addWidget(mode_group)
         
@@ -135,8 +151,7 @@ class DisplayTab(QWidget):
         timing_layout = QVBoxLayout(timing_group)
         
         # Rotation interval
-        interval_row = QHBoxLayout()
-        interval_row.addWidget(QLabel("Change image every:"))
+        interval_row = _aligned_row(timing_layout, "Change image every:")
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(1, 3600)
         self.interval_spin.setSingleStep(1)
@@ -144,15 +159,17 @@ class DisplayTab(QWidget):
         self.interval_spin.setSuffix(" seconds")
         self.interval_spin.setValue(10)
         self.interval_spin.valueChanged.connect(self._save_settings)
+        self.interval_spin.setFixedWidth(140)
         interval_row.addWidget(self.interval_spin)
         interval_row.addStretch()
-        timing_layout.addLayout(interval_row)
         
         # Shuffle toggle
+        shuffle_row = _aligned_row(timing_layout, "")
         self.shuffle_check = QCheckBox("Shuffle images (random order)")
         self.shuffle_check.setChecked(True)
         self.shuffle_check.stateChanged.connect(self._save_settings)
-        timing_layout.addWidget(self.shuffle_check)
+        shuffle_row.addWidget(self.shuffle_check)
+        shuffle_row.addStretch()
         
         layout.addWidget(timing_group)
         
@@ -160,6 +177,7 @@ class DisplayTab(QWidget):
         quality_group = QGroupBox("Image Quality")
         quality_layout = QVBoxLayout(quality_group)
         
+        lanczos_row = _aligned_row(quality_layout, "")
         self.lanczos_check = QCheckBox("Use Lanczos scaling (higher quality, more CPU)")
         self.lanczos_check.setChecked(True)
         self.lanczos_check.setToolTip(
@@ -167,12 +185,15 @@ class DisplayTab(QWidget):
             "Disable if experiencing performance issues during transitions."
         )
         self.lanczos_check.stateChanged.connect(self._save_settings)
-        quality_layout.addWidget(self.lanczos_check)
+        lanczos_row.addWidget(self.lanczos_check)
+        lanczos_row.addStretch()
         
+        sharpen_row = _aligned_row(quality_layout, "")
         self.sharpen_check = QCheckBox("Apply sharpening filter when downscaling")
         self.sharpen_check.setChecked(False)
         self.sharpen_check.stateChanged.connect(self._save_settings)
-        quality_layout.addWidget(self.sharpen_check)
+        sharpen_row.addWidget(self.sharpen_check)
+        sharpen_row.addStretch()
         
         layout.addWidget(quality_group)
         
@@ -182,14 +203,13 @@ class DisplayTab(QWidget):
         backend_group = QGroupBox("Renderer Backend")
         backend_layout = QVBoxLayout(backend_group)
 
-        backend_row = QHBoxLayout()
-        backend_row.addWidget(QLabel("Preferred backend:"))
+        backend_row = _aligned_row(backend_layout, "Preferred backend:")
         self.backend_combo = QComboBox()
         self.backend_combo.addItem("OpenGL (recommended)", userData="opengl")
         self.backend_combo.addItem("Software (fallback)", userData="software")
+        self.backend_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.backend_combo.currentIndexChanged.connect(self._save_settings)
         backend_row.addWidget(self.backend_combo, 1)
-        backend_layout.addLayout(backend_row)
 
         backend_hint = QLabel(
             "OpenGL is the primary renderer. If it fails during startup, the software fallback engages automatically."
@@ -202,24 +222,25 @@ class DisplayTab(QWidget):
         # Input & Exit group
         input_group = QGroupBox("Input && Exit")
         input_layout = QVBoxLayout(input_group)
+        hard_exit_row = _aligned_row(input_layout, "")
         self.hard_exit_check = QCheckBox("Hard Exit (ESC only)")
         self.hard_exit_check.setToolTip(
             "Makes the screensaver only close if you press escape and no longer for simple mouse movement"
         )
         self.hard_exit_check.setChecked(False)
         self.hard_exit_check.stateChanged.connect(self._save_settings)
-        input_layout.addWidget(self.hard_exit_check)
+        hard_exit_row.addWidget(self.hard_exit_check)
+        hard_exit_row.addStretch()
 
         # Cursor Halo Shape
-        halo_row = QHBoxLayout()
-        halo_row.addWidget(QLabel("Cursor Halo Shape:"))
+        halo_row = _aligned_row(input_layout, "Cursor Halo Shape:")
         self.halo_shape_combo = QComboBox()
         self.halo_shape_combo.addItems(["Circle", "Ring", "Crosshair", "Diamond", "Dot", "Cursor Triangle"])
         self.halo_shape_combo.setToolTip("Visual shape of the cursor halo in Hard Exit / Ctrl-click mode.")
+        self.halo_shape_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.halo_shape_combo.currentIndexChanged.connect(self._save_settings)
         halo_row.addWidget(self.halo_shape_combo)
         halo_row.addStretch()
-        input_layout.addLayout(halo_row)
         
         layout.addWidget(input_group)
         

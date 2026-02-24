@@ -106,6 +106,22 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """
     from ui.tabs.widgets_tab import NoWheelSlider
 
+    LABEL_WIDTH = 140
+
+    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        label = QLabel(label_text)
+        label.setFixedWidth(LABEL_WIDTH)
+        row.addWidget(label)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content
+
     # --- Media (Spotify) Widget Group ---
     media_group = QGroupBox("Spotify Widget")
     media_layout = QVBoxLayout(media_group)
@@ -132,8 +148,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
     _media_ctrl_layout.addWidget(media_info)
 
-    media_pos_row = QHBoxLayout()
-    media_pos_row.addWidget(QLabel("Position:"))
+    media_pos_row = _aligned_row(_media_ctrl_layout, "Position:")
     tab.media_position = QComboBox()
     tab.media_position.addItems([
         "Top Left", "Top Center", "Top Right",
@@ -142,6 +157,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     ])
     tab.media_position.currentTextChanged.connect(tab._save_settings)
     tab.media_position.currentTextChanged.connect(tab._update_stack_status)
+    tab.media_position.setMinimumWidth(150)
     media_pos_row.addWidget(tab.media_position)
     tab._set_combo_text(tab.media_position, tab._default_str('media', 'position', 'Bottom Left'))
     tab.media_stack_status = QLabel("")
@@ -150,20 +166,19 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_pos_row.addStretch()
     _media_ctrl_layout.addLayout(media_pos_row)
 
-    media_disp_row = QHBoxLayout()
-    media_disp_row.addWidget(QLabel("Display:"))
+    media_disp_row = _aligned_row(_media_ctrl_layout, "Display:")
     tab.media_monitor_combo = QComboBox()
     tab.media_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.media_monitor_combo.currentTextChanged.connect(tab._save_settings)
     tab.media_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
+    tab.media_monitor_combo.setMinimumWidth(120)
     media_disp_row.addWidget(tab.media_monitor_combo)
     media_monitor_default = tab._widget_default('media', 'monitor', 'ALL')
     tab._set_combo_text(tab.media_monitor_combo, str(media_monitor_default))
     media_disp_row.addStretch()
     _media_ctrl_layout.addLayout(media_disp_row)
 
-    media_font_family_row = QHBoxLayout()
-    media_font_family_row.addWidget(QLabel("Font:"))
+    media_font_family_row = _aligned_row(_media_ctrl_layout, "Font:")
     tab.media_font_combo = QFontComboBox()
     default_media_font = tab._default_str('media', 'font_family', 'Segoe UI')
     tab.media_font_combo.setCurrentFont(QFont(default_media_font))
@@ -171,10 +186,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_font_combo.currentFontChanged.connect(tab._save_settings)
     media_font_family_row.addWidget(tab.media_font_combo)
     media_font_family_row.addStretch()
-    _media_ctrl_layout.addLayout(media_font_family_row)
 
-    media_font_row = QHBoxLayout()
-    media_font_row.addWidget(QLabel("Font Size:"))
+    media_font_row = _aligned_row(_media_ctrl_layout, "Font Size:")
     tab.media_font_size = QSpinBox()
     tab.media_font_size.setRange(10, 72)
     tab.media_font_size.setValue(tab._default_int('media', 'font_size', 20))
@@ -182,24 +195,24 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_font_size.valueChanged.connect(tab._save_settings)
     tab.media_font_size.valueChanged.connect(tab._update_stack_status)
     media_font_row.addWidget(tab.media_font_size)
-    media_font_row.addWidget(QLabel("px"))
+    font_px = QLabel("px")
+    font_px.setMinimumWidth(24)
+    media_font_row.addWidget(font_px)
     media_font_row.addStretch()
-    _media_ctrl_layout.addLayout(media_font_row)
 
-    media_margin_row = QHBoxLayout()
-    media_margin_row.addWidget(QLabel("Margin:"))
+    media_margin_row = _aligned_row(_media_ctrl_layout, "Margin:")
     tab.media_margin = QSpinBox()
     tab.media_margin.setRange(0, 100)
     tab.media_margin.setValue(tab._default_int('media', 'margin', 30))
     tab.media_margin.setAccelerated(True)
     tab.media_margin.valueChanged.connect(tab._save_settings)
     media_margin_row.addWidget(tab.media_margin)
-    media_margin_row.addWidget(QLabel("px"))
+    margin_px = QLabel("px")
+    margin_px.setMinimumWidth(24)
+    media_margin_row.addWidget(margin_px)
     media_margin_row.addStretch()
-    _media_ctrl_layout.addLayout(media_margin_row)
 
-    media_color_row = QHBoxLayout()
-    media_color_row.addWidget(QLabel("Text Color:"))
+    media_color_row = _aligned_row(_media_ctrl_layout, "Text Color:")
     tab.media_color_btn = ColorSwatchButton(title="Choose Spotify Text Color")
     tab.media_color_btn.set_color(tab._media_color)
     tab.media_color_btn.color_changed.connect(
@@ -207,7 +220,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     media_color_row.addWidget(tab.media_color_btn)
     media_color_row.addStretch()
-    _media_ctrl_layout.addLayout(media_color_row)
 
     tab.media_show_background = QCheckBox("Show Background Frame")
     tab.media_show_background.setChecked(tab._default_bool('media', 'show_background', True))
@@ -228,8 +240,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_intense_shadow.stateChanged.connect(tab._save_settings)
     _mbg_layout.addWidget(tab.media_intense_shadow)
 
-    media_opacity_row = QHBoxLayout()
-    media_opacity_row.addWidget(QLabel("Background Opacity:"))
+    media_opacity_row = _aligned_row(_mbg_layout, "Background Opacity:")
     tab.media_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.media_bg_opacity.setMinimum(0)
     tab.media_bg_opacity.setMaximum(100)
@@ -243,11 +254,10 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_bg_opacity.valueChanged.connect(
         lambda v: tab.media_bg_opacity_label.setText(f"{v}%")
     )
+    tab.media_bg_opacity_label.setMinimumWidth(50)
     media_opacity_row.addWidget(tab.media_bg_opacity_label)
-    _mbg_layout.addLayout(media_opacity_row)
 
-    media_bg_color_row = QHBoxLayout()
-    media_bg_color_row.addWidget(QLabel("Background Color:"))
+    media_bg_color_row = _aligned_row(_mbg_layout, "Background Color:")
     tab.media_bg_color_btn = ColorSwatchButton(title="Choose Spotify Background Color")
     tab.media_bg_color_btn.set_color(tab._media_bg_color)
     tab.media_bg_color_btn.color_changed.connect(
@@ -255,10 +265,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     media_bg_color_row.addWidget(tab.media_bg_color_btn)
     media_bg_color_row.addStretch()
-    _mbg_layout.addLayout(media_bg_color_row)
 
-    media_border_color_row = QHBoxLayout()
-    media_border_color_row.addWidget(QLabel("Border Color:"))
+    media_border_color_row = _aligned_row(_mbg_layout, "Border Color:")
     tab.media_border_color_btn = ColorSwatchButton(title="Choose Spotify Border Color")
     tab.media_border_color_btn.set_color(tab._media_border_color)
     tab.media_border_color_btn.color_changed.connect(
@@ -266,10 +274,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     media_border_color_row.addWidget(tab.media_border_color_btn)
     media_border_color_row.addStretch()
-    _mbg_layout.addLayout(media_border_color_row)
 
-    media_border_opacity_row = QHBoxLayout()
-    media_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+    media_border_opacity_row = _aligned_row(_mbg_layout, "Border Opacity:")
     tab.media_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.media_border_opacity.setMinimum(0)
     tab.media_border_opacity.setMaximum(100)
@@ -283,15 +289,14 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_border_opacity.valueChanged.connect(
         lambda v: tab.media_border_opacity_label.setText(f"{v}%")
     )
+    tab.media_border_opacity_label.setMinimumWidth(50)
     media_border_opacity_row.addWidget(tab.media_border_opacity_label)
-    _mbg_layout.addLayout(media_border_opacity_row)
 
     _media_ctrl_layout.addWidget(tab._media_bg_container)
     tab.media_show_background.stateChanged.connect(lambda: _update_media_bg_visibility(tab))
     _update_media_bg_visibility(tab)
 
-    media_volume_fill_row = QHBoxLayout()
-    media_volume_fill_row.addWidget(QLabel("Volume Fill Color:"))
+    media_volume_fill_row = _aligned_row(_media_ctrl_layout, "Volume Fill Color:")
     tab.media_volume_fill_color_btn = ColorSwatchButton(title="Choose Spotify Volume Fill Color")
     tab.media_volume_fill_color_btn.set_color(getattr(tab, '_media_volume_fill_color', tab._media_color))
     tab.media_volume_fill_color_btn.color_changed.connect(
@@ -299,10 +304,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     media_volume_fill_row.addWidget(tab.media_volume_fill_color_btn)
     media_volume_fill_row.addStretch()
-    _media_ctrl_layout.addLayout(media_volume_fill_row)
 
-    media_artwork_row = QHBoxLayout()
-    media_artwork_row.addWidget(QLabel("Artwork Size:"))
+    media_artwork_row = _aligned_row(_media_ctrl_layout, "Artwork Size:")
     tab.media_artwork_size = QSpinBox()
     tab.media_artwork_size.setRange(100, 300)
     tab.media_artwork_size.setValue(tab._default_int('media', 'artwork_size', 200))
@@ -310,9 +313,10 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_artwork_size.valueChanged.connect(tab._save_settings)
     tab.media_artwork_size.valueChanged.connect(tab._update_stack_status)
     media_artwork_row.addWidget(tab.media_artwork_size)
-    media_artwork_row.addWidget(QLabel("px"))
+    art_px = QLabel("px")
+    art_px.setMinimumWidth(24)
+    media_artwork_row.addWidget(art_px)
     media_artwork_row.addStretch()
-    _media_ctrl_layout.addLayout(media_artwork_row)
 
     tab.media_rounded_artwork = QCheckBox("Rounded Artwork Border")
     tab.media_rounded_artwork.setChecked(
@@ -1018,11 +1022,19 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.spotify_vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
     _update_ghost_visibility(tab)
 
-    # Sine Heartbeat
+    # Sine Density / Heartbeat / Displacement
+    if hasattr(tab, 'sine_density'):
+        sd = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_density', 1.0) * 100)
+        tab.sine_density.setValue(max(25, min(300, sd)))
+        tab.sine_density_label.setText(f"{tab.sine_density.value() / 100.0:.2f}×")
     if hasattr(tab, 'sine_heartbeat'):
         shb = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_heartbeat', 0.0) * 100)
         tab.sine_heartbeat.setValue(max(0, min(100, shb)))
         tab.sine_heartbeat_label.setText(f"{shb}%")
+    if hasattr(tab, 'sine_displacement'):
+        sdisp = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_displacement', 0.0) * 100)
+        tab.sine_displacement.setValue(max(0, min(100, sdisp)))
+        tab.sine_displacement_label.setText(f"{sdisp}%")
 
     # Oscilloscope ghost trail
     if hasattr(tab, 'osc_ghost_enabled'):
@@ -1292,7 +1304,9 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_wave_effect': (tab.sine_wave_effect.value() if hasattr(tab, 'sine_wave_effect') else 0) / 100.0,
         'sine_micro_wobble': (tab.sine_micro_wobble.value() if hasattr(tab, 'sine_micro_wobble') else 0) / 100.0,
         'sine_width_reaction': (tab.sine_width_reaction.value() if hasattr(tab, 'sine_width_reaction') else 0) / 100.0,
-        'sine_vertical_shift': tab.sine_vertical_shift.value() if hasattr(tab, 'sine_vertical_shift') else 0,
+        'sine_density': (tab.sine_density.value() if hasattr(tab, 'sine_density') else 100) / 100.0,
+        'sine_heartbeat': (tab.sine_heartbeat.value() if hasattr(tab, 'sine_heartbeat') else 0) / 100.0,
+        'sine_displacement': (tab.sine_displacement.value() if hasattr(tab, 'sine_displacement') else 0) / 100.0,
         'sine_line1_shift': (tab.sine_line1_shift.value() if hasattr(tab, 'sine_line1_shift') else 0) / 100.0,
         'sine_wave_travel': tab.sine_travel.currentIndex() if hasattr(tab, 'sine_travel') else 0,
         'sine_travel_line2': tab.sine_travel_line2.currentIndex() if hasattr(tab, 'sine_travel_line2') else 0,
@@ -1312,7 +1326,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
         'osc_ghosting_enabled': tab.osc_ghost_enabled.isChecked() if hasattr(tab, 'osc_ghost_enabled') else False,
         'osc_ghost_intensity': (tab.osc_ghost_intensity.value() if hasattr(tab, 'osc_ghost_intensity') else 40) / 100.0,
-        'sine_heartbeat': (tab.sine_heartbeat.value() if hasattr(tab, 'sine_heartbeat') else 0) / 100.0,
         # Bubble
         'bubble_big_bass_pulse': (tab.bubble_big_bass_pulse.value() if hasattr(tab, 'bubble_big_bass_pulse') else 50) / 100.0,
         'bubble_small_freq_pulse': (tab.bubble_small_freq_pulse.value() if hasattr(tab, 'bubble_small_freq_pulse') else 50) / 100.0,

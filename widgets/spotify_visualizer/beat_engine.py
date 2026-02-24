@@ -100,8 +100,12 @@ class _SpotifyBeatEngine(QObject):
         self._last_smooth_ts = -1.0
         self._energy_bands = EnergyBands()
         self._waveform = [0.0] * self._waveform_count
-        self._latest_bars = None
+        self._latest_bars = [0.0] * self._bar_count
+        self._last_audio_ts = 0.0
         self._generation_id += 1
+        # Force consumers to wait for the next FFT result produced after
+        # this reset instead of reusing the pre-reset generation id.
+        self._latest_generation_with_frame = self._generation_id - 1
         logger.debug("[SPOTIFY_VIS] Beat engine smoothing state reset (generation=%d)", self._generation_id)
 
     def reset_floor_state(self) -> None:

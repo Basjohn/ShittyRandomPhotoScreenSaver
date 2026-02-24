@@ -235,6 +235,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
     if 'sine_width_reaction' in kwargs:
         widget._sine_width_reaction = max(0.0, min(1.0, float(kwargs['sine_width_reaction'])))
+    if 'sine_density' in kwargs:
+        widget._sine_density = max(0.25, min(3.0, float(kwargs['sine_density'])))
+    if 'sine_displacement' in kwargs:
+        widget._sine_displacement = max(0.0, min(1.0, float(kwargs['sine_displacement'])))
     if 'sine_vertical_shift' in kwargs:
         widget._sine_vertical_shift = int(kwargs['sine_vertical_shift'])
     if 'sine_card_adaptation' in kwargs:
@@ -389,6 +393,8 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
     extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
     extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
+    extra['sine_density'] = getattr(widget, '_sine_density', 1.0)
+    extra['sine_displacement'] = getattr(widget, '_sine_displacement', 0.0)
     if mode_str == 'spectrum':
         return extra
 

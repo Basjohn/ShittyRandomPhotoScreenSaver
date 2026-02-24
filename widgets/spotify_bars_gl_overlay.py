@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Sequence, Optional
+from typing import List, Sequence, Optional, Set
 
 import numpy as np
 import time
@@ -86,6 +86,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Accumulated time for animated visualizers (seconds)
         self._accumulated_time: float = 0.0
         self._last_time_ts: float = 0.0
+        self._pending_mode_resets: Set[str] = set()
+        self._last_reset_mode: Optional[str] = None
+        self._last_reset_reason: Optional[str] = None
+        self._last_reset_ts: float = 0.0
 
         # Waveform data for oscilloscope (256 samples, -1..1)
         self._waveform: List[float] = []
@@ -135,7 +139,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_size: float = 1.0
         self._blob_glow_intensity: float = 0.5
         self._blob_reactive_glow: bool = True
-        self._blob_smoothed_energy: float = 0.0  # CPU-side smoothed energy for glow decay
         self._blob_reactive_deformation: float = 1.0
         self._blob_stage_gain: float = 1.0
         self._blob_core_scale: float = 1.0
@@ -146,6 +149,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_constant_wobble: float = 1.0
         self._blob_reactive_wobble: float = 1.0
         self._blob_stretch_tendency: float = 0.0
+        self._blob_smoothed_energy: float = 0.0
+        self._blob_seed_pending: bool = False
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
         self._osc_line_offset_bias: float = 0.0
@@ -158,6 +163,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
         self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
         self._sine_width_reaction: float = 0.0  # 0.0-1.0, bass-driven line width stretching
+        self._sine_density: float = 1.0  # cycles per card multiplier
+        self._sine_displacement: float = 0.0  # multi-line transient offset
         self._sine_line1_shift: float = 0.0
         self._sine_line2_shift: float = 0.0
         self._sine_line3_shift: float = 0.0
@@ -174,6 +181,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stage_progress_filtered: tuple[float, float, float] = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_ready: bool = False
         self._blob_stage_hold_until: dict[int, float] = {2: 0.0, 3: 0.0}
+        self._last_vis_mode: Optional[str] = None
 
         # Rainbow (Taste The Rainbow) mode
         self._rainbow_enabled: bool = False
@@ -243,6 +251,86 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Centralized GL state manager for robust state tracking
         self._gl_state = GLStateManager(f"spotify_bars_{id(self)}")
 
+    def request_mode_reset(self, mode: str) -> None:
+        """Schedule a manual reset for ``mode`` prior to the next frame push."""
+
+        if not mode:
+            return
+        normalized = mode.lower()
+        valid_modes = {
+            'spectrum',
+            'oscilloscope',
+            'starfield',
+            'blob',
+            'helix',
+            'sine_wave',
+            'bubble',
+        }
+        if normalized not in valid_modes:
+            return
+        self._pending_mode_resets.add(normalized)
+
+    def _reset_mode_state(self, mode: str, *, reason: str) -> None:
+        """Cold-reset per-mode accumulators so the next frame behaves like a fresh start."""
+
+        mode_key = mode.lower() if mode else 'spectrum'
+        self._accumulated_time = 0.0
+        self._last_time_ts = 0.0
+
+        if mode_key == 'blob':
+            self.reset_blob_state()
+        else:
+            self._blob_diag_radius_min = None
+            self._blob_diag_radius_max = None
+            self._blob_stage_progress_ready = False
+            self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
+            self._blob_stage_progress_filtered = (-1.0, -1.0, -1.0)
+            self._blob_stage_hold_until = {2: 0.0, 3: 0.0}
+
+        if mode_key in {'oscilloscope', 'sine_wave'}:
+            self._waveform = []
+            self._prev_waveform = []
+            self._ghost_waveform_ring = []
+            self._ghost_ring_idx = 0
+            self._osc_smoothed_bass = 0.0
+            self._osc_smoothed_mid = 0.0
+            self._osc_smoothed_high = 0.0
+
+        if mode_key == 'starfield':
+            self._starfield_travel_time = 0.0
+
+        if mode_key == 'bubble':
+            self._bubble_pos_data = []
+            self._bubble_extra_data = []
+            self._bubble_trail_data = []
+            self._bubble_count = 0
+
+        logger.info(
+            "[SPOTIFY_VIS][OVERLAY][RESET] mode=%s reason=%s",
+            mode_key,
+            reason,
+        )
+        self._last_reset_mode = mode_key
+        self._last_reset_reason = reason
+        try:
+            self._last_reset_ts = time.time()
+        except Exception:
+            self._last_reset_ts = 0.0
+
+    def reset_blob_state(self) -> None:
+        if not hasattr(self, "_blob_smoothed_energy"):
+            self._blob_smoothed_energy = 0.0
+        else:
+            self._blob_smoothed_energy = 0.0
+        self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
+        self._blob_stage_progress_filtered = (0.0, 0.0, 0.0)
+        self._blob_stage_progress_ready = False
+        self._blob_stage_hold_until = {2: 0.0, 3: 0.0}
+        self._blob_stage_bucket = -1
+        self._blob_diag_radius_min = None
+        self._blob_diag_radius_max = None
+        self._blob_seed_pending = True
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -310,6 +398,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         sine_line2_shift: float = 0.0,
         sine_line3_shift: float = 0.0,
         sine_width_reaction: float = 0.0,
+        sine_density: float = 1.0,
+        sine_displacement: float = 0.0,
         helix_turns: int = 4,
         helix_double: bool = True,
         helix_speed: float = 1.0,
@@ -359,20 +449,32 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             return
 
         # Set active visualizer mode
-        self._vis_mode = vis_mode if vis_mode in (
+        prev_mode = self._vis_mode
+        requested_mode = vis_mode if vis_mode in (
             'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave', 'bubble'
         ) else 'spectrum'
-        if self._vis_mode != 'blob':
-            self._blob_diag_radius_min = None
-            self._blob_diag_radius_max = None
-            self._blob_stage_progress_ready = False
-            self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
-            self._blob_stage_progress_filtered = (-1.0, -1.0, -1.0)
-            self._blob_stage_hold_until = {2: 0.0, 3: 0.0}
+        self._vis_mode = requested_mode
+        manual_reset = False
+        if requested_mode in self._pending_mode_resets:
+            manual_reset = True
+            self._pending_mode_resets.discard(requested_mode)
+        if prev_mode != self._vis_mode or manual_reset:
+            reason = "mode_change" if prev_mode != self._vis_mode else "manual_reset"
+            self._reset_mode_state(self._vis_mode, reason=reason)
+            self._last_vis_mode = self._vis_mode
         try:
             self._border_width_px = max(0.0, float(border_width_px))
         except Exception:
             self._border_width_px = 0.0
+
+        try:
+            self._sine_density = float(sine_density)
+        except Exception:
+            self._sine_density = 1.0
+        try:
+            self._sine_displacement = float(sine_displacement)
+        except Exception:
+            self._sine_displacement = 0.0
 
         # Update accumulated time for animated modes
         dt_seconds = 0.0
@@ -449,6 +551,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             mid_val = float(getattr(energy_bands, 'mid', 0.0) or 0.0)
             high_val = float(getattr(energy_bands, 'high', 0.0) or 0.0)
             overall_val = float(getattr(energy_bands, 'overall', 0.0) or 0.0)
+            if self._blob_seed_pending:
+                seed_value = overall_val or bass_val or mid_val or high_val
+                if seed_value > 0.0:
+                    self._blob_smoothed_energy = seed_value
+                    self._blob_seed_pending = False
+                    logger.debug(
+                        "[SPOTIFY_VIS][BLOB] Seeded smoothed energy after reset: %.3f",
+                        seed_value,
+                    )
             stage_progress_raw = compute_stage_progress(
                 bass_energy=bass_val,
                 mid_energy=mid_val,
@@ -460,6 +571,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_stage_progress_raw = stage_progress_raw
             filtered = self._filter_stage_progress(stage_progress_raw, dt_seconds)
             self._blob_stage_progress_filtered = filtered
+            if not self._blob_stage_progress_ready:
+                logger.debug(
+                    "[SPOTIFY_VIS][BLOB][STAGE_READY] raw=%s filtered=%s overall=%.3f se=%.3f",
+                    tuple(round(v, 3) for v in stage_progress_raw),
+                    tuple(round(v, 3) for v in filtered),
+                    overall_val,
+                    self._blob_smoothed_energy,
+                )
             self._blob_stage_progress_ready = True
 
         self._maybe_log_blob_diagnostics()
@@ -989,8 +1108,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             return
         self._blob_diag_last_log_ts = now
 
+        reset_reason = self._last_reset_reason or "unknown"
+        reset_age = -1.0
+        if self._last_reset_mode == 'blob' and self._last_reset_ts > 0.0:
+            reset_age = max(0.0, now - self._last_reset_ts)
         logger.info(
-            "[SPOTIFY_VIS][BLOB][DIAG] stage_gain=%.2f core_scale=%.2f core_floor_bias=%.2f stage_filtered=(%.2f,%.2f,%.2f) stage_raw=(%.2f,%.2f,%.2f) stage_floor=%.2f high=%.3f bass=%.3f overall=%.3f se=%.3f pulse=%.2f playing=%s radius=%.4f radius_min=%.4f radius_max=%.4f",
+            "[SPOTIFY_VIS][BLOB][DIAG] stage_gain=%.2f core_scale=%.2f core_floor_bias=%.2f stage_filtered=(%.2f,%.2f,%.2f) stage_raw=(%.2f,%.2f,%.2f) stage_floor=%.2f high=%.3f bass=%.3f overall=%.3f se=%.3f pulse=%.2f playing=%s radius=%.4f radius_min=%.4f radius_max=%.4f reset_reason=%s reset_age=%.2f",
             stage_gain,
             core_scale,
             core_floor_bias,
@@ -1010,6 +1133,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             r,
             self._blob_diag_radius_min or r,
             self._blob_diag_radius_max or r,
+            reset_reason,
+            reset_age,
         )
 
     def _maybe_log_stage_transition(
@@ -1200,6 +1325,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_card_adaptation",
                     "u_sine_travel_line2", "u_sine_travel_line3",
                     "u_wave_effect", "u_micro_wobble", "u_width_reaction",
+                    "u_sine_density", "u_sine_displacement",
                     "u_helix_turns", "u_helix_double", "u_helix_speed",
                     "u_helix_glow_enabled", "u_helix_glow_intensity",
                     "u_helix_glow_color", "u_helix_reactive_glow",
@@ -1837,6 +1963,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_width_reaction", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._sine_width_reaction))
+                loc = u.get("u_sine_density", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_density))
+                loc = u.get("u_sine_displacement", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_displacement))
                 loc = u.get("u_sine_line1_shift", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._sine_line1_shift))

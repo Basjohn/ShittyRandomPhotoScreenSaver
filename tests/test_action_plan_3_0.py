@@ -128,59 +128,63 @@ class TestHeartbeatBumpShader:
     """Validate the heartbeat_bump() GLSL function replicated in Python."""
 
     @staticmethod
-    def heartbeat_bump(nx: float, travel: float,
+    def heartbeat_bump(nx: float,
                        heartbeat: float = 0.5,
-                       intensity: float = 1.0) -> float:
-        """Python replica of the GLSL heartbeat_bump() function."""
+                       intensity: float = 1.0,
+                       sine_frequency: float = 6.2831853 * 3.0,
+                       phase: float = 0.0) -> float:
+        """Python replica of the crest-based GLSL heartbeat_bump() function."""
         if heartbeat < 0.001 or intensity < 0.001:
             return 0.0
 
+        slider = max(0.0, min(1.0, heartbeat))
+        slider_eased = slider ** 0.85
+
         bump = 0.0
-        centers = [0.25, 0.50, 0.75]
-        widths = [0.12, 0.10, 0.08]
-        amps = [1.0, 0.7, 0.5]
+        crest_half_width = 0.03
+        for n in range(6):
+            crest_angle = (0.5 + float(n) * 2.0) * 3.14159265
+            cx = (crest_angle - phase) / sine_frequency
+            if cx < 0.02 or cx > 0.98:
+                continue
 
-        for c, w, a in zip(centers, widths, amps):
-            d = abs(nx - c)
-            if d < w:
-                tri = (1.0 - d / w) * a
-                # Directional asymmetry: bumps in travel direction are larger
-                if travel > 0.0:
-                    direction_scale = 1.0 + (c - 0.5) * 0.6
-                elif travel < 0.0:
-                    direction_scale = 1.0 - (c - 0.5) * 0.6
-                else:
-                    direction_scale = 1.0
-                bump += tri * max(0.2, direction_scale)
+            dx = nx - cx
+            tri = max(0.0, 1.0 - abs(dx) / crest_half_width)
+            tri *= tri
+            bump += tri
 
-        return bump * heartbeat * intensity * 0.15
+        crest_gain = 0.08 + (0.18 - 0.08) * slider_eased
+        return bump * crest_gain * slider_eased * intensity
 
     def test_zero_when_disabled(self):
         assert self.heartbeat_bump(0.5, 1.0, heartbeat=0.0) == 0.0
         assert self.heartbeat_bump(0.5, 1.0, intensity=0.0) == 0.0
 
-    def test_nonzero_at_bump_centers(self):
-        for center in [0.25, 0.50, 0.75]:
-            val = self.heartbeat_bump(center, 1.0, heartbeat=1.0, intensity=1.0)
+    def test_nonzero_at_peak_centers(self):
+        # Sample a handful of crest-aligned points (phase=0, freq=3 cycles)
+        centers = []
+        for n in range(3):
+            crest_angle = (0.5 + float(n) * 2.0) * 3.14159265
+            centers.append((crest_angle / (6.2831853 * 3.0)) % 1.0)
+        for center in centers:
+            val = self.heartbeat_bump(center, heartbeat=1.0, intensity=1.0)
             assert val > 0.0, f"Expected nonzero bump at center {center}"
 
     def test_zero_far_from_centers(self):
-        val = self.heartbeat_bump(0.0, 1.0, heartbeat=1.0, intensity=1.0)
+        val = self.heartbeat_bump(0.0, heartbeat=1.0, intensity=1.0)
         assert val == 0.0
 
-    def test_directional_asymmetry_positive_travel(self):
-        """With positive travel, rightward bumps should be larger."""
-        left = self.heartbeat_bump(0.25, 1.0, heartbeat=1.0, intensity=1.0)
-        right = self.heartbeat_bump(0.75, 1.0, heartbeat=1.0, intensity=1.0)
-        # Right bump (c=0.75) has direction_scale > 1.0 for positive travel
-        # But it also has smaller base amplitude (0.5 vs 1.0)
-        # The test validates they're both nonzero and different
-        assert left > 0.0
-        assert right > 0.0
+    def test_crests_do_not_invert_troughs(self):
+        # Bumps are always positive, so sampling ±0.1 around troughs should stay zero
+        trough_x = 0.0  # crest positions offset, trough near 0 for phase=0
+        assert self.heartbeat_bump(trough_x + 0.01, heartbeat=1.0, intensity=1.0) == 0.0
+        assert self.heartbeat_bump(trough_x - 0.01, heartbeat=1.0, intensity=1.0) == 0.0
 
     def test_scales_with_heartbeat(self):
-        full = self.heartbeat_bump(0.5, 1.0, heartbeat=1.0, intensity=1.0)
-        half = self.heartbeat_bump(0.5, 1.0, heartbeat=0.5, intensity=1.0)
+        # Use the first crest center
+        crest_center = ((0.5) * 3.14159265) / (6.2831853 * 3.0)
+        full = self.heartbeat_bump(crest_center, heartbeat=1.0, intensity=1.0)
+        half = self.heartbeat_bump(crest_center, heartbeat=0.5, intensity=1.0)
         assert abs(half - full * 0.5) < 1e-9
 
 

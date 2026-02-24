@@ -229,6 +229,21 @@ The Spotify widget defines the canonical header behaviour:
 Any future widget with a brand/logo header (e.g. Reddit, MusicBee) should
 follow this pattern, substituting its own logo asset and wordmark.
 
+### 4.1 Settings Dialog Alignment (NEW)
+
+The widget settings tab now standardizes alignment across every control:
+
+- Use a shared `_aligned_row(parent_layout, label_text)` helper in the builder module.
+  - Fixed label column (typically 140 px) + inner `QHBoxLayout` for controls.
+  - Ensures checkboxes/comboboxes/spin boxes/swatch buttons line up vertically.
+- Trim combo/spin minimum widths to avoid clipping while keeping left edges consistent.
+- Unit labels (`px`, `%`, etc.) receive a minimum width (≈24–50 px) so they align across rows.
+- Swatch buttons sit in the same column as other color pickers; add `addStretch()` after swatch to prevent drifting.
+- Advanced sections follow the same helper pattern inside their container.
+
+- Reference implementations: `widgets_tab_clock.py`, `widgets_tab_weather.py`, `widgets_tab_media.py`, `widgets_tab_reddit.py`, `widgets_tab_imgur.py`, `media/blob_builder.py` (Normal bucket), and the full `TransitionsTab` sweep (global controls plus every per-transition group).
+- When aligning transitions, treat each `QGroupBox` as its own parent layout and keep sliders + numeric readouts in a single row (slider stretches, label fixed ≈50 px). Combo boxes that share a row (e.g., block flip rows/cols) should use short inline sub-labels (≈50 px) so both spinners align beneath the helper column.
+
 ---
 
 ## 4. Artwork Placement & Border

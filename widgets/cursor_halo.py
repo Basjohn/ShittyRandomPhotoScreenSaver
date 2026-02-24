@@ -16,12 +16,13 @@ still work. The mouse cursor is hidden when the halo is visible.
 import math
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPointF
+from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import (
     QColor,
     QMouseEvent,
     QPaintEvent,
     QPainter,
+    QPen,
     QRadialGradient,
     QWheelEvent,
 )
@@ -44,6 +45,9 @@ PRIMARY_COLOR = QColor(246, 248, 255, 235)
 ACCENT_COLOR = QColor(130, 205, 255, 200)
 SHADOW_COLOR = QColor(12, 14, 28, 160)
 INNER_DOT_COLOR = QColor(255, 255, 255, 240)
+OUTER_COLOR = QColor(246, 248, 255, 235)
+OUTLINE_COLOR = QColor(255, 255, 255, 255)
+OUTLINE_WIDTH = 3.5
 
 
 class CursorHaloWidget(QWidget):
@@ -150,6 +154,7 @@ class CursorHaloWidget(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(highlight)
         painter.drawEllipse(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2)
+        self._paint_outer_outline(painter)
 
     def _paint_ring(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
         self._paint_shadow_ring(painter, cx, cy, r)
@@ -159,6 +164,7 @@ class CursorHaloWidget(QWidget):
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawEllipse(4, 4, r, r)
+        self._paint_outer_outline(painter)
 
     def _paint_crosshair(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
         from PySide6.QtCore import QLineF
@@ -550,6 +556,21 @@ class CursorHaloWidget(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(gradient)
         painter.drawEllipse(4, 4, r, r)
+
+    def _paint_outer_outline(self, painter: QPainter) -> None:
+        diameter = max(0.0, min(self.width(), self.height()) - 2.0)
+        if diameter <= 0.0:
+            return
+        offset_x = (self.width() - diameter) / 2.0
+        offset_y = (self.height() - diameter) / 2.0
+        painter.save()
+        pen = QPen(OUTLINE_COLOR)
+        pen.setWidthF(OUTLINE_WIDTH)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(QRectF(offset_x, offset_y, diameter, diameter))
+        painter.restore()
 
     def _paint_center_indicator(self, painter: QPainter, cx: int, cy: int) -> None:
         size = max(4, self.width() // 12)

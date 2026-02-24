@@ -78,35 +78,81 @@ uniform float u_heartbeat_intensity; // CPU-side decay envelope (1.0 → 0.0 ove
 // Encourages all lines to stretch wide in reaction to bass while still resembling a sine
 uniform float u_width_reaction;
 
-// Heartbeat bump: localised triangular spikes at sine ZERO-CROSSINGS (slopes).
-// Spikes appear on the slopes of the wave, not at peaks/troughs.
-// The same bump positions are used for ALL lines so they fire in unison.
-// sine_freq_local: the sine frequency used for the wave (needed to find zero-crossings)
-// phase_local: the phase offset of this particular line
-float heartbeat_bump(float nx, float sine_freq_local, float phase_local) {
-    if (u_heartbeat < 0.001 || u_heartbeat_intensity < 0.001) return 0.0;
+// Density: cycles per card multiplier (1.0 = default 3 cycles)
+uniform float u_sine_density;
 
-    // Find the 6 zero-crossing x-positions of sin(x * freq + phase) in [0,1].
-    // Zero crossings occur at x*freq+phase = n*PI, so x = (n*PI - phase) / freq.
-    float bump = 0.0;
-    float intensity = u_heartbeat_intensity;
-    float half_w = 0.025;  // narrow spike width (2.5% of card width)
+// Displacement: transient XY offsets for multi-line mode when multi-line is active
+uniform float u_sine_displacement;
 
-    for (int n = 0; n < 8; n++) {
-        float zx = (float(n) * 3.14159265 - phase_local) / sine_freq_local;
-        if (zx < 0.02 || zx > 0.98) continue;  // skip edges
-
-        float dx = nx - zx;
-        float tri = 1.0 - clamp(abs(dx) / half_w, 0.0, 1.0);
-        tri = tri * tri;  // sharpen to triangular point
-
-        // Direction: alternate up/down based on which zero-crossing
-        float sign_dir = (n % 2 == 0) ? 1.0 : -1.0;
-        bump += tri * sign_dir;
+// Heartbeat bump: crest-focused spikes that sharpen PEAKS only.
+// Returns a spike strength and reports the normalised DX to the closest crest so the caller
+// can build an inverted "V" profile.
+float heartbeat_bump(float nx, float sine_freq_local, float phase_local, out float normalised_dx) {
+    normalised_dx = 0.0;
+    if (u_heartbeat < 0.001 || u_heartbeat_intensity < 0.001) {
+        return 0.0;
     }
 
-    // Moderate multiplier — visible spikes but not gross distortion
-    return bump * u_heartbeat * intensity * 0.35;
+    float slider = clamp(u_heartbeat, 0.0, 1.0);
+    float slider_eased = pow(slider, 0.85);
+
+    float best = 0.0;
+    float best_dx = 0.0;
+    float crest_half_width = 0.03;  // ≈3% of card width per crest
+    for (int n = 0; n < 6; n++) {
+        float crest_angle = (0.5 + float(n) * 2.0) * 3.14159265;
+        float cx = (crest_angle - phase_local) / sine_freq_local;
+        if (cx < 0.01 || cx > 0.99) {
+            continue;
+        }
+
+        float dx = nx - cx;
+        float norm_dx = dx / crest_half_width;
+        float tri = max(0.0, 1.0 - abs(norm_dx));
+        if (tri > best) {
+            best = tri;
+            best_dx = clamp(norm_dx, -1.0, 1.0);
+        }
+    }
+
+    normalised_dx = best_dx;
+    float crest_gain = mix(0.12, 0.32, slider_eased);
+    return best * crest_gain * slider_eased * u_heartbeat_intensity;
+}
+
+float apply_heartbeat_spike(float base_wave, float spike_strength, float spike_dx_norm) {
+    if (spike_strength <= 0.0 || base_wave < -0.05) {
+        return base_wave + spike_strength;
+    }
+
+    float slider = clamp(u_heartbeat, 0.0, 1.0);
+    float cusp_shape = max(0.0, 1.0 - abs(spike_dx_norm));
+    float cusp_mix = clamp(spike_strength * 12.0, 0.0, 1.0) * pow(cusp_shape, 0.85);
+    float spike_peak = spike_strength * mix(1.35, 2.4, slider) + 0.02;
+    float cusp_wave = base_wave + cusp_shape * spike_peak;
+    return mix(base_wave + spike_strength, cusp_wave, cusp_mix);
+}
+
+float hash11(float p) {
+    return fract(sin(p) * 43758.5453123);
+}
+
+float randSmooth(float seed, float speed) {
+    float effectiveSpeed = max(speed, 0.0001);
+    float t = u_time * effectiveSpeed + seed;
+    float base = floor(t);
+    float frac = fract(t);
+    float h1 = hash11(base + seed * 1.37);
+    float h2 = hash11(base + 1.0 + seed * 1.37);
+    float smooth_t = frac * frac * (3.0 - 2.0 * frac);
+    return mix(h1, h2, smooth_t);
+}
+
+vec2 randomDirection(int line_id, float speed) {
+    float base = float(line_id) * 17.1337;
+    float rx = randSmooth(base + 0.37, speed);
+    float ry = randSmooth(base + 4.11, speed * 0.83 + 0.21);
+    return vec2(rx, ry) * 2.0 - 1.0;
 }
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
@@ -206,8 +252,9 @@ void main() {
     float fb_height = height * dpr;
     vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
 
-    float margin_x = 3.0;
-    float margin_y = 1.0;
+    // Keep a slightly larger safety margin so glow/line never overlaps the card border
+    float margin_x = 5.0;
+    float margin_y = 2.0;
     float inner_width = width - margin_x * 2.0;
     float inner_height = height - margin_y * 2.0;
 
@@ -225,18 +272,20 @@ void main() {
 
     // --- Amplitude: card_adaptation IS the fraction of half-height the wave uses ---
     // adapt=1.0 → wave peaks touch card edges, adapt=0.3 → wave uses 30% of card
-    float adapt = clamp(u_card_adaptation, 0.05, 1.0);
-    float base_amplitude = (0.5 - 1.0 / max(inner_height, 2.0)) * adapt;
-    float glow_sigma_base = u_glow_intensity * 8.0;
-
-    int lines = clamp(u_line_count, 1, 3);
-
-    // Sensitivity: controls how much BASS drives pulsing amplitude
     float sens = clamp(u_sensitivity, 0.1, 5.0);
 
     // Per-line energy: sensitivity only drives amplitude pulse, NOT glow.
     // bass_pulse = sensitivity-scaled bass for amplitude pulsing only.
     float bass_pulse = u_bass_energy * sens * 2.0;
+
+    float adapt = clamp(u_card_adaptation, 0.05, 1.0);
+    float base_amp_min = adapt * 0.24;
+    float base_amp_max = min(0.48, adapt * 0.62);
+    float bass_drive = clamp(u_bass_energy * 1.6 + bass_pulse * 0.5, 0.0, 1.0);
+    float base_amplitude = mix(base_amp_min, base_amp_max, bass_drive);
+    float glow_sigma_base = u_glow_intensity * 8.0;
+
+    int lines = clamp(u_line_count, 1, 3);
 
     // Line Offset Bias: declared early — used in energy and wfx/mw blends below.
     float lob = clamp(u_sine_line_offset_bias, 0.0, 1.0);
@@ -258,8 +307,12 @@ void main() {
     float glow_e2 = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
     float glow_e3 = u_high_energy * 0.70 + u_bass_energy * 0.15 + u_mid_energy * 0.15;
 
-    // Sine frequency: 3 full cycles across the card width
-    float sine_freq = 6.2831853 * 3.0;
+    // Sine frequency: base 3 cycles, scaled by user density
+    float density = clamp(u_sine_density, 0.25, 3.0);
+    float sine_freq = 6.2831853 * 3.0 * density;
+
+    // Displacement strength (multi-line transient shove)
+    float displacement_strength = clamp(u_sine_displacement, 0.0, 1.0);
 
     // Speed slider: controls travel rate. Gated on playback.
     float speed = clamp(u_sine_speed, 0.0, 3.0);
@@ -321,8 +374,10 @@ void main() {
     // LINE 1 (primary) — always centered vertically
     // =====================================================================
     // Energy drives amplitude pulsing. Clamp to 0.48 to stay in card.
-    float amp1 = min(base_amplitude * (1.0 + e1 * 1.5), 0.48);
-    float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * 6.2831853);
+    float amp1 = min(base_amplitude * (1.0 + e1 * 0.8), 0.48);
+    vec2 rand_line1 = randomDirection(1, 0.35 + displacement_strength * 0.8);
+    float phase_jitter1 = displacement_strength * 0.4 * rand_line1.x;
+    float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * 6.2831853 + phase_jitter1);
 
     // Wave effect: vocal-led positional y-offset preserving sine shape
     float wfx1 = 0.0;
@@ -355,9 +410,11 @@ void main() {
         }
     }
 
-    float ny1 = ny;
-    float hb1 = heartbeat_bump(nx, sine_freq, phase1);
-    float w1_final = w1 + mw1 + hb1 + wfx1 / max(amp1, 0.001);
+    float ny1 = ny + displacement_strength * 0.02 * rand_line1.y;
+    float crest_dx1;
+    float hb1 = heartbeat_bump(nx, sine_freq, phase1, crest_dx1);
+    float w1_pre = w1 + mw1 + wfx1 / max(amp1, 0.001);
+    float w1_final = apply_heartbeat_spike(w1_pre, hb1, crest_dx1);
     vec4 c1 = eval_line(ny1, inner_height, w1_final, amp1,
                         lineColor1, glowColor1, glow_sigma_base, glow_e1, 0.0, bass_width);
 
@@ -369,10 +426,12 @@ void main() {
     // Line 2 is affected 70% as much as Line 3
     // =====================================================================
     if (lines >= 2) {
-        float amp2 = min(base_amplitude * (1.0 + e2_band * 1.5), 0.48);
+        float amp2 = min(base_amplitude * (1.0 + e2_band * 0.75), 0.48);
         float lob_phase2 = lob * 0.45 * 0.7;  // X-axis separation — tight to line 1
         float add_shift2 = u_sine_line2_shift * 6.2831853;
-        float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2);
+        vec2 rand_line2 = randomDirection(2, 0.75 + displacement_strength * 1.2);
+        float phase_jitter2 = displacement_strength * 1.0 * rand_line2.x;
+        float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2 + phase_jitter2);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
         // as LOB increases, blend toward line 2's unique pattern.
@@ -406,11 +465,13 @@ void main() {
 
         // Y-axis separation: Line 2 at +70% of vertical shift
         // At v_spacing=0 (VShift=0), ny2 == ny — perfectly aligned with Line 1
-        float ny2 = ny + v_spacing * 0.7;
+        float ny2 = ny + v_spacing * 0.7 + displacement_strength * (0.09 * rand_line2.y);
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        float hb2 = heartbeat_bump(nx, sine_freq, lob_phase2 + phase2);
-        float w2_final = w2 + mw2 + hb2 + wfx2 / max(amp2, 0.001);
+        float crest_dx2;
+        float hb2 = heartbeat_bump(nx, sine_freq, lob_phase2 + phase2, crest_dx2);
+        float w2_pre = w2 + mw2 + wfx2 / max(amp2, 0.001);
+        float w2_final = apply_heartbeat_spike(w2_pre, hb2, crest_dx2);
         vec4 c2 = eval_line(ny2, inner_height, w2_final, amp2,
                             lineColor2, glowColor2, sigma2, glow_e2, 0.0, bass_width);
         final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
@@ -422,10 +483,12 @@ void main() {
     // Line 3 is affected 100% (full factor)
     // =====================================================================
     if (lines >= 3) {
-        float amp3 = min(base_amplitude * (1.0 + e3_band * 1.5), 0.48);
+        float amp3 = min(base_amplitude * (1.0 + e3_band * 0.75), 0.48);
         float lob_phase3 = lob * 0.90;  // X-axis separation — tight to line 1
         float add_shift3 = u_sine_line3_shift * 6.2831853;
-        float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3);
+        vec2 rand_line3 = randomDirection(3, 0.95 + displacement_strength * 1.35);
+        float phase_jitter3 = displacement_strength * 1.35 * rand_line3.x;
+        float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3 + phase_jitter3);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
         // as LOB increases, blend toward line 3's unique pattern.
@@ -459,11 +522,13 @@ void main() {
 
         // Y-axis separation: Line 3 at -100% of vertical shift (opposite direction)
         // At v_spacing=0 (VShift=0), ny3 == ny — perfectly aligned with Line 1
-        float ny3 = ny - v_spacing;
+        float ny3 = ny - v_spacing + displacement_strength * (0.12 * rand_line3.y);
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        float hb3 = heartbeat_bump(nx, sine_freq, lob_phase3 + phase3);
-        float w3_final = w3 + mw3 + hb3 + wfx3 / max(amp3, 0.001);
+        float crest_dx3;
+        float hb3 = heartbeat_bump(nx, sine_freq, lob_phase3 + phase3, crest_dx3);
+        float w3_pre = w3 + mw3 + wfx3 / max(amp3, 0.001);
+        float w3_final = apply_heartbeat_spike(w3_pre, hb3, crest_dx3);
         vec4 c3 = eval_line(ny3, inner_height, w3_final, amp3,
                             lineColor3, glowColor3, sigma3, glow_e3, 0.0, bass_width);
         final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;

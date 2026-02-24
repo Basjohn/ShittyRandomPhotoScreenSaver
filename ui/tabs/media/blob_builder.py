@@ -21,7 +21,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     from ui.tabs.widgets_tab import NoWheelSlider
     from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
-    LABEL_WIDTH = 120
+    LABEL_WIDTH = 140
     tab._blob_label_width = LABEL_WIDTH
 
     tab._blob_settings_container = QWidget()
@@ -48,7 +48,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lbl = QLabel(label_text)
         lbl.setFixedWidth(LABEL_WIDTH)
         row_layout.addWidget(lbl)
-        return row_widget, row_layout
+        inner = QHBoxLayout()
+        inner.setContentsMargins(0, 0, 0, 0)
+        inner.setSpacing(6)
+        row_layout.addLayout(inner, 1)
+        return row_widget, inner
 
     def _bind_slider(slider: QSlider, updater=None) -> None:
         slider.valueChanged.connect(tab._save_settings)
@@ -198,43 +202,19 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     blob_layout.addWidget(tab._blob_advanced_host)
     tab._blob_preset_slider.set_advanced_container(tab._blob_advanced_host)
 
-    tab._blob_adv_manual_visible = True
-
-    def _update_blob_adv_helper() -> None:
-        tab._blob_adv_helper.setVisible(
-            tab._blob_adv_toggle.isEnabled() and not tab._blob_adv_toggle.isChecked()
-        )
-
-    def _set_blob_adv_toggle_state(checked: bool, *, update_manual: bool = True) -> None:
-        tab._blob_adv_toggle.blockSignals(True)
-        tab._blob_adv_toggle.setChecked(checked)
-        tab._blob_adv_toggle.blockSignals(False)
+    def _apply_blob_adv_toggle_state(checked: bool) -> None:
         tab._blob_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         tab._blob_advanced.setVisible(checked)
-        if update_manual and tab._blob_adv_toggle.isEnabled():
-            tab._blob_adv_manual_visible = checked
-        _update_blob_adv_helper()
+        tab._blob_adv_helper.setVisible(not checked)
 
-    def _on_blob_adv_toggle(checked: bool) -> None:
-        if not tab._blob_adv_toggle.isEnabled():
-            return
-        tab._blob_adv_manual_visible = checked
-        tab._blob_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        tab._blob_advanced.setVisible(checked)
-        _update_blob_adv_helper()
-
-    tab._blob_adv_toggle.toggled.connect(_on_blob_adv_toggle)
+    tab._blob_adv_toggle.toggled.connect(_apply_blob_adv_toggle_state)
+    _apply_blob_adv_toggle_state(tab._blob_adv_toggle.isChecked())
 
     def _handle_blob_preset_adv(is_custom: bool) -> None:
-        tab._blob_adv_toggle.setEnabled(is_custom)
-        if is_custom:
-            _set_blob_adv_toggle_state(tab._blob_adv_manual_visible, update_manual=False)
-        else:
-            _set_blob_adv_toggle_state(False, update_manual=False)
-        _update_blob_adv_helper()
+        tab._blob_advanced_host.setVisible(is_custom)
 
     tab._blob_preset_slider.advanced_toggled.connect(_handle_blob_preset_adv)
-    _handle_blob_preset_adv(tab._blob_advanced.isVisible())
+    _handle_blob_preset_adv(True)
 
     # Glow intensity (advanced)
     glow_row, glow_layout = _aligned_row("Glow Intensity:")

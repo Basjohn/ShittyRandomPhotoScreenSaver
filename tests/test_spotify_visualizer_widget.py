@@ -12,6 +12,8 @@ from widgets.spotify_visualizer_widget import (
     SpotifyVisualizerWidget,
     _AudioFrame,
 )
+from widgets.spotify_visualizer.audio_worker import VisualizerMode
+from widgets.spotify_visualizer.energy_bands import EnergyBands
 import widgets.spotify_visualizer_widget as vis_mod
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect
 
@@ -208,6 +210,7 @@ def test_mode_cycle_resets_engine_smoothing(qt_app, qtbot, monkeypatch):
     mode_transition.mode_transition_fade_factor(widget, now)
 
     assert fake_engine.reset_calls >= 1
+
 
 @pytest.mark.qt
 def test_spotify_visualizer_widgets_share_audio_engine(qt_app, qtbot):

@@ -36,6 +36,7 @@ tests/
 - May require Qt event loop
 - May test real I/O (with mocks for external services)
 - Run in CI with pytest-qt plugin
+- `tests/test_spotify_visualizer_widget.py::test_blob_crossover_waits_for_fresh_engine_frame` enforces the Spotify visualizer crossover contract. It uses a fake engine/overlay to simulate a Spectrum→Blob reset and asserts `_waiting_for_fresh_engine_frame` blocks GPU pushes until the beat engine produces a new FFT generation (stage2 should exceed 0.4 within ~1 s once live energy flows).
 
 **Policy Enforcement Tests** (`tests/unit/test_policy_compliance.py`)
 - Static analysis of codebase

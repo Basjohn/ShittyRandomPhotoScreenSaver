@@ -74,6 +74,22 @@ class TransitionsTab(QWidget):
             QScrollArea QWidget { background: transparent; }
         """)
         
+        LABEL_WIDTH = 160
+
+        def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(6)
+            label = QLabel(label_text)
+            label.setFixedWidth(LABEL_WIDTH)
+            row.addWidget(label)
+            content = QHBoxLayout()
+            content.setContentsMargins(0, 0, 0, 0)
+            content.setSpacing(6)
+            row.addLayout(content, 1)
+            parent_layout.addLayout(row)
+            return content
+
         # Create content widget
         content = QWidget()
         layout = QVBoxLayout(content)
@@ -89,8 +105,7 @@ class TransitionsTab(QWidget):
         type_group = QGroupBox("Transition Type")
         type_layout = QVBoxLayout(type_group)
         
-        type_row = QHBoxLayout()
-        type_row.addWidget(QLabel("Transition:"))
+        type_row = _aligned_row(type_layout, "Transition:")
         self.transition_combo = QComboBox()
         self.transition_combo.addItems([
             "Ripple",            # 1. GL-only (formerly Rain Drops)
@@ -110,28 +125,30 @@ class TransitionsTab(QWidget):
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
         type_row.addWidget(self.transition_combo)
         type_row.addStretch()
-        type_layout.addLayout(type_row)
 
         # Random transitions option
+        random_row = _aligned_row(type_layout, "")
         self.random_checkbox = QCheckBox("Always use random transitions")
         self.random_checkbox.stateChanged.connect(self._save_settings)
-        type_layout.addWidget(self.random_checkbox)
+        random_row.addWidget(self.random_checkbox)
+        random_row.addStretch()
 
         # Per-transition pool membership: controls whether the selected
         # transition participates in the engine's random rotation and C-key
         # cycling. Explicit selection via the dropdown remains available
         # regardless of this flag.
+        pool_row = _aligned_row(type_layout, "")
         self.pool_checkbox = QCheckBox("Include in switch/random pool")
         self.pool_checkbox.stateChanged.connect(self._save_settings)
-        type_layout.addWidget(self.pool_checkbox)
+        pool_row.addWidget(self.pool_checkbox)
+        pool_row.addStretch()
         
         layout.addWidget(type_group)
         
         # Duration group (slider: short → long)
         duration_group = QGroupBox("Timing")
         duration_layout = QVBoxLayout(duration_group)
-        duration_row = QHBoxLayout()
-        duration_row.addWidget(QLabel("Duration (short → long):"))
+        duration_row = _aligned_row(duration_layout, "Duration (short → long):")
         self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.duration_slider.setRange(100, 15000)  # store milliseconds directly (15s max)
         self.duration_slider.setSingleStep(100)
@@ -140,23 +157,21 @@ class TransitionsTab(QWidget):
         self.duration_slider.valueChanged.connect(self._on_duration_changed)
         duration_row.addWidget(self.duration_slider, 1)
         self.duration_value_label = QLabel("1300 ms")
+        self.duration_value_label.setMinimumWidth(80)
         duration_row.addWidget(self.duration_value_label)
         duration_row.addStretch()
-        duration_layout.addLayout(duration_row)
         layout.addWidget(duration_group)
         
         # Direction group (for directional transitions)
         self.direction_group = QGroupBox("Direction")
         direction_layout = QVBoxLayout(self.direction_group)
         
-        direction_row = QHBoxLayout()
-        direction_row.addWidget(QLabel("Direction:"))
+        direction_row = _aligned_row(direction_layout, "Direction:")
         self.direction_combo = QComboBox()
         # Items are populated dynamically per transition in _update_specific_settings()
         self.direction_combo.currentTextChanged.connect(self._save_settings)
         direction_row.addWidget(self.direction_combo)
         direction_row.addStretch()
-        direction_layout.addLayout(direction_row)
         
         layout.addWidget(self.direction_group)
         
@@ -164,8 +179,7 @@ class TransitionsTab(QWidget):
         easing_group = QGroupBox("Easing Curve")
         easing_layout = QVBoxLayout(easing_group)
         
-        easing_row = QHBoxLayout()
-        easing_row.addWidget(QLabel("Easing:"))
+        easing_row = _aligned_row(easing_layout, "Easing:")
         self.easing_combo = QComboBox()
         self.easing_combo.addItems([
             "Auto",
@@ -181,7 +195,6 @@ class TransitionsTab(QWidget):
         self.easing_combo.currentTextChanged.connect(self._save_settings)
         easing_row.addWidget(self.easing_combo)
         easing_row.addStretch()
-        easing_layout.addLayout(easing_row)
         
         layout.addWidget(easing_group)
         
@@ -189,27 +202,25 @@ class TransitionsTab(QWidget):
         self.flip_group = QGroupBox("Block Flip Settings")
         flip_layout = QVBoxLayout(self.flip_group)
         
-        grid_row = QHBoxLayout()
-        grid_row.addWidget(QLabel("Grid Size:"))
+        grid_rows_row = _aligned_row(flip_layout, "Grid Rows:")
         self.grid_rows_spin = QSpinBox()
         self.grid_rows_spin.setRange(2, 25)
         self.grid_rows_spin.setValue(4)
         self.grid_rows_spin.setAccelerated(True)
         self.grid_rows_spin.valueChanged.connect(self._save_settings)
-        grid_row.addWidget(QLabel("Rows:"))
-        grid_row.addWidget(self.grid_rows_spin)
+        grid_rows_row.addWidget(self.grid_rows_spin)
+        grid_rows_row.addStretch()
+
+        grid_cols_row = _aligned_row(flip_layout, "Grid Columns:")
         self.grid_cols_spin = QSpinBox()
         self.grid_cols_spin.setRange(2, 25)
         self.grid_cols_spin.setValue(6)
         self.grid_cols_spin.setAccelerated(True)
         self.grid_cols_spin.valueChanged.connect(self._save_settings)
-        grid_row.addWidget(QLabel("Cols:"))
-        grid_row.addWidget(self.grid_cols_spin)
-        grid_row.addStretch()
-        flip_layout.addLayout(grid_row)
+        grid_cols_row.addWidget(self.grid_cols_spin)
+        grid_cols_row.addStretch()
 
-        flip_dir_row = QHBoxLayout()
-        flip_dir_row.addWidget(QLabel("Direction:"))
+        flip_dir_row = _aligned_row(flip_layout, "Direction:")
         self.blockflip_direction_combo = QComboBox()
         self.blockflip_direction_combo.addItems([
             "Left to Right",
@@ -223,7 +234,6 @@ class TransitionsTab(QWidget):
         self.blockflip_direction_combo.currentTextChanged.connect(self._save_settings)
         flip_dir_row.addWidget(self.blockflip_direction_combo)
         flip_dir_row.addStretch()
-        flip_layout.addLayout(flip_dir_row)
         
         layout.addWidget(self.flip_group)
 
@@ -231,8 +241,7 @@ class TransitionsTab(QWidget):
         self.blockspin_group = QGroupBox("3D Block Spins Settings")
         blockspin_layout = QVBoxLayout(self.blockspin_group)
 
-        bs_row = QHBoxLayout()
-        bs_row.addWidget(QLabel("Direction:"))
+        bs_row = _aligned_row(blockspin_layout, "Direction:")
         self.blockspin_direction_combo = QComboBox()
         self.blockspin_direction_combo.addItems([
             "Left to Right",
@@ -246,7 +255,6 @@ class TransitionsTab(QWidget):
         self.blockspin_direction_combo.currentTextChanged.connect(self._save_settings)
         bs_row.addWidget(self.blockspin_direction_combo)
         bs_row.addStretch()
-        blockspin_layout.addLayout(bs_row)
 
         layout.addWidget(self.blockspin_group)
 
@@ -254,17 +262,14 @@ class TransitionsTab(QWidget):
         self.blinds_group = QGroupBox("Blinds Settings")
         blinds_layout = QVBoxLayout(self.blinds_group)
 
-        blinds_dir_row = QHBoxLayout()
-        blinds_dir_row.addWidget(QLabel("Direction:"))
+        blinds_dir_row = _aligned_row(blinds_layout, "Direction:")
         self.blinds_direction_combo = QComboBox()
         self.blinds_direction_combo.addItems(["Horizontal", "Vertical", "Diagonal", "Random"])
         self.blinds_direction_combo.currentTextChanged.connect(self._save_settings)
         blinds_dir_row.addWidget(self.blinds_direction_combo)
         blinds_dir_row.addStretch()
-        blinds_layout.addLayout(blinds_dir_row)
 
-        blinds_feather_row = QHBoxLayout()
-        blinds_feather_row.addWidget(QLabel("Edge Softness:"))
+        blinds_feather_row = _aligned_row(blinds_layout, "Edge Softness:")
         self.blinds_feather_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.blinds_feather_slider.setRange(0, 25)
         self.blinds_feather_slider.setSingleStep(1)
@@ -272,225 +277,198 @@ class TransitionsTab(QWidget):
         self.blinds_feather_slider.valueChanged.connect(self._save_settings)
         blinds_feather_row.addWidget(self.blinds_feather_slider, 1)
         self.blinds_feather_label = QLabel("2")
+        self.blinds_feather_label.setMinimumWidth(50)
         blinds_feather_row.addWidget(self.blinds_feather_label)
         blinds_feather_row.addStretch()
-        blinds_layout.addLayout(blinds_feather_row)
 
         layout.addWidget(self.blinds_group)
         
         # Diffuse specific settings
         self.diffuse_group = QGroupBox("Diffuse Settings")
         diffuse_layout = QVBoxLayout(self.diffuse_group)
-        
-        block_size_row = QHBoxLayout()
-        block_size_row.addWidget(QLabel("Block Size (px):"))
+
+        block_size_row = _aligned_row(diffuse_layout, "Block Size (px):")
         self.block_size_spin = QSpinBox()
         self.block_size_spin.setRange(4, 256)
-        self.block_size_spin.setValue(50)
-        self.block_size_spin.setAccelerated(True)
+        self.block_size_spin.setValue(18)
         self.block_size_spin.valueChanged.connect(self._save_settings)
         block_size_row.addWidget(self.block_size_spin)
         block_size_row.addStretch()
-        diffuse_layout.addLayout(block_size_row)
-        
-        shape_row = QHBoxLayout()
-        shape_row.addWidget(QLabel("Shape:"))
+
+        shape_row = _aligned_row(diffuse_layout, "Shape:")
         self.diffuse_shape_combo = QComboBox()
-        self.diffuse_shape_combo.addItems(["Rectangle", "Membrane", "Lines", "Diamonds", "Amorph", "Random"])
+        self.diffuse_shape_combo.addItems([
+            "Rectangle",
+            "Membrane",
+            "Lines",
+            "Diamonds",
+            "Amorph",
+        ])
         self.diffuse_shape_combo.currentTextChanged.connect(self._save_settings)
         shape_row.addWidget(self.diffuse_shape_combo)
         shape_row.addStretch()
-        diffuse_layout.addLayout(shape_row)
-        
+
         layout.addWidget(self.diffuse_group)
-        
+
         # Ripple specific settings
         self.ripple_group = QGroupBox("Ripple Settings")
         ripple_layout = QVBoxLayout(self.ripple_group)
-        
-        ripple_count_row = QHBoxLayout()
-        ripple_count_row.addWidget(QLabel("Ripple Count:"))
+
+        ripple_count_row = _aligned_row(ripple_layout, "Ripple Count:")
         self.ripple_count_spin = QSpinBox()
         self.ripple_count_spin.setRange(1, 8)
         self.ripple_count_spin.setValue(3)
-        self.ripple_count_spin.setAccelerated(True)
         self.ripple_count_spin.valueChanged.connect(self._save_settings)
         ripple_count_row.addWidget(self.ripple_count_spin)
         ripple_count_row.addStretch()
-        ripple_layout.addLayout(ripple_count_row)
-        
+
         layout.addWidget(self.ripple_group)
-        
+
         # Crumble specific settings
         self.crumble_group = QGroupBox("Crumble Settings")
         crumble_layout = QVBoxLayout(self.crumble_group)
-        
-        piece_count_row = QHBoxLayout()
-        piece_count_row.addWidget(QLabel("Piece Count:"))
+
+        crumble_piece_row = _aligned_row(crumble_layout, "Piece Count:")
         self.crumble_piece_count_spin = QSpinBox()
-        self.crumble_piece_count_spin.setRange(4, 64)
-        self.crumble_piece_count_spin.setValue(8)
-        self.crumble_piece_count_spin.setAccelerated(True)
+        self.crumble_piece_count_spin.setRange(4, 128)
+        self.crumble_piece_count_spin.setValue(14)
         self.crumble_piece_count_spin.valueChanged.connect(self._save_settings)
-        piece_count_row.addWidget(self.crumble_piece_count_spin)
-        piece_count_row.addStretch()
-        crumble_layout.addLayout(piece_count_row)
-        
-        complexity_row = QHBoxLayout()
-        complexity_row.addWidget(QLabel("Crack Complexity:"))
+        crumble_piece_row.addWidget(self.crumble_piece_count_spin)
+        crumble_piece_row.addStretch()
+
+        crumble_complexity_row = _aligned_row(crumble_layout, "Crack Complexity:")
         self.crumble_complexity_spin = QDoubleSpinBox()
-        self.crumble_complexity_spin.setRange(0.5, 2.0)
+        self.crumble_complexity_spin.setDecimals(2)
+        self.crumble_complexity_spin.setRange(0.2, 5.0)
         self.crumble_complexity_spin.setSingleStep(0.1)
         self.crumble_complexity_spin.setValue(1.0)
         self.crumble_complexity_spin.valueChanged.connect(self._save_settings)
-        complexity_row.addWidget(self.crumble_complexity_spin)
-        complexity_row.addStretch()
-        crumble_layout.addLayout(complexity_row)
+        crumble_complexity_row.addWidget(self.crumble_complexity_spin)
+        crumble_complexity_row.addStretch()
 
-        weight_row = QHBoxLayout()
-        weight_row.addWidget(QLabel("Fall Weighting:"))
+        crumble_weight_row = _aligned_row(crumble_layout, "Weighting:")
         self.crumble_weight_combo = QComboBox()
         self.crumble_weight_combo.addItems([
-            "Top Weighted",
-            "Bottom Weighted",
-            "Random Weighted",
             "Random Choice",
-            "Age Weighted",
+            "Bias Old Image",
+            "Bias New Image",
         ])
-        self.crumble_weight_combo.setCurrentIndex(0)
-        self.crumble_weight_combo.currentIndexChanged.connect(self._save_settings)
-        weight_row.addWidget(self.crumble_weight_combo)
-        weight_row.addStretch()
-        crumble_layout.addLayout(weight_row)
-        
+        self.crumble_weight_combo.currentTextChanged.connect(self._save_settings)
+        crumble_weight_row.addWidget(self.crumble_weight_combo)
+        crumble_weight_row.addStretch()
+
         layout.addWidget(self.crumble_group)
-        
-        # Particle specific settings
+
+        # Particle transition settings
         self.particle_group = QGroupBox("Particle Settings")
         particle_layout = QVBoxLayout(self.particle_group)
-        
-        mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel("Mode:"))
+
+        particle_mode_row = _aligned_row(particle_layout, "Mode:")
         self.particle_mode_combo = QComboBox()
-        self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge", "Random"])
+        self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge"])
         self.particle_mode_combo.currentIndexChanged.connect(self._on_particle_mode_changed)
         self.particle_mode_combo.currentIndexChanged.connect(self._save_settings)
-        mode_row.addWidget(self.particle_mode_combo)
-        mode_row.addStretch()
-        particle_layout.addLayout(mode_row)
-        
-        direction_row = QHBoxLayout()
-        direction_row.addWidget(QLabel("Direction:"))
+        particle_mode_row.addWidget(self.particle_mode_combo)
+        particle_mode_row.addStretch()
+
+        particle_direction_row = _aligned_row(particle_layout, "Direction:")
         self.particle_direction_combo = QComboBox()
         self.particle_direction_combo.addItems([
             "Left to Right",
             "Right to Left",
             "Top to Bottom",
             "Bottom to Top",
-            "Top-Left to Bottom-Right",
-            "Top-Right to Bottom-Left",
-            "Bottom-Left to Top-Right",
-            "Bottom-Right to Top-Left",
-            "Random Direction",
-            "Random Placement",
+            "Random",
         ])
-        self.particle_direction_combo.currentIndexChanged.connect(self._save_settings)
-        direction_row.addWidget(self.particle_direction_combo)
-        direction_row.addStretch()
-        particle_layout.addLayout(direction_row)
-        
-        radius_row = QHBoxLayout()
-        radius_row.addWidget(QLabel("Particle Size:"))
+        self.particle_direction_combo.currentTextChanged.connect(self._save_settings)
+        particle_direction_row.addWidget(self.particle_direction_combo)
+        particle_direction_row.addStretch()
+
+        particle_radius_row = _aligned_row(particle_layout, "Particle Radius:")
         self.particle_radius_spin = QSpinBox()
-        self.particle_radius_spin.setRange(1, 64)
-        self.particle_radius_spin.setValue(24)
-        self.particle_radius_spin.setSuffix(" px")
+        self.particle_radius_spin.setRange(4, 80)
+        self.particle_radius_spin.setValue(10)
         self.particle_radius_spin.valueChanged.connect(self._save_settings)
-        radius_row.addWidget(self.particle_radius_spin)
-        radius_row.addStretch()
-        particle_layout.addLayout(radius_row)
-        
+        particle_radius_row.addWidget(self.particle_radius_spin)
+        particle_radius_row.addStretch()
+
+        particle_trail_row = _aligned_row(particle_layout, "")
         self.particle_trail_check = QCheckBox("Motion Trail")
         self.particle_trail_check.setChecked(True)
         self.particle_trail_check.stateChanged.connect(self._save_settings)
-        particle_layout.addWidget(self.particle_trail_check)
-        
+        particle_trail_row.addWidget(self.particle_trail_check)
+        particle_trail_row.addStretch()
+
+        particle_3d_row = _aligned_row(particle_layout, "")
         self.particle_3d_check = QCheckBox("3D Ball Shading")
         self.particle_3d_check.setChecked(True)
         self.particle_3d_check.stateChanged.connect(self._save_settings)
-        particle_layout.addWidget(self.particle_3d_check)
-        
+        particle_3d_row.addWidget(self.particle_3d_check)
+        particle_3d_row.addStretch()
+
+        particle_texture_row = _aligned_row(particle_layout, "")
         self.particle_texture_check = QCheckBox("Map Image to Particles")
         self.particle_texture_check.setChecked(True)
         self.particle_texture_check.stateChanged.connect(self._save_settings)
-        particle_layout.addWidget(self.particle_texture_check)
-        
+        particle_texture_row.addWidget(self.particle_texture_check)
+        particle_texture_row.addStretch()
+
+        particle_wobble_row = _aligned_row(particle_layout, "")
         self.particle_wobble_check = QCheckBox("Wobble on Arrival")
         self.particle_wobble_check.setChecked(False)
         self.particle_wobble_check.stateChanged.connect(self._save_settings)
-        particle_layout.addWidget(self.particle_wobble_check)
-        
-        # Gloss/specular settings
-        gloss_row = QHBoxLayout()
-        gloss_row.addWidget(QLabel("Gloss Sharpness:"))
+        particle_wobble_row.addWidget(self.particle_wobble_check)
+        particle_wobble_row.addStretch()
+
+        particle_gloss_row = _aligned_row(particle_layout, "Gloss Size:")
         self.particle_gloss_spin = QSpinBox()
-        self.particle_gloss_spin.setRange(16, 128)
-        self.particle_gloss_spin.setValue(64)
-        self.particle_gloss_spin.setToolTip("Higher = smaller/sharper specular highlight")
+        self.particle_gloss_spin.setRange(10, 200)
+        self.particle_gloss_spin.setValue(72)
         self.particle_gloss_spin.valueChanged.connect(self._save_settings)
-        gloss_row.addWidget(self.particle_gloss_spin)
-        gloss_row.addStretch()
-        particle_layout.addLayout(gloss_row)
-        
-        light_row = QHBoxLayout()
-        light_row.addWidget(QLabel("Light Direction:"))
+        particle_gloss_row.addWidget(self.particle_gloss_spin)
+        particle_gloss_row.addStretch()
+
+        particle_light_row = _aligned_row(particle_layout, "Light Direction:")
         self.particle_light_combo = QComboBox()
         self.particle_light_combo.addItems([
-            "Top-Left",
-            "Top-Right",
-            "Center",
-            "Bottom-Left",
-            "Bottom-Right",
+            "Front",
+            "Left",
+            "Right",
+            "Top",
+            "Bottom",
         ])
         self.particle_light_combo.currentIndexChanged.connect(self._save_settings)
-        light_row.addWidget(self.particle_light_combo)
-        light_row.addStretch()
-        particle_layout.addLayout(light_row)
-        
-        # Swirl-specific settings
-        swirl_turns_row = QHBoxLayout()
-        swirl_turns_row.addWidget(QLabel("Swirl Turns:"))
+        particle_light_row.addWidget(self.particle_light_combo)
+        particle_light_row.addStretch()
+
+        particle_swirl_turns_row = _aligned_row(particle_layout, "Swirl Turns:")
         self.particle_swirl_turns_spin = QDoubleSpinBox()
-        self.particle_swirl_turns_spin.setRange(0.5, 5.0)
-        self.particle_swirl_turns_spin.setSingleStep(0.5)
-        self.particle_swirl_turns_spin.setValue(2.0)
+        self.particle_swirl_turns_spin.setDecimals(2)
+        self.particle_swirl_turns_spin.setRange(0.5, 6.0)
+        self.particle_swirl_turns_spin.setSingleStep(0.1)
+        self.particle_swirl_turns_spin.setValue(3.0)
         self.particle_swirl_turns_spin.valueChanged.connect(self._save_settings)
-        swirl_turns_row.addWidget(self.particle_swirl_turns_spin)
-        swirl_turns_row.addStretch()
-        particle_layout.addLayout(swirl_turns_row)
-        
-        swirl_order_row = QHBoxLayout()
-        swirl_order_row.addWidget(QLabel("Build Order:"))
+        particle_swirl_turns_row.addWidget(self.particle_swirl_turns_spin)
+        particle_swirl_turns_row.addStretch()
+
+        particle_swirl_order_row = _aligned_row(particle_layout, "Swirl Build Order:")
         self.particle_swirl_order_combo = QComboBox()
         self.particle_swirl_order_combo.addItems([
-            "Typical",
-            "Center Outward",
-            "Edges Inward",
+            "Inside-Out",
+            "Outside-In",
+            "Random",
         ])
-        self.particle_swirl_order_combo.setToolTip("How particles fill in during swirl mode")
         self.particle_swirl_order_combo.currentIndexChanged.connect(self._save_settings)
-        swirl_order_row.addWidget(self.particle_swirl_order_combo)
-        swirl_order_row.addStretch()
-        particle_layout.addLayout(swirl_order_row)
-        
+        particle_swirl_order_row.addWidget(self.particle_swirl_order_combo)
+        particle_swirl_order_row.addStretch()
+
         layout.addWidget(self.particle_group)
 
         # Burn specific settings
         self.burn_group = QGroupBox("Burn Settings")
         burn_layout = QVBoxLayout(self.burn_group)
 
-        burn_dir_row = QHBoxLayout()
-        burn_dir_row.addWidget(QLabel("Direction:"))
+        burn_dir_row = _aligned_row(burn_layout, "Direction:")
         self.burn_direction_combo = QComboBox()
         self.burn_direction_combo.addItems([
             "Left to Right",
@@ -502,10 +480,8 @@ class TransitionsTab(QWidget):
         self.burn_direction_combo.currentIndexChanged.connect(self._save_settings)
         burn_dir_row.addWidget(self.burn_direction_combo)
         burn_dir_row.addStretch()
-        burn_layout.addLayout(burn_dir_row)
 
-        burn_jag_row = QHBoxLayout()
-        burn_jag_row.addWidget(QLabel("Jaggedness:"))
+        burn_jag_row = _aligned_row(burn_layout, "Jaggedness:")
         self.burn_jaggedness_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_jaggedness_slider.setRange(0, 100)
         self.burn_jaggedness_slider.setValue(50)
@@ -513,14 +489,13 @@ class TransitionsTab(QWidget):
         self.burn_jaggedness_slider.valueChanged.connect(self._save_settings)
         burn_jag_row.addWidget(self.burn_jaggedness_slider, 1)
         self.burn_jaggedness_label = QLabel("50%")
+        self.burn_jaggedness_label.setMinimumWidth(50)
         burn_jag_row.addWidget(self.burn_jaggedness_label)
         self.burn_jaggedness_slider.valueChanged.connect(
             lambda v: self.burn_jaggedness_label.setText(f"{v}%")
         )
-        burn_layout.addLayout(burn_jag_row)
 
-        burn_glow_row = QHBoxLayout()
-        burn_glow_row.addWidget(QLabel("Glow Intensity:"))
+        burn_glow_row = _aligned_row(burn_layout, "Glow Intensity:")
         self.burn_glow_intensity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_glow_intensity_slider.setRange(0, 100)
         self.burn_glow_intensity_slider.setValue(70)
@@ -528,14 +503,13 @@ class TransitionsTab(QWidget):
         self.burn_glow_intensity_slider.valueChanged.connect(self._save_settings)
         burn_glow_row.addWidget(self.burn_glow_intensity_slider, 1)
         self.burn_glow_intensity_label = QLabel("70%")
+        self.burn_glow_intensity_label.setMinimumWidth(50)
         burn_glow_row.addWidget(self.burn_glow_intensity_label)
         self.burn_glow_intensity_slider.valueChanged.connect(
             lambda v: self.burn_glow_intensity_label.setText(f"{v}%")
         )
-        burn_layout.addLayout(burn_glow_row)
 
-        burn_char_row = QHBoxLayout()
-        burn_char_row.addWidget(QLabel("Char Width:"))
+        burn_char_row = _aligned_row(burn_layout, "Char Width:")
         self.burn_char_width_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_char_width_slider.setRange(10, 100)
         self.burn_char_width_slider.setValue(50)
@@ -543,14 +517,13 @@ class TransitionsTab(QWidget):
         self.burn_char_width_slider.valueChanged.connect(self._save_settings)
         burn_char_row.addWidget(self.burn_char_width_slider, 1)
         self.burn_char_width_label = QLabel("50%")
+        self.burn_char_width_label.setMinimumWidth(50)
         burn_char_row.addWidget(self.burn_char_width_label)
         self.burn_char_width_slider.valueChanged.connect(
             lambda v: self.burn_char_width_label.setText(f"{v}%")
         )
-        burn_layout.addLayout(burn_char_row)
 
-        burn_color_row = QHBoxLayout()
-        burn_color_row.addWidget(QLabel("Glow Colour:"))
+        burn_color_row = _aligned_row(burn_layout, "Glow Colour:")
         self.burn_glow_color_btn = ColorSwatchButton(
             title="Choose Burn Glow Colour", show_alpha=True, auto_picker=False
         )
@@ -561,16 +534,16 @@ class TransitionsTab(QWidget):
         self.burn_glow_color_btn.clicked.connect(self._pick_burn_glow_color)
         burn_color_row.addWidget(self.burn_glow_color_btn)
         burn_color_row.addStretch()
-        burn_layout.addLayout(burn_color_row)
 
+        burn_smoke_row = _aligned_row(burn_layout, "")
         self.burn_smoke_check = QCheckBox("Sparks")
         self.burn_smoke_check.setChecked(True)
         self.burn_smoke_check.setToolTip("Enable bright sparks flying off the burn front")
         self.burn_smoke_check.stateChanged.connect(self._save_settings)
-        burn_layout.addWidget(self.burn_smoke_check)
+        burn_smoke_row.addWidget(self.burn_smoke_check)
+        burn_smoke_row.addStretch()
 
-        burn_smoke_density_row = QHBoxLayout()
-        burn_smoke_density_row.addWidget(QLabel("  Spark Intensity:"))
+        burn_smoke_density_row = _aligned_row(burn_layout, "Spark Intensity:")
         self.burn_smoke_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_smoke_density_slider.setRange(0, 100)
         self.burn_smoke_density_slider.setValue(50)
@@ -581,16 +554,16 @@ class TransitionsTab(QWidget):
         self.burn_smoke_density_slider.valueChanged.connect(
             lambda v: self.burn_smoke_density_label.setText(f"{v}%")
         )
-        burn_layout.addLayout(burn_smoke_density_row)
 
+        burn_ash_row = _aligned_row(burn_layout, "")
         self.burn_ash_check = QCheckBox("Ash Particles")
         self.burn_ash_check.setChecked(True)
         self.burn_ash_check.setToolTip("Enable falling ash specks below the burn front")
         self.burn_ash_check.stateChanged.connect(self._save_settings)
-        burn_layout.addWidget(self.burn_ash_check)
+        burn_ash_row.addWidget(self.burn_ash_check)
+        burn_ash_row.addStretch()
 
-        burn_ash_density_row = QHBoxLayout()
-        burn_ash_density_row.addWidget(QLabel("  Ash Density:"))
+        burn_ash_density_row = _aligned_row(burn_layout, "Ash Density:")
         self.burn_ash_density_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.burn_ash_density_slider.setRange(0, 100)
         self.burn_ash_density_slider.setValue(50)
@@ -601,7 +574,6 @@ class TransitionsTab(QWidget):
         self.burn_ash_density_slider.valueChanged.connect(
             lambda v: self.burn_ash_density_label.setText(f"{v}%")
         )
-        burn_layout.addLayout(burn_ash_density_row)
 
         layout.addWidget(self.burn_group)
 

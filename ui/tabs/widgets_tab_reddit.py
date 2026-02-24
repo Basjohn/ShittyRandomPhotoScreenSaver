@@ -39,6 +39,22 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """
     from ui.tabs.widgets_tab import NoWheelSlider
 
+    LABEL_WIDTH = 140
+
+    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        label = QLabel(label_text)
+        label.setFixedWidth(LABEL_WIDTH)
+        row.addWidget(label)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content
+
     reddit_group = QGroupBox("Reddit Widget")
     reddit_layout = QVBoxLayout(reddit_group)
 
@@ -74,8 +90,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addWidget(tab.reddit_exit_on_click)
 
     # Subreddit name
-    reddit_sub_row = QHBoxLayout()
-    reddit_sub_row.addWidget(QLabel("Subreddit:"))
+    reddit_sub_row = _aligned_row(_rc_layout, "Subreddit:")
     tab.reddit_subreddit = QLineEdit()
     default_subreddit = tab._default_str('reddit', 'subreddit', 'wallpapers')
     tab.reddit_subreddit.setText(default_subreddit)
@@ -83,16 +98,16 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_subreddit.setToolTip("Enter the subreddit name (without r/ prefix)")
     tab.reddit_subreddit.textChanged.connect(tab._save_settings)
     reddit_sub_row.addWidget(tab.reddit_subreddit)
-    _rc_layout.addLayout(reddit_sub_row)
+    reddit_sub_row.addStretch()
 
     # Item count
-    reddit_items_row = QHBoxLayout()
-    reddit_items_row.addWidget(QLabel("Items:"))
+    reddit_items_row = _aligned_row(_rc_layout, "Items:")
     tab.reddit_items = QComboBox()
     tab.reddit_items.addItems(["4", "10", "20"])
     tab.reddit_items.setToolTip("Number of Reddit posts to display in the widget")
     tab.reddit_items.currentTextChanged.connect(tab._save_settings)
     tab.reddit_items.currentTextChanged.connect(tab._update_stack_status)
+    tab.reddit_items.setMinimumWidth(80)
     reddit_items_row.addWidget(tab.reddit_items)
     reddit_limit_default = tab._default_int('reddit', 'limit', 10)
     if reddit_limit_default <= 5:
@@ -106,8 +121,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addLayout(reddit_items_row)
 
     # Position
-    reddit_pos_row = QHBoxLayout()
-    reddit_pos_row.addWidget(QLabel("Position:"))
+    reddit_pos_row = _aligned_row(_rc_layout, "Position:")
     tab.reddit_position = QComboBox()
     tab.reddit_position.addItems([
         "Top Left", "Top Center", "Top Right",
@@ -117,6 +131,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_position.setToolTip("Screen position for the Reddit widget (9-grid layout)")
     tab.reddit_position.currentTextChanged.connect(tab._save_settings)
     tab.reddit_position.currentTextChanged.connect(tab._update_stack_status)
+    tab.reddit_position.setMinimumWidth(150)
     reddit_pos_row.addWidget(tab.reddit_position)
     tab._set_combo_text(tab.reddit_position, tab._default_str('reddit', 'position', 'Bottom Right'))
     tab.reddit_stack_status = QLabel("")
@@ -126,13 +141,13 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addLayout(reddit_pos_row)
 
     # Display (monitor selection)
-    reddit_disp_row = QHBoxLayout()
-    reddit_disp_row.addWidget(QLabel("Display:"))
+    reddit_disp_row = _aligned_row(_rc_layout, "Display:")
     tab.reddit_monitor_combo = QComboBox()
     tab.reddit_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.reddit_monitor_combo.setToolTip("Which monitor(s) to show the Reddit widget on")
     tab.reddit_monitor_combo.currentTextChanged.connect(tab._save_settings)
     tab.reddit_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
+    tab.reddit_monitor_combo.setMinimumWidth(120)
     reddit_disp_row.addWidget(tab.reddit_monitor_combo)
     reddit_monitor_default = tab._widget_default('reddit', 'monitor', 'ALL')
     tab._set_combo_text(tab.reddit_monitor_combo, str(reddit_monitor_default))
@@ -140,8 +155,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addLayout(reddit_disp_row)
 
     # Font family
-    reddit_font_family_row = QHBoxLayout()
-    reddit_font_family_row.addWidget(QLabel("Font:"))
+    reddit_font_family_row = _aligned_row(_rc_layout, "Font:")
     tab.reddit_font_combo = QFontComboBox()
     default_reddit_font = tab._default_str('reddit', 'font_family', 'Segoe UI')
     tab.reddit_font_combo.setCurrentFont(QFont(default_reddit_font))
@@ -150,11 +164,9 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_font_combo.currentFontChanged.connect(tab._save_settings)
     reddit_font_family_row.addWidget(tab.reddit_font_combo)
     reddit_font_family_row.addStretch()
-    _rc_layout.addLayout(reddit_font_family_row)
 
     # Font size
-    reddit_font_row = QHBoxLayout()
-    reddit_font_row.addWidget(QLabel("Font Size:"))
+    reddit_font_row = _aligned_row(_rc_layout, "Font Size:")
     tab.reddit_font_size = QSpinBox()
     tab.reddit_font_size.setRange(10, 72)
     tab.reddit_font_size.setValue(tab._default_int('reddit', 'font_size', 18))
@@ -163,26 +175,26 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_font_size.valueChanged.connect(tab._save_settings)
     tab.reddit_font_size.valueChanged.connect(tab._update_stack_status)
     reddit_font_row.addWidget(tab.reddit_font_size)
-    reddit_font_row.addWidget(QLabel("px"))
+    reddit_font_px = QLabel("px")
+    reddit_font_px.setMinimumWidth(24)
+    reddit_font_row.addWidget(reddit_font_px)
     reddit_font_row.addStretch()
-    _rc_layout.addLayout(reddit_font_row)
 
     # Margin
-    reddit_margin_row = QHBoxLayout()
-    reddit_margin_row.addWidget(QLabel("Margin:"))
+    reddit_margin_row = _aligned_row(_rc_layout, "Margin:")
     tab.reddit_margin = QSpinBox()
     tab.reddit_margin.setRange(0, 100)
     tab.reddit_margin.setValue(tab._default_int('reddit', 'margin', 30))
     tab.reddit_margin.setAccelerated(True)
     tab.reddit_margin.valueChanged.connect(tab._save_settings)
     reddit_margin_row.addWidget(tab.reddit_margin)
-    reddit_margin_row.addWidget(QLabel("px"))
+    reddit_margin_px = QLabel("px")
+    reddit_margin_px.setMinimumWidth(24)
+    reddit_margin_row.addWidget(reddit_margin_px)
     reddit_margin_row.addStretch()
-    _rc_layout.addLayout(reddit_margin_row)
 
     # Text color
-    reddit_color_row = QHBoxLayout()
-    reddit_color_row.addWidget(QLabel("Text Color:"))
+    reddit_color_row = _aligned_row(_rc_layout, "Text Color:")
     tab.reddit_color_btn = ColorSwatchButton(title="Choose Reddit Text Color")
     tab.reddit_color_btn.set_color(tab._reddit_color)
     tab.reddit_color_btn.color_changed.connect(
@@ -190,7 +202,6 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     reddit_color_row.addWidget(tab.reddit_color_btn)
     reddit_color_row.addStretch()
-    _rc_layout.addLayout(reddit_color_row)
 
     # Background frame
     tab.reddit_show_background = QCheckBox("Show Background Frame")
@@ -213,8 +224,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addWidget(tab.reddit_show_separators)
 
     # Background opacity
-    reddit_opacity_row = QHBoxLayout()
-    reddit_opacity_row.addWidget(QLabel("Background Opacity:"))
+    reddit_opacity_row = _aligned_row(_rc_layout, "Background Opacity:")
     tab.reddit_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.reddit_bg_opacity.setMinimum(0)
     tab.reddit_bg_opacity.setMaximum(100)
@@ -228,12 +238,11 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_bg_opacity.valueChanged.connect(
         lambda v: tab.reddit_bg_opacity_label.setText(f"{v}%")
     )
+    tab.reddit_bg_opacity_label.setMinimumWidth(50)
     reddit_opacity_row.addWidget(tab.reddit_bg_opacity_label)
-    _rc_layout.addLayout(reddit_opacity_row)
 
     # Background color
-    reddit_bg_color_row = QHBoxLayout()
-    reddit_bg_color_row.addWidget(QLabel("Background Color:"))
+    reddit_bg_color_row = _aligned_row(_rc_layout, "Background Color:")
     tab.reddit_bg_color_btn = ColorSwatchButton(title="Choose Reddit Background Color")
     tab.reddit_bg_color_btn.set_color(tab._reddit_bg_color)
     tab.reddit_bg_color_btn.color_changed.connect(
@@ -241,11 +250,9 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     reddit_bg_color_row.addWidget(tab.reddit_bg_color_btn)
     reddit_bg_color_row.addStretch()
-    _rc_layout.addLayout(reddit_bg_color_row)
 
     # Border color
-    reddit_border_color_row = QHBoxLayout()
-    reddit_border_color_row.addWidget(QLabel("Border Color:"))
+    reddit_border_color_row = _aligned_row(_rc_layout, "Border Color:")
     tab.reddit_border_color_btn = ColorSwatchButton(title="Choose Reddit Border Color")
     tab.reddit_border_color_btn.set_color(tab._reddit_border_color)
     tab.reddit_border_color_btn.color_changed.connect(
@@ -253,11 +260,9 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     reddit_border_color_row.addWidget(tab.reddit_border_color_btn)
     reddit_border_color_row.addStretch()
-    _rc_layout.addLayout(reddit_border_color_row)
 
     # Border opacity
-    reddit_border_opacity_row = QHBoxLayout()
-    reddit_border_opacity_row.addWidget(QLabel("Border Opacity:"))
+    reddit_border_opacity_row = _aligned_row(_rc_layout, "Border Opacity:")
     tab.reddit_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.reddit_border_opacity.setMinimum(0)
     tab.reddit_border_opacity.setMaximum(100)
@@ -271,8 +276,8 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_border_opacity.valueChanged.connect(
         lambda v: tab.reddit_border_opacity_label.setText(f"{v}%")
     )
+    tab.reddit_border_opacity_label.setMinimumWidth(50)
     reddit_border_opacity_row.addWidget(tab.reddit_border_opacity_label)
-    _rc_layout.addLayout(reddit_border_opacity_row)
 
     # Reddit 2
     reddit2_label = QLabel("Reddit 2 (inherits styling from Reddit 1):")
@@ -284,6 +289,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit2_enabled.stateChanged.connect(tab._save_settings)
     tab.reddit2_enabled.stateChanged.connect(tab._update_stack_status)
     reddit2_row1.addWidget(tab.reddit2_enabled)
+    reddit2_row1.addSpacing(24)
     reddit2_row1.addWidget(QLabel("Subreddit:"))
     tab.reddit2_subreddit = QLineEdit()
     tab.reddit2_subreddit.setPlaceholderText("e.g. earthporn")
