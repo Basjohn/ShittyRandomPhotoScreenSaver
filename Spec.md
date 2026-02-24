@@ -460,16 +460,16 @@ debug in this order:
     `[PERF] [GL COMPOSITOR]` summaries are the canonical signals for confirming
     that frames are being produced and composited.
 
-#### Blob core headroom / intensity reserve
+#### Blob staged core sizing (Stage Gain / Core Scale / Stage Bias)
 
-- Slider lives in **Settings → Spotify Visualizer → Blob** as *Intensity Reserve* (0–200%).
-- Plumbing path: defaults → `SpotifyVisualizerSettings.blob_intensity_reserve` → widget attributes →
-  `build_gpu_push_extra_kwargs()` → `SpotifyBarsGLOverlay.set_state()` → shader uniform `u_blob_intensity_reserve`.
-- Shader behaviour: reserve=0.0 is an exact no-op; reserve > 0 gates a hidden radius boost on
-  high-frequency spikes only (`u_high_energy > 0.6`). The boost scales quadratically with spike height
-  and linearly with the slider so legacy presets remain untouched.
-- Regression coverage: `tests/test_blob_intensity_reserve.py` mirrors the GLSL math to ensure
-  gating + reserve scaling stay deterministic. Any shader edits must keep the Python mirror in sync.
+- Sliders live in **Settings → Spotify Visualizer → Blob**. Normal bucket surfaces *Pulse Intensity*, color rows, and the *Card Size* group; the **Advanced** bucket (hidden by default but always active) now contains *Stage Gain*, *Core Floor %*, *Core Scale %*, *Stage Bias*, *Stage 2 Release*, *Stage 3 Release*, *Reactive Deformation*, *Constant Wobble*, *Reactive Wobble*, *Stretch Tendency*, and *Glow Intensity*.
+- **Stage Gain/Core Scale:** sliders remain 0–200 % and 25–250 % respectively. Plumbing path: defaults → `SpotifyVisualizerSettings.blob_stage_gain/blob_core_scale` → widget attributes → `build_gpu_push_extra_kwargs()` → `SpotifyBarsGLOverlay.set_state()` → shader uniforms `u_blob_stage_gain`/`u_blob_core_scale`. UI layout follows the guidance in `Docs/Advanced_Migration.md` (Normal vs Advanced buckets, helper label, preset-driven toggle state).
+- **Advanced toggle expectations:** Blob mode is the reference implementation for the reusable Advanced section pattern. The QToolButton + helper label sit between the normal sliders and the hidden container. Preset sliders lock the toggle when using Preset 1/2/3, while Custom restores manually stored visibility. Controls continue to apply even when collapsed, so helpers must remind users and SettingsManager keys remain unchanged. See `Docs/Advanced_Migration.md` for migration steps before applying the same treatment to other modes.
+- **Stage Bias (±0.30):** biases all three stage progress curves upward (positive) or downward (negative) before smoothing. Defaults live in `core/settings/defaults.py`, persist via `SpotifyVisualizerSettings.blob_stage_bias`, flow through the widget/config applier, and surface on the GPU as `u_blob_stage_bias`. CPU helper `compute_stage_progress` mirrors the GLSL biasing so diagnostics/tests stay in lockstep.
+- **Per-stage release sliders (400–2000 ms):** `blob_stage2_release_ms` and `blob_stage3_release_ms` drive both hold timers and release τ values inside `SpotifyBarsGLOverlay`. Higher values extend the decay time after a stage bucket is reached, preventing instant drops when energy briefly dips. Defaults/plumbing follow the same path as Stage Bias; settings remain active even when the Advanced section is collapsed.
+- Shader behaviour: Stage Gain multiplies the amplitude of four weighted energy stages (silence, soft bed, groove, chorus) computed by `compute_stage_offset`. Core Scale applies a uniform multiplier to the staged offset so presets can shrink or expand the entire core without touching Blob Size. Stage Bias shifts the `smoothstep` thresholds symmetrically before clamping. Stage Gain = 0 is an exact no-op.
+- Diagnostics: `[SPOTIFY_VIS][BLOB][DIAG]`/`[SPOTIFY_VIS][BLOB][STAGE]` lines now emit `stage_gain`, `core_scale`, `stage_bias`, `stage2_release_ms`, `stage3_release_ms`, energies, and the clamped radius min/max, driven by the same helper used in the shader/overlay to keep CPU+GPU parity.
+- Regression coverage: `tests/test_blob_intensity_reserve.py` imports `compute_blob_radius_preview` and verifies Stage Gain/Core Scale linearity plus monotonic stage thresholds. Any shader edits must keep the Python helper + tests in sync; when Stage Bias defaults change, update the test fixtures accordingly.
 
 ## Banding & Pixmap Seeding
 - `DisplayWidget.show_on_screen` grabs a per-monitor wallpaper snapshot via `screen.grabWindow(0)` and seeds `current_pixmap`, `_seed_pixmap`, and `previous_pixmap` before GL prewarm runs. This prevents a wallpaper→black flash during startup even while overlays are initializing.

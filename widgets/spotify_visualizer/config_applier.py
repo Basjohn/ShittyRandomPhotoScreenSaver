@@ -115,8 +115,18 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
     if 'blob_reactive_deformation' in kwargs:
         widget._blob_reactive_deformation = max(0.0, min(3.0, float(kwargs['blob_reactive_deformation'])))
-    if 'blob_intensity_reserve' in kwargs:
-        widget._blob_intensity_reserve = max(0.0, min(2.0, float(kwargs['blob_intensity_reserve'])))
+    if 'blob_stage_gain' in kwargs:
+        widget._blob_stage_gain = max(0.0, min(2.0, float(kwargs['blob_stage_gain'])))
+    if 'blob_core_scale' in kwargs:
+        widget._blob_core_scale = max(0.25, min(2.5, float(kwargs['blob_core_scale'])))
+    if 'blob_core_floor_bias' in kwargs:
+        widget._blob_core_floor_bias = max(0.0, min(0.6, float(kwargs['blob_core_floor_bias'])))
+    if 'blob_stage_bias' in kwargs:
+        widget._blob_stage_bias = max(-0.35, min(0.35, float(kwargs['blob_stage_bias'])))
+    if 'blob_stage2_release_ms' in kwargs:
+        widget._blob_stage2_release_ms = max(200.0, min(4000.0, float(kwargs['blob_stage2_release_ms'])))
+    if 'blob_stage3_release_ms' in kwargs:
+        widget._blob_stage3_release_ms = max(200.0, min(4000.0, float(kwargs['blob_stage3_release_ms'])))
     if 'blob_constant_wobble' in kwargs:
         widget._blob_constant_wobble = max(0.0, min(2.0, float(kwargs['blob_constant_wobble'])))
     if 'blob_reactive_wobble' in kwargs:
@@ -409,7 +419,12 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['blob_glow_intensity'] = widget._blob_glow_intensity
     extra['blob_reactive_glow'] = widget._blob_reactive_glow
     extra['blob_reactive_deformation'] = widget._blob_reactive_deformation
-    extra['blob_intensity_reserve'] = widget._blob_intensity_reserve
+    extra['blob_stage_gain'] = widget._blob_stage_gain
+    extra['blob_core_scale'] = widget._blob_core_scale
+    extra['blob_core_floor_bias'] = widget._blob_core_floor_bias
+    extra['blob_stage_bias'] = getattr(widget, '_blob_stage_bias', 0.0)
+    extra['blob_stage2_release_ms'] = getattr(widget, '_blob_stage2_release_ms', 900.0)
+    extra['blob_stage3_release_ms'] = getattr(widget, '_blob_stage3_release_ms', 1200.0)
     extra['blob_constant_wobble'] = widget._blob_constant_wobble
     extra['blob_reactive_wobble'] = widget._blob_reactive_wobble
     extra['blob_stretch_tendency'] = widget._blob_stretch_tendency

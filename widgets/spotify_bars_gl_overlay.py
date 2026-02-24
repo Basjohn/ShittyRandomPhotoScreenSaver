@@ -18,11 +18,23 @@ from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
 from widgets.spotify_visualizer.energy_bands import EnergyBands
+from widgets.spotify_visualizer.blob_math import (
+    compute_stage_floor_fraction,
+    compute_stage_offset,
+    compute_stage_progress,
+)
 
 
 logger = get_logger(__name__)
 # Throttled logger for high-frequency debug messages (max 1/second)
 _throttled_logger = get_throttled_logger(__name__, max_per_second=1.0)
+
+
+def _smoothstep(edge0: float, edge1: float, x: float) -> float:
+    if edge0 == edge1:
+        return 0.0
+    t = max(0.0, min(1.0, (x - edge0) / (edge1 - edge0)))
+    return t * t * (3.0 - 2.0 * t)
 
 
 class SpotifyBarsGLOverlay(QOpenGLWidget):
@@ -125,7 +137,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_reactive_glow: bool = True
         self._blob_smoothed_energy: float = 0.0  # CPU-side smoothed energy for glow decay
         self._blob_reactive_deformation: float = 1.0
-        self._blob_intensity_reserve: float = 0.0
+        self._blob_stage_gain: float = 1.0
+        self._blob_core_scale: float = 1.0
+        self._blob_core_floor_bias: float = 0.35
+        self._blob_stage_bias: float = 0.0
+        self._blob_stage2_release_ms: float = 900.0
+        self._blob_stage3_release_ms: float = 1200.0
         self._blob_constant_wobble: float = 1.0
         self._blob_reactive_wobble: float = 1.0
         self._blob_stretch_tendency: float = 0.0
@@ -148,10 +165,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
 
-        # Blob diagnostics (reserve/radius instrumentation)
+        # Blob diagnostics (staged radius instrumentation)
         self._blob_diag_last_log_ts: float = 0.0
         self._blob_diag_radius_min: Optional[float] = None
         self._blob_diag_radius_max: Optional[float] = None
+        self._blob_stage_bucket: int = -1
+        self._blob_stage_progress_raw: tuple[float, float, float] = (-1.0, -1.0, -1.0)
+        self._blob_stage_progress_filtered: tuple[float, float, float] = (-1.0, -1.0, -1.0)
+        self._blob_stage_progress_ready: bool = False
+        self._blob_stage_hold_until: dict[int, float] = {2: 0.0, 3: 0.0}
 
         # Rainbow (Taste The Rainbow) mode
         self._rainbow_enabled: bool = False
@@ -165,11 +187,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_trail_data: list = []
         self._bubble_trail_strength: float = 0.0
         self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
-        self._bubble_specular_color: QColor = QColor(255, 255, 255, 255)
-        self._bubble_gradient_light: QColor = QColor(210, 170, 120, 255)
-        self._bubble_gradient_dark: QColor = QColor(80, 60, 50, 255)
-        self._bubble_pop_color: QColor = QColor(255, 255, 255, 180)
-        self._bubble_specular_direction: str = "top_left"
 
         # Helix settings
         self._helix_turns: int = 4
@@ -269,7 +286,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_glow_intensity: float = 0.5,
         blob_reactive_glow: bool = True,
         blob_reactive_deformation: float = 1.0,
-        blob_intensity_reserve: float = 0.0,
+        blob_stage_gain: float = 1.0,
+        blob_core_scale: float = 1.0,
+        blob_core_floor_bias: float = 0.35,
+        blob_stage_bias: float = 0.0,
+        blob_stage2_release_ms: float = 900.0,
+        blob_stage3_release_ms: float = 1200.0,
         blob_constant_wobble: float = 1.0,
         blob_reactive_wobble: float = 1.0,
         blob_stretch_tendency: float = 0.0,
@@ -343,16 +365,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if self._vis_mode != 'blob':
             self._blob_diag_radius_min = None
             self._blob_diag_radius_max = None
+            self._blob_stage_progress_ready = False
+            self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
+            self._blob_stage_progress_filtered = (-1.0, -1.0, -1.0)
+            self._blob_stage_hold_until = {2: 0.0, 3: 0.0}
         try:
             self._border_width_px = max(0.0, float(border_width_px))
         except Exception:
             self._border_width_px = 0.0
 
         # Update accumulated time for animated modes
+        dt_seconds = 0.0
         now_ts = time.time()
         if self._last_time_ts > 0.0:
             dt = now_ts - self._last_time_ts
             if 0.0 < dt < 1.0:  # sanity clamp
+                dt_seconds = dt
                 # Gate rainbow hue rotation on playing state (issue 1.5)
                 if playing:
                     self._accumulated_time += dt
@@ -417,6 +445,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Store energy bands (starfield / blob / helix)
         if energy_bands is not None:
             self._energy_bands = energy_bands
+            bass_val = float(getattr(energy_bands, 'bass', 0.0) or 0.0)
+            mid_val = float(getattr(energy_bands, 'mid', 0.0) or 0.0)
+            high_val = float(getattr(energy_bands, 'high', 0.0) or 0.0)
+            overall_val = float(getattr(energy_bands, 'overall', 0.0) or 0.0)
+            stage_progress_raw = compute_stage_progress(
+                bass_energy=bass_val,
+                mid_energy=mid_val,
+                high_energy=high_val,
+                overall_energy=overall_val,
+                smoothed_energy=self._blob_smoothed_energy,
+                stage_bias=self._blob_stage_bias,
+            )
+            self._blob_stage_progress_raw = stage_progress_raw
+            filtered = self._filter_stage_progress(stage_progress_raw, dt_seconds)
+            self._blob_stage_progress_filtered = filtered
+            self._blob_stage_progress_ready = True
 
         self._maybe_log_blob_diagnostics()
 
@@ -467,7 +511,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_intensity = max(0.0, min(1.0, float(blob_glow_intensity)))
         self._blob_reactive_glow = bool(blob_reactive_glow)
         self._blob_reactive_deformation = max(0.0, min(2.0, float(blob_reactive_deformation)))
-        self._blob_intensity_reserve = max(0.0, min(2.0, float(blob_intensity_reserve)))
+        self._blob_stage_gain = max(0.0, min(2.0, float(blob_stage_gain)))
+        self._blob_core_scale = max(0.25, min(2.5, float(blob_core_scale)))
+        self._blob_core_floor_bias = max(0.0, min(0.6, float(blob_core_floor_bias)))
+        self._blob_stage_bias = max(-0.3, min(0.3, float(blob_stage_bias)))
+        self._blob_stage2_release_ms = max(50.0, min(5000.0, float(blob_stage2_release_ms)))
+        self._blob_stage3_release_ms = max(50.0, min(5000.0, float(blob_stage3_release_ms)))
         self._blob_constant_wobble = max(0.0, min(2.0, float(blob_constant_wobble)))
         self._blob_reactive_wobble = max(0.0, min(2.0, float(blob_reactive_wobble)))
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
@@ -858,7 +907,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self.update()
 
     def _maybe_log_blob_diagnostics(self) -> None:
-        """Emit blob reserve diagnostics when viz diagnostics + perf metrics on."""
+        """Emit blob staged-radius diagnostics when viz diagnostics + perf metrics on."""
 
         if self._vis_mode != 'blob':
             return
@@ -869,25 +918,63 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         high = float(getattr(bands, 'high', 0.0) or 0.0)
         bass = float(getattr(bands, 'bass', 0.0) or 0.0)
         overall = float(getattr(bands, 'overall', 0.0) or 0.0)
-        reserve = float(self._blob_intensity_reserve or 0.0)
+        stage_gain = float(self._blob_stage_gain or 0.0)
+        core_scale = float(self._blob_core_scale or 1.0)
+        core_floor_bias = float(self._blob_core_floor_bias or 0.0)
         se = float(self._blob_smoothed_energy or 0.0)
         pulse = float(self._blob_pulse or 0.0)
         base_size = float(self._blob_size or 1.0)
         playing = bool(self._playing)
+        if self._blob_stage_progress_ready:
+            stage1_t, stage2_t, stage3_t = self._blob_stage_progress_filtered
+            raw_stage = self._blob_stage_progress_raw
+        else:
+            stage1_t, stage2_t, stage3_t = compute_stage_progress(
+                bass_energy=bass,
+                mid_energy=float(getattr(bands, 'mid', 0.0) or 0.0),
+                high_energy=high,
+                overall_energy=overall,
+                smoothed_energy=se,
+                stage_bias=self._blob_stage_bias,
+            )
+            raw_stage = (stage1_t, stage2_t, stage3_t)
+        self._maybe_log_stage_transition(
+            stage1_t,
+            stage2_t,
+            stage3_t,
+            raw_stage,
+            overall,
+            high,
+            bass,
+        )
+        stage_floor = compute_stage_floor_fraction(
+            core_floor_bias=core_floor_bias,
+            stage1_t=stage1_t,
+            stage2_t=stage2_t,
+            stage3_t=stage3_t,
+        )
 
         r = 0.44 * max(0.1, min(2.5, base_size))
         r += bass * bass * 0.066
         r += bass * 0.077 * pulse
         se_clamped = max(0.0, min(1.0, se))
         r -= (1.0 - se_clamped) * 0.053 * pulse
-        if reserve > 0.0001:
-            spike = max(0.0, min(1.0, high) - 0.45)
-            gate = 0.0
-            if spike > 0.0:
-                # smoothstep(0, 0.25, spike)
-                t = max(0.0, min(1.0, spike / 0.25))
-                gate = t * t * (3.0 - 2.0 * t)
-            r += spike * spike * 0.25 * reserve * gate
+        stage_progress_override: tuple[float, float, float] | None = None
+        if self._blob_stage_progress_ready:
+            stage_progress_override = self._blob_stage_progress_filtered
+        if stage_gain > 0.0001 and core_scale > 0.0:
+            r += compute_stage_offset(
+                blob_size=base_size,
+                bass_energy=bass,
+                mid_energy=float(getattr(bands, 'mid', 0.0) or 0.0),
+                high_energy=high,
+                overall_energy=overall,
+                stage_gain=stage_gain,
+                core_scale=core_scale,
+                smoothed_energy=se_clamped,
+                stage_bias=self._blob_stage_bias,
+                stage_progress_override=stage_progress_override,
+            )
         if not playing:
             r *= 0.45 + se_clamped * 0.25
 
@@ -903,18 +990,129 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_diag_last_log_ts = now
 
         logger.info(
-            "[SPOTIFY_VIS][BLOB][DIAG] reserve=%.2f high=%.3f bass=%.3f overall=%.3f se=%.3f pulse=%.2f playing=%s radius=%.4f radius_min=%.4f radius_max=%.4f",
-            reserve,
+            "[SPOTIFY_VIS][BLOB][DIAG] stage_gain=%.2f core_scale=%.2f core_floor_bias=%.2f stage_filtered=(%.2f,%.2f,%.2f) stage_raw=(%.2f,%.2f,%.2f) stage_floor=%.2f high=%.3f bass=%.3f overall=%.3f se=%.3f pulse=%.2f playing=%s radius=%.4f radius_min=%.4f radius_max=%.4f",
+            stage_gain,
+            core_scale,
+            core_floor_bias,
+            stage1_t,
+            stage2_t,
+            stage3_t,
+            raw_stage[0],
+            raw_stage[1],
+            raw_stage[2],
+            stage_floor,
             high,
             bass,
             overall,
-            se_clamped,
+            se,
             pulse,
             playing,
             r,
             self._blob_diag_radius_min or r,
             self._blob_diag_radius_max or r,
         )
+
+    def _maybe_log_stage_transition(
+        self,
+        stage1_t: float,
+        stage2_t: float,
+        stage3_t: float,
+        raw_stage_progress: tuple[float, float, float],
+        overall: float,
+        high: float,
+        bass: float,
+    ) -> None:
+        """Log stage bucket changes sparingly for diagnostics."""
+
+        prev_bucket = self._blob_stage_bucket
+
+        bucket = prev_bucket
+        stage1_up = 0.22
+        stage1_down = 0.08
+        stage2_up = 0.38
+        stage2_down = 0.25
+        stage3_up = 0.62
+        stage3_down = 0.56
+        hold_stage2 = self._blob_stage_hold_until.get(2, 0.0)
+        hold_stage3 = self._blob_stage_hold_until.get(3, 0.0)
+        now = time.time()
+
+        if prev_bucket >= 3:
+            can_drop_stage3 = now >= hold_stage3
+            if can_drop_stage3 and stage3_t <= stage3_down and overall <= 0.58:
+                bucket = 2
+        elif prev_bucket >= 2:
+            if stage3_t >= stage3_up:
+                bucket = 3
+            else:
+                can_drop_stage2 = now >= hold_stage2
+                if can_drop_stage2 and stage2_t <= stage2_down and overall <= 0.35:
+                    bucket = 1
+        elif prev_bucket >= 1:
+            if stage2_t >= stage2_up:
+                bucket = 2
+            elif stage1_t <= stage1_down:
+                bucket = 0
+        else:
+            if stage1_t >= stage1_up:
+                bucket = 1
+
+        if bucket == self._blob_stage_bucket:
+            return
+
+        self._blob_stage_bucket = bucket
+        if bucket >= 2:
+            hold_duration_ms = self._blob_stage2_release_ms if bucket == 2 else self._blob_stage3_release_ms
+            hold_duration = max(0.05, float(hold_duration_ms) / 1000.0)
+            self._blob_stage_hold_until[bucket] = now + hold_duration
+        else:
+            if prev_bucket >= 2 and overall <= 0.25:
+                self._blob_stage_hold_until[2] = 0.0
+            if prev_bucket >= 3 and overall <= 0.25:
+                self._blob_stage_hold_until[3] = 0.0
+        raw_s1, raw_s2, raw_s3 = raw_stage_progress
+        logger.info(
+            "[SPOTIFY_VIS][BLOB][STAGE] bucket=%d stage_gain=%.2f core_scale=%.2f stage_bias=%.2f s1=%.2f s2=%.2f s3=%.2f raw=(%.2f,%.2f,%.2f) release_ms=(%.0f,%.0f) overall=%.3f high=%.3f bass=%.3f",
+            bucket,
+            self._blob_stage_gain,
+            self._blob_core_scale,
+            self._blob_stage_bias,
+            stage1_t,
+            stage2_t,
+            stage3_t,
+            raw_s1,
+            raw_s2,
+            raw_s3,
+            self._blob_stage2_release_ms,
+            self._blob_stage3_release_ms,
+            overall,
+            high,
+            bass,
+        )
+
+    def _filter_stage_progress(
+        self,
+        new_progress: tuple[float, float, float],
+        dt: float,
+    ) -> tuple[float, float, float]:
+        new_clamped = tuple(max(0.0, min(1.0, v)) for v in new_progress)
+        if not self._blob_stage_progress_ready or dt <= 0.0:
+            return new_clamped
+
+        prev = self._blob_stage_progress_filtered
+        filtered: List[float] = []
+        stage2_tau = max(0.05, self._blob_stage2_release_ms / 1000.0)
+        stage3_tau = max(0.05, self._blob_stage3_release_ms / 1000.0)
+        decay_taus = (0.40, stage2_tau, stage3_tau)
+        rise_tau = 0.045
+        for idx, (prev_val, new_val) in enumerate(zip(prev, new_clamped)):
+            if new_val >= prev_val:
+                alpha = min(1.0, dt / rise_tau)
+            else:
+                decay_tau = decay_taus[idx] if idx < len(decay_taus) else 0.65
+                alpha = min(1.0, dt / decay_tau)
+            filtered.append(prev_val + (new_val - prev_val) * alpha)
+        return (filtered[0], filtered[1], filtered[2])
 
     # ------------------------------------------------------------------
     # Internal rendering helpers
@@ -988,8 +1186,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity",
                     "u_blob_reactive_glow", "u_blob_smoothed_energy",
-                    "u_blob_reactive_deformation", "u_blob_intensity_reserve", "u_blob_constant_wobble", "u_blob_reactive_wobble",
+                    "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
                     "u_blob_stretch_tendency",
+                    "u_blob_stage_progress_override",
                     "u_osc_speed", "u_osc_line_dim",
                     "u_osc_line_offset_bias",
                     "u_osc_vertical_shift",
@@ -1549,9 +1748,26 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_blob_reactive_deformation", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_reactive_deformation))
-                loc = u.get("u_blob_intensity_reserve", -1)
+                loc = u.get("u_blob_stage_gain", -1)
                 if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_intensity_reserve))
+                    _gl.glUniform1f(loc, float(self._blob_stage_gain))
+                loc = u.get("u_blob_core_scale", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_core_scale))
+                loc = u.get("u_blob_core_floor_bias", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_core_floor_bias))
+                loc = u.get("u_blob_stage_bias", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_stage_bias))
+                loc = u.get("u_blob_stage_progress_override", -1)
+                if loc >= 0:
+                    stage_vals = (
+                        self._blob_stage_progress_filtered
+                        if self._blob_stage_progress_ready
+                        else (-1.0, -1.0, -1.0)
+                    )
+                    _gl.glUniform3f(loc, float(stage_vals[0]), float(stage_vals[1]), float(stage_vals[2]))
                 loc = u.get("u_blob_constant_wobble", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_constant_wobble))

@@ -17,18 +17,22 @@ uniform float u_overall_energy;
 uniform vec4 u_blob_color;
 uniform vec4 u_blob_glow_color;
 uniform vec4 u_blob_edge_color;
+uniform vec4 u_blob_outline_color;
 uniform float u_blob_pulse;
 uniform float u_blob_width;  // (legacy, no longer used in shader — card width is widget-level)
 uniform float u_blob_size;   // 0.3..2.0  relative blob scale (default 1.0)
 uniform float u_blob_glow_intensity;  // 0..1  glow size/strength (default 0.5)
 uniform int u_blob_reactive_glow;  // 0 = static glow, 1 = energy-reactive
-uniform vec4 u_blob_outline_color;  // colour for the dark band between fill and glow
 uniform float u_blob_smoothed_energy;  // CPU-side smoothed energy (reduces flicker)
 uniform float u_blob_reactive_deformation;  // 0..2 scales outward energy growth (default 1.0)
-uniform float u_blob_intensity_reserve;  // 0..2 hidden headroom held for high-energy spikes
+uniform float u_blob_stage_gain;  // 0..2 multiplier for staged core sizing
+uniform float u_blob_core_scale;  // 0.25..2.5 post-stage scaling of the core radius
+uniform float u_blob_core_floor_bias; // 0..0.6 fraction of staged radius preserved during deformations
+uniform float u_blob_stage_bias;  // -0.35..0.35 shifts stage thresholds up/down before smoothing
 uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.0)
 uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
 uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.0)
+uniform vec3 u_blob_stage_progress_override;  // (-1,-1,-1) when unused
 uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 
@@ -65,6 +69,93 @@ vec3 apply_rainbow_shift(vec3 rgb) {
     return shifted + vec3(m);
 }
 
+float clampf(float value, float lo, float hi) {
+    return clamp(value, lo, hi);
+}
+
+vec3 compute_stage_progress_values(
+    float bass_energy,
+    float mid_energy,
+    float high_energy,
+    float overall_energy)
+{
+    float bass = clamp(bass_energy, 0.0, 1.0);
+    float mid = clamp(mid_energy, 0.0, 1.0);
+    float high = clamp(high_energy, 0.0, 1.0);
+    float overall = clamp(overall_energy, 0.0, 1.0);
+    float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
+
+    float weighted = clamp(overall * 0.50 + high * 0.35 + bass * 0.15, 0.0, 1.0);
+    float weighted_stage1 = clamp(weighted * 0.85 + se * 0.15, 0.0, 1.0);
+    float base_stage2_drive = clamp(weighted * 0.75 + high * 0.25, 0.0, 1.0);
+    float stage2_drive = clamp(base_stage2_drive * 0.60 + se * 0.40, 0.0, 1.0);
+    float chorus_drive = clamp(max(stage2_drive, high * 0.85 + mid * 0.15), 0.0, 1.0);
+    chorus_drive = clamp(max(chorus_drive, se * 0.82 + overall * 0.18), 0.0, 1.0);
+
+    float stage1_t = smoothstep(0.10, 0.32, weighted_stage1);
+    float stage2_t = smoothstep(0.58, 0.86, stage2_drive);
+    float stage3_t = smoothstep(0.68, 0.94, chorus_drive);
+
+    float bias = clamp(u_blob_stage_bias, -0.35, 0.35);
+    if (abs(bias) > 0.00001) {
+        stage1_t = clamp(stage1_t + bias, 0.0, 1.0);
+        stage2_t = clamp(stage2_t + bias, 0.0, 1.0);
+        stage3_t = clamp(stage3_t + bias, 0.0, 1.0);
+    }
+
+    return vec3(stage1_t, stage2_t, stage3_t);
+}
+
+float compute_stage_floor_fraction(float bias, vec3 stage_progress) {
+    float core_bias = clamp(bias, 0.0, 0.95);
+    float stage_floor = core_bias;
+    stage_floor += stage_progress.x * 0.05;
+    stage_floor += stage_progress.y * 0.08;
+    stage_floor += stage_progress.z * 0.12;
+    return clamp(stage_floor, 0.0, 0.9);
+}
+
+float compute_stage_offset(
+    float blob_size,
+    float bass_energy,
+    float mid_energy,
+    float high_energy,
+    float overall_energy,
+    float stage_gain,
+    float core_scale,
+    out vec3 stage_progress)
+{
+    float base_size = clamp(blob_size, 0.1, 2.5);
+    float gain = clamp(stage_gain, 0.0, 2.0);
+    float scale = clamp(core_scale, 0.25, 2.5);
+
+    if (gain <= 0.0001 || scale <= 0.0) {
+        stage_progress = vec3(0.0);
+        return 0.0;
+    }
+
+    stage_progress = compute_stage_progress_values(bass_energy, mid_energy, high_energy, overall_energy);
+    if (u_blob_stage_progress_override.x >= 0.0 &&
+        u_blob_stage_progress_override.y >= 0.0 &&
+        u_blob_stage_progress_override.z >= 0.0) {
+        stage_progress = clamp(u_blob_stage_progress_override, vec3(0.0), vec3(1.0));
+    }
+    float stage1_t = stage_progress.x;
+    float stage2_t = stage_progress.y;
+    float stage3_t = stage_progress.z;
+
+    float stage_unit = base_size * 0.18 + 0.02;
+    float stage1_amt = stage_unit * 0.50;
+    float stage2_amt = stage_unit * 1.00;
+    float stage3_amt = stage_unit * 1.80;
+
+    float offset = stage1_t * stage1_amt;
+    offset += stage2_t * max(0.0, stage2_amt - stage1_amt);
+    offset += stage3_t * max(0.0, stage3_amt - stage2_amt);
+
+    return offset * gain * scale;
+}
+
 // 2D SDF organic blob with audio-reactive deformation
 float blob_sdf(vec2 p, float time) {
     float r = 0.44 * clamp(u_blob_size, 0.1, 2.5);  // 10% larger minimum
@@ -76,22 +167,25 @@ float blob_sdf(vec2 p, float time) {
     float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
     r -= (1.0 - se) * 0.053 * u_blob_pulse;
 
-    // Headroom reserve — kicks in on high-frequency spikes so reserve=0 is a no-op.
-    float reserve = clamp(u_blob_intensity_reserve, 0.0, 2.0);
-    if (reserve > 0.0001) {
-        float high = clamp(u_high_energy, 0.0, 1.0);
-        // Trigger slightly earlier (≈45% hi-hat energy) so the boost is noticeable in busy tracks.
-        float spike = max(0.0, high - 0.45);
-        float gate = smoothstep(0.0, 0.25, spike);
-        // Quadratic response keeps sustain tame while letting spikes expand the core dramatically.
-        float reserve_boost = spike * spike * 0.25 * reserve;
-        r += reserve_boost * gate;
-    }
+    // Staged core scaling — four plateaus controlled by Stage Gain/Core Scale.
+    vec3 stage_progress = vec3(0.0);
+    r += compute_stage_offset(
+        clamp(u_blob_size, 0.1, 2.5),
+        u_bass_energy,
+        u_mid_energy,
+        u_high_energy,
+        u_overall_energy,
+        u_blob_stage_gain,
+        u_blob_core_scale,
+        stage_progress
+    );
 
     // Shrink significantly when playback is stopped (to ~45% of normal)
     if (u_playing == 0) {
         r *= 0.45 + se * 0.25;  // smoothed energy keeps shrink gradual
     }
+
+    float staged_r = r;
 
     float angle = atan(p.y, p.x);
     float dist = length(p);
@@ -102,27 +196,28 @@ float blob_sdf(vec2 p, float time) {
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
     float rw = clamp(u_blob_reactive_wobble, 0.0, 2.0);
     float st = clamp(u_blob_stretch_tendency, 0.0, 1.0);
-    float deform = 0.0;
+    float wobble_component = 0.0;
 
     // Constant wobble: reduced amplitude for rounder shape at silence
-    deform += sin(angle * 3.0 + time * 1.5) * 0.045 * 0.3 * cw;
-    deform += sin(angle * 5.0 - time * 2.3) * 0.028 * 0.2 * cw;
-    deform += sin(angle * 7.0 + time * 3.1) * 0.017 * 0.1 * cw;
-    deform += sin(angle * 1.0 + time * 0.2) * 0.013 * cw;
+    wobble_component += sin(angle * 3.0 + time * 1.5) * 0.045 * 0.3 * cw;
+    wobble_component += sin(angle * 5.0 - time * 2.3) * 0.028 * 0.2 * cw;
+    wobble_component += sin(angle * 7.0 + time * 3.1) * 0.017 * 0.1 * cw;
+    wobble_component += sin(angle * 1.0 + time * 0.2) * 0.013 * cw;
 
     // Reactive wobble: energy-driven, zero when silent regardless of rw
-    deform += sin(angle * 3.0 + time * 1.5) * 0.067 * u_mid_energy * 0.7 * rw;
-    deform += sin(angle * 5.0 - time * 2.3) * 0.042 * u_mid_energy * 0.8 * rw;
-    deform += sin(angle * 7.0 + time * 3.1) * 0.025 * u_high_energy * 0.9 * rw;
-    deform += sin(angle * 11.0 - time * 4.7) * 0.013 * u_high_energy * rw;
+    wobble_component += sin(angle * 3.0 + time * 1.5) * 0.067 * u_mid_energy * 0.7 * rw;
+    wobble_component += sin(angle * 5.0 - time * 2.3) * 0.042 * u_mid_energy * 0.8 * rw;
+    wobble_component += sin(angle * 7.0 + time * 3.1) * 0.025 * u_high_energy * 0.9 * rw;
+    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.013 * u_high_energy * rw;
 
     // Vocal-reactive wobble: smooth low-frequency shape change driven by mid (vocal) energy
     float vocal = clamp(u_mid_energy, 0.0, 1.0);
-    deform += sin(angle * 2.0 + time * 0.9) * 0.080 * vocal * rw;
-    deform += sin(angle * 4.0 - time * 1.1) * 0.050 * vocal * vocal * rw;
+    wobble_component += sin(angle * 2.0 + time * 0.9) * 0.080 * vocal * rw;
+    wobble_component += sin(angle * 4.0 - time * 1.1) * 0.050 * vocal * vocal * rw;
 
     // Stretch tendency: peak energy juts outward as dramatic tendrils
     // At max, loud moments cause long reaching bursts far beyond normal radius
+    float stretch_component = 0.0;
     if (st > 0.01) {
         float peak = max(u_bass_energy, max(u_mid_energy, u_high_energy));
         float peak2 = peak * peak;
@@ -139,15 +234,24 @@ float blob_sdf(vec2 p, float time) {
         stretch += sin(angle * 7.0 - time * 0.5) * u_mid_energy * u_mid_energy * 0.7;
         // High-frequency filigree
         stretch += sin(angle * 9.0 + time * 3.3) * u_high_energy * 0.5;
-        deform += stretch * st;
+        stretch_component += stretch * st;
     }
 
     // Scale total deformation by reactive deformation factor
     // Cubic scaling above 1.0 for truly dramatic stretching at high values
     float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
-    deform *= rd_scale;
+    wobble_component *= rd_scale;
+    stretch_component *= rd_scale;
+    // Stage-aware core floor clamp: preserve a minimum fraction of staged radius
+    float stage_floor = compute_stage_floor_fraction(u_blob_core_floor_bias, stage_progress);
+    float min_radius = staged_r * stage_floor;
+    float stretch_floor = min_radius - staged_r;
+    stretch_floor = min(stretch_floor, 0.0);
+    stretch_component = max(stretch_component, stretch_floor);
+    float core_radius = staged_r + stretch_component;
+    float final_radius = core_radius + wobble_component;
 
-    return dist - r - deform;
+    return dist - final_radius;
 }
 
 void main() {

@@ -1,0 +1,27 @@
+{
+  "name": "Preset 1 (Balanced)",
+  "description": "Balanced cyan/purple blob with longer stage linger and stretch bias.",
+  "preset_index": 0,
+  "settings": {
+    "blob_pulse": 1.25,
+    "blob_reactive_glow": true,
+    "blob_glow_color": [3, 104, 255, 180],
+    "blob_color": [0, 105, 243, 230],
+    "blob_edge_color": [208, 223, 255, 215],
+    "blob_outline_color": [84, 150, 255, 225],
+    "blob_width": 1.0,
+    "blob_size": 0.45,
+    "blob_glow_intensity": 0.5,
+    "blob_stage_bias": 0.15,
+    "blob_stage_gain": 1.25,
+    "blob_core_scale": 1.25,
+    "blob_core_floor_bias": 0.4,
+    "blob_stage2_release_ms": 996,
+    "blob_stage3_release_ms": 1298,
+    "blob_reactive_deformation": 0.6,
+    "blob_constant_wobble": 0.4,
+    "blob_reactive_wobble": 1.2,
+    "blob_stretch_tendency": 0.15,
+    "blob_growth": 5.0
+  }
+}

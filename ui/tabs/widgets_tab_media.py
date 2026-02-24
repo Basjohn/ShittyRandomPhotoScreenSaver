@@ -808,10 +808,33 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         blob_rd_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_reactive_deformation', 1.0) * 100)
         tab.blob_reactive_deformation.setValue(max(0, min(300, blob_rd_val)))
         tab.blob_reactive_deformation_label.setText(f"{blob_rd_val}%")
-    if hasattr(tab, 'blob_intensity_reserve'):
-        blob_reserve_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_intensity_reserve', 0.0) * 100)
-        tab.blob_intensity_reserve.setValue(max(0, min(200, blob_reserve_val)))
-        tab.blob_intensity_reserve_label.setText(f"{blob_reserve_val}%")
+    if hasattr(tab, 'blob_core_scale'):
+        blob_core_scale_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_core_scale', 1.0) * 100)
+        tab.blob_core_scale.setValue(max(25, min(250, blob_core_scale_val)))
+        tab.blob_core_scale_label.setText(f"{blob_core_scale_val}%")
+    if hasattr(tab, 'blob_stage_gain'):
+        blob_stage_gain_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stage_gain', 1.0) * 100)
+        tab.blob_stage_gain.setValue(max(0, min(200, blob_stage_gain_val)))
+        tab.blob_stage_gain_label.setText(f"{blob_stage_gain_val}%")
+    if hasattr(tab, 'blob_core_floor_bias'):
+        blob_core_floor_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_core_floor_bias', 0.35) * 100)
+        tab.blob_core_floor_bias.setValue(max(0, min(60, blob_core_floor_val)))
+        tab.blob_core_floor_bias_label.setText(f"{blob_core_floor_val}%")
+    if hasattr(tab, 'blob_stage_bias'):
+        blob_stage_bias_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stage_bias', 0.0) * 100)
+        blob_stage_bias_val = max(-30, min(30, blob_stage_bias_val))
+        tab.blob_stage_bias.setValue(blob_stage_bias_val)
+        tab.blob_stage_bias_label.setText(f"{blob_stage_bias_val / 100.0:+.2f}")
+    if hasattr(tab, 'blob_stage2_release_ms'):
+        s2_release_val = tab._config_int('spotify_visualizer', spotify_vis_config, 'blob_stage2_release_ms', 900)
+        s2_release_val = max(400, min(2000, s2_release_val))
+        tab.blob_stage2_release_ms.setValue(s2_release_val)
+        tab.blob_stage2_release_ms_label.setText(f"{s2_release_val / 1000:.2f}s")
+    if hasattr(tab, 'blob_stage3_release_ms'):
+        s3_release_val = tab._config_int('spotify_visualizer', spotify_vis_config, 'blob_stage3_release_ms', 1200)
+        s3_release_val = max(400, min(2000, s3_release_val))
+        tab.blob_stage3_release_ms.setValue(s3_release_val)
+        tab.blob_stage3_release_ms_label.setText(f"{s3_release_val / 1000:.2f}s")
     if hasattr(tab, 'blob_constant_wobble'):
         blob_cw_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_constant_wobble', 1.0) * 100)
         tab.blob_constant_wobble.setValue(max(0, min(200, blob_cw_val)))
@@ -1230,7 +1253,12 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_glow_intensity': (tab.blob_glow_intensity.value() if hasattr(tab, 'blob_glow_intensity') else 50) / 100.0,
         'blob_reactive_glow': tab.blob_reactive_glow.isChecked() if hasattr(tab, 'blob_reactive_glow') else False,
         'blob_reactive_deformation': (tab.blob_reactive_deformation.value() if hasattr(tab, 'blob_reactive_deformation') else 100) / 100.0,
-        'blob_intensity_reserve': (tab.blob_intensity_reserve.value() if hasattr(tab, 'blob_intensity_reserve') else 0) / 100.0,
+        'blob_stage_gain': (tab.blob_stage_gain.value() if hasattr(tab, 'blob_stage_gain') else 100) / 100.0,
+        'blob_core_scale': (tab.blob_core_scale.value() if hasattr(tab, 'blob_core_scale') else 100) / 100.0,
+        'blob_core_floor_bias': (tab.blob_core_floor_bias.value() if hasattr(tab, 'blob_core_floor_bias') else 35) / 100.0,
+        'blob_stage_bias': (tab.blob_stage_bias.value() if hasattr(tab, 'blob_stage_bias') else 0) / 100.0,
+        'blob_stage2_release_ms': tab.blob_stage2_release_ms.value() if hasattr(tab, 'blob_stage2_release_ms') else 900,
+        'blob_stage3_release_ms': tab.blob_stage3_release_ms.value() if hasattr(tab, 'blob_stage3_release_ms') else 1200,
         'blob_constant_wobble': (tab.blob_constant_wobble.value() if hasattr(tab, 'blob_constant_wobble') else 100) / 100.0,
         'blob_reactive_wobble': (tab.blob_reactive_wobble.value() if hasattr(tab, 'blob_reactive_wobble') else 100) / 100.0,
         'blob_stretch_tendency': (tab.blob_stretch_tendency.value() if hasattr(tab, 'blob_stretch_tendency') else 0) / 100.0,
