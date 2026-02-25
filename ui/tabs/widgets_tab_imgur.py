@@ -130,7 +130,6 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_pos_row.addWidget(tab.imgur_position)
     tab._set_combo_text(tab.imgur_position, tab._default_str('imgur', 'position', 'Top Right'))
     imgur_pos_row.addStretch()
-    _imgur_ctl.addLayout(imgur_pos_row)
 
     # Display (monitor selection)
     imgur_disp_row = _aligned_row(_imgur_ctl, "Display:")
@@ -143,7 +142,6 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_monitor_default = tab._widget_default('imgur', 'monitor', 2)
     tab._set_combo_text(tab.imgur_monitor_combo, str(imgur_monitor_default))
     imgur_disp_row.addStretch()
-    _imgur_ctl.addLayout(imgur_disp_row)
 
     # Update interval
     imgur_interval_row = _aligned_row(_imgur_ctl, "Update Interval:")

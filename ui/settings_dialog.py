@@ -458,7 +458,7 @@ class SettingsDialog(QDialog):
         self._connect_signals()
         self._restore_geometry()
         self._restore_last_tab_selection()
-        
+
         logger.info("Settings dialog created")
     
     def _setup_window(self) -> None:

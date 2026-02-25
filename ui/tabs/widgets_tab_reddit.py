@@ -118,7 +118,6 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         default_items_text = "10"
     tab._set_combo_text(tab.reddit_items, default_items_text)
     reddit_items_row.addStretch()
-    _rc_layout.addLayout(reddit_items_row)
 
     # Position
     reddit_pos_row = _aligned_row(_rc_layout, "Position:")
@@ -138,7 +137,6 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_stack_status.setMinimumWidth(100)
     reddit_pos_row.addWidget(tab.reddit_stack_status)
     reddit_pos_row.addStretch()
-    _rc_layout.addLayout(reddit_pos_row)
 
     # Display (monitor selection)
     reddit_disp_row = _aligned_row(_rc_layout, "Display:")
@@ -152,7 +150,6 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_monitor_default = tab._widget_default('reddit', 'monitor', 'ALL')
     tab._set_combo_text(tab.reddit_monitor_combo, str(reddit_monitor_default))
     reddit_disp_row.addStretch()
-    _rc_layout.addLayout(reddit_disp_row)
 
     # Font family
     reddit_font_family_row = _aligned_row(_rc_layout, "Font:")

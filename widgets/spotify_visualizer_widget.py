@@ -46,6 +46,15 @@ except Exception as e:
     _DEBUG_CONST_BARS = 0.0
 
 
+def clamp(value: float, lo: float, hi: float) -> float:
+    """Match the GLSL clamp helper for CPU-side parity."""
+    return max(lo, min(hi, value))
+
+
+def mix(a: float, b: float, t: float) -> float:
+    """Linear interpolation helper (GLSL mix equivalent)."""
+    return a + (b - a) * t
+
 
 class SpotifyVisualizerWidget(QWidget):
     """Thin bar visualizer card paired with the Spotify media widget.
@@ -206,8 +215,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_heartbeat: float = 0.0
         self._heartbeat_intensity: float = 0.0  # CPU-side decay envelope
         self._heartbeat_avg_bass: float = 0.0   # rolling average for transient detection
+        self._heartbeat_fast_bass: float = 0.0  # short window peak tracker
         self._heartbeat_last_ts: float = 0.0    # dedicated tick timestamp for dt_hb
         self._heartbeat_last_log_ts: float = 0.0
+        self._heartbeat_last_trigger_ts: float = 0.0
 
         # Audio latency instrumentation (viz debug)
         self._latency_last_log_ts: float = 0.0
@@ -1926,39 +1937,62 @@ class SpotifyVisualizerWidget(QWidget):
                 changed = True
 
         # --- Heartbeat transient detection (CPU-side) ---
-        # Compare current bass to rolling average; spike triggers heartbeat.
-        # Decay envelope: ~250ms full decay (4.0/s).
+        # Compare a short window vs long window bass average; slider tunes gate.
         if self._sine_heartbeat > 0.001 and self._engine is not None:
             eb = self._engine.get_energy_bands()
             bass_now = getattr(eb, 'bass', 0.0) if eb else 0.0
-            # Use dedicated heartbeat timestamp so dt_hb is always the real tick interval
+            mid_now = getattr(eb, 'mid', 0.0) if eb else 0.0
+            high_now = getattr(eb, 'high', 0.0) if eb else 0.0
+
             prev_hb_ts = self._heartbeat_last_ts
             self._heartbeat_last_ts = now_ts
             dt_hb = max(0.001, min(0.05, now_ts - prev_hb_ts)) if prev_hb_ts > 0.0 else 0.016
-            # Rolling average with ~0.5s window (slower average = easier to trigger)
-            alpha_avg = min(1.0, dt_hb / 0.5)
+
+            slider = max(0.0, min(1.0, self._sine_heartbeat))
+            # Short window reacts within ~80 ms, long window ~600 ms for baseline.
+            alpha_fast = min(1.0, dt_hb / 0.08)
+            alpha_avg = min(1.0, dt_hb / 0.6)
+            self._heartbeat_fast_bass += (bass_now - self._heartbeat_fast_bass) * alpha_fast
             self._heartbeat_avg_bass += (bass_now - self._heartbeat_avg_bass) * alpha_avg
-            # Transient: current bass exceeds average by threshold scaled by slider
-            threshold = 0.12 * (1.1 - self._sine_heartbeat)  # lower threshold at higher slider
-            delta = bass_now - self._heartbeat_avg_bass
+
+            fast = self._heartbeat_fast_bass
+            slow = self._heartbeat_avg_bass
+            delta = max(0.0, fast - slow)
+            norm_delta = delta / max(0.02, slow + 1e-3)
+            energy_mix = clamp(bass_now * 0.7 + mid_now * 0.2 + high_now * 0.1, 0.0, 1.0)
+            float_gate = mix(0.55, 0.25, slider)
+            cooldown_elapsed = now_ts - self._heartbeat_last_trigger_ts
             triggered = False
-            if delta > threshold:
-                self._heartbeat_intensity = 1.0
+
+            if (
+                norm_delta > float_gate
+                and energy_mix > 0.06
+                and cooldown_elapsed >= 0.08
+            ):
                 triggered = True
-            # Decay: ~300ms full decay (3.3/s) — slower so effect is visible
-            self._heartbeat_intensity = max(0.0, self._heartbeat_intensity - dt_hb * 3.3)
+                self._heartbeat_last_trigger_ts = now_ts
+                punch = clamp(0.2 + norm_delta * 0.5 + energy_mix * 0.35, 0.0, 1.2)
+                self._heartbeat_intensity = min(1.0, punch)
+
+            decay_rate = 1.0 / 0.30  # 300 ms to decay to zero
+            self._heartbeat_intensity = max(0.0, self._heartbeat_intensity - dt_hb * decay_rate)
 
             if is_viz_diagnostics_enabled() and (
                 triggered or (now_ts - self._heartbeat_last_log_ts) >= 0.5
             ):
                 logger.debug(
-                    "[SPOTIFY_VIS][SINE][HB] dt=%.3f bass=%.3f avg=%.3f delta=%.3f thr=%.3f slider=%.2f intensity=%.2f triggered=%s",
+                    (
+                        "[SPOTIFY_VIS][SINE][HB] dt=%.3f bass=%.3f fast=%.3f avg=%.3f "
+                        "norm=%.3f gate=%.3f energy=%.3f slider=%.2f intensity=%.2f trigger=%s"
+                    ),
                     dt_hb,
                     bass_now,
-                    self._heartbeat_avg_bass,
-                    delta,
-                    threshold,
-                    self._sine_heartbeat,
+                    fast,
+                    slow,
+                    norm_delta,
+                    float_gate,
+                    energy_mix,
+                    slider,
                     self._heartbeat_intensity,
                     triggered,
                 )

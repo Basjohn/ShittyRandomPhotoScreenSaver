@@ -430,7 +430,6 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l2_row.addLayout(sine_l2_travel_col)
 
     sine_l2_row.addStretch()
-    sine_ml_layout.addLayout(sine_l2_row)
 
     # Line 2 horizontal shift
     sine_l2_shift_row = _aligned_row(sine_ml_layout, "Line 2 Horizontal Shift:")
@@ -497,7 +496,6 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l3_content.addLayout(sine_l3_travel_col)
 
     sine_l3_content.addStretch()
-    sine_ml_layout.addWidget(tab._sine_l3_row_widget)
 
     # Line 3 horizontal shift
     sine_l3_shift_row = _aligned_row(sine_ml_layout, "Line 3 Horizontal Shift:")

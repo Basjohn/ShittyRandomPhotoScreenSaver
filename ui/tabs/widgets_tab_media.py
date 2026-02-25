@@ -164,7 +164,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_stack_status.setMinimumWidth(100)
     media_pos_row.addWidget(tab.media_stack_status)
     media_pos_row.addStretch()
-    _media_ctrl_layout.addLayout(media_pos_row)
 
     media_disp_row = _aligned_row(_media_ctrl_layout, "Display:")
     tab.media_monitor_combo = QComboBox()
@@ -176,7 +175,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_monitor_default = tab._widget_default('media', 'monitor', 'ALL')
     tab._set_combo_text(tab.media_monitor_combo, str(media_monitor_default))
     media_disp_row.addStretch()
-    _media_ctrl_layout.addLayout(media_disp_row)
 
     media_font_family_row = _aligned_row(_media_ctrl_layout, "Font:")
     tab.media_font_combo = QFontComboBox()
