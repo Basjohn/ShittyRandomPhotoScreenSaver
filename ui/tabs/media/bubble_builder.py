@@ -29,6 +29,12 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._bubble_preset_slider.preset_changed.connect(tab._save_settings)
     layout.addWidget(tab._bubble_preset_slider)
 
+    tab._bubble_normal = QWidget()
+    _normal_layout = QVBoxLayout(tab._bubble_normal)
+    _normal_layout.setContentsMargins(0, 0, 0, 0)
+    _normal_layout.setSpacing(6)
+    layout.addWidget(tab._bubble_normal)
+
     tab._bubble_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._bubble_advanced_host)
     _adv_host.setContentsMargins(0, 0, 0, 0)
@@ -354,9 +360,9 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     surface_reach_row.addWidget(tab.bubble_surface_reach_label)
 
     # ── Styling ───────────────────────────────────────────────────
-    _adv_layout.addWidget(QLabel("<b>Styling</b>"))
+    _normal_layout.addWidget(QLabel("<b>Styling</b>"))
 
-    specular_row = _aligned_row(_adv_layout, "Specular Direction:")
+    specular_row = _aligned_row(_normal_layout, "Specular Direction:")
     tab.bubble_specular_direction = QComboBox()
     tab.bubble_specular_direction.addItems(["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
     saved_sd = tab._default_str('spotify_visualizer', 'bubble_specular_direction', 'top_left').lower()
@@ -373,7 +379,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         ("bubble_gradient_dark_btn", "Gradient Dark", "_bubble_gradient_dark", "Choose Bubble Gradient Dark"),
         ("bubble_pop_color_btn", "Pop Colour", "_bubble_pop_color", "Choose Bubble Pop Color"),
     ):
-        color_row = _aligned_row(_adv_layout, f"{label_text}:")
+        color_row = _aligned_row(_normal_layout, f"{label_text}:")
         btn = ColorSwatchButton(title=title)
         btn.set_color(getattr(tab, color_attr, None))
         btn.color_changed.connect(

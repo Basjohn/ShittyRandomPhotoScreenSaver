@@ -37,6 +37,7 @@ tests/
 - May test real I/O (with mocks for external services)
 - Run in CI with pytest-qt plugin
 - `tests/test_spotify_visualizer_widget.py::test_blob_crossover_waits_for_fresh_engine_frame` enforces the Spotify visualizer crossover contract. It uses a fake engine/overlay to simulate a Spectrum→Blob reset and asserts `_waiting_for_fresh_engine_frame` blocks GPU pushes until the beat engine produces a new FFT generation (stage2 should exceed 0.4 within ~1 s once live energy flows).
+- `tests/test_widgets_tab.py::TestWidgetsTab::test_sine_wave_swatch_persistence` saves custom sine glow/line colors, reloads `WidgetsTab`, and asserts both the stored QColors and the ColorSwatchButtons round-trip. Guards against regressions like the Feb 2026 bug where sine line 1 reverted to white after reopening settings.
 
 **Policy Enforcement Tests** (`tests/unit/test_policy_compliance.py`)
 - Static analysis of codebase

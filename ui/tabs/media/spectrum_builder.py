@@ -36,6 +36,12 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._spectrum_preset_slider.preset_changed.connect(tab._save_settings)
     spectrum_layout.addWidget(tab._spectrum_preset_slider)
 
+    tab._spectrum_normal = QWidget()
+    _normal_layout = QVBoxLayout(tab._spectrum_normal)
+    _normal_layout.setContentsMargins(0, 0, 0, 0)
+    _normal_layout.setSpacing(4)
+    spectrum_layout.addWidget(tab._spectrum_normal)
+
     # --- Advanced host (toggle + helper + controls) ---
     tab._spectrum_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._spectrum_advanced_host)
@@ -105,7 +111,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         _, content = _aligned_row_widget(parent_layout, label_text)
         return content
 
-    spotify_vis_bar_row = _aligned_row(_adv_layout, "Bar Count:")
+    spotify_vis_bar_row = _aligned_row(_normal_layout, "Bar Count:")
     tab.spotify_vis_bar_count = QSpinBox()
     tab.spotify_vis_bar_count.setRange(8, 96)
     tab.spotify_vis_bar_count.setValue(tab._default_int('spotify_visualizer', 'bar_count', 32))
@@ -131,7 +137,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab.spotify_vis_block_size.setCurrentIndex(block_idx)
     spotify_vis_block_row.addStretch()
 
-    spotify_vis_fill_row = _aligned_row(_adv_layout, "Bar Fill Color:")
+    spotify_vis_fill_row = _aligned_row(_normal_layout, "Bar Fill Color:")
     tab.spotify_vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
     tab.spotify_vis_fill_color_btn.set_color(tab._spotify_vis_fill_color)
     tab.spotify_vis_fill_color_btn.color_changed.connect(
@@ -140,7 +146,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_fill_row.addWidget(tab.spotify_vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
 
-    spotify_vis_border_color_row = _aligned_row(_adv_layout, "Bar Border Color:")
+    spotify_vis_border_color_row = _aligned_row(_normal_layout, "Bar Border Color:")
     tab.spotify_vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
     tab.spotify_vis_border_color_btn.set_color(tab._spotify_vis_border_color)
     tab.spotify_vis_border_color_btn.color_changed.connect(
@@ -149,7 +155,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_border_color_row.addWidget(tab.spotify_vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
 
-    spotify_vis_border_opacity_row = _aligned_row(_adv_layout, "Bar Border Opacity:")
+    spotify_vis_border_opacity_row = _aligned_row(_normal_layout, "Bar Border Opacity:")
     tab.spotify_vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spotify_vis_border_opacity.setMinimum(0)
     tab.spotify_vis_border_opacity.setMaximum(100)
@@ -167,7 +173,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     spotify_vis_border_opacity_row.addWidget(tab.spotify_vis_border_opacity_label)
 
-    spotify_vis_recommended_row = _aligned_row(_adv_layout, "")
+    spotify_vis_recommended_row = _aligned_row(_normal_layout, "")
     tab.spotify_vis_recommended = QCheckBox("Suggest Sensitivity")
     tab.spotify_vis_recommended.setChecked(
         tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
@@ -180,7 +186,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_recommended_row.addWidget(tab.spotify_vis_recommended)
     spotify_vis_recommended_row.addStretch()
 
-    tab._spotify_vis_sensitivity_widget, spotify_vis_sensitivity_slider_row = _aligned_row_widget(_adv_layout, "Sensitivity:")
+    tab._spotify_vis_sensitivity_widget, spotify_vis_sensitivity_slider_row = _aligned_row_widget(_normal_layout, "Sensitivity:")
     tab.spotify_vis_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spotify_vis_sensitivity.setMinimum(25)
     tab.spotify_vis_sensitivity.setMaximum(250)
@@ -196,7 +202,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     spotify_vis_sensitivity_slider_row.addWidget(tab.spotify_vis_sensitivity_label)
 
-    dynamic_floor_row = _aligned_row(_adv_layout, "")
+    dynamic_floor_row = _aligned_row(_normal_layout, "")
     tab.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
     tab.spotify_vis_dynamic_floor.setChecked(
         tab._default_bool('spotify_visualizer', 'dynamic_range_enabled', True)
@@ -211,7 +217,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     dynamic_floor_row.addWidget(tab.spotify_vis_dynamic_floor)
     dynamic_floor_row.addStretch()
 
-    tab._manual_floor_widget, spotify_vis_manual_floor_row = _aligned_row_widget(_adv_layout, "Manual Floor:")
+    tab._manual_floor_widget, spotify_vis_manual_floor_row = _aligned_row_widget(_normal_layout, "Manual Floor:")
     tab.spotify_vis_manual_floor = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spotify_vis_manual_floor.setMinimum(12)
     tab.spotify_vis_manual_floor.setMaximum(400)

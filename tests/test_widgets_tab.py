@@ -7,6 +7,8 @@ roundtrips behave as expected.
 import pytest
 import uuid
 
+from PySide6.QtGui import QColor
+
 from ui.tabs.widgets_tab import WidgetsTab
 from core.settings import SettingsManager
 
@@ -105,3 +107,27 @@ class TestWidgetsTab:
         assert weather_cfg.get("show_background") is True
         assert pytest.approx(weather_cfg.get("bg_opacity", 0.0)) == 0.80
         assert weather_cfg.get("monitor") == "ALL"
+
+    def test_sine_wave_swatch_persistence(self, qt_app, settings_manager):
+        """Glow + line swatch selections persist through save/load and update buttons."""
+
+        def _rgba_tuple(color: QColor) -> tuple[int, int, int, int]:
+            return color.red(), color.green(), color.blue(), color.alpha()
+
+        first_tab = WidgetsTab(settings_manager)
+
+        custom_glow = QColor(12, 34, 56, 200)
+        custom_line = QColor(210, 180, 150, 128)
+        first_tab._sine_glow_color = custom_glow
+        first_tab._sine_line_color = custom_line
+        first_tab._save_settings_now()
+        first_tab.deleteLater()
+
+        reloaded_tab = WidgetsTab(settings_manager)
+        try:
+            assert _rgba_tuple(reloaded_tab._sine_glow_color) == _rgba_tuple(custom_glow)
+            assert _rgba_tuple(reloaded_tab._sine_line_color) == _rgba_tuple(custom_line)
+            assert _rgba_tuple(reloaded_tab.sine_glow_color_btn.color()) == _rgba_tuple(custom_glow)
+            assert _rgba_tuple(reloaded_tab.sine_line_color_btn.color()) == _rgba_tuple(custom_line)
+        finally:
+            reloaded_tab.deleteLater()

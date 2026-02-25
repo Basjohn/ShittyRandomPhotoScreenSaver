@@ -908,12 +908,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set sine_glow_color=%s", sine_glow_color_data, exc_info=True)
         tab._sine_glow_color = QColor(0, 200, 255, 230)
+    _apply_color_to_button('sine_glow_color_btn', '_sine_glow_color')
     sine_line_color_data = spotify_vis_config.get('sine_line_color', [255, 255, 255, 255])
     try:
         tab._sine_line_color = QColor(*sine_line_color_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set sine_line_color=%s", sine_line_color_data, exc_info=True)
         tab._sine_line_color = QColor(255, 255, 255, 255)
+    _apply_color_to_button('sine_line_color_btn', '_sine_line_color')
     if hasattr(tab, 'sine_reactive_glow'):
         tab.sine_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'sine_reactive_glow', True)
