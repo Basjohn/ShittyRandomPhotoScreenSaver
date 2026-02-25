@@ -10,24 +10,18 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import (
     get_logger,
-    get_throttled_logger,
     is_perf_metrics_enabled,
-    is_viz_diagnostics_enabled,
 )
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.blob_math import (
-    compute_stage_floor_fraction,
-    compute_stage_offset,
     compute_stage_progress,
 )
 
 
 logger = get_logger(__name__)
-# Throttled logger for high-frequency debug messages (max 1/second)
-_throttled_logger = get_throttled_logger(__name__, max_per_second=1.0)
 
 
 def _smoothstep(edge0: float, edge1: float, x: float) -> float:
@@ -172,15 +166,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
 
-        # Blob diagnostics (staged radius instrumentation)
-        self._blob_diag_last_log_ts: float = 0.0
-        self._blob_diag_radius_min: Optional[float] = None
-        self._blob_diag_radius_max: Optional[float] = None
-        self._blob_stage_bucket: int = -1
         self._blob_stage_progress_raw: tuple[float, float, float] = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_filtered: tuple[float, float, float] = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_ready: bool = False
-        self._blob_stage_hold_until: dict[int, float] = {2: 0.0, 3: 0.0}
         self._last_vis_mode: Optional[str] = None
 
         # Rainbow (Taste The Rainbow) mode
@@ -280,12 +268,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if mode_key == 'blob':
             self.reset_blob_state()
         else:
-            self._blob_diag_radius_min = None
-            self._blob_diag_radius_max = None
             self._blob_stage_progress_ready = False
             self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
             self._blob_stage_progress_filtered = (-1.0, -1.0, -1.0)
-            self._blob_stage_hold_until = {2: 0.0, 3: 0.0}
 
         if mode_key in {'oscilloscope', 'sine_wave'}:
             self._waveform = []
@@ -325,10 +310,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_filtered = (0.0, 0.0, 0.0)
         self._blob_stage_progress_ready = False
-        self._blob_stage_hold_until = {2: 0.0, 3: 0.0}
-        self._blob_stage_bucket = -1
-        self._blob_diag_radius_min = None
-        self._blob_diag_radius_max = None
         self._blob_seed_pending = True
 
     # ------------------------------------------------------------------
@@ -556,10 +537,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 if seed_value > 0.0:
                     self._blob_smoothed_energy = seed_value
                     self._blob_seed_pending = False
-                    logger.debug(
-                        "[SPOTIFY_VIS][BLOB] Seeded smoothed energy after reset: %.3f",
-                        seed_value,
-                    )
             stage_progress_raw = compute_stage_progress(
                 bass_energy=bass_val,
                 mid_energy=mid_val,
@@ -571,17 +548,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_stage_progress_raw = stage_progress_raw
             filtered = self._filter_stage_progress(stage_progress_raw, dt_seconds)
             self._blob_stage_progress_filtered = filtered
-            if not self._blob_stage_progress_ready:
-                logger.debug(
-                    "[SPOTIFY_VIS][BLOB][STAGE_READY] raw=%s filtered=%s overall=%.3f se=%.3f",
-                    tuple(round(v, 3) for v in stage_progress_raw),
-                    tuple(round(v, 3) for v in filtered),
-                    overall_val,
-                    self._blob_smoothed_energy,
-                )
             self._blob_stage_progress_ready = True
-
-        self._maybe_log_blob_diagnostics()
 
         # Oscilloscope glow settings
         self._glow_enabled = bool(glow_enabled)
@@ -1021,199 +988,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if not used_shader:
             self._render_with_qpainter(rect, fade)
 
-        self._maybe_log_blob_diagnostics()
-
         self.update()
-
-    def _maybe_log_blob_diagnostics(self) -> None:
-        """Emit blob staged-radius diagnostics when viz diagnostics + perf metrics on."""
-
-        if self._vis_mode != 'blob':
-            return
-        if not (is_perf_metrics_enabled() and is_viz_diagnostics_enabled()):
-            return
-
-        bands = self._energy_bands or EnergyBands()
-        high = float(getattr(bands, 'high', 0.0) or 0.0)
-        bass = float(getattr(bands, 'bass', 0.0) or 0.0)
-        overall = float(getattr(bands, 'overall', 0.0) or 0.0)
-        stage_gain = float(self._blob_stage_gain or 0.0)
-        core_scale = float(self._blob_core_scale or 1.0)
-        core_floor_bias = float(self._blob_core_floor_bias or 0.0)
-        se = float(self._blob_smoothed_energy or 0.0)
-        pulse = float(self._blob_pulse or 0.0)
-        base_size = float(self._blob_size or 1.0)
-        playing = bool(self._playing)
-        if self._blob_stage_progress_ready:
-            stage1_t, stage2_t, stage3_t = self._blob_stage_progress_filtered
-            raw_stage = self._blob_stage_progress_raw
-        else:
-            stage1_t, stage2_t, stage3_t = compute_stage_progress(
-                bass_energy=bass,
-                mid_energy=float(getattr(bands, 'mid', 0.0) or 0.0),
-                high_energy=high,
-                overall_energy=overall,
-                smoothed_energy=se,
-                stage_bias=self._blob_stage_bias,
-            )
-            raw_stage = (stage1_t, stage2_t, stage3_t)
-        self._maybe_log_stage_transition(
-            stage1_t,
-            stage2_t,
-            stage3_t,
-            raw_stage,
-            overall,
-            high,
-            bass,
-        )
-        stage_floor = compute_stage_floor_fraction(
-            core_floor_bias=core_floor_bias,
-            stage1_t=stage1_t,
-            stage2_t=stage2_t,
-            stage3_t=stage3_t,
-        )
-
-        r = 0.44 * max(0.1, min(2.5, base_size))
-        r += bass * bass * 0.066
-        r += bass * 0.077 * pulse
-        se_clamped = max(0.0, min(1.0, se))
-        r -= (1.0 - se_clamped) * 0.053 * pulse
-        stage_progress_override: tuple[float, float, float] | None = None
-        if self._blob_stage_progress_ready:
-            stage_progress_override = self._blob_stage_progress_filtered
-        if stage_gain > 0.0001 and core_scale > 0.0:
-            r += compute_stage_offset(
-                blob_size=base_size,
-                bass_energy=bass,
-                mid_energy=float(getattr(bands, 'mid', 0.0) or 0.0),
-                high_energy=high,
-                overall_energy=overall,
-                stage_gain=stage_gain,
-                core_scale=core_scale,
-                smoothed_energy=se_clamped,
-                stage_bias=self._blob_stage_bias,
-                stage_progress_override=stage_progress_override,
-            )
-        if not playing:
-            r *= 0.45 + se_clamped * 0.25
-
-        current_min = self._blob_diag_radius_min
-        current_max = self._blob_diag_radius_max
-        self._blob_diag_radius_min = r if current_min is None else min(current_min, r)
-        self._blob_diag_radius_max = r if current_max is None else max(current_max, r)
-
-        now = time.time()
-        threshold = 0.5  # seconds between logs
-        if (now - self._blob_diag_last_log_ts) < threshold:
-            return
-        self._blob_diag_last_log_ts = now
-
-        reset_reason = self._last_reset_reason or "unknown"
-        reset_age = -1.0
-        if self._last_reset_mode == 'blob' and self._last_reset_ts > 0.0:
-            reset_age = max(0.0, now - self._last_reset_ts)
-        logger.info(
-            "[SPOTIFY_VIS][BLOB][DIAG] stage_gain=%.2f core_scale=%.2f core_floor_bias=%.2f stage_filtered=(%.2f,%.2f,%.2f) stage_raw=(%.2f,%.2f,%.2f) stage_floor=%.2f high=%.3f bass=%.3f overall=%.3f se=%.3f pulse=%.2f playing=%s radius=%.4f radius_min=%.4f radius_max=%.4f reset_reason=%s reset_age=%.2f",
-            stage_gain,
-            core_scale,
-            core_floor_bias,
-            stage1_t,
-            stage2_t,
-            stage3_t,
-            raw_stage[0],
-            raw_stage[1],
-            raw_stage[2],
-            stage_floor,
-            high,
-            bass,
-            overall,
-            se,
-            pulse,
-            playing,
-            r,
-            self._blob_diag_radius_min or r,
-            self._blob_diag_radius_max or r,
-            reset_reason,
-            reset_age,
-        )
-
-    def _maybe_log_stage_transition(
-        self,
-        stage1_t: float,
-        stage2_t: float,
-        stage3_t: float,
-        raw_stage_progress: tuple[float, float, float],
-        overall: float,
-        high: float,
-        bass: float,
-    ) -> None:
-        """Log stage bucket changes sparingly for diagnostics."""
-
-        prev_bucket = self._blob_stage_bucket
-
-        bucket = prev_bucket
-        stage1_up = 0.22
-        stage1_down = 0.08
-        stage2_up = 0.38
-        stage2_down = 0.25
-        stage3_up = 0.62
-        stage3_down = 0.56
-        hold_stage2 = self._blob_stage_hold_until.get(2, 0.0)
-        hold_stage3 = self._blob_stage_hold_until.get(3, 0.0)
-        now = time.time()
-
-        if prev_bucket >= 3:
-            can_drop_stage3 = now >= hold_stage3
-            if can_drop_stage3 and stage3_t <= stage3_down and overall <= 0.58:
-                bucket = 2
-        elif prev_bucket >= 2:
-            if stage3_t >= stage3_up:
-                bucket = 3
-            else:
-                can_drop_stage2 = now >= hold_stage2
-                if can_drop_stage2 and stage2_t <= stage2_down and overall <= 0.35:
-                    bucket = 1
-        elif prev_bucket >= 1:
-            if stage2_t >= stage2_up:
-                bucket = 2
-            elif stage1_t <= stage1_down:
-                bucket = 0
-        else:
-            if stage1_t >= stage1_up:
-                bucket = 1
-
-        if bucket == self._blob_stage_bucket:
-            return
-
-        self._blob_stage_bucket = bucket
-        if bucket >= 2:
-            hold_duration_ms = self._blob_stage2_release_ms if bucket == 2 else self._blob_stage3_release_ms
-            hold_duration = max(0.05, float(hold_duration_ms) / 1000.0)
-            self._blob_stage_hold_until[bucket] = now + hold_duration
-        else:
-            if prev_bucket >= 2 and overall <= 0.25:
-                self._blob_stage_hold_until[2] = 0.0
-            if prev_bucket >= 3 and overall <= 0.25:
-                self._blob_stage_hold_until[3] = 0.0
-        raw_s1, raw_s2, raw_s3 = raw_stage_progress
-        logger.info(
-            "[SPOTIFY_VIS][BLOB][STAGE] bucket=%d stage_gain=%.2f core_scale=%.2f stage_bias=%.2f s1=%.2f s2=%.2f s3=%.2f raw=(%.2f,%.2f,%.2f) release_ms=(%.0f,%.0f) overall=%.3f high=%.3f bass=%.3f",
-            bucket,
-            self._blob_stage_gain,
-            self._blob_core_scale,
-            self._blob_stage_bias,
-            stage1_t,
-            stage2_t,
-            stage3_t,
-            raw_s1,
-            raw_s2,
-            raw_s3,
-            self._blob_stage2_release_ms,
-            self._blob_stage3_release_ms,
-            overall,
-            high,
-            bass,
-        )
 
     def _filter_stage_progress(
         self,

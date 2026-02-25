@@ -20,6 +20,7 @@ Single source of truth for architecture and key decisions.
   metadata (`version`, `profile`, `migrated_from`, timestamps) and treats
   structured roots (`widgets`, `transitions`, `custom_preset_backup`) as nested
   documents while exposing the dotted-key API expected by the rest of the app.
+  Refer to `Docs/Historical_Bugs.md` for dated postmortems of fixed regressions (symptoms, failed attempts, final fix, regression coverage) so future work avoids regressing past issues.
   Each profile owns:
   - `settings_v2.json` – canonical snapshot `{version, profile, metadata, snapshot}`
   - `backups/qsettings_snapshot_YYYYMMDD_HHMMSS.json` – raw registry export per migration

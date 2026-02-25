@@ -142,7 +142,8 @@ class DisplayTab(QWidget):
         ])
         self.mode_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.mode_combo.currentIndexChanged.connect(self._save_settings)
-        mode_row.addWidget(self.mode_combo, 1)
+        mode_row.addWidget(self.mode_combo)
+        mode_row.addStretch()
         
         layout.addWidget(mode_group)
         
@@ -209,7 +210,8 @@ class DisplayTab(QWidget):
         self.backend_combo.addItem("Software (fallback)", userData="software")
         self.backend_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.backend_combo.currentIndexChanged.connect(self._save_settings)
-        backend_row.addWidget(self.backend_combo, 1)
+        backend_row.addWidget(self.backend_combo)
+        backend_row.addStretch()
 
         backend_hint = QLabel(
             "OpenGL is the primary renderer. If it fails during startup, the software fallback engages automatically."

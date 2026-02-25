@@ -13,7 +13,6 @@ from widgets.spotify_visualizer_widget import (
     _AudioFrame,
 )
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
-from widgets.spotify_visualizer.energy_bands import EnergyBands
 import widgets.spotify_visualizer_widget as vis_mod
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect
 
@@ -127,7 +126,7 @@ def test_sensitivity_config_api_exists(np_module):
 
 
 class _FakeEngine:
-    def __init__(self) -> None:
+    def __init__(self, bar_count: int = 16) -> None:
         self._audio_buffer = object()
         self._audio_worker = object()
         self._bars_result_buffer = object()
@@ -137,6 +136,13 @@ class _FakeEngine:
         self.acquired = 0
         self.started = 0
         self.reset_calls = 0
+        self.cancel_calls = 0
+        self.floor_reset_calls = 0
+        self.last_smoothing = None
+        self._bar_count = bar_count
+        self._smoothed_bars = [0.0] * bar_count
+        self._generation_id = 1
+        self._latest_generation_with_frame = self._generation_id
 
     def set_floor_config(self, dyn: bool, floor: float) -> None:
         self.last_floor_config = (dyn, floor)
@@ -158,6 +164,56 @@ class _FakeEngine:
 
     def reset_smoothing_state(self) -> None:
         self.reset_calls += 1
+        self._generation_id += 1
+        self._latest_generation_with_frame = self._generation_id - 1
+        self._smoothed_bars = [0.0] * self._bar_count
+
+    def cancel_pending_compute_tasks(self) -> None:
+        self.cancel_calls += 1
+
+    def reset_floor_state(self) -> None:
+        self.floor_reset_calls += 1
+
+    def set_smoothing(self, smoothing: float) -> None:
+        self.last_smoothing = smoothing
+
+    def get_generation_id(self) -> int:
+        return self._generation_id
+
+    def get_latest_generation_with_frame(self) -> int:
+        return self._latest_generation_with_frame
+
+    def get_smoothed_bars(self) -> list[float]:
+        return list(self._smoothed_bars)
+
+    def tick(self):
+        return list(self._smoothed_bars)
+
+    def publish_frame(self, bars: list[float]) -> None:
+        self._smoothed_bars = list(bars)
+        self._latest_generation_with_frame = self._generation_id
+
+
+class _OverlayStub:
+    def __init__(self) -> None:
+        self.reset_requests: list[str] = []
+
+    def request_mode_reset(self, mode: str) -> None:  # pragma: no cover - trivial
+        self.reset_requests.append(mode)
+
+
+class _FakeDisplayParent(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._spotify_bars_overlay = _OverlayStub()
+        self.frames: list[dict[str, object]] = []
+
+    def push_spotify_visualizer_frame(self, *_, **kwargs):
+        self.frames.append(kwargs)
+        return True
+
+    def reset_pushes(self) -> None:
+        self.frames.clear()
 
 
 @pytest.mark.qt
@@ -187,6 +243,42 @@ def test_spotify_visualizer_replays_config_on_start(qt_app, qtbot, monkeypatch):
 
     assert fake_engine.last_floor_config == (False, 0.3)
     assert fake_engine.last_sensitivity_config == (False, 2.4)
+
+
+@pytest.mark.qt
+def test_blob_crossover_waits_for_fresh_engine_frame(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
+    widget.start()
+    qt_app.processEvents()
+
+    widget.set_visualization_mode(VisualizerMode.BLOB)
+    widget._reset_engine_state(reason="test_crossover")
+    widget._track_engine_generation(fake_engine)
+
+    parent.reset_pushes()
+    widget._on_tick()
+
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert parent.frames == []
+
+    fake_engine.publish_frame([0.75] * widget._bar_count)
+    widget._on_tick()
+
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert parent.frames, "GPU push should resume once a fresh engine generation publishes"
 
 
 @pytest.mark.qt

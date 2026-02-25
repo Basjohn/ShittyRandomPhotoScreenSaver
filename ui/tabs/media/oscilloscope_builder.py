@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QCheckBox, QSlider, QWidget,
+    QCheckBox, QSlider, QWidget, QToolButton,
 )
 from ui.styled_popup import ColorSwatchButton
 from PySide6.QtCore import Qt
@@ -21,7 +21,7 @@ def _update_osc_multi_line_visibility(tab) -> None:
         container.setVisible(bool(enabled))
     line_count = getattr(tab, 'osc_line_count', None)
     show_l3 = enabled and line_count is not None and line_count.value() >= 3
-    for w in (getattr(tab, '_osc_line3_label', None), getattr(tab, '_osc_l3_row_widget', None)):
+    for w in (getattr(tab, '_osc_l3_row_widget', None),):
         if w is not None:
             w.setVisible(bool(show_l3))
 
@@ -40,24 +40,92 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab._osc_preset_slider.preset_changed.connect(tab._save_settings)
     osc_layout.addWidget(tab._osc_preset_slider)
 
-    tab._osc_advanced = QWidget()
-    _adv = QVBoxLayout(tab._osc_advanced)
-    _adv.setContentsMargins(0, 0, 0, 0)
-    _adv.setSpacing(4)
-    tab._osc_preset_slider.set_advanced_container(tab._osc_advanced)
+    tab._osc_normal = QWidget()
+    _normal_layout = QVBoxLayout(tab._osc_normal)
+    _normal_layout.setContentsMargins(0, 0, 0, 0)
+    _normal_layout.setSpacing(4)
+    osc_layout.addWidget(tab._osc_normal)
 
+    tab._osc_advanced_host = QWidget()
+    _adv_host = QVBoxLayout(tab._osc_advanced_host)
+    _adv_host.setContentsMargins(0, 0, 0, 0)
+    _adv_host.setSpacing(4)
+    osc_layout.addWidget(tab._osc_advanced_host)
+
+    _adv_toggle_row = QHBoxLayout()
+    _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
+    _adv_toggle_row.setSpacing(4)
+    tab._osc_adv_toggle = QToolButton()
+    tab._osc_adv_toggle.setText("Advanced")
+    tab._osc_adv_toggle.setCheckable(True)
+    tab._osc_adv_toggle.setChecked(True)
+    tab._osc_adv_toggle.setArrowType(Qt.DownArrow)
+    tab._osc_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    tab._osc_adv_toggle.setAutoRaise(True)
+    _adv_toggle_row.addWidget(tab._osc_adv_toggle)
+    _adv_toggle_row.addStretch()
+    _adv_host.addLayout(_adv_toggle_row)
+
+    tab._osc_adv_helper = QLabel("Advanced sliders still apply when hidden.")
+    tab._osc_adv_helper.setProperty("class", "adv-helper")
+    tab._osc_adv_helper.setStyleSheet("color: rgba(220,220,220,0.6); font-size: 11px;")
+    _adv_host.addWidget(tab._osc_adv_helper)
+
+    tab._osc_advanced = QWidget()
+    _adv_layout = QVBoxLayout(tab._osc_advanced)
+    _adv_layout.setContentsMargins(0, 0, 0, 0)
+    _adv_layout.setSpacing(4)
+    _adv_host.addWidget(tab._osc_advanced)
+
+    tab._osc_preset_slider.set_advanced_container(tab._osc_advanced_host)
+
+    def _apply_osc_adv_toggle_state(checked: bool) -> None:
+        tab._osc_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        tab._osc_advanced.setVisible(checked)
+        tab._osc_adv_helper.setVisible(not checked)
+
+    tab._osc_adv_toggle.toggled.connect(_apply_osc_adv_toggle_state)
+    _apply_osc_adv_toggle_state(tab._osc_adv_toggle.isChecked())
+
+    def _handle_osc_preset_adv(is_custom: bool) -> None:
+        tab._osc_advanced_host.setVisible(is_custom)
+
+    tab._osc_preset_slider.advanced_toggled.connect(_handle_osc_preset_adv)
+    _handle_osc_preset_adv(True)
+
+    LABEL_WIDTH = 150
+
+    def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+        label = QLabel(label_text)
+        label.setFixedWidth(LABEL_WIDTH)
+        row_layout.addWidget(label)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(8)
+        row_layout.addLayout(content, 1)
+        parent_layout.addWidget(row_widget)
+        return row_widget, content
+
+    def _aligned_row(parent_layout: QVBoxLayout, label_text: str):
+        _, content = _aligned_row_widget(parent_layout, label_text)
+        return content
+
+    glow_toggle_row = _aligned_row(_normal_layout, "")
     tab.osc_glow_enabled = QCheckBox("Enable Glow")
     tab.osc_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_glow_enabled', True))
     tab.osc_glow_enabled.setToolTip("Draw a soft glow halo around the waveform line.")
     tab.osc_glow_enabled.stateChanged.connect(tab._save_settings)
-    _adv.addWidget(tab.osc_glow_enabled)
+    glow_toggle_row.addWidget(tab.osc_glow_enabled)
+    glow_toggle_row.addStretch()
 
-    tab._osc_glow_sub_container = QWidget()
-    _osc_glow_layout = QVBoxLayout(tab._osc_glow_sub_container)
-    _osc_glow_layout.setContentsMargins(16, 0, 0, 0)
+    tab._osc_glow_widgets: list[QWidget] = []
 
-    osc_glow_row = QHBoxLayout()
-    osc_glow_row.addWidget(QLabel("Glow Intensity:"))
+    glow_intensity_widget, osc_glow_row = _aligned_row_widget(_normal_layout, "Glow Intensity:")
+    tab._osc_glow_widgets.append(glow_intensity_widget)
     tab.osc_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_glow_intensity.setMinimum(0)
     tab.osc_glow_intensity.setMaximum(100)
@@ -72,33 +140,36 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_glow_intensity_label.setText(f"{v}%")
     )
     osc_glow_row.addWidget(tab.osc_glow_intensity_label)
-    _osc_glow_layout.addLayout(osc_glow_row)
 
+    glow_reactive_widget, glow_reactive_row = _aligned_row_widget(_normal_layout, "")
+    tab._osc_glow_widgets.append(glow_reactive_widget)
     tab.osc_reactive_glow = QCheckBox("Reactive Glow (bass-driven)")
     tab.osc_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'osc_reactive_glow', True))
     tab.osc_reactive_glow.setToolTip("Glow intensity pulses with bass energy.")
     tab.osc_reactive_glow.stateChanged.connect(tab._save_settings)
-    _osc_glow_layout.addWidget(tab.osc_reactive_glow)
-
-    _adv.addWidget(tab._osc_glow_sub_container)
+    glow_reactive_row.addWidget(tab.osc_reactive_glow)
+    glow_reactive_row.addStretch()
 
     def _update_osc_glow_vis(_s=None):
-        tab._osc_glow_sub_container.setVisible(tab.osc_glow_enabled.isChecked())
+        visible = tab.osc_glow_enabled.isChecked()
+        for widget in tab._osc_glow_widgets:
+            widget.setVisible(visible)
+
     tab.osc_glow_enabled.stateChanged.connect(_update_osc_glow_vis)
     _update_osc_glow_vis()
 
-    # --- Ghost Trail ---
+    ghost_toggle_row = _aligned_row(_normal_layout, "")
     tab.osc_ghost_enabled = QCheckBox("Ghost Trail")
     tab.osc_ghost_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_ghosting_enabled', False))
     tab.osc_ghost_enabled.setToolTip("Show a faded trail of the previous waveform behind the current one.")
     tab.osc_ghost_enabled.stateChanged.connect(tab._save_settings)
-    _adv.addWidget(tab.osc_ghost_enabled)
+    ghost_toggle_row.addWidget(tab.osc_ghost_enabled)
+    ghost_toggle_row.addStretch()
 
-    tab._osc_ghost_sub_container = QWidget()
-    _osc_ghost_layout = QVBoxLayout(tab._osc_ghost_sub_container)
-    _osc_ghost_layout.setContentsMargins(16, 0, 0, 0)
-    osc_ghost_row = QHBoxLayout()
-    osc_ghost_row.addWidget(QLabel("Ghost Intensity:"))
+    tab._osc_ghost_widgets: list[QWidget] = []
+
+    ghost_intensity_widget, osc_ghost_row = _aligned_row_widget(_normal_layout, "Ghost Intensity:")
+    tab._osc_ghost_widgets.append(ghost_intensity_widget)
     tab.osc_ghost_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_ghost_intensity.setMinimum(5)
     tab.osc_ghost_intensity.setMaximum(100)
@@ -114,16 +185,16 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_ghost_intensity_label.setText(f"{v}%")
     )
     osc_ghost_row.addWidget(tab.osc_ghost_intensity_label)
-    _osc_ghost_layout.addLayout(osc_ghost_row)
-    _adv.addWidget(tab._osc_ghost_sub_container)
 
     def _update_osc_ghost_vis(_s=None):
-        tab._osc_ghost_sub_container.setVisible(tab.osc_ghost_enabled.isChecked())
+        visible = tab.osc_ghost_enabled.isChecked()
+        for widget in tab._osc_ghost_widgets:
+            widget.setVisible(visible)
+
     tab.osc_ghost_enabled.stateChanged.connect(_update_osc_ghost_vis)
     _update_osc_ghost_vis()
 
-    osc_sens_row = QHBoxLayout()
-    osc_sens_row.addWidget(QLabel("Sensitivity:"))
+    osc_sens_row = _aligned_row(_normal_layout, "Sensitivity:")
     tab.osc_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_sensitivity.setMinimum(5)
     tab.osc_sensitivity.setMaximum(100)
@@ -138,10 +209,8 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_sensitivity_label.setText(f"{v / 10.0:.1f}x")
     )
     osc_sens_row.addWidget(tab.osc_sensitivity_label)
-    _adv.addLayout(osc_sens_row)
 
-    osc_smooth_row = QHBoxLayout()
-    osc_smooth_row.addWidget(QLabel("Smoothing:"))
+    osc_smooth_row = _aligned_row(_normal_layout, "Smoothing:")
     tab.osc_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_smoothing.setMinimum(0)
     tab.osc_smoothing.setMaximum(100)
@@ -156,10 +225,8 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_smoothing_label.setText(f"{v}%")
     )
     osc_smooth_row.addWidget(tab.osc_smoothing_label)
-    _adv.addLayout(osc_smooth_row)
 
-    osc_speed_row = QHBoxLayout()
-    osc_speed_row.addWidget(QLabel("Speed:"))
+    osc_speed_row = _aligned_row(_normal_layout, "Speed:")
     tab.osc_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_speed.setMinimum(1)
     tab.osc_speed.setMaximum(100)
@@ -175,16 +242,16 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_speed_label.setText(f"{v}%")
     )
     osc_speed_row.addWidget(tab.osc_speed_label)
-    _adv.addLayout(osc_speed_row)
 
+    osc_line_dim_row = _aligned_row(_adv_layout, "")
     tab.osc_line_dim = QCheckBox("Dim Lines 2/3 Glow")
     tab.osc_line_dim.setChecked(tab._default_bool('spotify_visualizer', 'osc_line_dim', False))
     tab.osc_line_dim.setToolTip("When enabled, lines 2 and 3 have slightly reduced glow to let the primary line stand out.")
     tab.osc_line_dim.stateChanged.connect(tab._save_settings)
-    _adv.addWidget(tab.osc_line_dim)
+    osc_line_dim_row.addWidget(tab.osc_line_dim)
+    osc_line_dim_row.addStretch()
 
-    osc_lob_row = QHBoxLayout()
-    osc_lob_row.addWidget(QLabel("Line Offset Bias:"))
+    osc_lob_row = _aligned_row(_adv_layout, "Line Offset Bias:")
     tab.osc_line_offset_bias = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_line_offset_bias.setMinimum(0)
     tab.osc_line_offset_bias.setMaximum(100)
@@ -204,10 +271,8 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_line_offset_bias_label.setText(f"{v}%")
     )
     osc_lob_row.addWidget(tab.osc_line_offset_bias_label)
-    _adv.addLayout(osc_lob_row)
 
-    osc_vshift_row = QHBoxLayout()
-    osc_vshift_row.addWidget(QLabel("Vertical Shift:"))
+    osc_vshift_row = _aligned_row(_adv_layout, "Vertical Shift:")
     tab.osc_vertical_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_vertical_shift.setMinimum(-50)
     tab.osc_vertical_shift.setMaximum(200)
@@ -226,37 +291,31 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_vertical_shift_label.setText(f"{v}")
     )
     osc_vshift_row.addWidget(tab.osc_vertical_shift_label)
-    _adv.addLayout(osc_vshift_row)
 
-    osc_line_color_row = QHBoxLayout()
-    osc_line_color_row.addWidget(QLabel("Line Color:"))
+    osc_line_color_row = _aligned_row(_adv_layout, "Line Color:")
     tab.osc_line_color_btn = ColorSwatchButton(title="Choose Oscilloscope Line Color")
     tab.osc_line_color_btn.color_changed.connect(lambda c: (setattr(tab, '_osc_line_color', c), tab._save_settings()))
     osc_line_color_row.addWidget(tab.osc_line_color_btn)
     osc_line_color_row.addStretch()
-    _adv.addLayout(osc_line_color_row)
-
-    osc_glow_color_row = QHBoxLayout()
-    osc_glow_color_row.addWidget(QLabel("Glow Color:"))
+    osc_glow_color_row = _aligned_row(_adv_layout, "Glow Color:")
     tab.osc_glow_color_btn = ColorSwatchButton(title="Choose Oscilloscope Glow Color")
     tab.osc_glow_color_btn.color_changed.connect(lambda c: (setattr(tab, '_osc_glow_color', c), tab._save_settings()))
     osc_glow_color_row.addWidget(tab.osc_glow_color_btn)
     osc_glow_color_row.addStretch()
-    _adv.addLayout(osc_glow_color_row)
-
+    tab.osc_multi_line_row = _aligned_row(_adv_layout, "")
     tab.osc_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
     tab.osc_multi_line.setChecked(tab._default_int('spotify_visualizer', 'osc_line_count', 1) > 1)
     tab.osc_multi_line.setToolTip("Enable additional waveform lines with different oscillation distributions.")
     tab.osc_multi_line.stateChanged.connect(tab._save_settings)
     tab.osc_multi_line.stateChanged.connect(lambda: _update_osc_multi_line_visibility(tab))
-    _adv.addWidget(tab.osc_multi_line)
+    tab.osc_multi_line_row.addWidget(tab.osc_multi_line)
+    tab.osc_multi_line_row.addStretch()
 
     tab._osc_multi_container = QWidget()
     ml_layout = QVBoxLayout(tab._osc_multi_container)
-    ml_layout.setContentsMargins(16, 0, 0, 0)
+    ml_layout.setContentsMargins(0, 0, 0, 0)
 
-    osc_line_count_row = QHBoxLayout()
-    osc_line_count_row.addWidget(QLabel("Line Count:"))
+    osc_line_count_row = _aligned_row(ml_layout, "Line Count:")
     tab.osc_line_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_line_count.setMinimum(2)
     tab.osc_line_count.setMaximum(3)
@@ -271,10 +330,8 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_line_count_label.setText(str(v))
     )
     osc_line_count_row.addWidget(tab.osc_line_count_label)
-    ml_layout.addLayout(osc_line_count_row)
 
-    ml_layout.addWidget(QLabel("Line 2:"))
-    osc_l2_row = QHBoxLayout()
+    osc_l2_widget, osc_l2_row = _aligned_row_widget(ml_layout, "Line 2:")
     osc_l2_color_col = QVBoxLayout()
     osc_l2_color_label = QLabel("Line Color")
     osc_l2_color_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -294,15 +351,9 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_line2_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_osc_line2_glow_color', c), tab._save_settings()))
     osc_l2_glow_col.addWidget(tab.osc_line2_glow_btn)
     osc_l2_row.addLayout(osc_l2_glow_col)
-
     osc_l2_row.addStretch()
-    ml_layout.addLayout(osc_l2_row)
 
-    tab._osc_line3_label = QLabel("Line 3:")
-    ml_layout.addWidget(tab._osc_line3_label)
-    tab._osc_l3_row_widget = QWidget()
-    osc_l3_row = QHBoxLayout(tab._osc_l3_row_widget)
-    osc_l3_row.setContentsMargins(0, 0, 0, 0)
+    tab._osc_l3_row_widget, osc_l3_row = _aligned_row_widget(ml_layout, "Line 3:")
 
     osc_l3_color_col = QVBoxLayout()
     osc_l3_color_label = QLabel("Line Color")
@@ -323,15 +374,12 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_line3_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_osc_line3_glow_color', c), tab._save_settings()))
     osc_l3_glow_col.addWidget(tab.osc_line3_glow_btn)
     osc_l3_row.addLayout(osc_l3_glow_col)
-
     osc_l3_row.addStretch()
-    ml_layout.addWidget(tab._osc_l3_row_widget)
 
-    _adv.addWidget(tab._osc_multi_container)
+    _adv_layout.addWidget(tab._osc_multi_container)
     _update_osc_multi_line_visibility(tab)
 
-    osc_growth_row = QHBoxLayout()
-    osc_growth_row.addWidget(QLabel("Card Height:"))
+    osc_growth_row = _aligned_row(_adv_layout, "Card Height:")
     tab.osc_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_growth.setMinimum(100)
     tab.osc_growth.setMaximum(500)
@@ -347,7 +395,5 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     osc_growth_row.addWidget(tab.osc_growth_label)
-    _adv.addLayout(osc_growth_row)
 
-    osc_layout.addWidget(tab._osc_advanced)
     parent_layout.addWidget(tab._osc_settings_container)

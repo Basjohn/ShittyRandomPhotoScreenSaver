@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QCheckBox, QSlider, QWidget,
+    QCheckBox, QSlider, QWidget, QToolButton,
 )
 from ui.styled_popup import ColorSwatchButton
 from PySide6.QtCore import Qt
@@ -40,39 +40,90 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._sine_preset_slider.preset_changed.connect(tab._save_settings)
     sine_layout.addWidget(tab._sine_preset_slider)
 
+    tab._sine_normal = QWidget()
+    _normal = QVBoxLayout(tab._sine_normal)
+    _normal.setContentsMargins(0, 0, 0, 0)
+    _normal.setSpacing(4)
+    sine_layout.addWidget(tab._sine_normal)
+
+    tab._sine_advanced_host = QWidget()
+    _adv_host = QVBoxLayout(tab._sine_advanced_host)
+    _adv_host.setContentsMargins(0, 0, 0, 0)
+    _adv_host.setSpacing(4)
+    sine_layout.addWidget(tab._sine_advanced_host)
+
+    _adv_toggle_row = QHBoxLayout()
+    _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
+    _adv_toggle_row.setSpacing(4)
+    tab._sine_adv_toggle = QToolButton()
+    tab._sine_adv_toggle.setText("Advanced")
+    tab._sine_adv_toggle.setCheckable(True)
+    tab._sine_adv_toggle.setChecked(True)
+    tab._sine_adv_toggle.setArrowType(Qt.DownArrow)
+    tab._sine_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    tab._sine_adv_toggle.setAutoRaise(True)
+    _adv_toggle_row.addWidget(tab._sine_adv_toggle)
+    _adv_toggle_row.addStretch()
+    _adv_host.addLayout(_adv_toggle_row)
+
+    tab._sine_adv_helper = QLabel("Advanced sliders still apply when hidden.")
+    tab._sine_adv_helper.setProperty("class", "adv-helper")
+    tab._sine_adv_helper.setStyleSheet("color: rgba(220,220,220,0.6); font-size: 11px;")
+    _adv_host.addWidget(tab._sine_adv_helper)
+
     tab._sine_advanced = QWidget()
     _adv = QVBoxLayout(tab._sine_advanced)
     _adv.setContentsMargins(0, 0, 0, 0)
     _adv.setSpacing(4)
-    tab._sine_preset_slider.set_advanced_container(tab._sine_advanced)
+    _adv_host.addWidget(tab._sine_advanced)
+
+    tab._sine_preset_slider.set_advanced_container(tab._sine_advanced_host)
+
+    def _apply_sine_adv_toggle_state(checked: bool) -> None:
+        tab._sine_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        tab._sine_advanced.setVisible(checked)
+        tab._sine_adv_helper.setVisible(not checked)
+
+    tab._sine_adv_toggle.toggled.connect(_apply_sine_adv_toggle_state)
+    _apply_sine_adv_toggle_state(tab._sine_adv_toggle.isChecked())
+
+    def _handle_sine_preset_adv(is_custom: bool) -> None:
+        tab._sine_advanced_host.setVisible(is_custom)
+
+    tab._sine_preset_slider.advanced_toggled.connect(_handle_sine_preset_adv)
+    _handle_sine_preset_adv(True)
 
     LABEL_WIDTH = 150
 
-    def _aligned_row(parent_layout, label_text: str):
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
+    def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str) -> tuple[QWidget, QHBoxLayout]:
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
         label = QLabel(label_text)
         label.setFixedWidth(LABEL_WIDTH)
-        row.addWidget(label)
+        row_layout.addWidget(label)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(8)
-        row.addLayout(content, 1)
-        parent_layout.addLayout(row)
+        row_layout.addLayout(content, 1)
+        parent_layout.addWidget(row_widget)
+        return row_widget, content
+
+    def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        _, content = _aligned_row_widget(parent_layout, label_text)
         return content
 
     # Glow
     tab.sine_glow_enabled = QCheckBox("Enable Glow")
     tab.sine_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'sine_glow_enabled', True))
     tab.sine_glow_enabled.stateChanged.connect(tab._save_settings)
-    _adv.addWidget(tab.sine_glow_enabled)
+    _normal.addWidget(tab.sine_glow_enabled)
 
-    tab._sine_glow_sub_container = QWidget()
-    _sine_glow_layout = QVBoxLayout(tab._sine_glow_sub_container)
-    _sine_glow_layout.setContentsMargins(16, 0, 0, 0)
+    tab._sine_glow_widgets: list[QWidget] = []
 
-    sine_glow_row = _aligned_row(_sine_glow_layout, "Glow Intensity:")
+    glow_intensity_widget, sine_glow_row = _aligned_row_widget(_normal, "Glow Intensity:")
+    tab._sine_glow_widgets.append(glow_intensity_widget)
     tab.sine_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_glow_intensity.setMinimum(0)
     tab.sine_glow_intensity.setMaximum(100)
@@ -88,7 +139,8 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     sine_glow_row.addWidget(tab.sine_glow_intensity_label)
 
-    sine_glow_color_row = _aligned_row(_sine_glow_layout, "Glow Color:")
+    glow_color_widget, sine_glow_color_row = _aligned_row_widget(_normal, "Glow Color:")
+    tab._sine_glow_widgets.append(glow_color_widget)
     tab.sine_glow_color_btn = ColorSwatchButton(title="Choose Sine Wave Glow Color")
     tab.sine_glow_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_glow_color', c), tab._save_settings()))
     sine_glow_color_row.addWidget(tab.sine_glow_color_btn)
@@ -97,22 +149,23 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_reactive_glow = QCheckBox("Reactive Glow (energy-driven)")
     tab.sine_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'sine_reactive_glow', True))
     tab.sine_reactive_glow.stateChanged.connect(tab._save_settings)
-    _sine_glow_layout.addWidget(tab.sine_reactive_glow)
-
-    _adv.addWidget(tab._sine_glow_sub_container)
+    _normal.addWidget(tab.sine_reactive_glow)
+    tab._sine_glow_widgets.append(tab.sine_reactive_glow)
 
     def _update_sine_glow_vis(_s=None):
-        tab._sine_glow_sub_container.setVisible(tab.sine_glow_enabled.isChecked())
+        visible = tab.sine_glow_enabled.isChecked()
+        for widget in getattr(tab, '_sine_glow_widgets', []):
+            widget.setVisible(visible)
     tab.sine_glow_enabled.stateChanged.connect(_update_sine_glow_vis)
     _update_sine_glow_vis()
 
-    sine_line_color_row = _aligned_row(_adv, "Line Color:")
+    sine_line_color_row = _aligned_row(_normal, "Line Color:")
     tab.sine_line_color_btn = ColorSwatchButton(title="Choose Sine Wave Line Color")
     tab.sine_line_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line_color', c), tab._save_settings()))
     sine_line_color_row.addWidget(tab.sine_line_color_btn)
     sine_line_color_row.addStretch()
 
-    sine_sens_row = _aligned_row(_adv, "Sensitivity:")
+    sine_sens_row = _aligned_row(_normal, "Sensitivity:")
     tab.sine_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_sensitivity.setMinimum(10)
     tab.sine_sensitivity.setMaximum(500)
@@ -129,7 +182,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     sine_sens_row.addWidget(tab.sine_sensitivity_label)
 
-    sine_speed_row = _aligned_row(_adv, "Speed:")
+    sine_speed_row = _aligned_row(_normal, "Speed:")
     tab.sine_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_speed.setMinimum(10)
     tab.sine_speed.setMaximum(100)
@@ -146,7 +199,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     sine_speed_row.addWidget(tab.sine_speed_label)
 
-    sine_travel_row = _aligned_row(_adv, "Travel:")
+    sine_travel_row = _aligned_row(_normal, "Travel:")
     tab.sine_travel = QComboBox()
     tab.sine_travel.addItems(["None", "Scroll Left", "Scroll Right"])
     default_sine_travel = tab._default_int('spotify_visualizer', 'sine_wave_travel', 0)
@@ -157,7 +210,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_travel_row.addStretch()
 
     # Wave Effect
-    sine_wave_fx_row = _aligned_row(_adv, "Wave Effect:")
+    sine_wave_fx_row = _aligned_row(_normal, "Wave Effect:")
     tab.sine_wave_effect = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_wave_effect.setMinimum(0)
     tab.sine_wave_effect.setMaximum(100)
@@ -176,7 +229,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_wave_fx_row.addWidget(tab.sine_wave_effect_label)
 
     # Micro Wobble
-    sine_mw_row = _aligned_row(_adv, "Micro Wobble:")
+    sine_mw_row = _aligned_row(_normal, "Micro Wobble:")
     tab.sine_micro_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_micro_wobble.setMinimum(0)
     tab.sine_micro_wobble.setMaximum(100)
@@ -194,7 +247,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_mw_row.addWidget(tab.sine_micro_wobble_label)
 
     # Width Reaction
-    sine_wr_row = _aligned_row(_adv, "Width Reaction:")
+    sine_wr_row = _aligned_row(_normal, "Width Reaction:")
     tab.sine_width_reaction = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_width_reaction.setMinimum(0)
     tab.sine_width_reaction.setMaximum(100)
@@ -327,7 +380,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._sine_multi_container = QWidget()
     sine_ml_layout = QVBoxLayout(tab._sine_multi_container)
-    sine_ml_layout.setContentsMargins(16, 0, 0, 0)
+    sine_ml_layout.setContentsMargins(0, 0, 0, 0)
 
     sine_lc_row = _aligned_row(sine_ml_layout, "Line Count:")
     tab.sine_line_count_slider = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -365,19 +418,22 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line2_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line2_glow_color', c), tab._save_settings()))
     sine_l2_glow_col.addWidget(tab.sine_line2_glow_btn)
     sine_l2_row.addLayout(sine_l2_glow_col)
-    sine_l2_row.addWidget(QLabel("Travel:"))
+    sine_l2_travel_col = QVBoxLayout()
+    sine_l2_travel_label = QLabel("Travel")
+    sine_l2_travel_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    sine_l2_travel_col.addWidget(sine_l2_travel_label)
     tab.sine_travel_line2 = QComboBox()
     tab.sine_travel_line2.addItems(["None", "Left", "Right"])
     tab.sine_travel_line2.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line2', 0))))
     tab.sine_travel_line2.currentIndexChanged.connect(tab._save_settings)
-    sine_l2_row.addWidget(tab.sine_travel_line2)
-    sine_l2_row.addStretch()
+    sine_l2_travel_col.addWidget(tab.sine_travel_line2)
+    sine_l2_row.addLayout(sine_l2_travel_col)
 
-    # Line 2 horizontal shift (visible when multi-line enabled)
-    sine_l2_shift_col = QVBoxLayout()
-    sine_l2_shift_label = QLabel("Horizontal Shift")
-    sine_l2_shift_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-    sine_l2_shift_col.addWidget(sine_l2_shift_label)
+    sine_l2_row.addStretch()
+    sine_ml_layout.addLayout(sine_l2_row)
+
+    # Line 2 horizontal shift
+    sine_l2_shift_row = _aligned_row(sine_ml_layout, "Line 2 Horizontal Shift:")
     tab.sine_line2_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line2_shift.setMinimum(-100)
     tab.sine_line2_shift.setMaximum(100)
@@ -393,17 +449,21 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line2_shift.valueChanged.connect(
         lambda v: tab.sine_line2_shift_label.setText(f"{v / 100.0:.2f} cycles")
     )
-    sine_l2_shift_col.addWidget(tab.sine_line2_shift)
-    sine_l2_shift_col.addWidget(tab.sine_line2_shift_label)
-    sine_l2_row.addLayout(sine_l2_shift_col)
-    sine_ml_layout.addLayout(sine_l2_row)
+    sine_l2_shift_row.addWidget(tab.sine_line2_shift)
+    sine_l2_shift_row.addWidget(tab.sine_line2_shift_label)
 
-    sine_l3_row = _aligned_row(sine_ml_layout, "Line 3:")
-    tab._sine_line3_label = QLabel("Line 3:")
-    sine_ml_layout.addWidget(tab._sine_line3_label)
     tab._sine_l3_row_widget = QWidget()
+    sine_ml_layout.addWidget(tab._sine_l3_row_widget)
     sine_l3_row = QHBoxLayout(tab._sine_l3_row_widget)
     sine_l3_row.setContentsMargins(0, 0, 0, 0)
+    sine_l3_row.setSpacing(8)
+    tab._sine_line3_label = QLabel("Line 3:")
+    tab._sine_line3_label.setFixedWidth(LABEL_WIDTH)
+    sine_l3_row.addWidget(tab._sine_line3_label)
+    sine_l3_content = QHBoxLayout()
+    sine_l3_content.setContentsMargins(0, 0, 0, 0)
+    sine_l3_content.setSpacing(8)
+    sine_l3_row.addLayout(sine_l3_content, 1)
 
     sine_l3_color_col = QVBoxLayout()
     sine_l3_color_label = QLabel("Line Color")
@@ -413,7 +473,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line3_color_btn.setToolTip("Sine wave line 3 colour")
     tab.sine_line3_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line3_color', c), tab._save_settings()))
     sine_l3_color_col.addWidget(tab.sine_line3_color_btn)
-    sine_l3_row.addLayout(sine_l3_color_col)
+    sine_l3_content.addLayout(sine_l3_color_col)
 
     sine_l3_glow_col = QVBoxLayout()
     sine_l3_glow_label = QLabel("Glow Color")
@@ -423,18 +483,24 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line3_glow_btn.setToolTip("Sine wave line 3 glow colour")
     tab.sine_line3_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line3_glow_color', c), tab._save_settings()))
     sine_l3_glow_col.addWidget(tab.sine_line3_glow_btn)
-    sine_l3_row.addLayout(sine_l3_glow_col)
-    sine_l3_row.addWidget(QLabel("Travel:"))
+    sine_l3_content.addLayout(sine_l3_glow_col)
+
+    sine_l3_travel_col = QVBoxLayout()
+    sine_l3_travel_label = QLabel("Travel")
+    sine_l3_travel_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    sine_l3_travel_col.addWidget(sine_l3_travel_label)
     tab.sine_travel_line3 = QComboBox()
     tab.sine_travel_line3.addItems(["None", "Left", "Right"])
     tab.sine_travel_line3.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line3', 0))))
     tab.sine_travel_line3.currentIndexChanged.connect(tab._save_settings)
-    sine_l3_row.addWidget(tab.sine_travel_line3)
-    sine_l3_row.addStretch()
-    sine_l3_shift_col = QVBoxLayout()
-    sine_l3_shift_label = QLabel("Horizontal Shift")
-    sine_l3_shift_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-    sine_l3_shift_col.addWidget(sine_l3_shift_label)
+    sine_l3_travel_col.addWidget(tab.sine_travel_line3)
+    sine_l3_content.addLayout(sine_l3_travel_col)
+
+    sine_l3_content.addStretch()
+    sine_ml_layout.addWidget(tab._sine_l3_row_widget)
+
+    # Line 3 horizontal shift
+    sine_l3_shift_row = _aligned_row(sine_ml_layout, "Line 3 Horizontal Shift:")
     tab.sine_line3_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line3_shift.setMinimum(-100)
     tab.sine_line3_shift.setMaximum(100)
@@ -450,17 +516,14 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line3_shift.valueChanged.connect(
         lambda v: tab.sine_line3_shift_label.setText(f"{v / 100.0:.2f} cycles")
     )
-    sine_l3_shift_col.addWidget(tab.sine_line3_shift)
-    sine_l3_shift_col.addWidget(tab.sine_line3_shift_label)
-    sine_l3_row.addLayout(sine_l3_shift_col)
-    sine_ml_layout.addWidget(tab._sine_l3_row_widget)
+    sine_l3_shift_row.addWidget(tab.sine_line3_shift)
+    sine_l3_shift_row.addWidget(tab.sine_line3_shift_label)
 
     _adv.addWidget(tab._sine_multi_container)
     _update_sine_multi_line_visibility(tab)
 
     # Line Offset Bias
-    sine_lob_row = QHBoxLayout()
-    sine_lob_row.addWidget(QLabel("Line Offset Bias:"))
+    sine_lob_row = _aligned_row(_adv, "Line Offset Bias:")
     tab.sine_line_offset_bias = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line_offset_bias.setMinimum(0)
     tab.sine_line_offset_bias.setMaximum(100)
@@ -476,11 +539,9 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_line_offset_bias_label.setText(f"{v}%")
     )
     sine_lob_row.addWidget(tab.sine_line_offset_bias_label)
-    _adv.addLayout(sine_lob_row)
 
     # Card Adaptation
-    sine_adapt_row = QHBoxLayout()
-    sine_adapt_row.addWidget(QLabel("Card Adaptation:"))
+    sine_adapt_row = _aligned_row(_adv, "Card Adaptation:")
     tab.sine_card_adaptation = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_card_adaptation.setMinimum(3)
     tab.sine_card_adaptation.setMaximum(100)
@@ -496,18 +557,17 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_card_adaptation_label.setText(f"{v}%")
     )
     sine_adapt_row.addWidget(tab.sine_card_adaptation_label)
-    _adv.addLayout(sine_adapt_row)
 
     # Card Height
-    sine_growth_row = QHBoxLayout()
-    sine_growth_row.addWidget(QLabel("Card Height:"))
+    sine_growth_row = _aligned_row(_adv, "Card Height:")
     tab.sine_wave_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_wave_growth.setMinimum(100)
-    tab.sine_wave_growth.setMaximum(500)
+    tab.sine_wave_growth.setMaximum(350)
+    tab.sine_wave_growth.setSingleStep(5)
+    tab.sine_wave_growth.setTickInterval(25)
     sine_growth_val = int(tab._default_float('spotify_visualizer', 'sine_wave_growth', 1.0) * 100)
-    tab.sine_wave_growth.setValue(max(100, min(500, sine_growth_val)))
+    tab.sine_wave_growth.setValue(max(100, min(350, sine_growth_val)))
     tab.sine_wave_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.sine_wave_growth.setTickInterval(50)
     tab.sine_wave_growth.setToolTip("Height multiplier for the sine wave card.")
     tab.sine_wave_growth.valueChanged.connect(tab._save_settings)
     sine_growth_row.addWidget(tab.sine_wave_growth)
@@ -516,7 +576,4 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_wave_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     sine_growth_row.addWidget(tab.sine_wave_growth_label)
-    _adv.addLayout(sine_growth_row)
-
-    sine_layout.addWidget(tab._sine_advanced)
     parent_layout.addWidget(tab._sine_wave_settings_container)

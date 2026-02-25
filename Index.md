@@ -15,6 +15,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/QTIMER_POLICY.md | QTimer usage policy: when to use QTimer vs ThreadManager, intentional UI-thread timer locations |
 | Docs/Defaults_Guide.md | All default settings, storage locations, SettingsManager API, safe change procedures |
 | Docs/Visualizer_Debug.md | Authoritative Spotify visualizer architecture + per-mode defaults, debugging, regression harness |
+| Docs/Historical_Bugs.md | Chronological archive of resolved bugs (symptoms, failed attempts, final fix, regression coverage) |
 | Docs/Visualizer_Presets_Plan.md | Comprehensive plan for per-visualizer-mode preset system with Advanced toggle |
 | Docs/Advanced_Migration.md | Mode-agnostic Advanced/Normal UI migration playbook (alignment, toggle mechanics, settings layers) |
 | Bubble_Vizualiser_Plan.md | Bubble visualizer implementation plan (Phases 1-5 COMPLETE, Phase 6 in progress) |
