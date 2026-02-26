@@ -334,12 +334,18 @@ void main() {
     // Displacement strength (multi-line shove). Slider sets maximum excursion, bass provides impulses.
     float displacement_slider = clamp(u_sine_displacement, 0.0, 1.0);
     float displacement_curve = pow(displacement_slider, 0.85);
-    float bass_peak = clamp(u_bass_energy * 1.55 + u_mid_energy * 0.30 + u_high_energy * 0.10, 0.0, 1.2);
-    float transient_gate = pow(bass_peak, mix(1.35, 0.65, displacement_curve));
-    float displacement_floor = displacement_curve * 0.12;  // always-on vibration so line 1 buzzes even at low gain
-    float displacement_pulse = displacement_curve * transient_gate;
-    float displacement_drive = clamp((displacement_floor + displacement_pulse) * max(play_gate, 0.2), 0.0, 1.8);
-    float rand_speed_base = mix(0.35, 1.1, displacement_curve);
+    float displacement_floor = mix(0.020, 0.200, displacement_slider); // baseline tremor for line 1
+    float bass_vector = clamp(u_bass_energy * 1.70 + u_mid_energy * 0.45 + u_high_energy * 0.10, 0.0, 1.35);
+    float transient_gate = pow(max(bass_vector, 0.0001), mix(1.15, 0.50, displacement_curve));
+    float impulse_mix = mix(0.40, 1.60, displacement_slider);
+    float displacement_drive = (displacement_floor + transient_gate * impulse_mix) * max(play_gate, 0.2);
+    float phase_scale = mix(0.16, 1.45, displacement_slider);
+    float y_scale = mix(0.020, 0.230, displacement_slider);
+    float rand_speed_base = mix(0.45, 1.55, displacement_slider) + transient_gate * 0.75;
+    float l23_energy = clamp(bass_vector, 0.0, 1.2);
+    float l23_gate = smoothstep(0.22, 0.48, l23_energy) * displacement_slider;
+    float l23_drive = displacement_drive * l23_gate;
+    float l23_rand_gate = smoothstep(0.15, 0.42, l23_energy) * displacement_slider;
 
     // Travel phase per line: ONLY non-zero when direction != NONE (0).
     // 1=left (positive phase shift), 2=right (negative phase shift)
@@ -397,9 +403,9 @@ void main() {
     // =====================================================================
     // Energy drives amplitude pulsing. Clamp to 0.48 to stay in card.
     float amp1 = min(base_amplitude * (1.0 + e1 * 0.8), 0.48);
-    float l1_drive = min(0.9, displacement_drive * mix(0.30, 0.60, displacement_curve));
-    vec2 rand_line1 = randomDirection(1, rand_speed_base + displacement_drive * 0.55);
-    float phase_jitter1 = l1_drive * 0.55 * TWO_PI * rand_line1.x;
+    float l1_drive = clamp(displacement_floor * 1.2 + displacement_drive * 0.65, 0.0, 1.3);
+    vec2 rand_line1 = randomDirection(1, rand_speed_base * 0.9 + displacement_drive * 0.5);
+    float phase_jitter1 = rand_line1.x * l1_drive * phase_scale;
     float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * TWO_PI + phase_jitter1);
 
     // Wave effect: vocal-led positional y-offset preserving sine shape
@@ -433,7 +439,16 @@ void main() {
         }
     }
 
-    float ny1 = ny + l1_drive * 0.30 * rand_line1.y;
+    float ny1 = ny + rand_line1.y * l1_drive * y_scale * 0.85;
+
+    vec2 rand_pair = vec2(0.0);
+    if (l23_rand_gate > 0.002) {
+        float pair_angle = randSmooth(42.0, rand_speed_base * 0.35 + displacement_drive * 0.2) * TWO_PI;
+        float pair_mag = mix(0.65, 1.0, randSmooth(84.0, rand_speed_base * 0.2 + displacement_drive * 0.12));
+        rand_pair = vec2(cos(pair_angle), sin(pair_angle)) * (pair_mag * l23_rand_gate);
+    }
+    vec2 rand_line2_base = rand_pair;
+    vec2 rand_line3_base = -rand_pair;
     float crest_dx1;
     float hb1 = heartbeat_bump(nx, sine_freq, phase1, crest_dx1);
     float w1_pre = w1 + mw1 + wfx1 / max(amp1, 0.001);
@@ -452,9 +467,9 @@ void main() {
         float amp2 = min(base_amplitude * (1.0 + e2_band * 0.75), 0.48);
         float lob_phase2 = lob * 0.45 * 0.7;  // X-axis separation — tight to line 1
         float add_shift2 = u_sine_line2_shift * TWO_PI;
-        float l2_drive = min(1.45, displacement_drive * mix(0.75, 1.35, displacement_curve));
-        vec2 rand_line2 = randomDirection(2, rand_speed_base + displacement_drive * 0.95);
-        float phase_jitter2 = l2_drive * TWO_PI * 0.95 * rand_line2.x;
+        float l2_drive = clamp((displacement_floor * 0.25 + l23_drive * 1.25), 0.0, 1.85);
+        vec2 rand_line2 = rand_line2_base;
+        float phase_jitter2 = rand_line2.x * l2_drive * phase_scale * 1.35;
         float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2 + phase_jitter2);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
@@ -489,7 +504,9 @@ void main() {
 
         // Y-axis separation: Line 2 at +70% of vertical shift
         // At v_spacing=0 (VShift=0), ny2 == ny — perfectly aligned with Line 1
-        float ny2 = ny + v_spacing * 0.7 + l2_drive * 0.95 * rand_line2.y;
+        float y_push2 = rand_line2.y * l2_drive * y_scale * 1.10;
+        y_push2 = tanh(y_push2 * 1.35) * 0.35;
+        float ny2 = ny + v_spacing * 0.7 + y_push2;
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
         float crest_dx2;
@@ -513,9 +530,9 @@ void main() {
         float amp3 = min(base_amplitude * (1.0 + e3_band * 0.75), 0.48);
         float lob_phase3 = lob * 0.90;  // X-axis separation — tight to line 1
         float add_shift3 = u_sine_line3_shift * TWO_PI;
-        float l3_drive = min(1.75, displacement_drive * mix(0.95, 1.55, displacement_curve));
-        vec2 rand_line3 = randomDirection(3, rand_speed_base + displacement_drive * 1.25);
-        float phase_jitter3 = l3_drive * TWO_PI * 1.10 * rand_line3.x;
+        float l3_drive = clamp((displacement_floor * 0.30 + l23_drive * 1.45), 0.0, 2.2);
+        vec2 rand_line3 = rand_line3_base;
+        float phase_jitter3 = rand_line3.x * l3_drive * phase_scale * 1.55;
         float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3 + phase_jitter3);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
@@ -550,7 +567,9 @@ void main() {
 
         // Y-axis separation: Line 3 at -100% of vertical shift (opposite direction)
         // At v_spacing=0 (VShift=0), ny3 == ny — perfectly aligned with Line 1
-        float ny3 = ny - v_spacing + l3_drive * 1.15 * rand_line3.y;
+        float y_push3 = rand_line3.y * l3_drive * y_scale * 1.20;
+        y_push3 = tanh(y_push3 * 1.4) * 0.38;
+        float ny3 = ny - v_spacing + y_push3;
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
         float crest_dx3;
