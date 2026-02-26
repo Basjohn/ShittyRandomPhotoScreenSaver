@@ -1028,9 +1028,8 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.sine_density.setValue(max(25, min(300, sd)))
         tab.sine_density_label.setText(f"{tab.sine_density.value() / 100.0:.2f}×")
     if hasattr(tab, 'sine_heartbeat'):
-        shb = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_heartbeat', 0.0) * 100)
-        tab.sine_heartbeat.setValue(max(0, min(100, shb)))
-        tab.sine_heartbeat_label.setText(f"{shb}%")
+        tab.sine_heartbeat.setValue(0)
+        tab.sine_heartbeat_label.setText("Disabled")
     if hasattr(tab, 'sine_displacement'):
         sdisp = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_displacement', 0.0) * 100)
         tab.sine_displacement.setValue(max(0, min(100, sdisp)))
@@ -1305,7 +1304,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_micro_wobble': (tab.sine_micro_wobble.value() if hasattr(tab, 'sine_micro_wobble') else 0) / 100.0,
         'sine_width_reaction': (tab.sine_width_reaction.value() if hasattr(tab, 'sine_width_reaction') else 0) / 100.0,
         'sine_density': (tab.sine_density.value() if hasattr(tab, 'sine_density') else 100) / 100.0,
-        'sine_heartbeat': (tab.sine_heartbeat.value() if hasattr(tab, 'sine_heartbeat') else 0) / 100.0,
+        'sine_heartbeat': 0.0,
         'sine_displacement': (tab.sine_displacement.value() if hasattr(tab, 'sine_displacement') else 0) / 100.0,
         'sine_vertical_shift': tab.sine_vertical_shift.value() if hasattr(tab, 'sine_vertical_shift') else 0,
         'sine_line1_shift': (tab.sine_line1_shift.value() if hasattr(tab, 'sine_line1_shift') else 0) / 100.0,

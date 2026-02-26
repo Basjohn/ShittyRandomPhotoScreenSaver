@@ -278,11 +278,12 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_density.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_density.setTickInterval(25)
     tab.sine_density.setToolTip(
-        "Controls how many sine cycles fit inside the card. Lower = wide arcs, higher = tighter waves."
+        "Temporarily disabled — density slider currently has no visual effect for an unknown reason."
     )
+    tab.sine_density.setEnabled(False)
     tab.sine_density.valueChanged.connect(tab._save_settings)
     sine_density_row.addWidget(tab.sine_density)
-    tab.sine_density_label = QLabel(f"{sine_density_val / 100.0:.2f}×")
+    tab.sine_density_label = QLabel("Disabled (no effect)")
     tab.sine_density.valueChanged.connect(
         lambda v: tab.sine_density_label.setText(f"{v / 100.0:.2f}×")
     )
@@ -293,21 +294,15 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_heartbeat = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_heartbeat.setMinimum(0)
     tab.sine_heartbeat.setMaximum(100)
-    sine_hb_val = int(tab._default_float('spotify_visualizer', 'sine_heartbeat', 0.0) * 100)
-    tab.sine_heartbeat.setValue(max(0, min(100, sine_hb_val)))
+    tab.sine_heartbeat.setValue(0)
     tab.sine_heartbeat.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_heartbeat.setTickInterval(10)
+    tab.sine_heartbeat.setEnabled(False)
     tab.sine_heartbeat.setToolTip(
-        "Bass transient-triggered triangular bumps along the line. "
-        "Bumps are largest in the travel direction, smallest opposite. "
-        "0 = off, higher = more prominent bumps."
+        "Temporarily disabled — heartbeat requires a redesign before returning."
     )
-    tab.sine_heartbeat.valueChanged.connect(tab._save_settings)
     sine_hb_row.addWidget(tab.sine_heartbeat)
-    tab.sine_heartbeat_label = QLabel(f"{sine_hb_val}%")
-    tab.sine_heartbeat.valueChanged.connect(
-        lambda v: tab.sine_heartbeat_label.setText(f"{v}%")
-    )
+    tab.sine_heartbeat_label = QLabel("Disabled")
     sine_hb_row.addWidget(tab.sine_heartbeat_label)
 
     # Multi-line displacement (reactive offset)
@@ -560,11 +555,11 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_growth_row = _aligned_row(_adv, "Card Height:")
     tab.sine_wave_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_wave_growth.setMinimum(100)
-    tab.sine_wave_growth.setMaximum(350)
+    tab.sine_wave_growth.setMaximum(500)
     tab.sine_wave_growth.setSingleStep(5)
-    tab.sine_wave_growth.setTickInterval(25)
+    tab.sine_wave_growth.setTickInterval(50)
     sine_growth_val = int(tab._default_float('spotify_visualizer', 'sine_wave_growth', 1.0) * 100)
-    tab.sine_wave_growth.setValue(max(100, min(350, sine_growth_val)))
+    tab.sine_wave_growth.setValue(max(100, min(500, sine_growth_val)))
     tab.sine_wave_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_wave_growth.setToolTip("Height multiplier for the sine wave card.")
     tab.sine_wave_growth.valueChanged.connect(tab._save_settings)

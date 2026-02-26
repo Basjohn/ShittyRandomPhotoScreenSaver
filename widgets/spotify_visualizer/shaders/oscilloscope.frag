@@ -179,10 +179,13 @@ float sample_prev_waveform(float nx, int offset) {
 }
 
 // Compute line + glow contribution for one waveform line.
-// Returns vec4(rgb, alpha).
+// Returns vec4(rgb, alpha) and exposes separate premultiplied components
+// so we can clamp glow overlap during composition.
 vec4 eval_line(
     float ny, float inner_height, float wave_val, float amplitude,
-    vec4 lineCol, vec4 glowCol, float glowSigmaBase, float band_energy
+    vec4 lineCol, vec4 glowCol, float glowSigmaBase, float band_energy,
+    out vec3 premult_line_rgb, out vec3 premult_glow_rgb,
+    out float line_alpha_out, out float glow_alpha_out
 ) {
     float wave_y = 0.5 + wave_val * amplitude;
     float dist = abs(ny - wave_y);
@@ -206,24 +209,49 @@ vec4 eval_line(
         }
     }
 
-    float total_alpha = max(line_alpha, glow_alpha * 0.7);
+    float glow_mix = 0.0;
+    if (glow_alpha > 0.0) {
+        float leftover = max(0.0, 1.0 - line_alpha);
+        glow_mix = min(glow_alpha * 0.7, leftover);
+    }
+
+    float total_alpha = line_alpha + glow_mix;
     if (total_alpha <= 0.001) {
+        premult_line_rgb = vec3(0.0);
+        premult_glow_rgb = vec3(0.0);
+        line_alpha_out = 0.0;
+        glow_alpha_out = 0.0;
         return vec4(0.0);
     }
 
-    vec3 rgb;
-    if (line_alpha > 0.0 && glow_alpha > 0.0) {
-        float blend = line_alpha / max(total_alpha, 0.001);
-        vec3 core = lineCol.rgb;
-        vec3 halo = glowCol.rgb;
-        rgb = mix(halo, core, blend);
-    } else if (line_alpha > 0.0) {
-        rgb = lineCol.rgb;
-    } else {
-        rgb = glowCol.rgb;
-    }
-
+    premult_line_rgb = lineCol.rgb * line_alpha;
+    premult_glow_rgb = glowCol.rgb * glow_mix;
+    vec3 premult = premult_line_rgb + premult_glow_rgb;
+    vec3 rgb = premult / total_alpha;
+    line_alpha_out = line_alpha;
+    glow_alpha_out = glow_mix;
     return vec4(rgb, total_alpha);
+}
+
+void composite_line(
+    vec3 line_rgb, vec3 glow_rgb, float line_alpha, float glow_alpha,
+    inout vec3 dst_rgb, inout float dst_a, inout float glow_accum
+) {
+    float available_glow = max(0.0, 1.0 - glow_accum);
+    float glow_scale = (glow_alpha > 0.0001)
+        ? min(1.0, available_glow / glow_alpha)
+        : 1.0;
+    vec3 adj_glow_rgb = glow_rgb * glow_scale;
+    float adj_glow_alpha = glow_alpha * glow_scale;
+    float combined_alpha = line_alpha + adj_glow_alpha;
+    if (combined_alpha <= 0.0) {
+        return;
+    }
+    vec3 combined_premult = line_rgb + adj_glow_rgb;
+    float inv_src = 1.0 - combined_alpha;
+    dst_rgb = combined_premult + dst_rgb * inv_src;
+    dst_a = combined_alpha + dst_a * inv_src;
+    glow_accum = adj_glow_alpha + glow_accum * (1.0 - adj_glow_alpha);
 }
 
 void main() {
@@ -294,8 +322,13 @@ void main() {
         float ga = u_osc_ghost_alpha;
         float gamp1 = amplitude * (1.0 + e1 * 0.13);
         float gw1 = sample_prev_waveform(nx, 0);
+        vec3 gc1_line_rgb;
+        vec3 gc1_glow_rgb;
+        float gc1_line_alpha;
+        float gc1_glow_alpha;
         vec4 gc1 = eval_line(ny, inner_height, gw1, gamp1,
-                             u_line_color, glowColor1, glow_sigma_base * 0.6, e1);
+                             u_line_color, glowColor1, glow_sigma_base * 0.6, e1,
+                             gc1_line_rgb, gc1_glow_rgb, gc1_line_alpha, gc1_glow_alpha);
         ghost_rgb = gc1.rgb * gc1.a * ga;
         ghost_a = gc1.a * ga;
 
@@ -306,8 +339,13 @@ void main() {
             float gw2 = sample_prev_waveform(nx, goffset2);
             float gny2 = ny - lob * 0.18;
             float gsigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.55 : glow_sigma_base * 0.6;
+            vec3 gc2_line_rgb;
+            vec3 gc2_glow_rgb;
+            float gc2_line_alpha;
+            float gc2_glow_alpha;
             vec4 gc2 = eval_line(gny2, inner_height, gw2, gamp2,
-                                 u_line2_color, glowColor2, gsigma2, e2_band);
+                                 u_line2_color, glowColor2, gsigma2, e2_band,
+                                 gc2_line_rgb, gc2_glow_rgb, gc2_line_alpha, gc2_glow_alpha);
             ghost_rgb = ghost_rgb * (1.0 - gc2.a * ga * 0.5) + gc2.rgb * gc2.a * ga;
             ghost_a = max(ghost_a, gc2.a * ga);
         }
@@ -318,22 +356,34 @@ void main() {
             float gw3 = sample_prev_waveform(nx, goffset3);
             float gny3 = ny + lob * 0.18;
             float gsigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.5 : glow_sigma_base * 0.6;
+            vec3 gc3_line_rgb;
+            vec3 gc3_glow_rgb;
+            float gc3_line_alpha;
+            float gc3_glow_alpha;
             vec4 gc3 = eval_line(gny3, inner_height, gw3, gamp3,
-                                 u_line3_color, glowColor3, gsigma3, e3_band);
+                                 u_line3_color, glowColor3, gsigma3, e3_band,
+                                 gc3_line_rgb, gc3_glow_rgb, gc3_line_alpha, gc3_glow_alpha);
             ghost_rgb = ghost_rgb * (1.0 - gc3.a * ga * 0.4) + gc3.rgb * gc3.a * ga;
             ghost_a = max(ghost_a, gc3.a * ga);
         }
     }
 
+    vec3 lines_rgb = vec3(0.0);
+    float lines_a = 0.0;
+    float glow_accum = 0.0;
+
     // Primary line — bass-reactive in multi-line, overall in single
     float amp1 = amplitude * (1.0 + e1 * 0.13);
     float w1 = sample_waveform(nx, 0);
-    vec4 c1 = eval_line(ny, inner_height, w1, amp1,
-                        u_line_color, glowColor1, glow_sigma_base, e1);
-
-    // Composite: ghost behind, current on top
-    vec3 final_rgb = ghost_rgb * (1.0 - c1.a) + c1.rgb * c1.a;
-    float final_a = max(ghost_a, c1.a);
+    vec3 line_rgb1;
+    vec3 glow_rgb1;
+    float line_alpha1;
+    float glow_alpha1;
+    eval_line(ny, inner_height, w1, amp1,
+              u_line_color, glowColor1, glow_sigma_base, e1,
+              line_rgb1, glow_rgb1, line_alpha1, glow_alpha1);
+    composite_line(line_rgb1, glow_rgb1, line_alpha1, glow_alpha1,
+                   lines_rgb, lines_a, glow_accum);
 
     if (lines >= 2) {
         // Line 2: mid-frequency reactive — responds to vocals, guitars, keys
@@ -353,11 +403,16 @@ void main() {
             ny2 = ny - lob * 0.18;
         }
         float sigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        vec4 c2 = eval_line(ny2, inner_height, w2, amp2,
-                            u_line2_color, glowColor2,
-                            sigma2, e2_band);
-        final_rgb = final_rgb * (1.0 - c2.a * 0.5) + c2.rgb * c2.a;
-        final_a = max(final_a, c2.a);
+        vec3 line_rgb2;
+        vec3 glow_rgb2;
+        float line_alpha2;
+        float glow_alpha2;
+        eval_line(ny2, inner_height, w2, amp2,
+                  u_line2_color, glowColor2,
+                  sigma2, e2_band,
+                  line_rgb2, glow_rgb2, line_alpha2, glow_alpha2);
+        composite_line(line_rgb2, glow_rgb2, line_alpha2, glow_alpha2,
+                       lines_rgb, lines_a, glow_accum);
     }
 
     if (lines >= 3) {
@@ -378,12 +433,20 @@ void main() {
             ny3 = ny + lob * 0.18;
         }
         float sigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        vec4 c3 = eval_line(ny3, inner_height, w3, amp3,
-                            u_line3_color, glowColor3,
-                            sigma3, e3_band);
-        final_rgb = final_rgb * (1.0 - c3.a * 0.4) + c3.rgb * c3.a;
-        final_a = max(final_a, c3.a);
+        vec3 line_rgb3;
+        vec3 glow_rgb3;
+        float line_alpha3;
+        float glow_alpha3;
+        eval_line(ny3, inner_height, w3, amp3,
+                  u_line3_color, glowColor3,
+                  sigma3, e3_band,
+                  line_rgb3, glow_rgb3, line_alpha3, glow_alpha3);
+        composite_line(line_rgb3, glow_rgb3, line_alpha3, glow_alpha3,
+                       lines_rgb, lines_a, glow_accum);
     }
+
+    vec3 final_rgb = lines_rgb + ghost_rgb * (1.0 - lines_a);
+    float final_a = lines_a + ghost_a * (1.0 - lines_a);
 
     if (final_a <= 0.001) {
         discard;
