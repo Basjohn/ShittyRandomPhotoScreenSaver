@@ -447,12 +447,20 @@ class WidgetManager:
         """Emit a single structured log line for Spotify VIS config rewires."""
         try:
             logger.info(
-                "[SPOTIFY_VIS][CFG] %s adaptive=%s sensitivity=%.3f dynamic=%s manual=%.3f",
+                (
+                    "[SPOTIFY_VIS][CFG] %s adaptive=%s sensitivity=%.3f dynamic=%s manual=%.3f "
+                    "mode=%s density=%s displacement=%s heartbeat=%s vshift=%s"
+                ),
                 context,
                 cfg.get('adaptive_sensitivity'),
                 float(cfg.get('sensitivity', 0.0)),
                 cfg.get('dynamic_floor'),
                 float(cfg.get('manual_floor', 0.0)),
+                cfg.get('mode'),
+                cfg.get('sine_density'),
+                cfg.get('sine_displacement'),
+                cfg.get('sine_heartbeat'),
+                cfg.get('sine_vertical_shift'),
             )
         except Exception:
             logger.debug("[SPOTIFY_VIS][CFG] %s %s", context, cfg, exc_info=True)
@@ -519,6 +527,21 @@ class WidgetManager:
 
         model = SpotifyVisualizerSettings.from_mapping(spotify_cfg)
         self._log_spotify_vis_config("refresh", spotify_cfg)
+        try:
+            logger.info(
+                (
+                    "[SPOTIFY_VIS][REFRESH] mode=%s density=%.3f displacement=%.3f "
+                    "heartbeat=%.3f vertical_shift=%d line_count=%d"
+                ),
+                model.mode,
+                float(model.sine_density),
+                float(model.sine_displacement),
+                float(model.sine_heartbeat),
+                int(model.sine_vertical_shift),
+                int(model.sine_line_count),
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS][REFRESH] Failed to log model snapshot", exc_info=True)
 
         # Sensitivity (adaptive or manual multiplier)
         try:

@@ -326,15 +326,18 @@ void main() {
     float density_cycles = compute_density_cycles();
     float sine_freq = TWO_PI * density_cycles;
 
-    // Displacement strength (multi-line transient shove) — audio reactive so loud passages push harder
-    float displacement_strength = clamp(u_sine_displacement, 0.0, 1.0);
-    float displacement_energy = clamp(u_bass_energy * 0.65 + u_mid_energy * 0.25 + u_high_energy * 0.10, 0.0, 1.0);
-    float displacement_drive = displacement_strength * mix(0.045, 0.55, displacement_energy);
-
     // Speed slider: controls travel rate. Gated on playback.
     float speed = clamp(u_sine_speed, 0.0, 3.0);
     float play_gate = (u_playing == 1) ? 1.0 : 0.0;
     float effective_speed = speed * play_gate;
+
+    // Displacement strength (multi-line transient shove) — now strongly bass/transient gated
+    float displacement_slider = clamp(u_sine_displacement, 0.0, 1.0);
+    float displacement_curve = pow(displacement_slider, 0.7);
+    float displacement_energy = clamp(u_bass_energy * 1.25 + u_mid_energy * 0.35 + u_high_energy * 0.10, 0.0, 1.0);
+    float displacement_impulse = pow(displacement_energy, mix(1.25, 0.85, displacement_curve));
+    float displacement_drive = displacement_curve * (mix(0.08, 0.45, displacement_curve) + displacement_impulse);
+    displacement_drive = clamp(displacement_drive * max(play_gate, 0.15), 0.0, 1.4);
 
     // Travel phase per line: ONLY non-zero when direction != NONE (0).
     // 1=left (positive phase shift), 2=right (negative phase shift)
@@ -392,8 +395,9 @@ void main() {
     // =====================================================================
     // Energy drives amplitude pulsing. Clamp to 0.48 to stay in card.
     float amp1 = min(base_amplitude * (1.0 + e1 * 0.8), 0.48);
-    vec2 rand_line1 = randomDirection(1, 0.55 + displacement_strength * 0.8);
-    float phase_jitter1 = displacement_drive * TWO_PI * rand_line1.x;
+    vec2 rand_line1 = randomDirection(1, 0.55 + displacement_curve * 1.6 + displacement_impulse * 0.5);
+    float l1_drive = min(1.05, displacement_drive * mix(0.45, 0.95, displacement_curve));
+    float phase_jitter1 = l1_drive * 0.65 * TWO_PI * rand_line1.x;
     float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * TWO_PI + phase_jitter1);
 
     // Wave effect: vocal-led positional y-offset preserving sine shape
@@ -427,7 +431,7 @@ void main() {
         }
     }
 
-    float ny1 = ny + displacement_drive * 0.35 * rand_line1.y;
+    float ny1 = ny + l1_drive * 0.35 * rand_line1.y;
     float crest_dx1;
     float hb1 = heartbeat_bump(nx, sine_freq, phase1, crest_dx1);
     float w1_pre = w1 + mw1 + wfx1 / max(amp1, 0.001);
@@ -446,8 +450,9 @@ void main() {
         float amp2 = min(base_amplitude * (1.0 + e2_band * 0.75), 0.48);
         float lob_phase2 = lob * 0.45 * 0.7;  // X-axis separation — tight to line 1
         float add_shift2 = u_sine_line2_shift * TWO_PI;
-        vec2 rand_line2 = randomDirection(2, 0.85 + displacement_strength * 1.2);
-        float phase_jitter2 = displacement_drive * TWO_PI * 1.35 * rand_line2.x;
+        vec2 rand_line2 = randomDirection(2, 0.85 + displacement_curve * 1.8 + displacement_impulse * 0.7);
+        float l2_drive = min(1.35, displacement_drive * mix(0.75, 1.55, displacement_curve));
+        float phase_jitter2 = l2_drive * TWO_PI * 1.2 * rand_line2.x;
         float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2 + phase_jitter2);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
@@ -482,7 +487,7 @@ void main() {
 
         // Y-axis separation: Line 2 at +70% of vertical shift
         // At v_spacing=0 (VShift=0), ny2 == ny — perfectly aligned with Line 1
-        float ny2 = ny + v_spacing * 0.7 + displacement_drive * 0.5 * rand_line2.y;
+        float ny2 = ny + v_spacing * 0.7 + l2_drive * 0.75 * rand_line2.y;
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
         float crest_dx2;
@@ -506,8 +511,9 @@ void main() {
         float amp3 = min(base_amplitude * (1.0 + e3_band * 0.75), 0.48);
         float lob_phase3 = lob * 0.90;  // X-axis separation — tight to line 1
         float add_shift3 = u_sine_line3_shift * TWO_PI;
-        vec2 rand_line3 = randomDirection(3, 1.0 + displacement_strength * 1.35);
-        float phase_jitter3 = displacement_drive * TWO_PI * 1.65 * rand_line3.x;
+        vec2 rand_line3 = randomDirection(3, 1.0 + displacement_curve * 2.1 + displacement_impulse * 0.9);
+        float l3_drive = min(1.55, displacement_drive * mix(0.95, 1.85, displacement_curve));
+        float phase_jitter3 = l3_drive * TWO_PI * 1.35 * rand_line3.x;
         float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3 + phase_jitter3);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
@@ -542,7 +548,7 @@ void main() {
 
         // Y-axis separation: Line 3 at -100% of vertical shift (opposite direction)
         // At v_spacing=0 (VShift=0), ny3 == ny — perfectly aligned with Line 1
-        float ny3 = ny - v_spacing + displacement_drive * 0.65 * rand_line3.y;
+        float ny3 = ny - v_spacing + l3_drive * 0.9 * rand_line3.y;
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
         float crest_dx3;
