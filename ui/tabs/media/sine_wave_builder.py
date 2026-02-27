@@ -228,7 +228,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     sine_wave_fx_row.addWidget(tab.sine_wave_effect_label)
 
-    # Micro Wobble
+    # Micro Wobble (legacy)
     sine_mw_row = _aligned_row(_normal, "Micro Wobble:")
     tab.sine_micro_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_micro_wobble.setMinimum(0)
@@ -237,7 +237,9 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_micro_wobble.setValue(max(0, min(100, sine_mw_val)))
     tab.sine_micro_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_micro_wobble.setTickInterval(10)
-    tab.sine_micro_wobble.setToolTip("Energy-reactive micro distortions along the line. Small dents/bumps that react to audio without changing core shape. Higher = sharper.")
+    tab.sine_micro_wobble.setToolTip(
+        "Legacy jagged wobble effect (energy-reactive dents). Leave at 0% if using Crawl."
+    )
     tab.sine_micro_wobble.valueChanged.connect(tab._save_settings)
     sine_mw_row.addWidget(tab.sine_micro_wobble)
     tab.sine_micro_wobble_label = QLabel(f"{sine_mw_val}%")
@@ -245,6 +247,26 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_micro_wobble_label.setText(f"{v}%")
     )
     sine_mw_row.addWidget(tab.sine_micro_wobble_label)
+
+    # Crawl (new sine slider)
+    sine_crawl_row = _aligned_row(_normal, "Crawl:")
+    tab.sine_crawl_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_crawl_slider.setMinimum(0)
+    tab.sine_crawl_slider.setMaximum(100)
+    sine_crawl_val = int(tab._default_float('spotify_visualizer', 'sine_crawl_amount', 0.25) * 100)
+    tab.sine_crawl_slider.setValue(max(0, min(100, sine_crawl_val)))
+    tab.sine_crawl_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_crawl_slider.setTickInterval(10)
+    tab.sine_crawl_slider.setToolTip(
+        "Gentle horizontal dents that crawl across the lines in response to vocals. Higher = more visible crawl."
+    )
+    tab.sine_crawl_slider.valueChanged.connect(tab._save_settings)
+    sine_crawl_row.addWidget(tab.sine_crawl_slider)
+    tab.sine_crawl_label = QLabel(f"{sine_crawl_val}%")
+    tab.sine_crawl_slider.valueChanged.connect(
+        lambda v: tab.sine_crawl_label.setText(f"{v}%")
+    )
+    sine_crawl_row.addWidget(tab.sine_crawl_label)
 
     # Width Reaction
     sine_wr_row = _aligned_row(_normal, "Width Reaction:")

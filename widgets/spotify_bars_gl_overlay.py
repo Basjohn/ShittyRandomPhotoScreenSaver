@@ -155,6 +155,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_travel_line3: int = 0
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
+        self._sine_crawl_amount: float = 0.0  # 0.0-1.0, Crawl slider amount
         self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
         self._sine_width_reaction: float = 0.0  # 0.0-1.0, bass-driven line width stretching
         self._sine_density: float = 1.0  # cycles per card multiplier
@@ -374,6 +375,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         sine_travel_line3: int = 0,
         sine_wave_effect: float = 0.0,
         sine_micro_wobble: float = 0.0,
+        sine_crawl_amount: float = 0.0,
         sine_vertical_shift: int = 0,
         sine_line1_shift: float = 0.0,
         sine_line2_shift: float = 0.0,
@@ -616,6 +618,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_travel_line3 = max(0, min(2, int(sine_travel_line3)))
         self._sine_wave_effect = max(0.0, min(1.0, float(sine_wave_effect)))
         self._sine_micro_wobble = max(0.0, min(1.0, float(sine_micro_wobble)))
+        self._sine_crawl_amount = max(0.0, min(1.0, float(sine_crawl_amount)))
         self._sine_vertical_shift = max(-50, min(200, int(sine_vertical_shift)))
         self._sine_line1_shift = max(-1.0, min(1.0, float(sine_line1_shift)))
         self._sine_line2_shift = max(-1.0, min(1.0, float(sine_line2_shift)))
@@ -1099,7 +1102,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_sine_travel",
                     "u_card_adaptation",
                     "u_sine_travel_line2", "u_sine_travel_line3",
-                    "u_wave_effect", "u_micro_wobble", "u_width_reaction",
+                    "u_wave_effect", "u_micro_wobble", "u_crawl_amount", "u_width_reaction",
                     "u_sine_density", "u_sine_displacement",
                     "u_helix_turns", "u_helix_double", "u_helix_speed",
                     "u_helix_glow_enabled", "u_helix_glow_intensity",
@@ -1726,6 +1729,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_micro_wobble", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._sine_micro_wobble))
+                loc = u.get("u_crawl_amount", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._sine_crawl_amount))
                 loc = u.get("u_sine_vertical_shift", -1)
                 if loc >= 0:
                     _gl.glUniform1i(loc, int(self._sine_vertical_shift))

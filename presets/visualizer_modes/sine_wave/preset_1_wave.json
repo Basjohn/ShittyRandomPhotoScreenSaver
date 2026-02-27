@@ -902,7 +902,7 @@
         "sensitivity": 0.4,
         "sine_card_adaptation": 0.05,
         "sine_density": 1.75,
-        "sine_displacement": 0.3,
+        "sine_displacement": 0,
         "sine_glow_color": [
           0,
           107,

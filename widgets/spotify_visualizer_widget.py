@@ -183,7 +183,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_travel_line3: int = 0  # per-line travel for line 3
         self._sine_card_adaptation: float = 0.3  # 0.0-1.0, how much of card height wave uses
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
-        self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
+        self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions (legacy)
+        self._sine_crawl_amount: float = 0.25  # 0.0-1.0, Crawl slider amount
         self._sine_vertical_shift: int = 0  # -50 to 200, line spread amount
         self._sine_width_reaction: float = 0.0  # 0.0-1.0, bass-driven line width stretching
         self._sine_density: float = 1.0
@@ -192,6 +193,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_glow_intensity: float = 0.5
         self._sine_glow_color: QColor = QColor(0, 200, 255, 230)
         self._sine_line_color: QColor = QColor(255, 255, 255, 255)
+        self._sine_line2_color: QColor = QColor(255, 120, 50, 230)
+        self._sine_line2_glow_color: QColor = QColor(255, 120, 50, 180)
+        self._sine_line3_color: QColor = QColor(50, 255, 120, 230)
+        self._sine_line3_glow_color: QColor = QColor(50, 255, 120, 180)
         self._sine_reactive_glow: bool = True
         self._sine_sensitivity: float = 1.0
         self._sine_speed: float = 1.0
@@ -221,6 +226,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._heartbeat_last_ts: float = 0.0    # dedicated tick timestamp for dt_hb
         self._heartbeat_last_log_ts: float = 0.0
         self._heartbeat_last_trigger_ts: float = 0.0
+        self._crawl_last_log_ts: float = 0.0
 
         # Audio latency instrumentation (viz debug)
         self._latency_last_log_ts: float = 0.0
@@ -2119,6 +2125,29 @@ class SpotifyVisualizerWidget(QWidget):
 
                 from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
                 extra = build_gpu_push_extra_kwargs(self, mode_str, self._engine)
+
+                if (
+                    mode_str == 'sine_wave'
+                    and is_viz_diagnostics_enabled()
+                ):
+                    crawl_now = time.time()
+                    if crawl_now - self._crawl_last_log_ts >= 0.75:
+                        eb = extra.get('energy_bands')
+                        mid_val = float(getattr(eb, 'mid', 0.0)) if eb is not None else 0.0
+                        high_val = float(getattr(eb, 'high', 0.0)) if eb is not None else 0.0
+                        crawl_drive = max(0.0, min(1.2, mid_val * 0.65 + high_val * 0.35))
+                        logger.debug(
+                            (
+                                "[SPOTIFY_VIS][SINE][CRAWL] slider=%.2f mid=%.3f "
+                                "high=%.3f drive=%.3f playing=%s"
+                            ),
+                            float(getattr(self, '_sine_crawl_amount', 0.0)),
+                            mid_val,
+                            high_val,
+                            crawl_drive,
+                            self._spotify_playing,
+                        )
+                        self._crawl_last_log_ts = crawl_now
 
                 border_width_px = float(self._border_width)
 

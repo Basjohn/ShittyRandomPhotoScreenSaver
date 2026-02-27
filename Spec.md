@@ -268,6 +268,33 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - `transitions.diffuse.block_size` (int, clamped to a 4–256px range) and `transitions.diffuse.shape` (`Rectangle`|`Membrane`). The same block-size was historically reused by Shuffle to size its GL grid; Shuffle is now retired but the configuration key is kept for back-compat.
 - `transitions.burn.direction` (`Left to Right`|`Right to Left`|`Top to Bottom`|`Bottom to Top`|`Random`; **Center Out removed**), `transitions.burn.jaggedness` (float 0–1), `transitions.burn.glow_intensity` (float 0–1), `transitions.burn.char_width` (float 0–1), `transitions.burn.smoke_enabled` (bool), `transitions.burn.smoke_density` (float 0–1), `transitions.burn.ash_enabled` (bool), `transitions.burn.ash_density` (float 0–1).
 - `transitions.pool`: mapping of transition type name → bool controlling whether a type participates in engine random rotation and C-key cycling (explicit selection is always allowed regardless of this flag).
+- `widgets.spotify_visualizer.preset_<mode>`: per-mode visualizer preset index. Each mode loads curated JSON files from `presets/visualizer_modes/<mode>/` (which now accept both compact `{settings}` blobs and full SST exports) plus drop-in snapshot exports placed directly under `/presets/`. Filenames such as `preset_1_upstream.json` automatically map to index 0 and render as “Preset 1 (Upstream)” — all friendly names follow the `Preset N (Suffix)` convention so UI labels stay consistent regardless of payload `name`. Snapshot files with full settings dumps are filtered down to mode-specific keys (e.g., `sine_`, `blob_`, etc.) plus a small allowlist of shared visualizer fields so incompatible options are ignored instead of erroring. Custom always occupies the last slot, and the number of presets grows automatically if higher-numbered files exist.
+- `widgets.spotify_visualizer.sine_crawl_amount`: normalized (0.0–1.0) Crawl slider for sine mode. Crawl is a vocal-reactive positional drift that adds low-frequency horizontal motion to the fine dents on every sine line. Implementation details:
+  - Energy shaping: playback must report `u_playing > 0.2`, then line 1 uses `0.65*mid + 0.35*high`, line 2 mixes toward `0.55*mid + 0.45*high`, and line 3 leans `0.60*high + 0.40*mid`, each raised to `pow(energy, 0.85)` before scaling by the slider.
+  - Spatial/temporal profile: combines two sin bands per line (1.1–4.2x `nx`) with slow time bases (±0.35–0.8 * `u_time`) and density-aware spacing so Crawl reads as a deliberate ripple crawl instead of Micro Wobble’s sparkly dents.
+  - Multi-line variation: line 2/3 blend the shared crawl foundation (`crawl1`) with phase- and energy-biased drifts so stacked cards do not mirror each other.
+  - Diagnostics: when `SRPSS_VIZ_DIAGNOSTICS` is enabled, `SpotifyVisualizerWidget` emits `[SPOTIFY_VIS][SINE][CRAWL] slider/mid/high/drive/playing` every ~0.75 s so QA can confirm energy gating without recording a capture.
+  - Defaults follow `Defaults_Guide.md` (0.25). UI clamps to 0–100 % with tooltips describing the motion; shader uniform `u_crawl_amount` is uploaded by `SpotifyBarsGLOverlay` each frame and covered by `tests/test_visualizer_overlay_kwargs.py`.
+
+### Visualizer drop-in preset workflow
+
+- Preset loader lives in `core/settings/visualizer_presets.py`; documentation applies to all modes in `MODES = [spectrum, oscilloscope, sine_wave, blob, helix, starfield, bubble]`.
+- File locations:
+  1. **Curated slots** – place JSON under `presets/visualizer_modes/<mode>/`. These override the built-in “Preset N” entries, and the loader now parses both minimal `{settings}` JSON and full SST exports dropped here.
+  2. **Snapshot/drop-in slots** – place exported SST JSON directly under `/presets/`. Loader inspects `snapshot.widgets.spotify_visualizer` and filters relevant keys.
+- Naming/indexing rules:
+  - Filenames such as `preset_3_glow_burst.json` or explicit `{"preset_index": 2}` map to slot index (0-based). Friendly names always render as `Preset N (Suffix)` where the suffix is derived from the filename or payload `name`, so “Sideway Swish” becomes “Preset 3 (Sideway Swish)” without extra metadata.
+  - Slots auto-expand: if any curated or snapshot file targets Preset 5, `_build_presets_for_mode()` inserts placeholder Preset 4 so UI shows Presets 1–5 plus Custom.
+  - `Custom` is always appended last and is never displaced by drop-ins.
+- Allowed keys per mode:
+  - Global allowlist (`GLOBAL_ALLOWED_KEYS`): `adaptive_sensitivity`, `audio_block_size`, `bar_border_color`, `bar_border_opacity`, `bar_count`, `bar_fill_color`, `dynamic_floor`, `dynamic_range_enabled`, `ghost_alpha`, `ghost_decay`, `ghosting_enabled`, `manual_floor`, `mode`, `monitor`, `rainbow_enabled`, `rainbow_per_bar`, `rainbow_speed`, `sensitivity`, `software_visualizer_enabled`.
+  - Mode prefixes (`MODE_KEY_PREFIXES`): Spectrum `spectrum_`, Oscilloscope `osc_`, Sine `sine_`/`sinewave_`, Blob `blob_`, Helix `helix_`, Starfield `star_`/`nebula_`, Bubble `bubble_`. Any keys outside these prefixes/globals are dropped (tests assert this via `tests/test_visualizer_presets.py`).
+- Loading order and overrides:
+  - Curated mode-specific files apply first; snapshot files then override matching indices so testers can drop Preset 8 without touching curated data.
+  - If a snapshot’s `widgets.spotify_visualizer.mode` is set and differs from the currently loading mode, it is ignored to avoid cross-mode leakage.
+  - Empty or invalid JSON emit `[VIS_PRESETS]` warnings but do not break preset loading.
+- UI/Settings wiring:
+  - `widgets.spotify_visualizer.preset_<mode>` stores the selected slot; the settings dialog enumerates whatever count `_build_presets_for_mode()` produced. Friendly names come directly from the preset payload, so adhering to the naming convention ensures the UI shows “Glow Burst” instead of “Preset 5”.
 - `timing.interval`: int seconds (default 45). The Display tab now always loads this canonical 45 s value when the key is missing so UI defaults match `SettingsManager`. Regression test `tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values` guards this.
 - `display.same_image_all_monitors`: bool
 - Cache:

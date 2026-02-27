@@ -67,6 +67,10 @@ uniform float u_wave_effect;
 // Creates small dents/spikes that react to audio without changing core shape
 uniform float u_micro_wobble;
 
+// Crawl: low-frequency horizontal drift of fine dents (0.0-1.0)
+// Applies a gentle, vocal-reactive positional crawl distinct from Micro Wobble
+uniform float u_crawl_amount;
+
 // Vertical shift: -50 to 200, controls line spread.
 // 0 = all lines on same center, 100 = default spread, 200 = max spread
 uniform int u_sine_vertical_shift;
@@ -341,6 +345,9 @@ void main() {
     // Micro wobble amount (energy-reactive snake lines)
     float micro_wob = clamp(u_micro_wobble, 0.0, 1.0);
 
+    // Crawl amount (new slider) — kept separate from micro wobble.
+    float crawl_amt = clamp(u_crawl_amount, 0.0, 1.0);
+
     // Width Reaction: bass-driven line width boost (0 = off, 1 = max)
     float wr = clamp(u_width_reaction, 0.0, 1.0);
     float bass_width = 0.0;
@@ -428,7 +435,22 @@ void main() {
     }
     vec2 rand_line2_base = rand_pair;
     vec2 rand_line3_base = -rand_pair;
-    float w1_pre = w1 + mw1 + wfx1 / amp1_safe;
+    // Crawl effect: slow, low-frequency positional drift applied before eval_line.
+    float crawl1 = 0.0;
+    if (crawl_amt > 0.001 && play_gate > 0.2) {
+        float crawl_energy = clamp(u_mid_energy * 0.65 + u_high_energy * 0.35, 0.0, 1.2);
+        float crawl_drive = pow(crawl_energy, 0.85) * crawl_amt;
+        if (crawl_drive > 0.0005) {
+            float slow_band = sin(nx * 1.5 + u_time * 0.35);
+            float mid_band = sin(nx * 3.2 - u_time * 0.55) * 0.6;
+            float crawl_raw = slow_band * 0.7 + mid_band * 0.3;
+            float spacing = mix(0.18, 0.45, clamp(u_sine_density * 0.2, 0.0, 1.0));
+            float crawl_norm = crawl_raw * crawl_drive * spacing;
+            crawl1 = crawl_norm;
+        }
+    }
+
+    float w1_pre = w1 + mw1 + crawl1 + wfx1 / amp1_safe;
     vec3 line_rgb1;
     vec3 glow_rgb1;
     float line_alpha1;
@@ -501,7 +523,15 @@ void main() {
         float ny2 = ny + v_spacing * 0.7 + y_push2;
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
-        float w2_pre = w2 + mw2 + wfx2 / amp2_safe;
+        float crawl2 = crawl1;
+        if (crawl_amt > 0.001 && play_gate > 0.2) {
+            float crawl_energy2 = clamp(u_mid_energy * 0.55 + u_high_energy * 0.45, 0.0, 1.2);
+            float crawl_drive2 = pow(crawl_energy2, 0.85) * crawl_amt;
+            float local_scale2 = mix(crawl_drive2, crawl_drive2 * 1.35, lob * 0.8);
+            float drift2 = sin(nx * 2.4 + u_time * 0.4) * 0.6 + sin(nx * 4.2 - u_time * 0.7) * 0.4;
+            crawl2 = crawl1 * (1.0 - lob) + (drift2 * local_scale2 * 0.35);
+        }
+        float w2_pre = w2 + mw2 + crawl2 + wfx2 / amp2_safe;
         vec3 line_rgb2;
         vec3 glow_rgb2;
         float line_alpha2;
@@ -576,7 +606,15 @@ void main() {
         float ny3 = ny - v_spacing + y_push3;
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
-        float w3_pre = w3 + mw3 + wfx3 / amp3_safe;
+        float crawl3 = crawl1;
+        if (crawl_amt > 0.001 && play_gate > 0.2) {
+            float crawl_energy3 = clamp(u_high_energy * 0.60 + u_mid_energy * 0.40, 0.0, 1.2);
+            float crawl_drive3 = pow(crawl_energy3, 0.85) * crawl_amt;
+            float local_scale3 = mix(crawl_drive3, crawl_drive3 * 1.5, lob);
+            float drift3 = sin(nx * 1.1 - u_time * 0.6) * 0.55 + sin(nx * 3.6 + u_time * 0.8) * 0.45;
+            crawl3 = crawl1 * (1.0 - lob * 0.5) + (drift3 * local_scale3 * 0.4);
+        }
+        float w3_pre = w3 + mw3 + crawl3 + wfx3 / amp3_safe;
         vec3 line_rgb3;
         vec3 glow_rgb3;
         float line_alpha3;

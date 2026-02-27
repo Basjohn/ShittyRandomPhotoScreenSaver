@@ -891,8 +891,8 @@ class WidgetsTab(QWidget):
             return
 
         # If already on Custom, nothing to switch.
-        from core.settings.visualizer_presets import PRESET_COUNT
-        if slider.preset_index() == PRESET_COUNT - 1:
+        custom_index = slider.custom_index() if hasattr(slider, 'custom_index') else slider.preset_index()
+        if slider.preset_index() == custom_index:
             return
 
         # Check sender is inside the advanced container
@@ -912,7 +912,7 @@ class WidgetsTab(QWidget):
             if not inside_adv:
                 return
 
-        slider.set_preset_index(PRESET_COUNT - 1)
+        slider.set_preset_index(custom_index)
 
     def _update_vis_mode_sections(self) -> None:
         """Show/hide per-mode settings containers based on selected visualizer type."""

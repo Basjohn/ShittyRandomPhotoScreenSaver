@@ -233,6 +233,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
     if 'sine_micro_wobble' in kwargs:
         widget._sine_micro_wobble = max(0.0, min(1.0, float(kwargs['sine_micro_wobble'])))
+    if 'sine_crawl_amount' in kwargs:
+        widget._sine_crawl_amount = max(0.0, min(1.0, float(kwargs['sine_crawl_amount'])))
     if 'sine_width_reaction' in kwargs:
         widget._sine_width_reaction = max(0.0, min(1.0, float(kwargs['sine_width_reaction'])))
     if 'sine_density' in kwargs:
@@ -447,6 +449,7 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['sine_line3_shift'] = getattr(widget, '_sine_line3_shift', 0.0)
     extra['sine_wave_effect'] = widget._sine_wave_effect
     extra['sine_micro_wobble'] = widget._sine_micro_wobble
+    extra['sine_crawl_amount'] = getattr(widget, '_sine_crawl_amount', 0.0)
     extra['sine_width_reaction'] = widget._sine_width_reaction
     extra['sine_vertical_shift'] = widget._sine_vertical_shift
     extra['helix_turns'] = widget._helix_turns

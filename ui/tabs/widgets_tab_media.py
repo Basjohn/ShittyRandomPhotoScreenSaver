@@ -931,10 +931,13 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
                        tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wobble_amount', 0.0)) * 100)
         tab.sine_wave_effect.setValue(max(0, min(100, sine_wfx)))
         tab.sine_wave_effect_label.setText(f"{sine_wfx}%")
-    if hasattr(tab, 'sine_micro_wobble'):
-        sine_mw = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_micro_wobble', 0.0) * 100)
-        tab.sine_micro_wobble.setValue(max(0, min(100, sine_mw)))
-        tab.sine_micro_wobble_label.setText(f"{sine_mw}%")
+    if hasattr(tab, 'sine_crawl_slider'):
+        sine_crawl = int(tab._config_float(
+            'spotify_visualizer', spotify_vis_config, 'sine_crawl_amount',
+            tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_micro_wobble', 0.0)
+        ) * 100)
+        tab.sine_crawl_slider.setValue(max(0, min(100, sine_crawl)))
+        tab.sine_crawl_label.setText(f"{sine_crawl}%")
     if hasattr(tab, 'sine_width_reaction'):
         sine_wr = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_width_reaction', 0.0) * 100)
         tab.sine_width_reaction.setValue(max(0, min(100, sine_wr)))
@@ -1301,6 +1304,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_sensitivity': (tab.sine_sensitivity.value() if hasattr(tab, 'sine_sensitivity') else 100) / 100.0,
         'sine_speed': (tab.sine_speed.value() if hasattr(tab, 'sine_speed') else 100) / 100.0,
         'sine_wave_effect': (tab.sine_wave_effect.value() if hasattr(tab, 'sine_wave_effect') else 0) / 100.0,
+        'sine_crawl_amount': (tab.sine_crawl_slider.value() if hasattr(tab, 'sine_crawl_slider') else 25) / 100.0,
         'sine_micro_wobble': (tab.sine_micro_wobble.value() if hasattr(tab, 'sine_micro_wobble') else 0) / 100.0,
         'sine_width_reaction': (tab.sine_width_reaction.value() if hasattr(tab, 'sine_width_reaction') else 0) / 100.0,
         'sine_density': (tab.sine_density.value() if hasattr(tab, 'sine_density') else 100) / 100.0,

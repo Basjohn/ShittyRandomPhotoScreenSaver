@@ -1,8 +1,8 @@
 """Reusable preset slider for per-visualizer-mode presets.
 
-Provides a compact 4-notch slider (Preset 1, 2, 3, Custom) with a label
-showing the active preset name. When Custom is selected, emits a signal
-so the parent can show the Advanced settings container.
+Provides a compact slider spanning however many named presets a mode
+exposes plus the trailing Custom slot. When Custom is selected, emits a
+signal so the parent can show the Advanced settings container.
 
 Usage:
     slider = VisualizerPresetSlider("spectrum")
@@ -19,7 +19,8 @@ from ui.tabs.shared_styles import NoWheelSlider
 
 from core.logging.logger import get_logger
 from core.settings.visualizer_presets import (
-    PRESET_COUNT,
+    get_custom_preset_index,
+    get_preset_count,
     get_preset_names,
 )
 
@@ -47,6 +48,8 @@ class VisualizerPresetSlider(QWidget):
         self._mode = mode
         self._advanced_container: Optional[QWidget] = None
         self._preset_names = get_preset_names(mode)
+        self._preset_count = get_preset_count(mode)
+        self._custom_index = get_custom_preset_index(mode)
 
         self._build_ui()
 
@@ -69,7 +72,7 @@ class VisualizerPresetSlider(QWidget):
 
         self._slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self._slider.setMinimum(0)
-        self._slider.setMaximum(PRESET_COUNT - 1)
+        self._slider.setMaximum(self._preset_count - 1)
         self._slider.setValue(0)
         self._slider.setTickPosition(QSlider.TickPosition.TicksBelow)
         self._slider.setTickInterval(1)
@@ -127,7 +130,7 @@ class VisualizerPresetSlider(QWidget):
 
     def set_preset_index(self, index: int) -> None:
         """Programmatically set the slider without triggering save."""
-        idx = max(0, min(PRESET_COUNT - 1, index))
+        idx = max(0, min(self._preset_count - 1, index))
         self._slider.blockSignals(True)
         self._slider.setValue(idx)
         self._slider.blockSignals(False)
@@ -141,12 +144,15 @@ class VisualizerPresetSlider(QWidget):
     def mode(self) -> str:
         return self._mode
 
+    def custom_index(self) -> int:
+        return self._custom_index
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
 
     def _on_slider_changed(self, value: int) -> None:
-        idx = max(0, min(PRESET_COUNT - 1, value))
+        idx = max(0, min(self._preset_count - 1, value))
         self._value_label.setText(self._preset_names[idx])
         self._update_advanced_visibility()
         # Guard: tell the parent tab this change came from the preset slider
@@ -155,7 +161,7 @@ class VisualizerPresetSlider(QWidget):
         if tab is not None:
             tab._preset_slider_changing = True
         self.preset_changed.emit(idx)
-        self.advanced_toggled.emit(idx == PRESET_COUNT - 1)
+        self.advanced_toggled.emit(idx == self._custom_index)
         if tab is not None:
             tab._preset_slider_changing = False
 
@@ -173,5 +179,5 @@ class VisualizerPresetSlider(QWidget):
 
     def _update_advanced_visibility(self) -> None:
         if self._advanced_container is not None:
-            is_custom = self._slider.value() == PRESET_COUNT - 1
+            is_custom = self._slider.value() == self._custom_index
             self._advanced_container.setVisible(is_custom)
