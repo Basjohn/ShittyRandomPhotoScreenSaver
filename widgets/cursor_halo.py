@@ -13,7 +13,6 @@ with GL widgets that have their own native window handles.
 Mouse events are forwarded to the parent widget so context menus and clicks
 still work. The mouse cursor is hidden when the halo is visible.
 """
-import math
 import os
 import time
 from typing import Optional
@@ -25,6 +24,7 @@ from PySide6.QtGui import (
     QPaintEvent,
     QPainter,
     QPen,
+    QPolygonF,
     QRadialGradient,
     QWheelEvent,
 )
@@ -51,6 +51,29 @@ INNER_DOT_COLOR = QColor(255, 255, 255, 240)
 OUTER_COLOR = QColor(246, 248, 255, 235)
 OUTLINE_COLOR = QColor(255, 255, 255, 255)
 OUTLINE_WIDTH = 3.5
+
+DEFAULT_HALO_SHAPE = "cursor_light"
+
+POINTER_CANVAS_WIDTH = 106.3
+POINTER_CANVAS_HEIGHT = 141.62
+POINTER_SHADOW_ALPHA = int(255 * 0.6)
+
+# Normalized (0-1) coordinates from the provided SVG paths
+POINTER_SHADOW_POINTS = [
+    (17.13 / POINTER_CANVAS_WIDTH, 8.38 / POINTER_CANVAS_HEIGHT),
+    ((17.13 - 3.06) / POINTER_CANVAS_WIDTH, (8.38 + 129.0) / POINTER_CANVAS_HEIGHT),
+    ((17.13 - 3.29) / POINTER_CANVAS_WIDTH, (8.38 + 133.21) / POINTER_CANVAS_HEIGHT),
+    (57.0 / POINTER_CANVAS_WIDTH, 94.22 / POINTER_CANVAS_HEIGHT),
+    (1.0, 93.0 / POINTER_CANVAS_HEIGHT),
+]
+
+POINTER_MAIN_POINTS = [
+    (5.0 / POINTER_CANVAS_WIDTH, 3.42 / POINTER_CANVAS_HEIGHT),
+    (2.0 / POINTER_CANVAS_WIDTH, 132.45 / POINTER_CANVAS_HEIGHT),
+    ((2.0 - 0.23) / POINTER_CANVAS_WIDTH, (132.45 + 4.21) / POINTER_CANVAS_HEIGHT),
+    ((2.0 - 0.23 + 43.14) / POINTER_CANVAS_WIDTH, (132.45 + 4.21 - 47.4) / POINTER_CANVAS_HEIGHT),
+    ((2.0 - 0.23 + 43.14 + 49.31) / POINTER_CANVAS_WIDTH, (132.45 + 4.21 - 47.4 - 1.18) / POINTER_CANVAS_HEIGHT),
+]
 
 _perf_env = os.getenv("SRPSS_HALO_PERF_MIN_MS")
 try:
@@ -101,7 +124,7 @@ class CursorHaloWidget(QWidget):
         # Match the 2.6 reference footprint (48px * 0.8 scale).
         self.resize(HALO_DIAMETER, HALO_DIAMETER)
         self._opacity = 1.0
-        self._shape: str = "circle"  # circle, ring, crosshair, diamond, dot
+        self._shape: str = DEFAULT_HALO_SHAPE
         self._animation_id: Optional[str] = None
         self._animation_manager = AnimationManager()
         self._is_fading_out = False  # Track fade state to prevent interference
@@ -128,9 +151,17 @@ class CursorHaloWidget(QWidget):
         return float(self._opacity)
 
     def set_shape(self, shape: str) -> None:
-        """Set the halo shape. Valid: circle, ring, crosshair, diamond, dot, cursor_triangle."""
-        valid = {"circle", "ring", "crosshair", "diamond", "dot", "cursor_triangle"}
-        normalized = shape if shape in valid else "circle"
+        """Set the halo shape."""
+        valid = {
+            "circle",
+            "ring",
+            "crosshair",
+            "diamond",
+            "dot",
+            "cursor_light",
+            "cursor_dark",
+        }
+        normalized = shape if shape in valid else DEFAULT_HALO_SHAPE
         if normalized == self._shape:
             return
         self._shape = normalized
@@ -160,8 +191,10 @@ class CursorHaloWidget(QWidget):
             self._paint_diamond(painter, cx, cy, r)
         elif shape == "dot":
             self._paint_dot(painter, cx, cy, inner_radius * 2)
-        elif shape == "cursor_triangle":
-            self._paint_cursor_triangle(painter, cx, cy, r)
+        elif shape == "cursor_light":
+            self._paint_cursor_pointer(painter, cx, cy, r, dark=False)
+        elif shape == "cursor_dark":
+            self._paint_cursor_pointer(painter, cx, cy, r, dark=True)
         else:
             self._paint_circle(painter, cx, cy, r, inner_radius)
         painter.end()
@@ -267,64 +300,55 @@ class CursorHaloWidget(QWidget):
         painter.drawEllipse(cx - radius // 2, cy - radius // 2, radius, radius)
         painter.restore()
 
-    def _paint_cursor_triangle(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
-        """Three elongated arrow-tip triangles merged at center, slightly left-slanted.
+    def _pointer_polygon(
+        self,
+        points: list[tuple[float, float]],
+        left: float,
+        top: float,
+        width: float,
+        height: float,
+    ) -> QPolygonF:
+        poly = QPolygonF()
+        for nx, ny in points:
+            poly.append(QPointF(left + nx * width, top + ny * height))
+        return poly
 
-        Each triangle has a sharp outer tip and a wide inner base meeting at the
-        centre, creating a 3-pointed star.  The whole shape is rotated ~15 degrees
-        counter-clockwise so it reads as a left-leaning cursor.
-        """
-        from PySide6.QtGui import QPolygonF
-        from PySide6.QtCore import QPointF as QPF
+    def _paint_cursor_pointer(
+        self,
+        painter: QPainter,
+        cx: int,
+        cy: int,
+        r: int,
+        *,
+        dark: bool,
+    ) -> None:
+        available_w = self.width() - 8
+        available_h = self.height() - 8
+        scale = min(available_w / POINTER_CANVAS_WIDTH, available_h / POINTER_CANVAS_HEIGHT)
+        width = POINTER_CANVAS_WIDTH * scale
+        height = POINTER_CANVAS_HEIGHT * scale
+        left = cx - width / 2
+        top = cy - height / 2
 
-        half = r / 2.0
-        tip_r = half * 0.95
-        base_r = half * 0.38
-        base_hw = half * 0.28
+        shadow_poly = self._pointer_polygon(POINTER_SHADOW_POINTS, left, top, width, height)
+        painter.save()
+        shadow_color = QColor(0, 0, 0, POINTER_SHADOW_ALPHA)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(shadow_color)
+        painter.drawPolygon(shadow_poly)
+        painter.restore()
 
-        def rot(angle_deg: float) -> tuple[float, float]:
-            angle = math.radians(angle_deg)
-            return math.cos(angle), math.sin(angle)
-
-        arm_angles = [135.0, 255.0, 15.0]
-        points: list[QPF] = []
-        for angle in arm_angles:
-            tx, ty = rot(angle)
-            tip = QPF(cx + tx * tip_r, cy - ty * tip_r)
-
-            perp_l = angle + 90.0
-            perp_r = angle - 90.0
-            lx, ly = rot(perp_l)
-            rx, ry = rot(perp_r)
-            back_x, back_y = rot(angle + 180.0)
-            base_cx = cx + back_x * base_r
-            base_cy = cy - back_y * base_r
-            base_left = QPF(base_cx + lx * base_hw, base_cy - ly * base_hw)
-            base_right = QPF(base_cx + rx * base_hw, base_cy - ry * base_hw)
-
-            points += [tip, base_left, base_right]
-
-        outline = [
-            points[0],
-            points[2],
-            points[4],
-            points[3],
-            points[5],
-            points[7],
-            points[6],
-            points[8],
-            points[1],
-        ]
-
-        pen = painter.pen()
-        pen.setWidth(2)
-        for color in (SHADOW_COLOR, PRIMARY_COLOR):
-            offset = 2 if color == SHADOW_COLOR else 0
-            shifted = QPolygonF([QPF(pt.x() + offset, pt.y() + offset) for pt in outline])
-            pen.setColor(color)
-            painter.setPen(pen)
-            painter.setBrush(color)
-            painter.drawPolygon(shifted)
+        main_poly = self._pointer_polygon(POINTER_MAIN_POINTS, left, top, width, height)
+        painter.save()
+        fill_color = QColor(252, 252, 252) if not dark else QColor(0, 0, 0)
+        stroke_color = QColor(0, 0, 0) if not dark else QColor(252, 252, 252)
+        painter.setBrush(fill_color)
+        pen = QPen(stroke_color)
+        pen.setWidthF(max(1.0, scale * 3.0))
+        pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+        painter.setPen(pen)
+        painter.drawPolygon(main_poly)
+        painter.restore()
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         """Forward mouse press to parent widget."""
@@ -574,15 +598,18 @@ class CursorHaloWidget(QWidget):
     def _shape_anchor_offset(self) -> QPointF:
         width = max(1, self.width())
         height = max(1, self.height())
-        if self._shape != "cursor_triangle":
+        if self._shape not in {"cursor_light", "cursor_dark"}:
             return QPointF(0.0, 0.0)
 
-        r = min(width, height) - 8
-        half = r / 2.0
-        tip_r = half * 0.95
-        tx = math.cos(math.radians(135.0)) * tip_r
-        ty = -math.sin(math.radians(135.0)) * tip_r
-        return QPointF(tx, ty)
+        available_w = max(1.0, float(width) - 8.0)
+        available_h = max(1.0, float(height) - 8.0)
+        scale = min(available_w / POINTER_CANVAS_WIDTH, available_h / POINTER_CANVAS_HEIGHT)
+        width_px = POINTER_CANVAS_WIDTH * scale
+        height_px = POINTER_CANVAS_HEIGHT * scale
+        tip_nx, tip_ny = POINTER_MAIN_POINTS[0]
+        offset_x = (tip_nx - 0.5) * width_px
+        offset_y = (tip_ny - 0.5) * height_px
+        return QPointF(offset_x, offset_y)
 
     def _move_internal(self, x: int, y: int) -> None:
         size = self.size()

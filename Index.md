@@ -232,7 +232,7 @@ endering/gl_programs/blockflip_program.py | BlockFlipProgram | Block Puzzle Flip
 | Shadow Utils | widgets/shadow_utils.py | ShadowRenderer, ShadowFadeProfile | Drop shadow rendering |
 | Overlay Timers | widgets/overlay_timers.py | create_overlay_timer() | ThreadManager timer helper |
 | Context Menu | widgets/context_menu.py | ScreensaverContextMenu | Right-click menu |
-| Cursor Halo | widgets/cursor_halo.py | CursorHaloWidget | Ctrl-held indicator; 6 shapes (circle/ring/crosshair/diamond/dot/cursor_triangle); cursor_triangle primary point faces top-left (135°); `_halo_forwarding` guard prevents jitter feedback loop |
+| Cursor Halo | widgets/cursor_halo.py | CursorHaloWidget | Ctrl-held indicator; 8 shapes (circle/ring/crosshair/diamond/dot/cursor_triangle/cursor_light/cursor_dark); cursor_triangle primary point faces top-left (135°); `_halo_forwarding` guard prevents jitter feedback loop |
 | Pixel Shift | widgets/pixel_shift_manager.py | PixelShiftManager | Burn-in prevention |
 
 ### Widget Implementations

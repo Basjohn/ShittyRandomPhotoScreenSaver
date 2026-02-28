@@ -237,7 +237,17 @@ class DisplayTab(QWidget):
         # Cursor Halo Shape
         halo_row = _aligned_row(input_layout, "Cursor Halo Shape:")
         self.halo_shape_combo = QComboBox()
-        self.halo_shape_combo.addItems(["Circle", "Ring", "Crosshair", "Diamond", "Dot", "Cursor Triangle"])
+        self.halo_shape_combo.addItems(
+            [
+                "Circle",
+                "Ring",
+                "Crosshair",
+                "Diamond",
+                "Dot",
+                "Cursor Pointer (Light)",
+                "Cursor Pointer (Dark)",
+            ]
+        )
         self.halo_shape_combo.setToolTip("Visual shape of the cursor halo in Hard Exit / Ctrl-click mode.")
         self.halo_shape_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.halo_shape_combo.currentIndexChanged.connect(self._save_settings)
@@ -356,7 +366,15 @@ class DisplayTab(QWidget):
 
             # Cursor Halo Shape
             halo_shape = str(self._settings.get('input.halo_shape', 'circle')).lower()
-            shape_map = {'circle': 0, 'ring': 1, 'crosshair': 2, 'diamond': 3, 'dot': 4, 'cursor_triangle': 5}
+            shape_map = {
+                'circle': 0,
+                'ring': 1,
+                'crosshair': 2,
+                'diamond': 3,
+                'dot': 4,
+                'cursor_light': 5,
+                'cursor_dark': 6,
+            }
             self.halo_shape_combo.blockSignals(True)
             self.halo_shape_combo.setCurrentIndex(shape_map.get(halo_shape, 0))
             self.halo_shape_combo.blockSignals(False)
@@ -429,7 +447,15 @@ class DisplayTab(QWidget):
         self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())
 
         # Cursor Halo Shape
-        shape_names = ['circle', 'ring', 'crosshair', 'diamond', 'dot', 'cursor_triangle']
+        shape_names = [
+            'circle',
+            'ring',
+            'crosshair',
+            'diamond',
+            'dot',
+            'cursor_light',
+            'cursor_dark',
+        ]
         halo_idx = self.halo_shape_combo.currentIndex()
         self._settings.set('input.halo_shape', shape_names[halo_idx] if 0 <= halo_idx < len(shape_names) else 'circle')
 

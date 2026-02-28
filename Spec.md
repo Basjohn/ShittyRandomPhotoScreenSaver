@@ -258,6 +258,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - `display.use_lanczos`: bool - Use Lanczos resampling for image scaling (higher quality, slightly more CPU intensive)
 - `display.sharpen_downscale`: bool - Apply sharpening when downscaling images
 - `input.hard_exit`: bool (when true, mouse movement/clicks do not exit; only ESC/Q and hotkeys remain active). Additionally, while the Ctrl key is held, `DisplayWidget` temporarily suppresses mouse-move and left-click exit even when `input.hard_exit` is false, allowing interaction with widgets without persisting a hard-exit setting change. MC builds default this setting to true at startup in their own QSettings profile, while the normal screensaver build respects the saved value.
+- `input.halo_shape`: str - Cursor halo shape: circle, ring, crosshair, diamond, dot, cursor_light (light pointer), cursor_dark (dark pointer). Default is cursor_light.
 - `transitions.type`: Crossfade|Slide|Wipe|Diffuse|Block Puzzle Flip|Blinds|Peel|"3D Block Spins"|"Ripple"|"Warp Dissolve"|Crumble|Particle|Burn (legacy `Shuffle` values are mapped to `Crossfade` for back-compat and are no longer exposed in the UI)
 - `transitions.random_always`: bool
 - `transitions.random_choice`: str (current random pick for this rotation; cleared on manual type changes)
