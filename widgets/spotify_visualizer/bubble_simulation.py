@@ -13,10 +13,15 @@ from __future__ import annotations
 
 import math
 import random
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from core.logging.logger import get_logger, is_verbose_logging
+from core.logging.logger import (
+    get_logger,
+    is_verbose_logging,
+    is_viz_diagnostics_enabled,
+)
 
 logger = get_logger(__name__)
 
@@ -130,6 +135,11 @@ class BubbleSimulation:
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
         self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
+        self._overdrive_active: bool = False
+        self._overdrive_hold_timer: float = 0.0
+        self._overdrive_consec_frames: int = 0
+        self._overdrive_last_log_state: Optional[str] = None
+        self._overdrive_last_log_ts: float = 0.0
 
     @property
     def count(self) -> int:
@@ -209,7 +219,11 @@ class BubbleSimulation:
         speed_energy = min(1.0, self._smoothed_speed_energy)
         cap = max(0.1, stream_cap)
         baseline = max(0.05, min(cap, stream_const))
-        reactivity = max(0.0, min(1.0, stream_reactivity))
+        reactivity_cap = 1.25
+        reactivity_raw = max(0.0, min(reactivity_cap, stream_reactivity))
+        overdrive_margin = max(0.0, reactivity_raw - 1.0)
+        overdrive_norm = overdrive_margin / (reactivity_cap - 1.0) if reactivity_cap > 1.0 else 0.0
+        reactivity = min(1.0, reactivity_raw)
 
         if speed_energy <= 0.0:
             energy_gate = 0.0
@@ -235,6 +249,44 @@ class BubbleSimulation:
 
         energy_scale = 0.10 + 0.82 * energy_curve
         effective_speed = speed_scale * energy_scale
+
+        # --- Overdrive band (reactivity slider 101-125%) ---
+        overdrive_threshold_gate = 0.12
+        if overdrive_margin <= 0.0:
+            if self._overdrive_active:
+                self._log_overdrive_state("release", reactivity_raw, energy_gate)
+            self._overdrive_active = False
+            self._overdrive_hold_timer = 0.0
+            self._overdrive_consec_frames = 0
+        else:
+            if energy_gate >= overdrive_threshold_gate:
+                self._overdrive_consec_frames += 1
+            else:
+                if not self._overdrive_active:
+                    self._overdrive_consec_frames = 0
+            if (not self._overdrive_active) and self._overdrive_consec_frames >= 3:
+                self._overdrive_active = True
+                self._overdrive_hold_timer = 0.5
+                self._log_overdrive_state("enter", reactivity_raw, energy_gate)
+
+            if self._overdrive_active:
+                if energy_gate >= overdrive_threshold_gate:
+                    self._overdrive_hold_timer = 0.5
+                else:
+                    self._overdrive_hold_timer = max(0.0, self._overdrive_hold_timer - dt)
+                    if self._overdrive_hold_timer <= 0.0:
+                        self._overdrive_active = False
+                        self._overdrive_consec_frames = 0
+                        self._log_overdrive_state("release", reactivity_raw, energy_gate)
+
+        if self._overdrive_active:
+            overdrive_boost = 0.10 + 0.30 * overdrive_norm
+            effective_speed = min(cap, effective_speed * (1.0 + overdrive_boost))
+            if is_viz_diagnostics_enabled():
+                now = time.time()
+                if now - self._overdrive_last_log_ts >= 0.5:
+                    self._log_overdrive_state("hold", reactivity_raw, energy_gate)
+                    self._overdrive_last_log_ts = now
         base_vel = effective_speed * 0.35  # normalised units/sec
 
         # --- Update existing bubbles ---
@@ -472,6 +524,19 @@ class BubbleSimulation:
             b.trail_tail_x = b.x
             b.trail_tail_y = b.y
             b.trail_ready = False
+
+    def _log_overdrive_state(self, state: str, slider: float, gate: float) -> None:
+        if not is_viz_diagnostics_enabled():
+            return
+        if state != "hold" and state == self._overdrive_last_log_state:
+            return
+        logger.debug(
+            "[SPOTIFY_VIS][BUBBLE][OVERDRIVE] state=%s react=%.2f gate=%.2f",
+            state,
+            slider,
+            gate,
+        )
+        self._overdrive_last_log_state = state
 
     def _update_trail_smear(self, b: BubbleState, dt: float,
                              move_dx: float, move_dy: float) -> None:

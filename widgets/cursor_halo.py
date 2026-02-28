@@ -14,9 +14,11 @@ Mouse events are forwarded to the parent widget so context menus and clicks
 still work. The mouse cursor is hidden when the halo is visible.
 """
 import math
+import os
+import time
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPointF, QRectF
+from PySide6.QtCore import Qt, QPointF, QRectF, QElapsedTimer
 from PySide6.QtGui import (
     QColor,
     QMouseEvent,
@@ -31,10 +33,11 @@ from shiboken6 import Shiboken
 
 from core.animation.animator import AnimationManager
 from core.animation.types import EasingCurve
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from rendering.multi_monitor_coordinator import get_coordinator
 
 logger = get_logger(__name__)
+PERF_METRICS_ENABLED = is_perf_metrics_enabled()
 
 
 HALO_BASE_DIAMETER = 48
@@ -48,6 +51,21 @@ INNER_DOT_COLOR = QColor(255, 255, 255, 240)
 OUTER_COLOR = QColor(246, 248, 255, 235)
 OUTLINE_COLOR = QColor(255, 255, 255, 255)
 OUTLINE_WIDTH = 3.5
+
+_perf_env = os.getenv("SRPSS_HALO_PERF_MIN_MS")
+try:
+    HALO_PERF_LOG_MIN_MS = max(0.01, float(_perf_env)) if _perf_env else 0.25
+except (TypeError, ValueError):
+    HALO_PERF_LOG_MIN_MS = 0.25
+
+
+def _scaled_shadow_color(scale: float = 1.0) -> QColor:
+    color = QColor(SHADOW_COLOR)
+    try:
+        color.setAlpha(min(255, int(round(color.alpha() * max(0.1, scale)))))
+    except Exception:
+        pass
+    return color
 
 
 class CursorHaloWidget(QWidget):
@@ -87,6 +105,8 @@ class CursorHaloWidget(QWidget):
         self._animation_id: Optional[str] = None
         self._animation_manager = AnimationManager()
         self._is_fading_out = False  # Track fade state to prevent interference
+        self._last_perf_log_ts: float = 0.0
+        self._perf_log_threshold_ms: float = HALO_PERF_LOG_MIN_MS
 
     def set_parent_widget(self, parent: QWidget) -> None:
         """Refresh the parent widget reference after display rebuilds."""
@@ -110,11 +130,19 @@ class CursorHaloWidget(QWidget):
     def set_shape(self, shape: str) -> None:
         """Set the halo shape. Valid: circle, ring, crosshair, diamond, dot, cursor_triangle."""
         valid = {"circle", "ring", "crosshair", "diamond", "dot", "cursor_triangle"}
-        self._shape = shape if shape in valid else "circle"
+        normalized = shape if shape in valid else "circle"
+        if normalized == self._shape:
+            return
+        self._shape = normalized
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         """Paint the halo in the configured shape with drop shadow."""
+        perf_timer: Optional[QElapsedTimer] = None
+        if PERF_METRICS_ENABLED:
+            perf_timer = QElapsedTimer()
+            perf_timer.start()
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
@@ -138,11 +166,25 @@ class CursorHaloWidget(QWidget):
             self._paint_circle(painter, cx, cy, r, inner_radius)
         painter.end()
 
+        if perf_timer is not None and perf_timer.isValid():
+            elapsed_ms = perf_timer.nsecsElapsed() / 1_000_000.0
+            now = time.monotonic()
+            threshold = max(0.01, getattr(self, "_perf_log_threshold_ms", HALO_PERF_LOG_MIN_MS))
+            if elapsed_ms >= threshold and (now - self._last_perf_log_ts) >= 1.0:
+                self._last_perf_log_ts = now
+                logger.info(
+                    "[CURSOR_HALO][PERF] paint shape=%s %.3fms size=%dx%d",
+                    self._shape,
+                    elapsed_ms,
+                    self.width(),
+                    self.height(),
+                )
+
     def _paint_circle(self, painter: QPainter, cx: int, cy: int, r: int, inner_r: int) -> None:
         """Default circle: ring + center dot."""
         self._paint_shadow_ring(painter, cx, cy, r)
         pen = painter.pen()
-        pen.setWidth(3)
+        pen.setWidth(5)
         pen.setColor(PRIMARY_COLOR)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
@@ -191,7 +233,7 @@ class CursorHaloWidget(QWidget):
         half = r // 2
         points = [QPF(cx, cy - half), QPF(cx + half, cy), QPF(cx, cy + half), QPF(cx - half, cy)]
         pen = painter.pen()
-        pen.setWidthF(max(1.0, pen.widthF()) + 0.5)
+        pen.setWidthF(max(1.0, pen.widthF()) + 1.5)
         for color in (SHADOW_COLOR, PRIMARY_COLOR):
             offset = 2 if color == SHADOW_COLOR else 0
             shifted = QPolygonF([QPF(pt.x() + offset, pt.y() + offset) for pt in points])
@@ -203,13 +245,27 @@ class CursorHaloWidget(QWidget):
         self._paint_center_indicator(painter, cx, cy)
 
     def _paint_dot(self, painter: QPainter, cx: int, cy: int, diameter: int) -> None:
-        radius = max(4, diameter)
+        radius = max(4, int(round(diameter * 1.2)))
+        shadow_radius = float(radius) * 1.35
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        shadow = QRadialGradient(QPointF(cx + 2, cy + 2), shadow_radius)
+        shadow.setColorAt(0.0, QColor(0, 0, 0, 0))
+        shadow.setColorAt(1.0, _scaled_shadow_color(1.8))
+        painter.setBrush(shadow)
+        painter.drawEllipse(
+            cx - int(shadow_radius // 2) + 1,
+            cy - int(shadow_radius // 2) + 1,
+            int(shadow_radius),
+            int(shadow_radius),
+        )
+
         gradient = QRadialGradient(QPointF(cx, cy), float(radius))
         gradient.setColorAt(0.0, PRIMARY_COLOR)
         gradient.setColorAt(1.0, ACCENT_COLOR)
         painter.setBrush(gradient)
-        painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(cx - radius // 2, cy - radius // 2, radius, radius)
+        painter.restore()
 
     def _paint_cursor_triangle(self, painter: QPainter, cx: int, cy: int, r: int) -> None:
         """Three elongated arrow-tip triangles merged at center, slightly left-slanted.

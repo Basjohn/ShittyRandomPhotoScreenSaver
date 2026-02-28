@@ -22,6 +22,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+HALO_MOVE_THRESHOLD_DEFAULT = 1.25  # px, prevent redundant window moves
+
+
 def ensure_ctrl_cursor_hint(widget) -> None:
     """Create the cursor halo widget if it doesn't exist."""
     if widget._ctrl_cursor_hint is not None:
@@ -93,10 +96,29 @@ def show_ctrl_cursor_hint(widget, pos, mode: str = "none") -> None:
         if context_menu_active:
             hide_ctrl_cursor_hint(widget, immediate=True)
             return
-        widget._halo_last_local_pos = QPoint(local_point)
-        widget._last_halo_activity_ts = time.monotonic()
-        reset_halo_inactivity_timer(widget, )
-        hint.move_to(local_point.x(), local_point.y())
+
+        now = time.monotonic()
+        widget._last_halo_activity_ts = now
+
+        halo_hidden = not hint.isVisible()
+        should_move = mode != "none" or halo_hidden
+        if not should_move:
+            last_point = getattr(widget, "_halo_last_local_pos", None)
+            if last_point is None:
+                should_move = True
+            else:
+                threshold = float(
+                    max(0.1, getattr(widget, "_halo_move_threshold_px", HALO_MOVE_THRESHOLD_DEFAULT))
+                )
+                dx = abs(local_point.x() - last_point.x())
+                dy = abs(local_point.y() - last_point.y())
+                should_move = dx >= threshold or dy >= threshold
+
+        if should_move:
+            widget._halo_last_local_pos = QPoint(local_point)
+            hint.move_to(local_point.x(), local_point.y())
+
+        reset_halo_inactivity_timer(widget)
     else:
         cancel_halo_inactivity_timer(widget, )
 

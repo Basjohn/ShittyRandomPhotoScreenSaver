@@ -931,10 +931,15 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
                        tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wobble_amount', 0.0)) * 100)
         tab.sine_wave_effect.setValue(max(0, min(100, sine_wfx)))
         tab.sine_wave_effect_label.setText(f"{sine_wfx}%")
+    if hasattr(tab, 'sine_micro_wobble'):
+        sine_mw_default = tab._default_float('spotify_visualizer', 'sine_micro_wobble', 0.0)
+        sine_mw = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_micro_wobble', sine_mw_default) * 100)
+        tab.sine_micro_wobble.setValue(max(0, min(100, sine_mw)))
+        tab.sine_micro_wobble_label.setText(f"{sine_mw}%")
     if hasattr(tab, 'sine_crawl_slider'):
+        sine_crawl_default = tab._default_float('spotify_visualizer', 'sine_crawl_amount', 0.25)
         sine_crawl = int(tab._config_float(
-            'spotify_visualizer', spotify_vis_config, 'sine_crawl_amount',
-            tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_micro_wobble', 0.0)
+            'spotify_visualizer', spotify_vis_config, 'sine_crawl_amount', sine_crawl_default
         ) * 100)
         tab.sine_crawl_slider.setValue(max(0, min(100, sine_crawl)))
         tab.sine_crawl_label.setText(f"{sine_crawl}%")
@@ -1034,9 +1039,8 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.sine_heartbeat.setValue(0)
         tab.sine_heartbeat_label.setText("Disabled")
     if hasattr(tab, 'sine_displacement'):
-        sdisp = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_displacement', 0.0) * 100)
-        tab.sine_displacement.setValue(max(0, min(100, sdisp)))
-        tab.sine_displacement_label.setText(f"{sdisp}%")
+        tab.sine_displacement.setValue(0)
+        tab.sine_displacement_label.setText("Disabled")
 
     # Oscilloscope ghost trail
     if hasattr(tab, 'osc_ghost_enabled'):
@@ -1082,7 +1086,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_stream_speed_cap_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_stream_reactivity'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_reactivity', 0.5) * 100)
-        tab.bubble_stream_reactivity.setValue(max(0, min(100, v)))
+        tab.bubble_stream_reactivity.setValue(max(0, min(125, v)))
         tab.bubble_stream_reactivity_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_rotation_amount'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_rotation_amount', 0.5) * 100)
@@ -1309,7 +1313,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_width_reaction': (tab.sine_width_reaction.value() if hasattr(tab, 'sine_width_reaction') else 0) / 100.0,
         'sine_density': (tab.sine_density.value() if hasattr(tab, 'sine_density') else 100) / 100.0,
         'sine_heartbeat': 0.0,
-        'sine_displacement': (tab.sine_displacement.value() if hasattr(tab, 'sine_displacement') else 0) / 100.0,
+        'sine_displacement': 0.0,
         'sine_vertical_shift': tab.sine_vertical_shift.value() if hasattr(tab, 'sine_vertical_shift') else 0,
         'sine_line1_shift': (tab.sine_line1_shift.value() if hasattr(tab, 'sine_line1_shift') else 0) / 100.0,
         'sine_wave_travel': tab.sine_travel.currentIndex() if hasattr(tab, 'sine_travel') else 0,

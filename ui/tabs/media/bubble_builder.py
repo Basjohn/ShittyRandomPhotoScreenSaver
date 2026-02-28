@@ -186,7 +186,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     stream_react_row = _aligned_row(_adv_layout, "Speed Reactivity:")
     tab.bubble_stream_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_reactivity.setMinimum(0)
-    tab.bubble_stream_reactivity.setMaximum(100)
+    tab.bubble_stream_reactivity.setMaximum(125)
     val = int(tab._default_float('spotify_visualizer', 'bubble_stream_reactivity', 0.5) * 100)
     tab.bubble_stream_reactivity.setValue(val)
     tab.bubble_stream_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)

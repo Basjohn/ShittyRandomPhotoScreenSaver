@@ -269,6 +269,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - `transitions.burn.direction` (`Left to Right`|`Right to Left`|`Top to Bottom`|`Bottom to Top`|`Random`; **Center Out removed**), `transitions.burn.jaggedness` (float 0–1), `transitions.burn.glow_intensity` (float 0–1), `transitions.burn.char_width` (float 0–1), `transitions.burn.smoke_enabled` (bool), `transitions.burn.smoke_density` (float 0–1), `transitions.burn.ash_enabled` (bool), `transitions.burn.ash_density` (float 0–1).
 - `transitions.pool`: mapping of transition type name → bool controlling whether a type participates in engine random rotation and C-key cycling (explicit selection is always allowed regardless of this flag).
 - `widgets.spotify_visualizer.preset_<mode>`: per-mode visualizer preset index. Each mode loads curated JSON files from `presets/visualizer_modes/<mode>/` (which now accept both compact `{settings}` blobs and full SST exports) plus drop-in snapshot exports placed directly under `/presets/`. Filenames such as `preset_1_upstream.json` automatically map to index 0 and render as “Preset 1 (Upstream)” — all friendly names follow the `Preset N (Suffix)` convention so UI labels stay consistent regardless of payload `name`. Snapshot files with full settings dumps are filtered down to mode-specific keys (e.g., `sine_`, `blob_`, etc.) plus a small allowlist of shared visualizer fields so incompatible options are ignored instead of erroring. Custom always occupies the last slot, and the number of presets grows automatically if higher-numbered files exist.
+- `widgets.spotify_visualizer.bubble_stream_reactivity`: slider controlling how aggressively the Bubble stream speed follows smoothed mid/high energy. UI now clamps to **0–125 %** (default 50 %). Values above 101 % enter an “overdrive” band that: (a) requires three consecutive frames over 101 % before engaging, (b) holds the boosted speed for 0.5 s before releasing even if energy dips, and (c) slowly bleeds back toward baseline unless energy stays above 101 %. Diagnostics emit `[SPOTIFY_VIS][BUBBLE][OVERDRIVE] state=enter/hold/release react=%.2f gate=%.2f` when `SRPSS_VIZ_DIAGNOSTICS=1`.
 - `widgets.spotify_visualizer.sine_crawl_amount`: normalized (0.0–1.0) Crawl slider for sine mode. Crawl is a vocal-reactive positional drift that adds low-frequency horizontal motion to the fine dents on every sine line. Implementation details:
   - Energy shaping: playback must report `u_playing > 0.2`, then line 1 uses `0.65*mid + 0.35*high`, line 2 mixes toward `0.55*mid + 0.45*high`, and line 3 leans `0.60*high + 0.40*mid`, each raised to `pow(energy, 0.85)` before scaling by the slider.
   - Spatial/temporal profile: combines two sin bands per line (1.1–4.2x `nx`) with slow time bases (±0.35–0.8 * `u_time`) and density-aware spacing so Crawl reads as a deliberate ripple crawl instead of Micro Wobble’s sparkly dents.
@@ -416,6 +417,8 @@ widget behaviour; this Spec only summarises the high-level contract.
 
 ### Spotify Visualizer lifecycle & debugging checklist
 
+Full cross-mode reset expectations now live in `Docs/Visualizer_Reset_Matrix.md`; treat that matrix as the canonical source for which subsystems (widget, beat engine, overlay, diagnostics) must reset together before/after mode switches or GL recovery. The checklist below focuses on runtime debugging once those contracts are satisfied.
+
 When the Spotify Beat Visualizer misbehaves (no fade, flat bars, or popping),
 debug in this order:
 
@@ -465,14 +468,11 @@ debug in this order:
 - **Per-stage release sliders (400–2000 ms):** `blob_stage2_release_ms` and `blob_stage3_release_ms` drive both hold timers and release τ values inside `SpotifyBarsGLOverlay`. Higher values extend the decay time after a stage bucket is reached, preventing instant drops when energy briefly dips. Defaults/plumbing follow the same path as Stage Bias; settings remain active even when the Advanced section is collapsed.
 - Shader behaviour: Stage Gain multiplies the amplitude of four weighted energy stages (silence, soft bed, groove, chorus) computed by `compute_stage_offset`. Core Scale applies a uniform multiplier to the staged offset so presets can shrink or expand the entire core without touching Blob Size. Stage Bias shifts the `smoothstep` thresholds symmetrically before clamping. Stage Gain = 0 is an exact no-op.
 
-#### Sine heartbeat detector (Feb 2026)
+#### Sine heartbeat detector (RETired Feb 28 2026)
 
-- Strictly mode-scoped: `_sine_heartbeat` plumbing never touches shared shaders/math for other visualizers.
-- CPU detector now tracks three bass envelopes — fast (~80 ms), average (~600 ms), and floor (~1.4 s) — plus per-frame slope. These values feed a `transient_score = max(norm_delta, floor_ratio * 0.9) + slope_ratio * 0.35` calculation so hits keep firing even after the first burst.
-- Dynamic gate: `base_gate` (slider), `intensity_gate` (current `_heartbeat_intensity`), and `relax_gate` (energy mix) combine into `dynamic_gate = max(0.12, base_gate * intensity_gate * relax_gate)`. Cooldown (≥80 ms) prevents chatter while allowing sustained pulses.
-- On trigger, `_heartbeat_intensity` is raised by `punch = clamp(0.28 + transient_score * 0.45 + energy_mix * 0.30, 0.0, 1.2)` and decays over ~300 ms. Only the sine shader consumes `u_heartbeat` / `u_heartbeat_intensity`, so crest-only spikes in `sine_wave.frag` stay isolated from oscilloscope/spectrum/etc.
-- Diagnostics: `[SPOTIFY_VIS][BLOB][DIAG]`/`[SPOTIFY_VIS][BLOB][STAGE]` lines now emit `stage_gain`, `core_scale`, `stage_bias`, `stage2_release_ms`, `stage3_release_ms`, energies, and the clamped radius min/max, driven by the same helper used in the shader/overlay to keep CPU+GPU parity.
-- Regression coverage: `tests/test_blob_intensity_reserve.py` imports `compute_blob_radius_preview` and verifies Stage Gain/Core Scale linearity plus monotonic stage thresholds. Any shader edits must keep the Python helper + tests in sync; when Stage Bias defaults change, update the test fixtures accordingly.
+- Heartbeat plumbing remains in settings JSON for forward/backward compatibility, but both the shader helper and UI now hard-return neutral values. `heartbeat_amp_params()` always yields `(1.0, 0.48)` so no amplitude modulation can leak through even if stale configs still contain non-zero sliders.
+- UI keeps the disabled slider row (labelled "Disabled") to document the retirement and prevent users from assuming a missing control is a bug.
+- If the feature returns in the future, restore the CPU detector/diagnostics described in the previous revision of this section and re-document the gating logic.
 
 ## Banding & Pixmap Seeding
 - `DisplayWidget.show_on_screen` grabs a per-monitor wallpaper snapshot via `screen.grabWindow(0)` and seeds `current_pixmap`, `_seed_pixmap`, and `previous_pixmap` before GL prewarm runs. This prevents a wallpaper→black flash during startup even while overlays are initializing.

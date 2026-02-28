@@ -13,8 +13,8 @@
     "sine_travel_line2": 2,
     "sine_travel_line3": 2,
     "sine_speed": 0.1,
-    "sine_sensitivity": 0.7,
-    "sine_micro_wobble": 0.2,
+    "sine_sensitivity": 0.8,
+    "sine_micro_wobble": 0.4,
     "sine_width_reaction": 0.6,
     "sine_line_offset_bias": 0.0,
     "sine_card_adaptation": 0.05,
@@ -29,7 +29,8 @@
     "sine_line3_glow_color": [53, 130, 255, 180],
     "sine_reactive_glow": true,
     "sine_line_dim": false,
-    "sine_heartbeat": 0.1,
+    "sine_heartbeat": 0,
+    "sine_displacement": 0,
     "rainbow_enabled": false,
     "rainbow_speed": 0.4
   }

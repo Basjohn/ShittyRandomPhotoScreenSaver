@@ -12,7 +12,7 @@
   "settings_version": 2,
   "snapshot": {
     "accessibility": {
-      "dimming.enabled": false,
+      "dimming.enabled": true,
       "dimming.opacity": 50,
       "pixel_shift.enabled": false,
       "pixel_shift.rate": 4
@@ -373,7 +373,7 @@
         "Wipe": 4000
       },
       "easing": "Auto",
-      "last_random_choice": "Wipe",
+      "last_random_choice": "Warp Dissolve",
       "particle": {
         "direction": "Left to Right",
         "gloss_size": 72.0,
@@ -409,7 +409,7 @@
         "Wipe": true
       },
       "random_always": true,
-      "random_choice": "Wipe",
+      "random_choice": "Warp Dissolve",
       "ripple": {
         "ripple_count": 3
       },
@@ -418,16 +418,16 @@
       },
       "type": "Ripple",
       "wipe": {
-        "direction": "Right to Left",
-        "last_direction": "Right to Left"
+        "direction": "Left to Right",
+        "last_direction": "Left to Right"
       }
     },
     "ui": {
       "dialog_geometry": {
         "height": 900,
         "width": 1389,
-        "x": 109,
-        "y": 0
+        "x": 117,
+        "y": -4
       },
       "last_tab_index": 6,
       "last_tab_scroll": {
@@ -480,6 +480,7 @@
         "margin": 30,
         "monitor": "ALL",
         "position": "Top Right",
+        "shared_tick": true,
         "show_background": false,
         "show_numerals": true,
         "show_seconds": true,
@@ -487,13 +488,43 @@
         "timezone": "local"
       },
       "clock2": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
         "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 30,
         "monitor": 2,
+        "position": "Bottom Right",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
         "timezone": "local"
       },
       "clock3": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
         "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 30,
         "monitor": "ALL",
+        "position": "Bottom Left",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
         "timezone": "local"
       },
       "global": {
@@ -625,10 +656,32 @@
         "subreddit": "All"
       },
       "reddit2": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "enabled": true,
+        "intense_shadow": true,
         "limit": 20,
         "monitor": 2,
         "position": "Bottom Right",
+        "show_background": true,
         "subreddit": "Games"
       },
       "shadows": {
@@ -704,17 +757,17 @@
         "blob_stage_gain": 1.0,
         "blob_stretch_tendency": 0.18,
         "blob_width": 1.0,
-        "bubble_big_bass_pulse": 0.8,
-        "bubble_big_count": 11,
+        "bubble_big_bass_pulse": 0.7,
+        "bubble_big_count": 10,
         "bubble_big_size_max": 0.03,
         "bubble_drift_amount": 0.75,
         "bubble_drift_direction": "swish_vertical",
         "bubble_drift_frequency": 0.8,
-        "bubble_drift_speed": 0.64,
+        "bubble_drift_speed": 0.6,
         "bubble_gradient_dark": [
-          15,
-          86,
-          109,
+          51,
+          64,
+          162,
           255
         ],
         "bubble_gradient_light": [
@@ -731,13 +784,13 @@
           230
         ],
         "bubble_pop_color": [
-          68,
-          68,
-          68,
-          255
+          255,
+          255,
+          255,
+          180
         ],
         "bubble_rotation_amount": 0.7,
-        "bubble_small_count": 34,
+        "bubble_small_count": 30,
         "bubble_small_freq_pulse": 0.56,
         "bubble_small_size_max": 0.015,
         "bubble_specular_color": [
@@ -747,11 +800,11 @@
           255
         ],
         "bubble_specular_direction": "top_left",
-        "bubble_stream_constant_speed": 0.3,
+        "bubble_stream_constant_speed": 0.28,
         "bubble_stream_direction": "right",
-        "bubble_stream_reactivity": 1.2,
+        "bubble_stream_reactivity": 1.25,
         "bubble_stream_speed_cap": 3.75,
-        "bubble_surface_reach": 0.81,
+        "bubble_surface_reach": 0.6,
         "bubble_trail_strength": 0.0,
         "dynamic_floor": false,
         "dynamic_range_enabled": false,
@@ -773,7 +826,8 @@
         "helix_speed": 1.0,
         "helix_turns": 6,
         "manual_floor": 2.1,
-        "mode": "bubble",
+        "mode": "sine_wave",
+        "monitor": "ALL",
         "nebula_cycle_speed": 0.59,
         "nebula_tint1": [
           27,
@@ -844,12 +898,12 @@
         "preset_spectrum": 3,
         "preset_starfield": 3,
         "rainbow_enabled": true,
-        "rainbow_speed": 0.3,
+        "rainbow_speed": 0.71,
         "sensitivity": 0.4,
         "sine_card_adaptation": 0.05,
         "sine_crawl_amount": 0.4,
         "sine_density": 1.0,
-        "sine_displacement": 0.0,
+        "sine_displacement": 0.1,
         "sine_glow_color": [
           0,
           107,
@@ -859,6 +913,12 @@
         "sine_glow_enabled": true,
         "sine_glow_intensity": 0.6,
         "sine_heartbeat": 0.0,
+        "sine_line1_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "sine_line1_shift": 0.0,
         "sine_line2_color": [
           255,
@@ -938,6 +998,7 @@
           255,
           230
         ],
+        "detail_icon_size": 16,
         "enabled": true,
         "font_family": "Segoe UI",
         "font_size": 28,

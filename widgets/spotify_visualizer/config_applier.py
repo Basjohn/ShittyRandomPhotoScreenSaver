@@ -323,7 +323,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             0.1, min(4.0, float(kwargs['bubble_stream_speed_cap']))
         )
     if 'bubble_stream_reactivity' in kwargs:
-        widget._bubble_stream_reactivity = max(0.0, min(1.0, float(kwargs['bubble_stream_reactivity'])))
+        widget._bubble_stream_reactivity = max(0.0, min(1.25, float(kwargs['bubble_stream_reactivity'])))
     if 'bubble_rotation_amount' in kwargs:
         widget._bubble_rotation_amount = max(0.0, min(1.0, float(kwargs['bubble_rotation_amount'])))
     if 'bubble_drift_amount' in kwargs:

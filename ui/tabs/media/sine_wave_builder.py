@@ -332,19 +332,15 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_displacement = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_displacement.setMinimum(0)
     tab.sine_displacement.setMaximum(100)
-    sine_disp_val = int(tab._default_float('spotify_visualizer', 'sine_displacement', 0.0) * 100)
-    tab.sine_displacement.setValue(max(0, min(100, sine_disp_val)))
+    tab.sine_displacement.setValue(0)
+    tab.sine_displacement.setEnabled(False)
     tab.sine_displacement.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_displacement.setTickInterval(10)
     tab.sine_displacement.setToolTip(
-        "Multi-line only: kicks briefly shove the extra lines away from center (both X & Y). Higher = stronger shove."
+        "Displacement is disabled (legacy feature)."
     )
-    tab.sine_displacement.valueChanged.connect(tab._save_settings)
     sine_disp_row.addWidget(tab.sine_displacement)
-    tab.sine_displacement_label = QLabel(f"{sine_disp_val}%")
-    tab.sine_displacement.valueChanged.connect(
-        lambda v: tab.sine_displacement_label.setText(f"{v}%")
-    )
+    tab.sine_displacement_label = QLabel("Disabled")
     sine_disp_row.addWidget(tab.sine_displacement_label)
 
     # Vertical Shift
