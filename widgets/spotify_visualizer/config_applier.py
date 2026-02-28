@@ -334,7 +334,11 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_drift_frequency = max(0.0, min(1.0, float(kwargs['bubble_drift_frequency'])))
     if 'bubble_drift_direction' in kwargs:
         val = str(kwargs['bubble_drift_direction']).lower()
-        valid_dirs = ('none', 'left', 'right', 'diagonal', 'swish_horizontal', 'swish_vertical', 'random')
+        valid_dirs = (
+            'none', 'left', 'right', 'diagonal',
+            'swish_horizontal', 'swish_vertical',
+            'swirl_cw', 'swirl_ccw', 'random'
+        )
         if val not in valid_dirs:
             val = 'random'
         widget._bubble_drift_direction = val
@@ -366,7 +370,11 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             widget._bubble_pop_color = c
     if 'bubble_specular_direction' in kwargs:
         val = str(kwargs['bubble_specular_direction']).lower()
-        if val not in ('top_left', 'top_right', 'bottom_left', 'bottom_right'):
+        valid_spec_dirs = (
+            'top', 'bottom', 'left', 'right',
+            'top_left', 'top_right', 'bottom_left', 'bottom_right'
+        )
+        if val not in valid_spec_dirs:
             val = 'top_left'
         widget._bubble_specular_direction = val
     if 'bubble_big_size_max' in kwargs:

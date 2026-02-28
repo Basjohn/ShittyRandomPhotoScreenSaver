@@ -1852,6 +1852,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 # the highlight at screen-top-left we need u_specular_dir = (-x, -y)
                 # because -(-y) pushes the bright spot toward low UV.y (= screen top).
                 spec_dir_map = {
+                    "top":          ( 0.0,   1.0),
+                    "bottom":       ( 0.0,  -1.0),
+                    "left":         ( 1.0,   0.0),
+                    "right":        (-1.0,  0.0),
                     "top_left":     ( 0.707,  0.707),
                     "top_right":    (-0.707,  0.707),
                     "bottom_left":  ( 0.707, -0.707),

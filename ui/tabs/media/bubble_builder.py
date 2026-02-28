@@ -267,6 +267,8 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         ("Diagonal", "diagonal"),
         ("Swish (Horizontal)", "swish_horizontal"),
         ("Swish (Vertical)", "swish_vertical"),
+        ("Swirl (Clockwise)", "swirl_cw"),
+        ("Swirl (Counter-Clockwise)", "swirl_ccw"),
         ("Random", "random"),
     ]
     for label, value in drift_options:
@@ -364,10 +366,23 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     specular_row = _aligned_row(_normal_layout, "Specular Direction:")
     tab.bubble_specular_direction = QComboBox()
-    tab.bubble_specular_direction.addItems(["Top Left", "Top Right", "Bottom Left", "Bottom Right"])
+    spec_options = [
+        ("Top", "top"),
+        ("Bottom", "bottom"),
+        ("Left", "left"),
+        ("Right", "right"),
+        ("Top Left", "top_left"),
+        ("Top Right", "top_right"),
+        ("Bottom Left", "bottom_left"),
+        ("Bottom Right", "bottom_right"),
+    ]
+    for label, key in spec_options:
+        tab.bubble_specular_direction.addItem(label, key)
     saved_sd = tab._default_str('spotify_visualizer', 'bubble_specular_direction', 'top_left').lower()
-    sd_map = {"top_left": 0, "top_right": 1, "bottom_left": 2, "bottom_right": 3}
-    tab.bubble_specular_direction.setCurrentIndex(sd_map.get(saved_sd, 0))
+    idx = tab.bubble_specular_direction.findData(saved_sd)
+    if idx < 0:
+        idx = 0
+    tab.bubble_specular_direction.setCurrentIndex(idx)
     tab.bubble_specular_direction.currentIndexChanged.connect(tab._save_settings)
     specular_row.addWidget(tab.bubble_specular_direction)
     specular_row.addStretch()

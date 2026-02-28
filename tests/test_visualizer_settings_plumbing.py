@@ -285,6 +285,11 @@ class TestGLOverlayUniforms:
         src = self._read_overlay_src()
         assert "sine_width_reaction" in src
 
+    def test_specular_dir_map_includes_cardinal_directions(self):
+        src = self._read_overlay_src()
+        for key in ('"top":', '"bottom":', '"left":', '"right":'):
+            assert key in src, f"Specular direction mapping missing {key}"
+
 
 # ===========================================================================
 # 8. Shader uniform declarations
@@ -359,6 +364,102 @@ class TestBubbleSimulationThreadSafety:
         }
         # None energy bands should not crash
         sim.tick(0.016, None, settings)
+
+
+# ==========================================================================
+# 9b. Bubble swirl plumbing + behaviour
+# ==========================================================================
+
+class TestBubbleSwirlSettings:
+    """Ensure swirl drift directions travel through settings + config layers."""
+
+    def test_swirl_direction_round_trip_in_settings_model(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping({
+            "bubble_drift_direction": "swirl_ccw",
+        })
+        assert model.bubble_drift_direction == "swirl_ccw"
+
+        payload = model.to_dict()
+        key = "widgets.spotify_visualizer.bubble_drift_direction"
+        assert payload[key] == "swirl_ccw"
+
+    def test_config_applier_accepts_swirl_direction(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bubble_drift_direction = "random"
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, "bubble", {
+            "bubble_drift_direction": "swirl_cw",
+        })
+        assert widget._bubble_drift_direction == "swirl_cw"
+
+
+class TestBubbleSwirlMotion:
+    """Validate helper math keeps swirl motion tangential with correct winding."""
+
+    def _radius(self, bubble):
+        return (bubble.x - 0.5, bubble.y - 0.5)
+
+    def _dot(self, a, b):
+        return a[0] * b[0] + a[1] * b[1]
+
+    def _cross_z(self, a, b):
+        return a[0] * b[1] - a[1] * b[0]
+
+    def test_swirl_cw_is_perpendicular_and_clockwise(self):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation, BubbleState
+
+        sim = BubbleSimulation()
+        bubble = BubbleState(x=0.82, y=0.35)
+        radius = self._radius(bubble)
+        swirl_vec = sim._swirl_motion(bubble, "swirl_cw", drift_offset=0.05, dt=1.0)
+
+        assert abs(self._dot(radius, swirl_vec)) < 0.01
+        assert self._cross_z(radius, swirl_vec) < 0.0
+
+    def test_swirl_ccw_is_perpendicular_and_counter_clockwise(self):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation, BubbleState
+
+        sim = BubbleSimulation()
+        bubble = BubbleState(x=0.2, y=0.75)
+        radius = self._radius(bubble)
+        swirl_vec = sim._swirl_motion(bubble, "swirl_ccw", drift_offset=0.05, dt=1.0)
+
+        assert abs(self._dot(radius, swirl_vec)) < 0.01
+        assert self._cross_z(radius, swirl_vec) > 0.0
+
+
+class TestBubbleSpecularDirection:
+    """Verify specular direction options stay wired through all layers."""
+
+    def test_specular_direction_round_trip_in_settings_model(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping({
+            "bubble_specular_direction": "right",
+        })
+        assert model.bubble_specular_direction == "right"
+
+        payload = model.to_dict()
+        key = "widgets.spotify_visualizer.bubble_specular_direction"
+        assert payload[key] == "right"
+
+    def test_config_applier_accepts_cardinal_directions(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bubble_specular_direction = "top_left"
+
+        widget = DummyWidget()
+        for val in ("top", "bottom", "left", "right"):
+            apply_vis_mode_kwargs(widget, "bubble", {
+                "bubble_specular_direction": val,
+            })
+            assert widget._bubble_specular_direction == val
 
 
 # ===========================================================================

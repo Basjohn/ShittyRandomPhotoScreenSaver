@@ -23,6 +23,8 @@ from core.logging.logger import (
     is_viz_diagnostics_enabled,
 )
 
+_SWIRL_DIRECTIONS = {"swirl_cw", "swirl_ccw"}
+
 logger = get_logger(__name__)
 
 MAX_BUBBLES = 110
@@ -340,11 +342,16 @@ class BubbleSimulation:
             drift_bias_val = b.drift_bias * drift_amount * 0.05
             drift_offset = drift_noise * drift_amount * 0.03 + drift_bias_val
 
-            # Apply drift; Swish modes force an axis, otherwise stay perpendicular to stream
+            # Apply drift; Swish modes force an axis, swirl modes orbit around centre,
+            # otherwise stay perpendicular to stream
             if drift_dir == "swish_horizontal":
                 move_x += drift_offset * dt
             elif drift_dir == "swish_vertical":
                 move_y += drift_offset * dt
+            elif drift_dir in _SWIRL_DIRECTIONS:
+                swirl_dx, swirl_dy = self._swirl_motion(b, drift_dir, drift_offset, dt)
+                move_x += swirl_dx
+                move_y += swirl_dy
             else:
                 if abs(sv[0]) > abs(sv[1]) if stream_dir != "random" else True:
                     move_y += drift_offset * dt
@@ -477,6 +484,8 @@ class BubbleSimulation:
             drift_bias = random.uniform(-0.9, 0.9)
         elif drift_dir == "swish_vertical":
             drift_bias = random.uniform(-0.9, 0.9)
+        elif drift_dir in _SWIRL_DIRECTIONS:
+            drift_bias = random.uniform(-1.0, 1.0)
         else:  # none
             drift_bias = random.uniform(-0.3, 0.3)
 
@@ -511,6 +520,47 @@ class BubbleSimulation:
             trail_tail_x=x, trail_tail_y=y,
         )
         self._bubbles.append(b)
+
+    def _swirl_motion(
+        self,
+        bubble: BubbleState,
+        drift_dir: str,
+        drift_offset: float,
+        dt: float,
+    ) -> Tuple[float, float]:
+        """Return (dx, dy) swirl offsets for this tick."""
+        dx = bubble.x - 0.5
+        dy = bubble.y - 0.5
+        dist = math.hypot(dx, dy)
+        if dist < 1e-4:
+            angle = random.uniform(0.0, math.tau)
+            dx = math.cos(angle) * 0.01
+            dy = math.sin(angle) * 0.01
+            dist = math.hypot(dx, dy)
+        inv = 1.0 / dist
+        norm_x = dx * inv
+        norm_y = dy * inv
+
+        if drift_dir == "swirl_cw":
+            tangent_x = norm_y
+            tangent_y = -norm_x
+        else:
+            tangent_x = -norm_y
+            tangent_y = norm_x
+
+        swirl_strength = max(0.002, abs(drift_offset))
+        swirl_scale = 8.0 + 2.0 * abs(bubble.drift_bias)
+        swirl_force = swirl_strength * swirl_scale
+
+        swirl_dx = tangent_x * swirl_force
+        swirl_dy = tangent_y * swirl_force
+
+        radial_error = dist - 0.33
+        radial_force = radial_error * 0.12 * swirl_strength
+        swirl_dx -= norm_x * radial_force
+        swirl_dy -= norm_y * radial_force
+
+        return swirl_dx * dt, swirl_dy * dt
 
     def _bleed_trail_smear(self, b: BubbleState, dt: float) -> None:
         if b.trail_strength <= 0.0:

@@ -1127,8 +1127,13 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_surface_reach_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_specular_direction'):
         sd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_specular_direction', 'top_left').lower()
-        sd_map = {"top_left": 0, "top_right": 1, "bottom_left": 2, "bottom_right": 3}
-        tab.bubble_specular_direction.setCurrentIndex(sd_map.get(sd, 0))
+        combo = tab.bubble_specular_direction
+        idx = combo.findData(sd)
+        if idx < 0:
+            idx = combo.findData('top_left')
+        if idx < 0:
+            idx = 0
+        combo.setCurrentIndex(idx)
     if hasattr(tab, 'bubble_big_size_max'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_size_max', 0.038) * 1000)
         tab.bubble_big_size_max.setValue(max(10, min(60, v)))
@@ -1357,7 +1362,10 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_gradient_light': _qcolor_to_list(getattr(tab, '_bubble_gradient_light', None), [210, 170, 120, 255]),
         'bubble_gradient_dark': _qcolor_to_list(getattr(tab, '_bubble_gradient_dark', None), [80, 60, 50, 255]),
         'bubble_pop_color': _qcolor_to_list(getattr(tab, '_bubble_pop_color', None), [255, 255, 255, 180]),
-        'bubble_specular_direction': (tab.bubble_specular_direction.currentText().lower().replace(' ', '_') if hasattr(tab, 'bubble_specular_direction') else 'top_left'),
+        'bubble_specular_direction': (
+            tab.bubble_specular_direction.currentData()
+            if hasattr(tab, 'bubble_specular_direction') else 'top_left'
+        ),
         'bubble_big_size_max': (tab.bubble_big_size_max.value() if hasattr(tab, 'bubble_big_size_max') else 38) / 1000.0,
         'bubble_small_size_max': (tab.bubble_small_size_max.value() if hasattr(tab, 'bubble_small_size_max') else 18) / 1000.0,
         'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
