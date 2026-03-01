@@ -81,6 +81,7 @@ class WidgetsTab(QWidget):
         self._imgur_bg_color = self._color_from_default('imgur', 'bg_color', [35, 35, 35, 255])
         self._imgur_border_color = self._color_from_default('imgur', 'border_color', [255, 255, 255, 255])
         self._media_artwork_size = int(self._widget_default('media', 'artwork_size', 200))
+        self._visualizer_adv_state: Dict[str, bool] = {}
         self._loading = True
         self._save_coalesce_pending = False
         self._setup_ui()
@@ -180,6 +181,16 @@ class WidgetsTab(QWidget):
         if raw is None:
             return default
         return str(raw)
+
+    # --- Visualizer advanced toggle persistence helpers -------------------
+
+    def get_visualizer_adv_state(self, mode: str) -> bool:
+        """Return remembered expanded state for a visualizer mode (session scoped)."""
+        return bool(self._visualizer_adv_state.get(mode, False))
+
+    def set_visualizer_adv_state(self, mode: str, expanded: bool) -> None:
+        """Persist expanded/collapsed state for a visualizer mode within this session."""
+        self._visualizer_adv_state[mode] = bool(expanded)
     
     @staticmethod
     def _set_combo_text(combo: QComboBox, text: str) -> None:

@@ -142,6 +142,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         bubble_gradient_dark=model.bubble_gradient_dark,
         bubble_pop_color=model.bubble_pop_color,
         bubble_specular_direction=model.bubble_specular_direction,
+        bubble_gradient_direction=model.bubble_gradient_direction,
         bubble_big_size_max=model.bubble_big_size_max,
         bubble_small_size_max=model.bubble_small_size_max,
         bubble_growth=model.bubble_growth,

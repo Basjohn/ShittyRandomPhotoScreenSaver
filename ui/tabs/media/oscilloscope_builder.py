@@ -58,7 +58,14 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab._osc_adv_toggle = QToolButton()
     tab._osc_adv_toggle.setText("Advanced")
     tab._osc_adv_toggle.setCheckable(True)
-    tab._osc_adv_toggle.setChecked(True)
+    _osc_adv_default = False
+    getter = getattr(tab, "get_visualizer_adv_state", None)
+    if callable(getter):
+        try:
+            _osc_adv_default = bool(getter("oscilloscope"))
+        except Exception:
+            _osc_adv_default = False
+    tab._osc_adv_toggle.setChecked(_osc_adv_default)
     tab._osc_adv_toggle.setArrowType(Qt.DownArrow)
     tab._osc_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     tab._osc_adv_toggle.setAutoRaise(True)
@@ -83,6 +90,12 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         tab._osc_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         tab._osc_advanced.setVisible(checked)
         tab._osc_adv_helper.setVisible(not checked)
+        setter = getattr(tab, "set_visualizer_adv_state", None)
+        if callable(setter):
+            try:
+                setter("oscilloscope", checked)
+            except Exception:
+                pass
 
     tab._osc_adv_toggle.toggled.connect(_apply_osc_adv_toggle_state)
     _apply_osc_adv_toggle_state(tab._osc_adv_toggle.isChecked())

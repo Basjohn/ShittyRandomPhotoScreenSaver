@@ -55,7 +55,14 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._spectrum_adv_toggle = QToolButton()
     tab._spectrum_adv_toggle.setText("Advanced")
     tab._spectrum_adv_toggle.setCheckable(True)
-    tab._spectrum_adv_toggle.setChecked(True)
+    _spectrum_adv_default = False
+    getter = getattr(tab, "get_visualizer_adv_state", None)
+    if callable(getter):
+        try:
+            _spectrum_adv_default = bool(getter("spectrum"))
+        except Exception:
+            _spectrum_adv_default = False
+    tab._spectrum_adv_toggle.setChecked(_spectrum_adv_default)
     tab._spectrum_adv_toggle.setArrowType(Qt.DownArrow)
     tab._spectrum_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     tab._spectrum_adv_toggle.setAutoRaise(True)
@@ -80,6 +87,12 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab._spectrum_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         tab._spectrum_advanced.setVisible(checked)
         tab._spectrum_adv_helper.setVisible(not checked)
+        setter = getattr(tab, "set_visualizer_adv_state", None)
+        if callable(setter):
+            try:
+                setter("spectrum", checked)
+            except Exception:
+                pass
 
     tab._spectrum_adv_toggle.toggled.connect(_apply_spectrum_adv_toggle_state)
     _apply_spectrum_adv_toggle_state(tab._spectrum_adv_toggle.isChecked())

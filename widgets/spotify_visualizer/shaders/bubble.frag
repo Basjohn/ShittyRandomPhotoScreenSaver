@@ -29,6 +29,7 @@ uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
+uniform vec2 u_gradient_dir;       // gradient direction (light -> dark)
 uniform vec4 u_outline_color;      // bubble outline colour (RGBA 0-1)
 uniform vec4 u_specular_color;     // specular highlight colour
 uniform vec4 u_gradient_light;     // gradient light end
@@ -117,11 +118,13 @@ void main() {
     float px = 1.0 / max(inner_h, 1.0);
     
     // --- Background gradient ---
-    // Gradient direction follows specular direction: lightest where light is,
-    // darkest opposite. u_specular_dir is normalised (e.g. (-0.707, 0.707) for top-left).
-    // Project UV onto specular direction to get gradient factor.
+    // Gradient direction follows dedicated control (defaults to specular dir when unset).
     vec2 center = vec2(0.5, 0.5);
-    float grad_t = dot(uv - center, -u_specular_dir) + 0.5;
+    vec2 grad_dir = u_gradient_dir;
+    if (length(grad_dir) < 0.001) {
+        grad_dir = u_specular_dir;
+    }
+    float grad_t = dot(uv - center, -grad_dir) + 0.5;
     grad_t = clamp(grad_t, 0.0, 1.0);
     
     vec4 bg_light = u_gradient_light;

@@ -58,7 +58,14 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._sine_adv_toggle = QToolButton()
     tab._sine_adv_toggle.setText("Advanced")
     tab._sine_adv_toggle.setCheckable(True)
-    tab._sine_adv_toggle.setChecked(True)
+    _sine_adv_default = False
+    getter = getattr(tab, "get_visualizer_adv_state", None)
+    if callable(getter):
+        try:
+            _sine_adv_default = bool(getter("sine_wave"))
+        except Exception:
+            _sine_adv_default = False
+    tab._sine_adv_toggle.setChecked(_sine_adv_default)
     tab._sine_adv_toggle.setArrowType(Qt.DownArrow)
     tab._sine_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     tab._sine_adv_toggle.setAutoRaise(True)
@@ -83,6 +90,12 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab._sine_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         tab._sine_advanced.setVisible(checked)
         tab._sine_adv_helper.setVisible(not checked)
+        setter = getattr(tab, "set_visualizer_adv_state", None)
+        if callable(setter):
+            try:
+                setter("sine_wave", checked)
+            except Exception:
+                pass
 
     tab._sine_adv_toggle.toggled.connect(_apply_sine_adv_toggle_state)
     _apply_sine_adv_toggle_state(tab._sine_adv_toggle.isChecked())

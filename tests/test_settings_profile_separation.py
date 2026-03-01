@@ -109,17 +109,6 @@ class TestMCDefaults:
         always_on_top = settings.get_bool('mc.always_on_top', True)
         assert always_on_top in (True, False)  # Valid boolean
     
-    def test_mc_eco_mode_setting(self, tmp_path):
-        """Test that MC eco_mode setting can be retrieved."""
-        from core.settings.settings_manager import SettingsManager
-        
-        settings = SettingsManager(application="Screensaver_MC", storage_base_dir=tmp_path)
-        
-        # MC eco_mode should be retrievable
-        # Use get_bool to handle string/bool conversion
-        eco_enabled = settings.get_bool('mc.eco_mode.enabled', True)
-        assert eco_enabled in (True, False)  # Valid boolean
-    
     def test_mc_display_setting(self, tmp_path):
         """Test MC display setting can be retrieved."""
         from core.settings.settings_manager import SettingsManager

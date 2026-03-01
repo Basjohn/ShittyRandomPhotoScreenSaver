@@ -1,0 +1,45 @@
+{
+  "application": "Screensaver_MC",
+  "description": "Curated spectrum preset derived from MC snapshot.",
+  "name": "Preset 1 (Rainbow)",
+  "preset_index": 0,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "adaptive_sensitivity": true,
+        "audio_block_size": 512,
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_count": 21,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "dynamic_floor": false,
+        "dynamic_range_enabled": false,
+        "ghost_alpha": 0.45,
+        "ghost_decay": 0.3,
+        "ghosting_enabled": true,
+        "manual_floor": 2.1,
+        "mode": "spectrum",
+        "monitor": "ALL",
+        "rainbow_enabled": true,
+        "rainbow_speed": 0.3,
+        "sensitivity": 0.4,
+        "software_visualizer_enabled": false,
+        "spectrum_bar_profile": "curved",
+        "spectrum_border_radius": 2.0,
+        "spectrum_growth": 3.96,
+        "spectrum_rainbow_per_bar": true,
+        "spectrum_single_piece": true
+      }
+    }
+  }
+}

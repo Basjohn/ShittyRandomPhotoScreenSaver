@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Sequence, Optional, Set
+from typing import List, Sequence, Optional, Set, Tuple
 
 import numpy as np
 import time
@@ -22,6 +22,18 @@ from widgets.spotify_visualizer.blob_math import (
 
 
 logger = get_logger(__name__)
+
+
+_DIRECTION_VECS: dict[str, Tuple[float, float]] = {
+    "top": (0.0, 1.0),
+    "bottom": (0.0, -1.0),
+    "left": (1.0, 0.0),
+    "right": (-1.0, 0.0),
+    "top_left": (0.707, 0.707),
+    "top_right": (-0.707, 0.707),
+    "bottom_left": (0.707, -0.707),
+    "bottom_right": (-0.707, -0.707),
+}
 
 
 def _smoothstep(edge0: float, edge1: float, x: float) -> float:
@@ -418,6 +430,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_gradient_dark: QColor | None = None,
         bubble_pop_color: QColor | None = None,
         bubble_specular_direction: str = "top_left",
+        bubble_gradient_direction: str = "top",
         border_width_px: float = 0.0,
     ) -> None:
         """Update overlay bar state and geometry.
@@ -670,6 +683,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if bubble_pop_color is not None:
             self._bubble_pop_color = QColor(bubble_pop_color) if not isinstance(bubble_pop_color, QColor) else bubble_pop_color
         self._bubble_specular_direction = str(bubble_specular_direction)
+        self._bubble_gradient_direction = str(bubble_gradient_direction)
 
         # Apply ghost configuration up-front so it is visible to both the
         # peak-envelope update and the shader path. When ghosting is
@@ -1117,7 +1131,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # Bubble mode uniforms
                     "u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
                     "u_bubbles_trail", "u_trail_strength",
-                    "u_specular_dir", "u_outline_color", "u_specular_color",
+                    "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_specular_color",
                     "u_gradient_light", "u_gradient_dark", "u_pop_color",
                     "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
                 ):
@@ -1851,20 +1865,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 # The shader projects (uv - center) onto -u_specular_dir, so to put
                 # the highlight at screen-top-left we need u_specular_dir = (-x, -y)
                 # because -(-y) pushes the bright spot toward low UV.y (= screen top).
-                spec_dir_map = {
-                    "top":          ( 0.0,   1.0),
-                    "bottom":       ( 0.0,  -1.0),
-                    "left":         ( 1.0,   0.0),
-                    "right":        (-1.0,  0.0),
-                    "top_left":     ( 0.707,  0.707),
-                    "top_right":    (-0.707,  0.707),
-                    "bottom_left":  ( 0.707, -0.707),
-                    "bottom_right": (-0.707, -0.707),
-                }
-                sd = spec_dir_map.get(self._bubble_specular_direction, (-0.707, 0.707))
+                sd = _DIRECTION_VECS.get(self._bubble_specular_direction, (-0.707, 0.707))
                 loc = u.get("u_specular_dir", -1)
                 if loc >= 0:
                     _gl.glUniform2f(loc, float(sd[0]), float(sd[1]))
+
+                gd = _DIRECTION_VECS.get(self._bubble_gradient_direction, (0.0, 1.0))
+                loc = u.get("u_gradient_dir", -1)
+                if loc >= 0:
+                    _gl.glUniform2f(loc, float(gd[0]), float(gd[1]))
 
                 # Colour uniforms
                 for uname, qc in (

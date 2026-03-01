@@ -1134,6 +1134,15 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         if idx < 0:
             idx = 0
         combo.setCurrentIndex(idx)
+    if hasattr(tab, 'bubble_gradient_direction'):
+        gd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_gradient_direction', 'top').lower()
+        combo = tab.bubble_gradient_direction
+        idx = combo.findData(gd)
+        if idx < 0:
+            idx = combo.findData('top')
+        if idx < 0:
+            idx = 0
+        combo.setCurrentIndex(idx)
     if hasattr(tab, 'bubble_big_size_max'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_size_max', 0.038) * 1000)
         tab.bubble_big_size_max.setValue(max(10, min(60, v)))
@@ -1365,6 +1374,10 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_specular_direction': (
             tab.bubble_specular_direction.currentData()
             if hasattr(tab, 'bubble_specular_direction') else 'top_left'
+        ),
+        'bubble_gradient_direction': (
+            tab.bubble_gradient_direction.currentData()
+            if hasattr(tab, 'bubble_gradient_direction') else 'top'
         ),
         'bubble_big_size_max': (tab.bubble_big_size_max.value() if hasattr(tab, 'bubble_big_size_max') else 38) / 1000.0,
         'bubble_small_size_max': (tab.bubble_small_size_max.value() if hasattr(tab, 'bubble_small_size_max') else 18) / 1000.0,

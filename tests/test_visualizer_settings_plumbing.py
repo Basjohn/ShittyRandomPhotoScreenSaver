@@ -164,6 +164,7 @@ class TestSettingsModelPlumbing:
         "bubble_stream_direction",
         "bubble_outline_color",
         "bubble_specular_direction",
+        "bubble_gradient_direction",
     ]
 
     def _read_models_src(self):
@@ -246,6 +247,16 @@ class TestConfigApplier:
                 f"config_applier missing {key} in bubble GPU push"
             )
 
+    def test_config_applier_accepts_gradient_direction(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bubble_gradient_direction = "top"
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {"bubble_gradient_direction": "bottom_left"})
+        assert widget._bubble_gradient_direction == "bottom_left"
+
 
 # ===========================================================================
 # 7. GL overlay: uniform query list and set_state params
@@ -272,13 +283,13 @@ class TestGLOverlayUniforms:
     def test_bubble_uniforms_queried(self):
         src = self._read_overlay_src()
         for uname in ("u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
-                       "u_specular_dir", "u_outline_color", "u_gradient_light"):
+                       "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_gradient_light"):
             assert f'"{uname}"' in src, f"Bubble uniform {uname} not queried"
 
     def test_set_state_accepts_bubble_params(self):
         src = self._read_overlay_src()
         for param in ("bubble_count", "bubble_pos_data", "bubble_extra_data",
-                       "bubble_outline_color", "bubble_specular_direction"):
+                       "bubble_outline_color", "bubble_specular_direction", "bubble_gradient_direction"):
             assert param in src, f"set_state missing bubble param: {param}"
 
     def test_set_state_accepts_width_reaction(self):
@@ -310,7 +321,7 @@ class TestShaderUniformDeclarations:
     def test_bubble_has_required_uniforms(self):
         src = (SHADER_DIR / "bubble.frag").read_text(encoding="utf-8")
         for u in ("u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
-                   "u_specular_dir", "u_outline_color", "u_specular_color",
+                   "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_specular_color",
                    "u_gradient_light", "u_gradient_dark", "u_pop_color",
                    "u_rainbow_hue_offset"):
             assert u in src, f"bubble.frag missing uniform: {u}"

@@ -180,7 +180,14 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._blob_adv_toggle = QToolButton()
     tab._blob_adv_toggle.setText("Advanced")
     tab._blob_adv_toggle.setCheckable(True)
-    tab._blob_adv_toggle.setChecked(True)
+    _blob_adv_default = False
+    getter = getattr(tab, "get_visualizer_adv_state", None)
+    if callable(getter):
+        try:
+            _blob_adv_default = bool(getter("blob"))
+        except Exception:
+            _blob_adv_default = False
+    tab._blob_adv_toggle.setChecked(_blob_adv_default)
     tab._blob_adv_toggle.setArrowType(Qt.DownArrow)
     tab._blob_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     tab._blob_adv_toggle.setAutoRaise(True)
@@ -206,6 +213,12 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab._blob_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         tab._blob_advanced.setVisible(checked)
         tab._blob_adv_helper.setVisible(not checked)
+        setter = getattr(tab, "set_visualizer_adv_state", None)
+        if callable(setter):
+            try:
+                setter("blob", checked)
+            except Exception:
+                pass
 
     tab._blob_adv_toggle.toggled.connect(_apply_blob_adv_toggle_state)
     _apply_blob_adv_toggle_state(tab._blob_adv_toggle.isChecked())

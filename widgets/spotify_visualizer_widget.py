@@ -260,6 +260,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_gradient_dark: QColor = QColor(80, 60, 50, 255)
         self._bubble_pop_color: QColor = QColor(255, 255, 255, 180)
         self._bubble_specular_direction: str = "top_left"
+        self._bubble_gradient_direction: str = "top"
         self._bubble_big_size_max: float = 0.038
         self._bubble_small_size_max: float = 0.018
         self._bubble_simulation: Optional[object] = None  # lazy init (owned by compute thread)

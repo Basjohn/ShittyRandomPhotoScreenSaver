@@ -47,7 +47,14 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._bubble_adv_toggle = QToolButton()
     tab._bubble_adv_toggle.setText("Advanced")
     tab._bubble_adv_toggle.setCheckable(True)
-    tab._bubble_adv_toggle.setChecked(True)
+    _bubble_adv_default = False
+    getter = getattr(tab, "get_visualizer_adv_state", None)
+    if callable(getter):
+        try:
+            _bubble_adv_default = bool(getter("bubble"))
+        except Exception:
+            _bubble_adv_default = False
+    tab._bubble_adv_toggle.setChecked(_bubble_adv_default)
     tab._bubble_adv_toggle.setArrowType(Qt.DownArrow)
     tab._bubble_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
     tab._bubble_adv_toggle.setAutoRaise(True)
@@ -72,6 +79,12 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab._bubble_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
         tab._bubble_advanced.setVisible(checked)
         tab._bubble_adv_helper.setVisible(not checked)
+        setter = getattr(tab, "set_visualizer_adv_state", None)
+        if callable(setter):
+            try:
+                setter("bubble", checked)
+            except Exception:
+                pass
 
     tab._bubble_adv_toggle.toggled.connect(_apply_bubble_adv_toggle_state)
     _apply_bubble_adv_toggle_state(tab._bubble_adv_toggle.isChecked())
@@ -366,7 +379,8 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     specular_row = _aligned_row(_normal_layout, "Specular Direction:")
     tab.bubble_specular_direction = QComboBox()
-    spec_options = [
+    tab.bubble_gradient_direction = QComboBox()
+    direction_options = [
         ("Top", "top"),
         ("Bottom", "bottom"),
         ("Left", "left"),
@@ -376,8 +390,10 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         ("Bottom Left", "bottom_left"),
         ("Bottom Right", "bottom_right"),
     ]
-    for label, key in spec_options:
+    for label, key in direction_options:
         tab.bubble_specular_direction.addItem(label, key)
+        tab.bubble_gradient_direction.addItem(label, key)
+
     saved_sd = tab._default_str('spotify_visualizer', 'bubble_specular_direction', 'top_left').lower()
     idx = tab.bubble_specular_direction.findData(saved_sd)
     if idx < 0:
@@ -385,6 +401,18 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_specular_direction.setCurrentIndex(idx)
     tab.bubble_specular_direction.currentIndexChanged.connect(tab._save_settings)
     specular_row.addWidget(tab.bubble_specular_direction)
+
+    gradient_row = _aligned_row(_normal_layout, "Gradient Direction:")
+    saved_gd = tab._default_str('spotify_visualizer', 'bubble_gradient_direction', 'top').lower()
+    gidx = tab.bubble_gradient_direction.findData(saved_gd)
+    if gidx < 0:
+        gidx = tab.bubble_gradient_direction.findData('top')
+    if gidx < 0:
+        gidx = 0
+    tab.bubble_gradient_direction.setCurrentIndex(gidx)
+    tab.bubble_gradient_direction.currentIndexChanged.connect(tab._save_settings)
+    gradient_row.addWidget(tab.bubble_gradient_direction)
+    gradient_row.addStretch()
     specular_row.addStretch()
 
     for attr_name, label_text, color_attr, title in (

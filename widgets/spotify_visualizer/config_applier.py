@@ -23,6 +23,15 @@ def _color_or_none(value: Any) -> QColor | None:
     return None
 
 
+def _normalize_direction(value: Any, default: str = "top_left") -> str:
+    val = str(value).lower()
+    valid = {
+        "top", "bottom", "left", "right",
+        "top_left", "top_right", "bottom_left", "bottom_right",
+    }
+    return val if val in valid else default
+
+
 def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     """Apply per-mode keyword settings to *widget*.
 
@@ -369,14 +378,9 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if c is not None:
             widget._bubble_pop_color = c
     if 'bubble_specular_direction' in kwargs:
-        val = str(kwargs['bubble_specular_direction']).lower()
-        valid_spec_dirs = (
-            'top', 'bottom', 'left', 'right',
-            'top_left', 'top_right', 'bottom_left', 'bottom_right'
-        )
-        if val not in valid_spec_dirs:
-            val = 'top_left'
-        widget._bubble_specular_direction = val
+        widget._bubble_specular_direction = _normalize_direction(kwargs['bubble_specular_direction'], default='top_left')
+    if 'bubble_gradient_direction' in kwargs:
+        widget._bubble_gradient_direction = _normalize_direction(kwargs['bubble_gradient_direction'], default='top')
     if 'bubble_big_size_max' in kwargs:
         widget._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
     if 'bubble_small_size_max' in kwargs:
@@ -486,6 +490,7 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
         extra['bubble_gradient_dark'] = getattr(widget, '_bubble_gradient_dark', None)
         extra['bubble_pop_color'] = getattr(widget, '_bubble_pop_color', None)
         extra['bubble_specular_direction'] = getattr(widget, '_bubble_specular_direction', 'top_left')
+        extra['bubble_gradient_direction'] = getattr(widget, '_bubble_gradient_direction', 'top')
         extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
         extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
         extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
