@@ -177,10 +177,13 @@ QComboBox[customCombo='true']::down-arrow {
     margin: 0px;
     padding: 0px;
 }
+"""
 
-QComboBox[customCombo='true'] QAbstractItemView {
-    background-color: transparent;
-    border: 2px solid rgba(255, 255, 255, 0.55);
+COMBOBOX_POPUP_VIEW_STYLE = """
+QListView[customComboPopup='true'],
+QListWidget[customComboPopup='true'] {
+    background-color: rgba(18, 18, 18, 0.95);
+    border: 2px solid #ffffff;
     border-radius: 14px;
     padding: 8px 8px 12px 8px;
     outline: none;
@@ -192,12 +195,8 @@ QComboBox[customCombo='true'] QAbstractItemView {
     font-size: 14px;
 }
 
-QComboBox[customCombo='true'] QAbstractItemView::viewport {
-    background-color: rgba(18, 18, 18, 0.9);
-    border-radius: 12px;
-}
-
-QComboBox[customCombo='true'] QAbstractItemView::item {
+QListView[customComboPopup='true']::item,
+QListWidget[customComboPopup='true']::item {
     padding: 4px 6px;
     min-height: 22px;
     margin: 0px 2px;
