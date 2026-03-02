@@ -278,25 +278,27 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
   - Diagnostics: when `SRPSS_VIZ_DIAGNOSTICS` is enabled, `SpotifyVisualizerWidget` emits `[SPOTIFY_VIS][SINE][CRAWL] slider/mid/high/drive/playing` every ~0.75 s so QA can confirm energy gating without recording a capture.
   - Defaults follow `Defaults_Guide.md` (0.25). UI clamps to 0–100 % with tooltips describing the motion; shader uniform `u_crawl_amount` is uploaded by `SpotifyBarsGLOverlay` each frame and covered by `tests/test_visualizer_overlay_kwargs.py`.
 
-### Visualizer drop-in preset workflow
+-### Visualizer drop-in preset workflow
 
-- Preset loader lives in `core/settings/visualizer_presets.py`; documentation applies to all modes in `MODES = [spectrum, oscilloscope, sine_wave, blob, helix, starfield, bubble]`.
+- Loader: `core/settings/visualizer_presets.py` (modes: `spectrum`, `oscilloscope`, `sine_wave`, `blob`, `helix`, `starfield`, `bubble`). It boots with placeholder Preset 1–3 + Custom, then overlays curated JSON and optional snapshot drop-ins before exposing the final list via `get_presets()`.
 - File locations:
-  1. **Curated slots** – place JSON under `presets/visualizer_modes/<mode>/`. These override the built-in “Preset N” entries. Preferred workflow is to run `python tools/rebuild_visualizer_presets.py` so curated files stay minimal and aligned with canonical defaults, but the loader will still parse legacy full-SST exports if one slips in.
-  2. **Snapshot/drop-in slots** – place exported SST JSON directly under `/presets/`. Loader inspects `snapshot.widgets.spotify_visualizer` and filters relevant keys, so full snapshots remain viable when a curated file is not available.
-- Naming/indexing rules:
-  - Filenames such as `preset_3_glow_burst.json` or explicit `{"preset_index": 2}` map to slot index (0-based). Friendly names always render as `Preset N (Suffix)` where the suffix is derived from the filename or payload `name`, so “Sideway Swish” becomes “Preset 3 (Sideway Swish)” without extra metadata.
-  - Slots auto-expand: if any curated or snapshot file targets Preset 5, `_build_presets_for_mode()` inserts placeholder Preset 4 so UI shows Presets 1–5 plus Custom.
-  - `Custom` is always appended last and is never displaced by drop-ins.
-- Allowed keys per mode:
+  1. **Curated slots** – `presets/visualizer_modes/<mode>/preset_<n>_*.json`. Rebuild with `python tools/rebuild_visualizer_presets.py` so payloads contain only the filtered `snapshot.widgets.spotify_visualizer` block plus metadata (`application`, `preset_index`, `name`, `description`). The script mirrors runtime filtering using the same allowlists.
+  2. **Snapshot/drop-in slots** – any SST export dropped in `/presets/*.json`. Loader inspects `snapshot.widgets.spotify_visualizer` (plus `custom_preset_backup`) and filters keys, allowing on-the-fly presets without touching curated files.
+- Naming/indexing:
+  - Filenames such as `preset_3_glow_burst.json` or explicit `{"preset_index": 2}` map to slot index (0-based). Friendly names auto-render as `Preset N (Suffix)` by extracting the suffix from the filename or payload `name`.
+  - Slots auto-expand: if any curated/snapshot payload references Preset 5, `_build_presets_for_mode()` inserts placeholder indices so UI shows Presets 1–5 plus Custom.
+  - `Custom` is always appended last, is never displaced, and exposes the Advanced bucket.
+- Filtering:
   - Global allowlist (`GLOBAL_ALLOWED_KEYS`): `adaptive_sensitivity`, `audio_block_size`, `bar_border_color`, `bar_border_opacity`, `bar_count`, `bar_fill_color`, `dynamic_floor`, `dynamic_range_enabled`, `ghost_alpha`, `ghost_decay`, `ghosting_enabled`, `manual_floor`, `mode`, `monitor`, `rainbow_enabled`, `rainbow_per_bar`, `rainbow_speed`, `sensitivity`, `software_visualizer_enabled`.
-  - Mode prefixes (`MODE_KEY_PREFIXES`): Spectrum `spectrum_`, Oscilloscope `osc_`, Sine `sine_`/`sinewave_`, Blob `blob_`, Helix `helix_`, Starfield `star_`/`nebula_`, Bubble `bubble_`. Any keys outside these prefixes/globals are dropped (tests assert this via `tests/test_visualizer_presets.py`).
-- Loading order and overrides:
-  - Curated mode-specific files apply first; snapshot files then override matching indices so testers can drop Preset 8 without touching curated data.
-  - If a snapshot’s `widgets.spotify_visualizer.mode` is set and differs from the currently loading mode, it is ignored to avoid cross-mode leakage.
-  - Empty or invalid JSON emit `[VIS_PRESETS]` warnings but do not break preset loading.
-- UI/Settings wiring:
-  - `widgets.spotify_visualizer.preset_<mode>` stores the selected slot; the settings dialog enumerates whatever count `_build_presets_for_mode()` produced. Friendly names come directly from the preset payload, so adhering to the naming convention ensures the UI shows “Glow Burst” instead of “Preset 5”.
+  - Mode prefixes (`MODE_KEY_PREFIXES`): Spectrum `spectrum_`, Oscilloscope `osc_`, Sine `sine_`/`sinewave_`, Blob `blob_`, Helix `helix_`, Starfield `star_`/`nebula_`, Bubble `bubble_` (covers `bubble_gradient_direction` vs `bubble_specular_direction`, etc.). Keys outside these sets are dropped. Tests: `tests/test_visualizer_presets.py::test_all_curated_presets_have_unique_keys_and_filtered_settings` and SST round-trip coverage.
+- Loading order:
+  - Curated JSON applied first, snapshot overrides layered on top so QA can distribute ad-hoc Preset 8 payloads.
+  - `_filter_settings_for_mode()` forcibly sets `mode` so payloads cannot switch visualizer modes.
+  - Empty/invalid JSON logs `[VIS_PRESETS]` warnings without interrupting other presets.
+- UI/Settings interplay:
+  - `widgets.spotify_visualizer.preset_<mode>` stores the active slot index. Values clamp between 0 and `custom_index` so corrupted settings never crash the slider.
+  - `VisualizerPresetSlider` (Docs/Visualizer_Presets_Plan.md) lists the friendly names, auto-hiding the Advanced container whenever a curated slot is active and surfacing it only for Custom.
+  - Advanced buckets follow the Always-Apply rule (`Docs/Advanced_Migration.md`): hidden controls remain in force, and SST exports/imports preserve every key (including split gradient/specular directions) even when the UI is collapsed.
 - `timing.interval`: int seconds (default 45). The Display tab now always loads this canonical 45 s value when the key is missing so UI defaults match `SettingsManager`. Regression test `tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values` guards this.
 - `display.same_image_all_monitors`: bool
 - Cache:
@@ -419,6 +421,14 @@ widget behaviour; this Spec only summarises the high-level contract.
 ### Spotify Visualizer lifecycle & debugging checklist
 
 Full cross-mode reset expectations now live in `Docs/Visualizer_Reset_Matrix.md`; treat that matrix as the canonical source for which subsystems (widget, beat engine, overlay, diagnostics) must reset together before/after mode switches or GL recovery. The checklist below focuses on runtime debugging once those contracts are satisfied.
+
+#### Bubble gradient vs specular direction
+
+- **Why**: Bubble presets historically tied the background gradient direction to the specular highlight vector, making it impossible to keep the highlight on one side while shading toward another. March 2026 decouple introduces `bubble_specular_direction` (advanced) and `bubble_gradient_direction` (normal bucket) as distinct settings.
+- **Defaults**: `bubble_specular_direction="top_left"`, `bubble_gradient_direction="top"` live in `core/settings/default_settings.py`, mirrored in `SpotifyVisualizerSettings` and snapshot exports.
+- **UI**: Bubble builder now shows a Gradient Direction combobox directly under Specular Direction (Settings → Widgets → Spotify Visualizer → Bubble). WidgetsTab load/save hydrates both controls so preset toggles and session restore keep custom vectors.
+- **Rendering path**: `SpotifyVisualizerWidget.apply_vis_mode_config()` delegates to `config_applier`, which normalizes both directions and pushes them into `build_gpu_push_extra_kwargs()`. `SpotifyBarsGLOverlay.set_state()` now accepts both `bubble_specular_direction` and `bubble_gradient_direction`, mapping them to the new `u_gradient_dir` uniform in `bubble.frag` so gradient shading and specular offsets are fully independent.
+- **Presets / rebuild**: `tools/rebuild_visualizer_presets.py` emits `bubble_gradient_direction` for bubble presets by replaying defaults + historical overrides and filtering through `MODE_KEY_PREFIXES`. Regenerate curated payloads after modifying Gradient/Specular defaults so commits always include the new key.
 
 When the Spotify Beat Visualizer misbehaves (no fade, flat bars, or popping),
 debug in this order:

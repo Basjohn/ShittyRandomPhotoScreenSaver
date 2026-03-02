@@ -257,6 +257,34 @@ class TestConfigApplier:
         apply_vis_mode_kwargs(widget, {"bubble_gradient_direction": "bottom_left"})
         assert widget._bubble_gradient_direction == "bottom_left"
 
+    def test_config_applier_accepts_specular_direction(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bubble_specular_direction = "top_left"
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {"bubble_specular_direction": "right"})
+        assert widget._bubble_specular_direction == "right"
+
+    def test_gpu_push_extra_kwargs_include_gradient_and_specular(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+
+        extra = build_gpu_push_extra_kwargs(
+            mode_str="bubble",
+            widget=None,
+            model=None,
+            bubble_count=10,
+            bubble_pos_data=[0.0] * 30,
+            bubble_extra_data=[0.0] * 30,
+            bubble_trail_data=[0.0] * 30,
+            bubble_gradient_direction="bottom",
+            bubble_specular_direction="bottom_right",
+        )
+
+        assert extra["bubble_gradient_direction"] == "bottom"
+        assert extra["bubble_specular_direction"] == "bottom_right"
+
 
 # ===========================================================================
 # 7. GL overlay: uniform query list and set_state params
@@ -354,10 +382,13 @@ class TestBubbleSimulationThreadSafety:
         }
         # Should not raise — dict must be accepted, not just objects
         sim.tick(0.016, eb_dict, settings)
-        pos, extra = sim.snapshot(bass=0.5, mid_high=0.25,
-                                   big_bass_pulse=0.5, small_freq_pulse=0.5)
+        pos, extra, trail = sim.snapshot(
+            bass=0.5, mid_high=0.25, big_bass_pulse=0.5, small_freq_pulse=0.5
+        )
         assert isinstance(pos, list)
         assert isinstance(extra, list)
+        assert isinstance(trail, list)
+        assert isinstance(sim.count, int)
 
     def test_tick_accepts_none_energy_bands(self):
         """Graceful handling of None energy bands."""
@@ -403,7 +434,7 @@ class TestBubbleSwirlSettings:
             _bubble_drift_direction = "random"
 
         widget = DummyWidget()
-        apply_vis_mode_kwargs(widget, "bubble", {
+        apply_vis_mode_kwargs(widget, {
             "bubble_drift_direction": "swirl_cw",
         })
         assert widget._bubble_drift_direction == "swirl_cw"
@@ -467,7 +498,7 @@ class TestBubbleSpecularDirection:
 
         widget = DummyWidget()
         for val in ("top", "bottom", "left", "right"):
-            apply_vis_mode_kwargs(widget, "bubble", {
+            apply_vis_mode_kwargs(widget, {
                 "bubble_specular_direction": val,
             })
             assert widget._bubble_specular_direction == val

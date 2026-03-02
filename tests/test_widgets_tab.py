@@ -131,3 +131,24 @@ class TestWidgetsTab:
             assert _rgba_tuple(reloaded_tab.sine_line_color_btn.color()) == _rgba_tuple(custom_line)
         finally:
             reloaded_tab.deleteLater()
+
+    def test_visualizer_advanced_edit_switches_to_custom(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            # Force Spotify tab visible and preset slider available
+            tab.spotify_vis_type_combo.setCurrentIndex(tab.spotify_vis_type_combo.findData("bubble"))
+            preset_slider = getattr(tab, "_bubble_preset_slider", None)
+            assert preset_slider is not None
+
+            preset_slider.set_preset_index(0)  # curated preset
+            assert preset_slider.preset_index() == 0
+
+            # Simulate editing an advanced control (gradient direction combo lives in advanced container)
+            gradient_combo = getattr(tab, "bubble_gradient_direction", None)
+            assert gradient_combo is not None
+            gradient_combo.setCurrentText("Bottom")
+            gradient_combo.currentTextChanged.emit("Bottom")
+
+            assert preset_slider.preset_index() == preset_slider.custom_index()
+        finally:
+            tab.deleteLater()

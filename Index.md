@@ -6,20 +6,18 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 | Document | Purpose |
 |----------|---------|
-| Spec.md | Canonical architecture specification |
-| Docs/DESYNC_STRATEGIES.md | Transition/visualizer desynchronization patterns |
-| Docs/10_WIDGET_GUIDELINES.md | Widget implementation standards |
-| Docs/GL_PIPELINE_ANALYSIS.md | GPU/GL contention analysis |
-| Docs/TestSuite.md | Test documentation |
-| Docs/SETTINGS_MIGRATION.md | JSON settings migration guide |
-| Docs/QTIMER_POLICY.md | QTimer usage policy: when to use QTimer vs ThreadManager, intentional UI-thread timer locations |
-| Docs/Defaults_Guide.md | All default settings, storage locations, SettingsManager API, safe change procedures |
-| Docs/Visualizer_Debug.md | Authoritative Spotify visualizer architecture + per-mode defaults, debugging, regression harness |
-| Docs/Historical_Bugs.md | Chronological archive of resolved bugs (symptoms, failed attempts, final fix, regression coverage) |
-| Docs/Visualizer_Presets_Plan.md | Comprehensive plan for per-visualizer-mode preset system with Advanced toggle |
-| Docs/Advanced_Migration.md | Mode-agnostic Advanced/Normal UI migration playbook (alignment, toggle mechanics, settings layers) |
-| Bubble_Vizualiser_Plan.md | Bubble visualizer implementation plan (Phases 1-5 COMPLETE, Phase 6 in progress) |
-| Burn_Transition_Plan.md | Burn transition implementation plan (not started) |
+| Spec.md | Canonical architecture specification and single source of truth |
+| Docs/00_PROJECT_OVERVIEW.md | High-level introduction, pillars, documentation map |
+| Docs/10_WIDGET_GUIDELINES.md | Widget implementation standards + compositor/fade policies |
+| Docs/Advanced_Migration.md | Normal vs Advanced bucket playbook, Always-Apply rule |
+| Docs/Defaults_Guide.md | Canonical defaults, storage locations, change workflow |
+| Docs/QTIMER_POLICY.md | QTimer vs ThreadManager policy and allowed UI-thread timers |
+| Docs/TestSuite.md | Test matrix, fixtures, execution order |
+| Docs/Historical_Bugs.md | Chronological archive of resolved bugs + regression coverage |
+| Docs/Visualizer_Debug.md | Spotify visualizer architecture, diagnostics, per-mode notes |
+| Docs/Visualizer_Reset_Matrix.md | Reset sequencing matrix for visualizer subsystems |
+| Docs/Visualizer_Presets_Plan.md | Per-visualizer preset workflow, curated rebuild tooling |
+| Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
 
 ## Entry Points
 

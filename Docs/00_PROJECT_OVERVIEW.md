@@ -1,166 +1,113 @@
-# Project Overview: ShittyRandomPhotoScreenSaver
+# Project Overview — ShittyRandomPhotoScreenSaver (SRPSS)
 
-## Project Name
-**ShittyRandomPhotoScreenSaver** (SRPSS)
+This document introduces the SRPSS codebase. Treat it as the top-level landing page before diving into `Spec.md`, `Index.md`, or any of the focused guides under `Docs/`.
 
-## Objective
-A modern, feature-rich Windows screensaver application using PySide6 that displays photos from multiple sources with GPU-accelerated transitions, multi-monitor support, and rich overlay widgets including a Spotify audio visualizer.
+## 1. Mission Statement
 
-## Key Features
+Deliver a modern Windows screensaver and media controller that blends curated imagery, GPU transitions, and rich overlay widgets while honoring strict thread/resource policies. Every subsystem (sources, rendering, widgets, visualizers) routes through centralized managers so behavior stays deterministic and debuggable.
 
-### 1. Multi-Source Image Support
-- **Local Folders**: Recursive scanning of designated directories with extension filtering
-- **RSS/JSON Feeds**: Parse RSS/Atom feeds and Reddit JSON listings for images
-  - High-resolution filter for Reddit (prefers posts ≥2560px width)
-  - On-disk caching with rotating cache (keeps at least 20 images before cleanup)
-  - Optional save-to-disk mirroring for permanent storage
-- **Usage Ratio Control**: Configurable split between local and RSS sources (default 70/30)
-  - Probabilistic selection based on ratio with automatic fallback when the selected pool is empty
-  - UI slider control in Sources tab (disabled when only one source type is configured)
+## 2. Core Pillars
 
-### 2. Display Modes
-- **Fill Mode** (Primary): Crop and scale to fill screen without distortion/letterboxing
-- **Fit Mode**: Scale to fit within screen bounds with letterboxing
-- **Shrink Mode**: Scale down only if larger than screen
-- DPR-aware scaling for high-DPI displays
+| Pillar | Summary | References |
+|--------|---------|------------|
+| Deterministic threading | All async work is scheduled through `ThreadManager`. No raw `threading.Thread`, no stray `QThread`. UI updates return to the Qt thread via `invoke_in_ui_thread()`. | `Spec.md` → “Thread Safety”, `Docs/QTIMER_POLICY.md` |
+| Centralized lifecycle | ResourceManager tracks every Qt object, GL overlay, and animation. Settings changes replay through `SettingsManager` with JSON snapshots + SST import/export. | `Index.md`, `Docs/Defaults_Guide.md`, `core/settings/sst_io.py` |
+| GPU-first rendering | Each display owns a single `GLCompositorWidget` that runs all shader-backed transitions, Spotify visualizer modes, and diagnostics. CPU/QPainter fallbacks remain for older hardware. | `Spec.md` → “Transitions”, `Docs/Visualizer_Debug.md` |
+| Widget parity | Overlay widgets (clock/weather/media/Reddit/Spotify visualizer) follow `Docs/10_WIDGET_GUIDELINES.md` (ShadowFadeProfile, fade synchronization, interaction gating). | Widget guidelines doc |
+| Preset hygiene | Global widget presets plus per-visualizer curated presets derive from canonical defaults and filtered snapshots; rebuild tooling prevents eco-mode or malformed JSON regressions. | `tools/rebuild_visualizer_presets.py`, `Docs/Visualizer_Presets_Plan.md`, new tests in `tests/test_visualizer_presets.py` |
 
-### 3. Transition Effects (12 Types)
-Transitions run on the GL compositor when hardware acceleration is available. Some transition types are GL-only and do not have CPU fallbacks.
-- **Crossfade**: Smooth opacity transition
-- **Slide**: Directional slide (cardinal directions)
-- **Wipe**: Directional wipe (includes diagonals)
-- **Diffuse**: Block-based dissolve (Rectangle/Membrane shapes)
-- **Block Puzzle Flip**: 3D tile flip effect
-- **Blinds**: GL-only venetian blinds effect
-- **Peel**: GL-only strip-based peel
-- **3D Block Spins**: GL-only full-frame 3D slab rotation
-- **Ripple/Rain Drops**: GL-only radial ripple effect
-- **Warp Dissolve**: GL-only vortex-style dissolve
-- **Crumble**: GL-only Voronoi crack pattern with falling pieces
-- **Particle**: GL-only particle stacking transition (Directional/Swirl/Converge)
+## 3. Feature Overview
 
-### 4. Multi-Monitor Support
-- **Same Image Mode**: Synchronized display across all monitors
-- **Different Image Mode**: Independent images per monitor with deduplication
-- **Per-Monitor Widget Config**: Each widget can target ALL, Monitor 1, 2, or 3
-- Automatic monitor hotplug detection
+### 3.1 Image Sources
 
-### 5. Widget Overlays
-- **Clock Widget** (up to 3 instances):
-  - Digital or analog display with cached face pixmaps for low paint cost
-  - 12h/24h format, optional seconds, timezone per instance
-  - Per-monitor placement plus centralized visual padding helpers for alignment
-- **Weather Widget**:
-  - Current temperature/conditions via Open-Meteo with 30-minute caching
-  - Optional forecast row and location autocomplete
-  - ThreadManager-driven refresh timers (no raw QThreads)
-- **Media Widget**:
-  - Spotify/system media integration via Windows GSMTC with guarded WinRT polling and adaptive idle detection
-  - Album artwork, track info, transport controls, optional Spotify volume slider
-  - Smart polling intervals (1000 ms → 2500 ms active, 5000 ms idle)
-- **Reddit Widget** (up to 2 instances):
-  - Top posts from configured subreddits with 4-, 10-, or 20-item layouts
-  - Click-through behavior gated by interaction mode (Ctrl/Hard Exit)
-  - Shared styling via widget factories
-- **Spotify Visualizer** (5 modes):
-  - **Spectrum**: Segmented bar analyzer with ghost peak trails, dynamic segment count scaling with card height
-  - **Oscilloscope**: Catmull-Rom spline waveform, up to 3 frequency-band-reactive lines with glow
-  - **Blob**: 2D SDF organic metaball with drum-reactive pulse, vocal wobble, energy-reactive glow
-  - **Starfield**: Point-star field with nebula background, audio-reactive travel (dev-gated)
-  - **Helix**: 3D DNA double-helix with Blinn-Phong tube shading and energy-reactive rotation
-  - All modes: WASAPI loopback audio, GL rendering + software fallback, synchronized fade-in
-  - Volume slider control and pixel-shift aware positioning
+1. **Local folders** — recursive scan with extension filtering, per-path enablement, DPR-aware caching.
+2. **RSS / JSON feeds** — `sources/rss/` stack handles Bing, NASA, Unsplash, Reddit JSON. Every download is vetted via `QImageReader`; assets below 1920×1080 never hit cache/queue. Background refresh maintains `MIN_WALLPAPER_REFRESH_TARGET` (11 images) by topping up from trusted feeds. Optional disk mirroring + health tracker keep feeds stable.
+3. **Source ratio control** — probabilistic sampler enforces `sources.local_ratio` (default 60/40). Fallback logic automatically draws from the other pool if the chosen pool is empty so rotations never stall.
 
-### 6. Configuration GUI
-- Dark-themed settings dialog (dark.qss)
-- Six tabs: Sources, Display, Transitions, Widgets, Accessibility, About
-- Instant save and apply
-- Settings import/export (JSON snapshots)
-- Context menu (right-click) for quick access
+### 3.2 Rendering & Transitions
 
-### 7. Windows Screensaver Integration
-- Command-line arguments: `/s` (run), `/c` (config), `/p` (preview)
-- .scr file format deployment
-- Manual Controller (MC) variant for non-screensaver use
-  - Separate QSettings application name (`Screensaver_MC`) with executable stem detection
-  - Hard-exit mode forced on at startup so mouse movement never exits unless the user changes the setting
-  - Idle suppression now relies on standard OS power settings (legacy `SetThreadExecutionState` call removed)
-  - MC window uses `Qt.Tool` flags to stay off Alt+Tab/taskbar and ships primarily as a Nuitka onedir bundle
+- Display modes: Fill (primary), Fit, Shrink. DPR-aware scaling plus optional Lanczos + sharpen toggles.
+- `GLCompositorWidget` pre-warms shaders/programs per transition, caches the detected refresh rate (falls back to 240 Hz if Qt fails). All GL-only transitions (Peel, Ripple, Block Spins, Crumble, Particle, Burn) demote to QPainter/CPU groups when hardware acceleration is off or shader init fails mid-session.
+- Transition catalog (March 2026): Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Ripple (Rain Drops), Warp Dissolve, Crumble, Particle, Burn. Each entry has a GL implementation with automatic CPU fallback where feasible.
 
-### 8. Accessibility Features
-- **Background Dimming**: Adjustable compositor-based dimming (rendered after the base image/transition but before overlay widgets)
-- **Pixel Shift**: Periodic 1px widget movement for burn-in prevention
-- **Hard Exit / Ctrl Gating**: Prevents accidental exit from mouse movement; holding Ctrl temporarily enables widget interaction even when hard-exit is off
+### 3.3 Spotify Visualizer
 
-## Technology Stack
-- **Framework**: PySide6 (Qt 6.x)
-- **Language**: Python 3.11
-- **Graphics**: OpenGL 4.1+ via PyOpenGL (GLSL shaders)
-- **Audio**: WASAPI loopback via pyaudiowpatch/sounddevice
-- **Architecture**: Event-driven with centralized resource/resource + settings managers (see `Spec.md`)
-- **Threading**: ThreadManager with IO/Compute pools, lock-free SPSC queues
-- **Platform**: Windows 11 (Windows 10 supported but not primary test target)
+Modes: Spectrum, Oscilloscope, Blob, Helix, Starfield (dev gated), Sine Wave, Bubble. Shared state lives in `SpotifyVisualizerWidget`, GPU uploads in `SpotifyBarsGLOverlay`, and GLSL shaders under `widgets/spotify_visualizer/shaders/`.
 
-## Core Architecture
+Key capabilities:
 
-### Centralized Managers
-- **ThreadManager** (`core/threading/manager.py`): All async operations, IO/Compute thread pools
-- **ResourceManager** (`core/resources/manager.py`): Qt object lifecycle tracking
-- **EventSystem** (`core/events/event_system.py`): Pub/sub inter-module communication
-- **SettingsManager** (`core/settings/settings_manager.py`): Persistent configuration with change notifications
-- **AnimationManager** (`core/animation/animator.py`): Centralized animation timing and easing
+- **Advanced toggle hygiene**: Normal vs Advanced buckets share a session-cached collapse state per mode. Hidden sliders keep their values (Always-Apply rule).
+- **Bubble controls**: Specular and gradient directions are fully decoupled (`bubble_specular_direction`, `bubble_gradient_direction`). Defaults, UI, config applier, overlay uniforms, and preset rebuild all ship both keys so curated presets + SST snapshots remain authoritative.
+- **Preset integrity**: Curated JSON files are rebuilt from canonical defaults, filtered by mode, and covered by tests checking duplicate keys, mode enforcement, and SST round-trips (`tests/test_visualizer_presets.py`).
+- **Diagnostics**: `Docs/Visualizer_Debug.md` + `Visualizer_Reset_Matrix.md` document cold-start expectations, shared beat engine resets, and per-mode shader uniform maps.
 
-### Rendering Pipeline
-1. **Image Queue** selects next `ImageMetadata` (ratio-based for local/RSS)
-2. **Prefetcher** decodes images to `QImage` on IO threads, stores in `ImageCache`
-3. **Engine** loads via cache (QPixmap if cached, else QImage→QPixmap conversion)
-4. **ImageProcessor** scales to screen size (DPR-aware)
-5. **Transition** (GL compositor or CPU) presents old→new
-6. **Prefetch** scheduled for next images
+### 3.4 Widgets & Overlays
 
-### GL Compositor
-- Single `GLCompositorWidget` per display
-- Hosts all GL-backed transitions via GLSL shaders
-- Fallback to QPainter compositor or CPU transitions on GL failure
-- Session-scoped fallback: shader failure disables shaders for entire session
+- **Clock (1–3 instances)**: Digital/analog, per-monitor placement, cached pixmaps, pixel-shift aware.
+- **Weather**: Open-Meteo provider, 30 min refresh, monochrome option, detail rows.
+- **Media**: GSMTC polling with idle/backoff, optional Spotify volume/mute controls, per-card color bindings.
+- **Reddit**: Up to two widgets, rate-limited via `RedditRateLimiter`, staggered refresh, card growth (4→10→20 posts) without extra API calls.
+- **Spotify Visualizer overlay**: GL widget with cold-start blanking, fade coordination, pixel-shift integration.
 
-### Transition Groups
-- **Group A**: Shader-backed GLSL transitions (primary path)
-- **Group B**: QPainter compositor transitions (fallback)
-- **Group C**: Pure software/CPU transitions (final fallback)
+### 3.5 Configuration UX
 
-## Performance Targets
-- 60 FPS transitions on 1080p displays
-- < 500MB memory usage typical
-- < 2 second startup time (local images)
-- Smooth operation on dual 4K monitors
-- No memory leaks during extended runs
+- Tabs: Sources, Display, Transitions, Widgets, Accessibility, About.
+- Instant apply: `WidgetsTab` rehydrates slider positions, preset indices, and advanced toggle states on every open.
+- Settings snapshots: Export/import via SST (human-readable JSON). Merge-import respects structured roots (`widgets`, `transitions`, `custom_preset_backup`) and rejects legacy display keys automatically.
 
-## Quality Assurance
-- Unit tests for core modules (see `Docs/TestSuite.md`)
-- Logging-first policy with rotating log files
-- Debug mode with comprehensive logging
-- PERF metrics for GL compositor timing
+### 3.6 Deployment Modes
 
-## Deployment
-- **SRPSS.scr** / **SRPSS.exe**: Main screensaver build
-- **SRPSS_MC.exe**: Manual Controller variant
-- **Inno Setup installer**: `scripts/SRPSS_Installer.iss`
-- Build scripts: PyInstaller and Nuitka options
+| Artifact | Purpose | Notes |
+|----------|---------|-------|
+| `SRPSS.scr` / `SRPSS.exe` | Primary screensaver build | Handles `/s`, `/c`, `/p` args. |
+| `SRPSS_MC.exe` | Manual Controller | Forces `input.hard_exit=True`, stores settings under `%APPDATA%/SRPSS_MC`, primary build uses Nuitka onedir. |
+| Installers | `scripts/SRPSS_Installer.iss`, `scripts/SRPSS_MediaCenter_Installer.iss` | PyInstaller path kept for experiments, Nuitka mainline. |
 
-## Key Settings
-| Setting | Description | Default |
-|---------|-------------|---------|
-| `sources.local_ratio` | Local vs RSS image ratio (%) | 70 |
-| `display.same_image_all_monitors` | Same image on all displays | false |
-| `display.hw_accel` | Hardware acceleration | true |
-| `transitions.type` | Active transition type | Ripple |
-| `transitions.duration_ms` | Transition duration (ms) | 7200 |
-| `timing.interval` | Image rotation interval (s) | 45 |
+## 4. Technology Stack
 
-## Related Documentation
-- `Index.md` - Canonical module map and class index
-- `Spec.md` - Architecture decisions, policies, and settings schema
-- `Docs/10_WIDGET_GUIDELINES.md` - Widget implementation standards and compositor rules
-- `Docs/TestSuite.md` - Test documentation and execution patterns
-- `audits/` - Architecture audits and optimization notes
+- **Language / runtime**: Python 3.11, PySide6 6.9.1.
+- **Rendering**: OpenGL 4.1 via PyOpenGL, GLSL fragment shaders per mode/transition.
+- **Audio**: WASAPI loopback (pyaudiowpatch), shared beat engine with compute-pool smoothing.
+- **Threading**: `ThreadManager` IO + compute pools, lock-free queues, zero ad-hoc threads.
+- **Persistence**: JSON settings store (`core/settings/json_store.py`), SST snapshot import/export, curated presets under `presets/`.
+
+## 5. Performance & QA Targets
+
+| Target | Current Status | Notes |
+|--------|----------------|-------|
+| Steady 60 FPS on 1080p | ✅ | GL compositor warms programs per transition, fallback to 240 Hz default if refresh detection fails. |
+| Dual 4K stability | ✅ | Image pipeline prefetch/prescale via compute threads; DisplayWidget avoids synchronous repaints. |
+| Memory guard | ✅ | ImageCache bounded by item count + MB, GL overlays tear down cleanly, ResourceManager ensures deterministic cleanup. |
+| Logging | ✅ | Five rotating logs (`screensaver*.log`, `screensaver_perf.log`, `screensaver_spotify_vis.log`, etc.) with suppression/deduplication. |
+| Tests | ✅ | See `Docs/TestSuite.md` for suites. Visualizer preset audit tests added Mar 2026. |
+
+## 6. Settings Snapshot Cheat Sheet
+
+- **Defaults**: `core/settings/default_settings.py` (mirrored to `core/settings/defaults_snapshot.*`).
+- **Models**: `core/settings/models.py` – Spotify visualizer dataclass includes both specular and gradient direction fields.
+- **Preset rebuild**: `tools/rebuild_visualizer_presets.py` overlays canonical defaults + legacy JSON, filters allowed keys, writes compact payload.
+- **SST export/import**: `core/settings/sst_io.py`. Export includes metadata + snapshot; import merge respects structured roots and skips deprecated display toggles automatically. Preview path computes diffs without mutating settings.
+
+## 7. Documentation Map
+
+| Doc | Purpose |
+|-----|---------|
+| `Spec.md` | Architecture, policies, settings schema, Spotify visualizer checklist |
+| `Index.md` | Living module map with per-file summaries and responsibilities |
+| `Docs/Defaults_Guide.md` | Canonical defaults, how to change them safely, per-mode tables |
+| `Docs/10_WIDGET_GUIDELINES.md` | Overlay widget contract (ShadowFadeProfile, fade sync, DisplayWidget integration) |
+| `Docs/Advanced_Migration.md` | Normal vs Advanced bucket playbook, Always-Apply rule, alignment helpers |
+| `Docs/Visualizer_Debug.md` & `Docs/Visualizer_Reset_Matrix.md` | Visualizer architecture, reset expectations, diagnostics |
+| `Docs/Visualizer_Presets_Plan.md` | End-to-end preset workflow (creation, filtering, rebuild tooling) |
+| `Docs/TestSuite.md` | Test matrix, fixtures, execution order |
+| `Docs/Historical_Bugs.md` | Postmortems and regression coverage |
+
+## 8. Quick Start for Contributors
+
+1. **Read** `Spec.md` → `Index.md` → relevant plan doc (e.g., `Bubble_Motion_Plan.md`).
+2. **Follow** the centralized managers (ThreadManager, ResourceManager, SettingsManager). Never create ad-hoc threads or timers.
+3. **Update** `Index.md`, `Spec.md`, and any relevant doc after feature work. Preset or defaults changes must pass through defaults → models → UI → docs/tests.
+4. **Test** using `Docs/TestSuite.md` guidance (PySide Qt plugin issues are already handled). New features need regression tests plus SST/preset coverage when settings change.
+5. **Log** using the dedicated loggers; performance metrics (`[PERF]`) gate to `screensaver_perf.log`.
+
+For anything not covered here, locate the corresponding doc in `Docs/`, confirm it matches the latest code, and keep it updated going forward.

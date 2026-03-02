@@ -19,6 +19,26 @@
 - [MC (Manual Controller)](#mc-manual-controller) - MC-specific features
 - [Regression Tests](#regression-tests) - Specific bug fixes
 
+## Temporary Test Refresh Plan *(remove after tasks are delivered)*
+
+1. [ ] **Visualizer preset + Advanced bucket coverage** — `tests/test_visualizer_settings_plumbing.py`, `tests/test_visualizer_presets.py`
+   - Add assertions that `bubble_gradient_direction`/`bubble_specular_direction` survive model → overlay, and that `VisualizerPresetSlider` auto-switches to Custom when Advanced controls change.
+   - **Reasoning:** Recent doc/spec updates rely on decoupled gradient/specular plumbing and preset overlay integrity; we need tests to guard the Always-Apply rule and preset indices per mode.
+
+2. [ ] **Reset matrix automation** — new targeted test (e.g., `tests/test_visualizer_reset_matrix.py`) or extend `tests/test_visualizer_playback_gating.py`
+   - Simulate mode switches to assert `_pending_mode_resets`, beat-engine generation increments, and reapplication of curated preset overlays after `_reset_visualizer_state()`.
+   - **Reasoning:** Visualizer_Reset_Matrix now documents strict sequencing; automation keeps regressions from creeping back when future reset logic changes.
+
+3. [ ] **Preset JSON hygiene consolidation** — merge duplicate curated-file scans across `tests/test_visualizer_presets.py` and any custom tooling tests
+   - Build a helper fixture that validates duplicate keys, allowed modes, and SST round-trips once, then reuse it for curated + snapshot payloads.
+   - **Reasoning:** Current tests re-read the same files multiple times; consolidating reduces runtime and keeps the duplicate-key logic centralized for future preset additions.
+
+4. [ ] **WidgetsTab Advanced toggle regression** — extend `tests/test_widgets_tab.py`
+   - Verify Advanced collapse state caching per mode and ensure UI load/save preserves session memory without writing stale defaults back to settings.
+   - **Reasoning:** Documentation emphasizes session-scoped Advanced memory. A regression here would break preset UX and contradict Advanced_Migration guidance.
+
+*(Remove this section once every item above is either merged or tracked in a dedicated doc.)*
+
 ---
 
 ## Core Infrastructure
