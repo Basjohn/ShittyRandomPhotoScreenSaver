@@ -5,6 +5,10 @@
 /* ===== BASE STYLES ===== */
 /* These styles apply globally across the application */
 
+* {
+    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+}
+
 /* Main window base styling */
 QMainWindow {
     /* color-picker: background-color: #000000; */

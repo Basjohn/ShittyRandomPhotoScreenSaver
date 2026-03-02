@@ -22,8 +22,8 @@ from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
     CIRCLE_CHECKBOX_STYLE,
     COMBOBOX_STYLE,
-    COMBOBOX_POPUP_VIEW_STYLE,
 )
+from ui.widgets import StyledComboBox
 
 logger = get_logger(__name__)
 
@@ -242,15 +242,9 @@ class DisplayTab(QWidget):
 
         # Cursor Halo Shape
         halo_row = _aligned_row(input_layout, "Cursor Halo Shape:")
-        self.halo_shape_combo = QComboBox()
-        self.halo_shape_combo.setProperty("customCombo", True)
+        self.halo_shape_combo = StyledComboBox()
         self.halo_shape_combo.setFixedWidth(192)
         self.halo_shape_combo.setFixedHeight(42)
-        popup_view = self.halo_shape_combo.view()
-        popup_view.setProperty("customComboPopup", True)
-        popup_view.viewport().setProperty("customComboPopupViewport", True)
-        popup_view.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        popup_view.setStyleSheet(COMBOBOX_POPUP_VIEW_STYLE)
         self.halo_shape_combo.addItems(
             [
                 "Circle",
@@ -285,7 +279,6 @@ class DisplayTab(QWidget):
             + SPINBOX_STYLE
             + CIRCLE_CHECKBOX_STYLE
             + COMBOBOX_STYLE
-            + COMBOBOX_POPUP_VIEW_STYLE
         )
     
     def _load_settings(self) -> None:

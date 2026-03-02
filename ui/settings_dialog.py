@@ -21,6 +21,7 @@ from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, PresetsTab
 from ui.styled_popup import StyledPopup
+from ui.tabs import shared_styles
 
 logger = get_logger(__name__)
 
@@ -57,7 +58,9 @@ class CustomTitleBar(QWidget):
         # Title
         self.title_label = QLabel("SRPSS SETTINGS")
         self.title_label.setObjectName("titleBarLabel")
-        title_font = QFont("Segoe UI", 11, QFont.Weight.Bold)
+        title_font = QFont("Jost", 11)
+        title_font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
+        title_font.setWeight(QFont.Weight.Bold)
         self.title_label.setFont(title_font)
         # Subtle drop shadow so the title reads crisply against bright
         # backgrounds without overwhelming the frame shadow.
@@ -121,8 +124,9 @@ class TabButton(QPushButton):
         self.setCheckable(True)
         self.setObjectName("tabButton")
         self.setMinimumHeight(50)
-        
-        font = QFont("Segoe UI", 10)
+
+        font = QFont("Jost", 10)
+        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
         self.setFont(font)
 
 
@@ -174,7 +178,12 @@ class NoSourcesPopup(QDialog):
     
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self._dragging = False
+
+        shared_styles.ensure_custom_fonts()
+        self._apply_application_font()
+
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setModal(True)
         
@@ -293,6 +302,12 @@ class NoSourcesPopup(QDialog):
         self.exit_requested.emit()
         self.reject()
     
+    def _apply_application_font(self) -> None:
+        font = QFont("Jost", 11)
+        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
+        font.setWeight(QFont.Weight.Normal)
+        QGuiApplication.setFont(font)
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
         parent = self.parentWidget()
