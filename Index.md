@@ -18,6 +18,13 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Visualizer_Reset_Matrix.md | Reset sequencing matrix for visualizer subsystems |
 | Docs/Visualizer_Presets_Plan.md | Per-visualizer preset workflow, curated rebuild tooling |
 | Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
+| Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, fonts) |
+
+## Tooling
+
+| Tool | Purpose |
+|------|---------|
+| tools/regen_qrc.py | Regenerates `ui/resources/icons_rc.py` from `icons.qrc`, wraps `pyside6-rcc`, shows success popup |
 
 ## Entry Points
 

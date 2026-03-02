@@ -18,7 +18,11 @@ from PySide6.QtCore import Signal, Qt
 from core.settings.settings_manager import SettingsManager
 from utils.monitors import get_screen_count
 from core.logging.logger import get_logger
-from ui.tabs.shared_styles import SPINBOX_STYLE
+from ui.tabs.shared_styles import (
+    SPINBOX_STYLE,
+    CIRCLE_CHECKBOX_STYLE,
+    COMBOBOX_STYLE,
+)
 
 logger = get_logger(__name__)
 
@@ -226,6 +230,7 @@ class DisplayTab(QWidget):
         input_layout = QVBoxLayout(input_group)
         hard_exit_row = _aligned_row(input_layout, "")
         self.hard_exit_check = QCheckBox("Hard Exit (ESC only)")
+        self.hard_exit_check.setProperty("circleIndicator", True)
         self.hard_exit_check.setToolTip(
             "Makes the screensaver only close if you press escape and no longer for simple mouse movement"
         )
@@ -237,6 +242,9 @@ class DisplayTab(QWidget):
         # Cursor Halo Shape
         halo_row = _aligned_row(input_layout, "Cursor Halo Shape:")
         self.halo_shape_combo = QComboBox()
+        self.halo_shape_combo.setProperty("customCombo", True)
+        self.halo_shape_combo.setFixedWidth(192)
+        self.halo_shape_combo.setFixedHeight(42)
         self.halo_shape_combo.addItems(
             [
                 "Circle",
@@ -266,7 +274,9 @@ class DisplayTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-        self.setStyleSheet(self.styleSheet() + SPINBOX_STYLE)
+        self.setStyleSheet(
+            self.styleSheet() + SPINBOX_STYLE + CIRCLE_CHECKBOX_STYLE + COMBOBOX_STYLE
+        )
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""

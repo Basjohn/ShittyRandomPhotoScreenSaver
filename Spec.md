@@ -7,6 +7,9 @@ Single source of truth for architecture and key decisions.
 - Centralized managers for threads, resources, settings, animations.
 - Predictable performance with memory-aware caching and prefetching.
 
+## UI Component Specifications
+- **Circle Checkbox Indicator**: See `Docs/Circle_Checkbox_Implementation.md` for the SVG geometry, hover-state assets, QRC packaging, QSS selectors, and rebuild workflow. Any checkbox opting into the concentric style must set the `circleIndicator` property and rely on those shared assets; do not fork styles per tab.
+
 ## Architecture Overview
 - Engine orchestrates sources → queue → display → transitions.
 - DisplayWidget is the fullscreen presenter; transitions are created per-settings.
@@ -250,6 +253,13 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
  - When PERF metrics are enabled, `GLCompositorWidget` can optionally draw a small on-screen FPS/debug overlay on top of compositor frames (e.g. Slide/Wipe) to visualise real frame pacing during development. This overlay is disabled implicitly when PERF metrics are turned off so retail builds incur no additional HUD cost.
  - On `initializeGL`, `GLCompositorWidget` logs the OpenGL adapter vendor/renderer/version and disables the shader pipeline for the session when a clearly software GL implementation is detected (for example, GDI Generic, Microsoft Basic Render Driver, llvmpipe). In this case, compositor QPainter-based transitions and CPU fallbacks remain active, but shader-backed paths are not used on that stack.
  - If spikes persist, further expand compute-pool pre-scale-to-screen (including DPR-specific variants) as a future enhancement.
+
+## UI Component References
+- **Circle Checkbox**: `ui/components/circle_checkbox.py` provides a custom checkbox widget with a circular appearance, used throughout the settings UI.
+
+## Build & Automation Tools
+- `tools/regen_qrc.py`: Single entry point for regenerating `ui/resources/icons_rc.py` from `ui/resources/icons.qrc`. Wraps `pyside6-rcc` with a `python -m PySide6.scripts.rcc` fallback and surfaces a modal "Success!" dialog so UI contributors know resources refreshed before reloading stylesheets.
+- `tools/build_nuitka.ps1`: Build script for Nuitka, used to create standalone executables for the screensaver and manual controller.
 
 ## Settings
 - Timer-only rendering: DisplayWidget initialises `_target_fps = 0` (sentinel); `configure_refresh_rate_sync` detects the panel Hz and writes the resolved value. If the compositor reads 0 it forces late re-detection from the screen object. GL surfaces request `swapInterval=0`. No adaptive ladders, no vsync, no user-facing refresh-sync toggle.

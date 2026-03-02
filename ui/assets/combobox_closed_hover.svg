@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 355.43 66.44">
+  <defs>
+    <style>
+      .shadow { opacity: 0.8; }
+      .knob-fill { fill: #444; }
+      .body-fill { fill: #1e1e1e; }
+      .outline-fill { fill: #fff; }
+      .knob-alt-fill { fill: #969696; }
+      .knob-shadow { opacity: 0.5; }
+      .knob-ring { fill: #fff; stroke: #383838; stroke-miterlimit: 10; }
+    </style>
+  </defs>
+  <g id="Layer_2" data-name="Layer 2">
+    <g id="CLOSED">
+      <g class="shadow">
+        <rect x="4.43" y="2.44" width="351" height="64" rx="19" />
+      </g>
+      <rect class="knob-fill" x="320" y="8" width="28" height="53" rx="12" />
+      <rect class="body-fill" x="1" y="1" width="349" height="62" rx="18" />
+      <path class="outline-fill" d="M332,2a17,17,0,0,1,17,17V45a17,17,0,0,1-17,17H19A17,17,0,0,1,2,45V19A17,17,0,0,1,19,2H332m0-2H19A19.06,19.06,0,0,0,0,19V45A19.06,19.06,0,0,0,19,64H332a19.06,19.06,0,0,0,19-19V19A19.06,19.06,0,0,0,332,0Z" />
+      <rect x="314" y="10.89" width="28" height="46.11" rx="12" />
+      <rect class="knob-alt-fill" x="312" y="9.15" width="28" height="46.11" rx="12" />
+      <circle class="knob-shadow" cx="327" cy="46" r="6" />
+      <circle class="knob-ring" cx="325.5" cy="44.5" r="6" />
+    </g>
+  </g>
+</svg>

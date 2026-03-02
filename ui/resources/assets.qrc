@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/ui/assets">
+        <file alias="circle_checkbox_unchecked.svg">../assets/circle_checkbox_unchecked.svg</file>
+        <file alias="circle_checkbox_checked.svg">../assets/circle_checkbox_checked.svg</file>
+        <file alias="circle_checkbox_unchecked_hover.svg">../assets/circle_checkbox_unchecked_hover.svg</file>
+        <file alias="circle_checkbox_checked_hover.svg">../assets/circle_checkbox_checked_hover.svg</file>
+        <file alias="fonts/Jost-Regular.ttf">../assets/fonts/Jost-Regular.ttf</file>
+        <file alias="fonts/Jost-SemiBold.ttf">../assets/fonts/Jost-SemiBold.ttf</file>
+        <file alias="fonts/Jost-Bold.ttf">../assets/fonts/Jost-Bold.ttf</file>
+        <file alias="combobox_closed.svg">../assets/combobox_closed.svg</file>
+        <file alias="combobox_closed_hover.svg">../assets/combobox_closed_hover.svg</file>
+    </qresource>
+</RCC>
