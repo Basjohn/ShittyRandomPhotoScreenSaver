@@ -2,10 +2,10 @@
   <defs>
     <style>
       .shadow { opacity: 0.8; }
-      .knob-fill { fill: #444; }
+      .knob-fill { fill: #434343; }
       .body-fill { fill: #1e1e1e; }
       .outline-fill { fill: #fff; }
-      .knob-alt-fill { fill: #969696; }
+      .knob-alt-fill { fill: #232323; }
       .knob-shadow { opacity: 0.5; }
       .knob-ring { fill: #fff; stroke: #383838; stroke-miterlimit: 10; }
     </style>

@@ -17,6 +17,12 @@ from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import (
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    STATUS_LABEL_STYLE,
+    INFO_LABEL_STYLE,
+)
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
 if TYPE_CHECKING:
@@ -48,6 +54,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         row.setSpacing(6)
         label = QLabel(label_text)
         label.setFixedWidth(LABEL_WIDTH)
+        label.setStyleSheet(SECTION_HEADING_STYLE)
         row.addWidget(label)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
@@ -57,6 +64,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         return content
 
     reddit_group = QGroupBox("Reddit Widget")
+    reddit_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
     reddit_layout = QVBoxLayout(reddit_group)
 
     tab.reddit_enabled = QCheckBox("Enable Reddit Widget")
@@ -80,7 +88,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "interaction modes are active."
     )
     reddit_info.setWordWrap(True)
-    reddit_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+    reddit_info.setStyleSheet(INFO_LABEL_STYLE)
     _rc_layout.addWidget(reddit_info)
 
     tab.reddit_exit_on_click = QCheckBox("Exit screensaver when Reddit links are opened")
@@ -138,6 +146,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._set_combo_text(tab.reddit_position, tab._default_str('reddit', 'position', 'Bottom Right'))
     tab.reddit_stack_status = QLabel("")
     tab.reddit_stack_status.setMinimumWidth(100)
+    tab.reddit_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
     reddit_pos_row.addWidget(tab.reddit_stack_status)
     reddit_pos_row.addStretch()
 
@@ -325,6 +334,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_pos_row.addWidget(tab.reddit2_position)
     tab.reddit2_stack_status = QLabel("")
     tab.reddit2_stack_status.setMinimumWidth(80)
+    tab.reddit2_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
     reddit2_pos_row.addWidget(tab.reddit2_stack_status)
     reddit2_pos_row.addStretch()
 

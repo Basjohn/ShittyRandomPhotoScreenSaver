@@ -23,18 +23,19 @@ logger = get_logger(__name__)
 MENU_STYLE = """
 QMenu {
     background-color: rgba(43, 43, 43, 255);
-    border: 2px solid rgba(154, 154, 154, 200);
-    border-radius: 8px;
-    padding: 6px 4px;
+    border: 3px solid #ffffff;
+    border-radius: 10px;
+    padding: 8px 6px;
 }
 QMenu::item {
     background-color: transparent;
     color: #ffffff;
-    padding: 8px 24px 8px 8px;
-    margin: 2px 4px;
-    border-radius: 4px;
-    font-size: 13px;
+    padding: 10px 26px 10px 10px;
+    margin: 3px 5px;
+    border-radius: 6px;
+    font-size: 14px;
     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+    font-weight: 600;
 }
 QMenu::item:selected {
     background-color: rgba(62, 62, 62, 220);
@@ -48,63 +49,59 @@ QMenu::separator {
     margin: 4px 12px;
 }
 QMenu::indicator {
-    width: 16px;
-    height: 16px;
-    margin-left: 6px;
-    margin-right: 6px;
+    width: 22px;
+    height: 22px;
+    margin-left: 8px;
+    margin-right: 8px;
+    border-radius: 11px;
+    border: none;
 }
 QMenu::indicator:checked {
-    background-color: #ffffff;
-    border: 2px solid #888888;
-    border-radius: 3px;
-    image: url(none);
+    image: url(:/ui/assets/circle_checkbox_checked.svg);
 }
 QMenu::indicator:unchecked {
-    background-color: rgba(30, 30, 30, 220);
-    border: 2px solid #555555;
-    border-radius: 3px;
+    image: url(:/ui/assets/circle_checkbox_unchecked.svg);
 }
 """
 
 SUBMENU_STYLE = """
 QMenu {
     background-color: rgba(43, 43, 43, 255);
-    border: 2px solid rgba(154, 154, 154, 200);
-    border-radius: 6px;
-    padding: 4px 2px;
+    border: 3px solid #ffffff;
+    border-radius: 8px;
+    padding: 6px 4px;
 }
 QMenu::item {
     background-color: transparent;
     color: #ffffff;
-    padding: 6px 20px 6px 12px;
-    margin: 1px 3px;
-    border-radius: 3px;
-    font-size: 12px;
+    padding: 8px 22px 8px 12px;
+    margin: 2px 4px;
+    border-radius: 4px;
+    font-size: 13px;
     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+    font-weight: 600;
 }
 QMenu::item:selected {
     background-color: rgba(62, 62, 62, 220);
 }
 QMenu::item:checked {
     color: #ffffff;
-    font-weight: bold;
+    font-weight: 700;
     background-color: rgba(62, 62, 62, 220);
 }
 QMenu::indicator {
-    width: 14px;
-    height: 14px;
-    margin-left: 4px;
-    margin-right: 2px;
+    width: 20px;
+    height: 20px;
+    margin-left: 6px;
+    margin-right: 4px;
+    border-radius: 10px;
+    border: none;
 }
 QMenu::indicator:checked {
-    background-color: #ffffff;
-    border: 2px solid #888888;
-    border-radius: 3px;
+    image: url(:/ui/assets/circle_checkbox_checked.svg);
 }
 QMenu::indicator:unchecked {
-    background-color: rgba(30, 30, 30, 220);
-    border: 2px solid #555555;
-    border-radius: 3px;
+    image: url(:/ui/assets/circle_checkbox_unchecked.svg);
 }
 """
 

@@ -14,7 +14,12 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
-from ui.tabs.shared_styles import NoWheelSlider
+from ui.tabs.shared_styles import (
+    CIRCLE_CHECKBOX_STYLE,
+    NoWheelSlider,
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+)
 
 logger = get_logger(__name__)
 
@@ -100,10 +105,13 @@ class AccessibilityTab(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
+
+        self.setStyleSheet(self.styleSheet() + CIRCLE_CHECKBOX_STYLE)
     
     def _create_dimming_group(self) -> QGroupBox:
         """Create the Background Dimming settings group."""
         group = QGroupBox("Background Dimming")
+        group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         layout = QVBoxLayout(group)
         layout.setSpacing(12)
         
@@ -121,6 +129,7 @@ class AccessibilityTab(QWidget):
         # Opacity slider row
         opacity_row = QHBoxLayout()
         opacity_label = QLabel("Dimming Opacity:")
+        opacity_label.setStyleSheet(SECTION_HEADING_STYLE)
         opacity_label.setMinimumWidth(120)
         opacity_row.addWidget(opacity_label)
         
@@ -154,6 +163,7 @@ class AccessibilityTab(QWidget):
     def _create_pixel_shift_group(self) -> QGroupBox:
         """Create the Widget Pixel Shift settings group."""
         group = QGroupBox("Widget Pixel Shift (Burn-in Prevention)")
+        group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         layout = QVBoxLayout(group)
         layout.setSpacing(12)
         
@@ -170,6 +180,7 @@ class AccessibilityTab(QWidget):
         # Shifts per minute slider row
         shift_row = QHBoxLayout()
         shift_label = QLabel("Shifts Per Minute:")
+        shift_label.setStyleSheet(SECTION_HEADING_STYLE)
         shift_label.setMinimumWidth(120)
         shift_row.addWidget(shift_label)
         

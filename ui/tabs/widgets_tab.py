@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QCheckBox, QPushButton, QSpinBox,
-    QScrollArea, QButtonGroup,
+    QScrollArea, QButtonGroup, QGroupBox,
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor
@@ -28,6 +28,11 @@ from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
     TOOLTIP_STYLE,
     COMBOBOX_STYLE,
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    NAV_TAB_FONT_STYLE,
+    NAV_TAB_FONT_STYLE_ACTIVE,
+    STATUS_LABEL_STYLE,
     NoWheelSlider,  # noqa: F401 — re-exported
 )
 from ui.styled_popup import StyledColorPicker
@@ -247,10 +252,21 @@ class WidgetsTab(QWidget):
         
         # Title
         title = QLabel("Overlay Widgets")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        title.setStyleSheet(
+            "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+            "font-weight: 700;"
+            "font-size: 18px;"
+            "color: #ffffff;"
+        )
         layout.addWidget(title)
 
         # Global widget options
+        global_group = QGroupBox("Global Widget Defaults")
+        global_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+        global_layout = QVBoxLayout(global_group)
+        global_layout.setContentsMargins(16, 12, 16, 12)
+        global_layout.setSpacing(10)
+
         global_row = QHBoxLayout()
         self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
         self.widget_shadows_enabled.setProperty("circleIndicator", True)
@@ -264,7 +280,7 @@ class WidgetsTab(QWidget):
 
         global_row.addSpacing(20)
         border_label = QLabel("Card Border Width (px)")
-        border_label.setStyleSheet("color: #ffffff;")
+        border_label.setStyleSheet(SECTION_HEADING_STYLE)
         global_row.addWidget(border_label)
 
         self.card_border_width_spin = QSpinBox()
@@ -277,7 +293,8 @@ class WidgetsTab(QWidget):
         global_row.addWidget(self.card_border_width_spin)
 
         global_row.addStretch()
-        layout.addLayout(global_row)
+        global_layout.addLayout(global_row)
+        layout.addWidget(global_group)
 
         # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit)
         subtab_row = QHBoxLayout()
@@ -295,12 +312,12 @@ class WidgetsTab(QWidget):
 
         button_style = (
             "QPushButton {"
+            f" {NAV_TAB_FONT_STYLE}"
             " background-color: #2a2a2a;"
             " color: #ffffff;"
             " border-radius: 6px;"
             " padding: 6px 20px;"
             " min-width: 110px;"
-            " font-weight: 600;"
             " border-top: 1px solid rgba(110, 110, 110, 0.8);"
             " border-left: 1px solid rgba(110, 110, 110, 0.8);"
             " border-right: 2px solid rgba(0, 0, 0, 0.75);"
@@ -310,8 +327,8 @@ class WidgetsTab(QWidget):
             " background-color: #343434;"
             " }"
             "QPushButton:checked {"
+            f" {NAV_TAB_FONT_STYLE_ACTIVE}"
             " background-color: #3a3a3a;"
-            " font-weight: 700;"
             " border-top: 2px solid rgba(0, 0, 0, 0.75);"
             " border-left: 2px solid rgba(0, 0, 0, 0.75);"
             " border-right: 1px solid rgba(140, 140, 140, 0.85);"
@@ -1065,10 +1082,14 @@ class WidgetsTab(QWidget):
                 if message:
                     if can_stack:
                         status_label.setText(message)
-                        status_label.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold;")
+                        status_label.setStyleSheet(
+                            f"{STATUS_LABEL_STYLE} color: #4CAF50;"
+                        )
                     else:
                         status_label.setText(message)
-                        status_label.setStyleSheet("color: #FF9800; font-size: 11px; font-weight: bold;")
+                        status_label.setStyleSheet(
+                            f"{STATUS_LABEL_STYLE} color: #FF9800;"
+                        )
                 else:
                     status_label.setText("")
                     status_label.setStyleSheet("")

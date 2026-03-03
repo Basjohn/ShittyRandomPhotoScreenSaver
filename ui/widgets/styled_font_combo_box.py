@@ -43,6 +43,13 @@ class StyledFontComboBox(QFontComboBox):
         self.setProperty("comboFlavor", "font")
         self.setProperty("comboSize", self._size_variant)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        # Filter out non-scalable bitmap fonts (e.g., "Small Fonts", "System") that
+        # trigger DirectWrite CreateFontFaceFromHDC warnings on Windows.
+        self.setFontFilters(QFontComboBox.FontFilter.ScalableFonts)
+        # QFontComboBox defaults to editable; once we hide the drop-down arrow in QSS
+        # there is no obvious click target to open the popup. Keep it non-editable so
+        # the entire control behaves like a button and the popup can open normally.
+        self.setEditable(False)
 
     def _style_popup_view(self) -> None:
         popup_view = self.view()

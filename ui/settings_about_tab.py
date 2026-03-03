@@ -208,9 +208,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     hotkeys_label = QLabel(
         "<p><b>Hotkeys While Running:</b></p>"
         "<p>"
-        "<b>Z</b>  - Go back to previous image<br>"
-        "<b>X</b>  - Go forward to next image<br>"
-        "<b>C</b>  - Cycle transition modes (Crossfade   Slide   Wipe   Diffuse   Block Flip)<br>"
+        "<b>Right-Click (Ctrl Held/Hard Exit)</b> - Opens Context Menu<br>"
         "<b>S</b>  - Stop screensaver and open Settings<br>"
         "<b>ESC</b> - Exit screensaver<br>"
         "<b>Ctrl (HOLD)</b> - Temporary interaction mode (widgets clickable without exiting)<br>"

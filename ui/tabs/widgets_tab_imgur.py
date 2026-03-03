@@ -18,6 +18,12 @@ from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import (
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    STATUS_LABEL_STYLE,
+    INFO_LABEL_STYLE,
+)
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
 if TYPE_CHECKING:
@@ -41,6 +47,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         row.setSpacing(6)
         label = QLabel(label_text)
         label.setFixedWidth(LABEL_WIDTH)
+        label.setStyleSheet(SECTION_HEADING_STYLE)
         row.addWidget(label)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
@@ -50,6 +57,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         return content
 
     imgur_group = QGroupBox("Imgur Widget")
+    imgur_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
     imgur_layout = QVBoxLayout(imgur_group)
 
     tab.imgur_enabled = QCheckBox("Enable Imgur Widget")
@@ -67,7 +75,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "Displays curated images from Imgur. Click images to open in browser."
     )
     imgur_info.setWordWrap(True)
-    imgur_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+    imgur_info.setStyleSheet(INFO_LABEL_STYLE)
     _imgur_ctl.addWidget(imgur_info)
 
     # Tag selection
@@ -115,6 +123,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab.imgur_grid_total = QLabel("= 8 images")
     tab.imgur_grid_total.setMinimumWidth(100)
+    tab.imgur_grid_total.setStyleSheet(STATUS_LABEL_STYLE)
     imgur_grid_row.addWidget(tab.imgur_grid_total)
     imgur_grid_row.addStretch()
 

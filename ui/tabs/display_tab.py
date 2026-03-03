@@ -17,7 +17,14 @@ from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
-from ui.tabs.shared_styles import SPINBOX_STYLE, CIRCLE_CHECKBOX_STYLE, COMBOBOX_STYLE
+from ui.tabs.shared_styles import (
+    SPINBOX_STYLE,
+    CIRCLE_CHECKBOX_STYLE,
+    COMBOBOX_STYLE,
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    INFO_LABEL_STYLE,
+)
 from ui.widgets import StyledComboBox
 from utils.monitors import get_screen_count
 
@@ -80,6 +87,7 @@ class DisplayTab(QWidget):
             row.setSpacing(8)
             label = QLabel(label_text)
             label.setFixedWidth(LABEL_WIDTH)
+            label.setStyleSheet(SECTION_HEADING_STYLE)
             row.addWidget(label)
             content = QHBoxLayout()
             content.setContentsMargins(0, 0, 0, 0)
@@ -101,6 +109,7 @@ class DisplayTab(QWidget):
         
         # Monitor selection group
         monitor_group = QGroupBox("Monitor Configuration")
+        monitor_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         monitor_layout = QVBoxLayout(monitor_group)
         monitor_layout.setSpacing(6)
 
@@ -135,6 +144,7 @@ class DisplayTab(QWidget):
         
         # Display mode group
         mode_group = QGroupBox("Display Mode")
+        mode_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         mode_layout = QVBoxLayout(mode_group)
         
         mode_row = _aligned_row(mode_layout, "Mode:")
@@ -153,6 +163,7 @@ class DisplayTab(QWidget):
         
         # Timing group
         timing_group = QGroupBox("Image Timing")
+        timing_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         timing_layout = QVBoxLayout(timing_group)
         
         # Rotation interval
@@ -161,7 +172,7 @@ class DisplayTab(QWidget):
         self.interval_spin.setRange(1, 3600)
         self.interval_spin.setSingleStep(1)
         self.interval_spin.setAccelerated(True)
-        self.interval_spin.setSuffix(" seconds")
+        self.interval_spin.setSuffix("s")
         self.interval_spin.setValue(10)
         self.interval_spin.valueChanged.connect(self._save_settings)
         self.interval_spin.setFixedWidth(140)
@@ -181,6 +192,7 @@ class DisplayTab(QWidget):
         
         # Image quality group
         quality_group = QGroupBox("Image Quality")
+        quality_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         quality_layout = QVBoxLayout(quality_group)
         
         lanczos_row = _aligned_row(quality_layout, "")
@@ -209,6 +221,7 @@ class DisplayTab(QWidget):
 
         # Renderer backend group
         backend_group = QGroupBox("Renderer Backend")
+        backend_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         backend_layout = QVBoxLayout(backend_group)
 
         backend_row = _aligned_row(backend_layout, "Preferred backend:")
@@ -224,12 +237,13 @@ class DisplayTab(QWidget):
             "OpenGL is the primary renderer. If it fails during startup, the software fallback engages automatically."
         )
         backend_hint.setWordWrap(True)
-        backend_hint.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+        backend_hint.setStyleSheet(INFO_LABEL_STYLE)
         backend_layout.addWidget(backend_hint)
 
         layout.addWidget(backend_group)
         # Input & Exit group
         input_group = QGroupBox("Input && Exit")
+        input_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         input_layout = QVBoxLayout(input_group)
         hard_exit_row = _aligned_row(input_layout, "")
         self.hard_exit_check = QCheckBox("Hard Exit (ESC only)")

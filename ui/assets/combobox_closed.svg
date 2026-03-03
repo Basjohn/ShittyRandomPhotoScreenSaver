@@ -2,7 +2,7 @@
   <defs>
     <style>
       .shadow { opacity: 0.8; }
-      .knob-fill { fill: #444; }
+      .knob-fill { fill: #7f7f7f; }
       .body-fill { fill: #1e1e1e; }
       .outline-fill { fill: #fff; }
       .knob-shadow { opacity: 0.5; }

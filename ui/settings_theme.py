@@ -87,6 +87,9 @@ def load_theme(widget) -> None:
                     border-radius: 6px;
                     border-bottom: 2px solid rgba(0, 0, 0, 0.6);
                     border-right: 2px solid rgba(0, 0, 0, 0.7);
+                    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+                    font-weight: 600;
+                    font-size: 13px;
                 }
                 
                 #tabButton:hover {
@@ -97,7 +100,7 @@ def load_theme(widget) -> None:
                 #tabButton:checked {
                     background-color: #3E3E3E;
                     color: #ffffff;
-                    font-weight: bold;
+                    font-weight: 700;
                 }
                 
                 #contentArea {
@@ -217,20 +220,23 @@ def load_theme(widget) -> None:
                 
                 QGroupBox {
                     background-color: rgba(40, 40, 40, 0.8);
-                    border: 1px solid rgba(90, 90, 90, 0.8);
-                    border-radius: 6px;
-                    margin-top: 15px;
-                    margin-bottom: 10px;
-                    padding: 15px 10px 10px 10px;
+                    border: 1px solid rgba(255, 255, 255, 0.8);
+                    border-radius: 18px;
+                    margin-top: 20px;
+                    margin-bottom: 12px;
+                    padding: 18px 14px 12px 14px;
                     color: #ffffff;
                 }
                 
                 QGroupBox::title {
                     subcontrol-origin: margin;
                     subcontrol-position: top left;
-                    padding: 2px 8px;
+                    padding: 2px 10px;
                     margin-top: 5px;
                     color: #ffffff;
+                    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+                    font-weight: 600;
+                    font-size: 14px;
                 }
                 
                 QCheckBox {

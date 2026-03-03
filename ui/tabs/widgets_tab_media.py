@@ -19,6 +19,12 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import (
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    STATUS_LABEL_STYLE,
+    INFO_LABEL_STYLE,
+)
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.settings_binding import (
     ColorBinding,
@@ -115,6 +121,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         row.setSpacing(6)
         label = QLabel(label_text)
         label.setFixedWidth(LABEL_WIDTH)
+        label.setStyleSheet(SECTION_HEADING_STYLE)
         row.addWidget(label)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
@@ -125,6 +132,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # --- Media (Spotify) Widget Group ---
     media_group = QGroupBox("Spotify Widget")
+    media_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
     media_layout = QVBoxLayout(media_group)
 
     tab.media_enabled = QCheckBox("Enable Spotify Widget")
@@ -147,7 +155,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         "only be active when explicitly enabled via input settings (hard-exit / Ctrl mode)."
     )
     media_info.setWordWrap(True)
-    media_info.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+    media_info.setStyleSheet(INFO_LABEL_STYLE)
     _media_ctrl_layout.addWidget(media_info)
 
     media_pos_row = _aligned_row(_media_ctrl_layout, "Position:")
@@ -164,6 +172,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._set_combo_text(tab.media_position, tab._default_str('media', 'position', 'Bottom Left'))
     tab.media_stack_status = QLabel("")
     tab.media_stack_status.setMinimumWidth(100)
+    tab.media_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
     media_pos_row.addWidget(tab.media_stack_status)
     media_pos_row.addStretch()
 
@@ -374,6 +383,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # --- Spotify Beat Visualizer Group ---
     spotify_vis_group = QGroupBox("Spotify Beat Visualizer")
+    spotify_vis_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
     spotify_vis_layout = QVBoxLayout(spotify_vis_group)
 
     spotify_vis_enable_row = QHBoxLayout()
@@ -427,7 +437,9 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rsc_layout = QHBoxLayout(tab._rainbow_speed_container)
     _rsc_layout.setContentsMargins(20, 0, 0, 0)
     _rsc_layout.setSpacing(4)
-    _rsc_layout.addWidget(QLabel("Speed:"))
+    speed_label = QLabel("Speed:")
+    speed_label.setStyleSheet(SECTION_HEADING_STYLE)
+    _rsc_layout.addWidget(speed_label)
     tab.rainbow_speed_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.rainbow_speed_slider.setRange(1, 100)
     tab.rainbow_speed_slider.setValue(50)
@@ -444,7 +456,9 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # --- Visualizer Type Selector ---
     vis_type_row = QHBoxLayout()
-    vis_type_row.addWidget(QLabel("Visualizer Type:"))
+    vis_label = QLabel("Visualizer Type:")
+    vis_label.setStyleSheet(SECTION_HEADING_STYLE)
+    vis_type_row.addWidget(vis_label)
     tab.spotify_vis_type_combo = StyledComboBox(size_variant="hero")
     tab.spotify_vis_type_combo.setMinimumWidth(160)
     import os as _os

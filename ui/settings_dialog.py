@@ -11,7 +11,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QFileDialog, QMenu, QScrollArea, QCheckBox,
+    QFileDialog, QMenu, QScrollArea,
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPen, QGuiApplication
@@ -711,7 +711,7 @@ class SettingsDialog(QDialog):
                 )
                 self._animations.start()
                 _after_switch()
-            # Fade out old widget
+
             self._animations.animate_property(
                 target=old_widget,
                 property_name='windowOpacity',
@@ -731,13 +731,18 @@ class SettingsDialog(QDialog):
         font.setWeight(QFont.Weight.Normal)
         QGuiApplication.setFont(font)
 
+    def _apply_tab_button_font(self) -> None:
+        font = QFont("Jost", 10)
+        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
+        font.setWeight(QFont.Weight.DemiBold)
+        for button in self.tab_buttons:
+            button.setFont(font)
+
     def _apply_circle_checkbox_style(self) -> None:
-        for checkbox in self.findChildren(QCheckBox):
-            checkbox.setProperty("circleIndicator", True)
-            style = checkbox.style()
-            style.unpolish(checkbox)
-            style.polish(checkbox)
-            checkbox.update()
+        try:
+            self.setStyleSheet(self.styleSheet() + shared_styles.CIRCLE_CHECKBOX_STYLE)
+        except Exception:
+            logger.debug("Failed to append circle checkbox stylesheet", exc_info=True)
 
     def _register_tab_scroll_area(self, index: int, tab_widget: QWidget) -> None:
         """Associate a scroll area with a tab for persistence."""

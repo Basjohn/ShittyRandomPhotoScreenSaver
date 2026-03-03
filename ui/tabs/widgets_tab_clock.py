@@ -17,6 +17,11 @@ from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import (
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    STATUS_LABEL_STYLE,
+)
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
 if TYPE_CHECKING:
@@ -73,6 +78,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         row.setSpacing(6)
         label = QLabel(label_text)
         label.setFixedWidth(LABEL_WIDTH)
+        label.setStyleSheet(SECTION_HEADING_STYLE)
         row.addWidget(label)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
@@ -82,6 +88,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         return content
 
     clock_group = QGroupBox("Clock Widget")
+    clock_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
     clock_layout = QVBoxLayout(clock_group)
 
     # Enable clock
@@ -220,6 +227,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._set_combo_text(tab.clock_position, tab._default_str('clock', 'position', 'Top Right'))
     tab.clock_stack_status = QLabel("")
     tab.clock_stack_status.setMinimumWidth(100)
+    tab.clock_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
     position_row.addWidget(tab.clock_stack_status)
     position_row.addStretch()
 

@@ -73,7 +73,7 @@ ffff\x22 opacity=\x220\
 .4\x22 cx=\x2214\x22 cy=\x22\
 14\x22 r=\x228.5\x22 />\x0a<\
 /svg>\x0a\
-\x00\x00\x05\x04\
+\x00\x00\x05\x07\
 <\
 svg xmlns=\x22http:\
 //www.w3.org/200\
@@ -84,145 +84,65 @@ svg xmlns=\x22http:\
  .shadow { opaci\
 ty: 0.8; }\x0d\x0a    \
   .knob-fill { f\
-ill: #444; }\x0d\x0a  \
-    .body-fill {\
- fill: #1e1e1e; \
-}\x0d\x0a      .outlin\
-e-fill { fill: #\
-fff; }\x0d\x0a      .k\
-nob-alt-fill { f\
-ill: #969696; }\x0d\
-\x0a      .knob-sha\
-dow { opacity: 0\
-.5; }\x0d\x0a      .kn\
-ob-ring { fill: \
-#fff; stroke: #3\
-83838; stroke-mi\
-terlimit: 10; }\x0d\
-\x0a    </style>\x0d\x0a \
- </defs>\x0d\x0a  <g i\
-d=\x22Layer_2\x22 data\
--name=\x22Layer 2\x22>\
-\x0d\x0a    <g id=\x22CLO\
-SED\x22>\x0d\x0a      <g \
-class=\x22shadow\x22>\x0d\
-\x0a        <rect x\
-=\x224.43\x22 y=\x222.44\x22\
- width=\x22351\x22 hei\
-ght=\x2264\x22 rx=\x2219\x22\
- />\x0d\x0a      </g>\x0d\
-\x0a      <rect cla\
-ss=\x22knob-fill\x22 x\
-=\x22320\x22 y=\x228\x22 wid\
-th=\x2228\x22 height=\x22\
-53\x22 rx=\x2212\x22 />\x0d\x0a\
-      <rect clas\
-s=\x22body-fill\x22 x=\
-\x221\x22 y=\x221\x22 width=\
-\x22349\x22 height=\x2262\
-\x22 rx=\x2218\x22 />\x0d\x0a  \
-    <path class=\
-\x22outline-fill\x22 d\
-=\x22M332,2a17,17,0\
-,0,1,17,17V45a17\
-,17,0,0,1-17,17H\
-19A17,17,0,0,1,2\
-,45V19A17,17,0,0\
-,1,19,2H332m0-2H\
-19A19.06,19.06,0\
-,0,0,0,19V45A19.\
-06,19.06,0,0,0,1\
-9,64H332a19.06,1\
-9.06,0,0,0,19-19\
-V19A19.06,19.06,\
-0,0,0,332,0Z\x22 />\
-\x0d\x0a      <rect x=\
-\x22314\x22 y=\x2210.89\x22 \
+ill: #434343; }\x0d\
+\x0a      .body-fil\
+l { fill: #1e1e1\
+e; }\x0d\x0a      .out\
+line-fill { fill\
+: #fff; }\x0d\x0a     \
+ .knob-alt-fill \
+{ fill: #232323;\
+ }\x0d\x0a      .knob-\
+shadow { opacity\
+: 0.5; }\x0d\x0a      \
+.knob-ring { fil\
+l: #fff; stroke:\
+ #383838; stroke\
+-miterlimit: 10;\
+ }\x0d\x0a    </style>\
+\x0d\x0a  </defs>\x0d\x0a  <\
+g id=\x22Layer_2\x22 d\
+ata-name=\x22Layer \
+2\x22>\x0d\x0a    <g id=\x22\
+CLOSED\x22>\x0d\x0a      \
+<g class=\x22shadow\
+\x22>\x0d\x0a        <rec\
+t x=\x224.43\x22 y=\x222.\
+44\x22 width=\x22351\x22 \
+height=\x2264\x22 rx=\x22\
+19\x22 />\x0d\x0a      </\
+g>\x0d\x0a      <rect \
+class=\x22knob-fill\
+\x22 x=\x22320\x22 y=\x228\x22 \
 width=\x2228\x22 heigh\
-t=\x2246.11\x22 rx=\x2212\
-\x22 />\x0d\x0a      <rec\
-t class=\x22knob-al\
-t-fill\x22 x=\x22312\x22 \
-y=\x229.15\x22 width=\x22\
-28\x22 height=\x2246.1\
-1\x22 rx=\x2212\x22 />\x0d\x0a \
-     <circle cla\
-ss=\x22knob-shadow\x22\
- cx=\x22327\x22 cy=\x2246\
-\x22 r=\x226\x22 />\x0d\x0a    \
-  <circle class=\
-\x22knob-ring\x22 cx=\x22\
-325.5\x22 cy=\x2244.5\x22\
- r=\x226\x22 />\x0d\x0a    <\
-/g>\x0d\x0a  </g>\x0d\x0a</s\
-vg>\
-\x00\x00\x04\xd7\
-<\
-svg xmlns=\x22http:\
-//www.w3.org/200\
-0/svg\x22 viewBox=\x22\
-0 0 355.43 66.44\
-\x22>\x0d\x0a  <defs>\x0d\x0a  \
-  <style>\x0d\x0a     \
- .shadow { opaci\
-ty: 0.8; }\x0d\x0a    \
-  .knob-fill { f\
-ill: #444; }\x0d\x0a  \
-    .body-fill {\
- fill: #1e1e1e; \
-}\x0d\x0a      .outlin\
-e-fill { fill: #\
-fff; }\x0d\x0a      .k\
-nob-shadow { opa\
-city: 0.5; }\x0d\x0a  \
-    .knob-ring {\
- fill: #fff; str\
-oke: #383838; st\
-roke-miterlimit:\
- 10; }\x0d\x0a    </st\
-yle>\x0d\x0a  </defs>\x0d\
-\x0a  <g id=\x22Layer_\
-2\x22 data-name=\x22La\
-yer 2\x22>\x0d\x0a    <g \
-id=\x22CLOSED\x22>\x0d\x0a  \
-    <g class=\x22sh\
-adow\x22>\x0d\x0a        \
-<rect x=\x224.43\x22 y\
-=\x222.44\x22 width=\x223\
-51\x22 height=\x2264\x22 \
-rx=\x2219\x22 />\x0d\x0a    \
-  </g>\x0d\x0a      <r\
-ect class=\x22knob-\
-fill\x22 x=\x22320\x22 y=\
-\x228\x22 width=\x2228\x22 h\
-eight=\x2253\x22 rx=\x221\
-2\x22 />\x0d\x0a      <re\
-ct class=\x22body-f\
-ill\x22 x=\x221\x22 y=\x221\x22\
- width=\x22349\x22 hei\
-ght=\x2262\x22 rx=\x2218\x22\
- />\x0d\x0a      <path\
- class=\x22outline-\
-fill\x22 d=\x22M332,2a\
-17,17,0,0,1,17,1\
-7V45a17,17,0,0,1\
--17,17H19A17,17,\
-0,0,1,2,45V19A17\
-,17,0,0,1,19,2H3\
-32m0-2H19A19.06,\
-19.06,0,0,0,0,19\
-V45A19.06,19.06,\
-0,0,0,19,64H332a\
+t=\x2253\x22 rx=\x2212\x22 /\
+>\x0d\x0a      <rect c\
+lass=\x22body-fill\x22\
+ x=\x221\x22 y=\x221\x22 wid\
+th=\x22349\x22 height=\
+\x2262\x22 rx=\x2218\x22 />\x0d\
+\x0a      <path cla\
+ss=\x22outline-fill\
+\x22 d=\x22M332,2a17,1\
+7,0,0,1,17,17V45\
+a17,17,0,0,1-17,\
+17H19A17,17,0,0,\
+1,2,45V19A17,17,\
+0,0,1,19,2H332m0\
+-2H19A19.06,19.0\
+6,0,0,0,0,19V45A\
 19.06,19.06,0,0,\
-0,19-19V19A19.06\
-,19.06,0,0,0,332\
-,0Z\x22 />\x0d\x0a      <\
-rect x=\x22314\x22 y=\x22\
-10.89\x22 width=\x2228\
-\x22 height=\x2246.11\x22\
- rx=\x2212\x22 />\x0d\x0a   \
-   <rect class=\x22\
-knob-fill\x22 x=\x2231\
+0,19,64H332a19.0\
+6,19.06,0,0,0,19\
+-19V19A19.06,19.\
+06,0,0,0,332,0Z\x22\
+ />\x0d\x0a      <rect\
+ x=\x22314\x22 y=\x2210.8\
+9\x22 width=\x2228\x22 he\
+ight=\x2246.11\x22 rx=\
+\x2212\x22 />\x0d\x0a      <\
+rect class=\x22knob\
+-alt-fill\x22 x=\x2231\
 2\x22 y=\x229.15\x22 widt\
 h=\x2228\x22 height=\x224\
 6.11\x22 rx=\x2212\x22 />\
@@ -236,6 +156,86 @@ x=\x22325.5\x22 cy=\x2244\
 .5\x22 r=\x226\x22 />\x0d\x0a  \
   </g>\x0d\x0a  </g>\x0d\x0a\
 </svg>\
+\x00\x00\x04\xda\
+<\
+svg xmlns=\x22http:\
+//www.w3.org/200\
+0/svg\x22 viewBox=\x22\
+0 0 355.43 66.44\
+\x22>\x0d\x0a  <defs>\x0d\x0a  \
+  <style>\x0d\x0a     \
+ .shadow { opaci\
+ty: 0.8; }\x0d\x0a    \
+  .knob-fill { f\
+ill: #7f7f7f; }\x0d\
+\x0a      .body-fil\
+l { fill: #1e1e1\
+e; }\x0d\x0a      .out\
+line-fill { fill\
+: #fff; }\x0d\x0a     \
+ .knob-shadow { \
+opacity: 0.5; }\x0d\
+\x0a      .knob-rin\
+g { fill: #fff; \
+stroke: #383838;\
+ stroke-miterlim\
+it: 10; }\x0d\x0a    <\
+/style>\x0d\x0a  </def\
+s>\x0d\x0a  <g id=\x22Lay\
+er_2\x22 data-name=\
+\x22Layer 2\x22>\x0d\x0a    \
+<g id=\x22CLOSED\x22>\x0d\
+\x0a      <g class=\
+\x22shadow\x22>\x0d\x0a     \
+   <rect x=\x224.43\
+\x22 y=\x222.44\x22 width\
+=\x22351\x22 height=\x226\
+4\x22 rx=\x2219\x22 />\x0d\x0a \
+     </g>\x0d\x0a     \
+ <rect class=\x22kn\
+ob-fill\x22 x=\x22320\x22\
+ y=\x228\x22 width=\x2228\
+\x22 height=\x2253\x22 rx\
+=\x2212\x22 />\x0d\x0a      \
+<rect class=\x22bod\
+y-fill\x22 x=\x221\x22 y=\
+\x221\x22 width=\x22349\x22 \
+height=\x2262\x22 rx=\x22\
+18\x22 />\x0d\x0a      <p\
+ath class=\x22outli\
+ne-fill\x22 d=\x22M332\
+,2a17,17,0,0,1,1\
+7,17V45a17,17,0,\
+0,1-17,17H19A17,\
+17,0,0,1,2,45V19\
+A17,17,0,0,1,19,\
+2H332m0-2H19A19.\
+06,19.06,0,0,0,0\
+,19V45A19.06,19.\
+06,0,0,0,19,64H3\
+32a19.06,19.06,0\
+,0,0,19-19V19A19\
+.06,19.06,0,0,0,\
+332,0Z\x22 />\x0d\x0a    \
+  <rect x=\x22314\x22 \
+y=\x2210.89\x22 width=\
+\x2228\x22 height=\x2246.\
+11\x22 rx=\x2212\x22 />\x0d\x0a\
+      <rect clas\
+s=\x22knob-fill\x22 x=\
+\x22312\x22 y=\x229.15\x22 w\
+idth=\x2228\x22 height\
+=\x2246.11\x22 rx=\x2212\x22\
+ />\x0d\x0a      <circ\
+le class=\x22knob-s\
+hadow\x22 cx=\x22327\x22 \
+cy=\x2246\x22 r=\x226\x22 />\
+\x0d\x0a      <circle \
+class=\x22knob-ring\
+\x22 cx=\x22325.5\x22 cy=\
+\x2244.5\x22 r=\x226\x22 />\x0d\
+\x0a    </g>\x0d\x0a  </g\
+>\x0d\x0a</svg>\
 \x00\x00\x01I\
 <\
 svg xmlns=\x22http:\
@@ -11889,20 +11889,20 @@ qt_resource_struct = b"\
 \x00\x00\x00X\x00\x00\x00\x00\x00\x01\x00\x00\x01M\
 \x00\x00\x01\x9c\xaeh\x9d\x9b\
 \x00\x00\x00\xf4\x00\x00\x00\x00\x00\x01\x00\x00\x03\xc1\
-\x00\x00\x01\x9c\xaf\xeb\xbe#\
+\x00\x00\x01\x9c\xb4u$\x87\
 \x00\x00\x00\xa8\x00\x00\x00\x00\x00\x01\x00\x00\x02f\
 \x00\x00\x01\x9c\xaey\x85\xc9\
-\x00\x00\x01X\x00\x00\x00\x00\x00\x01\x00\x00\x0d\xa4\
+\x00\x00\x01X\x00\x00\x00\x00\x00\x01\x00\x00\x0d\xaa\
 \x00\x00\x01\x9c\xaey\xdey\
 \x00\x00\x00\x1c\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00\
 \x00\x00\x01\x9c\xaeim\x0f\
-\x00\x00\x01,\x00\x00\x00\x00\x00\x01\x00\x00\x08\xc9\
-\x00\x00\x01\x9c\xaf\xe9\x11\xc0\
-\x00\x00\x01\xe6\x00\x00\x00\x00\x00\x01\x00\x01\xef\xf9\
+\x00\x00\x01,\x00\x00\x00\x00\x00\x01\x00\x00\x08\xcc\
+\x00\x00\x01\x9c\xb4:\xd2\xd8\
+\x00\x00\x01\xe6\x00\x00\x00\x00\x00\x01\x00\x01\xef\xff\
 \x00\x00\x01\x994\x99\xf1\x00\
-\x00\x00\x01\xa0\x00\x00\x00\x00\x00\x01\x00\x00\x0e\xf1\
+\x00\x00\x01\xa0\x00\x00\x00\x00\x00\x01\x00\x00\x0e\xf7\
 \x00\x00\x01\x994\x99\xf1\x00\
-\x00\x00\x01\xc0\x00\x00\x00\x00\x00\x01\x00\x00\xff\xa1\
+\x00\x00\x01\xc0\x00\x00\x00\x00\x00\x01\x00\x00\xff\xa7\
 \x00\x00\x01\x994\x99\xf1\x00\
 "
 

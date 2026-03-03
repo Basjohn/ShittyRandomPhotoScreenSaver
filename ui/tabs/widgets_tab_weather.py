@@ -18,6 +18,11 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from widgets.timezone_utils import get_local_timezone
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import (
+    SECTION_HEADING_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    STATUS_LABEL_STYLE,
+)
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
 if TYPE_CHECKING:
@@ -78,6 +83,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         row.setSpacing(6)
         label = QLabel(label_text)
         label.setFixedWidth(LABEL_WIDTH)
+        label.setStyleSheet(SECTION_HEADING_STYLE)
         row.addWidget(label)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
@@ -87,6 +93,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         return content
 
     weather_group = QGroupBox("Weather Widget")
+    weather_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
     weather_layout = QVBoxLayout(weather_group)
 
     # Enable weather
@@ -105,7 +112,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Info label
     info_label = QLabel("\u2713 Uses Open-Meteo API (free, no API key required)")
-    info_label.setStyleSheet("color: #4CAF50; font-size: 11px;")
+    info_label.setStyleSheet("color: #4CAF50; font-size: 11px; font-family: 'Jost'; font-weight: 600;")
     _weather_ctrl_layout.addWidget(info_label)
 
     # Location with autocomplete
@@ -161,6 +168,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._set_combo_text(tab.weather_position, tab._default_str('weather', 'position', 'Top Left'))
     tab.weather_stack_status = QLabel("")
     tab.weather_stack_status.setMinimumWidth(100)
+    tab.weather_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
     weather_pos_row.addWidget(tab.weather_stack_status)
     weather_pos_row.addStretch()
 

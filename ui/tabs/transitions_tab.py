@@ -19,7 +19,14 @@ from PySide6.QtGui import QColor
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
-from ui.tabs.shared_styles import COMBOBOX_STYLE, SPINBOX_STYLE, NoWheelSlider
+from ui.tabs.shared_styles import (
+    COMBOBOX_STYLE,
+    CIRCLE_CHECKBOX_STYLE,
+    SPINBOX_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+    SECTION_HEADING_STYLE,
+    NoWheelSlider,
+)
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
 from ui.widgets import StyledComboBox
 
@@ -83,6 +90,7 @@ class TransitionsTab(QWidget):
             row.setSpacing(6)
             label = QLabel(label_text)
             label.setFixedWidth(LABEL_WIDTH)
+            label.setStyleSheet(SECTION_HEADING_STYLE)
             row.addWidget(label)
             content = QHBoxLayout()
             content.setContentsMargins(0, 0, 0, 0)
@@ -90,6 +98,9 @@ class TransitionsTab(QWidget):
             row.addLayout(content, 1)
             parent_layout.addLayout(row)
             return content
+
+        def _style_group_box(box: QGroupBox) -> None:
+            box.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
 
         # Create content widget
         content = QWidget()
@@ -99,11 +110,17 @@ class TransitionsTab(QWidget):
         
         # Title
         title = QLabel("Transition Settings")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        title.setStyleSheet(
+            "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+            "font-weight: 700;"
+            "font-size: 18px;"
+            "color: #ffffff;"
+        )
         layout.addWidget(title)
         
         # Transition type group
         type_group = QGroupBox("Transition Type")
+        _style_group_box(type_group)
         type_layout = QVBoxLayout(type_group)
         
         type_row = _aligned_row(type_layout, "Transition:")
@@ -150,6 +167,7 @@ class TransitionsTab(QWidget):
         
         # Duration group (slider: short → long)
         duration_group = QGroupBox("Timing")
+        _style_group_box(duration_group)
         duration_layout = QVBoxLayout(duration_group)
         duration_row = _aligned_row(duration_layout, "Duration (short → long):")
         self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -167,6 +185,7 @@ class TransitionsTab(QWidget):
         
         # Direction group (for directional transitions)
         self.direction_group = QGroupBox("Direction")
+        _style_group_box(self.direction_group)
         direction_layout = QVBoxLayout(self.direction_group)
         
         direction_row = _aligned_row(direction_layout, "Direction:")
@@ -180,6 +199,7 @@ class TransitionsTab(QWidget):
         
         # Easing group
         easing_group = QGroupBox("Easing Curve")
+        _style_group_box(easing_group)
         easing_layout = QVBoxLayout(easing_group)
         
         easing_row = _aligned_row(easing_layout, "Easing:")
@@ -203,6 +223,7 @@ class TransitionsTab(QWidget):
         
         # Block flip specific settings
         self.flip_group = QGroupBox("Block Flip Settings")
+        _style_group_box(self.flip_group)
         flip_layout = QVBoxLayout(self.flip_group)
         
         grid_rows_row = _aligned_row(flip_layout, "Grid Rows:")
@@ -242,6 +263,7 @@ class TransitionsTab(QWidget):
 
         # 3D Block Spins specific settings (single-slab only, no grid)
         self.blockspin_group = QGroupBox("3D Block Spins Settings")
+        _style_group_box(self.blockspin_group)
         blockspin_layout = QVBoxLayout(self.blockspin_group)
 
         bs_row = _aligned_row(blockspin_layout, "Direction:")
@@ -263,6 +285,7 @@ class TransitionsTab(QWidget):
 
         # Blinds specific settings
         self.blinds_group = QGroupBox("Blinds Settings")
+        _style_group_box(self.blinds_group)
         blinds_layout = QVBoxLayout(self.blinds_group)
 
         blinds_dir_row = _aligned_row(blinds_layout, "Direction:")
@@ -288,6 +311,7 @@ class TransitionsTab(QWidget):
         
         # Diffuse specific settings
         self.diffuse_group = QGroupBox("Diffuse Settings")
+        _style_group_box(self.diffuse_group)
         diffuse_layout = QVBoxLayout(self.diffuse_group)
 
         block_size_row = _aligned_row(diffuse_layout, "Block Size (px):")
@@ -315,6 +339,7 @@ class TransitionsTab(QWidget):
 
         # Ripple specific settings
         self.ripple_group = QGroupBox("Ripple Settings")
+        _style_group_box(self.ripple_group)
         ripple_layout = QVBoxLayout(self.ripple_group)
 
         ripple_count_row = _aligned_row(ripple_layout, "Ripple Count:")
@@ -329,6 +354,7 @@ class TransitionsTab(QWidget):
 
         # Crumble specific settings
         self.crumble_group = QGroupBox("Crumble Settings")
+        _style_group_box(self.crumble_group)
         crumble_layout = QVBoxLayout(self.crumble_group)
 
         crumble_piece_row = _aligned_row(crumble_layout, "Piece Count:")
@@ -364,6 +390,7 @@ class TransitionsTab(QWidget):
 
         # Particle transition settings
         self.particle_group = QGroupBox("Particle Settings")
+        _style_group_box(self.particle_group)
         particle_layout = QVBoxLayout(self.particle_group)
 
         particle_mode_row = _aligned_row(particle_layout, "Mode:")
@@ -473,6 +500,7 @@ class TransitionsTab(QWidget):
 
         # Burn specific settings
         self.burn_group = QGroupBox("Burn Settings")
+        _style_group_box(self.burn_group)
         burn_layout = QVBoxLayout(self.burn_group)
 
         burn_dir_row = _aligned_row(burn_layout, "Direction:")
@@ -600,7 +628,9 @@ class TransitionsTab(QWidget):
         # Enforce GL-only availability on initial build
         self._refresh_hw_dependent_options()
         
-        self.setStyleSheet(self.styleSheet() + SPINBOX_STYLE + COMBOBOX_STYLE)
+        self.setStyleSheet(
+            self.styleSheet() + SPINBOX_STYLE + COMBOBOX_STYLE + CIRCLE_CHECKBOX_STYLE
+        )
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""

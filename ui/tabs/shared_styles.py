@@ -43,15 +43,15 @@ class NoWheelSlider(QSlider):
         event.ignore()
 
 SPINBOX_STYLE = """
-/* Rounded inputs without visible seams */
+/* Rounded inputs with opaque borders + circular stepper controls */
 QSpinBox, QDoubleSpinBox, QLineEdit {
     min-height: 36px;
-    padding: 4px 40px 4px 16px;
+    padding: 4px 48px 4px 16px;
     color: #ffffff;
     font-family: 'Jost';
     font-weight: 600;
     background-color: #101010;
-    border: 2px solid rgba(255, 255, 255, 0.45);
+    border: 2px solid #ffffff;
     border-radius: 18px;
 }
 
@@ -60,29 +60,30 @@ QLineEdit {
 }
 
 QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover {
-    border-color: rgba(255, 255, 255, 0.6);
+    border-color: #ffffff;
 }
 
 QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus {
-    border-color: rgba(255, 255, 255, 0.95);
+    border-color: #ffffff;
 }
 
 QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled {
-    color: rgba(255, 255, 255, 0.35);
-    border-color: rgba(255, 255, 255, 0.2);
-    background-color: #121212;
+    color: rgba(255, 255, 255, 0.45);
+    border-color: #6a6a6a;
+    background-color: #202020;
 }
 
 QSpinBox::up-button, QDoubleSpinBox::up-button,
 QSpinBox::down-button, QDoubleSpinBox::down-button {
     subcontrol-origin: border;
     subcontrol-position: right;
-    width: 28px;
-    border: none;
-    background: transparent;
-    margin: 3px 6px 3px 0px;
+    width: 8px;
+    height: 8px;
+    margin: 8px 18px 8px 0px;
     padding: 0px;
-    border-radius: 10px;
+    border: none;
+    border-radius: 4px;
+    background-color: #ffffff;
 }
 
 QSpinBox::up-button {
@@ -93,40 +94,42 @@ QSpinBox::down-button {
     subcontrol-position: bottom right;
 }
 
+QDoubleSpinBox::up-button {
+    subcontrol-position: top right;
+}
+
+QDoubleSpinBox::down-button {
+    subcontrol-position: bottom right;
+}
+
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-    background: rgba(255, 255, 255, 0.12);
+    background-color: #4d4d4d;
 }
 
 QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
 QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
-    background: rgba(255, 255, 255, 0.25);
+    background-color: #2d2d2d;
 }
 
-QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
-    width: 0px;
-    height: 0px;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-bottom: 7px solid #ffffff;
-    margin-top: 3px;
+QSpinBox::up-button:disabled, QDoubleSpinBox::up-button:disabled,
+QSpinBox::down-button:disabled, QDoubleSpinBox::down-button:disabled {
+    background-color: #6a6a6a;
 }
 
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow,
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
     width: 0px;
     height: 0px;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 7px solid #ffffff;
-    margin-bottom: 3px;
+    border: none;
 }
 """
 
 CIRCLE_CHECKBOX_STYLE = """
 /* Circular indicator prototype (feature flag via `circleIndicator` dynamic property). */
 QCheckBox[circleIndicator='true'] {
-    spacing: 12px;
-    padding: 2px 10px 2px 4px;
+    spacing: 10px;
+    padding: 4px 16px 4px 6px;
     min-height: 28px;
 }
 
@@ -134,7 +137,7 @@ QCheckBox[circleIndicator='true']::indicator {
     width: 22px;
     height: 22px;
     border-radius: 11px;
-    margin: 2px 8px 2px 2px;
+    margin: 2px 12px 2px 0px;
     border: none;
     background: transparent;
     image: none;
@@ -260,6 +263,43 @@ QToolTip {
     font-size: 12px;
 }
 """
+
+SECTION_HEADING_STYLE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 600;"
+    "font-size: 14px;"
+    "color: #ffffff;"
+)
+
+SUBSECTION_DIVIDER_STYLE = (
+    "border: 1px solid rgba(255, 255, 255, 0.8);"
+    "border-radius: 18px;"
+)
+
+NAV_TAB_FONT_STYLE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 600;"
+    "font-size: 13px;"
+)
+
+NAV_TAB_FONT_STYLE_ACTIVE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 700;"
+    "font-size: 13px;"
+)
+
+STATUS_LABEL_STYLE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 600;"
+    "font-size: 11px;"
+)
+
+INFO_LABEL_STYLE = (
+    "color: #aaaaaa;"
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 500;"
+    "font-size: 11px;"
+)
 
 SCROLL_AREA_STYLE = """
 QScrollArea { border: none; background: transparent; }
