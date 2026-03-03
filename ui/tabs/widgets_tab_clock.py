@@ -21,6 +21,7 @@ from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
     SUBSECTION_DIVIDER_STYLE,
     STATUS_LABEL_STYLE,
+    INFO_LABEL_STYLE,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
@@ -352,7 +353,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     clock_border_opacity_row.addWidget(tab.clock_border_opacity_label)
 
     extra_label = QLabel("Additional clocks (optional, share style with main clock)")
-    extra_label.setStyleSheet("color: #aaaaaa; font-size: 11px;")
+    extra_label.setStyleSheet(INFO_LABEL_STYLE)
     _clock_ctrl_layout.addWidget(extra_label)
 
     clock2_row = QHBoxLayout()

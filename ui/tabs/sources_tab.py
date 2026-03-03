@@ -12,7 +12,14 @@ from PySide6.QtWidgets import (
     QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox,
     QScrollArea, QDialog, QFrame,
 )
-from ui.tabs.shared_styles import NoWheelSlider
+from ui.tabs.shared_styles import (
+    NoWheelSlider,
+    SECTION_HEADING_STYLE,
+    SECTION_HEADING_STYLE_DISABLED,
+    SUBSECTION_DIVIDER_STYLE,
+    INFO_LABEL_STYLE,
+    INFO_LABEL_STYLE_DISABLED,
+)
 from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
@@ -72,11 +79,17 @@ class SourcesTab(QWidget):
         
         # Title
         title = QLabel("Image Sources")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        title.setStyleSheet(
+            "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+            "font-weight: 700;"
+            "font-size: 18px;"
+            "color: #ffffff;"
+        )
         layout.addWidget(title)
         
         # Folder sources group
         folder_group = QGroupBox("Folder Sources")
+        folder_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         folder_layout = QVBoxLayout(folder_group)
         
         # Folder list
@@ -114,12 +127,13 @@ class SourcesTab(QWidget):
         ratio_layout.setSpacing(10)
         
         self.ratio_label = QLabel("Usage Ratio:")
-        self.ratio_label.setStyleSheet("color: #cccccc; font-weight: bold;")
+        self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE)
         ratio_layout.addWidget(self.ratio_label)
         
         # Local percentage display label (read-only)
         self.local_ratio_label = QLabel("70% Local")
-        self.local_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
+        self.local_ratio_label.setMinimumWidth(70)
+        self.local_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
         self.local_ratio_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         ratio_layout.addWidget(self.local_ratio_label)
         
@@ -133,7 +147,8 @@ class SourcesTab(QWidget):
         
         # RSS percentage display label (read-only)
         self.rss_ratio_label = QLabel("40% RSS")
-        self.rss_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
+        self.rss_ratio_label.setMinimumWidth(70)
+        self.rss_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
         self.rss_ratio_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         ratio_layout.addWidget(self.rss_ratio_label)
         
@@ -143,6 +158,7 @@ class SourcesTab(QWidget):
         
         # RSS sources group
         rss_group = QGroupBox("RSS / JSON Feed Sources")
+        rss_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
         rss_layout = QVBoxLayout(rss_group)
         
         # Suggestion label (session-local; updated by "Just Make It Work")
@@ -150,7 +166,7 @@ class SourcesTab(QWidget):
             "<i>Suggested: Add high-quality RSS/JSON image feeds here.</i>"
         )
         self.rss_suggestion_label.setWordWrap(True)
-        self.rss_suggestion_label.setStyleSheet("color: #888888; padding: 5px;")
+        self.rss_suggestion_label.setStyleSheet(INFO_LABEL_STYLE + "padding: 5px;")
         rss_layout.addWidget(self.rss_suggestion_label)
         
         # RSS list
@@ -639,9 +655,9 @@ class SourcesTab(QWidget):
                     padding: 8px;
                 }
             """)
-            self.ratio_label.setStyleSheet("color: #cccccc; font-weight: bold;")
-            self.local_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
-            self.rss_ratio_label.setStyleSheet("color: #aaaaaa; min-width: 70px;")
+            self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE)
+            self.local_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
+            self.rss_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
         else:
             self.ratio_frame.setStyleSheet("""
                 #ratioFrame {
@@ -651,9 +667,9 @@ class SourcesTab(QWidget):
                     padding: 8px;
                 }
             """)
-            self.ratio_label.setStyleSheet("color: #666666; font-weight: bold;")
-            self.local_ratio_label.setStyleSheet("color: #555555; min-width: 70px;")
-            self.rss_ratio_label.setStyleSheet("color: #555555; min-width: 70px;")
+            self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE_DISABLED)
+            self.local_ratio_label.setStyleSheet(INFO_LABEL_STYLE_DISABLED)
+            self.rss_ratio_label.setStyleSheet(INFO_LABEL_STYLE_DISABLED)
     
     def _on_ratio_slider_changed(self, value: int) -> None:
         """Handle ratio slider change - the only control for adjusting ratio."""

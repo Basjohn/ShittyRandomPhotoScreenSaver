@@ -77,29 +77,25 @@ QSpinBox::up-button, QDoubleSpinBox::up-button,
 QSpinBox::down-button, QDoubleSpinBox::down-button {
     subcontrol-origin: border;
     subcontrol-position: right;
-    width: 8px;
-    height: 8px;
-    margin: 8px 18px 8px 0px;
+    width: 10px;
+    height: 10px;
+    margin: 4px 14px 4px 0px;
     padding: 0px;
     border: none;
-    border-radius: 4px;
+    border-radius: 5px;
     background-color: #ffffff;
 }
 
-QSpinBox::up-button {
+QSpinBox::up-button, QDoubleSpinBox::up-button {
     subcontrol-position: top right;
+    margin-top: 7.5px;
+    margin-bottom: -3.5px;
 }
 
-QSpinBox::down-button {
+QSpinBox::down-button, QDoubleSpinBox::down-button {
     subcontrol-position: bottom right;
-}
-
-QDoubleSpinBox::up-button {
-    subcontrol-position: top right;
-}
-
-QDoubleSpinBox::down-button {
-    subcontrol-position: bottom right;
+    margin-top: -3.5px;
+    margin-bottom: 7.5px;
 }
 
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
@@ -271,6 +267,13 @@ SECTION_HEADING_STYLE = (
     "color: #ffffff;"
 )
 
+SECTION_HEADING_STYLE_DISABLED = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 600;"
+    "font-size: 14px;"
+    "color: #666666;"
+)
+
 SUBSECTION_DIVIDER_STYLE = (
     "border: 1px solid rgba(255, 255, 255, 0.8);"
     "border-radius: 18px;"
@@ -296,6 +299,13 @@ STATUS_LABEL_STYLE = (
 
 INFO_LABEL_STYLE = (
     "color: #aaaaaa;"
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 500;"
+    "font-size: 11px;"
+)
+
+INFO_LABEL_STYLE_DISABLED = (
+    "color: #555555;"
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"

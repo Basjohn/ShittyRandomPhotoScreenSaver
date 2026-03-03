@@ -24,6 +24,11 @@ from core.settings.presets import (
     get_current_preset_info,
     reset_non_custom_presets,
 )
+from ui.tabs.shared_styles import (
+    SECTION_HEADING_STYLE,
+    INFO_LABEL_STYLE,
+    SUBSECTION_DIVIDER_STYLE,
+)
 
 if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
@@ -112,19 +117,23 @@ class PresetDescriptionBox(QFrame):
         """Apply custom styling."""
         self.setStyleSheet("""
             #presetDescriptionBox {
+                %s
                 background-color: rgba(40, 40, 40, 0.9);
-                border: 1px solid rgba(90, 90, 90, 0.8);
-                border-radius: 8px;
+                padding: 4px;
             }
             
             #presetNameLabel {
-                color: #ffffff;
+                %s
             }
             
             #presetDescriptionLabel {
-                color: #cccccc;
+                %s
             }
-        """)
+        """ % (
+            SUBSECTION_DIVIDER_STYLE,
+            SECTION_HEADING_STYLE,
+            INFO_LABEL_STYLE,
+        ))
     
     def set_preset(self, name: str, description: str) -> None:
         """Update the displayed preset information."""
@@ -170,19 +179,20 @@ class PresetsTab(QScrollArea):
         # Header
         header = QLabel("Presets")
         header.setObjectName("presetsHeader")
-        header_font = QFont(font_family, 18, QFont.Weight.Bold)
-        header.setFont(header_font)
-        header.setStyleSheet("color: #ffffff;")
+        header.setWordWrap(False)
+        header.setStyleSheet(
+            SECTION_HEADING_STYLE
+            + "font-size: 18px;"
+            + "font-weight: 700;"
+        )
         main_layout.addWidget(header)
-        
+
         # Subtitle
         subtitle = QLabel(
             "Choose a preset configuration or use Custom to keep your own settings."
         )
         subtitle.setWordWrap(True)
-        subtitle_font = QFont(font_family, 12, QFont.Weight.Normal)
-        subtitle.setFont(subtitle_font)
-        subtitle.setStyleSheet("color: #aaaaaa;")
+        subtitle.setStyleSheet(INFO_LABEL_STYLE)
         main_layout.addWidget(subtitle)
         
         # Spacer
@@ -212,7 +222,7 @@ class PresetsTab(QScrollArea):
             label = QLabel(preset.name)
             label_font = QFont(font_family, 11, QFont.Weight.Normal)
             label.setFont(label_font)
-            label.setStyleSheet("color: #ffffff;")
+            label.setStyleSheet(SECTION_HEADING_STYLE)
             
             # Alignment based on position
             if i == 0:
