@@ -8,9 +8,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QLineEdit,
-    QSlider, QFontComboBox, QWidget, QCompleter,
+    QVBoxLayout, QHBoxLayout, QLabel, QWidget,
+    QCheckBox, QSpinBox, QGroupBox,
+    QLineEdit, QCompleter, QSlider,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -18,6 +18,7 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from widgets.timezone_utils import get_local_timezone
 from ui.styled_popup import ColorSwatchButton
+from ui.widgets import StyledComboBox, StyledFontComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -90,6 +91,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Enable weather
     tab.weather_enabled = QCheckBox("Enable Weather Widget")
+    tab.weather_enabled.setProperty("circleIndicator", True)
     tab.weather_enabled.setChecked(tab._default_bool('weather', 'enabled', True))
     tab.weather_enabled.stateChanged.connect(tab._save_settings)
     tab.weather_enabled.stateChanged.connect(tab._update_stack_status)
@@ -146,7 +148,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Position
     weather_pos_row = _aligned_row(_weather_ctrl_layout, "Position:")
-    tab.weather_position = QComboBox()
+    tab.weather_position = StyledComboBox()
     tab.weather_position.addItems([
         "Top Left", "Top Center", "Top Right",
         "Middle Left", "Center", "Middle Right",
@@ -164,7 +166,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Display (monitor selection)
     weather_disp_row = _aligned_row(_weather_ctrl_layout, "Display:")
-    tab.weather_monitor_combo = QComboBox()
+    tab.weather_monitor_combo = StyledComboBox(size_variant="compact")
     tab.weather_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.weather_monitor_combo.currentTextChanged.connect(tab._save_settings)
     tab.weather_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
@@ -176,7 +178,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Font family
     weather_font_family_row = _aligned_row(_weather_ctrl_layout, "Font:")
-    tab.weather_font_combo = QFontComboBox()
+    tab.weather_font_combo = StyledFontComboBox(size_variant="hero")
     default_weather_font = tab._default_str('weather', 'font_family', 'Segoe UI')
     tab.weather_font_combo.setCurrentFont(QFont(default_weather_font))
     tab.weather_font_combo.setMinimumWidth(220)
@@ -210,6 +212,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Show forecast line
     tab.weather_show_forecast = QCheckBox("Show Forecast Line")
+    tab.weather_show_forecast.setProperty("circleIndicator", True)
     tab.weather_show_forecast.setChecked(tab._default_bool('weather', 'show_forecast', True))
     tab.weather_show_forecast.setToolTip("Display tomorrow's forecast below current weather")
     tab.weather_show_forecast.stateChanged.connect(tab._save_settings)
@@ -218,6 +221,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Show details row
     tab.weather_show_details = QCheckBox("Show Details (Rain/Humidity/Wind)")
+    tab.weather_show_details.setProperty("circleIndicator", True)
     tab.weather_show_details.setChecked(tab._default_bool('weather', 'show_details_row', True))
     tab.weather_show_details.setToolTip("Display weather detail metrics with icons")
     tab.weather_show_details.stateChanged.connect(tab._save_settings)
@@ -225,6 +229,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Show condition icon
     tab.weather_show_icon = QCheckBox("Show Weather Icon")
+    tab.weather_show_icon.setProperty("circleIndicator", True)
     tab.weather_show_icon.setChecked(tab._default_bool('weather', 'show_condition_icon', True))
     tab.weather_show_icon.setToolTip("Display weather condition icon (clear, cloudy, rain, etc.)")
     tab.weather_show_icon.stateChanged.connect(tab._save_settings)
@@ -237,7 +242,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _icon_layout.setSpacing(4)
 
     icon_align_row = _aligned_row(_icon_layout, "Icon Position:")
-    tab.weather_icon_alignment = QComboBox()
+    tab.weather_icon_alignment = StyledComboBox(size_variant="compact")
     tab.weather_icon_alignment.addItems(["LEFT", "RIGHT"])
     tab._set_combo_text(tab.weather_icon_alignment, tab._default_str('weather', 'icon_alignment', 'RIGHT'))
     tab.weather_icon_alignment.currentTextChanged.connect(tab._save_settings)
@@ -260,6 +265,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Intense shadow
     tab.weather_intense_shadow = QCheckBox("Intense Shadows")
+    tab.weather_intense_shadow.setProperty("circleIndicator", True)
     tab.weather_intense_shadow.setChecked(tab._default_bool('weather', 'intense_shadow', True))
     tab.weather_intense_shadow.setToolTip(
         "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
@@ -269,6 +275,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Background frame
     tab.weather_show_background = QCheckBox("Show Background Frame")
+    tab.weather_show_background.setProperty("circleIndicator", True)
     tab.weather_show_background.setChecked(tab._default_bool('weather', 'show_background', True))
     tab.weather_show_background.stateChanged.connect(tab._save_settings)
     _weather_ctrl_layout.addWidget(tab.weather_show_background)

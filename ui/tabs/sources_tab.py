@@ -188,6 +188,7 @@ class SourcesTab(QWidget):
         
         # RSS save to disk option
         self.rss_save_to_disk = QCheckBox("Save RSS Images To Disk")
+        self.rss_save_to_disk.setProperty("circleIndicator", True)
         self.rss_save_to_disk.setToolTip("Hope you have space! All RSS feed images will be permanently saved to a folder of your choosing.")
         self.rss_save_to_disk.stateChanged.connect(self._on_rss_save_toggled)
         rss_layout.addWidget(self.rss_save_to_disk)

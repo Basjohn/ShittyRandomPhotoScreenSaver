@@ -10,20 +10,16 @@ Allows users to configure display settings:
 """
 from typing import Optional, List
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-    QSpinBox, QGroupBox, QCheckBox, QScrollArea
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QSpinBox, QGroupBox, QCheckBox, QScrollArea, QComboBox
 )
 from PySide6.QtCore import Signal, Qt
 
 from core.settings.settings_manager import SettingsManager
-from utils.monitors import get_screen_count
 from core.logging.logger import get_logger
-from ui.tabs.shared_styles import (
-    SPINBOX_STYLE,
-    CIRCLE_CHECKBOX_STYLE,
-    COMBOBOX_STYLE,
-)
+from ui.tabs.shared_styles import SPINBOX_STYLE, CIRCLE_CHECKBOX_STYLE, COMBOBOX_STYLE
 from ui.widgets import StyledComboBox
+from utils.monitors import get_screen_count
 
 logger = get_logger(__name__)
 
@@ -111,6 +107,7 @@ class DisplayTab(QWidget):
         # Show On section (per-monitor checkboxes)
         show_row = _aligned_row(monitor_layout, "Show screensaver on:")
         self.show_all_check = QCheckBox("All")
+        self.show_all_check.setProperty("circleIndicator", True)
         self.monitor_checks: List[QCheckBox] = [
             QCheckBox("Monitor 1"),
             QCheckBox("Monitor 2"),
@@ -120,6 +117,7 @@ class DisplayTab(QWidget):
         self.show_all_check.stateChanged.connect(self._on_show_on_changed)
         show_row.addWidget(self.show_all_check)
         for cb in self.monitor_checks:
+            cb.setProperty("circleIndicator", True)
             cb.stateChanged.connect(self._on_show_on_changed)
             show_row.addWidget(cb)
         show_row.addStretch()
@@ -127,6 +125,7 @@ class DisplayTab(QWidget):
         # Same image toggle
         same_image_row = _aligned_row(monitor_layout, "")
         self.same_image_check = QCheckBox("Show same image on all monitors")
+        self.same_image_check.setProperty("circleIndicator", True)
         self.same_image_check.setChecked(True)
         self.same_image_check.stateChanged.connect(self._save_settings)
         same_image_row.addWidget(self.same_image_check)
@@ -139,7 +138,7 @@ class DisplayTab(QWidget):
         mode_layout = QVBoxLayout(mode_group)
         
         mode_row = _aligned_row(mode_layout, "Mode:")
-        self.mode_combo = QComboBox()
+        self.mode_combo = StyledComboBox(size_variant="hero")
         self.mode_combo.addItems([
             "Fill - Scale to fill screen (crop if needed)",
             "Fit - Scale to fit screen (show all, may have bars)",
@@ -172,6 +171,7 @@ class DisplayTab(QWidget):
         # Shuffle toggle
         shuffle_row = _aligned_row(timing_layout, "")
         self.shuffle_check = QCheckBox("Shuffle images (random order)")
+        self.shuffle_check.setProperty("circleIndicator", True)
         self.shuffle_check.setChecked(True)
         self.shuffle_check.stateChanged.connect(self._save_settings)
         shuffle_row.addWidget(self.shuffle_check)
@@ -185,6 +185,7 @@ class DisplayTab(QWidget):
         
         lanczos_row = _aligned_row(quality_layout, "")
         self.lanczos_check = QCheckBox("Use Lanczos scaling (higher quality, more CPU)")
+        self.lanczos_check.setProperty("circleIndicator", True)
         self.lanczos_check.setChecked(True)
         self.lanczos_check.setToolTip(
             "Lanczos provides better image quality when scaling, especially for downscaling. "
@@ -196,6 +197,7 @@ class DisplayTab(QWidget):
         
         sharpen_row = _aligned_row(quality_layout, "")
         self.sharpen_check = QCheckBox("Apply sharpening filter when downscaling")
+        self.sharpen_check.setProperty("circleIndicator", True)
         self.sharpen_check.setChecked(False)
         self.sharpen_check.stateChanged.connect(self._save_settings)
         sharpen_row.addWidget(self.sharpen_check)
@@ -210,7 +212,7 @@ class DisplayTab(QWidget):
         backend_layout = QVBoxLayout(backend_group)
 
         backend_row = _aligned_row(backend_layout, "Preferred backend:")
-        self.backend_combo = QComboBox()
+        self.backend_combo = StyledComboBox(size_variant="compact")
         self.backend_combo.addItem("OpenGL (recommended)", userData="opengl")
         self.backend_combo.addItem("Software (fallback)", userData="software")
         self.backend_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)

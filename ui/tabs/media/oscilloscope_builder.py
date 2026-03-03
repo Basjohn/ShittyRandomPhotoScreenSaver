@@ -129,6 +129,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
 
     glow_toggle_row = _aligned_row(_normal_layout, "")
     tab.osc_glow_enabled = QCheckBox("Enable Glow")
+    tab.osc_glow_enabled.setProperty("circleIndicator", True)
     tab.osc_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_glow_enabled', True))
     tab.osc_glow_enabled.setToolTip("Draw a soft glow halo around the waveform line.")
     tab.osc_glow_enabled.stateChanged.connect(tab._save_settings)
@@ -157,6 +158,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     glow_reactive_widget, glow_reactive_row = _aligned_row_widget(_normal_layout, "")
     tab._osc_glow_widgets.append(glow_reactive_widget)
     tab.osc_reactive_glow = QCheckBox("Reactive Glow (bass-driven)")
+    tab.osc_reactive_glow.setProperty("circleIndicator", True)
     tab.osc_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'osc_reactive_glow', True))
     tab.osc_reactive_glow.setToolTip("Glow intensity pulses with bass energy.")
     tab.osc_reactive_glow.stateChanged.connect(tab._save_settings)
@@ -173,6 +175,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
 
     ghost_toggle_row = _aligned_row(_normal_layout, "")
     tab.osc_ghost_enabled = QCheckBox("Ghost Trail")
+    tab.osc_ghost_enabled.setProperty("circleIndicator", True)
     tab.osc_ghost_enabled.setChecked(tab._default_bool('spotify_visualizer', 'osc_ghosting_enabled', False))
     tab.osc_ghost_enabled.setToolTip("Show a faded trail of the previous waveform behind the current one.")
     tab.osc_ghost_enabled.stateChanged.connect(tab._save_settings)
@@ -258,6 +261,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
 
     osc_line_dim_row = _aligned_row(_adv_layout, "")
     tab.osc_line_dim = QCheckBox("Dim Lines 2/3 Glow")
+    tab.osc_line_dim.setProperty("circleIndicator", True)
     tab.osc_line_dim.setChecked(tab._default_bool('spotify_visualizer', 'osc_line_dim', False))
     tab.osc_line_dim.setToolTip("When enabled, lines 2 and 3 have slightly reduced glow to let the primary line stand out.")
     tab.osc_line_dim.stateChanged.connect(tab._save_settings)
@@ -317,6 +321,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     osc_glow_color_row.addStretch()
     tab.osc_multi_line_row = _aligned_row(_adv_layout, "")
     tab.osc_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
+    tab.osc_multi_line.setProperty("circleIndicator", True)
     tab.osc_multi_line.setChecked(tab._default_int('spotify_visualizer', 'osc_line_count', 1) > 1)
     tab.osc_multi_line.setToolTip("Enable additional waveform lines with different oscillation distributions.")
     tab.osc_multi_line.stateChanged.connect(tab._save_settings)

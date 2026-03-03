@@ -43,62 +43,82 @@ class NoWheelSlider(QSlider):
         event.ignore()
 
 SPINBOX_STYLE = """
-QSpinBox, QDoubleSpinBox {
-    background-color: #1e1e1e;
+/* Rounded inputs without visible seams */
+QSpinBox, QDoubleSpinBox, QLineEdit {
+    min-height: 36px;
+    padding: 4px 40px 4px 16px;
     color: #ffffff;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    padding-right: 28px;
-    min-height: 24px;
+    font-family: 'Jost';
+    font-weight: 600;
+    background-color: #101010;
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    border-radius: 18px;
 }
-QSpinBox::up-button, QDoubleSpinBox::up-button {
-    subcontrol-origin: border;
-    subcontrol-position: top right;
-    width: 24px;
-    height: 12px;
-    background: #2a2a2a;
-    border-left: 1px solid #3a3a3a;
-    border-top: 1px solid #3a3a3a;
-    border-right: 1px solid #3a3a3a;
-    border-bottom: 1px solid #3a3a3a;
-    margin: 0px;
+
+QLineEdit {
+    padding-right: 16px;
 }
+
+QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover {
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus {
+    border-color: rgba(255, 255, 255, 0.95);
+}
+
+QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled {
+    color: rgba(255, 255, 255, 0.35);
+    border-color: rgba(255, 255, 255, 0.2);
+    background-color: #121212;
+}
+
+QSpinBox::up-button, QDoubleSpinBox::up-button,
 QSpinBox::down-button, QDoubleSpinBox::down-button {
     subcontrol-origin: border;
-    subcontrol-position: bottom right;
-    width: 24px;
-    height: 12px;
-    background: #2a2a2a;
-    border-left: 1px solid #3a3a3a;
-    border-right: 1px solid #3a3a3a;
-    border-bottom: 1px solid #3a3a3a;
-    margin: 0px;
+    subcontrol-position: right;
+    width: 28px;
+    border: none;
+    background: transparent;
+    margin: 3px 6px 3px 0px;
+    padding: 0px;
+    border-radius: 10px;
 }
+
+QSpinBox::up-button {
+    subcontrol-position: top right;
+}
+
+QSpinBox::down-button {
+    subcontrol-position: bottom right;
+}
+
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-    background: #3a3a3a;
+    background: rgba(255, 255, 255, 0.12);
 }
+
 QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed,
 QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {
-    background: #505050;
+    background: rgba(255, 255, 255, 0.25);
 }
+
 QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
-    image: none;
     width: 0px;
     height: 0px;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-bottom: 6px solid #ffffff;
-    margin-top: 2px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 7px solid #ffffff;
+    margin-top: 3px;
 }
+
 QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
-    image: none;
     width: 0px;
     height: 0px;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 6px solid #ffffff;
-    margin-bottom: 2px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 7px solid #ffffff;
+    margin-bottom: 3px;
 }
 """
 
@@ -106,13 +126,15 @@ CIRCLE_CHECKBOX_STYLE = """
 /* Circular indicator prototype (feature flag via `circleIndicator` dynamic property). */
 QCheckBox[circleIndicator='true'] {
     spacing: 12px;
+    padding: 2px 10px 2px 4px;
+    min-height: 28px;
 }
 
 QCheckBox[circleIndicator='true']::indicator {
     width: 22px;
     height: 22px;
     border-radius: 11px;
-    margin: 2px 10px 2px 2px;
+    margin: 2px 8px 2px 2px;
     border: none;
     background: transparent;
     image: none;
@@ -145,13 +167,10 @@ QCheckBox[circleIndicator='true']::indicator:disabled:checked {
 
 
 COMBOBOX_STYLE = """
-/* Cursor Halo Shape combobox prototype */
+/* StyledComboBox base skin */
 QComboBox[customCombo='true'] {
-    min-width: 188px;
-    max-width: 200px;
-    min-height: 42px;
-    max-height: 42px;
-    padding: 4px 48px 4px 16px;
+    min-height: 38px;
+    padding: 4px 44px 4px 16px;
     font-family: 'Jost';
     font-weight: 700;
     font-size: 14px;
@@ -176,6 +195,33 @@ QComboBox[customCombo='true']::down-arrow {
     image: none;
     margin: 0px;
     padding: 0px;
+}
+
+QComboBox[customCombo='true'][comboSize='regular'] {
+    min-width: 188px;
+    max-height: 44px;
+    padding: 4px 48px 4px 16px;
+}
+
+QComboBox[customCombo='true'][comboSize='compact'] {
+    min-width: 164px;
+    max-height: 40px;
+    padding: 2px 42px 2px 14px;
+    font-size: 13px;
+}
+
+QComboBox[customCombo='true'][comboSize='mini'] {
+    min-width: 136px;
+    max-height: 36px;
+    padding: 2px 36px 2px 12px;
+    font-size: 12px;
+}
+
+QComboBox[customCombo='true'][comboSize='hero'] {
+    min-width: 220px;
+    max-height: 46px;
+    padding: 6px 54px 6px 18px;
+    font-size: 15px;
 }
 """
 

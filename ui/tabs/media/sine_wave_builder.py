@@ -4,11 +4,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QVBoxLayout, QHBoxLayout, QLabel,
     QCheckBox, QSlider, QWidget, QToolButton,
 )
 from ui.styled_popup import ColorSwatchButton
 from PySide6.QtCore import Qt
+from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -129,6 +130,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # Glow
     tab.sine_glow_enabled = QCheckBox("Enable Glow")
+    tab.sine_glow_enabled.setProperty("circleIndicator", True)
     tab.sine_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'sine_glow_enabled', True))
     tab.sine_glow_enabled.stateChanged.connect(tab._save_settings)
     _normal.addWidget(tab.sine_glow_enabled)
@@ -160,6 +162,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_glow_color_row.addStretch()
 
     tab.sine_reactive_glow = QCheckBox("Reactive Glow (energy-driven)")
+    tab.sine_reactive_glow.setProperty("circleIndicator", True)
     tab.sine_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'sine_reactive_glow', True))
     tab.sine_reactive_glow.stateChanged.connect(tab._save_settings)
     _normal.addWidget(tab.sine_reactive_glow)
@@ -213,7 +216,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_speed_row.addWidget(tab.sine_speed_label)
 
     sine_travel_row = _aligned_row(_normal, "Travel:")
-    tab.sine_travel = QComboBox()
+    tab.sine_travel = StyledComboBox(size_variant="compact")
     tab.sine_travel.addItems(["None", "Scroll Left", "Scroll Right"])
     default_sine_travel = tab._default_int('spotify_visualizer', 'sine_wave_travel', 0)
     tab.sine_travel.setCurrentIndex(max(0, min(2, default_sine_travel)))
@@ -396,6 +399,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # Multi-line
     tab.sine_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
+    tab.sine_multi_line.setProperty("circleIndicator", True)
     tab.sine_multi_line.setChecked(
         tab._default_int('spotify_visualizer', 'sine_line_count', 1) > 1
     )
@@ -448,7 +452,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l2_travel_label = QLabel("Travel")
     sine_l2_travel_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
     sine_l2_travel_col.addWidget(sine_l2_travel_label)
-    tab.sine_travel_line2 = QComboBox()
+    tab.sine_travel_line2 = StyledComboBox(size_variant="mini")
     tab.sine_travel_line2.addItems(["None", "Left", "Right"])
     tab.sine_travel_line2.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line2', 0))))
     tab.sine_travel_line2.currentIndexChanged.connect(tab._save_settings)
@@ -514,7 +518,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l3_travel_label = QLabel("Travel")
     sine_l3_travel_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
     sine_l3_travel_col.addWidget(sine_l3_travel_label)
-    tab.sine_travel_line3 = QComboBox()
+    tab.sine_travel_line3 = StyledComboBox(size_variant="mini")
     tab.sine_travel_line3.addItems(["None", "Left", "Right"])
     tab.sine_travel_line3.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line3', 0))))
     tab.sine_travel_line3.currentIndexChanged.connect(tab._save_settings)

@@ -1,26 +1,17 @@
-"""Specialized QComboBox used by the Cursor Halo prototype.
-
-The widget centralizes all the styling boilerplate required to make the
-closed control and popup view reuse the SVG skin.  Keeping this logic in
-one place avoids copy/paste in every tab and guarantees the popup is always
-re-styled when Qt recreates its internal view.
-"""
+"""Styled QFontComboBox that reuses the custom combobox chrome."""
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
-from PySide6.QtWidgets import QComboBox
+from PySide6.QtWidgets import QFontComboBox
 
 from ui.tabs import shared_styles
+from ui.widgets.styled_combo_box import SizeVariant
 
 
-SizeVariant = Literal["regular", "compact", "mini", "hero"]
-
-
-class StyledComboBox(QComboBox):
-    """ComboBox that preloads the Jost font and styles its popup view."""
+class StyledFontComboBox(QFontComboBox):
+    """Font picker that matches StyledComboBox visuals."""
 
     def __init__(
         self,
@@ -40,7 +31,7 @@ class StyledComboBox(QComboBox):
     # Qt overrides
     # ------------------------------------------------------------------
     def showPopup(self) -> None:  # type: ignore[override]
-        """Ensure the popup picks up our stylesheet every time it opens."""
+        """Ensure the popup keeps the themed background each time."""
         self._style_popup_view()
         super().showPopup()
 
@@ -48,13 +39,10 @@ class StyledComboBox(QComboBox):
     # Internal helpers
     # ------------------------------------------------------------------
     def _apply_base_properties(self) -> None:
-        font = QFont("Jost", 14)
-        font.setBold(True)
-        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
-        self.setFont(font)
         self.setProperty("customCombo", True)
-        self.setProperty("comboFlavor", "default")
+        self.setProperty("comboFlavor", "font")
         self.setProperty("comboSize", self._size_variant)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
     def _style_popup_view(self) -> None:
         popup_view = self.view()

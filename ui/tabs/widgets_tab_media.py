@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox,
-    QSlider, QFontComboBox, QWidget,
+    QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -19,6 +19,7 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
+from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.settings_binding import (
     ColorBinding,
     apply_bindings_load,
@@ -127,6 +128,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_layout = QVBoxLayout(media_group)
 
     tab.media_enabled = QCheckBox("Enable Spotify Widget")
+    tab.media_enabled.setProperty("circleIndicator", True)
     tab.media_enabled.setToolTip(
         "Shows current Spotify playback using Windows media controls when available."
     )
@@ -149,7 +151,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _media_ctrl_layout.addWidget(media_info)
 
     media_pos_row = _aligned_row(_media_ctrl_layout, "Position:")
-    tab.media_position = QComboBox()
+    tab.media_position = StyledComboBox()
     tab.media_position.addItems([
         "Top Left", "Top Center", "Top Right",
         "Middle Left", "Center", "Middle Right",
@@ -166,7 +168,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_pos_row.addStretch()
 
     media_disp_row = _aligned_row(_media_ctrl_layout, "Display:")
-    tab.media_monitor_combo = QComboBox()
+    tab.media_monitor_combo = StyledComboBox(size_variant="compact")
     tab.media_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.media_monitor_combo.currentTextChanged.connect(tab._save_settings)
     tab.media_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
@@ -177,7 +179,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_disp_row.addStretch()
 
     media_font_family_row = _aligned_row(_media_ctrl_layout, "Font:")
-    tab.media_font_combo = QFontComboBox()
+    tab.media_font_combo = StyledFontComboBox(size_variant="hero")
     default_media_font = tab._default_str('media', 'font_family', 'Segoe UI')
     tab.media_font_combo.setCurrentFont(QFont(default_media_font))
     tab.media_font_combo.setMinimumWidth(220)
@@ -220,6 +222,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_color_row.addStretch()
 
     tab.media_show_background = QCheckBox("Show Background Frame")
+    tab.media_show_background.setProperty("circleIndicator", True)
     tab.media_show_background.setChecked(tab._default_bool('media', 'show_background', True))
     tab.media_show_background.stateChanged.connect(tab._save_settings)
     _media_ctrl_layout.addWidget(tab.media_show_background)
@@ -231,6 +234,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _mbg_layout.setSpacing(4)
 
     tab.media_intense_shadow = QCheckBox("Intense Shadows")
+    tab.media_intense_shadow.setProperty("circleIndicator", True)
     tab.media_intense_shadow.setChecked(tab._default_bool('media', 'intense_shadow', True))
     tab.media_intense_shadow.setToolTip(
         "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
@@ -317,6 +321,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_artwork_row.addStretch()
 
     tab.media_rounded_artwork = QCheckBox("Rounded Artwork Border")
+    tab.media_rounded_artwork.setProperty("circleIndicator", True)
     tab.media_rounded_artwork.setChecked(
         tab._default_bool('media', 'rounded_artwork_border', True)
     )
@@ -324,6 +329,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _media_ctrl_layout.addWidget(tab.media_rounded_artwork)
 
     tab.media_show_header_frame = QCheckBox("Header Border Around Logo + Title")
+    tab.media_show_header_frame.setProperty("circleIndicator", True)
     tab.media_show_header_frame.setChecked(
         tab._default_bool('media', 'show_header_frame', True)
     )
@@ -331,6 +337,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _media_ctrl_layout.addWidget(tab.media_show_header_frame)
 
     tab.media_show_controls = QCheckBox("Show Transport Controls")
+    tab.media_show_controls.setProperty("circleIndicator", True)
     tab.media_show_controls.setChecked(
         tab._default_bool('media', 'show_controls', True)
     )
@@ -338,6 +345,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _media_ctrl_layout.addWidget(tab.media_show_controls)
 
     tab.media_spotify_volume_enabled = QCheckBox("Enable Spotify Volume Slider")
+    tab.media_spotify_volume_enabled.setProperty("circleIndicator", True)
     tab.media_spotify_volume_enabled.setToolTip(
         "Show a slim vertical volume slider next to the Spotify card when Core Audio/pycaw is available. "
         "The slider only affects the Spotify session volume and is gated by hard-exit / Ctrl interaction modes."
@@ -349,6 +357,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _media_ctrl_layout.addWidget(tab.media_spotify_volume_enabled)
 
     tab.media_mute_button_enabled = QCheckBox("Enable System Mute Button")
+    tab.media_mute_button_enabled.setProperty("circleIndicator", True)
     tab.media_mute_button_enabled.setToolTip(
         "Show a small mute toggle button near the media card. "
         "Single-click toggles system-wide mute on/off (requires pycaw/Core Audio)."
@@ -369,6 +378,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     spotify_vis_enable_row = QHBoxLayout()
     tab.spotify_vis_enabled = QCheckBox("Enable Spotify Beat Visualizer")
+    tab.spotify_vis_enabled.setProperty("circleIndicator", True)
     tab.spotify_vis_enabled.setChecked(tab._default_bool('spotify_visualizer', 'enabled', True))
     tab.spotify_vis_enabled.setToolTip(
         "Shows a thin bar visualizer tied to Spotify playback, positioned just above the Spotify widget."
@@ -377,6 +387,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_enable_row.addWidget(tab.spotify_vis_enabled)
 
     tab.spotify_vis_software_enabled = QCheckBox("FORCE Software Visualizer")
+    tab.spotify_vis_software_enabled.setProperty("circleIndicator", True)
     tab.spotify_vis_software_enabled.setChecked(
         tab._default_bool('spotify_visualizer', 'software_visualizer_enabled', False)
     )
@@ -397,6 +408,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # --- Taste The Rainbow (global hue shift) ---
     rainbow_row = QHBoxLayout()
     tab.rainbow_enabled = QCheckBox("Taste The Rainbow")
+    tab.rainbow_enabled.setProperty("circleIndicator", True)
     tab.rainbow_enabled.setToolTip(
         "Slowly shift the hue of all visualizer colours through the spectrum. "
         "Retains state across mode switches."
@@ -433,7 +445,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # --- Visualizer Type Selector ---
     vis_type_row = QHBoxLayout()
     vis_type_row.addWidget(QLabel("Visualizer Type:"))
-    tab.spotify_vis_type_combo = QComboBox()
+    tab.spotify_vis_type_combo = StyledComboBox(size_variant="hero")
     tab.spotify_vis_type_combo.setMinimumWidth(160)
     import os as _os
     _dev_features = _os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'

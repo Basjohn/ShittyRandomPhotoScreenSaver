@@ -109,6 +109,7 @@ class AccessibilityTab(QWidget):
         
         # Enable checkbox
         self.dimming_enabled = QCheckBox("Enable Background Dimming")
+        self.dimming_enabled.setProperty("circleIndicator", True)
         self.dimming_enabled.setToolTip(
             "Adds a semi-transparent black overlay behind all widgets to reduce "
             "brightness and improve widget readability on bright images.\n\n"
@@ -158,6 +159,7 @@ class AccessibilityTab(QWidget):
         
         # Enable checkbox
         self.pixel_shift_enabled = QCheckBox("Enable Widget Pixel Shift")
+        self.pixel_shift_enabled.setProperty("circleIndicator", True)
         self.pixel_shift_enabled.setToolTip(
             "Periodically shifts all overlay widgets by 1 pixel in a random direction "
             "to prevent static elements from causing burn-in on older LCD displays."

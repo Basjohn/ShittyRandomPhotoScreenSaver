@@ -24,7 +24,12 @@ from PySide6.QtGui import QColor
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
 from core.settings.defaults import get_default_settings
-from ui.tabs.shared_styles import SPINBOX_STYLE, TOOLTIP_STYLE, NoWheelSlider  # noqa: F401 — re-exported
+from ui.tabs.shared_styles import (
+    SPINBOX_STYLE,
+    TOOLTIP_STYLE,
+    COMBOBOX_STYLE,
+    NoWheelSlider,  # noqa: F401 — re-exported
+)
 from ui.styled_popup import StyledColorPicker
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
@@ -248,6 +253,7 @@ class WidgetsTab(QWidget):
         # Global widget options
         global_row = QHBoxLayout()
         self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
+        self.widget_shadows_enabled.setProperty("circleIndicator", True)
         self.widget_shadows_enabled.setChecked(self._default_bool('shadows', 'enabled', True))
         self.widget_shadows_enabled.setToolTip(
             "Applies a subtle bottom-right drop shadow to overlay widgets (clocks, "
@@ -291,16 +297,21 @@ class WidgetsTab(QWidget):
             "QPushButton {"
             " background-color: #2a2a2a;"
             " color: #ffffff;"
-            " border-radius: 4px;"
-            " padding: 4px 12px;"
+            " border-radius: 6px;"
+            " padding: 6px 20px;"
+            " min-width: 110px;"
+            " font-weight: 600;"
             " border-top: 1px solid rgba(110, 110, 110, 0.8);"
             " border-left: 1px solid rgba(110, 110, 110, 0.8);"
             " border-right: 2px solid rgba(0, 0, 0, 0.75);"
             " border-bottom: 2px solid rgba(0, 0, 0, 0.8);"
             " }"
+            "QPushButton:hover {"
+            " background-color: #343434;"
+            " }"
             "QPushButton:checked {"
             " background-color: #3a3a3a;"
-            " font-weight: bold;"
+            " font-weight: 700;"
             " border-top: 2px solid rgba(0, 0, 0, 0.75);"
             " border-left: 2px solid rgba(0, 0, 0, 0.75);"
             " border-right: 1px solid rgba(140, 140, 140, 0.85);"
@@ -360,7 +371,14 @@ class WidgetsTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-        self.setStyleSheet(self.styleSheet() + SPINBOX_STYLE + TOOLTIP_STYLE)
+        from ui.tabs.shared_styles import CIRCLE_CHECKBOX_STYLE
+        self.setStyleSheet(
+            self.styleSheet()
+            + SPINBOX_STYLE
+            + TOOLTIP_STYLE
+            + CIRCLE_CHECKBOX_STYLE
+            + COMBOBOX_STYLE
+        )
 
         # Default to "Clocks" subtab
         self._on_subtab_changed(0)

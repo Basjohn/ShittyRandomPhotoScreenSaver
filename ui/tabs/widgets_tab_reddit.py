@@ -8,15 +8,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit,
-    QSlider, QFontComboBox, QWidget,
+    QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
+from ui.widgets import StyledComboBox, StyledFontComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -59,6 +60,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_layout = QVBoxLayout(reddit_group)
 
     tab.reddit_enabled = QCheckBox("Enable Reddit Widget")
+    tab.reddit_enabled.setProperty("circleIndicator", True)
     tab.reddit_enabled.setToolTip(
         "Shows a small list of posts from a subreddit using Reddit's public JSON feed."
     )
@@ -82,6 +84,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addWidget(reddit_info)
 
     tab.reddit_exit_on_click = QCheckBox("Exit screensaver when Reddit links are opened")
+    tab.reddit_exit_on_click.setProperty("circleIndicator", True)
     tab.reddit_exit_on_click.setToolTip(
         "When enabled, clicking a Reddit link will exit the screensaver and open the link in your browser."
     )
@@ -102,7 +105,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Item count
     reddit_items_row = _aligned_row(_rc_layout, "Items:")
-    tab.reddit_items = QComboBox()
+    tab.reddit_items = StyledComboBox(size_variant="compact")
     tab.reddit_items.addItems(["4", "10", "20"])
     tab.reddit_items.setToolTip("Number of Reddit posts to display in the widget")
     tab.reddit_items.currentTextChanged.connect(tab._save_settings)
@@ -121,7 +124,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Position
     reddit_pos_row = _aligned_row(_rc_layout, "Position:")
-    tab.reddit_position = QComboBox()
+    tab.reddit_position = StyledComboBox()
     tab.reddit_position.addItems([
         "Top Left", "Top Center", "Top Right",
         "Middle Left", "Center", "Middle Right",
@@ -140,7 +143,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Display (monitor selection)
     reddit_disp_row = _aligned_row(_rc_layout, "Display:")
-    tab.reddit_monitor_combo = QComboBox()
+    tab.reddit_monitor_combo = StyledComboBox(size_variant="compact")
     tab.reddit_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.reddit_monitor_combo.setToolTip("Which monitor(s) to show the Reddit widget on")
     tab.reddit_monitor_combo.currentTextChanged.connect(tab._save_settings)
@@ -153,7 +156,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Font family
     reddit_font_family_row = _aligned_row(_rc_layout, "Font:")
-    tab.reddit_font_combo = QFontComboBox()
+    tab.reddit_font_combo = StyledFontComboBox(size_variant="hero")
     default_reddit_font = tab._default_str('reddit', 'font_family', 'Segoe UI')
     tab.reddit_font_combo.setCurrentFont(QFont(default_reddit_font))
     tab.reddit_font_combo.setMinimumWidth(220)
@@ -202,12 +205,14 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Background frame
     tab.reddit_show_background = QCheckBox("Show Background Frame")
+    tab.reddit_show_background.setProperty("circleIndicator", True)
     tab.reddit_show_background.setChecked(tab._default_bool('reddit', 'show_background', True))
     tab.reddit_show_background.stateChanged.connect(tab._save_settings)
     _rc_layout.addWidget(tab.reddit_show_background)
 
     # Intense shadow
     tab.reddit_intense_shadow = QCheckBox("Intense Shadows")
+    tab.reddit_intense_shadow.setProperty("circleIndicator", True)
     tab.reddit_intense_shadow.setChecked(tab._default_bool('reddit', 'intense_shadow', True))
     tab.reddit_intense_shadow.setToolTip(
         "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
@@ -216,6 +221,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addWidget(tab.reddit_intense_shadow)
 
     tab.reddit_show_separators = QCheckBox("Show separator lines between posts")
+    tab.reddit_show_separators.setProperty("circleIndicator", True)
     tab.reddit_show_separators.setChecked(tab._default_bool('reddit', 'show_separators', True))
     tab.reddit_show_separators.stateChanged.connect(tab._save_settings)
     _rc_layout.addWidget(tab.reddit_show_separators)
@@ -283,6 +289,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     reddit2_enable_row = _aligned_row(_rc_layout, "Reddit 2:")
     tab.reddit2_enabled = QCheckBox("Enable Reddit 2")
+    tab.reddit2_enabled.setProperty("circleIndicator", True)
     tab.reddit2_enabled.stateChanged.connect(tab._save_settings)
     tab.reddit2_enabled.stateChanged.connect(tab._update_stack_status)
     reddit2_enable_row.addWidget(tab.reddit2_enabled)
@@ -297,7 +304,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_sub_row.addStretch()
 
     reddit2_items_row = _aligned_row(_rc_layout, "Items:")
-    tab.reddit2_items = QComboBox()
+    tab.reddit2_items = StyledComboBox(size_variant="compact")
     tab.reddit2_items.addItems(["4", "10", "20"])
     tab.reddit2_items.setMinimumWidth(80)
     tab.reddit2_items.currentTextChanged.connect(tab._save_settings)
@@ -306,7 +313,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_items_row.addStretch()
 
     reddit2_pos_row = _aligned_row(_rc_layout, "Position:")
-    tab.reddit2_position = QComboBox()
+    tab.reddit2_position = StyledComboBox()
     tab.reddit2_position.addItems([
         "Top Left", "Top Center", "Top Right",
         "Middle Left", "Center", "Middle Right",
@@ -322,7 +329,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_pos_row.addStretch()
 
     reddit2_display_row = _aligned_row(_rc_layout, "Display:")
-    tab.reddit2_monitor_combo = QComboBox()
+    tab.reddit2_monitor_combo = StyledComboBox(size_variant="compact")
     tab.reddit2_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.reddit2_monitor_combo.setMinimumWidth(80)
     tab.reddit2_monitor_combo.currentTextChanged.connect(tab._save_settings)

@@ -47,6 +47,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(helix_turns_row)
 
     tab.helix_double = QCheckBox("Double Helix (DNA)")
+    tab.helix_double.setProperty("circleIndicator", True)
     tab.helix_double.setChecked(tab._default_bool('spotify_visualizer', 'helix_double', True))
     tab.helix_double.setToolTip("Show a second strand and cross-rungs for a DNA-like appearance.")
     tab.helix_double.stateChanged.connect(tab._save_settings)
@@ -71,6 +72,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(helix_speed_row)
 
     tab.helix_glow_enabled = QCheckBox("Enable Glow")
+    tab.helix_glow_enabled.setProperty("circleIndicator", True)
     tab.helix_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'helix_glow_enabled', True))
     tab.helix_glow_enabled.setToolTip("Draw a soft glow halo around the helix strands.")
     tab.helix_glow_enabled.stateChanged.connect(tab._save_settings)
@@ -110,6 +112,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _helix_glow_layout.addLayout(helix_glow_color_row)
 
     tab.helix_reactive_glow = QCheckBox("Reactive Glow")
+    tab.helix_reactive_glow.setProperty("circleIndicator", True)
     tab.helix_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'helix_reactive_glow', True))
     tab.helix_reactive_glow.setToolTip("Glow intensity pulses with audio energy.")
     tab.helix_reactive_glow.stateChanged.connect(tab._save_settings)

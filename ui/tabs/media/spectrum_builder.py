@@ -4,12 +4,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QCheckBox, QSlider, QWidget, QToolButton,
 )
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
+from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -136,7 +137,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_bar_row.addStretch()
 
     spotify_vis_block_row = _aligned_row(_adv_layout, "Audio Block Size:")
-    tab.spotify_vis_block_size = QComboBox()
+    tab.spotify_vis_block_size = StyledComboBox(size_variant="compact")
     tab.spotify_vis_block_size.setMinimumWidth(140)
     tab.spotify_vis_block_size.addItem("Auto (Driver)", 0)
     tab.spotify_vis_block_size.addItem("256 samples", 256)
@@ -188,6 +189,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     spotify_vis_recommended_row = _aligned_row(_normal_layout, "")
     tab.spotify_vis_recommended = QCheckBox("Suggest Sensitivity")
+    tab.spotify_vis_recommended.setProperty("circleIndicator", True)
     tab.spotify_vis_recommended.setChecked(
         tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
     )
@@ -217,6 +219,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     dynamic_floor_row = _aligned_row(_normal_layout, "")
     tab.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
+    tab.spotify_vis_dynamic_floor.setProperty("circleIndicator", True)
     tab.spotify_vis_dynamic_floor.setChecked(
         tab._default_bool('spotify_visualizer', 'dynamic_range_enabled', True)
     )
@@ -254,6 +257,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # Ghosting controls
     ghost_toggle_row = _aligned_row(_adv_layout, "")
     tab.spotify_vis_ghost_enabled = QCheckBox("Enable Ghosting")
+    tab.spotify_vis_ghost_enabled.setProperty("circleIndicator", True)
     tab.spotify_vis_ghost_enabled.setChecked(
         tab._default_bool('spotify_visualizer', 'ghosting_enabled', True)
     )
@@ -308,6 +312,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # Single Piece Mode (solid bars, no segment gaps)
     single_piece_row = _aligned_row(_adv_layout, "")
     tab.spectrum_single_piece = QCheckBox("Single Piece Mode")
+    tab.spectrum_single_piece.setProperty("circleIndicator", True)
     tab.spectrum_single_piece.setChecked(
         tab._default_bool('spotify_visualizer', 'spectrum_single_piece', False)
     )
@@ -322,6 +327,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # Unique Colours Per Bar (rainbow per-bar mode, only relevant when rainbow is on)
     rainbow_row = _aligned_row(_adv_layout, "")
     tab.spectrum_rainbow_per_bar = QCheckBox("Unique Colours Per Bar")
+    tab.spectrum_rainbow_per_bar.setProperty("circleIndicator", True)
     tab.spectrum_rainbow_per_bar.setChecked(
         tab._default_bool('spotify_visualizer', 'spectrum_rainbow_per_bar', False)
     )
@@ -335,7 +341,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # Bar Profile selector (Legacy / Curved)
     _profile_row = _aligned_row(_adv_layout, "Bar Profile:")
-    tab.spectrum_bar_profile = QComboBox()
+    tab.spectrum_bar_profile = StyledComboBox(size_variant="compact")
     tab.spectrum_bar_profile.addItem("Legacy", "legacy")
     tab.spectrum_bar_profile.addItem("Curved Bar Profile", "curved")
     _profile_default = tab._default_str('spotify_visualizer', 'spectrum_bar_profile', 'legacy')

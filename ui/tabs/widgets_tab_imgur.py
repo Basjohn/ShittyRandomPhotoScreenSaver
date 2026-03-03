@@ -9,15 +9,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit,
-    QSlider, QFontComboBox, QWidget,
+    QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
+from ui.widgets import StyledComboBox, StyledFontComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -52,6 +53,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_layout = QVBoxLayout(imgur_group)
 
     tab.imgur_enabled = QCheckBox("Enable Imgur Widget")
+    tab.imgur_enabled.setProperty("circleIndicator", True)
     tab.imgur_enabled.setToolTip("Shows a grid of images from Imgur tags.")
     tab.imgur_enabled.setChecked(tab._default_bool('imgur', 'enabled', False))
     tab.imgur_enabled.stateChanged.connect(tab._save_settings)
@@ -70,7 +72,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Tag selection
     imgur_tag_row = _aligned_row(_imgur_ctl, "Tag:")
-    tab.imgur_tag = QComboBox()
+    tab.imgur_tag = StyledComboBox(size_variant="compact")
     tab.imgur_tag.addItems([
         "most_viral", "memes", "aww", "dog", "cats", "funny",
         "earthporn", "architecture", "wallpapers", "gifs", "pics", "custom"
@@ -118,7 +120,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Position
     imgur_pos_row = _aligned_row(_imgur_ctl, "Position:")
-    tab.imgur_position = QComboBox()
+    tab.imgur_position = StyledComboBox()
     tab.imgur_position.addItems([
         "Top Left", "Top Center", "Top Right",
         "Middle Left", "Center", "Middle Right",
@@ -133,7 +135,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Display (monitor selection)
     imgur_disp_row = _aligned_row(_imgur_ctl, "Display:")
-    tab.imgur_monitor_combo = QComboBox()
+    tab.imgur_monitor_combo = StyledComboBox(size_variant="compact")
     tab.imgur_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.imgur_monitor_combo.setToolTip("Which monitor(s) to show the Imgur widget on")
     tab.imgur_monitor_combo.currentTextChanged.connect(tab._save_settings)
@@ -156,6 +158,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Show header
     tab.imgur_show_header = QCheckBox("Show Header")
+    tab.imgur_show_header.setProperty("circleIndicator", True)
     tab.imgur_show_header.setToolTip("Show Imgur logo and tag name in header")
     tab.imgur_show_header.setChecked(tab._default_bool('imgur', 'show_header', True))
     tab.imgur_show_header.stateChanged.connect(tab._save_settings)
@@ -163,7 +166,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Font family
     imgur_font_family_row = _aligned_row(_imgur_ctl, "Font:")
-    tab.imgur_font_combo = QFontComboBox()
+    tab.imgur_font_combo = StyledFontComboBox(size_variant="hero")
     default_imgur_font = tab._default_str('imgur', 'font_family', 'Segoe UI')
     tab.imgur_font_combo.setCurrentFont(QFont(default_imgur_font))
     tab.imgur_font_combo.setMinimumWidth(220)
@@ -211,6 +214,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Background frame
     tab.imgur_show_background = QCheckBox("Show Background Frame")
+    tab.imgur_show_background.setProperty("circleIndicator", True)
     tab.imgur_show_background.setToolTip("Show a semi-transparent background behind the widget")
     tab.imgur_show_background.setChecked(tab._default_bool('imgur', 'show_background', True))
     tab.imgur_show_background.stateChanged.connect(tab._save_settings)
@@ -218,6 +222,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Intense shadow
     tab.imgur_intense_shadow = QCheckBox("Intense Shadow")
+    tab.imgur_intense_shadow.setProperty("circleIndicator", True)
     tab.imgur_intense_shadow.setToolTip("Use a more pronounced drop shadow effect")
     tab.imgur_intense_shadow.setChecked(tab._default_bool('imgur', 'intense_shadow', True))
     tab.imgur_intense_shadow.stateChanged.connect(tab._save_settings)

@@ -8,7 +8,10 @@ Single source of truth for architecture and key decisions.
 - Predictable performance with memory-aware caching and prefetching.
 
 ## UI Component Specifications
-- **Circle Checkbox Indicator**: See `Docs/Circle_Checkbox_Implementation.md` for the SVG geometry, hover-state assets, QRC packaging, QSS selectors, and rebuild workflow. Any checkbox opting into the concentric style must set the `circleIndicator` property and rely on those shared assets; do not fork styles per tab.
+- **Circle Checkbox Indicator**: See `Docs/Custom_Style_Implementation.md` for the SVG geometry, padding rules, QRC packaging, QSS selectors, and rebuild workflow. Any checkbox opting into the concentric style must set the `circleIndicator` property and rely on those shared assets; do not fork styles per tab.
+- **Styled ComboBox / Font ComboBox**: All dropdowns in settings tabs must use `ui/widgets/styled_combo_box.py` plus the shared `COMBOBOX_STYLE` appended at the dialog level. Font pickers must instantiate `ui/widgets/styled_font_combo_box.py` so the preview rows stay intact while inheriting the same chrome. `WidgetsTab` and TransitionsTab both import `COMBOBOX_STYLE`, so every dropdown inherits the skin without per-tab QSS; DisplayTab remains the reference for standalone dialogs.
+- **Rounded Input Fields**: `SPINBOX_STYLE` in `ui/tabs/shared_styles.py` now defines the shared rounded border/hover/focus state for `QSpinBox`, `QDoubleSpinBox`, and `QLineEdit`. Append that stylesheet alongside `COMBOBOX_STYLE` in any dialog so numeric/text inputs keep parity with the combo box chrome.
+- **Rollout Tracking**: `Current_Plan.md` maintains a live, auto-generated checklist of every checkbox/combobox across the UI. Any new widget must be added to this manifest before implementation and marked complete only after verifying styling + runtime behavior.
 
 ## Architecture Overview
 - Engine orchestrates sources → queue → display → transitions.

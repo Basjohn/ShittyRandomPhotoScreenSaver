@@ -5,11 +5,12 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QSlider, QWidget, QToolButton,
+    QSlider, QWidget, QToolButton,
 )
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
+from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -155,7 +156,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv_layout.addWidget(QLabel("<b>Stream Controls</b>"))
 
     stream_dir_row = _aligned_row(_adv_layout, "Stream Direction:")
-    tab.bubble_stream_direction = QComboBox()
+    tab.bubble_stream_direction = StyledComboBox(size_variant="compact")
     tab.bubble_stream_direction.addItems(["None", "Up", "Down", "Left", "Right", "Diagonal", "Random"])
     saved_dir = tab._default_str('spotify_visualizer', 'bubble_stream_direction', 'up').lower()
     dir_map = {"none": 0, "up": 1, "down": 2, "left": 3, "right": 4, "diagonal": 5, "random": 6}
@@ -272,7 +273,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     drift_frequency_row.addWidget(tab.bubble_drift_frequency_label)
 
     drift_direction_row = _aligned_row(_adv_layout, "Drift Direction:")
-    tab.bubble_drift_direction = QComboBox()
+    tab.bubble_drift_direction = StyledComboBox(size_variant="compact")
     drift_options = [
         ("None", "none"),
         ("Left", "left"),
@@ -378,8 +379,8 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _normal_layout.addWidget(QLabel("<b>Styling</b>"))
 
     specular_row = _aligned_row(_normal_layout, "Specular Direction:")
-    tab.bubble_specular_direction = QComboBox()
-    tab.bubble_gradient_direction = QComboBox()
+    tab.bubble_specular_direction = StyledComboBox(size_variant="mini")
+    tab.bubble_gradient_direction = StyledComboBox(size_variant="mini")
     direction_options = [
         ("Top", "top"),
         ("Bottom", "bottom"),

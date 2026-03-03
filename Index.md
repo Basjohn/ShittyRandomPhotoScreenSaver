@@ -19,6 +19,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Visualizer_Presets_Plan.md | Per-visualizer preset workflow, curated rebuild tooling |
 | Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, fonts) |
+| Current_Plan.md | Live backlog + checkbox/combobox rollout manifest (auto-generated inventory for styled controls) |
 
 ## Tooling
 

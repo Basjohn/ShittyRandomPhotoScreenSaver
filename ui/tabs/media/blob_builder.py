@@ -84,6 +84,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     normal_layout.addWidget(pulse_widget)
 
     tab.blob_reactive_glow = QCheckBox("Reactive Glow")
+    tab.blob_reactive_glow.setProperty("circleIndicator", True)
     tab.blob_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'blob_reactive_glow', True))
     tab.blob_reactive_glow.setToolTip("Outer glow pulses with audio energy.")
     tab.blob_reactive_glow.stateChanged.connect(tab._save_settings)

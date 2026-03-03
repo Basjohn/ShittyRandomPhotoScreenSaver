@@ -34,6 +34,7 @@ QMenu::item {
     margin: 2px 4px;
     border-radius: 4px;
     font-size: 13px;
+    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
 }
 QMenu::item:selected {
     background-color: rgba(62, 62, 62, 220);
@@ -79,6 +80,7 @@ QMenu::item {
     margin: 1px 3px;
     border-radius: 3px;
     font-size: 12px;
+    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
 }
 QMenu::item:selected {
     background-color: rgba(62, 62, 62, 220);

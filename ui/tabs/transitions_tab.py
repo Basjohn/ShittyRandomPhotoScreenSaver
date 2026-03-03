@@ -9,7 +9,7 @@ Allows users to configure transition settings:
 """
 from typing import Optional
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QCheckBox, QGroupBox, QScrollArea,
     QSpinBox, QDoubleSpinBox,
 )
@@ -19,8 +19,9 @@ from PySide6.QtGui import QColor
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
-from ui.tabs.shared_styles import SPINBOX_STYLE, NoWheelSlider
+from ui.tabs.shared_styles import COMBOBOX_STYLE, SPINBOX_STYLE, NoWheelSlider
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
+from ui.widgets import StyledComboBox
 
 logger = get_logger(__name__)
 
@@ -106,7 +107,7 @@ class TransitionsTab(QWidget):
         type_layout = QVBoxLayout(type_group)
         
         type_row = _aligned_row(type_layout, "Transition:")
-        self.transition_combo = QComboBox()
+        self.transition_combo = StyledComboBox(size_variant="hero")
         self.transition_combo.addItems([
             "Ripple",            # 1. GL-only (formerly Rain Drops)
             "Wipe",              # 2. Directional
@@ -129,6 +130,7 @@ class TransitionsTab(QWidget):
         # Random transitions option
         random_row = _aligned_row(type_layout, "")
         self.random_checkbox = QCheckBox("Always use random transitions")
+        self.random_checkbox.setProperty("circleIndicator", True)
         self.random_checkbox.stateChanged.connect(self._save_settings)
         random_row.addWidget(self.random_checkbox)
         random_row.addStretch()
@@ -139,6 +141,7 @@ class TransitionsTab(QWidget):
         # regardless of this flag.
         pool_row = _aligned_row(type_layout, "")
         self.pool_checkbox = QCheckBox("Include in switch/random pool")
+        self.pool_checkbox.setProperty("circleIndicator", True)
         self.pool_checkbox.stateChanged.connect(self._save_settings)
         pool_row.addWidget(self.pool_checkbox)
         pool_row.addStretch()
@@ -167,7 +170,7 @@ class TransitionsTab(QWidget):
         direction_layout = QVBoxLayout(self.direction_group)
         
         direction_row = _aligned_row(direction_layout, "Direction:")
-        self.direction_combo = QComboBox()
+        self.direction_combo = StyledComboBox()
         # Items are populated dynamically per transition in _update_specific_settings()
         self.direction_combo.currentTextChanged.connect(self._save_settings)
         direction_row.addWidget(self.direction_combo)
@@ -180,7 +183,7 @@ class TransitionsTab(QWidget):
         easing_layout = QVBoxLayout(easing_group)
         
         easing_row = _aligned_row(easing_layout, "Easing:")
-        self.easing_combo = QComboBox()
+        self.easing_combo = StyledComboBox()
         self.easing_combo.addItems([
             "Auto",
             "Linear",
@@ -221,7 +224,7 @@ class TransitionsTab(QWidget):
         grid_cols_row.addStretch()
 
         flip_dir_row = _aligned_row(flip_layout, "Direction:")
-        self.blockflip_direction_combo = QComboBox()
+        self.blockflip_direction_combo = StyledComboBox()
         self.blockflip_direction_combo.addItems([
             "Left to Right",
             "Right to Left",
@@ -242,7 +245,7 @@ class TransitionsTab(QWidget):
         blockspin_layout = QVBoxLayout(self.blockspin_group)
 
         bs_row = _aligned_row(blockspin_layout, "Direction:")
-        self.blockspin_direction_combo = QComboBox()
+        self.blockspin_direction_combo = StyledComboBox()
         self.blockspin_direction_combo.addItems([
             "Left to Right",
             "Right to Left",
@@ -263,7 +266,7 @@ class TransitionsTab(QWidget):
         blinds_layout = QVBoxLayout(self.blinds_group)
 
         blinds_dir_row = _aligned_row(blinds_layout, "Direction:")
-        self.blinds_direction_combo = QComboBox()
+        self.blinds_direction_combo = StyledComboBox(size_variant="compact")
         self.blinds_direction_combo.addItems(["Horizontal", "Vertical", "Diagonal", "Random"])
         self.blinds_direction_combo.currentTextChanged.connect(self._save_settings)
         blinds_dir_row.addWidget(self.blinds_direction_combo)
@@ -296,7 +299,7 @@ class TransitionsTab(QWidget):
         block_size_row.addStretch()
 
         shape_row = _aligned_row(diffuse_layout, "Shape:")
-        self.diffuse_shape_combo = QComboBox()
+        self.diffuse_shape_combo = StyledComboBox(size_variant="compact")
         self.diffuse_shape_combo.addItems([
             "Rectangle",
             "Membrane",
@@ -347,7 +350,7 @@ class TransitionsTab(QWidget):
         crumble_complexity_row.addStretch()
 
         crumble_weight_row = _aligned_row(crumble_layout, "Weighting:")
-        self.crumble_weight_combo = QComboBox()
+        self.crumble_weight_combo = StyledComboBox(size_variant="compact")
         self.crumble_weight_combo.addItems([
             "Random Choice",
             "Bias Old Image",
@@ -364,7 +367,7 @@ class TransitionsTab(QWidget):
         particle_layout = QVBoxLayout(self.particle_group)
 
         particle_mode_row = _aligned_row(particle_layout, "Mode:")
-        self.particle_mode_combo = QComboBox()
+        self.particle_mode_combo = StyledComboBox(size_variant="compact")
         self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge"])
         self.particle_mode_combo.currentIndexChanged.connect(self._on_particle_mode_changed)
         self.particle_mode_combo.currentIndexChanged.connect(self._save_settings)
@@ -372,7 +375,7 @@ class TransitionsTab(QWidget):
         particle_mode_row.addStretch()
 
         particle_direction_row = _aligned_row(particle_layout, "Direction:")
-        self.particle_direction_combo = QComboBox()
+        self.particle_direction_combo = StyledComboBox(size_variant="compact")
         self.particle_direction_combo.addItems([
             "Left to Right",
             "Right to Left",
@@ -394,6 +397,7 @@ class TransitionsTab(QWidget):
 
         particle_trail_row = _aligned_row(particle_layout, "")
         self.particle_trail_check = QCheckBox("Motion Trail")
+        self.particle_trail_check.setProperty("circleIndicator", True)
         self.particle_trail_check.setChecked(True)
         self.particle_trail_check.stateChanged.connect(self._save_settings)
         particle_trail_row.addWidget(self.particle_trail_check)
@@ -401,6 +405,7 @@ class TransitionsTab(QWidget):
 
         particle_3d_row = _aligned_row(particle_layout, "")
         self.particle_3d_check = QCheckBox("3D Ball Shading")
+        self.particle_3d_check.setProperty("circleIndicator", True)
         self.particle_3d_check.setChecked(True)
         self.particle_3d_check.stateChanged.connect(self._save_settings)
         particle_3d_row.addWidget(self.particle_3d_check)
@@ -408,6 +413,7 @@ class TransitionsTab(QWidget):
 
         particle_texture_row = _aligned_row(particle_layout, "")
         self.particle_texture_check = QCheckBox("Map Image to Particles")
+        self.particle_texture_check.setProperty("circleIndicator", True)
         self.particle_texture_check.setChecked(True)
         self.particle_texture_check.stateChanged.connect(self._save_settings)
         particle_texture_row.addWidget(self.particle_texture_check)
@@ -415,6 +421,7 @@ class TransitionsTab(QWidget):
 
         particle_wobble_row = _aligned_row(particle_layout, "")
         self.particle_wobble_check = QCheckBox("Wobble on Arrival")
+        self.particle_wobble_check.setProperty("circleIndicator", True)
         self.particle_wobble_check.setChecked(False)
         self.particle_wobble_check.stateChanged.connect(self._save_settings)
         particle_wobble_row.addWidget(self.particle_wobble_check)
@@ -429,7 +436,7 @@ class TransitionsTab(QWidget):
         particle_gloss_row.addStretch()
 
         particle_light_row = _aligned_row(particle_layout, "Light Direction:")
-        self.particle_light_combo = QComboBox()
+        self.particle_light_combo = StyledComboBox(size_variant="compact")
         self.particle_light_combo.addItems([
             "Front",
             "Left",
@@ -452,7 +459,7 @@ class TransitionsTab(QWidget):
         particle_swirl_turns_row.addStretch()
 
         particle_swirl_order_row = _aligned_row(particle_layout, "Swirl Build Order:")
-        self.particle_swirl_order_combo = QComboBox()
+        self.particle_swirl_order_combo = StyledComboBox(size_variant="compact")
         self.particle_swirl_order_combo.addItems([
             "Inside-Out",
             "Outside-In",
@@ -469,7 +476,7 @@ class TransitionsTab(QWidget):
         burn_layout = QVBoxLayout(self.burn_group)
 
         burn_dir_row = _aligned_row(burn_layout, "Direction:")
-        self.burn_direction_combo = QComboBox()
+        self.burn_direction_combo = StyledComboBox(size_variant="compact")
         self.burn_direction_combo.addItems([
             "Left to Right",
             "Right to Left",
@@ -537,6 +544,7 @@ class TransitionsTab(QWidget):
 
         burn_smoke_row = _aligned_row(burn_layout, "")
         self.burn_smoke_check = QCheckBox("Sparks")
+        self.burn_smoke_check.setProperty("circleIndicator", True)
         self.burn_smoke_check.setChecked(True)
         self.burn_smoke_check.setToolTip("Enable bright sparks flying off the burn front")
         self.burn_smoke_check.stateChanged.connect(self._save_settings)
@@ -557,6 +565,7 @@ class TransitionsTab(QWidget):
 
         burn_ash_row = _aligned_row(burn_layout, "")
         self.burn_ash_check = QCheckBox("Ash Particles")
+        self.burn_ash_check.setProperty("circleIndicator", True)
         self.burn_ash_check.setChecked(True)
         self.burn_ash_check.setToolTip("Enable falling ash specks below the burn front")
         self.burn_ash_check.stateChanged.connect(self._save_settings)
@@ -591,7 +600,7 @@ class TransitionsTab(QWidget):
         # Enforce GL-only availability on initial build
         self._refresh_hw_dependent_options()
         
-        self.setStyleSheet(self.styleSheet() + SPINBOX_STYLE)
+        self.setStyleSheet(self.styleSheet() + SPINBOX_STYLE + COMBOBOX_STYLE)
     
     def _load_settings(self) -> None:
         """Load settings from settings manager."""

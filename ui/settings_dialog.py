@@ -11,7 +11,7 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QFileDialog, QMenu, QScrollArea,
+    QFileDialog, QMenu, QScrollArea, QCheckBox,
 )
 from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPen, QGuiApplication
@@ -183,7 +183,7 @@ class NoSourcesPopup(QDialog):
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
 
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setModal(True)
         
@@ -302,12 +302,6 @@ class NoSourcesPopup(QDialog):
         self.exit_requested.emit()
         self.reject()
     
-    def _apply_application_font(self) -> None:
-        font = QFont("Jost", 11)
-        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
-        font.setWeight(QFont.Weight.Normal)
-        QGuiApplication.setFont(font)
-
     def showEvent(self, event) -> None:
         super().showEvent(event)
         parent = self.parentWidget()
@@ -432,7 +426,7 @@ class SettingsDialog(QDialog):
             parent: Parent widget
         """
         super().__init__(parent)
-        
+
         self._settings = settings_manager
         self._animations = animation_manager
         self._is_maximized = False
@@ -467,9 +461,13 @@ class SettingsDialog(QDialog):
                     except Exception:
                         logger.debug("Invalid stored tab state for %s", key)
         
+        shared_styles.ensure_custom_fonts()
+        self._apply_application_font()
+
         self._setup_window()
         self._load_theme()
         self._setup_ui()
+        self._apply_circle_checkbox_style()
         self._connect_signals()
         self._restore_geometry()
         self._restore_last_tab_selection()
@@ -630,8 +628,8 @@ class SettingsDialog(QDialog):
         # Default selection
         self.sources_tab_btn.setChecked(True)
         self.content_stack.setCurrentIndex(0)
-    
-    
+
+
     def _create_about_tab(self) -> QWidget:
         """Create about tab. Delegates to ui.settings_about_tab."""
         from ui.settings_about_tab import build_about_tab
@@ -726,6 +724,20 @@ class SettingsDialog(QDialog):
         else:
             self.content_stack.setCurrentIndex(index)
             _after_switch()
+
+    def _apply_application_font(self) -> None:
+        font = QFont("Jost", 11)
+        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
+        font.setWeight(QFont.Weight.Normal)
+        QGuiApplication.setFont(font)
+
+    def _apply_circle_checkbox_style(self) -> None:
+        for checkbox in self.findChildren(QCheckBox):
+            checkbox.setProperty("circleIndicator", True)
+            style = checkbox.style()
+            style.unpolish(checkbox)
+            style.polish(checkbox)
+            checkbox.update()
 
     def _register_tab_scroll_area(self, index: int, tab_widget: QWidget) -> None:
         """Associate a scroll area with a tab for persistence."""
