@@ -30,13 +30,13 @@ def load_theme(widget) -> None:
                 }
                 
                 #dialogContainer {
-                    background-color: #2B2B2B;
-                    border: 2px solid #9a9a9a;
+                    background-color: rgba(34, 34, 34, 0.65);
+                    border: 3px solid #ffffff;
                     border-radius: 10px;
                 }
                 
                 #customTitleBar {
-                    background-color: #1E1E1E;
+                    background-color: rgba(24, 24, 24, 0.65);
                     border-top-left-radius: 10px;
                     border-top-right-radius: 10px;
                 }
@@ -74,6 +74,7 @@ def load_theme(widget) -> None:
                 
                 #sidebar {
                     background-color: #232323;
+                    border: 1px solid #ffffff;
                     border-radius: 8px;
                 }
                 
@@ -105,6 +106,7 @@ def load_theme(widget) -> None:
                 
                 #contentArea {
                     background-color: #1E1E1E;
+                    border: 1px solid #ffffff;
                     border-radius: 8px;
                     padding: 20px;
                 }
