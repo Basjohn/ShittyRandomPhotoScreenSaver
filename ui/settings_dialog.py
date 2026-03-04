@@ -58,7 +58,7 @@ class CustomTitleBar(QWidget):
         # Title
         self.title_label = QLabel("SRPSS SETTINGS")
         self.title_label.setObjectName("titleBarLabel")
-        title_font = QFont("Jost", 11)
+        title_font = QFont("Jost", 15)
         title_font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
         title_font.setWeight(QFont.Weight.Bold)
         self.title_label.setFont(title_font)
@@ -511,12 +511,11 @@ class SettingsDialog(QDialog):
             )
         
         # Drop shadow effect (no global windowOpacity so controls stay fully opaque)
-        shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(20)
-        shadow.setXOffset(0)
-        shadow.setYOffset(0)
-        shadow.setColor(QColor(0, 0, 0, 180))
-        self.setGraphicsEffect(shadow)
+        self._shell_shadow = QGraphicsDropShadowEffect(self)
+        self._shell_shadow.setBlurRadius(20)
+        self._shell_shadow.setXOffset(0)
+        self._shell_shadow.setYOffset(0)
+        self._shell_shadow.setColor(QColor(0, 0, 0, 180))
     
     def _load_theme(self) -> None:
         """Delegates to ui.settings_theme."""
@@ -528,6 +527,8 @@ class SettingsDialog(QDialog):
         # Main container (for rounded corners and shadow)
         container = QWidget()
         container.setObjectName("dialogContainer")
+        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        container.setGraphicsEffect(self._shell_shadow)
         
         main_layout = QVBoxLayout(container)
         main_layout.setContentsMargins(0, 0, 0, 0)

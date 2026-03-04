@@ -30,13 +30,13 @@ def load_theme(widget) -> None:
                 }
                 
                 #dialogContainer {
-                    background-color: rgba(34, 34, 34, 0.65);
+                    background-color: rgba(34, 34, 34, 0.5);
                     border: 3px solid #ffffff;
                     border-radius: 10px;
                 }
                 
                 #customTitleBar {
-                    background-color: rgba(24, 24, 24, 0.65);
+                    background-color: rgba(24, 24, 24, 0.5);
                     border-top-left-radius: 10px;
                     border-top-right-radius: 10px;
                 }
