@@ -91,17 +91,37 @@ uniform float u_sine_density;
 uniform float u_sine_displacement;
 
 float compute_density_cycles() {
-    float density_slider = clamp(u_sine_density, 0.25, 3.0);
-    float density_t = (density_slider - 0.25) / (3.0 - 0.25);
-    density_t = pow(clamp(density_t, 0.0, 1.0), 0.85);
-    return mix(0.65, 8.5, density_t);
+    // Two-piece linear: 0.25→1 cycle, 1.0→3 cycles (default), 3.0→8 cycles.
+    // Below default: gentle wide waves.  Above default: tightly packed.
+    // Every slider increment produces a proportional visible change.
+    float s = clamp(u_sine_density, 0.25, 3.0);
+    if (s <= 1.0) {
+        return mix(1.0, 3.0, (s - 0.25) / 0.75);
+    }
+    return mix(3.0, 8.0, (s - 1.0) / 2.0);
+}
+
+// Returns a thickness multiplier that tapers line width at high density
+// so tightly packed waves don't blob together.
+float density_thickness_factor() {
+    float cycles = compute_density_cycles();
+    return mix(1.0, 0.55, clamp((cycles - 3.0) / 5.0, 0.0, 1.0));
 }
 
 // Heartbeat amplitude pulse: returns <multiplier, cap>
+// u_heartbeat = slider amount (0-1), u_heartbeat_intensity = CPU-side decay envelope (1→0 over ~600ms)
+// On bass transient: wave swells dramatically then decays back.
 vec2 heartbeat_amp_params() {
-    // Heartbeat effect is intentionally disabled until the redesigned control ships again.
-    // Always return neutral values so no lingering CPU envelope can influence amplitude.
-    return vec2(1.0, 0.48);
+    float slider = clamp(u_heartbeat, 0.0, 1.0);
+    float envelope = clamp(u_heartbeat_intensity, 0.0, 1.0);
+    // Smooth the envelope with a cubic ease-out so the swell looks organic.
+    float shaped = 1.0 - (1.0 - envelope) * (1.0 - envelope);
+    float pulse = slider * shaped;
+    // Up to +120% amplitude at max pulse (dramatic visible swell).
+    float multiplier = 1.0 + pulse * 1.20;
+    // Cap rises substantially so the wave can grow to nearly fill the card.
+    float cap = 0.48 + pulse * 0.30;
+    return vec2(multiplier, cap);
 }
 
 float hash11(float p) {
@@ -173,8 +193,10 @@ vec4 eval_line(
     float dist = abs(ny - wave_y);
     float dist_px = dist * inner_height;
 
-    // Base width 2px, bass reaction can push it up to ~8px while still looking like a sine
-    float line_width = 2.0 + bass_width_boost * 6.0;
+    // Base width 2px, bass reaction can push it up to ~8px while still looking like a sine.
+    // density_thickness_factor() tapers width at high density to prevent blobbing.
+    float dtf = density_thickness_factor();
+    float line_width = (2.0 + bass_width_boost * 6.0) * dtf;
     float line_alpha = 1.0 - smoothstep(0.0, line_width, dist_px);
 
     float glow_alpha = 0.0;
@@ -298,30 +320,18 @@ void main() {
     float play_gate = (u_playing == 1) ? 1.0 : 0.0;
     float effective_speed = speed * play_gate;
 
-    // Displacement strength (multi-line shove). Slider sets maximum excursion, bass provides impulses.
+    // Displacement: smooth bass-reactive positional offset for all lines.
+    // On bass hits lines shift smoothly in Y (bounce) and X (phase nudge),
+    // with the direction slowly rotating over time so it looks intentional.
     float displacement_slider = clamp(u_sine_displacement, 0.0, 1.0);
     float displacement_gate = (displacement_slider > 0.005) ? 1.0 : 0.0;
-    float displacement_curve = pow(displacement_slider, 0.85);
-    float displacement_floor = mix(0.020, 0.200, displacement_slider) * displacement_gate; // baseline tremor for line 1
     float bass_vector = clamp(u_bass_energy * 1.70 + u_mid_energy * 0.45 + u_high_energy * 0.10, 0.0, 1.35);
-    float transient_gate = pow(max(bass_vector, 0.0001), mix(1.15, 0.50, displacement_curve));
-    float impulse_mix = mix(0.40, 1.60, displacement_slider);
-    float displacement_drive = (displacement_floor + transient_gate * impulse_mix) * max(play_gate, 0.2) * displacement_gate;
-    float phase_scale = mix(0.16, 1.45, displacement_slider);
-    float y_scale = mix(0.020, 0.230, displacement_slider);
-    float rand_speed_base = mix(0.45, 1.55, displacement_slider) + transient_gate * 0.75;
-    float l23_energy = clamp(bass_vector, 0.0, 1.2);
-    float l23_gate = smoothstep(0.22, 0.48, l23_energy) * displacement_slider;
-    float l23_drive = displacement_drive * l23_gate;
-    float l23_rand_gate = smoothstep(0.15, 0.42, l23_energy) * displacement_slider;
-    vec2 rand_line2_base = randomDirection(
-        2,
-        rand_speed_base * 1.05 + l23_rand_gate * 0.75 + displacement_drive * 0.30
-    );
-    vec2 rand_line3_base = randomDirection(
-        3,
-        rand_speed_base * 1.15 + l23_rand_gate * 0.90 + displacement_drive * 0.45
-    );
+    // Smooth bass drive: rises fast, falls slow — gives a punchy bounce feel.
+    float disp_energy = bass_vector * displacement_slider * displacement_gate * play_gate;
+    // Slowly rotating offset direction so displacement isn't always the same axis.
+    float disp_angle = u_time * 0.25;
+    float disp_phase_offset = sin(disp_angle) * disp_energy * 0.60;
+    float disp_y_offset = cos(disp_angle) * disp_energy * 0.12;
 
     // Travel phase per line: ONLY non-zero when direction != NONE (0).
     // 1=left (positive phase shift), 2=right (negative phase shift)
@@ -394,9 +404,6 @@ void main() {
     float amp1_raw = base_amplitude * (1.0 + e1 * 0.8);
     float amp1 = min(amp1_raw * hb_mult, hb_cap);
     float amp1_safe = max(amp1_raw, 0.01);
-    float l1_drive = clamp(displacement_floor * 1.2 + displacement_drive * 0.65, 0.0, 1.3);
-    vec2 rand_line1 = randomDirection(1, rand_speed_base * 0.9 + displacement_drive * 0.5);
-    float phase_jitter1 = rand_line1.x * l1_drive * phase_scale;
     float crawl_offset1 = 0.0;
     if (crawl_gate > 0.5) {
         float crawl_energy_mix = clamp(u_mid_energy * 0.75 + u_high_energy * 0.55 + u_bass_energy * 0.25, 0.0, 1.8);
@@ -413,7 +420,7 @@ void main() {
             crawl_offset1 = clamp(crawl_raw * crawl_drive * energy_push * 0.45, -0.45, 0.45);
         }
     }
-    float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * TWO_PI + phase_jitter1);
+    float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * TWO_PI + disp_phase_offset);
 
     // Wave effect: vocal-led positional y-offset preserving sine shape
     float wfx1 = 0.0;
@@ -445,7 +452,7 @@ void main() {
         }
     }
 
-    float ny1 = ny + rand_line1.y * l1_drive * y_scale * 0.85;
+    float ny1 = ny + disp_y_offset;
     float w1_pre = w1 + mw1 + crawl_offset1 + wfx1 / amp1_safe;
     vec3 line_rgb1;
     vec3 glow_rgb1;
@@ -478,9 +485,6 @@ void main() {
         float amp2_safe = max(amp2_raw, 0.01);
         float lob_phase2 = lob * 0.45 * 0.7;  // X-axis separation — tight to line 1
         float add_shift2 = u_sine_line2_shift * TWO_PI;
-        float l2_drive = clamp((displacement_floor * 0.25 + l23_drive * 1.25), 0.0, 1.85);
-        vec2 rand_line2 = rand_line2_base;
-        float phase_jitter2 = rand_line2.x * l2_drive * phase_scale * 1.35;
         float crawl_offset2 = crawl_offset1 * mix(0.35, 0.80, lob);
         if (crawl_gate > 0.5) {
             float crawl_energy2 = clamp(u_mid_energy * 0.70 + u_high_energy * 0.40 + u_bass_energy * 0.20, 0.0, 1.8);
@@ -497,7 +501,7 @@ void main() {
                 crawl_offset2 = clamp(blended * crawl_drive2 * 0.55, -0.50, 0.50);
             }
         }
-        float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2 + phase_jitter2);
+        float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2 + disp_phase_offset * 0.85);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
         // as LOB increases, blend toward line 2's unique pattern.
@@ -530,9 +534,7 @@ void main() {
 
         // Y-axis separation: Line 2 at +70% of vertical shift
         // At v_spacing=0 (VShift=0), ny2 == ny — perfectly aligned with Line 1
-        float y_push2 = rand_line2.y * l2_drive * y_scale * 1.10;
-        y_push2 = tanh(y_push2 * 1.35) * 0.35;
-        float ny2 = ny + v_spacing * 0.7 + y_push2;
+        float ny2 = ny + v_spacing * 0.7 + disp_y_offset * 1.10;
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
         float w2_pre = w2 + mw2 + crawl_offset2 + wfx2 / amp2_safe;
@@ -569,9 +571,6 @@ void main() {
         float amp3_safe = max(amp3_raw, 0.01);
         float lob_phase3 = lob * 0.90;  // X-axis separation — tight to line 1
         float add_shift3 = u_sine_line3_shift * TWO_PI;
-        float l3_drive = clamp((displacement_floor * 0.30 + l23_drive * 1.45), 0.0, 2.2);
-        vec2 rand_line3 = rand_line3_base;
-        float phase_jitter3 = rand_line3.x * l3_drive * phase_scale * 1.55;
         float crawl_offset3 = crawl_offset1 * mix(0.55, 1.15, lob);
         if (crawl_gate > 0.5) {
             float crawl_energy3 = clamp(u_high_energy * 0.75 + u_mid_energy * 0.35 + u_bass_energy * 0.25, 0.0, 1.8);
@@ -588,7 +587,7 @@ void main() {
                 crawl_offset3 = clamp(blended3 * crawl_drive3 * 0.60, -0.55, 0.55);
             }
         }
-        float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3 + phase_jitter3);
+        float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3 + disp_phase_offset * 1.15);
 
         // Wave effect: at LOB=0 use line 1's wfx for perfect alignment;
         // as LOB increases, blend toward line 3's unique pattern.
@@ -621,9 +620,7 @@ void main() {
 
         // Y-axis separation: Line 3 at -100% of vertical shift (opposite direction)
         // At v_spacing=0 (VShift=0), ny3 == ny — perfectly aligned with Line 1
-        float y_push3 = rand_line3.y * l3_drive * y_scale * 1.20;
-        y_push3 = tanh(y_push3 * 1.4) * 0.38;
-        float ny3 = ny - v_spacing + y_push3;
+        float ny3 = ny - v_spacing + disp_y_offset * 1.25;
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
         float w3_pre = w3 + mw3 + crawl_offset3 + wfx3 / amp3_safe;

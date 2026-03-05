@@ -35,6 +35,8 @@ uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward
 uniform vec3 u_blob_stage_progress_override;  // (-1,-1,-1) when unused
 uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
+uniform float u_ghost_alpha;           // 0 = no ghost, >0 = ghost outline intensity
+uniform float u_blob_peak_energy;      // CPU-tracked peak energy for ghost outline
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
 vec3 apply_rainbow_shift(vec3 rgb) {
@@ -335,7 +337,29 @@ void main() {
         outline_band_alpha = (1.0 - smoothstep(0.0, 0.015, d)) * outline_a;
     }
 
-    float total_alpha = max(fill_alpha, max(edge_alpha, max(glow_alpha, outline_band_alpha)));
+    // Ghost outline: faded ring at the peak blob radius (where the blob WAS)
+    float ghost_ring_alpha = 0.0;
+    if (u_ghost_alpha > 0.001) {
+        float pe = clamp(u_blob_peak_energy, 0.0, 1.0);
+        float ce = clamp(u_blob_smoothed_energy, 0.0, 1.0);
+        float delta_e = max(0.0, pe - ce);
+        if (delta_e > 0.003) {
+            // Estimate how much larger the blob was at peak energy
+            float pulse_f = clamp(u_blob_pulse, 0.0, 2.0);
+            float ghost_expand = delta_e * (0.053 * pulse_f + 0.066);
+            // ghost_d = distance from the ghost (peak) blob edge
+            float ghost_d = d - ghost_expand;
+            // Thin ring at ghost edge + soft fade-out
+            float ring = (1.0 - smoothstep(-0.004, 0.002, ghost_d))
+                       * smoothstep(-0.020, -0.004, ghost_d);
+            // Only show outside the current fill (avoid doubling inside)
+            float outside_mask = smoothstep(-0.005, 0.005, d);
+            ghost_ring_alpha = ring * outside_mask * u_ghost_alpha
+                             * clamp(delta_e * 4.0, 0.0, 1.0);
+        }
+    }
+
+    float total_alpha = max(fill_alpha, max(edge_alpha, max(glow_alpha, max(outline_band_alpha, ghost_ring_alpha))));
     if (total_alpha <= 0.001) {
         discard;
     }
@@ -365,6 +389,9 @@ void main() {
         // Near edge: transition from fill to edge highlight colour
         float t = 1.0 - clamp(-d / 0.02, 0.0, 1.0);
         final_rgb = mix(blob_rgb, edge_rgb, t);
+    } else if (ghost_ring_alpha > 0.01 && ghost_ring_alpha >= glow_alpha) {
+        // Ghost ring zone: use outline colour with ghost alpha
+        final_rgb = outline_rgb;
     } else if (d < 0.015 && outline_a > 0.01) {
         // Outline band: thin region just outside the fill, before glow takes over
         float band_t = clamp(d / 0.015, 0.0, 1.0);

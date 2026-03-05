@@ -104,6 +104,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._ghosting_enabled: bool = True
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
+        self._blob_ghosting_enabled: bool = False
+        self._blob_ghost_alpha: float = 0.4
+        self._blob_ghost_decay: float = 0.3
         self._spectrum_single_piece: bool = False
         self._spectrum_bar_profile: str = 'legacy'
         self._spectrum_border_radius: float = 0.0
@@ -268,6 +271,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_extra_data: list = []
         self._bubble_trail_data: list = []
         self._bubble_trail_strength: float = 0.0
+        self._bubble_tail_opacity: float = 0.0
         self._bubble_count: int = 0
         self._bubble_compute_pending: bool = False  # coalescing flag
         self._bubble_last_tick_ts: float = 0.0
@@ -1946,7 +1950,9 @@ class SpotifyVisualizerWidget(QWidget):
                 changed = True
 
         # --- Heartbeat transient detection (CPU-side) ---
-        # Compare a short window vs long window bass average; slider tunes gate.
+        # Detects bass energy spikes above a running average and produces a
+        # decay envelope (_heartbeat_intensity) that the shader uses to swell
+        # all sine line amplitudes.  Slider tunes sensitivity (lower gate).
         if self._sine_heartbeat > 0.001 and self._engine is not None:
             eb = self._engine.get_energy_bands()
             bass_now = getattr(eb, 'bass', 0.0) if eb else 0.0
@@ -1958,48 +1964,40 @@ class SpotifyVisualizerWidget(QWidget):
             dt_hb = max(0.001, min(0.05, now_ts - prev_hb_ts)) if prev_hb_ts > 0.0 else 0.016
 
             slider = max(0.0, min(1.0, self._sine_heartbeat))
-            # Short window reacts within ~80 ms, long window ~600 ms for baseline.
-            alpha_fast = min(1.0, dt_hb / 0.08)
-            alpha_avg = min(1.0, dt_hb / 0.6)
-            alpha_floor = min(1.0, dt_hb / 1.4)
+
+            # Fast EMA (~50ms) reacts to current beat, slow EMA (~400ms) is baseline.
+            alpha_fast = min(1.0, dt_hb / 0.05)
+            alpha_slow = min(1.0, dt_hb / 0.40)
             self._heartbeat_fast_bass += (bass_now - self._heartbeat_fast_bass) * alpha_fast
-            self._heartbeat_avg_bass += (bass_now - self._heartbeat_avg_bass) * alpha_avg
-            self._heartbeat_floor_bass += (bass_now - self._heartbeat_floor_bass) * alpha_floor
+            self._heartbeat_avg_bass += (bass_now - self._heartbeat_avg_bass) * alpha_slow
 
             fast = self._heartbeat_fast_bass
             slow = self._heartbeat_avg_bass
-            floor_bass = self._heartbeat_floor_bass
-            delta_avg = max(0.0, fast - slow)
-            delta_floor = max(0.0, fast - floor_bass)
-            slope = max(0.0, fast - self._heartbeat_fast_prev)
-            norm_delta = delta_avg / max(0.05, slow + 1e-3)
-            floor_ratio = delta_floor / max(0.12, floor_bass + 1e-3)
-            slope_ratio = slope / max(0.08, fast + 1e-3)
-            transient_score = max(norm_delta, floor_ratio * 0.9) + slope_ratio * 0.35
 
-            energy_mix = clamp(bass_now * 0.7 + mid_now * 0.2 + high_now * 0.1, 0.0, 1.0)
-            base_gate = mix(0.5, 0.24, slider)
-            intensity_gate = 0.55 + 0.45 * clamp(self._heartbeat_intensity, 0.0, 1.0)
-            relax_gate = 1.0 - min(0.35, energy_mix * 0.3)
-            dynamic_gate = max(0.12, base_gate * intensity_gate * relax_gate)
+            # Spike ratio: how much fast exceeds slow (1.0 = equal, 2.0 = double).
+            spike_ratio = fast / max(0.02, slow)
+            # Gate: at slider=0.0 need 80% spike above average; at slider=1.0 need 20%.
+            trigger_gate = 1.0 + (0.80 - 0.60 * slider)
             cooldown_elapsed = now_ts - self._heartbeat_last_trigger_ts
+            energy_mix = clamp(bass_now * 0.7 + mid_now * 0.2 + high_now * 0.1, 0.0, 1.0)
             triggered = False
 
             if (
-                transient_score > dynamic_gate
-                and energy_mix > 0.06
-                and cooldown_elapsed >= 0.08
+                spike_ratio > trigger_gate
+                and energy_mix > 0.04
+                and cooldown_elapsed >= 0.15
             ):
                 triggered = True
                 self._heartbeat_last_trigger_ts = now_ts
-                punch = clamp(0.28 + transient_score * 0.45 + energy_mix * 0.30, 0.0, 1.2)
-                rise_tau = 0.040  # enforce ~40 ms rise
-                rise_alpha = min(1.0, dt_hb / max(rise_tau, 1e-3))
-                blended = self._heartbeat_intensity + (punch - self._heartbeat_intensity) * rise_alpha
-                self._heartbeat_intensity = min(1.0, blended)
+                # Punch scales with both how big the spike is and slider sensitivity.
+                punch = clamp(0.4 + (spike_ratio - trigger_gate) * 0.8 + energy_mix * 0.3, 0.0, 1.0)
+                # Instant rise — set intensity directly to punch (or keep if already higher).
+                self._heartbeat_intensity = max(self._heartbeat_intensity, punch)
+            else:
+                # Decay only when NOT triggered this frame.  600ms full decay.
+                decay_rate = 1.0 / 0.60
+                self._heartbeat_intensity = max(0.0, self._heartbeat_intensity - dt_hb * decay_rate)
 
-            decay_rate = 1.0 / 0.45  # 450 ms to decay to zero
-            self._heartbeat_intensity = max(0.0, self._heartbeat_intensity - dt_hb * decay_rate)
             self._heartbeat_fast_prev = fast
 
             if is_viz_diagnostics_enabled() and (
@@ -2007,16 +2005,15 @@ class SpotifyVisualizerWidget(QWidget):
             ):
                 logger.debug(
                     (
-                        "[SPOTIFY_VIS][SINE][HB] dt=%.3f bass=%.3f fast=%.3f avg=%.3f floor=%.3f "
-                        "score=%.3f gate=%.3f energy=%.3f slider=%.2f intensity=%.2f trigger=%s"
+                        "[SPOTIFY_VIS][SINE][HB] dt=%.3f bass=%.3f fast=%.3f avg=%.3f "
+                        "spike=%.3f gate=%.3f energy=%.3f slider=%.2f intensity=%.2f trigger=%s"
                     ),
                     dt_hb,
                     bass_now,
                     fast,
                     slow,
-                    floor_bass,
-                    transient_score,
-                    dynamic_gate,
+                    spike_ratio,
+                    trigger_gate,
                     energy_mix,
                     slider,
                     self._heartbeat_intensity,

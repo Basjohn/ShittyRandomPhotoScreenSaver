@@ -26,6 +26,7 @@ uniform vec4 u_bubbles_extra[110];
 // Trail: 3 previous (x,y,strength) samples per bubble, oldest first
 uniform vec3 u_bubbles_trail[330];  // 110 * 3
 uniform float u_trail_strength;     // 0.0 = off, 1.0 = full
+uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.0-0.85)
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
@@ -150,9 +151,10 @@ void main() {
     int count = min(u_bubble_count, 110);
 
     // --- Motion trail smear (stretched glow following each bubble) ---
-    if (u_trail_strength > 0.001) {
+    if (u_trail_strength > 0.001 && u_tail_opacity > 0.001) {
         float trail_strength = clamp(u_trail_strength, 0.0, 1.0);
         float trail_boost = max(0.0, u_trail_strength - 1.0); // extra headroom up to 1.5
+        float opacity_cap = clamp(u_tail_opacity, 0.0, 0.85);
         vec2 uv_aspect = vec2(uv.x * aspect, uv.y);
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
@@ -205,9 +207,9 @@ void main() {
                 clamp(0.35 + along_t * 0.55 + trail_boost * 0.8, 0.0, 1.0)
             );
 
-            float blend = clamp(trail_alpha * u_fade, 0.0, 1.0);
+            float blend = clamp(trail_alpha * u_fade, 0.0, opacity_cap);
             result.rgb = mix(result.rgb, trail_rgb, blend);
-            result.a = max(result.a, blend * 0.85 + balpha * 0.15);
+            result.a = max(result.a, blend * opacity_cap + balpha * 0.15);
         }
     }
 

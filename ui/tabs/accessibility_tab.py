@@ -16,6 +16,7 @@ from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
 from ui.tabs.shared_styles import (
     CIRCLE_CHECKBOX_STYLE,
+    SLIDER_STYLE,
     NoWheelSlider,
     SECTION_HEADING_STYLE,
     SUBSECTION_DIVIDER_STYLE,
@@ -66,7 +67,7 @@ class AccessibilityTab(QWidget):
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         from ui.tabs.shared_styles import SCROLL_AREA_STYLE
-        scroll.setStyleSheet(SCROLL_AREA_STYLE)
+        scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
         
         # Create content widget
         content = QWidget()

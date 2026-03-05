@@ -309,6 +309,14 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'osc_ghost_intensity' in kwargs:
         widget._osc_ghost_intensity = max(0.0, min(1.0, float(kwargs['osc_ghost_intensity'])))
 
+    # --- Blob ghost -------------------------------------------------------
+    if 'blob_ghosting_enabled' in kwargs:
+        widget._blob_ghosting_enabled = bool(kwargs['blob_ghosting_enabled'])
+    if 'blob_ghost_alpha' in kwargs:
+        widget._blob_ghost_alpha = max(0.0, min(1.0, float(kwargs['blob_ghost_alpha'])))
+    if 'blob_ghost_decay' in kwargs:
+        widget._blob_ghost_decay = max(0.1, min(1.0, float(kwargs['blob_ghost_decay'])))
+
     # --- Sine Wave Heartbeat -----------------------------------------------
     if 'sine_heartbeat' in kwargs:
         widget._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
@@ -388,8 +396,9 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'bubble_growth' in kwargs:
         widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
     if 'bubble_trail_strength' in kwargs:
-        # Trails are temporarily disabled until the gradient taper rework lands.
-        widget._bubble_trail_strength = 0.0
+        widget._bubble_trail_strength = max(0.0, min(1.5, float(kwargs['bubble_trail_strength'])))
+    if 'bubble_tail_opacity' in kwargs:
+        widget._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
@@ -405,6 +414,9 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['rainbow_per_bar'] = getattr(widget, '_rainbow_per_bar', False)
     extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
     extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
+    extra['blob_ghosting_enabled'] = getattr(widget, '_blob_ghosting_enabled', False)
+    extra['blob_ghost_alpha'] = getattr(widget, '_blob_ghost_alpha', 0.4)
+    extra['blob_ghost_decay'] = getattr(widget, '_blob_ghost_decay', 0.3)
     extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
     extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
     extra['sine_density'] = getattr(widget, '_sine_density', 1.0)
@@ -495,6 +507,7 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
         extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
         extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
         extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
+        extra['bubble_tail_opacity'] = getattr(widget, '_bubble_tail_opacity', 0.0)
         extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
 
     return extra

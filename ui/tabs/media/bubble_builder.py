@@ -451,25 +451,41 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     bubble_growth_row.addWidget(tab.bubble_growth_label)
 
-    # ── Motion Trails ────────────────────────────────────────────────
-    trail_row = _aligned_row(_adv_layout, "Motion Trails:")
+    # ── Motion Tails ─────────────────────────────────────────────────
+    tail_len_row = _aligned_row(_adv_layout, "Tail Length:")
     tab.bubble_trail_strength = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_trail_strength.setMinimum(0)
     tab.bubble_trail_strength.setMaximum(150)
     tab.bubble_trail_strength.setValue(0)
     tab.bubble_trail_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_trail_strength.setTickInterval(10)
-    tab.bubble_trail_strength.setEnabled(False)
     tab.bubble_trail_strength.setToolTip(
-        "Disabled while bubble trails are being reworked for gradient tapering."
+        "How long the motion tail stretches behind each bubble (0 = off)."
     )
-    trail_row.addWidget(tab.bubble_trail_strength)
+    tab.bubble_trail_strength.valueChanged.connect(tab._save_settings)
+    tail_len_row.addWidget(tab.bubble_trail_strength)
     tab.bubble_trail_strength_label = QLabel("0%")
-    tab.bubble_trail_strength_label.setEnabled(False)
-    trail_row.addWidget(tab.bubble_trail_strength_label)
-    disabled_msg = QLabel("(Temporarily unavailable – trails need gradient rework)")
-    disabled_msg.setObjectName("bubbleTrailDisabledLabel")
-    disabled_msg.setStyleSheet("color: rgba(255,255,255,110);")
-    trail_row.addWidget(disabled_msg)
+    tab.bubble_trail_strength.valueChanged.connect(
+        lambda v: tab.bubble_trail_strength_label.setText(f"{v}%")
+    )
+    tail_len_row.addWidget(tab.bubble_trail_strength_label)
+
+    tail_opa_row = _aligned_row(_adv_layout, "Tail Opacity:")
+    tab.bubble_tail_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_tail_opacity.setMinimum(0)
+    tab.bubble_tail_opacity.setMaximum(85)
+    tab.bubble_tail_opacity.setValue(0)
+    tab.bubble_tail_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_tail_opacity.setTickInterval(5)
+    tab.bubble_tail_opacity.setToolTip(
+        "Maximum opacity of the tail gradient (0 = off). Always somewhat translucent."
+    )
+    tab.bubble_tail_opacity.valueChanged.connect(tab._save_settings)
+    tail_opa_row.addWidget(tab.bubble_tail_opacity)
+    tab.bubble_tail_opacity_label = QLabel("0%")
+    tab.bubble_tail_opacity.valueChanged.connect(
+        lambda v: tab.bubble_tail_opacity_label.setText(f"{v}%")
+    )
+    tail_opa_row.addWidget(tab.bubble_tail_opacity_label)
 
     parent_layout.addWidget(tab._bubble_settings_container)

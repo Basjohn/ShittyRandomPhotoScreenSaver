@@ -78,32 +78,6 @@ class VisualizerPresetSlider(QWidget):
         self._slider.setTickInterval(1)
         self._slider.setPageStep(1)
         self._slider.setSingleStep(1)
-        self._slider.setStyleSheet("""
-            QSlider::groove:horizontal {
-                border: 1px solid rgba(68, 68, 68, 1.0);
-                height: 6px;
-                background: rgba(35, 35, 35, 1.0);
-                margin: 2px 0;
-                border-radius: 3px;
-            }
-            QSlider::handle:horizontal {
-                background: rgba(255, 255, 255, 0.95);
-                border: 1px solid rgba(200, 200, 200, 1.0);
-                width: 14px;
-                margin: -5px 0;
-                border-radius: 7px;
-            }
-            QSlider::handle:horizontal:hover {
-                background: rgba(255, 255, 255, 1.0);
-                border: 1px solid rgba(153, 153, 153, 1.0);
-            }
-            QSlider::sub-page:horizontal {
-                background: rgba(58, 58, 58, 1.0);
-                border: 1px solid rgba(102, 102, 102, 1.0);
-                height: 6px;
-                border-radius: 3px;
-            }
-        """)
         self._slider.setToolTip(
             "Choose a visualizer preset. Custom (rightmost) shows all settings."
         )

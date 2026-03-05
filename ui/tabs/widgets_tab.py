@@ -378,13 +378,14 @@ class WidgetsTab(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-        from ui.tabs.shared_styles import CIRCLE_CHECKBOX_STYLE
+        from ui.tabs.shared_styles import CIRCLE_CHECKBOX_STYLE, SLIDER_STYLE
         self.setStyleSheet(
             self.styleSheet()
             + SPINBOX_STYLE
             + TOOLTIP_STYLE
             + CIRCLE_CHECKBOX_STYLE
             + COMBOBOX_STYLE
+            + SLIDER_STYLE
         )
 
         # Default to "Clocks" subtab

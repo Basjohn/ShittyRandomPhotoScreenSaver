@@ -18,7 +18,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Visualizer_Reset_Matrix.md | Reset sequencing matrix for visualizer subsystems |
 | Docs/Visualizer_Presets_Plan.md | Per-visualizer preset workflow, curated rebuild tooling |
 | Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
-| Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, fonts) |
+| Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
 | Current_Plan.md | Live backlog + checkbox/combobox rollout manifest (auto-generated inventory for styled controls) |
 
 ## Tooling
@@ -253,17 +253,6 @@ endering/gl_programs/blockflip_program.py | BlockFlipProgram | Block Puzzle Flip
 | Imgur | widgets/imgur/ | ImgurWidget, ImgurScraper, ImgurImageCache | widgets.imgur |
 
 **Imgur Widget Details:**
-- **widget.py**: ImgurWidget - Grid-based image display with configurable layout modes (vertical/square/hybrid), circular buffer rotation, smooth fade transitions, high-DPI support, **synchronous cache loading** (matches Reddit pattern for immediate fade-in with content)
-- **scraper.py**: ImgurScraper - BeautifulSoup HTML parsing, conservative rate limiting (24 req/10min), exponential backoff, 429 handling, gallery page parsing (NOTE: not viable due to Imgur React SPA)
-- **image_cache.py**: ImgurImageCache - LRU disk cache (100MB max), GIF-to-first-frame conversion, high-DPI pixmap loading, **metadata persistence after every put**, **auto-rebuild from files if metadata missing**
-- **Features**: Concurrent downloads (4 at a time), cell pixmap caching, click-to-browser, header with logo colorization, fade coordination
-- **Limitation**: Only 160x160 thumbnails available - Imgur deprecated size suffixes and gallery parsing requires JS rendering
-| Spotify Visualizer | widgets/spotify_visualizer_widget.py | SpotifyVisualizerWidget | widgets.spotify_visualizer (tracks `_sine_line{1,2,3}_shift` + `line_offset_bias`; teardown pipeline now drives ShadowFadeProfile fade-out → engine cancel/reset → wait-for-fresh-bars gate before fade-in; `_destroy_parent_overlay()` blank-clears and deletes the GL overlay, unregisters from PixelShift, clears shadows, and defers shadow reattach until `_on_first_frame_after_cold_start()` fires; card height changes defer until fade-in; settings dialog exposes **Suggest Sensitivity** (renamed from Adaptive) which hides the manual slider while the curated multiplier is active and reveals it when unchecked). Blob mode follows the Advanced toggle pattern (Normal vs Advanced buckets per Docs/Advanced_Migration.md) with Stage Gain/Core Floor/Core Scale, Stage Bias, Stage 2/Stage 3 release, wobble/stretch, and glow sliders gated cosmetically but still applied even when hidden. **Sine displacement was retired Feb 2026** — the control stays visible but locked at 0% and shader uniforms are clamped so no random jitter can leak through old configs. Crawl remains documented below; density stays in the Advanced bucket and must use `_aligned_row()`. Sine heartbeat plumbing also remains for compatibility but the shader returns neutral `(1.0, 0.48)` so no amplitude modulation occurs until the feature is redesigned. |
-| Crawl Slider | defaults/models/UI/config_applier/shader | `sine_crawl_amount`, Crawl slider UI rows, `u_crawl_amount` uniform | Feb 2026 sine slider providing vocal-driven horizontal crawl. Defaults routed via `defaults.py`/settings model/UI save-load, GPU plumbing pushes `u_crawl_amount` per frame, and `sine_wave.frag` now applies density-aware low-frequency drift per line plus `[SPOTIFY_VIS][SINE][CRAWL]` diagnostics. |
-| Spotify Bars GL | widgets/spotify_bars_gl_overlay.py | SpotifyBarsGLOverlay | Receives global card border width each frame (`u_border_width`); always clears its framebuffer even when disabled; `cleanup_gl()` now guarantees the GL context is current before deleting programs/VAO/VBO so mode cycles cannot leave stale silhouettes |
-| Spotify Volume | widgets/spotify_volume_widget.py | SpotifyVolumeWidget | widgets.spotify_volume |
-| Mute Button | widgets/mute_button_widget.py | MuteButtonWidget | widgets.media.mute_button_enabled |
-
 ### Visualizer Components
 
 | Module | File | Key Classes/Functions | Purpose |
@@ -408,7 +397,7 @@ value = settings.get("display.mode", "fill")
 | WidgetsTab Reddit | ui/tabs/widgets_tab_reddit.py | build_reddit_ui(), load_reddit_settings(), save_reddit_settings(), _update_reddit_enabled_visibility() | Reddit 1/2 UI, load, save; all controls gated by enabled checkbox |
 | WidgetsTab Imgur | ui/tabs/widgets_tab_imgur.py | build_imgur_ui(), load_imgur_settings(), save_imgur_settings() | Imgur UI, load, save (dev-gated) |
 | Settings Binding | ui/tabs/settings_binding.py | SliderBinding, CheckBinding, ComboDataBinding, ComboIndexBinding, ColorBinding, RawBinding, apply_bindings_load, collect_bindings_save | Declarative widget↔config key binding utility for reducing save/load boilerplate |
-| Shared Styles | ui/tabs/shared_styles.py | NoWheelSlider, SPINBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants and shared widgets (NoWheelSlider) for all settings tabs |
+| Shared Styles | ui/tabs/shared_styles.py | NoWheelSlider, SPINBOX_STYLE, COMBOBOX_STYLE, SLIDER_STYLE, CIRCLE_CHECKBOX_STYLE, TOOLTIP_STYLE, SCROLL_AREA_STYLE | Centralised QSS constants and shared widgets (NoWheelSlider) for all settings tabs |
 | SourcesTab | ui/tabs/sources_tab.py | SourcesTab | Image source config |
 | TransitionsTab | ui/tabs/transitions_tab.py | TransitionsTab | Transition config; Burn Settings group (direction 4-way, jaggedness, glow intensity, char width, glow colour picker, smoke/ash toggles + density sliders) shown conditionally when Burn is selected |
 | DisplayTab | ui/tabs/display_tab.py | DisplayTab | Display settings |

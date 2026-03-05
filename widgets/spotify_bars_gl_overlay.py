@@ -156,6 +156,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_reactive_wobble: float = 1.0
         self._blob_stretch_tendency: float = 0.0
         self._blob_smoothed_energy: float = 0.0
+        self._blob_peak_energy: float = 0.0
         self._blob_seed_pending: bool = False
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
@@ -195,6 +196,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_extra_data: list = []
         self._bubble_trail_data: list = []
         self._bubble_trail_strength: float = 0.0
+        self._bubble_tail_opacity: float = 0.0
         self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
 
         # Helix settings
@@ -320,6 +322,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_smoothed_energy = 0.0
         else:
             self._blob_smoothed_energy = 0.0
+        self._blob_peak_energy = 0.0
         self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_filtered = (0.0, 0.0, 0.0)
         self._blob_stage_progress_ready = False
@@ -416,6 +419,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         rainbow_per_bar: bool = False,
         osc_ghosting_enabled: bool = False,
         osc_ghost_intensity: float = 0.4,
+        blob_ghosting_enabled: bool = False,
+        blob_ghost_alpha: float = 0.4,
+        blob_ghost_decay: float = 0.3,
         sine_heartbeat: float = 0.0,
         heartbeat_intensity: float = 0.0,
         # Bubble mode
@@ -424,6 +430,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_extra_data: list | None = None,
         bubble_trail_data: list | None = None,
         bubble_trail_strength: float = 0.0,
+        bubble_tail_opacity: float = 0.0,
         bubble_outline_color: QColor | None = None,
         bubble_specular_color: QColor | None = None,
         bubble_gradient_light: QColor | None = None,
@@ -499,6 +506,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # Fast rise (~50ms tau), slow decay (~300ms tau)
                     alpha = min(1.0, dt / 0.05) if raw_e > prev else min(1.0, dt / 0.30)
                     self._blob_smoothed_energy = prev + (raw_e - prev) * alpha
+                    # Ghost peak: instant rise, slow decay per ghost_decay setting
+                    se = self._blob_smoothed_energy
+                    if se > self._blob_peak_energy:
+                        self._blob_peak_energy = se
+                    elif self._ghosting_enabled and self._peak_decay_per_sec > 0:
+                        self._blob_peak_energy = max(0.0, self._blob_peak_energy - dt * self._peak_decay_per_sec * 0.5)
                 # Oscilloscope / Sine Wave: smooth per-band energy for glow anti-flicker
                 if self._vis_mode in ('oscilloscope', 'sine_wave') and energy_bands is not None:
                     for attr, band in (
@@ -662,6 +675,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Oscilloscope ghost trail
         self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
 
+        # Blob ghost: override shared ghost settings when in blob mode
+        if self._vis_mode == 'blob':
+            self._ghosting_enabled = bool(blob_ghosting_enabled)
+            self._ghost_alpha = max(0.0, min(1.0, float(blob_ghost_alpha)))
+            _decay = max(0.1, min(1.0, float(blob_ghost_decay)))
+            self._peak_decay_per_sec = _decay * 2.0
+
         # Sine Wave Heartbeat
         self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
         self._heartbeat_intensity = max(0.0, min(1.0, float(heartbeat_intensity)))
@@ -672,6 +692,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_extra_data = bubble_extra_data or []
         self._bubble_trail_data = bubble_trail_data or []
         self._bubble_trail_strength = max(0.0, min(1.5, float(bubble_trail_strength)))
+        self._bubble_tail_opacity = max(0.0, min(0.85, float(bubble_tail_opacity)))
         if bubble_outline_color is not None:
             self._bubble_outline_color = QColor(bubble_outline_color) if not isinstance(bubble_outline_color, QColor) else bubble_outline_color
         if bubble_specular_color is not None:
@@ -1102,7 +1123,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_travel_time", "u_nebula_tint1", "u_nebula_tint2", "u_nebula_cycle_speed",
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity",
-                    "u_blob_reactive_glow", "u_blob_smoothed_energy",
+                    "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_peak_energy",
                     "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
                     "u_blob_stretch_tendency",
                     "u_blob_stage_progress_override",
@@ -1663,6 +1684,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_blob_smoothed_energy", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_smoothed_energy))
+                loc = u.get("u_blob_peak_energy", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._blob_peak_energy))
                 loc = u.get("u_blob_reactive_deformation", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._blob_reactive_deformation))
@@ -1859,6 +1883,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 loc = u.get("u_trail_strength", -1)
                 if loc >= 0:
                     _gl.glUniform1f(loc, float(self._bubble_trail_strength))
+
+                loc = u.get("u_tail_opacity", -1)
+                if loc >= 0:
+                    _gl.glUniform1f(loc, float(self._bubble_tail_opacity))
 
                 # Specular direction (normalised vec2).
                 # UV Y is inverted (0=top, 1=bottom), so screen "top" = low UV.y.

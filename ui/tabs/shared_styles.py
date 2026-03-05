@@ -320,6 +320,69 @@ INFO_LABEL_STYLE_DISABLED = (
     "font-size: 11px;"
 )
 
+SLIDER_STYLE = """
+/* Dark glass indented slider with pill-shaped notch handle */
+QSlider::groove:horizontal {
+    height: 4px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(8, 8, 8, 0.95),
+        stop:0.35 rgba(20, 20, 20, 0.9),
+        stop:0.65 rgba(30, 30, 30, 0.85),
+        stop:1 rgba(45, 45, 45, 0.7));
+    border: 1px solid rgba(12, 12, 12, 0.9);
+    border-top-color: rgba(0, 0, 0, 0.7);
+    border-bottom-color: rgba(70, 70, 70, 0.25);
+    border-radius: 2px;
+    margin: 0px 0;
+}
+
+QSlider::sub-page:horizontal {
+    height: 4px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(50, 50, 50, 0.9),
+        stop:0.5 rgba(65, 65, 65, 0.85),
+        stop:1 rgba(50, 50, 50, 0.75));
+    border: 1px solid rgba(35, 35, 35, 0.85);
+    border-top-color: rgba(25, 25, 25, 0.7);
+    border-bottom-color: rgba(80, 80, 80, 0.25);
+    border-radius: 2px;
+}
+
+QSlider::handle:horizontal {
+    width: 16px;
+    height: 10px;
+    margin: -4px 0;
+    border-radius: 5px;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
+    border: 1px solid #444444;
+    border-bottom-color: rgba(0, 0, 0, 0.6);
+}
+
+QSlider::handle:horizontal:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #3a3a3a, stop:0.85 #242424, stop:1 #181818);
+    border: 1px solid #555555;
+    border-bottom-color: rgba(0, 0, 0, 0.55);
+}
+
+QSlider::handle:horizontal:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #222222, stop:1 #141414);
+    border: 1px solid #2a2a2a;
+}
+
+QSlider::handle:horizontal:disabled {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(50, 50, 50, 0.5), stop:1 rgba(35, 35, 35, 0.5));
+    border: 1px solid rgba(40, 40, 40, 0.4);
+}
+
+QSlider::add-page:horizontal {
+    background: transparent;
+}
+"""
+
 SCROLL_AREA_STYLE = """
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }

@@ -22,6 +22,7 @@ from core.logging.logger import get_logger
 from ui.tabs.shared_styles import (
     COMBOBOX_STYLE,
     CIRCLE_CHECKBOX_STYLE,
+    SLIDER_STYLE,
     SPINBOX_STYLE,
     SUBSECTION_DIVIDER_STYLE,
     SECTION_HEADING_STYLE,
@@ -77,7 +78,7 @@ class TransitionsTab(QWidget):
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
         from ui.tabs.shared_styles import SCROLL_AREA_STYLE
-        scroll.setStyleSheet(SCROLL_AREA_STYLE)
+        scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
         
         LABEL_WIDTH = 160
 

@@ -28,6 +28,8 @@ from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
     INFO_LABEL_STYLE,
     SUBSECTION_DIVIDER_STYLE,
+    SLIDER_STYLE,
+    SCROLL_AREA_STYLE,
 )
 
 if TYPE_CHECKING:
@@ -42,39 +44,8 @@ class PresetSlider(QSlider):
     def __init__(self, parent: Optional[QWidget] = None):
         super().__init__(Qt.Orientation.Horizontal, parent)
         self.setObjectName("presetSlider")
-        self._setup_style()
-    
-    def _setup_style(self) -> None:
-        """Apply custom styling for the preset slider to match app theme."""
-        self.setStyleSheet("""
-            QSlider::groove:horizontal {
-                border: 2px solid rgba(68, 68, 68, 1.0);
-                height: 8px;
-                background: rgba(35, 35, 35, 1.0);
-                margin: 2px 0;
-                border-radius: 4px;
-            }
-            
-            QSlider::handle:horizontal {
-                background: rgba(255, 255, 255, 0.95);
-                border: 2px solid rgba(255, 255, 255, 1.0);
-                width: 20px;
-                margin: -6px 0;
-                border-radius: 10px;
-            }
-            
-            QSlider::handle:horizontal:hover {
-                background: rgba(255, 255, 255, 1.0);
-                border: 2px solid rgba(153, 153, 153, 1.0);
-            }
-            
-            QSlider::sub-page:horizontal {
-                background: rgba(58, 58, 58, 1.0);
-                border: 2px solid rgba(102, 102, 102, 1.0);
-                height: 8px;
-                border-radius: 4px;
-            }
-        """)
+        self.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.setTickInterval(1)
 
 
 class PresetDescriptionBox(QFrame):
@@ -165,6 +136,7 @@ class PresetsTab(QScrollArea):
         self.setWidgetResizable(True)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
         
         # Main content widget
         content = QWidget()

@@ -131,6 +131,68 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     outline_layout.addStretch()
     normal_layout.addWidget(outline_widget)
 
+    # --- Ghosting controls ---
+    ghost_toggle_row_w, ghost_toggle_row = _aligned_row("")
+    tab.blob_ghost_enabled = QCheckBox("Enable Ghosting")
+    tab.blob_ghost_enabled.setProperty("circleIndicator", True)
+    tab.blob_ghost_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'blob_ghosting_enabled', False)
+    )
+    tab.blob_ghost_enabled.setToolTip(
+        "Show a faded outline ring at the blob's recent peak size."
+    )
+    tab.blob_ghost_enabled.stateChanged.connect(tab._save_settings)
+    ghost_toggle_row.addWidget(tab.blob_ghost_enabled)
+    ghost_toggle_row.addStretch()
+    normal_layout.addWidget(ghost_toggle_row_w)
+
+    tab._blob_ghost_sub = QWidget()
+    _ghost_layout = QVBoxLayout(tab._blob_ghost_sub)
+    _ghost_layout.setContentsMargins(0, 0, 0, 0)
+    _ghost_layout.setSpacing(4)
+
+    ghost_opa_w, ghost_opa_l = _aligned_row("Ghost Opacity:")
+    tab.blob_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_ghost_opacity.setMinimum(0)
+    tab.blob_ghost_opacity.setMaximum(100)
+    _bg_alpha_pct = int(tab._default_float('spotify_visualizer', 'blob_ghost_alpha', 0.4) * 100)
+    tab.blob_ghost_opacity.setValue(max(0, min(100, _bg_alpha_pct)))
+    tab.blob_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_ghost_opacity.setTickInterval(5)
+    tab.blob_ghost_opacity.valueChanged.connect(tab._save_settings)
+    ghost_opa_l.addWidget(tab.blob_ghost_opacity)
+    tab.blob_ghost_opacity_label = QLabel(f"{_bg_alpha_pct}%")
+    tab.blob_ghost_opacity.valueChanged.connect(
+        lambda v: tab.blob_ghost_opacity_label.setText(f"{v}%")
+    )
+    ghost_opa_l.addWidget(tab.blob_ghost_opacity_label)
+    _ghost_layout.addWidget(ghost_opa_w)
+
+    ghost_dec_w, ghost_dec_l = _aligned_row("Ghost Decay:")
+    tab.blob_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_ghost_decay_slider.setMinimum(10)
+    tab.blob_ghost_decay_slider.setMaximum(100)
+    _bg_decay_pct = int(tab._default_float('spotify_visualizer', 'blob_ghost_decay', 0.3) * 100)
+    tab.blob_ghost_decay_slider.setValue(max(10, min(100, _bg_decay_pct)))
+    tab.blob_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_ghost_decay_slider.setTickInterval(5)
+    tab.blob_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    ghost_dec_l.addWidget(tab.blob_ghost_decay_slider)
+    tab.blob_ghost_decay_label = QLabel(f"{tab.blob_ghost_decay_slider.value() / 100.0:.2f}x")
+    tab.blob_ghost_decay_slider.valueChanged.connect(
+        lambda v: tab.blob_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
+    )
+    ghost_dec_l.addWidget(tab.blob_ghost_decay_label)
+    _ghost_layout.addWidget(ghost_dec_w)
+
+    normal_layout.addWidget(tab._blob_ghost_sub)
+
+    def _update_blob_ghost_vis(tab=tab):
+        tab._blob_ghost_sub.setVisible(tab.blob_ghost_enabled.isChecked())
+
+    tab.blob_ghost_enabled.stateChanged.connect(lambda _s: _update_blob_ghost_vis())
+    _update_blob_ghost_vis()
+
     normal_layout.addItem(QSpacerItem(0, 8, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed))
 
     # Card size grouping (width, blob scale, height via build_blob_growth)

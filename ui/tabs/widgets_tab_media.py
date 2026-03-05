@@ -1062,11 +1062,13 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.sine_density.setValue(max(25, min(300, sd)))
         tab.sine_density_label.setText(f"{tab.sine_density.value() / 100.0:.2f}×")
     if hasattr(tab, 'sine_heartbeat'):
-        tab.sine_heartbeat.setValue(0)
-        tab.sine_heartbeat_label.setText("Disabled")
+        shb = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_heartbeat', 0.0) * 100)
+        tab.sine_heartbeat.setValue(max(0, min(100, shb)))
+        tab.sine_heartbeat_label.setText(f"{shb}%")
     if hasattr(tab, 'sine_displacement'):
-        tab.sine_displacement.setValue(0)
-        tab.sine_displacement_label.setText("Disabled")
+        sdp = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_displacement', 0.0) * 100)
+        tab.sine_displacement.setValue(max(0, min(100, sdp)))
+        tab.sine_displacement_label.setText(f"{sdp}%")
 
     # Oscilloscope ghost trail
     if hasattr(tab, 'osc_ghost_enabled'):
@@ -1077,6 +1079,20 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         gi = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_ghost_intensity', 0.4) * 100)
         tab.osc_ghost_intensity.setValue(max(5, min(100, gi)))
         tab.osc_ghost_intensity_label.setText(f"{gi}%")
+
+    # Blob ghost
+    if hasattr(tab, 'blob_ghost_enabled'):
+        tab.blob_ghost_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'blob_ghosting_enabled', False)
+        )
+    if hasattr(tab, 'blob_ghost_opacity'):
+        bga = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_ghost_alpha', 0.4) * 100)
+        tab.blob_ghost_opacity.setValue(max(0, min(100, bga)))
+        tab.blob_ghost_opacity_label.setText(f"{bga}%")
+    if hasattr(tab, 'blob_ghost_decay_slider'):
+        bgd = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_ghost_decay', 0.3) * 100)
+        tab.blob_ghost_decay_slider.setValue(max(10, min(100, bgd)))
+        tab.blob_ghost_decay_label.setText(f"{bgd / 100.0:.2f}x")
 
     # Rainbow (Taste The Rainbow)
     if hasattr(tab, 'rainbow_enabled'):
@@ -1182,10 +1198,13 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_growth.setValue(max(100, min(500, bubble_growth_val)))
         tab.bubble_growth_label.setText(f"{bubble_growth_val / 100.0:.1f}x")
     if hasattr(tab, 'bubble_trail_strength'):
-        tab.bubble_trail_strength.setValue(0)
-        tab.bubble_trail_strength.setEnabled(False)
-        tab.bubble_trail_strength_label.setText("0%")
-        tab.bubble_trail_strength_label.setEnabled(False)
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_trail_strength', 0.0) * 100)
+        tab.bubble_trail_strength.setValue(max(0, min(150, v)))
+        tab.bubble_trail_strength_label.setText(f"{v}%")
+    if hasattr(tab, 'bubble_tail_opacity'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_tail_opacity', 0.0) * 100)
+        tab.bubble_tail_opacity.setValue(max(0, min(85, v)))
+        tab.bubble_tail_opacity_label.setText(f"{v}%")
     # Bubble colours
     for attr, key, default in (
         ('_bubble_outline_color', 'bubble_outline_color', [255, 255, 255, 230]),
@@ -1352,8 +1371,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_micro_wobble': (tab.sine_micro_wobble.value() if hasattr(tab, 'sine_micro_wobble') else 0) / 100.0,
         'sine_width_reaction': (tab.sine_width_reaction.value() if hasattr(tab, 'sine_width_reaction') else 0) / 100.0,
         'sine_density': (tab.sine_density.value() if hasattr(tab, 'sine_density') else 100) / 100.0,
-        'sine_heartbeat': 0.0,
-        'sine_displacement': 0.0,
+        'sine_heartbeat': (tab.sine_heartbeat.value() if hasattr(tab, 'sine_heartbeat') else 0) / 100.0,
+        'sine_displacement': (tab.sine_displacement.value() if hasattr(tab, 'sine_displacement') else 0) / 100.0,
         'sine_vertical_shift': tab.sine_vertical_shift.value() if hasattr(tab, 'sine_vertical_shift') else 0,
         'sine_line1_shift': (tab.sine_line1_shift.value() if hasattr(tab, 'sine_line1_shift') else 0) / 100.0,
         'sine_wave_travel': tab.sine_travel.currentIndex() if hasattr(tab, 'sine_travel') else 0,
@@ -1374,6 +1393,9 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
         'osc_ghosting_enabled': tab.osc_ghost_enabled.isChecked() if hasattr(tab, 'osc_ghost_enabled') else False,
         'osc_ghost_intensity': (tab.osc_ghost_intensity.value() if hasattr(tab, 'osc_ghost_intensity') else 40) / 100.0,
+        'blob_ghosting_enabled': tab.blob_ghost_enabled.isChecked() if hasattr(tab, 'blob_ghost_enabled') else False,
+        'blob_ghost_alpha': (tab.blob_ghost_opacity.value() if hasattr(tab, 'blob_ghost_opacity') else 40) / 100.0,
+        'blob_ghost_decay': max(0.1, (tab.blob_ghost_decay_slider.value() if hasattr(tab, 'blob_ghost_decay_slider') else 30) / 100.0),
         # Bubble
         'bubble_big_bass_pulse': (tab.bubble_big_bass_pulse.value() if hasattr(tab, 'bubble_big_bass_pulse') else 50) / 100.0,
         'bubble_small_freq_pulse': (tab.bubble_small_freq_pulse.value() if hasattr(tab, 'bubble_small_freq_pulse') else 50) / 100.0,
@@ -1409,6 +1431,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_small_size_max': (tab.bubble_small_size_max.value() if hasattr(tab, 'bubble_small_size_max') else 18) / 1000.0,
         'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
         'bubble_trail_strength': (tab.bubble_trail_strength.value() if hasattr(tab, 'bubble_trail_strength') else 0) / 100.0,
+        'bubble_tail_opacity': (tab.bubble_tail_opacity.value() if hasattr(tab, 'bubble_tail_opacity') else 0) / 100.0,
     }
     spotify_vis_config.update(collect_bindings_save(tab, _OSC_MULTI_LINE_COLOR_BINDINGS))
     # Preset indices per mode
