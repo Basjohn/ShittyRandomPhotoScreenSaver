@@ -178,7 +178,7 @@ class WeatherDetailIcon(QWidget):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
         self._target_size = max(_DETAIL_ICON_MIN_PX, size_px)
-        self._box = QSize(self._target_size + 6, self._target_size + 6)
+        self._box = QSize(self._target_size + 2, self._target_size + 2)
         self.setFixedSize(self._box)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -248,9 +248,9 @@ class WeatherDetailRow(QWidget):
         # Segments layout with stretch like old code
         self._segments_layout = QHBoxLayout()
         self._segments_layout.setContentsMargins(0, 0, 0, 0)
-        self._segments_layout.setSpacing(12)
+        self._segments_layout.setSpacing(10)
         self._segments_layout.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter
         )
         self._segments_layout.addStretch(1)
 
@@ -283,7 +283,7 @@ class WeatherDetailRow(QWidget):
             0, 6 if has_metrics else 0, 0, 4 if has_metrics else 0
         )
         self._segments_layout.setSpacing(
-            max(12, self._icon_size // 2 + 4) if has_metrics else 0
+            10 if has_metrics else 0
         )
 
         active_keys: List[str] = []
@@ -311,7 +311,7 @@ class WeatherDetailRow(QWidget):
         segment.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout = QHBoxLayout(segment)
         layout.setContentsMargins(0, 1, 0, 1)
-        layout.setSpacing(3)
+        layout.setSpacing(4)
         layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         icon_label = WeatherDetailIcon(self._icon_size, segment)

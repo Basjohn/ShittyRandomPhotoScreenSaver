@@ -828,6 +828,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         blob_gi_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_glow_intensity', 0.5) * 100)
         tab.blob_glow_intensity.setValue(max(0, min(100, blob_gi_val)))
         tab.blob_glow_intensity_label.setText(f"{blob_gi_val}%")
+    if hasattr(tab, 'blob_glow_reactivity'):
+        blob_gr_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_glow_reactivity', 1.0) * 100)
+        tab.blob_glow_reactivity.setValue(max(0, min(200, blob_gr_val)))
+        tab.blob_glow_reactivity_label.setText(f"{blob_gr_val}%")
+    if hasattr(tab, 'blob_glow_max_size'):
+        blob_gms_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_glow_max_size', 1.0) * 100)
+        tab.blob_glow_max_size.setValue(max(10, min(300, blob_gms_val)))
+        tab.blob_glow_max_size_label.setText(f"{blob_gms_val}%")
     if hasattr(tab, 'blob_reactive_glow'):
         tab.blob_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'blob_reactive_glow', True)
@@ -1328,6 +1336,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_width': (tab.blob_width.value() if hasattr(tab, 'blob_width') else 100) / 100.0,
         'blob_size': (tab.blob_size.value() if hasattr(tab, 'blob_size') else 100) / 100.0,
         'blob_glow_intensity': (tab.blob_glow_intensity.value() if hasattr(tab, 'blob_glow_intensity') else 50) / 100.0,
+        'blob_glow_reactivity': (tab.blob_glow_reactivity.value() if hasattr(tab, 'blob_glow_reactivity') else 100) / 100.0,
+        'blob_glow_max_size': (tab.blob_glow_max_size.value() if hasattr(tab, 'blob_glow_max_size') else 100) / 100.0,
         'blob_reactive_glow': tab.blob_reactive_glow.isChecked() if hasattr(tab, 'blob_reactive_glow') else False,
         'blob_reactive_deformation': (tab.blob_reactive_deformation.value() if hasattr(tab, 'blob_reactive_deformation') else 100) / 100.0,
         'blob_stage_gain': (tab.blob_stage_gain.value() if hasattr(tab, 'blob_stage_gain') else 100) / 100.0,

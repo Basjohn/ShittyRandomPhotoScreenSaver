@@ -489,16 +489,36 @@ debug in this order:
 
 - Sliders live in **Settings → Spotify Visualizer → Blob**. Normal bucket surfaces *Pulse Intensity*, color rows, and the *Card Size* group; the **Advanced** bucket (hidden by default but always active) now contains *Stage Gain*, *Core Floor %*, *Core Scale %*, *Stage Bias*, *Stage 2 Release*, *Stage 3 Release*, *Reactive Deformation*, *Constant Wobble*, *Reactive Wobble*, *Stretch Tendency*, and *Glow Intensity*.
 - **Stage Gain/Core Scale:** sliders remain 0–200 % and 25–250 % respectively. Plumbing path: defaults → `SpotifyVisualizerSettings.blob_stage_gain/blob_core_scale` → widget attributes → `build_gpu_push_extra_kwargs()` → `SpotifyBarsGLOverlay.set_state()` → shader uniforms `u_blob_stage_gain`/`u_blob_core_scale`. UI layout follows the guidance in `Docs/Advanced_Migration.md` (Normal vs Advanced buckets, helper label, preset-driven toggle state).
-- **Advanced toggle expectations:** Blob mode is the reference implementation for the reusable Advanced section pattern. The QToolButton + helper label sit between the normal sliders and the hidden container. Preset sliders lock the toggle when using Preset 1/2/3, while Custom restores manually stored visibility. Controls continue to apply even when collapsed, so helpers must remind users and SettingsManager keys remain unchanged. See `Docs/Advanced_Migration.md` for migration steps before applying the same treatment to other modes.
-- **Stage Bias (±0.30):** biases all three stage progress curves upward (positive) or downward (negative) before smoothing. Defaults live in `core/settings/defaults.py`, persist via `SpotifyVisualizerSettings.blob_stage_bias`, flow through the widget/config applier, and surface on the GPU as `u_blob_stage_bias`. CPU helper `compute_stage_progress` mirrors the GLSL biasing so diagnostics/tests stay in lockstep.
-- **Per-stage release sliders (400–2000 ms):** `blob_stage2_release_ms` and `blob_stage3_release_ms` drive both hold timers and release τ values inside `SpotifyBarsGLOverlay`. Higher values extend the decay time after a stage bucket is reached, preventing instant drops when energy briefly dips. Defaults/plumbing follow the same path as Stage Bias; settings remain active even when the Advanced section is collapsed.
-- Shader behaviour: Stage Gain multiplies the amplitude of four weighted energy stages (silence, soft bed, groove, chorus) computed by `compute_stage_offset`. Core Scale applies a uniform multiplier to the staged offset so presets can shrink or expand the entire core without touching Blob Size. Stage Bias shifts the `smoothstep` thresholds symmetrically before clamping. Stage Gain = 0 is an exact no-op.
 
-#### Sine heartbeat detector (RETired Feb 28 2026)
+#### Sine Heartbeat (Reworked Mar 5 2026)
 
-- Heartbeat plumbing remains in settings JSON for forward/backward compatibility, but both the shader helper and UI now hard-return neutral values. `heartbeat_amp_params()` always yields `(1.0, 0.48)` so no amplitude modulation can leak through even if stale configs still contain non-zero sliders.
-- UI keeps the disabled slider row (labelled "Disabled") to document the retirement and prevent users from assuming a missing control is a bug.
-- If the feature returns in the future, restore the CPU detector/diagnostics described in the previous revision of this section and re-document the gating logic.
+- CPU-side beat detection rewritten: uses spike ratio (`fast_bass / avg_bass`) with a low gate (1.6×), separate trigger/decay logic (no decay on trigger frame), 600ms decay via `_heartbeat_intensity` envelope pushed as `u_heartbeat_intensity`.
+- Shader `heartbeat_amp_params()` now yields +120% amplitude boost (up from +55%) with a cap of 0.78 (up from 0.58). Envelope is shaped with cubic ease-out (`pulse * pulse * (3.0 - 2.0 * pulse)`) for organic swell.
+- Slider `u_heartbeat` (0–1) controls the effect strength. At 0, heartbeat is fully disabled (multiplier = 1.0, cap = 0.48).
+
+#### Sine Density (Reworked Mar 5 2026)
+
+- `compute_density_cycles()` uses a two-piece linear mapping: slider 0.25–1.0 → 0.65–3.0 cycles (gentle), slider 1.0–3.0 → 3.0–8.5 cycles (steep). This ensures perceptually balanced changes across the full slider range.
+- `density_thickness_factor()` tapers line width at high cycle counts (above 4.0 cycles) to prevent lines from blobbing together. Applied as a multiplier to `line_width` in `eval_line()`.
+
+#### Sine Displacement (Reworked Mar 5 2026)
+
+- Replaced chaotic `randomDirection`-based jitter with smooth bass-reactive offset system. Uses a slowly rotating angle (`u_time * 0.17`) to vary offset direction over time.
+- `disp_phase_offset` shifts sine wave phase; `disp_y_offset` shifts vertical position. Both scale with `displacement_slider` and `bass_vector`.
+- Per-line variation: Line 1 = 1.0× phase / 1.0× Y, Line 2 = 0.85× phase / 1.10× Y, Line 3 = 1.15× phase / 1.25× Y.
+- All old displacement variables (`rand_line*`, `phase_jitter*`, `l*_drive`, `y_push*`, `y_scale`, `phase_scale`, `l23_*`) removed.
+
+#### Blob Ghosting (Fixed Mar 5 2026)
+
+- Root cause: shared ghost settings (`ghosting_enabled`, `ghost_alpha`, `peak_decay_per_sec`) were assigned AFTER the blob-specific override in `set_state()`, silently overwriting blob values with spectrum defaults.
+- Fix: moved blob ghost override block to run AFTER the shared ghost assignment block.
+- New uniforms: `u_blob_glow_reactivity` (0–2.0, scales energy contribution to glow sigma/strength), `u_blob_glow_max_size` (0.1–3.0, scales glow spread radius). Both surfaced as Advanced sliders in `blob_builder.py`.
+- Ghosting controls (Enable toggle, Opacity slider, Decay slider) moved from normal bucket to Advanced bucket.
+
+#### Bubble Motion Tails (Reworked Mar 5 2026)
+
+- CPU sim constants reworked: `TRAIL_SMEAR_FOLLOW_RATE` 0.65 (was 1.4), `TRAIL_SMEAR_FOLLOW_MAX` 0.18 (was 0.35), `TRAIL_SMEAR_DECAY_PER_SEC` 0.9 (was 1.6), `TRAIL_SMEAR_STRENGTH_FROM_DISTANCE` 35.0 (was 22.0). Result: longer, more visible streaks.
+- Shader reworked for teardrop/tadpole shape matching mock (`BubbleMotionTrailMock.png`): cubic taper (`along_t² × (3 - 2×along_t)`), wider at bubble head (1.8× radius), tapering to 8% at tail tip. Organic longitudinal fade with gentle tip fade-in and head fade-out.
 
 ## Banding & Pixmap Seeding
 - `DisplayWidget.show_on_screen` grabs a per-monitor wallpaper snapshot via `screen.grabWindow(0)` and seeds `current_pixmap`, `_seed_pixmap`, and `previous_pixmap` before GL prewarm runs. This prevents a wallpaper→black flash during startup even while overlays are initializing.

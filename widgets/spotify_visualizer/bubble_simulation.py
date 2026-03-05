@@ -32,10 +32,10 @@ MAX_BUBBLES = 110
 
 TRAIL_STEPS = 3  # uniform layout still reserves 3 vec3 slots per bubble
 # Smear tail behaviour: trail_tail slowly chases each bubble, forming a streak
-TRAIL_SMEAR_FOLLOW_RATE = 1.4   # how quickly tails chase heads (per second)
-TRAIL_SMEAR_FOLLOW_MAX = 0.35   # clamp per-tick lerp to keep visible lag
-TRAIL_SMEAR_DECAY_PER_SEC = 1.6  # how fast strength fades when slowing
-TRAIL_SMEAR_STRENGTH_FROM_DISTANCE = 22.0  # convert offset distance → brightness
+TRAIL_SMEAR_FOLLOW_RATE = 0.65   # how quickly tails chase heads (per second) — lower = longer streaks
+TRAIL_SMEAR_FOLLOW_MAX = 0.18   # clamp per-tick lerp to keep visible lag
+TRAIL_SMEAR_DECAY_PER_SEC = 0.9  # how fast strength fades when slowing
+TRAIL_SMEAR_STRENGTH_FROM_DISTANCE = 35.0  # convert offset distance → brightness (higher = brighter sooner)
 TRAIL_SMEAR_MAX_LENGTH = 0.55   # cap streak length to avoid card wrap
 
 
@@ -349,7 +349,7 @@ class BubbleSimulation:
             elif drift_dir == "swish_vertical":
                 move_y += drift_offset * dt
             elif drift_dir in _SWIRL_DIRECTIONS:
-                swirl_dx, swirl_dy = self._swirl_motion(b, drift_dir, drift_offset, dt)
+                swirl_dx, swirl_dy = self._swirl_motion(b, drift_dir, drift_amount, drift_speed, dt)
                 move_x += swirl_dx
                 move_y += swirl_dy
             else:
@@ -525,10 +525,15 @@ class BubbleSimulation:
         self,
         bubble: BubbleState,
         drift_dir: str,
-        drift_offset: float,
+        drift_amount: float,
+        drift_speed: float,
         dt: float,
     ) -> Tuple[float, float]:
-        """Return (dx, dy) swirl offsets for this tick."""
+        """Return (dx, dy) swirl offsets for this tick.
+
+        Uses constant angular velocity for full-orbit swirl instead of
+        sinusoidal drift_offset which stalls at zero crossings.
+        """
         dx = bubble.x - 0.5
         dy = bubble.y - 0.5
         dist = math.hypot(dx, dy)
@@ -548,15 +553,19 @@ class BubbleSimulation:
             tangent_x = -norm_y
             tangent_y = norm_x
 
-        swirl_strength = max(0.002, abs(drift_offset))
-        swirl_scale = 8.0 + 2.0 * abs(bubble.drift_bias)
-        swirl_force = swirl_strength * swirl_scale
+        # Constant angular velocity: drift_amount controls orbit speed,
+        # drift_speed adds variation. Per-bubble drift_bias adds uniqueness.
+        angular_speed = (0.3 + drift_amount * 0.7) * (0.5 + drift_speed * 1.0)
+        per_bubble_var = 0.8 + 0.4 * abs(bubble.drift_bias)
+        swirl_force = angular_speed * per_bubble_var
 
         swirl_dx = tangent_x * swirl_force
         swirl_dy = tangent_y * swirl_force
 
-        radial_error = dist - 0.33
-        radial_force = radial_error * 0.12 * swirl_strength
+        # Preferred orbit radius varies per bubble (0.15 to 0.40 of card)
+        preferred_radius = 0.15 + abs(bubble.drift_bias) * 0.25
+        radial_error = dist - preferred_radius
+        radial_force = radial_error * 0.8 * angular_speed
         swirl_dx -= norm_x * radial_force
         swirl_dy -= norm_y * radial_force
 

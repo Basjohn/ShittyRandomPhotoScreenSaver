@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Sequence, Optional, Set, Tuple
+from typing import List, Sequence, Optional, Set
 
 import numpy as np
 import time
@@ -23,17 +23,6 @@ from widgets.spotify_visualizer.blob_math import (
 
 logger = get_logger(__name__)
 
-
-_DIRECTION_VECS: dict[str, Tuple[float, float]] = {
-    "top": (0.0, 1.0),
-    "bottom": (0.0, -1.0),
-    "left": (1.0, 0.0),
-    "right": (-1.0, 0.0),
-    "top_left": (0.707, 0.707),
-    "top_right": (-0.707, 0.707),
-    "bottom_left": (0.707, -0.707),
-    "bottom_right": (-0.707, -0.707),
-}
 
 
 def _smoothstep(edge0: float, edge1: float, x: float) -> float:
@@ -144,6 +133,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_width: float = 1.0
         self._blob_size: float = 1.0
         self._blob_glow_intensity: float = 0.5
+        self._blob_glow_reactivity: float = 1.0
+        self._blob_glow_max_size: float = 1.0
         self._blob_reactive_glow: bool = True
         self._blob_reactive_deformation: float = 1.0
         self._blob_stage_gain: float = 1.0
@@ -422,6 +413,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_ghosting_enabled: bool = False,
         blob_ghost_alpha: float = 0.4,
         blob_ghost_decay: float = 0.3,
+        blob_glow_reactivity: float = 1.0,
+        blob_glow_max_size: float = 1.0,
         sine_heartbeat: float = 0.0,
         heartbeat_intensity: float = 0.0,
         # Bubble mode
@@ -506,12 +499,21 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # Fast rise (~50ms tau), slow decay (~300ms tau)
                     alpha = min(1.0, dt / 0.05) if raw_e > prev else min(1.0, dt / 0.30)
                     self._blob_smoothed_energy = prev + (raw_e - prev) * alpha
-                    # Ghost peak: instant rise, slow decay per ghost_decay setting
-                    se = self._blob_smoothed_energy
-                    if se > self._blob_peak_energy:
-                        self._blob_peak_energy = se
-                    elif self._ghosting_enabled and self._peak_decay_per_sec > 0:
-                        self._blob_peak_energy = max(0.0, self._blob_peak_energy - dt * self._peak_decay_per_sec * 0.5)
+                    # Ghost peak: separate slow-decay envelope that holds the
+                    # maximum energy for a visible duration. The ghost ring in
+                    # the shader needs peak >> smoothed to produce a visible
+                    # expansion. We use a very slow exponential decay (tau ~1-3s
+                    # depending on ghost_decay slider) so the peak lingers well
+                    # above the current smoothed energy after beats.
+                    if raw_e > self._blob_peak_energy:
+                        self._blob_peak_energy = raw_e
+                    elif self._ghosting_enabled:
+                        # ghost_decay slider: 0.1 (slow/long) to 1.0 (fast/short)
+                        # Map to decay tau: 3.0s at min to 0.5s at max
+                        decay_slider = max(0.1, min(1.0, self._peak_decay_per_sec / 2.0))
+                        tau = 3.0 - decay_slider * 2.5  # 0.5s to 3.0s
+                        decay_alpha = min(1.0, dt / max(tau, 0.1))
+                        self._blob_peak_energy = self._blob_peak_energy + (self._blob_smoothed_energy - self._blob_peak_energy) * decay_alpha
                 # Oscilloscope / Sine Wave: smooth per-band energy for glow anti-flicker
                 if self._vis_mode in ('oscilloscope', 'sine_wave') and energy_bands is not None:
                     for attr, band in (
@@ -623,6 +625,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_width = max(0.1, min(1.0, float(blob_width)))
         self._blob_size = max(0.3, min(2.0, float(blob_size)))
         self._blob_glow_intensity = max(0.0, min(1.0, float(blob_glow_intensity)))
+        self._blob_glow_reactivity = max(0.0, min(2.0, float(blob_glow_reactivity)))
+        self._blob_glow_max_size = max(0.1, min(3.0, float(blob_glow_max_size)))
         self._blob_reactive_glow = bool(blob_reactive_glow)
         self._blob_reactive_deformation = max(0.0, min(2.0, float(blob_reactive_deformation)))
         self._blob_stage_gain = max(0.0, min(2.0, float(blob_stage_gain)))
@@ -674,13 +678,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Oscilloscope ghost trail
         self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
-
-        # Blob ghost: override shared ghost settings when in blob mode
-        if self._vis_mode == 'blob':
-            self._ghosting_enabled = bool(blob_ghosting_enabled)
-            self._ghost_alpha = max(0.0, min(1.0, float(blob_ghost_alpha)))
-            _decay = max(0.1, min(1.0, float(blob_ghost_decay)))
-            self._peak_decay_per_sec = _decay * 2.0
 
         # Sine Wave Heartbeat
         self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
@@ -734,6 +731,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             gd = -1.0
         if gd >= 0.0:
             self._peak_decay_per_sec = max(0.0, gd)
+
+        # Blob ghost: override shared ghost settings AFTER the shared assignment
+        # so blob-specific values are not overwritten.
+        if self._vis_mode == 'blob':
+            self._ghosting_enabled = bool(blob_ghosting_enabled)
+            self._ghost_alpha = max(0.0, min(1.0, float(blob_ghost_alpha)))
+            _decay = max(0.1, min(1.0, float(blob_ghost_decay)))
+            self._peak_decay_per_sec = _decay * 2.0
 
         try:
             count = int(bar_count)
@@ -1122,7 +1127,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_star_density", "u_travel_speed", "u_star_reactivity",
                     "u_travel_time", "u_nebula_tint1", "u_nebula_tint2", "u_nebula_cycle_speed",
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
-                    "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity",
+                    "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
                     "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_peak_energy",
                     "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
                     "u_blob_stretch_tendency",
@@ -1151,7 +1156,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_heartbeat", "u_heartbeat_intensity",
                     # Bubble mode uniforms
                     "u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
-                    "u_bubbles_trail", "u_trail_strength",
+                    "u_bubbles_trail", "u_trail_strength", "u_tail_opacity",
                     "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_specular_color",
                     "u_gradient_light", "u_gradient_dark", "u_pop_color",
                     "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
@@ -1336,20 +1341,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         u = self._gl_uniforms.get(mode, {})
 
-        # For spectrum mode, bar data is required
-        if mode == 'spectrum':
-            try:
-                count = int(self._bar_count)
-                segments = int(self._segments)
-            except Exception:
-                return False
-            if count <= 0 or segments <= 0:
-                return False
-
         width = rect.width()
         height = rect.height()
         if width <= 0 or height <= 0:
             return False
+
+        # Store rect for renderer access (e.g. spectrum height scale)
+        self._render_rect = rect
 
         try:
             from OpenGL import GL as _gl
@@ -1421,500 +1419,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "(uniform missing or optimized out in shader)", mode,
                 )
 
-            # --- Spectrum-specific uniforms ---
-            if mode == 'spectrum':
-                count = int(self._bar_count)
-                segments = int(self._segments)
-
-                loc = u.get("u_bar_count", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, min(count, 64))
-                loc = u.get("u_segments", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, segments)
-
-                # Visual height boost: when the card is taller than the default
-                # 80px spectrum height, scale bar values so they fill more of
-                # the card.  The 0.55 audio scaling is preserved on the CPU
-                # side; this only affects the shader's visual mapping.
-                loc = u.get("u_bar_height_scale", -1)
-                if loc >= 0:
-                    _SPECTRUM_BASE_HEIGHT = 80.0
-                    cur_h = max(1.0, float(rect.height()))
-                    height_scale = max(1.0, cur_h / _SPECTRUM_BASE_HEIGHT)
-                    _gl.glUniform1f(loc, float(height_scale))
-
-                loc = u.get("u_single_piece", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._single_piece else 0)
-
-                loc = u.get("u_slanted", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if getattr(self, '_slanted', False) else 0)
-
-                loc = u.get("u_border_radius", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(getattr(self, '_border_radius', 0.0)))
-
-                bars = list(self._bars)
-                if not bars:
-                    _gl.glBindVertexArray(0)
-                    _gl.glUseProgram(0)
-                    return False
-                if len(bars) < 64:
-                    bars = bars + [0.0] * (64 - len(bars))
-                else:
-                    bars = bars[:64]
-
-                if not self._debug_bars_logged:
-                    try:
-                        sample = bars[:count] if count > 0 else [0.0]
-                        logger.debug(
-                            "[SPOTIFY_VIS] Shader bars snapshot: count=%d, min=%.4f, max=%.4f",
-                            count, min(sample), max(sample),
-                        )
-                    except Exception:
-                        pass
-                    self._debug_bars_logged = True
-
-                loc = u.get("u_bars", -1)
-                if loc >= 0:
-                    buf = self._bars_buffer
-                    buf.fill(0.0)
-                    # Scale bars ~55% so vocals/drums (bars 1/2) don't pin at top
-                    # at normal volume. Calibrated to match ideal state at ~55% mixer.
-                    for i in range(min(len(bars), 64)):
-                        buf[i] = float(bars[i]) * 0.55
-                    _gl.glUniform1fv(loc, 64, buf)
-
-                loc = u.get("u_peaks", -1)
-                if loc >= 0:
-                    buf_peaks = self._peaks_buffer
-                    buf_peaks.fill(0.0)
-                    peaks = self._peaks
-                    for i in range(min(len(peaks), 64)):
-                        buf_peaks[i] = float(peaks[i]) * 0.55
-                    _gl.glUniform1fv(loc, 64, buf_peaks)
-
-                loc = u.get("u_playing", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._playing else 0)
-
-                loc = u.get("u_ghost_alpha", -1)
-                if loc >= 0:
-                    try:
-                        ga = float(self._ghost_alpha if self._ghosting_enabled else 0.0)
-                    except Exception:
-                        ga = 0.0
-                    _gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
-
-            # --- Fill / border colours (spectrum + helix) ---
-            if mode in ('spectrum', 'helix'):
-                fill = QColor(self._fill_color)
-                loc = u.get("u_fill_color", -1)
-                if loc >= 0:
-                    _gl.glUniform4f(loc, float(fill.redF()), float(fill.greenF()),
-                                    float(fill.blueF()), float(fill.alphaF()))
-                border = QColor(self._border_color)
-                loc = u.get("u_border_color", -1)
-                if loc >= 0:
-                    _gl.glUniform4f(loc, float(border.redF()), float(border.greenF()),
-                                    float(border.blueF()), float(border.alphaF()))
-
-            # --- Oscilloscope uniforms (waveform data only) ---
-            if mode == 'oscilloscope':
-                wf = self._waveform
-                wf_count = min(len(wf), 256) if wf else 0
-                loc = u.get("u_waveform_count", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, max(wf_count, 2))
-                loc = u.get("u_waveform", -1)
-                if loc >= 0 and wf_count > 0:
-                    wf_buf = np.zeros(256, dtype="float32")
-                    for i in range(wf_count):
-                        wf_buf[i] = float(wf[i])
-                    _gl.glUniform1fv(loc, 256, wf_buf)
-
-                # Ghost waveform (previous frame trail)
-                loc = u.get("u_osc_ghost_alpha", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._osc_ghost_alpha))
-                loc = u.get("u_prev_waveform", -1)
-                if loc >= 0 and self._osc_ghost_alpha > 0.001:
-                    prev_wf = self._prev_waveform
-                    prev_count = min(len(prev_wf), 256) if prev_wf else 0
-                    prev_buf = np.zeros(256, dtype="float32")
-                    for i in range(prev_count):
-                        prev_buf[i] = float(prev_wf[i])
-                    _gl.glUniform1fv(loc, 256, prev_buf)
-
-            # --- Shared line/glow uniforms (oscilloscope + sine_wave) ---
-            if mode in ('oscilloscope', 'sine_wave'):
-                loc = u.get("u_glow_enabled", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._glow_enabled else 0)
-                loc = u.get("u_glow_intensity", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._glow_intensity))
-                loc = u.get("u_glow_color", -1)
-                if loc >= 0:
-                    gc = self._glow_color
-                    _gl.glUniform4f(loc, float(gc.redF()), float(gc.greenF()),
-                                    float(gc.blueF()), float(gc.alphaF()))
-                loc = u.get("u_reactive_glow", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._reactive_glow else 0)
-                loc = u.get("u_sensitivity", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._osc_sensitivity))
-                loc = u.get("u_smoothing", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._osc_smoothing))
-
-                # Line colour (separate from glow)
-                loc = u.get("u_line_color", -1)
-                if loc >= 0:
-                    lc = self._line_color
-                    _gl.glUniform4f(loc, float(lc.redF()), float(lc.greenF()),
-                                    float(lc.blueF()), float(lc.alphaF()))
-
-                # Multi-line uniforms
-                loc = u.get("u_line_count", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, self._osc_line_count)
-                for uname, qc in (
-                    ("u_line2_color", self._osc_line2_color),
-                    ("u_line2_glow_color", self._osc_line2_glow_color),
-                    ("u_line3_color", self._osc_line3_color),
-                    ("u_line3_glow_color", self._osc_line3_glow_color),
-                ):
-                    loc = u.get(uname, -1)
-                    if loc >= 0:
-                        _gl.glUniform4f(loc, float(qc.redF()), float(qc.greenF()),
-                                        float(qc.blueF()), float(qc.alphaF()))
-
-            # --- Energy band uniforms (oscilloscope, sine_wave, starfield, blob, helix) ---
-            if mode in ('oscilloscope', 'sine_wave', 'starfield', 'blob', 'helix'):
-                eb = self._energy_bands
-                loc = u.get("u_overall_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.overall))
-                # Oscilloscope/sine_wave use CPU-smoothed bands for glow anti-flicker
-                if mode in ('oscilloscope', 'sine_wave'):
-                    bass_val = self._osc_smoothed_bass
-                    mid_val = self._osc_smoothed_mid
-                    high_val = self._osc_smoothed_high
-                else:
-                    bass_val = eb.bass
-                    mid_val = eb.mid
-                    high_val = eb.high
-                loc = u.get("u_bass_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(bass_val))
-                loc = u.get("u_mid_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(mid_val))
-                loc = u.get("u_high_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(high_val))
-
-            # --- Starfield uniforms ---
-            if mode == 'starfield':
-                loc = u.get("u_star_density", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._star_density))
-                loc = u.get("u_travel_speed", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._travel_speed))
-                loc = u.get("u_star_reactivity", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._star_reactivity))
-                loc = u.get("u_travel_time", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._starfield_travel_time))
-                loc = u.get("u_nebula_tint1", -1)
-                if loc >= 0:
-                    nt1 = self._nebula_tint1
-                    _gl.glUniform3f(loc, float(nt1.redF()), float(nt1.greenF()), float(nt1.blueF()))
-                loc = u.get("u_nebula_tint2", -1)
-                if loc >= 0:
-                    nt2 = self._nebula_tint2
-                    _gl.glUniform3f(loc, float(nt2.redF()), float(nt2.greenF()), float(nt2.blueF()))
-                loc = u.get("u_nebula_cycle_speed", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._nebula_cycle_speed))
-
-            # --- Blob uniforms ---
-            if mode == 'blob':
-                loc = u.get("u_blob_color", -1)
-                if loc >= 0:
-                    bc = self._blob_color
-                    _gl.glUniform4f(loc, float(bc.redF()), float(bc.greenF()),
-                                    float(bc.blueF()), float(bc.alphaF()))
-                loc = u.get("u_blob_glow_color", -1)
-                if loc >= 0:
-                    bgc = self._blob_glow_color
-                    _gl.glUniform4f(loc, float(bgc.redF()), float(bgc.greenF()),
-                                    float(bgc.blueF()), float(bgc.alphaF()))
-                loc = u.get("u_blob_edge_color", -1)
-                if loc >= 0:
-                    bec = self._blob_edge_color
-                    _gl.glUniform4f(loc, float(bec.redF()), float(bec.greenF()),
-                                    float(bec.blueF()), float(bec.alphaF()))
-                loc = u.get("u_blob_pulse", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_pulse))
-                loc = u.get("u_blob_width", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_width))
-                loc = u.get("u_blob_size", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_size))
-                loc = u.get("u_blob_glow_intensity", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_glow_intensity))
-                loc = u.get("u_blob_reactive_glow", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._blob_reactive_glow else 0)
-                loc = u.get("u_blob_outline_color", -1)
-                if loc >= 0:
-                    boc = self._blob_outline_color
-                    _gl.glUniform4f(loc, float(boc.redF()), float(boc.greenF()),
-                                    float(boc.blueF()), float(boc.alphaF()))
-                loc = u.get("u_blob_smoothed_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_smoothed_energy))
-                loc = u.get("u_blob_peak_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_peak_energy))
-                loc = u.get("u_blob_reactive_deformation", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_reactive_deformation))
-                loc = u.get("u_blob_stage_gain", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_stage_gain))
-                loc = u.get("u_blob_core_scale", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_core_scale))
-                loc = u.get("u_blob_core_floor_bias", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_core_floor_bias))
-                loc = u.get("u_blob_stage_bias", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_stage_bias))
-                loc = u.get("u_blob_stage_progress_override", -1)
-                if loc >= 0:
-                    stage_vals = (
-                        self._blob_stage_progress_filtered
-                        if self._blob_stage_progress_ready
-                        else (-1.0, -1.0, -1.0)
-                    )
-                    _gl.glUniform3f(loc, float(stage_vals[0]), float(stage_vals[1]), float(stage_vals[2]))
-                loc = u.get("u_blob_constant_wobble", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_constant_wobble))
-                loc = u.get("u_blob_reactive_wobble", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_reactive_wobble))
-                loc = u.get("u_blob_stretch_tendency", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._blob_stretch_tendency))
-
-            # --- Oscilloscope uniforms ---
-            if mode == 'oscilloscope':
-                loc = u.get("u_osc_speed", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._osc_speed))
-                loc = u.get("u_osc_line_dim", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._osc_line_dim else 0)
-                loc = u.get("u_osc_line_offset_bias", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._osc_line_offset_bias))
-                loc = u.get("u_osc_vertical_shift", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, int(self._osc_vertical_shift))
-
-            # --- Sine Wave uniforms (shares osc speed/dim/offset/travel) ---
-            if mode == 'sine_wave':
-                loc = u.get("u_playing", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._playing else 0)
-                loc = u.get("u_sine_speed", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._osc_speed))
-                loc = u.get("u_sine_line_dim", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._osc_line_dim else 0)
-                loc = u.get("u_sine_line_offset_bias", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._osc_line_offset_bias))
-                loc = u.get("u_sine_travel", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, int(self._osc_sine_travel))
-                loc = u.get("u_card_adaptation", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_card_adaptation))
-                loc = u.get("u_sine_travel_line2", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, int(self._sine_travel_line2))
-                loc = u.get("u_sine_travel_line3", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, int(self._sine_travel_line3))
-                loc = u.get("u_wave_effect", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_wave_effect))
-                loc = u.get("u_micro_wobble", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_micro_wobble))
-                loc = u.get("u_crawl_amount", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_crawl_amount))
-                loc = u.get("u_sine_vertical_shift", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, int(self._sine_vertical_shift))
-                loc = u.get("u_heartbeat", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_heartbeat))
-                loc = u.get("u_heartbeat_intensity", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._heartbeat_intensity))
-                loc = u.get("u_width_reaction", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_width_reaction))
-                loc = u.get("u_sine_density", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_density))
-                loc = u.get("u_sine_displacement", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_displacement))
-                loc = u.get("u_sine_line1_shift", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_line1_shift))
-                loc = u.get("u_sine_line2_shift", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_line2_shift))
-                loc = u.get("u_sine_line3_shift", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._sine_line3_shift))
-
-            # --- Helix uniforms ---
-            if mode == 'helix':
-                loc = u.get("u_helix_turns", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, int(self._helix_turns))
-                loc = u.get("u_helix_double", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._helix_double else 0)
-                loc = u.get("u_helix_speed", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._helix_speed))
-                loc = u.get("u_helix_glow_enabled", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._helix_glow_enabled else 0)
-                loc = u.get("u_helix_glow_intensity", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._helix_glow_intensity))
-                loc = u.get("u_helix_glow_color", -1)
-                if loc >= 0:
-                    hgc = self._helix_glow_color
-                    _gl.glUniform4f(loc, float(hgc.redF()), float(hgc.greenF()),
-                                    float(hgc.blueF()), float(hgc.alphaF()))
-                loc = u.get("u_helix_reactive_glow", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._helix_reactive_glow else 0)
-
-            # --- Bubble uniforms ---
-            if mode == 'bubble':
-                # Energy bands for bubble mode
-                eb = self._energy_bands
-                loc = u.get("u_overall_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.overall))
-                loc = u.get("u_bass_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.bass))
-                loc = u.get("u_mid_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.mid))
-                loc = u.get("u_high_energy", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(eb.high))
-                loc = u.get("u_playing", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, 1 if self._playing else 0)
-
-                # Bubble count
-                bcount = min(self._bubble_count, 110)
-                loc = u.get("u_bubble_count", -1)
-                if loc >= 0:
-                    _gl.glUniform1i(loc, bcount)
-
-                # Bubble position data (vec4 array: x, y, radius, alpha)
-                loc = u.get("u_bubbles_pos", -1)
-                if loc >= 0 and bcount > 0:
-                    pos_data = self._bubble_pos_data
-                    pos_buf = np.zeros(110 * 4, dtype="float32")
-                    copy_len = min(len(pos_data), 110 * 4)
-                    for i in range(copy_len):
-                        pos_buf[i] = float(pos_data[i])
-                    _gl.glUniform4fv(loc, 110, pos_buf)
-
-                # Bubble extra data (vec4 array: spec_size, rotation, spec_ox, spec_oy)
-                loc = u.get("u_bubbles_extra", -1)
-                if loc >= 0 and bcount > 0:
-                    extra_data = self._bubble_extra_data
-                    extra_buf = np.zeros(110 * 4, dtype="float32")
-                    copy_len = min(len(extra_data), 110 * 4)
-                    for i in range(copy_len):
-                        extra_buf[i] = float(extra_data[i])
-                    _gl.glUniform4fv(loc, 110, extra_buf)
-
-                # Bubble trail data (vec3 array: TRAIL_STEPS xy + strength per bubble)
-                loc = u.get("u_bubbles_trail", -1)
-                if loc >= 0 and bcount > 0:
-                    trail_data = self._bubble_trail_data
-                    trail_buf = np.zeros(110 * 3 * 3, dtype="float32")  # TRAIL_STEPS=3, xyz
-                    copy_len = min(len(trail_data), 110 * 3 * 3)
-                    for i in range(copy_len):
-                        trail_buf[i] = float(trail_data[i])
-                    _gl.glUniform3fv(loc, 110 * 3, trail_buf)
-
-                loc = u.get("u_trail_strength", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._bubble_trail_strength))
-
-                loc = u.get("u_tail_opacity", -1)
-                if loc >= 0:
-                    _gl.glUniform1f(loc, float(self._bubble_tail_opacity))
-
-                # Specular direction (normalised vec2).
-                # UV Y is inverted (0=top, 1=bottom), so screen "top" = low UV.y.
-                # The shader projects (uv - center) onto -u_specular_dir, so to put
-                # the highlight at screen-top-left we need u_specular_dir = (-x, -y)
-                # because -(-y) pushes the bright spot toward low UV.y (= screen top).
-                sd = _DIRECTION_VECS.get(self._bubble_specular_direction, (-0.707, 0.707))
-                loc = u.get("u_specular_dir", -1)
-                if loc >= 0:
-                    _gl.glUniform2f(loc, float(sd[0]), float(sd[1]))
-
-                gd = _DIRECTION_VECS.get(self._bubble_gradient_direction, (0.0, 1.0))
-                loc = u.get("u_gradient_dir", -1)
-                if loc >= 0:
-                    _gl.glUniform2f(loc, float(gd[0]), float(gd[1]))
-
-                # Colour uniforms
-                for uname, qc in (
-                    ("u_outline_color", self._bubble_outline_color),
-                    ("u_specular_color", self._bubble_specular_color),
-                    ("u_gradient_light", self._bubble_gradient_light),
-                    ("u_gradient_dark", self._bubble_gradient_dark),
-                    ("u_pop_color", self._bubble_pop_color),
-                ):
-                    loc = u.get(uname, -1)
-                    if loc >= 0:
-                        _gl.glUniform4f(loc, float(qc.redF()), float(qc.greenF()),
-                                        float(qc.blueF()), float(qc.alphaF()))
+            # --- Per-mode uniforms (dispatched to renderer modules) ---
+            from widgets.spotify_visualizer.renderers import upload_mode_uniforms
+            if not upload_mode_uniforms(mode, _gl, u, self):
+                _gl.glBindVertexArray(0)
+                _gl.glUseProgram(0)
+                return False
 
             # --- Draw ---
             _gl.glDrawArrays(_gl.GL_TRIANGLE_STRIP, 0, 4)

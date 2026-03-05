@@ -120,6 +120,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_size = max(0.3, min(2.0, float(kwargs['blob_size'])))
     if 'blob_glow_intensity' in kwargs:
         widget._blob_glow_intensity = max(0.0, min(1.0, float(kwargs['blob_glow_intensity'])))
+    if 'blob_glow_reactivity' in kwargs:
+        widget._blob_glow_reactivity = max(0.0, min(2.0, float(kwargs['blob_glow_reactivity'])))
+    if 'blob_glow_max_size' in kwargs:
+        widget._blob_glow_max_size = max(0.1, min(3.0, float(kwargs['blob_glow_max_size'])))
     if 'blob_reactive_glow' in kwargs:
         widget._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
     if 'blob_reactive_deformation' in kwargs:
@@ -449,6 +453,8 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['blob_width'] = widget._blob_width
     extra['blob_size'] = widget._blob_size
     extra['blob_glow_intensity'] = widget._blob_glow_intensity
+    extra['blob_glow_reactivity'] = getattr(widget, '_blob_glow_reactivity', 1.0)
+    extra['blob_glow_max_size'] = getattr(widget, '_blob_glow_max_size', 1.0)
     extra['blob_reactive_glow'] = widget._blob_reactive_glow
     extra['blob_reactive_deformation'] = widget._blob_reactive_deformation
     extra['blob_stage_gain'] = widget._blob_stage_gain

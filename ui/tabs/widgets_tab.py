@@ -92,7 +92,7 @@ class WidgetsTab(QWidget):
         self._imgur_bg_color = self._color_from_default('imgur', 'bg_color', [35, 35, 35, 255])
         self._imgur_border_color = self._color_from_default('imgur', 'border_color', [255, 255, 255, 255])
         self._media_artwork_size = int(self._widget_default('media', 'artwork_size', 200))
-        self._visualizer_adv_state: Dict[str, bool] = {}
+        self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
         self._loading = True
         self._save_coalesce_pending = False
         self._setup_ui()
@@ -195,13 +195,61 @@ class WidgetsTab(QWidget):
 
     # --- Visualizer advanced toggle persistence helpers -------------------
 
+    _ADV_STATE_KEY = "ui.visualizer_adv_states"
+    _SCROLL_POS_KEY = "ui.visualizer_scroll_positions"
+
+    def _load_adv_states(self) -> Dict[str, bool]:
+        """Load persisted advanced toggle states from SettingsManager."""
+        raw = self._settings.get(self._ADV_STATE_KEY, {})
+        if isinstance(raw, dict):
+            return {k: bool(v) for k, v in raw.items()}
+        return {}
+
     def get_visualizer_adv_state(self, mode: str) -> bool:
-        """Return remembered expanded state for a visualizer mode (session scoped)."""
+        """Return remembered expanded state for a visualizer mode."""
         return bool(self._visualizer_adv_state.get(mode, False))
 
     def set_visualizer_adv_state(self, mode: str, expanded: bool) -> None:
-        """Persist expanded/collapsed state for a visualizer mode within this session."""
+        """Persist expanded/collapsed state for a visualizer mode."""
         self._visualizer_adv_state[mode] = bool(expanded)
+        try:
+            self._settings.set(self._ADV_STATE_KEY, dict(self._visualizer_adv_state))
+        except Exception:
+            pass
+
+    def save_scroll_position(self, mode: str) -> None:
+        """Save current scroll position for a visualizer mode."""
+        sa = getattr(self, '_scroll_area', None)
+        if sa is None:
+            return
+        vbar = sa.verticalScrollBar()
+        if vbar is None:
+            return
+        positions = self._settings.get(self._SCROLL_POS_KEY, {})
+        if not isinstance(positions, dict):
+            positions = {}
+        positions[mode] = vbar.value()
+        try:
+            self._settings.set(self._SCROLL_POS_KEY, positions)
+        except Exception:
+            pass
+
+    def restore_scroll_position(self, mode: str) -> None:
+        """Restore saved scroll position for a visualizer mode."""
+        sa = getattr(self, '_scroll_area', None)
+        if sa is None:
+            return
+        vbar = sa.verticalScrollBar()
+        if vbar is None:
+            return
+        positions = self._settings.get(self._SCROLL_POS_KEY, {})
+        if isinstance(positions, dict) and mode in positions:
+            try:
+                from PySide6.QtCore import QTimer
+                pos = int(positions[mode])
+                QTimer.singleShot(0, lambda: vbar.setValue(pos))
+            except Exception:
+                pass
     
     @staticmethod
     def _set_combo_text(combo: QComboBox, text: str) -> None:
@@ -958,6 +1006,12 @@ class WidgetsTab(QWidget):
         except Exception:
             mode = 'spectrum'
 
+        # Save scroll position for the previous mode before switching
+        prev_mode = getattr(self, '_last_vis_mode_section', None)
+        if prev_mode and prev_mode != mode:
+            self.save_scroll_position(prev_mode)
+        self._last_vis_mode_section = mode
+
         containers = {
             'spectrum': getattr(self, '_spectrum_settings_container', None),
             'oscilloscope': getattr(self, '_osc_settings_container', None),
@@ -970,6 +1024,10 @@ class WidgetsTab(QWidget):
         for m, container in containers.items():
             if container is not None:
                 container.setVisible(m == mode)
+
+        # Restore scroll position for the new mode
+        if prev_mode != mode:
+            self.restore_scroll_position(mode)
 
     def _update_rainbow_visibility(self) -> None:
         """Show/hide rainbow speed slider based on checkbox state."""

@@ -145,6 +145,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_width: float = 1.0
         self._blob_size: float = 1.0
         self._blob_glow_intensity: float = 0.5
+        self._blob_glow_reactivity: float = 1.0
+        self._blob_glow_max_size: float = 1.0
         self._blob_reactive_glow: bool = True
         self._blob_reactive_deformation: float = 1.0
         self._blob_stage_gain: float = 1.0

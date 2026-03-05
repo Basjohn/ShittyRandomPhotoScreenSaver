@@ -37,6 +37,8 @@ uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 uniform float u_ghost_alpha;           // 0 = no ghost, >0 = ghost outline intensity
 uniform float u_blob_peak_energy;      // CPU-tracked peak energy for ghost outline
+uniform float u_blob_glow_reactivity;  // 0..2 how strongly glow responds to energy (default 1.0)
+uniform float u_blob_glow_max_size;    // 0.1..3.0 maximum glow spread multiplier (default 1.0)
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
 vec3 apply_rainbow_shift(vec3 rgb) {
@@ -313,14 +315,17 @@ void main() {
     float glow_sigma;
     float glow_strength;
     float gi = clamp(u_blob_glow_intensity, 0.0, 1.0);
+    float g_react = clamp(u_blob_glow_reactivity, 0.0, 2.0);
+    float g_max = clamp(u_blob_glow_max_size, 0.1, 3.0);
     if (u_blob_reactive_glow == 1) {
         // Use CPU-smoothed energy to prevent glow flickering
         float e = u_blob_smoothed_energy;
-        // Low base (barely visible at silence) → dramatic at full energy
-        glow_sigma = (1.5 + gi * 5.0) + e * e * (20.0 + gi * 40.0);
-        glow_strength = (0.02 + gi * 0.08) + e * (0.40 + gi * 0.8);
+        // Reactivity scales the energy contribution; max_size scales the sigma cap.
+        float e_scaled = e * g_react;
+        glow_sigma = ((1.5 + gi * 5.0) + e_scaled * e_scaled * (20.0 + gi * 40.0)) * g_max;
+        glow_strength = (0.02 + gi * 0.08) + e_scaled * (0.40 + gi * 0.8);
     } else {
-        glow_sigma = 4.0 + gi * 25.0;
+        glow_sigma = (4.0 + gi * 25.0) * g_max;
         glow_strength = 0.15 + gi * 0.6;
     }
     float d_px = d * inner_height;
@@ -337,25 +342,31 @@ void main() {
         outline_band_alpha = (1.0 - smoothstep(0.0, 0.015, d)) * outline_a;
     }
 
-    // Ghost outline: faded ring at the peak blob radius (where the blob WAS)
+    // Ghost outline: glowing ring at the peak blob radius (where the blob WAS)
     float ghost_ring_alpha = 0.0;
     if (u_ghost_alpha > 0.001) {
         float pe = clamp(u_blob_peak_energy, 0.0, 1.0);
         float ce = clamp(u_blob_smoothed_energy, 0.0, 1.0);
         float delta_e = max(0.0, pe - ce);
-        if (delta_e > 0.003) {
-            // Estimate how much larger the blob was at peak energy
+        if (delta_e > 0.002) {
+            // Ghost ring distance from current blob edge — 3x larger expansion
             float pulse_f = clamp(u_blob_pulse, 0.0, 2.0);
-            float ghost_expand = delta_e * (0.053 * pulse_f + 0.066);
-            // ghost_d = distance from the ghost (peak) blob edge
+            float ghost_expand = delta_e * (0.16 * pulse_f + 0.20);
             float ghost_d = d - ghost_expand;
-            // Thin ring at ghost edge + soft fade-out
-            float ring = (1.0 - smoothstep(-0.004, 0.002, ghost_d))
-                       * smoothstep(-0.020, -0.004, ghost_d);
-            // Only show outside the current fill (avoid doubling inside)
-            float outside_mask = smoothstep(-0.005, 0.005, d);
-            ghost_ring_alpha = ring * outside_mask * u_ghost_alpha
-                             * clamp(delta_e * 4.0, 0.0, 1.0);
+
+            // Wide ring with soft glow halo (not a thin line)
+            // Core ring: ~0.03 wide in d-space
+            float ring_core = (1.0 - smoothstep(-0.008, 0.006, ghost_d))
+                            * smoothstep(-0.040, -0.008, ghost_d);
+            // Soft outer glow halo around the ring
+            float halo = exp(-ghost_d * ghost_d * inner_height * inner_height * 0.003);
+            halo *= smoothstep(-0.06, -0.01, ghost_d);
+
+            // Only show outside the current fill
+            float outside_mask = smoothstep(-0.003, 0.008, d);
+            float intensity = clamp(delta_e * 3.0, 0.0, 1.0);
+            ghost_ring_alpha = (ring_core * 0.85 + halo * 0.45)
+                             * outside_mask * u_ghost_alpha * intensity;
         }
     }
 

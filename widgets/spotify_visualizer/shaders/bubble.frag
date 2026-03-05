@@ -150,66 +150,80 @@ void main() {
     
     int count = min(u_bubble_count, 110);
 
-    // --- Motion trail smear (stretched glow following each bubble) ---
+    // --- Water ripple wake trail behind each moving bubble ---
+    // Each bubble's 3 trail samples become ripple source points at
+    // different ages. At each source we draw concentric expanding rings
+    // using sin(dist * freq) modulated by a Gaussian decay envelope.
+    // Oldest sample = largest rings, most faded.  Newest = tightest, strongest.
+    // The result is a subtle watery wake behind moving bubbles.
     if (u_trail_strength > 0.001 && u_tail_opacity > 0.001) {
-        float trail_strength = clamp(u_trail_strength, 0.0, 1.0);
-        float trail_boost = max(0.0, u_trail_strength - 1.0); // extra headroom up to 1.5
+        float trail_strength = clamp(u_trail_strength, 0.0, 1.5);
         float opacity_cap = clamp(u_tail_opacity, 0.0, 0.85);
         vec2 uv_aspect = vec2(uv.x * aspect, uv.y);
+
+        // Ripple ring parameters
+        float ring_freq = 220.0;          // spatial frequency of concentric rings
+        float ring_thickness = 0.38;      // how sharp the rings are (0=needle, 1=solid)
+        float max_ripple_radius = 0.12;   // max distance ripples extend (normalised)
+
         for (int i = 0; i < count; i++) {
             vec4 bpos = u_bubbles_pos[i];
             float brad = bpos.z;
             float balpha = bpos.w;
-            if (balpha < 0.01 || brad < 2.5 * px) continue;
+            if (balpha < 0.01 || brad < 2.0 * px) continue;
 
-            vec3 tail_sample = u_bubbles_trail[i * 3 + 0];
-            vec3 mid_sample  = u_bubbles_trail[i * 3 + 1];
-            vec3 head_sample = u_bubbles_trail[i * 3 + 2];
-            float max_strength = max(tail_sample.z, max(mid_sample.z, head_sample.z));
-            if (max_strength < 0.001) continue;
+            // Process each of the 3 trail samples as a ripple source
+            // age_factor: 0=oldest (most expanded/faded), 2=newest (tightest)
+            for (int s = 0; s < 3; s++) {
+                vec3 sample_data = u_bubbles_trail[i * 3 + s];
+                float strength = sample_data.z;
+                if (strength < 0.001) continue;
 
-            vec2 tail_aspect = vec2(tail_sample.x * aspect, tail_sample.y);
-            vec2 head_aspect = vec2(head_sample.x * aspect, head_sample.y);
-            vec2 dir = head_aspect - tail_aspect;
-            float seg_len = length(dir);
-            if (seg_len < 0.0005) continue;
-            vec2 axis = dir / seg_len;
-            vec2 rel = uv_aspect - tail_aspect;
+                vec2 src = vec2(sample_data.x * aspect, sample_data.y);
+                vec2 delta = uv_aspect - src;
+                float dist = length(delta);
 
-            float along = dot(rel, axis);
-            if (along < -brad * 2.5 || along > seg_len + brad * 3.0) continue;
+                // Age determines how far the ripples have expanded:
+                // oldest sample (s=0) → age 1.0, newest (s=2) → age 0.15
+                float age = mix(1.0, 0.15, float(s) / 2.0);
 
-            float along_t = clamp(along / seg_len, 0.0, 1.0);
-            vec2 perp = vec2(-axis.y, axis.x);
-            float across = dot(rel, perp);
-            float width_base = clamp(brad * 1.45, 0.012, 0.08);
-            float width = mix(width_base * 0.6, width_base, pow(along_t, 0.65));
-            float radial = 1.0 - smoothstep(0.0, width, abs(across));
-            if (radial <= 0.0) continue;
+                // Ripple radius grows with age; scale with bubble size
+                float ripple_r = brad * (2.0 + age * 6.0) * trail_strength;
+                ripple_r = min(ripple_r, max_ripple_radius);
 
-            float segment_alpha;
-            if (along_t < 0.5) {
-                float local_t = smoothstep(0.0, 0.5, along_t);
-                segment_alpha = mix(tail_sample.z, mid_sample.z, local_t);
-            } else {
-                float local_t = smoothstep(0.5, 1.0, along_t);
-                segment_alpha = mix(mid_sample.z, head_sample.z, local_t);
+                // Skip fragments outside the ripple radius (+ soft edge margin)
+                if (dist > ripple_r + 2.0 * px) continue;
+
+                // Concentric ring pattern: sin wave creates rings
+                float wave = sin(dist * ring_freq - age * 12.0);
+                // Sharpen the wave into thin rings
+                float ring = smoothstep(1.0 - ring_thickness, 1.0, wave);
+
+                // Gaussian decay: rings fade with distance from source
+                float sigma = ripple_r * 0.45;
+                float decay = exp(-(dist * dist) / (2.0 * sigma * sigma));
+
+                // Fade out at the very centre (avoid bright dot on top of bubble)
+                float centre_fade = smoothstep(brad * 0.3, brad * 0.9, dist);
+
+                // Outer edge fade
+                float edge_fade = 1.0 - smoothstep(ripple_r * 0.7, ripple_r, dist);
+
+                // Older ripples are fainter
+                float age_fade = mix(0.25, 1.0, float(s) / 2.0);
+
+                float ripple_alpha = ring * decay * centre_fade * edge_fade
+                                   * age_fade * strength * balpha
+                                   * trail_strength * opacity_cap;
+                if (ripple_alpha <= 0.001) continue;
+
+                // Subtle watery colour: mostly outline, slightly brightened
+                vec3 ripple_rgb = mix(outline_col.rgb, vec3(1.0), 0.3 + dist / ripple_r * 0.15);
+
+                float blend = clamp(ripple_alpha * u_fade * 0.55, 0.0, opacity_cap * 0.5);
+                result.rgb = mix(result.rgb, ripple_rgb, blend);
+                result.a = max(result.a, blend * 0.4);
             }
-
-            float longitudinal = smoothstep(0.02, 0.25, along_t) * smoothstep(1.05, 0.6, along_t);
-            float base_alpha = trail_strength * balpha * segment_alpha * radial * longitudinal;
-            float trail_alpha = base_alpha * (1.0 + trail_boost * 0.9);
-            if (trail_alpha <= 0.0005) continue;
-
-            vec3 trail_rgb = mix(
-                outline_col.rgb,
-                pop_col.rgb,
-                clamp(0.35 + along_t * 0.55 + trail_boost * 0.8, 0.0, 1.0)
-            );
-
-            float blend = clamp(trail_alpha * u_fade, 0.0, opacity_cap);
-            result.rgb = mix(result.rgb, trail_rgb, blend);
-            result.a = max(result.a, blend * opacity_cap + balpha * 0.15);
         }
     }
 

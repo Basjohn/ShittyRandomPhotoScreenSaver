@@ -120,7 +120,15 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         rainbow_speed=model.rainbow_speed,
         osc_ghosting_enabled=model.osc_ghosting_enabled,
         osc_ghost_intensity=model.osc_ghost_intensity,
+        blob_ghosting_enabled=model.blob_ghosting_enabled,
+        blob_ghost_alpha=model.blob_ghost_alpha,
+        blob_ghost_decay=model.blob_ghost_decay,
+        blob_glow_reactivity=model.blob_glow_reactivity,
+        blob_glow_max_size=model.blob_glow_max_size,
         sine_heartbeat=model.sine_heartbeat,
+        sine_density=model.sine_density,
+        sine_displacement=model.sine_displacement,
+        sine_crawl_amount=model.sine_crawl_amount,
         # Bubble
         bubble_big_bass_pulse=model.bubble_big_bass_pulse,
         bubble_small_freq_pulse=model.bubble_small_freq_pulse,
@@ -147,6 +155,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         bubble_small_size_max=model.bubble_small_size_max,
         bubble_growth=model.bubble_growth,
         bubble_trail_strength=model.bubble_trail_strength,
+        bubble_tail_opacity=model.bubble_tail_opacity,
         sine_line_dim=model.sine_line_dim,
     )
 
