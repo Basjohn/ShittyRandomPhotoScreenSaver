@@ -294,20 +294,26 @@ SECTION_HEADING_STYLE_DISABLED = (
 )
 
 SUBSECTION_DIVIDER_STYLE = (
+    "background-color: rgba(40, 40, 40, 0.8);"
     "border: 1px solid rgba(255, 255, 255, 0.8);"
     "border-radius: 18px;"
-    "background: transparent;"
-    "margin-top: 6px;"
-    "padding-top: 12px;"
+    "margin-top: 20px;"
+    "margin-bottom: 12px;"
+    "padding: 18px 14px 12px 14px;"
+    "color: #ffffff;"
 )
 
 SUBSECTION_DIVIDER_TITLE_STYLE = (
     "QGroupBox::title {"
     "  subcontrol-origin: margin;"
     "  subcontrol-position: top left;"
-    "  padding: 0 8px;"
-    "  background: transparent;"
-    "  color: rgba(255, 255, 255, 0.85);"
+    "  padding: 2px 10px;"
+    "  margin-top: 5px;"
+    "  background-color: rgba(40, 40, 40, 0.8);"
+    "  color: #ffffff;"
+    "  font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "  font-weight: 700;"
+    "  font-size: 14px;"
     "}"
 )
 

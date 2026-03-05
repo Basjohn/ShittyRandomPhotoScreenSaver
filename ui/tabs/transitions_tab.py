@@ -504,6 +504,8 @@ class TransitionsTab(QWidget):
             "Right to Left",
             "Top to Bottom",
             "Bottom to Top",
+            "Diagonal TL-BR",
+            "Diagonal TR-BL",
             "Random",
         ])
         self.burn_direction_combo.currentIndexChanged.connect(self._save_settings)

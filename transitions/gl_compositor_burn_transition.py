@@ -35,7 +35,7 @@ class GLCompositorBurnTransition(BaseTransition):
     duration_ms:
         Total transition duration in milliseconds.
     direction:
-        Burn direction — 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=center→out.
+        Burn direction — 0=L→R, 1=R→L, 2=T→B, 3=B→T, 4=TL→BR, 5=TR→BL.
     jaggedness:
         Edge noise amplitude (0.0–1.0).
     glow_intensity:
@@ -75,7 +75,7 @@ class GLCompositorBurnTransition(BaseTransition):
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
 
-        self._direction: int = max(0, min(3, int(direction)))
+        self._direction: int = max(0, min(5, int(direction)))
         self._jaggedness: float = max(0.0, min(1.0, float(jaggedness)))
         self._glow_intensity: float = max(0.0, min(1.0, float(glow_intensity)))
         self._glow_color: tuple = tuple(glow_color)

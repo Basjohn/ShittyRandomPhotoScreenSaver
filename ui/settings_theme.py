@@ -171,9 +171,10 @@ def load_theme(widget) -> None:
                     subcontrol-position: top left;
                     padding: 2px 10px;
                     margin-top: 5px;
+                    background-color: rgba(40, 40, 40, 0.8);
                     color: #ffffff;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
-                    font-weight: 600;
+                    font-weight: 700;
                     font-size: 14px;
                 }
                 

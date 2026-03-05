@@ -107,6 +107,8 @@ float burn_axis(vec2 uv) {
     if (u_direction == 1) return 1.0 - uv.x;
     if (u_direction == 2) return 1.0 - uv.y;
     if (u_direction == 3) return uv.y;
+    if (u_direction == 4) return (uv.x + (1.0 - uv.y)) * 0.5;        // TL->BR
+    if (u_direction == 5) return ((1.0 - uv.x) + (1.0 - uv.y)) * 0.5; // TR->BL
     return uv.x;
 }
 
@@ -147,7 +149,7 @@ void main() {
     // Jaggedness controls how much the noise deforms the burn front
     // Range: 0.0 = nearly straight line, 1.0 = very wild/organic edge
     float jag_amount = u_jaggedness * 0.22;
-    float front = move_t * 1.12 - edge_noise * jag_amount;
+    float front = move_t * 1.35 - edge_noise * jag_amount;
 
     // Signed distance: positive = ahead of front (old), negative = behind (burned)
     float sd = axis - front;
@@ -170,8 +172,8 @@ void main() {
     float core_w  = 0.005 + u_glow_intensity * 0.010;  // white-hot burn line
     float char_w  = 0.025 + u_char_width * 0.08;       // charred zone behind front
 
-    // Smooth fade to new image near completion
-    float tail_fade = smoothstep(0.88, 1.0, move_t);
+    // Smooth fade to new image near completion (delayed so burn reaches far edge)
+    float tail_fade = smoothstep(0.92, 1.0, move_t);
 
     // Thermite intensity: peaks at ignition, stays warm
     float thermite = mix(1.5, 1.0, smoothstep(0.0, 0.20, move_t));

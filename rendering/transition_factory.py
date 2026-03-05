@@ -580,9 +580,10 @@ class TransitionFactory:
         dir_map = {
             'Left to Right': 0, 'Right to Left': 1,
             'Top to Bottom': 2, 'Bottom to Top': 3,
+            'Diagonal TL-BR': 4, 'Diagonal TR-BL': 5,
         }
         if dir_str == 'Random':
-            direction = random.randint(0, 3)
+            direction = random.randint(0, 5)
         else:
             direction = dir_map.get(dir_str, 0)
         jaggedness = self._safe_float(burn_cfg.get('jaggedness', canonical.get('jaggedness', 0.5)), 0.5)
