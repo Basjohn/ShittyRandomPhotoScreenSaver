@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -198,7 +199,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._blob_adv_helper = QLabel("Advanced sliders still apply when hidden.")
     tab._blob_adv_helper.setProperty("class", "adv-helper")
-    tab._blob_adv_helper.setStyleSheet("color: rgba(220,220,220,0.6); font-size: 11px;")
+    tab._blob_adv_helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
     host_layout.addWidget(tab._blob_adv_helper)
 
     tab._blob_advanced = QWidget()

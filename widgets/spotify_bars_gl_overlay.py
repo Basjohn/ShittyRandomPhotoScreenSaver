@@ -24,14 +24,6 @@ from widgets.spotify_visualizer.blob_math import (
 logger = get_logger(__name__)
 
 
-
-def _smoothstep(edge0: float, edge1: float, x: float) -> float:
-    if edge0 == edge1:
-        return 0.0
-    t = max(0.0, min(1.0, (x - edge0) / (edge1 - edge0)))
-    return t * t * (3.0 - 2.0 * t)
-
-
 class SpotifyBarsGLOverlay(QOpenGLWidget):
     """Small GL surface that renders the Spotify bar field.
 

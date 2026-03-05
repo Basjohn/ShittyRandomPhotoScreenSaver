@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import List, Optional, Dict, Any, Callable
-import os
 import time
 import copy
 
@@ -14,12 +13,10 @@ from core.logging.logger import (
     get_logger,
     is_verbose_logging,
     is_perf_metrics_enabled,
-    is_viz_logging_enabled,
-    is_viz_diagnostics_enabled,
 )
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes, clear_cached_shadow_for_widget
+from widgets.shadow_utils import configure_overlay_widget_attributes
 from widgets.base_overlay_widget import BaseOverlayWidget
 
 
@@ -39,21 +36,6 @@ from widgets.spotify_visualizer.beat_engine import (
 
 logger = get_logger(__name__)
 
-try:
-    _DEBUG_CONST_BARS = float(os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST", "0.0"))
-except Exception as e:
-    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-    _DEBUG_CONST_BARS = 0.0
-
-
-def clamp(value: float, lo: float, hi: float) -> float:
-    """Match the GLSL clamp helper for CPU-side parity."""
-    return max(lo, min(hi, value))
-
-
-def mix(a: float, b: float, t: float) -> float:
-    """Linear interpolation helper (GLSL mix equivalent)."""
-    return a + (b - a) * t
 
 
 class SpotifyVisualizerWidget(QWidget):
@@ -1352,323 +1334,69 @@ class SpotifyVisualizerWidget(QWidget):
         persist_vis_mode(self)
 
     def _reset_visualizer_state(self, *, clear_overlay: bool = False, replay_cached: bool = False) -> None:
-        """Clear runtime visualizer state so the next mode behaves like a cold start."""
-        zeros = [0.0] * self._bar_count
-        self._display_bars = list(zeros)
-        self._target_bars = list(zeros)
-        self._visual_bars = list(zeros)
-        self._per_bar_energy = list(zeros)
-        self._geom_cache_rect = None
-        self._geom_cache_bar_count = self._bar_count
-        self._geom_cache_segments = self._bar_segments_base
-        self._geom_bar_x = []
-        self._geom_seg_y = []
-        self._geom_bar_width = 0
-        self._geom_seg_height = 0
-        self._last_update_ts = -1.0
-        self._last_smooth_ts = 0.0
-        self._has_pushed_first_frame = False
-        self._last_gpu_geom = None
-        self._last_gpu_fade_sent = -1.0
-        resume_ts = 0.0
-        if getattr(self, "_mode_transition_phase", 0) != 0:
-            resume_ts = float(getattr(self, "_mode_transition_resume_ts", 0.0) or 0.0)
-        self._mode_transition_ts = resume_ts if resume_ts > 0.0 else 0.0
-        self._mode_transition_resume_ts = 0.0
-        self._perf_tick_start_ts = None
-        self._perf_tick_last_ts = None
-        self._perf_tick_frame_count = 0
-        self._perf_tick_min_dt = 0.0
-        self._perf_tick_max_dt = 0.0
-        self._perf_paint_start_ts = None
-        self._perf_paint_last_ts = None
-        self._perf_paint_frame_count = 0
-        self._perf_paint_min_dt = 0.0
-        self._perf_paint_max_dt = 0.0
-        self._perf_audio_lag_last_ms = 0.0
-        self._perf_audio_lag_min_ms = 0.0
-        self._perf_audio_lag_max_ms: float = 0.0
-        self._perf_last_log_ts: Optional[float] = None
-        self._last_tick_spike_log_ts: float = 0.0
-        self._fallback_mismatch_start: float = 0.0
-        self._fallback_forced_until: float = 0.0
-        self._bubble_pos_data: List[float] = []
-        self._bubble_extra_data: List[float] = []
-        self._bubble_trail_data: List[float] = []
-        self._bubble_count: int = 0
-        self._bubble_compute_pending: bool = False
-        self._bubble_last_tick_ts: float = 0.0
-        self._heartbeat_intensity: float = 0.0
-        self._heartbeat_avg_bass: float = 0.0
-        self._heartbeat_last_ts: float = 0.0
-        self._waiting_for_fresh_frame: bool = False
-        self._waiting_for_fresh_engine_frame: bool = False
-        self._pending_engine_generation: int = -1
-        self._last_engine_generation_seen: int = -1
-        self._request_overlay_mode_reset(reason="widget_reset_state")
-        if clear_overlay:
-            self._clear_gl_overlay()
-        self._reset_engine_state(reason="widget_reset_state")
-        if replay_cached and self._cached_vis_kwargs:
-            from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
-            try:
-                apply_vis_mode_kwargs(self, copy.deepcopy(self._cached_vis_kwargs))
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to replay cached settings during reset", exc_info=True)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import reset_visualizer_state
+        reset_visualizer_state(self, clear_overlay=clear_overlay, replay_cached=replay_cached)
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
-        if duration_ms <= 0:
-            try:
-                self.show()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            try:
-                ShadowFadeProfile.attach_shadow(
-                    self,
-                    self._shadow_config,
-                    has_background_frame=self._show_background,
-                )
-            except Exception:
-                logger.debug(
-                    "[SPOTIFY_VIS] Failed to attach shadow in no-fade path",
-                    exc_info=True,
-                )
-            return
-
-        try:
-            ShadowFadeProfile.start_fade_in(
-                self,
-                self._shadow_config,
-                has_background_frame=self._show_background,
-            )
-        except Exception:
-            logger.debug(
-                "[SPOTIFY_VIS] _start_widget_fade_in fallback path triggered",
-                exc_info=True,
-            )
-            try:
-                self.show()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    logger.debug(
-                        "[SPOTIFY_VIS] Failed to apply widget shadow in fallback path",
-                        exc_info=True,
-                    )
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import start_widget_fade_in
+        start_widget_fade_in(self, duration_ms)
 
     def _start_widget_fade_out(self, duration_ms: int = 1200, on_complete: Optional[Callable[[], None]] = None) -> None:
-        try:
-            ShadowFadeProfile.start_fade_out(
-                self,
-                duration_ms=duration_ms,
-                on_complete=on_complete,
-            )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] _start_widget_fade_out fallback triggered", exc_info=True)
-            try:
-                self.hide()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            if on_complete is not None:
-                try:
-                    on_complete()
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed in fade-out callback: %s", e)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import start_widget_fade_out
+        start_widget_fade_out(self, duration_ms, on_complete)
 
     def _reset_teardown_bookkeeping(self) -> None:
-        self._mode_transition_ready = False
-        self._mode_transition_phase = 0
-        self._mode_transition_resume_ts = 0.0
-        self._mode_transition_apply_height_on_resume = False
-        self._pending_shadow_cache_invalidation = False
-        self._mode_teardown_state = "idle"
-        self._mode_teardown_target_generation = -1
-        self._mode_teardown_wait_started_ts = 0.0
-        self._mode_teardown_block_until_ready = False
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import reset_teardown_bookkeeping
+        reset_teardown_bookkeeping(self)
 
     def _on_mode_cycle_requested(self) -> None:
-        self._mode_transition_ready = False
-        if self._mode_teardown_state == 'fading_out':
-            return
-        self._mode_teardown_state = 'fading_out'
-        self._mode_teardown_block_until_ready = False
-        self._mode_teardown_target_generation = -1
-        self._mode_teardown_wait_started_ts = 0.0
-        self._start_widget_fade_out(on_complete=self._on_mode_fade_out_complete)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import on_mode_cycle_requested
+        on_mode_cycle_requested(self)
 
     def _on_mode_fade_out_complete(self) -> None:
-        if not Shiboken.isValid(self):
-            return
-        self._clear_gl_overlay()
-        self._mode_teardown_state = 'waiting_bars'
-        self._mode_teardown_block_until_ready = True
-        self._mode_teardown_wait_started_ts = time.time()
-        self._pending_shadow_cache_invalidation = True
-        self._prepare_engine_for_mode_reset()
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import on_mode_fade_out_complete
+        on_mode_fade_out_complete(self)
 
     def _prepare_engine_for_mode_reset(self) -> None:
-        self._mode_teardown_target_generation = -1
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            engine = None
-        if engine is None:
-            return
-        try:
-            engine.cancel_pending_compute_tasks()
-            engine.reset_smoothing_state()
-            engine.reset_floor_state()
-            engine.set_smoothing(self._smoothing)
-            self._replay_engine_config(engine)
-            engine.ensure_started()
-            self._mode_teardown_target_generation = engine.get_generation_id()
-            self._track_engine_generation(engine)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to prepare engine for mode reset", exc_info=True)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import prepare_engine_for_mode_reset
+        prepare_engine_for_mode_reset(self)
 
     def _begin_mode_fade_in(self, now_ts: float) -> None:
-        if self._mode_transition_phase == 3:
-            self._mode_transition_phase = 2
-            self._mode_transition_ts = now_ts
-        elif self._mode_transition_phase == 0:
-            self._mode_transition_phase = 2
-            self._mode_transition_ts = now_ts
-        self._mode_transition_ready = True
-        self._mode_teardown_state = 'fading_in'
-        self._mode_teardown_block_until_ready = False
-        self._invalidate_shadow_cache_if_needed()
-        self._apply_pending_mode_transition_layout()
-        try:
-            self._start_widget_fade_in(1500)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Mode fade-in fallback path", exc_info=True)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import begin_mode_fade_in
+        begin_mode_fade_in(self, now_ts)
 
     def _check_mode_teardown_ready(self, engine: Optional[_SpotifyBeatEngine], now_ts: float) -> None:
-        if self._mode_teardown_state != 'waiting_bars':
-            return
-        ready = False
-        if engine is not None and self._mode_teardown_target_generation > 0:
-            try:
-                latest = engine.get_latest_generation_with_frame()
-            except Exception:
-                latest = -1
-            if latest >= self._mode_teardown_target_generation:
-                ready = True
-        elif (now_ts - self._mode_teardown_wait_started_ts) >= 0.75:
-            ready = True
-        if ready and not self._mode_transition_ready:
-            self._mode_teardown_state = 'ready'
-            self._begin_mode_fade_in(now_ts)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import check_mode_teardown_ready
+        check_mode_teardown_ready(self, engine, now_ts)
 
     def _apply_pending_mode_transition_layout(self) -> None:
-        if not self._mode_transition_apply_height_on_resume:
-            return
-        self._mode_transition_apply_height_on_resume = False
-        try:
-            self._apply_preferred_height()
-            self._request_reposition()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Deferred card height apply failed", exc_info=True)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import apply_pending_mode_transition_layout
+        apply_pending_mode_transition_layout(self)
 
     def _invalidate_shadow_cache_if_needed(self) -> None:
-        if not self._pending_shadow_cache_invalidation:
-            return
-        self._pending_shadow_cache_invalidation = False
-        try:
-            effect = self.graphicsEffect()
-        except Exception:
-            effect = None
-        if effect is not None:
-            try:
-                self.setGraphicsEffect(None)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to clear graphics effect during shadow reset", exc_info=True)
-        try:
-            clear_cached_shadow_for_widget(self)
-            logger.debug("[SPOTIFY_VIS] Shadow cache cleared for widget=%s", hex(id(self)))
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to clear cached shadow entry", exc_info=True)
-        # Ensure ShadowFadeProfile internal bookkeeping doesn't hold stale references
-        try:
-            setattr(self, "_shadowfade_effect", None)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to reset shadowfade effect handle", exc_info=True)
-        try:
-            setattr(self, "_shadowfade_anim", None)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to reset shadowfade anim handle", exc_info=True)
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import invalidate_shadow_cache_if_needed
+        invalidate_shadow_cache_if_needed(self)
 
     def _on_first_frame_after_cold_start(self) -> None:
-        if not getattr(self, "_waiting_for_fresh_frame", False):
-            return
-        self._waiting_for_fresh_frame = False
-        if getattr(self, "_shadow_config_missing", False):
-            if self._shadow_config is not None:
-                try:
-                    ShadowFadeProfile.attach_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                    logger.debug("[SPOTIFY_VIS] Shadow reattached after fresh frame")
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to reattach shadow after fresh frame", exc_info=True)
-            self._shadow_config_missing = False
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import on_first_frame_after_cold_start
+        on_first_frame_after_cold_start(self)
 
     def _get_gpu_fade_factor(self, now_ts: float) -> float:
-        """Return fade factor for GPU bars based on ShadowFadeProfile.
-
-        We prefer the shared ShadowFadeProfile progress when available so that
-        the GL overlay tracks the exact same curve. When no progress is
-        present we fall back to 1.0 while the widget is visible.
-        """
-
-        try:
-            prog = getattr(self, "_shadowfade_progress", None)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            prog = None
-
-        if isinstance(prog, (float, int)):
-            p = float(prog)
-            if p <= 0.0:
-                return 0.0
-            if p >= 1.0:
-                return 1.0
-
-            # Clamp first, then apply a stronger delay so bars fade in well
-            # after the card/shadow begin fading. This keeps practical sync
-            # with ShadowFadeProfile while ensuring the bars clearly read as a
-            # second wave rather than appearing fully formed too early.
-            p = max(0.0, min(1.0, p))
-            delay = 0.65
-            if p <= delay:
-                return 0.0
-            t = (p - delay) / (1.0 - delay)
-            # Slower cubic ease-in so the bar opacity builds gradually and
-            # avoids a sudden pop once the delay has elapsed.
-            t = t * t * t
-            return max(0.0, min(1.0, t))
-
-        # Fallback: when ShadowFadeProfile progress is unavailable, check if
-        # the fade animation has completed (progress reached 1.0 at some point).
-        # We track this via _shadowfade_completed flag to avoid returning 1.0
-        # prematurely at startup before the fade animation begins.
-        try:
-            completed = getattr(self, "_shadowfade_completed", False)
-            if completed and self.isVisible():
-                return 1.0
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        return 0.0
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import get_gpu_fade_factor
+        return get_gpu_fade_factor(self, now_ts)
 
     def _dynamic_bar_segments(self) -> int:
         """Compute segment count based on current widget height.
@@ -1736,471 +1464,14 @@ class SpotifyVisualizerWidget(QWidget):
         now_ts: float,
         force_reason: Optional[str] = None,
     ) -> None:
-        """Emit viz-only latency diagnostics when enabled via --viz."""
-
-        if engine is None or not is_viz_logging_enabled():
-            return
-
-        last_audio_ts = float(getattr(engine, "_last_audio_ts", 0.0) or 0.0)
-        last_smooth_ts = float(getattr(engine, "_last_smooth_ts", -1.0) or -1.0)
-        source_ts = max(last_audio_ts, last_smooth_ts)
-        if source_ts <= 0.0:
-            return
-
-        force_logging = bool(force_reason)
-        if (
-            not force_logging
-            and (now_ts - self._latency_last_log_ts) < self._latency_log_interval
-        ):
-            return
-
-        lag_ms = max(0.0, (now_ts - source_ts) * 1000.0)
-        phase = self._mode_transition_phase
-        mode = getattr(self, "_vis_mode_str", "unknown")
-        pending = getattr(self, "_mode_transition_pending", None)
-        pending_mode = getattr(pending, "name", None) if pending is not None else None
-
-        level: Optional[str] = None
-        if lag_ms >= self._latency_error_ms:
-            level = "error"
-        elif lag_ms >= self._latency_warn_ms:
-            level = "warning"
-
-        if level is None:
-            return
-
-        rounded = round(lag_ms, 1)
-        signature = (level, rounded, mode, phase, pending_mode, force_reason)
-        if signature == self._latency_last_signature:
-            return
-        self._latency_last_signature = signature
-
-        trigger_suffix = f" trigger={force_reason}" if force_reason else ""
-        msg = (
-            "[SPOTIFY_VIS][LATENCY] lag_ms=%.1f mode=%s transition_phase=%d pending=%s%s"
-            % (lag_ms, mode, phase, pending_mode or "<none>", trigger_suffix)
-        )
-        if level == "error":
-            logger.error(msg)
-        else:
-            logger.warning(msg)
-
-        self._latency_last_log_ts = now_ts
+        """Delegates to widgets.spotify_visualizer.tick_pipeline."""
+        from widgets.spotify_visualizer.tick_pipeline import log_audio_latency_metrics
+        log_audio_latency_metrics(self, engine, now_ts, force_reason=force_reason)
 
     def _on_tick(self) -> None:
-        """Periodic UI tick - PERFORMANCE OPTIMIZED.
-
-        Consumes the latest bar frame from the TripleBuffer and smoothly
-        interpolates towards it for visual stability.
-        
-        FPS CAP: This method is called by both _bars_timer (60Hz) and
-        AnimationManager tick listener (60-165Hz). We apply the FPS cap
-        at the START to avoid doing any work when rate-limited.
-        """
-        _tick_entry_ts = time.time()
-        
-        # PERFORMANCE: Fast validity check without nested try/except
-        if not Shiboken.isValid(self):
-            if self._bars_timer is not None:
-                self._bars_timer.stop()
-                self._bars_timer = None
-            self._enabled = False
-            return
-
-        if not self._enabled:
-            return
-
-        now_ts = time.time()
-        parent = self.parent()
-        transition_ctx = self._get_transition_context(parent)
-        is_transition_active = transition_ctx.get("running", False)
-        was_transition_active = self._last_transition_running
-        if is_transition_active and not was_transition_active:
-            self._request_latency_probe("transition_start")
-        elif not is_transition_active and was_transition_active:
-            self._request_latency_probe("transition_end")
-        self._last_transition_running = is_transition_active
-        
-        # PERFORMANCE: Pause dedicated timer during transitions when AnimationManager is active
-        # This prevents timer contention that causes 50-100ms dt spikes
-        self._pause_timer_during_transition(is_transition_active)
-        
-        max_fps = self._resolve_max_fps(transition_ctx)
-        self._update_timer_interval(max_fps)
-
-        min_dt = 1.0 / max_fps if max_fps > 0.0 else 0.0
-        last = self._last_update_ts
-        dt_since_last = 0.0
-        if last >= 0.0:
-            dt_since_last = now_ts - last
-        if last >= 0.0 and dt_since_last < min_dt:
-            # Rate limited - skip this tick entirely
-            return
-        
-        self._last_update_ts = now_ts
-        # Cap dt to avoid logging spikes after system sleep/resume
-        # dt > 1s indicates system sleep, not a performance issue
-        _dt_spike_max_reasonable_ms: float = 1000.0  # 1 second
-        dt_for_spike_check = min(dt_since_last * 1000.0, _dt_spike_max_reasonable_ms)
-        if dt_since_last * 1000.0 >= self._dt_spike_threshold_ms and dt_for_spike_check < _dt_spike_max_reasonable_ms:
-            self._log_tick_spike(dt_since_last, transition_ctx)
-
-        # PERFORMANCE: Inline PERF metrics with gap filtering
-        if is_perf_metrics_enabled():
-            if self._perf_tick_last_ts is not None:
-                dt = now_ts - self._perf_tick_last_ts
-                # Skip metrics for gaps >100ms (startup, widget paused/hidden).
-                # Reset measurement window to avoid polluting duration/avg_fps
-                # with startup spikes that aren't representative of runtime perf.
-                if dt > 0.1:
-                    self._perf_tick_start_ts = now_ts
-                    self._perf_tick_min_dt = 0.0
-                    self._perf_tick_max_dt = 0.0
-                    self._perf_tick_frame_count = 0
-                elif dt > 0.0:
-                    if self._perf_tick_min_dt == 0.0 or dt < self._perf_tick_min_dt:
-                        self._perf_tick_min_dt = dt
-                    if dt > self._perf_tick_max_dt:
-                        self._perf_tick_max_dt = dt
-                    self._perf_tick_frame_count += 1
-            else:
-                self._perf_tick_start_ts = now_ts
-            self._perf_tick_last_ts = now_ts
-
-            # Periodic PERF snapshot
-            if self._perf_last_log_ts is None or (now_ts - self._perf_last_log_ts) >= 5.0:
-                self._log_perf_snapshot(reset=False)
-                self._perf_last_log_ts = now_ts
-
-        # PERFORMANCE: Get pre-smoothed bars from engine
-        # Smoothing is now done on COMPUTE pool, not UI thread
-        engine = self._engine
-        if engine is None:
-            engine = get_shared_spotify_beat_engine(self._bar_count)
-            self._engine = engine
-            # Sync smoothing settings to engine
-            engine.set_smoothing(self._smoothing)
-        
-        changed = False
-        if engine is not None:
-            # Trigger engine tick (schedules audio processing + smoothing on COMPUTE pool)
-            _engine_tick_start = time.time()
-            engine.tick()
-            _engine_tick_elapsed = (time.time() - _engine_tick_start) * 1000.0
-            if _engine_tick_elapsed > 20.0 and is_perf_metrics_enabled():
-                logger.warning("[PERF] [SPOTIFY_VIS] Slow engine.tick(): %.2fms", _engine_tick_elapsed)
-            
-            if self._waiting_for_fresh_engine_frame and self._pending_engine_generation >= 0:
-                try:
-                    latest_gen = engine.get_latest_generation_with_frame()
-                except Exception:
-                    latest_gen = -1
-                if latest_gen >= self._pending_engine_generation:
-                    self._waiting_for_fresh_engine_frame = False
-                    self._last_engine_generation_seen = latest_gen
-                    logger.debug(
-                        "[SPOTIFY_VIS] Engine delivered fresh frame (gen=%d) after reset",
-                        latest_gen,
-                    )
-
-            pending_reasons = list(self._latency_pending_probe)
-            self._latency_pending_probe.clear()
-            probe_reason = ",".join(pending_reasons) if pending_reasons else None
-            self._log_audio_latency_metrics(engine, now_ts, force_reason=probe_reason)
-            
-            # Get pre-smoothed bars from engine (smoothing done on COMPUTE pool)
-            smoothed = engine.get_smoothed_bars()
-
-            if self._waiting_for_fresh_engine_frame:
-                display_bars = self._display_bars
-                any_nonzero = False
-                for i in range(self._bar_count):
-                    val = smoothed[i] if i < len(smoothed) else 0.0
-                    display_bars[i] = val
-                    if val > 0.0:
-                        any_nonzero = True
-                if any_nonzero:
-                    # Safety: if we somehow see non-zero bars before engine generation updates, accept them.
-                    self._waiting_for_fresh_engine_frame = False
-                else:
-                    # Still waiting – skip downstream GPU push so overlay stays idle until fresh FFT arrives.
-                    return
-
-            # Always drive the bars from audio to avoid Spotify bridge flakiness.
-            self._fallback_logged = False
-
-            # Debug constant-bar mode
-            if _DEBUG_CONST_BARS > 0.0:
-                const_val = max(0.0, min(1.0, _DEBUG_CONST_BARS))
-                smoothed = [const_val] * self._bar_count
-            
-            # Check if bars changed
-            bar_count = self._bar_count
-            display_bars = self._display_bars
-            any_nonzero = False
-            for i in range(bar_count):
-                new_val = smoothed[i] if i < len(smoothed) else 0.0
-                old_val = display_bars[i] if i < len(display_bars) else 0.0
-                if abs(new_val - old_val) > 1e-4:
-                    changed = True
-                if new_val > 0.0:
-                    any_nonzero = True
-                display_bars[i] = new_val
-            
-            # Force update during decay (when bars are non-zero but Spotify stopped)
-            if any_nonzero and not self._spotify_playing:
-                changed = True
-
-        # --- Heartbeat transient detection (CPU-side) ---
-        # Detects bass energy spikes above a running average and produces a
-        # decay envelope (_heartbeat_intensity) that the shader uses to swell
-        # all sine line amplitudes.  Slider tunes sensitivity (lower gate).
-        if self._sine_heartbeat > 0.001 and self._engine is not None:
-            eb = self._engine.get_energy_bands()
-            bass_now = getattr(eb, 'bass', 0.0) if eb else 0.0
-            mid_now = getattr(eb, 'mid', 0.0) if eb else 0.0
-            high_now = getattr(eb, 'high', 0.0) if eb else 0.0
-
-            prev_hb_ts = self._heartbeat_last_ts
-            self._heartbeat_last_ts = now_ts
-            dt_hb = max(0.001, min(0.05, now_ts - prev_hb_ts)) if prev_hb_ts > 0.0 else 0.016
-
-            slider = max(0.0, min(1.0, self._sine_heartbeat))
-
-            # Fast EMA (~50ms) reacts to current beat, slow EMA (~400ms) is baseline.
-            alpha_fast = min(1.0, dt_hb / 0.05)
-            alpha_slow = min(1.0, dt_hb / 0.40)
-            self._heartbeat_fast_bass += (bass_now - self._heartbeat_fast_bass) * alpha_fast
-            self._heartbeat_avg_bass += (bass_now - self._heartbeat_avg_bass) * alpha_slow
-
-            fast = self._heartbeat_fast_bass
-            slow = self._heartbeat_avg_bass
-
-            # Spike ratio: how much fast exceeds slow (1.0 = equal, 2.0 = double).
-            spike_ratio = fast / max(0.02, slow)
-            # Gate: at slider=0.0 need 80% spike above average; at slider=1.0 need 20%.
-            trigger_gate = 1.0 + (0.80 - 0.60 * slider)
-            cooldown_elapsed = now_ts - self._heartbeat_last_trigger_ts
-            energy_mix = clamp(bass_now * 0.7 + mid_now * 0.2 + high_now * 0.1, 0.0, 1.0)
-            triggered = False
-
-            if (
-                spike_ratio > trigger_gate
-                and energy_mix > 0.04
-                and cooldown_elapsed >= 0.15
-            ):
-                triggered = True
-                self._heartbeat_last_trigger_ts = now_ts
-                # Punch scales with both how big the spike is and slider sensitivity.
-                punch = clamp(0.4 + (spike_ratio - trigger_gate) * 0.8 + energy_mix * 0.3, 0.0, 1.0)
-                # Instant rise — set intensity directly to punch (or keep if already higher).
-                self._heartbeat_intensity = max(self._heartbeat_intensity, punch)
-            else:
-                # Decay only when NOT triggered this frame.  600ms full decay.
-                decay_rate = 1.0 / 0.60
-                self._heartbeat_intensity = max(0.0, self._heartbeat_intensity - dt_hb * decay_rate)
-
-            self._heartbeat_fast_prev = fast
-
-            if is_viz_diagnostics_enabled() and (
-                triggered or (now_ts - self._heartbeat_last_log_ts) >= 0.5
-            ):
-                logger.debug(
-                    (
-                        "[SPOTIFY_VIS][SINE][HB] dt=%.3f bass=%.3f fast=%.3f avg=%.3f "
-                        "spike=%.3f gate=%.3f energy=%.3f slider=%.2f intensity=%.2f trigger=%s"
-                    ),
-                    dt_hb,
-                    bass_now,
-                    fast,
-                    slow,
-                    spike_ratio,
-                    trigger_gate,
-                    energy_mix,
-                    slider,
-                    self._heartbeat_intensity,
-                    triggered,
-                )
-                self._heartbeat_last_log_ts = now_ts
-
-        self._check_mode_teardown_ready(engine, now_ts)
-        if self._mode_teardown_block_until_ready and not self._mode_transition_ready:
-            return
-
-        # --- Bubble simulation tick (dispatched to COMPUTE thread pool) ---
-        if (
-            self._vis_mode_str == 'bubble'
-            and not self._bubble_compute_pending
-            and not self._mode_teardown_block_until_ready
-        ):
-            if self._thread_manager is not None:
-                self._bubble_compute_pending = True
-                # Snapshot energy bands and settings on UI thread (cheap reads)
-                # Use raw (unsmoothed) energy for pulse so kicks/drums produce
-                # sharp transients. Travel speed uses smoothed bands (smooth feel).
-                eb_raw = self._engine.get_raw_energy_bands() if self._engine else None
-                eb_smooth = self._engine.get_energy_bands() if self._engine else None
-                prev_ts = self._bubble_last_tick_ts
-                self._bubble_last_tick_ts = now_ts
-                dt_bubble = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
-                if not self._spotify_playing:
-                    dt_bubble = 0.0
-                eb_snap = {
-                    'bass': getattr(eb_raw, 'bass', 0.0) if eb_raw else 0.0,
-                    'mid': getattr(eb_raw, 'mid', 0.0) if eb_raw else 0.0,
-                    'high': getattr(eb_raw, 'high', 0.0) if eb_raw else 0.0,
-                    'overall': getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,
-                    'smooth_mid': getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
-                    'smooth_high': getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0,
-                }
-                sim_settings = {
-                    "bubble_big_count": self._bubble_big_count,
-                    "bubble_small_count": self._bubble_small_count,
-                    "bubble_surface_reach": self._bubble_surface_reach,
-                    "bubble_stream_direction": self._bubble_stream_direction,
-                    "bubble_stream_constant_speed": self._bubble_stream_constant_speed,
-                    "bubble_stream_speed_cap": self._bubble_stream_speed_cap,
-                    "bubble_stream_reactivity": self._bubble_stream_reactivity,
-                    "bubble_rotation_amount": self._bubble_rotation_amount,
-                    "bubble_drift_amount": self._bubble_drift_amount,
-                    "bubble_drift_speed": self._bubble_drift_speed,
-                    "bubble_drift_frequency": self._bubble_drift_frequency,
-                    "bubble_drift_direction": self._bubble_drift_direction,
-                    "bubble_big_size_max": self._bubble_big_size_max,
-                    "bubble_small_size_max": self._bubble_small_size_max,
-                    "bubble_trail_strength": self._bubble_trail_strength,
-                }
-                pulse_params = {
-                    'bass': eb_snap['bass'],
-                    'mid_high': (eb_snap['mid'] + eb_snap['high']) * 0.5,
-                    'big_bass_pulse': self._bubble_big_bass_pulse,
-                    'small_freq_pulse': self._bubble_small_freq_pulse,
-                }
-                self._thread_manager.submit_compute_task(
-                    self._bubble_compute_worker,
-                    dt_bubble, eb_snap, sim_settings, pulse_params,
-                    callback=self._bubble_compute_done,
-                    task_id=f"bubble_sim_{id(self)}",
-                )
-
-        # Always push at least one frame so the visualiser baseline is
-        # visible as soon as the widget fades in, even before audio arrives.
-        first_frame = not self._has_pushed_first_frame
-
-        used_gpu = False
-        need_card_update = False
-        fade_changed = False
-        fade = 1.0
-        # When DisplayWidget exposes a GPU overlay path, prefer
-        # that and disable CPU bar drawing once it succeeds.
-        if parent is not None and hasattr(parent, "push_spotify_visualizer_frame"):
-            try:
-                current_geom = self.geometry()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                current_geom = None
-            last_geom = self._last_gpu_geom
-            geom_changed = last_geom is None or (current_geom is not None and current_geom != last_geom)
-
-            fade = self._get_gpu_fade_factor(now_ts)
-            # Apply mode-transition crossfade (1.0 when idle, 0→1 during switch)
-            transition_fade = self._mode_transition_fade_factor(now_ts)
-            fade *= transition_fade
-            prev_fade = self._last_gpu_fade_sent
-            self._last_gpu_fade_sent = fade
-            if prev_fade < 0.0 or abs(fade - prev_fade) >= 0.01:
-                fade_changed = True
-                need_card_update = True
-
-            transitioning = self._mode_transition_phase != 0
-            # Animated modes must push every tick because their visuals change
-            # continuously (bubble sim, waveform, starfield travel, blob pulse,
-            # rainbow hue rotation, etc.) independent of bar data.
-            # Spectrum only needs pushes when bars change, UNLESS rainbow is on.
-            animated_mode = (self._vis_mode_str != 'spectrum') or getattr(self, '_rainbow_enabled', False)
-            should_push = changed or fade_changed or first_frame or geom_changed or transitioning or animated_mode
-            if should_push:
-                _gpu_push_start = time.time()
-                mode_str = self._vis_mode_str
-
-                from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-                extra = build_gpu_push_extra_kwargs(self, mode_str, self._engine)
-
-                if (
-                    mode_str == 'sine_wave'
-                    and is_viz_diagnostics_enabled()
-                ):
-                    crawl_now = time.time()
-                    if crawl_now - self._crawl_last_log_ts >= 0.75:
-                        eb = extra.get('energy_bands')
-                        mid_val = float(getattr(eb, 'mid', 0.0)) if eb is not None else 0.0
-                        high_val = float(getattr(eb, 'high', 0.0)) if eb is not None else 0.0
-                        crawl_drive = max(0.0, min(1.2, mid_val * 0.65 + high_val * 0.35))
-                        logger.debug(
-                            (
-                                "[SPOTIFY_VIS][SINE][CRAWL] slider=%.2f mid=%.3f "
-                                "high=%.3f drive=%.3f playing=%s"
-                            ),
-                            float(getattr(self, '_sine_crawl_amount', 0.0)),
-                            mid_val,
-                            high_val,
-                            crawl_drive,
-                            self._spotify_playing,
-                        )
-                        self._crawl_last_log_ts = crawl_now
-
-                border_width_px = float(self._border_width)
-
-                used_gpu = parent.push_spotify_visualizer_frame(
-                    bars=list(self._display_bars),
-                    bar_count=self._bar_count,
-                    segments=self._dynamic_bar_segments(),
-                    fill_color=self._bar_fill_color,
-                    border_color=self._bar_border_color,
-                    fade=fade,
-                    playing=self._spotify_playing,
-                    ghosting_enabled=self._ghosting_enabled,
-                    ghost_alpha=self._ghost_alpha,
-                    ghost_decay=self._ghost_decay_rate,
-                    vis_mode=mode_str,
-                    single_piece=self._spectrum_single_piece,
-                    slanted=(self._spectrum_bar_profile == 'slanted'),
-                    border_radius=self._spectrum_border_radius if self._spectrum_bar_profile == 'curved' else 0.0,
-                    border_width_px=border_width_px,
-                    **extra,
-                )
-                _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
-                if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
-                    logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", _gpu_push_elapsed)
-
-            if used_gpu:
-                self._has_pushed_first_frame = True
-                self._cpu_bars_enabled = False
-                try:
-                    if current_geom is None:
-                        current_geom = self.geometry()
-                    self._last_gpu_geom = QRect(current_geom)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                    self._last_gpu_geom = None
-                # Card/background/shadow still repaint via stylesheet
-                # Only request QWidget repaint when fade changes
-                if need_card_update:
-                    self.update()
-                self._on_first_frame_after_cold_start()
-            else:
-                # Fallback: when there is no DisplayWidget/GPU bridge
-                has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
-                if not has_gpu_parent or self._software_visualizer_enabled:
-                    self._cpu_bars_enabled = True
-                    self.update()
-                    self._has_pushed_first_frame = True
-                    self._on_first_frame_after_cold_start()
-
-        # PERF: Log slow ticks to identify blocking operations
-        _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
-        if _tick_elapsed > 50.0 and is_perf_metrics_enabled():
-            logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
+        """Delegates to widgets.spotify_visualizer.tick_pipeline."""
+        from widgets.spotify_visualizer.tick_pipeline import on_tick
+        on_tick(self)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         super().paintEvent(event)

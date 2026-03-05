@@ -18,7 +18,7 @@ import random
 from PySide6.QtCore import QTimer, QPoint
 from PySide6.QtWidgets import QWidget
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 
@@ -392,6 +392,7 @@ class PixelShiftManager:
         self._widgets = valid_widgets
         
         offset_point = QPoint(self._offset_x, self._offset_y)
+        _perf = is_perf_metrics_enabled()
         
         for widget in self._widgets:
             widget_id = id(widget)
@@ -400,12 +401,23 @@ class PixelShiftManager:
                 # Prefer apply_pixel_shift() for BaseOverlayWidget subclasses
                 # This integrates the offset into their position calculation
                 if hasattr(widget, 'apply_pixel_shift'):
+                    if _perf:
+                        logger.info(
+                            "[PERF][PIXEL_SHIFT] applying offset=(%d,%d) to %s via apply_pixel_shift",
+                            self._offset_x, self._offset_y, widget.__class__.__name__,
+                        )
                     widget.apply_pixel_shift(offset_point)
                 elif widget_id in self._original_positions:
                     # Fallback: direct move for non-overlay widgets
                     orig = self._original_positions[widget_id]
                     new_x = orig.x() + self._offset_x
                     new_y = orig.y() + self._offset_y
+                    
+                    if _perf:
+                        logger.info(
+                            "[PERF][PIXEL_SHIFT] direct move %s orig=(%d,%d) new=(%d,%d)",
+                            widget.__class__.__name__, orig.x(), orig.y(), new_x, new_y,
+                        )
                     
                     # Block signals during move to prevent flicker from layout updates
                     was_blocked = widget.signalsBlocked()

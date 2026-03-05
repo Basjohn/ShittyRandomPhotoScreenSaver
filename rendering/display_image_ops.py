@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import sys
 import time
-from typing import List, Optional, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 import weakref
 
@@ -424,12 +424,13 @@ def push_spotify_visualizer_frame(
                     )
                 except Exception:
                     logger.debug("[SPOTIFY_VIS] Failed to register SpotifyBarsGLOverlay", exc_info=True)
-            pixel_shift_manager = getattr(widget, "_pixel_shift_manager", None)
-            if pixel_shift_manager is not None:
-                try:
-                    pixel_shift_manager.register_widget(overlay)
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to register GL overlay with PixelShiftManager", exc_info=True)
+            # NOTE: Do NOT register the GL overlay with PixelShiftManager.
+            # The overlay already tracks the visualizer card's geometry via
+            # set_state(rect=vis.geometry()) every tick.  Registering it
+            # causes double-shifting: PSM moves the overlay, then set_state()
+            # snaps it to the card's already-shifted position, then PSM
+            # shifts it again → the overlay drifts past the card and briefly
+            # flashes over neighbouring widgets (e.g. weather).
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to initialize SpotifyBarsGLOverlay", exc_info=True)
             widget._widget._spotify_bars_overlay = None

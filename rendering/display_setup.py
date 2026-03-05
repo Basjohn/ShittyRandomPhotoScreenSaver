@@ -425,10 +425,18 @@ def setup_pixel_shift(widget) -> None:
     
     widget._pixel_shift_manager.set_shifts_per_minute(pixel_shift_rate)
     
-    # Register all overlay widgets
+    # Register all overlay widgets.
+    # NOTE: spotify_visualizer_widget is excluded because it is positioned
+    # relative to the media card via position_spotify_visualizer().  Since
+    # the media card is a BaseOverlayWidget whose pixel shift is integrated
+    # properly, the visualizer card already follows the shifted media
+    # geometry.  Registering it with PSM causes double-shifting: PSM
+    # direct-moves the card, and the GL overlay (which reads vis.geometry()
+    # every tick) inherits that double offset, briefly flashing visualizer
+    # content over neighbouring widgets like weather.
     for attr_name in (
         "clock_widget", "clock2_widget", "clock3_widget",
-        "weather_widget", "media_widget", "spotify_visualizer_widget",
+        "weather_widget", "media_widget",
         "reddit_widget", "reddit2_widget",
     ):
         child = getattr(widget, attr_name, None)

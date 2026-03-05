@@ -328,9 +328,13 @@ void main() {
             float ghost_span = max(1.0, peak_height - active_height);
             float t = clamp(ghost_dist / ghost_span, 0.0, 1.0);
             float ghost_factor = mix(1.0, 0.15, t);
-            vec4 ghost = border;
-            ghost.a *= ghost_alpha * ghost_factor;
-            sp_color = ghost;
+            vec4 ghost_base = border;
+            // Per-bar rainbow: ghost inherits bar's unique hue
+            if (u_rainbow_per_bar == 1 && u_rainbow_hue_offset > 0.001) {
+                ghost_base = apply_spectrum_rainbow(ghost_base, bar_index);
+            }
+            ghost_base.a *= ghost_alpha * ghost_factor;
+            sp_color = ghost_base;
             sp_is_border = true;
         } else {
             // Border on left/right edges and top edge of the bar
@@ -510,6 +514,10 @@ void main() {
         }
 
         vec4 ghost = border;
+        // Per-bar rainbow: ghost inherits bar's unique hue
+        if (u_rainbow_per_bar == 1 && u_rainbow_hue_offset > 0.001) {
+            ghost = apply_spectrum_rainbow(ghost, bar_index);
+        }
         ghost.a *= ghost_alpha * ghost_factor;
         out_color = ghost;
         seg_is_border = true;

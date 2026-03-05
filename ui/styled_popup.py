@@ -382,7 +382,7 @@ class ColorSwatchButton(QPushButton):
     color_changed = Signal(QColor)
 
     _MIN_WIDTH = 78
-    _MIN_HEIGHT = 26
+    _MIN_HEIGHT = 28
 
     def __init__(
         self,
@@ -408,9 +408,9 @@ class ColorSwatchButton(QPushButton):
         self.setStyleSheet("border: none; background: transparent;")
 
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(12)
-        shadow.setOffset(0, 3)
-        shadow.setColor(QColor(0, 0, 0, 110))
+        shadow.setBlurRadius(18)
+        shadow.setOffset(2.5, 5.0)
+        shadow.setColor(QColor(0, 0, 0, 170))
         self.setGraphicsEffect(shadow)
 
         if self._auto_picker:

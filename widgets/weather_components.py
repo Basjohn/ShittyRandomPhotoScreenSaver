@@ -311,7 +311,7 @@ class WeatherDetailRow(QWidget):
         segment.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout = QHBoxLayout(segment)
         layout.setContentsMargins(0, 1, 0, 1)
-        layout.setSpacing(4)
+        layout.setSpacing(2)
         layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         icon_label = WeatherDetailIcon(self._icon_size, segment)

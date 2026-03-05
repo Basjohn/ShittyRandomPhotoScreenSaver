@@ -889,14 +889,10 @@ class WidgetManager:
                     height,
                 )
             
-            # Keep pixel-shift drift baseline aligned with the media card so the
-            # GL overlay inherits the same reference frame as the QWidget card.
-            pixel_shift_manager = getattr(self._parent, "_pixel_shift_manager", None)
-            if pixel_shift_manager is not None and hasattr(pixel_shift_manager, "update_original_position"):
-                try:
-                    pixel_shift_manager.update_original_position(vis_widget)
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            # NOTE: The visualizer card and its GL overlay are intentionally
+            # NOT registered with PixelShiftManager.  The card is positioned
+            # relative to the media widget (which handles pixel shift via
+            # BaseOverlayWidget), so it inherits the shift automatically.
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 

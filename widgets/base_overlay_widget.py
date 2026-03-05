@@ -495,10 +495,34 @@ class BaseOverlayWidget(QLabel):
             logger.debug("[OVERLAY] Exception suppressed: %s", e)
             new_geo = QRect()
 
-        try:
-            parent.update(old_geo.united(new_geo))
-        except Exception as e:
-            logger.debug("[OVERLAY] Exception suppressed: %s", e)
+        # Pixel shift drift logging — only when perf metrics are active
+        if is_perf_metrics_enabled() and old_geo != new_geo:
+            ps = self._pixel_shift_offset
+            logger.info(
+                "[PERF][PIXEL_SHIFT] %s move old=(%d,%d,%d,%d) new=(%d,%d,%d,%d) "
+                "ps_offset=(%d,%d) parent_update_rect=(%d,%d,%d,%d)",
+                self.__class__.__name__,
+                old_geo.x(), old_geo.y(), old_geo.width(), old_geo.height(),
+                new_geo.x(), new_geo.y(), new_geo.width(), new_geo.height(),
+                ps.x(), ps.y(),
+                old_geo.united(new_geo).x(), old_geo.united(new_geo).y(),
+                old_geo.united(new_geo).width(), old_geo.united(new_geo).height(),
+            )
+
+        # Skip parent.update() for small pixel-shift moves (<=3px per axis).
+        # For these tiny shifts, move() already triggers the widget's own
+        # repaint and the 1-2px gap left behind is filled by the next GL
+        # compositor frame. Calling parent.update() on the union rect forces
+        # a synchronous parent repaint that can flash the background through
+        # the old position before the compositor fills it in.
+        dx = abs(new_geo.x() - old_geo.x())
+        dy = abs(new_geo.y() - old_geo.y())
+        size_changed = (new_geo.width() != old_geo.width() or new_geo.height() != old_geo.height())
+        if size_changed or dx > 3 or dy > 3:
+            try:
+                parent.update(old_geo.united(new_geo))
+            except Exception as e:
+                logger.debug("[OVERLAY] Exception suppressed: %s", e)
     
     # -------------------------------------------------------------------------
     # Shadow Management

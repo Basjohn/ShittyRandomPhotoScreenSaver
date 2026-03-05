@@ -23,7 +23,6 @@ from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
     SUBSECTION_DIVIDER_STYLE,
     STATUS_LABEL_STYLE,
-    INFO_LABEL_STYLE,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.settings_binding import (
@@ -149,14 +148,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _media_ctrl_layout = QVBoxLayout(tab._media_controls_container)
     _media_ctrl_layout.setContentsMargins(0, 0, 0, 0)
     _media_ctrl_layout.setSpacing(4)
-
-    media_info = QLabel(
-        "This widget is display-only and non-interactive. Transport controls will "
-        "only be active when explicitly enabled via input settings (hard-exit / Ctrl mode)."
-    )
-    media_info.setWordWrap(True)
-    media_info.setStyleSheet(INFO_LABEL_STYLE)
-    _media_ctrl_layout.addWidget(media_info)
 
     media_pos_row = _aligned_row(_media_ctrl_layout, "Position:")
     tab.media_position = StyledComboBox()

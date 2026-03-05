@@ -273,6 +273,7 @@ SECTION_HEADING_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
     "font-size: 14px;"
+    "letter-spacing: 0.4px;"
     "color: #ffffff;"
 )
 
@@ -280,6 +281,7 @@ SECTION_HEADING_STYLE_DISABLED = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
     "font-size: 14px;"
+    "letter-spacing: 0.4px;"
     "color: #666666;"
 )
 
@@ -292,22 +294,32 @@ NAV_TAB_FONT_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
     "font-size: 13px;"
+    "letter-spacing: 0.3px;"
 )
 
 NAV_TAB_FONT_STYLE_ACTIVE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 700;"
     "font-size: 13px;"
+    "letter-spacing: 0.3px;"
 )
 
 STATUS_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
     "font-size: 11px;"
+    "letter-spacing: 0.3px;"
 )
 
 INFO_LABEL_STYLE = (
     "color: #aaaaaa;"
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 500;"
+    "font-size: 11px;"
+)
+
+ADV_HELPER_LABEL_STYLE = (
+    "color: rgba(220, 220, 220, 0.6);"
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"

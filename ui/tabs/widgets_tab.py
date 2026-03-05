@@ -1029,13 +1029,60 @@ class WidgetsTab(QWidget):
         if prev_mode != mode:
             self.restore_scroll_position(mode)
 
+    _RAINBOW_COLORS = [
+        "#FF0000", "#FF7F00", "#FFFF00", "#00FF00",
+        "#0000FF", "#4B0082", "#8F00FF",
+    ]
+    _RAINBOW_GLOWS = [
+        "rgba(255,0,0,0.45)", "rgba(255,127,0,0.40)", "rgba(255,255,0,0.35)",
+        "rgba(0,255,0,0.40)", "rgba(0,0,255,0.45)", "rgba(75,0,130,0.40)",
+        "rgba(143,0,255,0.45)",
+    ]
+
     def _update_rainbow_visibility(self) -> None:
-        """Show/hide rainbow speed slider based on checkbox state."""
+        """Show/hide rainbow speed slider and apply rainbow text easter egg."""
         try:
             enabled = self.rainbow_enabled.isChecked()
             container = getattr(self, '_rainbow_speed_container', None)
             if container is not None:
                 container.setVisible(enabled)
+            cb = self.rainbow_enabled
+            plain = "Taste The Rainbow"
+            if enabled:
+                spans = []
+                for i, ch in enumerate(plain):
+                    c = self._RAINBOW_COLORS[i % len(self._RAINBOW_COLORS)]
+                    g = self._RAINBOW_GLOWS[i % len(self._RAINBOW_GLOWS)]
+                    shadow = f"text-shadow: 0 0 6px {g}, 0 0 2px {g};"
+                    spans.append(
+                        f'<span style="color:{c}; {shadow}">{ch}</span>'
+                    )
+                cb.setText(plain)
+                cb.setStyleSheet(
+                    cb.styleSheet().split("/* rainbow */")[0]
+                    + "/* rainbow */ QCheckBox { color: transparent; }"
+                )
+                lbl = getattr(self, '_rainbow_label', None)
+                if lbl is None:
+                    from PySide6.QtWidgets import QLabel
+                    lbl = QLabel(cb)
+                    lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+                    lbl.setTextFormat(Qt.TextFormat.RichText)
+                    self._rainbow_label = lbl
+                lbl.setText("".join(spans))
+                lbl.setStyleSheet("background: transparent; padding-left: 34px;")
+                lbl.move(0, 0)
+                # Ensure label is wide enough — sizeHint can be wider than cb
+                lbl.setMinimumWidth(cb.sizeHint().width())
+                lbl.resize(max(cb.width(), cb.sizeHint().width()), cb.height())
+                lbl.show()
+            else:
+                cb.setText(plain)
+                base = cb.styleSheet().split("/* rainbow */")[0]
+                cb.setStyleSheet(base)
+                lbl = getattr(self, '_rainbow_label', None)
+                if lbl is not None:
+                    lbl.hide()
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 

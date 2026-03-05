@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QSlider, QWidget, QToolButton,
 )
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
 from PySide6.QtCore import Qt
 from ui.widgets import StyledComboBox
 
@@ -76,7 +77,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._sine_adv_helper = QLabel("Advanced sliders still apply when hidden.")
     tab._sine_adv_helper.setProperty("class", "adv-helper")
-    tab._sine_adv_helper.setStyleSheet("color: rgba(220,220,220,0.6); font-size: 11px;")
+    tab._sine_adv_helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
     _adv_host.addWidget(tab._sine_adv_helper)
 
     tab._sine_advanced = QWidget()
