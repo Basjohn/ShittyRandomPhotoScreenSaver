@@ -24,9 +24,9 @@ from ui.tabs.shared_styles import (
     CIRCLE_CHECKBOX_STYLE,
     SLIDER_STYLE,
     SPINBOX_STYLE,
-    SUBSECTION_DIVIDER_STYLE,
     SECTION_HEADING_STYLE,
     NoWheelSlider,
+    style_group_box,
 )
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
 from ui.widgets import StyledComboBox
@@ -98,7 +98,7 @@ class TransitionsTab(QWidget):
             return content
 
         def _style_group_box(box: QGroupBox) -> None:
-            box.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+            style_group_box(box)
 
         # Create content widget
         content = QWidget()
@@ -393,7 +393,7 @@ class TransitionsTab(QWidget):
 
         particle_mode_row = _aligned_row(particle_layout, "Mode:")
         self.particle_mode_combo = StyledComboBox(size_variant="compact")
-        self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge"])
+        self.particle_mode_combo.addItems(["Directional", "Swirl", "Converge", "Random"])
         self.particle_mode_combo.currentIndexChanged.connect(self._on_particle_mode_changed)
         self.particle_mode_combo.currentIndexChanged.connect(self._save_settings)
         particle_mode_row.addWidget(self.particle_mode_combo)
@@ -1066,14 +1066,15 @@ class TransitionsTab(QWidget):
     def _update_particle_mode_visibility(self) -> None:
         """Update visibility of particle mode-specific settings."""
         mode = self.particle_mode_combo.currentText()
+        is_random = mode == "Random"
         is_directional = mode == "Directional"
         is_swirl = mode == "Swirl"
         is_converge = mode == "Converge"
         # Direction only applies to Directional/Converge modes (disabled for Random - auto-selected)
-        self.particle_direction_combo.setEnabled(is_directional or is_converge)
+        self.particle_direction_combo.setEnabled((is_directional or is_converge) and not is_random)
         # Swirl settings only apply to Swirl mode (disabled for Random - auto-selected)
-        self.particle_swirl_turns_spin.setEnabled(is_swirl)
-        self.particle_swirl_order_combo.setEnabled(is_swirl)
+        self.particle_swirl_turns_spin.setEnabled(is_swirl and not is_random)
+        self.particle_swirl_order_combo.setEnabled(is_swirl and not is_random)
 
     def _apply_burn_glow_color_btn(self) -> None:
         """Update the burn glow colour button background to reflect the current colour."""

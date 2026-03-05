@@ -20,9 +20,9 @@ from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
-    SUBSECTION_DIVIDER_STYLE,
     STATUS_LABEL_STYLE,
     INFO_LABEL_STYLE,
+    style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
@@ -57,7 +57,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         return content
 
     imgur_group = QGroupBox("Imgur Widget")
-    imgur_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+    style_group_box(imgur_group)
     imgur_layout = QVBoxLayout(imgur_group)
 
     tab.imgur_enabled = QCheckBox("Enable Imgur Widget")

@@ -1,10 +1,58 @@
 """
 Shared pytest fixtures for screensaver tests.
+
+Chunked test execution:
+  When running the full suite (``pytest tests/``), tests are automatically
+  split into chunks to avoid memory/timeout issues.  The chunking is
+  transparent — each chunk runs in its own subprocess so GL state, leaked
+  Qt singletons, and memory are cleanly isolated.
+
+  Manual chunk selection::
+
+      pytest tests/ --chunk 1 --total-chunks 4   # run only chunk 1 of 4
+
+  Or use the helper script::
+
+      python tests/run_chunked.py          # auto-detect chunk count
+      python tests/run_chunked.py --chunks 6
 """
 import pytest
 import sys
 import uuid
 from PySide6.QtWidgets import QApplication
+
+
+# ---------------------------------------------------------------------------
+# Chunked-suite support
+# ---------------------------------------------------------------------------
+
+def pytest_addoption(parser):
+    parser.addoption("--chunk", type=int, default=None,
+                     help="1-indexed chunk number to run (requires --total-chunks)")
+    parser.addoption("--total-chunks", type=int, default=None,
+                     help="Total number of chunks the suite is split into")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Filter collected tests to only those in the requested chunk."""
+    chunk = config.getoption("--chunk")
+    total = config.getoption("--total-chunks")
+    if chunk is None or total is None:
+        return
+    chunk = max(1, min(chunk, total))
+    # Stable sort by nodeid so chunks are deterministic
+    items.sort(key=lambda item: item.nodeid)
+    per_chunk = len(items) // total
+    remainder = len(items) % total
+    start = 0
+    for i in range(1, chunk):
+        start += per_chunk + (1 if i <= remainder else 0)
+    size = per_chunk + (1 if chunk <= remainder else 0)
+    selected = items[start:start + size]
+    deselected = [it for it in items if it not in selected]
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+    items[:] = selected
 
 
 @pytest.fixture(scope='session')

@@ -21,8 +21,8 @@ from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
-    SUBSECTION_DIVIDER_STYLE,
     STATUS_LABEL_STYLE,
+    style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.settings_binding import (
@@ -131,7 +131,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # --- Media (Spotify) Widget Group ---
     media_group = QGroupBox("Spotify Widget")
-    media_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+    style_group_box(media_group)
     media_layout = QVBoxLayout(media_group)
 
     tab.media_enabled = QCheckBox("Enable Spotify Widget")
@@ -374,7 +374,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # --- Spotify Beat Visualizer Group ---
     spotify_vis_group = QGroupBox("Spotify Beat Visualizer")
-    spotify_vis_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+    style_group_box(spotify_vis_group)
     spotify_vis_layout = QVBoxLayout(spotify_vis_group)
 
     spotify_vis_enable_row = QHBoxLayout()

@@ -19,7 +19,7 @@ from ui.tabs.shared_styles import (
     SLIDER_STYLE,
     NoWheelSlider,
     SECTION_HEADING_STYLE,
-    SUBSECTION_DIVIDER_STYLE,
+    style_group_box,
 )
 
 logger = get_logger(__name__)
@@ -112,7 +112,7 @@ class AccessibilityTab(QWidget):
     def _create_dimming_group(self) -> QGroupBox:
         """Create the Background Dimming settings group."""
         group = QGroupBox("Background Dimming")
-        group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+        style_group_box(group)
         layout = QVBoxLayout(group)
         layout.setSpacing(12)
         
@@ -164,7 +164,7 @@ class AccessibilityTab(QWidget):
     def _create_pixel_shift_group(self) -> QGroupBox:
         """Create the Widget Pixel Shift settings group."""
         group = QGroupBox("Widget Pixel Shift (Burn-in Prevention)")
-        group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+        style_group_box(group)
         layout = QVBoxLayout(group)
         layout.setSpacing(12)
         

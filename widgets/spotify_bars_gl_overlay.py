@@ -140,6 +140,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_tendency: float = 0.0
         self._blob_smoothed_energy: float = 0.0
         self._blob_peak_energy: float = 0.0
+        self._blob_peak_bass: float = 0.0
+        self._blob_peak_mid: float = 0.0
+        self._blob_peak_high: float = 0.0
+        self._blob_peak_overall: float = 0.0
         self._blob_seed_pending: bool = False
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
@@ -306,6 +310,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         else:
             self._blob_smoothed_energy = 0.0
         self._blob_peak_energy = 0.0
+        self._blob_peak_bass = 0.0
+        self._blob_peak_mid = 0.0
+        self._blob_peak_high = 0.0
+        self._blob_peak_overall = 0.0
         self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_filtered = (0.0, 0.0, 0.0)
         self._blob_stage_progress_ready = False
@@ -491,21 +499,31 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # Fast rise (~50ms tau), slow decay (~300ms tau)
                     alpha = min(1.0, dt / 0.05) if raw_e > prev else min(1.0, dt / 0.30)
                     self._blob_smoothed_energy = prev + (raw_e - prev) * alpha
-                    # Ghost peak: separate slow-decay envelope that holds the
-                    # maximum energy for a visible duration. The ghost ring in
-                    # the shader needs peak >> smoothed to produce a visible
-                    # expansion. We use a very slow exponential decay (tau ~1-3s
-                    # depending on ghost_decay slider) so the peak lingers well
-                    # above the current smoothed energy after beats.
+                    # Ghost peak: per-band slow-decay envelope so the shader
+                    # can reconstruct the blob's full deformed SDF shape at
+                    # peak energy (tendrils, warping, stretch all captured).
+                    raw_bass = getattr(energy_bands, 'bass', 0.0)
+                    raw_mid = getattr(energy_bands, 'mid', 0.0)
+                    raw_high = getattr(energy_bands, 'high', 0.0)
                     if raw_e > self._blob_peak_energy:
                         self._blob_peak_energy = raw_e
-                    elif self._ghosting_enabled:
-                        # ghost_decay slider: 0.1 (slow/long) to 1.0 (fast/short)
-                        # Map to decay tau: 3.0s at min to 0.5s at max
+                    if raw_bass > self._blob_peak_bass:
+                        self._blob_peak_bass = raw_bass
+                    if raw_mid > self._blob_peak_mid:
+                        self._blob_peak_mid = raw_mid
+                    if raw_high > self._blob_peak_high:
+                        self._blob_peak_high = raw_high
+                    if raw_e > self._blob_peak_overall:
+                        self._blob_peak_overall = raw_e
+                    if self._ghosting_enabled:
                         decay_slider = max(0.1, min(1.0, self._peak_decay_per_sec / 2.0))
                         tau = 3.0 - decay_slider * 2.5  # 0.5s to 3.0s
-                        decay_alpha = min(1.0, dt / max(tau, 0.1))
-                        self._blob_peak_energy = self._blob_peak_energy + (self._blob_smoothed_energy - self._blob_peak_energy) * decay_alpha
+                        da = min(1.0, dt / max(tau, 0.1))
+                        self._blob_peak_energy += (self._blob_smoothed_energy - self._blob_peak_energy) * da
+                        self._blob_peak_bass += (raw_bass - self._blob_peak_bass) * da
+                        self._blob_peak_mid += (raw_mid - self._blob_peak_mid) * da
+                        self._blob_peak_high += (raw_high - self._blob_peak_high) * da
+                        self._blob_peak_overall += (raw_e - self._blob_peak_overall) * da
                 # Oscilloscope / Sine Wave: smooth per-band energy for glow anti-flicker
                 if self._vis_mode in ('oscilloscope', 'sine_wave') and energy_bands is not None:
                     for attr, band in (
@@ -1121,6 +1139,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
                     "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_peak_energy",
+                    "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
                     "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
                     "u_blob_stretch_tendency",
                     "u_blob_stage_progress_override",

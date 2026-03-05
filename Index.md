@@ -26,6 +26,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Tool | Purpose |
 |------|---------|
 | tools/regen_qrc.py | Regenerates `ui/resources/icons_rc.py` from `icons.qrc`, wraps `pyside6-rcc`, shows success popup |
+| tests/run_chunked.py | Chunked test runner — splits full suite into N subprocess chunks (default 4) for memory/timeout isolation |
 
 ## Entry Points
 
@@ -283,7 +284,7 @@ Extracted from the monolithic `_render_with_shader` method in `spotify_bars_gl_o
 | Oscilloscope | renderers/oscilloscope.py | Waveform, ghost waveform, shared line/glow, smoothed energy bands |
 | Sine Wave | renderers/sine_wave.py | Shared line/glow, heartbeat, density, displacement, crawl, travel |
 | Starfield | renderers/starfield.py | Star density, travel, nebula tints, energy bands |
-| Blob | renderers/blob.py | Ghost alpha, blob colours, pulse, glow, smoothed/peak energy, stage, wobble |
+| Blob | renderers/blob.py | Ghost alpha, blob colours, pulse, glow, smoothed/peak energy, per-band peak (bass/mid/high/overall) for SDF ghost shape, stage, wobble |
 | Helix | renderers/helix.py | Turns, speed, glow, fill/border, energy bands |
 | Bubble | renderers/bubble.py | Bubble arrays (pos/extra/trail), trail strength/opacity, specular/gradient dirs, colours |
 
@@ -295,7 +296,7 @@ Extracted from the monolithic `_render_with_shader` method in `spotify_bars_gl_o
 | Oscilloscope | widgets/spotify_visualizer/shaders/oscilloscope.frag | u_waveform[256], u_prev_waveform[256], u_osc_ghost_alpha, u_line_color, u_glow_*, u_reactive_glow, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_osc_vertical_shift, u_rainbow_enabled, u_rainbow_hue_offset | Pure audio waveform with Catmull-Rom spline, per-band energy, equalized multi-line glow (3 lines: bass/mid/high), ghost trail (previous waveform overlay), rainbow hue cycling, vertical shift slider (-50 to 200). Feb 2026 parity: uses the same premultiplied glow budget/composite helper as sine_wave so overlapping glows stay sub-1.0 and shader compile failures cannot dump to Spectrum fallback. |
 | Sine Wave | widgets/spotify_visualizer/shaders/sine_wave.frag | u_line_color, u_glow_*, u_reactive_glow, u_sensitivity, u_osc_speed, u_osc_sine_travel, u_sine_travel_line2, u_sine_travel_line3, u_card_adaptation, u_playing, u_line_count, u_line{2,3}_{color,glow_color}, u_bass/mid/high_energy, u_wave_effect, u_micro_wobble, u_osc_vertical_shift, u_heartbeat, u_heartbeat_intensity, u_sine_density, u_sine_displacement, u_rainbow_enabled, u_rainbow_hue_offset, u_width_reaction | Sine wave visualizer: audio-reactive amplitude, card adaptation, multi-line (up to 3) with tight phase offsets. **Density**: two-piece linear mapping (0.25–3.0 → 0.65–8.5 cycles) + thickness taper at high densities. **Heartbeat**: CPU spike-ratio detection (600ms decay) + shader +120% amplitude with cubic ease-out swell. **Displacement**: smooth bass-reactive offset with slowly rotating angle (replaces old chaotic randomDirection jitter), per-line variation (1.0x/0.85x/1.15x phase, 1.0x/1.1x/1.25x Y). Wave effect, micro wobble, crawl, rainbow hue cycling (line colours exempt), vertical shift, width reaction. Glow uses per-line premultiplied budget. |
 | Starfield | widgets/spotify_visualizer/shaders/starfield.frag | u_star_density, u_travel_speed, u_star_reactivity, u_travel_time, u_nebula_tint{1,2} | Point-star starfield with nebula background, CPU-accumulated monotonic travel (dev-gated) |
-| Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy, u_blob_peak_energy, u_ghost_alpha, u_blob_glow_reactivity, u_blob_glow_max_size, u_blob_reactive_deformation (0-3.0), u_blob_constant_wobble, u_blob_reactive_wobble | 2D SDF organic metaball with separated constant wobble and reactive wobble, vocal wobble, dip contraction, CPU-smoothed glow, quadratic reactive deformation (0-3.0). **Ghosting**: peak-energy ghost ring (bug fixed: blob override now runs AFTER shared ghost assignment). **Glow**: reactivity (0-200%) and max size (10-300%) sliders under Advanced bucket. Taste The Rainbow shifts fill/glow/outline colours, edge highlight exempt. |
+| Blob | widgets/spotify_visualizer/shaders/blob.frag | u_blob_color, u_blob_pulse, u_blob_outline_color, u_blob_smoothed_energy, u_blob_peak_energy, u_blob_peak_bass/mid/high/overall, u_ghost_alpha, u_blob_glow_reactivity, u_blob_glow_max_size, u_blob_reactive_deformation (0-3.0), u_blob_constant_wobble, u_blob_reactive_wobble | 2D SDF organic metaball with separated constant wobble and reactive wobble, vocal wobble, dip contraction, CPU-smoothed glow, quadratic reactive deformation (0-3.0). **Ghosting V3**: `blob_sdf_ex()` accepts per-band energies; ghost re-evaluates the full SDF at peak energies to capture true blob shape (tendrils, warping) instead of a simple radial ring. **Glow**: reactivity (0-200%) and max size (10-300%) sliders under Advanced bucket. Taste The Rainbow shifts fill/glow/outline colours, edge highlight exempt. |
 | Helix | widgets/spotify_visualizer/shaders/helix.frag | u_helix_turns, u_helix_double, u_helix_speed, u_helix_glow_*, u_helix_glow_color | Parametric double-helix with depth shading and user-controllable glow color |
 | Bubble | widgets/spotify_visualizer/shaders/bubble.frag | u_bubble_count, u_bubbles_pos[110], u_bubbles_extra[110], u_bubbles_trail[330], u_trail_strength, u_tail_opacity, u_specular_dir, u_outline_color, u_specular_color, u_gradient_light, u_gradient_dark, u_pop_color | SDF-based bubble visualizer: thin outlines, crescent specular highlights, warm gradient background, pop flash, rainbow hue cycling. **Water ripple wake**: concentric expanding rings at trail sample positions (3 per bubble at different ages), sin(dist*freq) ring pattern with Gaussian decay, centre fade to avoid bright dot on bubble, soft outer edges. Trail Strength + Tail Opacity sliders. CPU simulation on COMPUTE pool. |
 
@@ -404,7 +405,7 @@ value = settings.get("display.mode", "fill")
 |--------|------|-----------------------|---------|
 | SettingsDialog | ui/settings_dialog.py | SettingsDialog | Main settings dialog container (1595 LOC, refactored from ~1957). Transitions tab (Feb 2026) now runs **every checkbox/slider row through `_aligned_row()`** so the shared gutter is honored and the `QLayout::addChildLayout` spam is gone; follow this helper whenever adding controls to transitions or media tabs. |
 | SettingsAboutTab | ui/settings_about_tab.py | build_about_tab(), update_about_header_images() | About tab UI, header image scaling |
-| WidgetsTab | ui/tabs/widgets_tab.py | WidgetsTab, NoWheelSlider | Widget config orchestrator (965 LOC, refactored from ~3200) |
+| WidgetsTab | ui/tabs/widgets_tab.py | WidgetsTab, _RainbowGlowLabel, NoWheelSlider | Widget config orchestrator; `_RainbowGlowLabel` uses QPainter for per-letter rainbow glow (Qt has no text-shadow CSS support) |
 | WidgetsTab Clock | ui/tabs/widgets_tab_clock.py | build_clock_ui(), load_clock_settings(), save_clock_settings(), _update_clock_mode_visibility() | Clock 1/2/3 UI, load, save; analog/digital mode visibility gating |
 | WidgetsTab Weather | ui/tabs/widgets_tab_weather.py | build_weather_ui(), load_weather_settings(), save_weather_settings(), _update_weather_icon_visibility(), _update_weather_bg_visibility() | Weather UI, load, save; icon + background visibility gating |
 | WidgetsTab Media | ui/tabs/widgets_tab_media.py | build_media_ui(), load_media_settings(), save_media_settings() | Spotify + Beat Visualizer UI coordinator; per-viz builders extracted to ui/tabs/media/. Oscilloscope multi-line colour + glow swatches now use `ColorBinding` parity so Taste The Rainbow reaches every line. |
@@ -440,6 +441,9 @@ value = settings.get("display.mode", "fill")
 | audits/AUDIT_SETTINGS_SYSTEM.md | Settings system audit: models.py sync, migration, healing, hardcoded paths |
 | audits/AUDIT_RESOURCE_VRAM.md | ResourceManager/VRAM/memory audit: GL handles, QTimer lifecycle, leak risks |
 | audits/AUDIT_CODE_HYGIENE.md | Code hygiene: monoliths, unused imports, dead code, QTimer policy, bare exceptions, naming, save pattern bugs |
+| Audits/pixel_shift_regression_audit.md | Pixel shift double-shifting regression root cause + fix |
+| Audits/settings_persistence_audit.md | Settings persistence consistency: hardcoded defaults vs canonical defaults.py (live checklist) |
+| Audits/threading_resource_audit.md | ThreadManager/ResourceManager async path coverage: raw QTimer/Thread usage, injection, singleton (live checklist) |
 
 ## Test Organization
 
@@ -464,4 +468,5 @@ value = settings.get("display.mode", "fill")
 | tests/test_micro_wobble_math.py | Micro wobble shader math: energy weighting, spatial freq, displacement bounds, smoothness (20 tests) |
 | tests/test_action_plan_3_0.py | Action Plan 3.0: heartbeat settings/math, artwork double-click fix, halo forwarding guard, halo shapes, sine line positioning, rainbow/ghosting roundtrip, shader source validation (37 tests) |
 | tests/test_visualizer_settings_plumbing.py | Visualizer settings plumbing: bubble kwargs, card height, rainbow greyscale, model/creator/applier/overlay/shader/UI plumbing, bubble simulation thread safety (30 tests) |
+| tests/conftest.py | Shared fixtures + `--chunk`/`--total-chunks` CLI options for chunked test execution |
 | tests/unit/test_policy_compliance.py | Threading/import policy enforcement |

@@ -28,6 +28,7 @@ from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
     INFO_LABEL_STYLE,
     SUBSECTION_DIVIDER_STYLE,
+    SUBSECTION_DIVIDER_TITLE_STYLE,
     SLIDER_STYLE,
     SCROLL_AREA_STYLE,
 )
@@ -100,8 +101,10 @@ class PresetDescriptionBox(QFrame):
             #presetDescriptionLabel {
                 %s
             }
+        %s
         """ % (
             SUBSECTION_DIVIDER_STYLE,
+            SUBSECTION_DIVIDER_TITLE_STYLE,
             SECTION_HEADING_STYLE,
             INFO_LABEL_STYLE,
         ))

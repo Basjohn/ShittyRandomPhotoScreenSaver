@@ -37,6 +37,10 @@ uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 uniform float u_ghost_alpha;           // 0 = no ghost, >0 = ghost outline intensity
 uniform float u_blob_peak_energy;      // CPU-tracked peak energy for ghost outline
+uniform float u_blob_peak_bass;        // per-band peak for SDF ghost shape
+uniform float u_blob_peak_mid;
+uniform float u_blob_peak_high;
+uniform float u_blob_peak_overall;
 uniform float u_blob_glow_reactivity;  // 0..2 how strongly glow responds to energy (default 1.0)
 uniform float u_blob_glow_max_size;    // 0.1..3.0 maximum glow spread multiplier (default 1.0)
 
@@ -160,33 +164,29 @@ float compute_stage_offset(
     return offset * gain * scale;
 }
 
-// 2D SDF organic blob with audio-reactive deformation
-float blob_sdf(vec2 p, float time) {
-    float r = 0.44 * clamp(u_blob_size, 0.1, 2.5);  // 10% larger minimum
-    // Bass-driven core size boost: ~15% larger base at intense bass (quadratic ramp)
-    r += u_bass_energy * u_bass_energy * 0.066;
-    // Bass pulse — breathe the radius (+15% drum reactivity: 0.084 → 0.097)
-    r += u_bass_energy * 0.077 * u_blob_pulse;
-    // Subtle contraction on energy dips (~10% of pulse range, smoothed to avoid flicker)
-    float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
+// 2D SDF organic blob with audio-reactive deformation.
+// Accepts per-band energies + smoothed so it can be called with current OR
+// peak energies (for ghost shape reconstruction).
+float blob_sdf_ex(vec2 p, float time,
+                  float e_bass, float e_mid, float e_high, float e_overall,
+                  float smoothed_e) {
+    float r = 0.44 * clamp(u_blob_size, 0.1, 2.5);
+    r += e_bass * e_bass * 0.066;
+    r += e_bass * 0.077 * u_blob_pulse;
+    float se = clamp(smoothed_e, 0.0, 1.0);
     r -= (1.0 - se) * 0.053 * u_blob_pulse;
 
-    // Staged core scaling — four plateaus controlled by Stage Gain/Core Scale.
     vec3 stage_progress = vec3(0.0);
     r += compute_stage_offset(
         clamp(u_blob_size, 0.1, 2.5),
-        u_bass_energy,
-        u_mid_energy,
-        u_high_energy,
-        u_overall_energy,
+        e_bass, e_mid, e_high, e_overall,
         u_blob_stage_gain,
         u_blob_core_scale,
         stage_progress
     );
 
-    // Shrink significantly when playback is stopped (to ~45% of normal)
     if (u_playing == 0) {
-        r *= 0.45 + se * 0.25;  // smoothed energy keeps shrink gradual
+        r *= 0.45 + se * 0.25;
     }
 
     float staged_r = r;
@@ -194,59 +194,44 @@ float blob_sdf(vec2 p, float time) {
     float angle = atan(p.y, p.x);
     float dist = length(p);
 
-    // Organic deformation: constant wobble (time-driven) and reactive wobble (energy-driven)
-    // are cleanly separated so cw=0 means truly no wobble during silence.
     float rd = clamp(u_blob_reactive_deformation, 0.0, 3.0);
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
     float rw = clamp(u_blob_reactive_wobble, 0.0, 2.0);
     float st = clamp(u_blob_stretch_tendency, 0.0, 1.0);
     float wobble_component = 0.0;
 
-    // Constant wobble: reduced amplitude for rounder shape at silence
     wobble_component += sin(angle * 3.0 + time * 1.5) * 0.045 * 0.3 * cw;
     wobble_component += sin(angle * 5.0 - time * 2.3) * 0.028 * 0.2 * cw;
     wobble_component += sin(angle * 7.0 + time * 3.1) * 0.017 * 0.1 * cw;
     wobble_component += sin(angle * 1.0 + time * 0.2) * 0.013 * cw;
 
-    // Reactive wobble: energy-driven, zero when silent regardless of rw
-    wobble_component += sin(angle * 3.0 + time * 1.5) * 0.067 * u_mid_energy * 0.7 * rw;
-    wobble_component += sin(angle * 5.0 - time * 2.3) * 0.042 * u_mid_energy * 0.8 * rw;
-    wobble_component += sin(angle * 7.0 + time * 3.1) * 0.025 * u_high_energy * 0.9 * rw;
-    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.013 * u_high_energy * rw;
+    wobble_component += sin(angle * 3.0 + time * 1.5) * 0.067 * e_mid * 0.7 * rw;
+    wobble_component += sin(angle * 5.0 - time * 2.3) * 0.042 * e_mid * 0.8 * rw;
+    wobble_component += sin(angle * 7.0 + time * 3.1) * 0.025 * e_high * 0.9 * rw;
+    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.013 * e_high * rw;
 
-    // Vocal-reactive wobble: smooth low-frequency shape change driven by mid (vocal) energy
-    float vocal = clamp(u_mid_energy, 0.0, 1.0);
+    float vocal = clamp(e_mid, 0.0, 1.0);
     wobble_component += sin(angle * 2.0 + time * 0.9) * 0.080 * vocal * rw;
     wobble_component += sin(angle * 4.0 - time * 1.1) * 0.050 * vocal * vocal * rw;
 
-    // Stretch tendency: peak energy juts outward as dramatic tendrils
-    // At max, loud moments cause long reaching bursts far beyond normal radius
     float stretch_component = 0.0;
     if (st > 0.01) {
-        float peak = max(u_bass_energy, max(u_mid_energy, u_high_energy));
+        float peak = max(e_bass, max(e_mid, e_high));
         float peak2 = peak * peak;
-        float peak3 = peak2 * peak;  // cubic for explosive spikes
-        // Multiple angular frequencies create varied, asymmetric tendrils
+        float peak3 = peak2 * peak;
         float stretch = 0.0;
-        // Dominant tendrils — large amplitude, slow rotation
         stretch += sin(angle * 2.0 + time * 0.7) * peak3 * 1.8;
         stretch += sin(angle * 1.0 + time * 0.15) * peak2 * 1.2;
-        // Bass-driven bursts — punchy, fast
-        stretch += sin(angle * 3.0 - time * 1.3) * u_bass_energy * u_bass_energy * 1.4;
-        // Mid/vocal tendrils — sustained reach
-        stretch += sin(angle * 5.0 + time * 2.1) * u_mid_energy * u_mid_energy * 0.9;
-        stretch += sin(angle * 7.0 - time * 0.5) * u_mid_energy * u_mid_energy * 0.7;
-        // High-frequency filigree
-        stretch += sin(angle * 9.0 + time * 3.3) * u_high_energy * 0.5;
+        stretch += sin(angle * 3.0 - time * 1.3) * e_bass * e_bass * 1.4;
+        stretch += sin(angle * 5.0 + time * 2.1) * e_mid * e_mid * 0.9;
+        stretch += sin(angle * 7.0 - time * 0.5) * e_mid * e_mid * 0.7;
+        stretch += sin(angle * 9.0 + time * 3.3) * e_high * 0.5;
         stretch_component += stretch * st;
     }
 
-    // Scale total deformation by reactive deformation factor
-    // Cubic scaling above 1.0 for truly dramatic stretching at high values
     float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
     wobble_component *= rd_scale;
     stretch_component *= rd_scale;
-    // Stage-aware core floor clamp: preserve a minimum fraction of staged radius
     float stage_floor = compute_stage_floor_fraction(u_blob_core_floor_bias, stage_progress);
     float min_radius = staged_r * stage_floor;
     float stretch_floor = min_radius - staged_r;
@@ -256,6 +241,13 @@ float blob_sdf(vec2 p, float time) {
     float final_radius = core_radius + wobble_component;
 
     return dist - final_radius;
+}
+
+// Convenience wrapper using current uniforms.
+float blob_sdf(vec2 p, float time) {
+    return blob_sdf_ex(p, time,
+        u_bass_energy, u_mid_energy, u_high_energy, u_overall_energy,
+        u_blob_smoothed_energy);
 }
 
 void main() {
@@ -342,32 +334,30 @@ void main() {
         outline_band_alpha = (1.0 - smoothstep(0.0, 0.015, d)) * outline_a;
     }
 
-    // Ghost outline: glowing ring at the peak blob radius (where the blob WAS)
+    // Ghost shape: re-evaluate blob SDF at peak per-band energies so the
+    // ghost captures the actual deformed shape (tendrils, warping, stretch).
+    // Driven entirely by spatial SDF difference (peak shape vs current shape)
+    // so the ghost is visible at ALL stages, not just low energy.
     float ghost_ring_alpha = 0.0;
     if (u_ghost_alpha > 0.001) {
-        float pe = clamp(u_blob_peak_energy, 0.0, 1.0);
-        float ce = clamp(u_blob_smoothed_energy, 0.0, 1.0);
-        float delta_e = max(0.0, pe - ce);
-        if (delta_e > 0.002) {
-            // Ghost ring distance from current blob edge — 3x larger expansion
-            float pulse_f = clamp(u_blob_pulse, 0.0, 2.0);
-            float ghost_expand = delta_e * (0.16 * pulse_f + 0.20);
-            float ghost_d = d - ghost_expand;
+        float ghost_d = blob_sdf_ex(uv, u_time,
+            u_blob_peak_bass, u_blob_peak_mid, u_blob_peak_high,
+            u_blob_peak_overall, u_blob_peak_energy);
 
-            // Wide ring with soft glow halo (not a thin line)
-            // Core ring: ~0.03 wide in d-space
-            float ring_core = (1.0 - smoothstep(-0.008, 0.006, ghost_d))
-                            * smoothstep(-0.040, -0.008, ghost_d);
-            // Soft outer glow halo around the ring
-            float halo = exp(-ghost_d * ghost_d * inner_height * inner_height * 0.003);
-            halo *= smoothstep(-0.06, -0.01, ghost_d);
+        // outside_current: 1.0 when pixel is outside the current blob, 0 inside
+        float outside_current = smoothstep(-0.005, 0.01, d);
+        // inside_peak: 1.0 when pixel is inside the peak shape, fading at edge
+        float inside_peak = 1.0 - smoothstep(-0.01, 0.025, ghost_d);
 
-            // Only show outside the current fill
-            float outside_mask = smoothstep(-0.003, 0.008, d);
-            float intensity = clamp(delta_e * 3.0, 0.0, 1.0);
-            ghost_ring_alpha = (ring_core * 0.85 + halo * 0.45)
-                             * outside_mask * u_ghost_alpha * intensity;
-        }
+        // Ghost region = outside current blob AND inside peak blob shape
+        float ghost_mask = outside_current * inside_peak;
+
+        // Soft outer glow halo around the peak shape boundary
+        float ghost_d_px = ghost_d * inner_height;
+        float edge_glow = exp(-ghost_d_px * ghost_d_px * 0.008) * outside_current;
+        edge_glow *= smoothstep(0.04, -0.01, ghost_d);
+
+        ghost_ring_alpha = (ghost_mask * 0.65 + edge_glow * 0.35) * u_ghost_alpha;
     }
 
     float total_alpha = max(fill_alpha, max(edge_alpha, max(glow_alpha, max(outline_band_alpha, ghost_ring_alpha))));
@@ -401,8 +391,8 @@ void main() {
         float t = 1.0 - clamp(-d / 0.02, 0.0, 1.0);
         final_rgb = mix(blob_rgb, edge_rgb, t);
     } else if (ghost_ring_alpha > 0.01 && ghost_ring_alpha >= glow_alpha) {
-        // Ghost ring zone: use outline colour with ghost alpha
-        final_rgb = outline_rgb;
+        // Ghost shape zone: use glow colour blended toward outline for depth
+        final_rgb = mix(glow_rgb, outline_rgb, 0.5);
     } else if (d < 0.015 && outline_a > 0.01) {
         // Outline band: thin region just outside the fill, before glow takes over
         float band_t = clamp(d / 0.015, 0.0, 1.0);

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QScrollArea, QButtonGroup, QGroupBox,
 )
 from PySide6.QtCore import Signal, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
@@ -30,8 +30,8 @@ from ui.tabs.shared_styles import (
     TOOLTIP_STYLE,
     COMBOBOX_STYLE,
     SECTION_HEADING_STYLE,
-    SUBSECTION_DIVIDER_STYLE,
     NAV_TAB_FONT_STYLE,
+    style_group_box,
     NAV_TAB_FONT_STYLE_ACTIVE,
     STATUS_LABEL_STYLE,
     NoWheelSlider,  # noqa: F401 — re-exported
@@ -41,6 +41,58 @@ from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
 
 logger = get_logger(__name__)
+
+
+class _RainbowGlowLabel(QWidget):
+    """Overlay widget that paints per-letter rainbow text with matching coloured glow.
+
+    Qt rich-text does not support ``text-shadow``, so glow is done via
+    QPainter.  Each letter gets a subtle 1px cardinal-direction glow at low
+    alpha, then the crisp coloured letter on top.
+    """
+
+    _GLOW_ALPHA = 60
+    _LEFT_PAD = 38  # 6px padding + 22px indicator + 10px spacing
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setStyleSheet("background: transparent;")
+        self._letters: list[tuple[str, QColor]] = []
+
+    def set_rainbow_text(self, text: str, hex_colors: list[str]) -> None:
+        n = len(hex_colors)
+        self._letters = [(ch, QColor(hex_colors[i % n])) for i, ch in enumerate(text)]
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        if not self._letters:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+        font = self.font()
+        fm = QFontMetrics(font)
+        y_base = (self.height() + fm.ascent() - fm.descent()) // 2
+        x = self._LEFT_PAD
+
+        _offsets = ((-1, 0), (1, 0), (0, -1), (0, 1))
+
+        for ch, color in self._letters:
+            adv = fm.horizontalAdvance(ch)
+            glow_c = QColor(color)
+            glow_c.setAlpha(self._GLOW_ALPHA)
+            p.setPen(QPen(glow_c, 0))
+            for dx, dy in _offsets:
+                p.drawText(x + dx, y_base + dy, ch)
+
+            p.setPen(QPen(color, 0))
+            p.drawText(x, y_base, ch)
+            x += adv
+
+        p.end()
 
 
 class WidgetsTab(QWidget):
@@ -300,7 +352,7 @@ class WidgetsTab(QWidget):
 
         # Global widget options
         global_group = QGroupBox("Global Widget Defaults")
-        global_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+        style_group_box(global_group)
         global_layout = QVBoxLayout(global_group)
         global_layout.setContentsMargins(16, 12, 16, 12)
         global_layout.setSpacing(10)
@@ -1033,11 +1085,6 @@ class WidgetsTab(QWidget):
         "#FF0000", "#FF7F00", "#FFFF00", "#00FF00",
         "#0000FF", "#4B0082", "#8F00FF",
     ]
-    _RAINBOW_GLOWS = [
-        "rgba(255,0,0,0.45)", "rgba(255,127,0,0.40)", "rgba(255,255,0,0.35)",
-        "rgba(0,255,0,0.40)", "rgba(0,0,255,0.45)", "rgba(75,0,130,0.40)",
-        "rgba(143,0,255,0.45)",
-    ]
 
     def _update_rainbow_visibility(self) -> None:
         """Show/hide rainbow speed slider and apply rainbow text easter egg."""
@@ -1049,14 +1096,6 @@ class WidgetsTab(QWidget):
             cb = self.rainbow_enabled
             plain = "Taste The Rainbow"
             if enabled:
-                spans = []
-                for i, ch in enumerate(plain):
-                    c = self._RAINBOW_COLORS[i % len(self._RAINBOW_COLORS)]
-                    g = self._RAINBOW_GLOWS[i % len(self._RAINBOW_GLOWS)]
-                    shadow = f"text-shadow: 0 0 6px {g}, 0 0 2px {g};"
-                    spans.append(
-                        f'<span style="color:{c}; {shadow}">{ch}</span>'
-                    )
                 cb.setText(plain)
                 cb.setStyleSheet(
                     cb.styleSheet().split("/* rainbow */")[0]
@@ -1064,15 +1103,10 @@ class WidgetsTab(QWidget):
                 )
                 lbl = getattr(self, '_rainbow_label', None)
                 if lbl is None:
-                    from PySide6.QtWidgets import QLabel
-                    lbl = QLabel(cb)
-                    lbl.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
-                    lbl.setTextFormat(Qt.TextFormat.RichText)
+                    lbl = _RainbowGlowLabel(cb)
                     self._rainbow_label = lbl
-                lbl.setText("".join(spans))
-                lbl.setStyleSheet("background: transparent; padding-left: 34px;")
+                lbl.set_rainbow_text(plain, self._RAINBOW_COLORS)
                 lbl.move(0, 0)
-                # Ensure label is wide enough — sizeHint can be wider than cb
                 lbl.setMinimumWidth(cb.sizeHint().width())
                 lbl.resize(max(cb.width(), cb.sizeHint().width()), cb.height())
                 lbl.show()

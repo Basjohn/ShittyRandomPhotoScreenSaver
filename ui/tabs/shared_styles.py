@@ -288,7 +288,34 @@ SECTION_HEADING_STYLE_DISABLED = (
 SUBSECTION_DIVIDER_STYLE = (
     "border: 1px solid rgba(255, 255, 255, 0.8);"
     "border-radius: 18px;"
+    "background: transparent;"
+    "margin-top: 6px;"
+    "padding-top: 12px;"
 )
+
+SUBSECTION_DIVIDER_TITLE_STYLE = (
+    "QGroupBox::title {"
+    "  subcontrol-origin: margin;"
+    "  subcontrol-position: top left;"
+    "  padding: 0 8px;"
+    "  background: transparent;"
+    "  color: rgba(255, 255, 255, 0.85);"
+    "}"
+)
+
+
+def style_group_box(box) -> None:
+    """Apply the standard subsection divider style to a QGroupBox.
+
+    Combines the border/radius body rule with a ::title subcontrol rule
+    to eliminate corner seam artefacts that appear when the title area
+    disrupts the border arc.  All tabs should call this instead of
+    inlining ``setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")``.
+    """
+    box.setStyleSheet(
+        f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}"
+        f" {SUBSECTION_DIVIDER_TITLE_STYLE}"
+    )
 
 NAV_TAB_FONT_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"

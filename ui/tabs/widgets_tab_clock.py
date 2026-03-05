@@ -19,9 +19,9 @@ from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
-    SUBSECTION_DIVIDER_STYLE,
     STATUS_LABEL_STYLE,
     INFO_LABEL_STYLE,
+    style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
@@ -89,7 +89,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         return content
 
     clock_group = QGroupBox("Clock Widget")
-    clock_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+    style_group_box(clock_group)
     clock_layout = QVBoxLayout(clock_group)
 
     # Enable clock

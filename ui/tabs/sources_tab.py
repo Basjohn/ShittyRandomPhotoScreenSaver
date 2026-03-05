@@ -16,9 +16,9 @@ from ui.tabs.shared_styles import (
     NoWheelSlider,
     SECTION_HEADING_STYLE,
     SECTION_HEADING_STYLE_DISABLED,
-    SUBSECTION_DIVIDER_STYLE,
     INFO_LABEL_STYLE,
     INFO_LABEL_STYLE_DISABLED,
+    style_group_box,
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -84,7 +84,7 @@ class SourcesTab(QWidget):
         
         # Folder sources group
         folder_group = QGroupBox("Folder Sources")
-        folder_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+        style_group_box(folder_group)
         folder_layout = QVBoxLayout(folder_group)
         
         # Folder list
@@ -153,7 +153,7 @@ class SourcesTab(QWidget):
         
         # RSS sources group
         rss_group = QGroupBox("RSS / JSON Feed Sources")
-        rss_group.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+        style_group_box(rss_group)
         rss_layout = QVBoxLayout(rss_group)
         
         # Suggestion label (session-local; updated by "Just Make It Work")

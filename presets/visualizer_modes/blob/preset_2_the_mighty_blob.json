@@ -373,7 +373,7 @@
         "Wipe": 4000
       },
       "easing": "Auto",
-      "last_random_choice": "Block Puzzle Flip",
+      "last_random_choice": "3D Block Spins",
       "particle": {
         "direction": "Random",
         "gloss_size": 72.0,
@@ -409,7 +409,7 @@
         "Wipe": true
       },
       "random_always": true,
-      "random_choice": "Block Puzzle Flip",
+      "random_choice": "3D Block Spins",
       "ripple": {
         "ripple_count": 3
       },
@@ -418,19 +418,21 @@
       },
       "type": "Particle",
       "wipe": {
-        "direction": "Diagonal TR-BL",
-        "last_direction": "Diagonal TR-BL"
+        "direction": "Diagonal TL-BR",
+        "last_direction": "Diagonal TL-BR"
       }
     },
     "ui": {
       "dialog_geometry": {
         "height": 900,
         "width": 1389,
-        "x": 184,
+        "x": 106,
         "y": 0
       },
       "last_tab_index": 6,
       "last_tab_scroll": {
+        "accessibility": 0,
+        "presets": 0,
         "widgets": 0
       },
       "tab_state": {
@@ -677,7 +679,7 @@
         ],
         "blob_constant_wobble": 0.4,
         "blob_core_floor_bias": 0.4,
-        "blob_core_scale": 1.2,
+        "blob_core_scale": 1.12,
         "blob_edge_color": [
           208,
           223,
@@ -693,9 +695,9 @@
           255,
           180
         ],
-        "blob_glow_intensity": 0.45,
-        "blob_glow_max_size": 1.05,
-        "blob_glow_reactivity": 2.0,
+        "blob_glow_intensity": 0.5,
+        "blob_glow_max_size": 1.1,
+        "blob_glow_reactivity": 1.7,
         "blob_growth": 5.0,
         "blob_outline_color": [
           84,
@@ -708,10 +710,10 @@
         "blob_reactive_glow": true,
         "blob_reactive_wobble": 1.55,
         "blob_size": 0.4,
-        "blob_stage2_release_ms": 603,
-        "blob_stage3_release_ms": 846,
-        "blob_stage_bias": -0.2,
-        "blob_stage_gain": 0.6,
+        "blob_stage2_release_ms": 748,
+        "blob_stage3_release_ms": 1102,
+        "blob_stage_bias": -0.15,
+        "blob_stage_gain": 0.85,
         "blob_stretch_tendency": 0.18,
         "blob_width": 1.0,
         "bubble_big_bass_pulse": 0.8,
@@ -785,7 +787,7 @@
         "helix_speed": 1.0,
         "helix_turns": 6,
         "manual_floor": 2.1,
-        "mode": "bubble",
+        "mode": "blob",
         "nebula_cycle_speed": 0.59,
         "nebula_tint1": [
           27,

@@ -526,13 +526,16 @@ class TransitionFactory:
         return CrossfadeTransition(duration_ms, easing_str)
     
     def _create_blinds(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+        from core.settings.defaults import get_default_settings
+        canonical = get_default_settings().get('transitions', {}).get('blinds', {})
+
         if use_compositor:
             blinds_cfg = settings.get('blinds', {})
             if not isinstance(blinds_cfg, dict):
                 blinds_cfg = {}
-            feather = float(blinds_cfg.get('feather', 2)) / 25.0  # slider 0-25 → 0.0-1.0 → shader 0.0-0.5
+            feather = float(blinds_cfg.get('feather', canonical.get('feather', 2))) / 25.0
             feather = max(0.001, min(0.5, feather * 0.5))
-            direction_str = str(blinds_cfg.get('direction', 'Horizontal'))
+            direction_str = str(blinds_cfg.get('direction', canonical.get('direction', 'Horizontal')))
             if direction_str == 'Random':
                 direction_str = random.choice(['Horizontal', 'Vertical', 'Diagonal'])
             direction_map = {'Horizontal': 0, 'Vertical': 1, 'Diagonal': 2}
@@ -567,10 +570,13 @@ class TransitionFactory:
         return CrossfadeTransition(duration_ms)
     
     def _create_burn(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+        from core.settings.defaults import get_default_settings
+        canonical = get_default_settings().get('transitions', {}).get('burn', {})
+
         burn_cfg = settings.get('burn', {})
         if not isinstance(burn_cfg, dict):
             burn_cfg = {}
-        dir_str = burn_cfg.get('direction', 'Random') or 'Random'
+        dir_str = burn_cfg.get('direction', canonical.get('direction', 'Random')) or 'Random'
         dir_map = {
             'Left to Right': 0, 'Right to Left': 1,
             'Top to Bottom': 2, 'Bottom to Top': 3,
@@ -579,13 +585,13 @@ class TransitionFactory:
             direction = random.randint(0, 3)
         else:
             direction = dir_map.get(dir_str, 0)
-        jaggedness = self._safe_float(burn_cfg.get('jaggedness', 0.5), 0.5)
-        glow_intensity = self._safe_float(burn_cfg.get('glow_intensity', 0.7), 0.7)
-        char_width = self._safe_float(burn_cfg.get('char_width', 0.5), 0.5)
-        smoke_enabled = SettingsManager.to_bool(burn_cfg.get('smoke_enabled', True), True)
-        smoke_density = self._safe_float(burn_cfg.get('smoke_density', 0.5), 0.5)
-        ash_enabled = SettingsManager.to_bool(burn_cfg.get('ash_enabled', True), True)
-        ash_density = self._safe_float(burn_cfg.get('ash_density', 0.5), 0.5)
+        jaggedness = self._safe_float(burn_cfg.get('jaggedness', canonical.get('jaggedness', 0.5)), 0.5)
+        glow_intensity = self._safe_float(burn_cfg.get('glow_intensity', canonical.get('glow_intensity', 0.7)), 0.7)
+        char_width = self._safe_float(burn_cfg.get('char_width', canonical.get('char_width', 0.5)), 0.5)
+        smoke_enabled = SettingsManager.to_bool(burn_cfg.get('smoke_enabled', canonical.get('smoke_enabled', True)), True)
+        smoke_density = self._safe_float(burn_cfg.get('smoke_density', canonical.get('smoke_density', 0.5)), 0.5)
+        ash_enabled = SettingsManager.to_bool(burn_cfg.get('ash_enabled', canonical.get('ash_enabled', True)), True)
+        ash_density = self._safe_float(burn_cfg.get('ash_density', canonical.get('ash_density', 0.5)), 0.5)
         if use_compositor:
             return GLCompositorBurnTransition(
                 duration_ms=duration_ms,

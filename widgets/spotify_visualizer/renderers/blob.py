@@ -10,6 +10,7 @@ def get_uniform_names() -> list[str]:
         "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
         "u_blob_reactive_glow", "u_blob_outline_color",
         "u_blob_smoothed_energy", "u_blob_peak_energy",
+        "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
         "u_blob_reactive_deformation", "u_blob_stage_gain",
         "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias",
         "u_blob_stage_progress_override",
@@ -44,6 +45,10 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set_color4(gl, u, "u_blob_outline_color", s._blob_outline_color)
     _set1f(gl, u, "u_blob_smoothed_energy", s._blob_smoothed_energy)
     _set1f(gl, u, "u_blob_peak_energy", s._blob_peak_energy)
+    _set1f(gl, u, "u_blob_peak_bass", s._blob_peak_bass)
+    _set1f(gl, u, "u_blob_peak_mid", s._blob_peak_mid)
+    _set1f(gl, u, "u_blob_peak_high", s._blob_peak_high)
+    _set1f(gl, u, "u_blob_peak_overall", s._blob_peak_overall)
     _set1f(gl, u, "u_blob_reactive_deformation", s._blob_reactive_deformation)
     _set1f(gl, u, "u_blob_stage_gain", s._blob_stage_gain)
     _set1f(gl, u, "u_blob_core_scale", s._blob_core_scale)
