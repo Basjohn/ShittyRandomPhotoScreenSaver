@@ -655,6 +655,35 @@ QPushButton#QSmolselectMini:checked:hover {
     background-color: rgba(0, 0, 0, 1.0);
 }
 
+/* ===== ADVANCED TOGGLE TOOLBUTTON ===== */
+/* QToolButton used as "Advanced" expand/collapse toggle in visualizer settings */
+
+QToolButton[autoRaise="true"] {
+    background-color: rgba(50, 50, 50, 1.0);
+    color: rgba(220, 220, 220, 1.0);
+    border: 1px solid rgba(80, 80, 80, 0.6);
+    border-radius: 3px;
+    padding: 3px 8px;
+    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+    font-size: 11px;
+    font-weight: 500;
+}
+
+QToolButton[autoRaise="true"]:hover {
+    background-color: rgba(60, 60, 60, 1.0);
+    border-color: rgba(100, 100, 100, 0.8);
+}
+
+QToolButton[autoRaise="true"]:checked {
+    background-color: rgba(20, 20, 20, 1.0);
+    color: rgba(255, 255, 255, 1.0);
+    border-color: rgba(100, 100, 100, 0.8);
+}
+
+QToolButton[autoRaise="true"]:checked:hover {
+    background-color: rgba(30, 30, 30, 1.0);
+}
+
 /* ===== CONTEXT MENUS ===== */
 /* Styles for all context menus */
 

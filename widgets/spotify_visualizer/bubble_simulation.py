@@ -333,8 +333,11 @@ class BubbleSimulation:
                     b.vx, b.vy = rd
                 sv = (b.vx, b.vy)
 
-            move_x = sv[0] * base_vel * dt
-            move_y = sv[1] * base_vel * dt
+            # Swirl modes: suppress stream velocity so orbits stay centred
+            is_swirl = drift_dir in _SWIRL_DIRECTIONS
+            stream_scale = 0.0 if is_swirl else 1.0
+            move_x = sv[0] * base_vel * dt * stream_scale
+            move_y = sv[1] * base_vel * dt * stream_scale
 
             # Drift (sinusoidal lateral wander)
             drift_phase = b.phase + self._time * drift_speed * 2.0
@@ -348,7 +351,7 @@ class BubbleSimulation:
                 move_x += drift_offset * dt
             elif drift_dir == "swish_vertical":
                 move_y += drift_offset * dt
-            elif drift_dir in _SWIRL_DIRECTIONS:
+            elif is_swirl:
                 swirl_dx, swirl_dy = self._swirl_motion(b, drift_dir, drift_amount, drift_speed, dt)
                 move_x += swirl_dx
                 move_y += swirl_dy
@@ -420,6 +423,12 @@ class BubbleSimulation:
                 # First fill: scatter across card area
                 base_x = random.uniform(0.05, 0.95)
                 base_y = random.uniform(0.05, 0.95)
+            elif drift_dir in _SWIRL_DIRECTIONS:
+                # Swirl: spawn near center so bubbles spiral outward
+                _angle = random.uniform(0.0, math.tau)
+                _spawn_r = random.uniform(0.02, 0.10)
+                base_x = 0.5 + math.cos(_angle) * _spawn_r
+                base_y = 0.5 + math.sin(_angle) * _spawn_r
             else:
                 base_x, base_y = _spawn_position(stream_dir, False)
             for c in range(count):
@@ -433,7 +442,14 @@ class BubbleSimulation:
 
     def _spawn_bubble(self, is_big: bool, stream_dir: str,
                       surface_reach: float, drift_dir: str) -> None:
-        x, y = _spawn_position(stream_dir, is_big)
+        if drift_dir in _SWIRL_DIRECTIONS:
+            # Swirl: spawn near center so bubbles spiral outward.
+            angle = random.uniform(0.0, math.tau)
+            spawn_r = random.uniform(0.02, 0.10)
+            x = 0.5 + math.cos(angle) * spawn_r
+            y = 0.5 + math.sin(angle) * spawn_r
+        else:
+            x, y = _spawn_position(stream_dir, is_big)
         self._spawn_bubble_at(is_big, x, y, stream_dir, surface_reach, drift_dir)
 
     def _overlaps_existing(self, x: float, y: float, radius: float,
@@ -529,47 +545,60 @@ class BubbleSimulation:
         drift_speed: float,
         dt: float,
     ) -> Tuple[float, float]:
-        """Return (dx, dy) swirl offsets for this tick.
+        """Return (move_x, move_y) for expanding-spiral motion.
 
-        Uses constant angular velocity for full-orbit swirl instead of
-        sinusoidal drift_offset which stalls at zero crossings.
+        **Coordinate convention**: the caller applies the returned values as
+        ``b.x += move_x; b.y -= move_y`` (Y-inverted screen space).  All
+        vector math here uses standard math-Y-up so that rotation formulas
+        are correct, then flips ``out_y`` at the end to compensate for the
+        caller's negation.
+
+        Bubbles spawn near the center, trace an Archimedean spiral outward,
+        and die when they leave the card bounds.
         """
-        dx = bubble.x - 0.5
-        dy = bubble.y - 0.5
-        dist = math.hypot(dx, dy)
+        # Vector from centre in screen space (0,0 = top-left).
+        sx = bubble.x - 0.5
+        sy = bubble.y - 0.5
+
+        # Flip to math-Y-up for rotation math.
+        mx =  sx
+        my = -sy
+
+        dist = math.hypot(mx, my)
         if dist < 1e-4:
             angle = random.uniform(0.0, math.tau)
-            dx = math.cos(angle) * 0.01
-            dy = math.sin(angle) * 0.01
-            dist = math.hypot(dx, dy)
+            mx = math.cos(angle) * 0.01
+            my = math.sin(angle) * 0.01
+            dist = math.hypot(mx, my)
+
         inv = 1.0 / dist
-        norm_x = dx * inv
-        norm_y = dy * inv
+        nx = mx * inv
+        ny = my * inv
 
+        # Tangent perpendicular to radial (standard math rotation).
         if drift_dir == "swirl_cw":
-            tangent_x = norm_y
-            tangent_y = -norm_x
+            tx =  ny
+            ty = -nx
         else:
-            tangent_x = -norm_y
-            tangent_y = norm_x
+            tx = -ny
+            ty =  nx
 
-        # Constant angular velocity: drift_amount controls orbit speed,
-        # drift_speed adds variation. Per-bubble drift_bias adds uniqueness.
         angular_speed = (0.3 + drift_amount * 0.7) * (0.5 + drift_speed * 1.0)
         per_bubble_var = 0.8 + 0.4 * abs(bubble.drift_bias)
-        swirl_force = angular_speed * per_bubble_var
+        force = angular_speed * per_bubble_var
 
-        swirl_dx = tangent_x * swirl_force
-        swirl_dy = tangent_y * swirl_force
+        out_x = tx * force
+        out_y = ty * force
 
-        # Preferred orbit radius varies per bubble (0.15 to 0.40 of card)
-        preferred_radius = 0.15 + abs(bubble.drift_bias) * 0.25
-        radial_error = dist - preferred_radius
-        radial_force = radial_error * 0.8 * angular_speed
-        swirl_dx -= norm_x * radial_force
-        swirl_dy -= norm_y * radial_force
+        # Outward radial push — drives the expanding spiral.
+        radial_push = (0.04 + drift_amount * 0.10) * per_bubble_var
+        out_x += nx * radial_push
+        out_y += ny * radial_push
 
-        return swirl_dx * dt, swirl_dy * dt
+        # Convert back: caller does b.x += move_x, b.y -= move_y,
+        # so move_y = -screen_dy.  Since out_y is in math-Y-up and
+        # screen_dy = -out_y, move_y = -(-out_y) = out_y.  No extra flip.
+        return out_x * dt, out_y * dt
 
     def _bleed_trail_smear(self, b: BubbleState, dt: float) -> None:
         if b.trail_strength <= 0.0:

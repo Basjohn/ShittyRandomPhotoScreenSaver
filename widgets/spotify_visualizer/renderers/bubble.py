@@ -13,6 +13,7 @@ _DIRECTION_VECS = {
     'bottom_left': (-0.707, -0.707),
     'bottom': (0.0, -1.0),
     'bottom_right': (0.707, -0.707),
+    'center_out': (0.0, 0.0),
 }
 
 

@@ -500,17 +500,6 @@ class WeatherWidget(BaseOverlayWidget):
             if isinstance(wind, dict):
                 windspeed = _to_float(wind.get("speed"))
 
-        # Rain chance fix: try to get from hourly forecast if not in current
-        if precipitation is None:
-            hourly = data.get("hourly", {})
-            if isinstance(hourly, dict):
-                precip_data = hourly.get("precipitation_probability", [])
-                if isinstance(precip_data, list) and precip_data:
-                    # Get current hour index
-                    current_hour = datetime.now().hour
-                    if current_hour < len(precip_data):
-                        precipitation = _to_float(precip_data[current_hour])
-
         return precipitation, humidity, windspeed
 
     def _build_detail_metrics(self, data: Dict[str, Any]) -> List[Tuple[str, str]]:

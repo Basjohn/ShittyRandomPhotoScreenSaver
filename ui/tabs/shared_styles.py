@@ -269,6 +269,14 @@ QToolTip {
 }
 """
 
+PAGE_TITLE_STYLE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 700;"
+    "font-size: 18px;"
+    "letter-spacing: 0.3px;"
+    "color: #ffffff;"
+)
+
 SECTION_HEADING_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"

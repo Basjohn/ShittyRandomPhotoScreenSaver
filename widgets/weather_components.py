@@ -178,7 +178,7 @@ class WeatherDetailIcon(QWidget):
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
         self._target_size = max(_DETAIL_ICON_MIN_PX, size_px)
-        self._box = QSize(self._target_size + 2, self._target_size + 2)
+        self._box = QSize(self._target_size, self._target_size)
         self.setFixedSize(self._box)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -311,7 +311,7 @@ class WeatherDetailRow(QWidget):
         segment.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         layout = QHBoxLayout(segment)
         layout.setContentsMargins(0, 1, 0, 1)
-        layout.setSpacing(2)
+        layout.setSpacing(1)
         layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         icon_label = WeatherDetailIcon(self._icon_size, segment)

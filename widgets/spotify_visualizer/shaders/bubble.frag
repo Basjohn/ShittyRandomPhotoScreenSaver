@@ -119,14 +119,21 @@ void main() {
     float px = 1.0 / max(inner_h, 1.0);
     
     // --- Background gradient ---
-    // Gradient direction follows dedicated control (defaults to specular dir when unset).
+    // Gradient direction follows dedicated control.
+    // Special: (0,0) = center-out radial gradient (light at center, dark at edges).
     vec2 center = vec2(0.5, 0.5);
     vec2 grad_dir = u_gradient_dir;
+    float grad_t;
     if (length(grad_dir) < 0.001) {
-        grad_dir = u_specular_dir;
+        // Center-out radial: dark at center, light at edges.
+        // Gentle power-curve falloff so the transition feels smooth.
+        float radial_dist = length(uv - center);
+        float norm = clamp(radial_dist / 0.85, 0.0, 1.0);
+        grad_t = pow(norm, 1.65);
+    } else {
+        grad_t = dot(uv - center, -grad_dir) + 0.5;
+        grad_t = clamp(grad_t, 0.0, 1.0);
     }
-    float grad_t = dot(uv - center, -grad_dir) + 0.5;
-    grad_t = clamp(grad_t, 0.0, 1.0);
     
     vec4 bg_light = u_gradient_light;
     vec4 bg_dark = u_gradient_dark;

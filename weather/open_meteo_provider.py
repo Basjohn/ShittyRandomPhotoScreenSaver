@@ -267,9 +267,8 @@ class OpenMeteoProvider:
                 'latitude': latitude,
                 'longitude': longitude,
                 'current_weather': 'true',
-                'current': 'relative_humidity_2m',  # Only humidity available in current
-                'hourly': 'precipitation_probability,relative_humidity_2m',  # Precipitation ONLY in hourly
-                'daily': 'temperature_2m_max,temperature_2m_min,weathercode',  # Tomorrow's forecast
+                'current': 'relative_humidity_2m,precipitation_probability,precipitation,rain',
+                'daily': 'temperature_2m_max,temperature_2m_min,weathercode',
                 'forecast_days': 2,  # Today + tomorrow
                 'timezone': 'auto'
             }
@@ -295,36 +294,19 @@ class OpenMeteoProvider:
             windspeed = current_weather.get('windspeed', 0.0)
             is_day = current_weather.get('is_day', 1)  # 1 = day, 0 = night
             
-            # Get humidity from extended current data (if available)
-            # Note: current_extended contains single values, not arrays
+            # Extract humidity + precipitation from the 'current' block.
+            # All requested via the 'current' param so they are scalar values.
             humidity = None
-            if current_extended and 'relative_humidity_2m' in current_extended:
-                humidity = current_extended['relative_humidity_2m']
-                logger.debug(f"[WEATHER_API] Extracted humidity from current_extended: {humidity}")
-            
-            # Precipitation probability is NOT available in current - only in hourly
-            # We'll extract it from hourly data below
             precipitation = None
-            
-            # Extract precipitation from hourly data (always, since not in current)
-            hourly = data.get('hourly', {})
-            if hourly:
-                logger.debug(f"[WEATHER_API] hourly keys: {list(hourly.keys())}")
-                
-                # Get precipitation probability from hourly
-                if 'precipitation_probability' in hourly:
-                    precip_list = hourly['precipitation_probability']
-                    if isinstance(precip_list, list) and precip_list:
-                        # Use first value (current hour) - hourly data starts from current time
-                        precipitation = precip_list[0] if precip_list[0] is not None else None
-                        logger.debug(f"[WEATHER_API] Extracted precipitation from hourly[0]: {precipitation}")
-                
-                # Also try to get humidity from hourly if not in current
-                if humidity is None and 'relative_humidity_2m' in hourly:
-                    humidity_list = hourly['relative_humidity_2m']
-                    if isinstance(humidity_list, list) and humidity_list:
-                        humidity = humidity_list[0] if humidity_list[0] is not None else None
-                        logger.debug(f"[WEATHER_API] Extracted humidity from hourly[0]: {humidity}")
+            if current_extended:
+                humidity = current_extended.get('relative_humidity_2m')
+                precipitation = current_extended.get('precipitation_probability')
+                logger.debug(
+                    f"[WEATHER_API] current_extended: humidity={humidity}, "
+                    f"precip_prob={precipitation}, "
+                    f"rain={current_extended.get('rain')}, "
+                    f"precipitation={current_extended.get('precipitation')}"
+                )
             
             logger.debug(f"[WEATHER_API] Final values: humidity={humidity}, precipitation={precipitation}, windspeed={windspeed}")
             

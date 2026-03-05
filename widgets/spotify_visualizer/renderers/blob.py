@@ -15,6 +15,7 @@ def get_uniform_names() -> list[str]:
         "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias",
         "u_blob_stage_progress_override",
         "u_blob_constant_wobble", "u_blob_reactive_wobble", "u_blob_stretch_tendency",
+        "u_blob_stretch_inner", "u_blob_stretch_outer",
         # Energy bands (shared)
         "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
     ]
@@ -67,6 +68,8 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_blob_constant_wobble", s._blob_constant_wobble)
     _set1f(gl, u, "u_blob_reactive_wobble", s._blob_reactive_wobble)
     _set1f(gl, u, "u_blob_stretch_tendency", s._blob_stretch_tendency)
+    _set1f(gl, u, "u_blob_stretch_inner", getattr(s, '_blob_stretch_inner', 0.5))
+    _set1f(gl, u, "u_blob_stretch_outer", getattr(s, '_blob_stretch_outer', 0.5))
 
     # Energy bands
     eb = s._energy_bands

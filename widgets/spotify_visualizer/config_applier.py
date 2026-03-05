@@ -28,6 +28,7 @@ def _normalize_direction(value: Any, default: str = "top_left") -> str:
     valid = {
         "top", "bottom", "left", "right",
         "top_left", "top_right", "bottom_left", "bottom_right",
+        "center_out",
     }
     return val if val in valid else default
 
@@ -146,6 +147,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_reactive_wobble = max(0.0, min(2.0, float(kwargs['blob_reactive_wobble'])))
     if 'blob_stretch_tendency' in kwargs:
         widget._blob_stretch_tendency = max(0.0, min(1.0, float(kwargs['blob_stretch_tendency'])))
+    if 'blob_stretch_inner' in kwargs:
+        widget._blob_stretch_inner = max(0.0, min(1.0, float(kwargs['blob_stretch_inner'])))
+    if 'blob_stretch_outer' in kwargs:
+        widget._blob_stretch_outer = max(0.0, min(1.0, float(kwargs['blob_stretch_outer'])))
 
     # --- Helix --------------------------------------------------------
     if 'helix_turns' in kwargs:
@@ -466,6 +471,8 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['blob_constant_wobble'] = widget._blob_constant_wobble
     extra['blob_reactive_wobble'] = widget._blob_reactive_wobble
     extra['blob_stretch_tendency'] = widget._blob_stretch_tendency
+    extra['blob_stretch_inner'] = getattr(widget, '_blob_stretch_inner', 0.5)
+    extra['blob_stretch_outer'] = getattr(widget, '_blob_stretch_outer', 0.5)
     extra['osc_speed'] = widget._sine_speed if _is_sine else widget._osc_speed
     extra['osc_line_dim'] = widget._sine_line_dim if _is_sine else widget._osc_line_dim
     extra['osc_line_offset_bias'] = widget._sine_line_offset_bias if _is_sine else widget._osc_line_offset_bias

@@ -59,26 +59,26 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
 
     # Spike ratio: how much fast exceeds slow (1.0 = equal, 2.0 = double).
     spike_ratio = fast / max(0.02, slow)
-    # Gate: at slider=0.0 need 80% spike above average; at slider=1.0 need 20%.
-    trigger_gate = 1.0 + (0.80 - 0.60 * slider)
+    # Gate: at slider=0.0 need 60% spike above average; at slider=1.0 need 15%.
+    trigger_gate = 1.0 + (0.60 - 0.45 * slider)
     cooldown_elapsed = now_ts - widget._heartbeat_last_trigger_ts
     energy_mix = _clamp(bass_now * 0.7 + mid_now * 0.2 + high_now * 0.1, 0.0, 1.0)
     triggered = False
 
     if (
         spike_ratio > trigger_gate
-        and energy_mix > 0.04
-        and cooldown_elapsed >= 0.15
+        and energy_mix > 0.03
+        and cooldown_elapsed >= 0.10
     ):
         triggered = True
         widget._heartbeat_last_trigger_ts = now_ts
         # Punch scales with both how big the spike is and slider sensitivity.
-        punch = _clamp(0.4 + (spike_ratio - trigger_gate) * 0.8 + energy_mix * 0.3, 0.0, 1.0)
+        punch = _clamp(0.5 + (spike_ratio - trigger_gate) * 1.0 + energy_mix * 0.4, 0.0, 1.0)
         # Instant rise — set intensity directly to punch (or keep if already higher).
         widget._heartbeat_intensity = max(widget._heartbeat_intensity, punch)
     else:
-        # Decay only when NOT triggered this frame.  600ms full decay.
-        decay_rate = 1.0 / 0.60
+        # Decay only when NOT triggered this frame.  400ms full decay for punchy feel.
+        decay_rate = 1.0 / 0.40
         widget._heartbeat_intensity = max(0.0, widget._heartbeat_intensity - dt_hb * decay_rate)
 
     widget._heartbeat_fast_prev = fast

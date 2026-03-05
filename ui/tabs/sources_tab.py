@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 from ui.tabs.shared_styles import (
     NoWheelSlider,
+    PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     SECTION_HEADING_STYLE_DISABLED,
     INFO_LABEL_STYLE,
@@ -74,12 +75,7 @@ class SourcesTab(QWidget):
         
         # Title
         title = QLabel("Image Sources")
-        title.setStyleSheet(
-            "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-            "font-weight: 700;"
-            "font-size: 18px;"
-            "color: #ffffff;"
-        )
+        title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
         
         # Folder sources group

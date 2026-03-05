@@ -106,6 +106,10 @@ class ClockWidgetFactory(WidgetFactory):
         """
         from widgets.clock_widget import ClockWidget, TimeFormat, ClockPosition
         from core.settings.models import WidgetPosition, coerce_widget_position
+        from core.settings.defaults import get_default_settings
+        canonical = get_default_settings().get('widgets', {}).get(settings_key, {})
+        # For clock2/clock3, fall back to base clock canonical if key missing
+        base_canonical = get_default_settings().get('widgets', {}).get('clock', {})
         
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
@@ -114,12 +118,14 @@ class ClockWidgetFactory(WidgetFactory):
 
         try:
             # Style inheritance helper for secondary clocks
-            def _resolve_style(key: str, default):
+            def _resolve_style(key: str, default=None):
+                # Use canonical default as ultimate fallback
+                canon_val = canonical.get(key, base_canonical.get(key, default))
                 if settings_key == 'clock':
-                    return config.get(key, default)
+                    return config.get(key, canon_val)
                 if isinstance(base_clock_settings, dict) and key in base_clock_settings:
-                    return base_clock_settings.get(key, default)
-                return config.get(key, default)
+                    return base_clock_settings.get(key, canon_val)
+                return config.get(key, canon_val)
             
             # Position mapping
             position_map = {
@@ -159,17 +165,17 @@ class ClockWidgetFactory(WidgetFactory):
                 show_timezone=show_timezone,
             )
             
-            # Configure styling with inheritance
-            font_family = _resolve_style('font_family', 'Segoe UI')
-            default_font_size = config.get("_default_font_size", 48)
+            # Configure styling with inheritance (canonical defaults from defaults.py)
+            font_family = _resolve_style('font_family')
+            default_font_size = config.get("_default_font_size", canonical.get('font_size', base_canonical.get('font_size', 48)))
             font_size = _resolve_style('font_size', default_font_size)
-            margin = _resolve_style('margin', 20)
-            color = _resolve_style('color', [255, 255, 255, 230])
-            bg_color = _resolve_style('bg_color', [64, 64, 64, 255])
-            border_color = _resolve_style('border_color', [128, 128, 128, 255])
-            border_opacity = _resolve_style('border_opacity', 0.8)
-            show_background = SettingsManager.to_bool(_resolve_style('show_background', False), False)
-            bg_opacity = _resolve_style('bg_opacity', 0.9)
+            margin = _resolve_style('margin')
+            color = _resolve_style('color')
+            bg_color = _resolve_style('bg_color')
+            border_color = _resolve_style('border_color')
+            border_opacity = _resolve_style('border_opacity')
+            show_background = SettingsManager.to_bool(_resolve_style('show_background'), False)
+            bg_opacity = _resolve_style('bg_opacity')
             
             if hasattr(widget, 'set_font_family'):
                 widget.set_font_family(font_family)
@@ -264,7 +270,9 @@ class WeatherWidgetFactory(WidgetFactory):
         """Create and configure a WeatherWidget."""
         from widgets.weather_widget import WeatherWidget, WeatherPosition
         from core.settings.models import WidgetPosition, coerce_widget_position
+        from core.settings.defaults import get_default_settings
         from widgets.shadow_utils import apply_widget_shadow
+        canonical = get_default_settings().get('widgets', {}).get('weather', {})
         
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
@@ -285,9 +293,12 @@ class WeatherWidgetFactory(WidgetFactory):
                 WidgetPosition.BOTTOM_RIGHT: WeatherPosition.BOTTOM_RIGHT,
             }
             
-            widget_pos = coerce_widget_position(config.get('position', 'Top Left'), WidgetPosition.TOP_LEFT)
+            widget_pos = coerce_widget_position(
+                config.get('position', canonical.get('position', 'Top Left')),
+                WidgetPosition.TOP_LEFT,
+            )
             position = position_map.get(widget_pos, WeatherPosition.TOP_LEFT)
-            location = config.get('location', 'New York')
+            location = config.get('location', canonical.get('location', 'New York'))
             
             widget = WeatherWidget(parent=parent, location=location, position=position)
             
@@ -296,33 +307,35 @@ class WeatherWidgetFactory(WidgetFactory):
                 widget.set_thread_manager(self._thread_manager)
             
             # Font
-            font_family = config.get('font_family', 'Segoe UI')
-            font_size = config.get('font_size', 24)
+            font_family = config.get('font_family', canonical.get('font_family', 'Segoe UI'))
+            font_size = config.get('font_size', canonical.get('font_size', 28))
             if hasattr(widget, 'set_font_family'):
                 widget.set_font_family(font_family)
             widget.set_font_size(font_size)
             
             # Color
-            color = config.get('color', [255, 255, 255, 230])
+            color = config.get('color', canonical.get('color', [255, 255, 255, 230]))
             qcolor = parse_color_to_qcolor(color)
             if qcolor:
                 widget.set_text_color(qcolor)
             
             # Background
-            show_background = SettingsManager.to_bool(config.get('show_background', True), True)
+            show_background = SettingsManager.to_bool(
+                config.get('show_background', canonical.get('show_background', True)), True
+            )
             widget.set_show_background(show_background)
             
-            bg_color = config.get('bg_color', [35, 35, 35, 255])
+            bg_color = config.get('bg_color', canonical.get('bg_color', [35, 35, 35, 255]))
             bg_qcolor = parse_color_to_qcolor(bg_color)
             if bg_qcolor:
                 widget.set_background_color(bg_qcolor)
             
-            bg_opacity = config.get('bg_opacity', 0.7)
+            bg_opacity = config.get('bg_opacity', canonical.get('bg_opacity', 0.6))
             widget.set_background_opacity(bg_opacity)
             
             # Border
-            border_color = config.get('border_color', [255, 255, 255, 255])
-            border_opacity = config.get('border_opacity', 1.0)
+            border_color = config.get('border_color', canonical.get('border_color', [255, 255, 255, 255]))
+            border_opacity = config.get('border_opacity', canonical.get('border_opacity', 1.0))
             try:
                 bo = float(border_opacity)
             except Exception as e:
@@ -333,33 +346,39 @@ class WeatherWidgetFactory(WidgetFactory):
                 widget.set_background_border(border_width, border_qcolor)
             
             # Forecast
-            show_forecast = SettingsManager.to_bool(config.get('show_forecast', False), False)
+            show_forecast = SettingsManager.to_bool(
+                config.get('show_forecast', canonical.get('show_forecast', True)), True
+            )
             widget.set_show_forecast(show_forecast)
             
             # Margin
-            margin = config.get('margin', 30)
+            margin = config.get('margin', canonical.get('margin', 30))
             try:
                 widget.set_margin(int(margin))
             except Exception as e:
                 logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
             # Intense shadow
-            intense_shadow = SettingsManager.to_bool(config.get('intense_shadow', False), False)
+            intense_shadow = SettingsManager.to_bool(
+                config.get('intense_shadow', canonical.get('intense_shadow', True)), True
+            )
             if hasattr(widget, 'set_intense_shadow'):
                 widget.set_intense_shadow(intense_shadow)
             
             # Icon alignment (LEFT, RIGHT, NONE) - Issue #3 Fix
-            icon_alignment = config.get('icon_alignment', 'RIGHT')
+            icon_alignment = config.get('icon_alignment', canonical.get('icon_alignment', 'RIGHT'))
             if hasattr(widget, 'set_icon_alignment'):
                 widget.set_icon_alignment(str(icon_alignment).upper())
             
             # Show condition icon
-            show_condition_icon = SettingsManager.to_bool(config.get('show_condition_icon', True), True)
+            show_condition_icon = SettingsManager.to_bool(
+                config.get('show_condition_icon', canonical.get('show_condition_icon', True)), True
+            )
             if hasattr(widget, 'set_show_condition_icon'):
                 widget.set_show_condition_icon(show_condition_icon)
             
             # Icon size
-            icon_size = config.get('icon_size', 96)
+            icon_size = config.get('icon_size', canonical.get('icon_size', 96))
             if hasattr(widget, 'set_icon_size'):
                 try:
                     widget.set_icon_size(int(icon_size))
@@ -367,7 +386,9 @@ class WeatherWidgetFactory(WidgetFactory):
                     pass
             
             # Show details row
-            show_details_row = SettingsManager.to_bool(config.get('show_details_row', True), True)
+            show_details_row = SettingsManager.to_bool(
+                config.get('show_details_row', canonical.get('show_details_row', True)), True
+            )
             if hasattr(widget, 'set_show_details_row'):
                 widget.set_show_details_row(show_details_row)
             

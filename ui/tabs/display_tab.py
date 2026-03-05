@@ -21,6 +21,7 @@ from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
     CIRCLE_CHECKBOX_STYLE,
     COMBOBOX_STYLE,
+    PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     INFO_LABEL_STYLE,
     style_group_box,
@@ -101,7 +102,7 @@ class DisplayTab(QWidget):
         
         # Title
         title = QLabel("Display Settings")
-        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
+        title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
         
         # Monitor selection group

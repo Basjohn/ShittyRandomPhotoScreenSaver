@@ -139,7 +139,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_stage3_release_ms: float = 1200.0
         self._blob_constant_wobble: float = 1.0
         self._blob_reactive_wobble: float = 1.0
-        self._blob_stretch_tendency: float = 0.0
+        self._blob_stretch_tendency: float = 0.35
+        self._blob_stretch_inner: float = 0.5  # 0..1 how deep inward dents go
+        self._blob_stretch_outer: float = 0.5  # 0..1 how far outward protrusions go
 
         # Helix settings
         self._helix_turns: int = 4
@@ -168,7 +170,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_wave_travel: int = 0  # 0=none, 1=left, 2=right
         self._sine_travel_line2: int = 0  # per-line travel for line 2
         self._sine_travel_line3: int = 0  # per-line travel for line 3
-        self._sine_card_adaptation: float = 0.3  # 0.0-1.0, how much of card height wave uses
+        self._sine_card_adaptation: float = 0.3  # 0.05-1.0, how much of card height waves use
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions (legacy)
         self._sine_crawl_amount: float = 0.25  # 0.0-1.0, Crawl slider amount

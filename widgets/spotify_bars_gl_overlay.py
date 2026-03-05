@@ -137,7 +137,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stage3_release_ms: float = 1200.0
         self._blob_constant_wobble: float = 1.0
         self._blob_reactive_wobble: float = 1.0
-        self._blob_stretch_tendency: float = 0.0
+        self._blob_stretch_tendency: float = 0.35
+        self._blob_stretch_inner: float = 0.5
+        self._blob_stretch_outer: float = 0.5
         self._blob_smoothed_energy: float = 0.0
         self._blob_peak_energy: float = 0.0
         self._blob_peak_bass: float = 0.0
@@ -150,7 +152,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_line_offset_bias: float = 0.0
         self._osc_vertical_shift: int = 0
         self._osc_sine_travel: int = 0  # 0=none, 1=left, 2=right (used by sine_wave mode)
-        self._sine_card_adaptation: float = 0.3  # 0.0-1.0, how much of card height wave uses
+        self._sine_card_adaptation: float = 0.30
         self._sine_travel_line2: int = 0  # per-line travel: 0=none, 1=left, 2=right
         self._sine_travel_line3: int = 0
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
@@ -314,6 +316,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_peak_mid = 0.0
         self._blob_peak_high = 0.0
         self._blob_peak_overall = 0.0
+        self._blob_peak_hold_remaining = 0.0
         self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_filtered = (0.0, 0.0, 0.0)
         self._blob_stage_progress_ready = False
@@ -370,13 +373,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_stage3_release_ms: float = 1200.0,
         blob_constant_wobble: float = 1.0,
         blob_reactive_wobble: float = 1.0,
-        blob_stretch_tendency: float = 0.0,
+        blob_stretch_tendency: float = 0.35,
+        blob_stretch_inner: float = 0.5,
+        blob_stretch_outer: float = 0.5,
         osc_speed: float = 1.0,
         osc_line_dim: bool = False,
         osc_line_offset_bias: float = 0.0,
         osc_vertical_shift: int = 0,
         osc_sine_travel: int = 0,
-        sine_card_adaptation: float = 0.3,
+        sine_card_adaptation: float = 0.30,
         sine_travel_line2: int = 0,
         sine_travel_line3: int = 0,
         sine_wave_effect: float = 0.0,
@@ -505,25 +510,54 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     raw_bass = getattr(energy_bands, 'bass', 0.0)
                     raw_mid = getattr(energy_bands, 'mid', 0.0)
                     raw_high = getattr(energy_bands, 'high', 0.0)
+                    smoothed_e = self._blob_smoothed_energy
+                    # Update peaks when new raw exceeds current peak
+                    any_peak_hit = False
                     if raw_e > self._blob_peak_energy:
                         self._blob_peak_energy = raw_e
+                        any_peak_hit = True
                     if raw_bass > self._blob_peak_bass:
                         self._blob_peak_bass = raw_bass
+                        any_peak_hit = True
                     if raw_mid > self._blob_peak_mid:
                         self._blob_peak_mid = raw_mid
+                        any_peak_hit = True
                     if raw_high > self._blob_peak_high:
                         self._blob_peak_high = raw_high
+                        any_peak_hit = True
                     if raw_e > self._blob_peak_overall:
                         self._blob_peak_overall = raw_e
+                        any_peak_hit = True
                     if self._ghosting_enabled:
-                        decay_slider = max(0.1, min(1.0, self._peak_decay_per_sec / 2.0))
-                        tau = 3.0 - decay_slider * 2.5  # 0.5s to 3.0s
-                        da = min(1.0, dt / max(tau, 0.1))
-                        self._blob_peak_energy += (self._blob_smoothed_energy - self._blob_peak_energy) * da
-                        self._blob_peak_bass += (raw_bass - self._blob_peak_bass) * da
-                        self._blob_peak_mid += (raw_mid - self._blob_peak_mid) * da
-                        self._blob_peak_high += (raw_high - self._blob_peak_high) * da
-                        self._blob_peak_overall += (raw_e - self._blob_peak_overall) * da
+                        # Reset hold timer on any new peak hit
+                        if any_peak_hit:
+                            self._blob_peak_hold_remaining = 0.15  # hold 150ms before decay
+                        # During hold period, don't decay peaks
+                        hold = getattr(self, '_blob_peak_hold_remaining', 0.0)
+                        if hold > 0.0:
+                            self._blob_peak_hold_remaining = max(0.0, hold - dt)
+                        else:
+                            # Decay peaks toward smoothed energy (not raw) so the
+                            # ghost maintains a meaningful offset even when music
+                            # is sustained loud.
+                            decay_slider = max(0.1, min(1.0, self._peak_decay_per_sec / 2.0))
+                            tau = 3.0 - decay_slider * 2.5  # 0.5s to 3.0s
+                            da = min(1.0, dt / max(tau, 0.1))
+                            self._blob_peak_energy += (smoothed_e - self._blob_peak_energy) * da
+                            self._blob_peak_bass += (smoothed_e * (raw_bass / max(raw_e, 0.001)) - self._blob_peak_bass) * da
+                            self._blob_peak_mid += (smoothed_e * (raw_mid / max(raw_e, 0.001)) - self._blob_peak_mid) * da
+                            self._blob_peak_high += (smoothed_e * (raw_high / max(raw_e, 0.001)) - self._blob_peak_high) * da
+                            self._blob_peak_overall += (smoothed_e - self._blob_peak_overall) * da
+                        # Enforce minimum peak offset above current values
+                        # so the ghost is always visible when enabled and
+                        # music is playing.  The offset scales with current
+                        # energy so it stays proportional at all stages.
+                        min_offset = max(0.06, smoothed_e * 0.12)
+                        self._blob_peak_energy = max(self._blob_peak_energy, smoothed_e + min_offset)
+                        self._blob_peak_bass = max(self._blob_peak_bass, raw_bass + min_offset * 0.8)
+                        self._blob_peak_mid = max(self._blob_peak_mid, raw_mid + min_offset * 0.8)
+                        self._blob_peak_high = max(self._blob_peak_high, raw_high + min_offset * 0.8)
+                        self._blob_peak_overall = max(self._blob_peak_overall, raw_e + min_offset)
                 # Oscilloscope / Sine Wave: smooth per-band energy for glow anti-flicker
                 if self._vis_mode in ('oscilloscope', 'sine_wave') and energy_bands is not None:
                     for attr, band in (
@@ -533,7 +567,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     ):
                         raw_e = getattr(energy_bands, band, 0.0)
                         prev = getattr(self, attr)
-                        a = min(1.0, dt / 0.06) if raw_e > prev else min(1.0, dt / 0.25)
+                        a = min(1.0, dt / 0.06) if raw_e > prev else min(1.0, dt / 0.12)
                         setattr(self, attr, prev + (raw_e - prev) * a)
         self._last_time_ts = now_ts
 
@@ -648,6 +682,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_constant_wobble = max(0.0, min(2.0, float(blob_constant_wobble)))
         self._blob_reactive_wobble = max(0.0, min(2.0, float(blob_reactive_wobble)))
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
+        self._blob_stretch_inner = max(0.0, min(1.0, float(blob_stretch_inner)))
+        self._blob_stretch_outer = max(0.0, min(1.0, float(blob_stretch_outer)))
         self._osc_speed = max(0.01, min(1.0, float(osc_speed)))
         self._osc_line_dim = bool(osc_line_dim)
         self._osc_line_offset_bias = max(0.0, min(1.0, float(osc_line_offset_bias)))
@@ -1141,7 +1177,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_peak_energy",
                     "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
                     "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
-                    "u_blob_stretch_tendency",
+                    "u_blob_stretch_tendency", "u_blob_stretch_inner", "u_blob_stretch_outer",
                     "u_blob_stage_progress_override",
                     "u_osc_speed", "u_osc_line_dim",
                     "u_osc_line_offset_bias",

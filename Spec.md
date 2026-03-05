@@ -357,7 +357,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
  - `widgets.shadows.*`: global drop-shadow configuration shared by all overlay widgets (enabled flag, colour, offset, blur radius, text/frame opacity multipliers). Individual widgets perform a two-stage startup animation: first a coordinated card opacity fade-in (driven by the overlay fade synchronizer), then a shadow fade where the drop shadow grows smoothly from transparent to its configured opacity using the same global duration/easing. Shadows are slightly enlarged/softened via a shared blur-radius multiplier so all widgets share a consistent halo.
  - Accessibility:
   - `accessibility.dimming.enabled` (bool, default false): enables compositor-based dimming via `GLCompositorWidget.set_dimming()`, rendered after the base image/transition but before overlay widgets.
-  - `accessibility.dimming.opacity` (int, 10-90, default 30): opacity percentage (mapped to 0.0–1.0) for compositor dimming. `widgets/dimming_overlay.py` remains as a legacy/test/fallback widget.
+  - `accessibility.dimming.opacity` (int, 10-90, default 50): opacity percentage (mapped to 0.0–1.0) for compositor dimming. `widgets/dimming_overlay.py` remains as a legacy/test/fallback widget.
   - `accessibility.pixel_shift.enabled` (bool, default false): enables periodic 1px shifts of all overlay widgets to prevent burn-in on older LCD displays.
   - `accessibility.pixel_shift.rate` (int, 1-5, default 1): number of shifts per minute. Widgets drift up to 4px in any direction then drift back. Shifting is deferred during transitions.
 - Settings dialog:
@@ -432,6 +432,17 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 
 `Docs/10_WIDGET_GUIDELINES.md` is the **canonical source of truth** for overlay
 widget behaviour; this Spec only summarises the high-level contract.
+
+### Spotify Visualizer Architecture (Mar 2026 split)
+
+The monolithic `SpotifyVisualizerWidget` and `SpotifyBarsGLOverlay` have been decomposed:
+
+- **Per-mode renderers** (`widgets/spotify_visualizer/renderers/`): 7 modules (spectrum, oscilloscope, sine_wave, blob, helix, starfield, bubble) each export `get_uniform_names()` and `upload_uniforms()`. Dispatched via `upload_mode_uniforms(mode, gl, u, state)` — only the active mode's uniforms are pushed, preventing cross-mode bleed.
+- **Tick pipeline** (`widgets/spotify_visualizer/tick_pipeline.py`): Extracted `_on_tick()` (~415 lines) from the widget.
+- **Mode transition** (`widgets/spotify_visualizer/mode_transition.py`): Extracted mode cycling, fade, teardown (~300 lines). `reset_visualizer_state()` is the single reset surface for cold starts, settings applies, and double-click switches.
+- **Bubble simulation** (`widgets/spotify_visualizer/bubble_simulation.py`): CPU-side particle sim with per-bubble state, trail smear, swirl orbits.
+- **Result**: `spotify_visualizer_widget.py` 2407→1482 lines. `spotify_bars_gl_overlay.py` 2049→1518 lines.
+- **Mode isolation**: `_reset_mode_state()` clears per-mode accumulators on switch. Non-active modes get their blob/osc state zeroed. No data bleeds between modes on double-click transitions.
 
 ### Spotify Visualizer lifecycle & debugging checklist
 

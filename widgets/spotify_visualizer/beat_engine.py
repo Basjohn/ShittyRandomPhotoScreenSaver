@@ -68,11 +68,11 @@ class _SpotifyBeatEngine(QObject):
         # Smoothing state (moved from widget to reduce UI thread work)
         self._smoothed_bars: List[float] = [0.0] * self._bar_count
         self._last_smooth_ts: float = -1.0
-        self._smoothing_tau: float = 0.12  # Base smoothing time constant
+        self._smoothing_tau: float = 0.10  # Base smoothing time constant
         
         # Anti-flicker: dead-zone threshold filters micro-oscillations
         self._segment_hysteresis: float = 0.0  # Disabled — was amplifying oscillations
-        self._min_change_threshold: float = 0.06  # 6% dead-zone — filters segment-boundary noise
+        self._min_change_threshold: float = 0.008  # 0.8% dead-zone — tight enough to let bars reach zero
         
         # Playback state gating for FFT processing
         self._is_spotify_playing: bool = False
@@ -171,7 +171,7 @@ class _SpotifyBeatEngine(QObject):
         
         base_tau = self._smoothing_tau
         tau_rise = base_tau * 0.35
-        tau_decay = base_tau * 3.0
+        tau_decay = base_tau * 1.5
         alpha_rise = 1.0 - math.exp(-dt / tau_rise)
         alpha_decay = 1.0 - math.exp(-dt / tau_decay)
         alpha_rise = max(0.0, min(1.0, alpha_rise))
@@ -270,7 +270,7 @@ class _SpotifyBeatEngine(QObject):
             
             base_tau = smoothing_tau
             tau_rise = base_tau * 0.35
-            tau_decay = base_tau * 3.0
+            tau_decay = base_tau * 1.5
             alpha_rise = 1.0 - math.exp(-dt / tau_rise)
             alpha_decay = 1.0 - math.exp(-dt / tau_decay)
             alpha_rise = max(0.0, min(1.0, alpha_rise))
@@ -404,11 +404,23 @@ class _SpotifyBeatEngine(QObject):
             last_ts = 0.0
         if last_ts > 0.0:
             try:
-                silence_timeout = 0.4
-                if (now_ts - last_ts) >= silence_timeout:
+                silence_elapsed = now_ts - last_ts
+                if silence_elapsed >= 0.3:
+                    # Gradually decay bars toward zero during silence
+                    decay_alpha = min(1.0, silence_elapsed * 2.5)  # full zero by ~0.7s
                     if isinstance(self._latest_bars, list) and self._bar_count > 0:
-                        if any(b > 0.0 for b in self._latest_bars):
-                            self._latest_bars = [0.0] * self._bar_count
+                        for i in range(len(self._latest_bars)):
+                            if self._latest_bars[i] > 0.0:
+                                self._latest_bars[i] *= max(0.0, 1.0 - decay_alpha)
+                                if self._latest_bars[i] < 0.005:
+                                    self._latest_bars[i] = 0.0
+                    # Also decay smoothed bars so the UI actually sees the drop
+                    if isinstance(self._smoothed_bars, list):
+                        for i in range(len(self._smoothed_bars)):
+                            if self._smoothed_bars[i] > 0.0:
+                                self._smoothed_bars[i] *= max(0.0, 1.0 - decay_alpha)
+                                if self._smoothed_bars[i] < 0.005:
+                                    self._smoothed_bars[i] = 0.0
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 

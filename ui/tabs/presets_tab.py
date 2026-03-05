@@ -25,10 +25,10 @@ from core.settings.presets import (
     reset_non_custom_presets,
 )
 from ui.tabs.shared_styles import (
+    PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     INFO_LABEL_STYLE,
     SUBSECTION_DIVIDER_STYLE,
-    SUBSECTION_DIVIDER_TITLE_STYLE,
     SLIDER_STYLE,
     SCROLL_AREA_STYLE,
 )
@@ -90,8 +90,9 @@ class PresetDescriptionBox(QFrame):
         self.setStyleSheet("""
             #presetDescriptionBox {
                 %s
-                background-color: rgba(40, 40, 40, 0.9);
-                padding: 4px;
+                background: transparent;
+                margin-top: 6px;
+                padding: 4px 8px 4px 8px;
             }
             
             #presetNameLabel {
@@ -101,10 +102,8 @@ class PresetDescriptionBox(QFrame):
             #presetDescriptionLabel {
                 %s
             }
-        %s
         """ % (
             SUBSECTION_DIVIDER_STYLE,
-            SUBSECTION_DIVIDER_TITLE_STYLE,
             SECTION_HEADING_STYLE,
             INFO_LABEL_STYLE,
         ))
@@ -155,11 +154,7 @@ class PresetsTab(QScrollArea):
         header = QLabel("Presets")
         header.setObjectName("presetsHeader")
         header.setWordWrap(False)
-        header.setStyleSheet(
-            SECTION_HEADING_STYLE
-            + "font-size: 18px;"
-            + "font-weight: 700;"
-        )
+        header.setStyleSheet(PAGE_TITLE_STYLE)
         main_layout.addWidget(header)
 
         # Subtitle

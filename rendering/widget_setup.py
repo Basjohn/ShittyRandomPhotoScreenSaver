@@ -51,18 +51,21 @@ def setup_dimming(display: "DisplayWidget", widgets_config: Dict) -> None:
         display: The DisplayWidget instance
         widgets_config: Widget settings dictionary
     """
+    from core.settings.defaults import get_default_settings
+    canonical = get_default_settings().get('accessibility', {}).get('dimming', {})
+
     settings = display.settings_manager
     if not settings:
         return
         
     dimming_enabled = SettingsManager.to_bool(
-        settings.get('accessibility.dimming.enabled', False), False
+        settings.get('accessibility.dimming.enabled', canonical.get('enabled', False)), False
     )
     try:
-        dimming_opacity = int(settings.get('accessibility.dimming.opacity', 30))
+        dimming_opacity = int(settings.get('accessibility.dimming.opacity', canonical.get('opacity', 50)))
         dimming_opacity = max(10, min(90, dimming_opacity))
     except (ValueError, TypeError):
-        dimming_opacity = 30
+        dimming_opacity = canonical.get('opacity', 50)
     
     # Store dimming state
     display._dimming_enabled = dimming_enabled

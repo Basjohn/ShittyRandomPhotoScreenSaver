@@ -6,6 +6,7 @@ Features gorgeous UI with:
 - Drop shadow effect
 - Resizable window
 """
+import sys
 from typing import Dict, Optional, Any
 from pathlib import Path
 from PySide6.QtWidgets import (
@@ -981,7 +982,6 @@ class SettingsDialog(QDialog):
     
     def _on_exit_without_sources(self) -> None:
         """User chose to exit the application without sources."""
-        import sys
         logger.info("User chose to exit without configuring sources")
         sys.exit(0)
 

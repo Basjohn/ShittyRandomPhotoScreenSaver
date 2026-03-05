@@ -542,7 +542,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.media_position.setCurrentIndex(index)
 
     tab.media_font_combo.setCurrentFont(QFont(tab._config_str('media', media_config, 'font_family', 'Segoe UI')))
-    tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size', 20))
+    tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size', 22))
     tab.media_margin.setValue(tab._config_int('media', media_config, 'margin', 30))
     tab.media_show_background.setChecked(tab._config_bool('media', media_config, 'show_background', True))
     tab.media_intense_shadow.setChecked(tab._config_bool('media', media_config, 'intense_shadow', True))
@@ -550,7 +550,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_bg_opacity.setValue(media_opacity_pct)
     tab.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
 
-    tab._media_artwork_size = tab._config_int('media', media_config, 'artwork_size', 200)
+    tab._media_artwork_size = tab._config_int('media', media_config, 'artwork_size', 250)
     tab.media_artwork_size.setValue(tab._media_artwork_size)
     tab.media_rounded_artwork.setChecked(tab._config_bool('media', media_config, 'rounded_artwork_border', True))
     tab.media_show_header_frame.setChecked(tab._config_bool('media', media_config, 'show_header_frame', True))
@@ -559,7 +559,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab._config_bool('media', media_config, 'spotify_volume_enabled', True)
     )
     tab.media_mute_button_enabled.setChecked(
-        tab._config_bool('media', media_config, 'mute_button_enabled', False)
+        tab._config_bool('media', media_config, 'mute_button_enabled', True)
     )
 
     # Colors
@@ -871,9 +871,17 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.blob_reactive_wobble.setValue(max(0, min(200, blob_rw_val)))
         tab.blob_reactive_wobble_label.setText(f"{blob_rw_val}%")
     if hasattr(tab, 'blob_stretch_tendency'):
-        blob_st_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stretch_tendency', 0.0) * 100)
+        blob_st_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stretch_tendency', 0.35) * 100)
         tab.blob_stretch_tendency.setValue(max(0, min(100, blob_st_val)))
         tab.blob_stretch_tendency_label.setText(f"{blob_st_val}%")
+    if hasattr(tab, 'blob_stretch_inner'):
+        blob_si_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stretch_inner', 0.5) * 100)
+        tab.blob_stretch_inner.setValue(max(0, min(100, blob_si_val)))
+        tab.blob_stretch_inner_label.setText(f"{blob_si_val}%")
+    if hasattr(tab, 'blob_stretch_outer'):
+        blob_so_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stretch_outer', 0.5) * 100)
+        tab.blob_stretch_outer.setValue(max(0, min(100, blob_so_val)))
+        tab.blob_stretch_outer_label.setText(f"{blob_so_val}%")
     if hasattr(tab, 'blob_growth'):
         blob_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_growth', 2.5) * 100)
         tab.blob_growth.setValue(max(100, min(500, blob_growth_val)))
@@ -1029,9 +1037,9 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.sine_line_offset_bias.setValue(max(0, min(100, sine_lob_val)))
         tab.sine_line_offset_bias_label.setText(f"{sine_lob_val}%")
     if hasattr(tab, 'sine_card_adaptation'):
-        sine_ca = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_card_adaptation', 0.3) * 100)
-        tab.sine_card_adaptation.setValue(max(3, min(100, sine_ca)))
-        tab.sine_card_adaptation_label.setText(f"{sine_ca}%")
+        sine_adapt = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_card_adaptation', 0.30) * 100)
+        tab.sine_card_adaptation.setValue(max(5, min(100, sine_adapt)))
+        tab.sine_card_adaptation_label.setText(f"{sine_adapt}%")
     if hasattr(tab, 'sine_wave_growth'):
         sine_gv = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_wave_growth', 1.0) * 100)
         tab.sine_wave_growth.setValue(max(100, min(500, sine_gv)))
@@ -1147,8 +1155,20 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_drift_frequency_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_drift_direction'):
         dd = tab._config_str('spotify_visualizer', spotify_vis_config, 'bubble_drift_direction', 'random').lower()
+        is_swirl = dd in ('swirl_cw', 'swirl_ccw')
+        # Restore swirl checkbox + combo
+        if hasattr(tab, 'bubble_swirl_enabled'):
+            tab.bubble_swirl_enabled.setChecked(is_swirl)
+        if hasattr(tab, 'bubble_swirl_direction') and is_swirl:
+            sd_idx = tab.bubble_swirl_direction.findData(dd)
+            if sd_idx >= 0:
+                tab.bubble_swirl_direction.setCurrentIndex(sd_idx)
+        # Restore drift direction combo (use 'none' if swirl active)
         combo = tab.bubble_drift_direction
-        idx = combo.findData(dd)
+        if is_swirl:
+            idx = combo.findData('none')
+        else:
+            idx = combo.findData(dd)
         if idx < 0:
             idx = combo.findData('random')
         if idx < 0:
@@ -1339,7 +1359,9 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_stage3_release_ms': tab.blob_stage3_release_ms.value() if hasattr(tab, 'blob_stage3_release_ms') else 1200,
         'blob_constant_wobble': (tab.blob_constant_wobble.value() if hasattr(tab, 'blob_constant_wobble') else 100) / 100.0,
         'blob_reactive_wobble': (tab.blob_reactive_wobble.value() if hasattr(tab, 'blob_reactive_wobble') else 100) / 100.0,
-        'blob_stretch_tendency': (tab.blob_stretch_tendency.value() if hasattr(tab, 'blob_stretch_tendency') else 0) / 100.0,
+        'blob_stretch_tendency': (tab.blob_stretch_tendency.value() if hasattr(tab, 'blob_stretch_tendency') else 35) / 100.0,
+        'blob_stretch_inner': (tab.blob_stretch_inner.value() if hasattr(tab, 'blob_stretch_inner') else 50) / 100.0,
+        'blob_stretch_outer': (tab.blob_stretch_outer.value() if hasattr(tab, 'blob_stretch_outer') else 50) / 100.0,
         'helix_turns': tab.helix_turns.value() if hasattr(tab, 'helix_turns') else 4,
         'helix_double': tab.helix_double.isChecked() if hasattr(tab, 'helix_double') else False,
         'helix_speed': (tab.helix_speed.value() if hasattr(tab, 'helix_speed') else 100) / 100.0,
@@ -1409,8 +1431,12 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_drift_speed': (tab.bubble_drift_speed.value() if hasattr(tab, 'bubble_drift_speed') else 50) / 100.0,
         'bubble_drift_frequency': (tab.bubble_drift_frequency.value() if hasattr(tab, 'bubble_drift_frequency') else 50) / 100.0,
         'bubble_drift_direction': (
-            (tab.bubble_drift_direction.currentData() or 'random')
-            if hasattr(tab, 'bubble_drift_direction') else 'random'
+            (tab.bubble_swirl_direction.currentData() or 'swirl_cw')
+            if hasattr(tab, 'bubble_swirl_enabled') and tab.bubble_swirl_enabled.isChecked()
+            else (
+                (tab.bubble_drift_direction.currentData() or 'random')
+                if hasattr(tab, 'bubble_drift_direction') else 'random'
+            )
         ),
         'bubble_big_count': tab.bubble_big_count.value() if hasattr(tab, 'bubble_big_count') else 8,
         'bubble_small_count': tab.bubble_small_count.value() if hasattr(tab, 'bubble_small_count') else 25,

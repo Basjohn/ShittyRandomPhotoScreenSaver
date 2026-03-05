@@ -268,11 +268,12 @@ def create_spotify_visualizer_widget(
         return None
 
     media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
+    media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
     spotify_vis_settings = widgets_config.get('spotify_visualizer', {}) if isinstance(widgets_config, dict) else {}
     model = SpotifyVisualizerSettings.from_mapping(spotify_vis_settings if isinstance(spotify_vis_settings, Mapping) else {})
     spotify_vis_enabled = SettingsManager.to_bool(model.enabled, False)
 
-    media_monitor_sel = media_settings.get('monitor', 'ALL')
+    media_monitor_sel = media_model.monitor
     try:
         show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
     except Exception as e:
@@ -318,23 +319,22 @@ def create_spotify_visualizer_widget(
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
-        # Card style inheritance from media widget
-        bg_color_data = media_settings.get('bg_color', [64, 64, 64, 255])
+        # Card style inheritance from media model (canonical defaults)
+        bg_color_data = media_model.bg_color
         bg_qcolor = parse_color_to_qcolor(bg_color_data)
         try:
-            bg_opacity = float(media_settings.get('bg_opacity', 0.9))
+            bg_opacity = float(media_model.background_opacity)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            bg_opacity = 0.9
-        border_color_data = media_settings.get('border_color', [128, 128, 128, 255])
-        border_opacity = media_settings.get('border_opacity', 0.8)
+            bg_opacity = 0.5
+        border_color_data = media_model.border_color
         try:
-            bo = float(border_opacity)
+            bo = float(media_model.border_opacity)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             bo = 0.8
         border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-        show_background = SettingsManager.to_bool(media_settings.get('show_background', True), True)
+        show_background = media_model.show_background
 
         try:
             vis.set_bar_style(
@@ -446,11 +446,12 @@ def create_mute_button_widget(
         return None
 
     media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
+    media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
     mute_enabled = SettingsManager.to_bool(media_settings.get('mute_button_enabled', False), False)
     if not mute_enabled:
         return None
 
-    media_monitor_sel = media_settings.get('monitor', 'ALL')
+    media_monitor_sel = media_model.monitor
     try:
         show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
     except Exception as e:
@@ -469,17 +470,16 @@ def create_mute_button_widget(
 
         btn.set_anchor(media_widget)
 
-        # Inherit media card background and border colours
-        bg_color_data = media_settings.get('bg_color', [35, 35, 35, 255])
+        # Inherit media card background and border colours from model
+        bg_color_data = media_model.bg_color
         bg_qcolor = parse_color_to_qcolor(bg_color_data)
-        border_color_data = media_settings.get('border_color', [255, 255, 255, 255])
-        border_opacity = media_settings.get('border_opacity', 0.8)
+        border_color_data = media_model.border_color
         try:
-            bo = float(border_opacity)
+            bo = float(media_model.border_opacity)
         except Exception:
             bo = 0.8
         border_qcolor = parse_color_to_qcolor(border_color_data, opacity_override=bo)
-        text_color_data = media_settings.get('color', [255, 255, 255, 230])
+        text_color_data = media_model.color
         icon_qcolor = parse_color_to_qcolor(text_color_data)
 
         if bg_qcolor and border_qcolor and icon_qcolor:

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QSlider, QWidget, QToolButton,
+    QSlider, QWidget, QToolButton, QCheckBox,
 )
 from PySide6.QtCore import Qt
 
@@ -282,20 +282,51 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         ("Diagonal", "diagonal"),
         ("Swish (Horizontal)", "swish_horizontal"),
         ("Swish (Vertical)", "swish_vertical"),
-        ("Swirl (Clockwise)", "swirl_cw"),
-        ("Swirl (Counter-Clockwise)", "swirl_ccw"),
         ("Random", "random"),
     ]
     for label, value in drift_options:
         tab.bubble_drift_direction.addItem(label, value)
     saved_dd = tab._default_str('spotify_visualizer', 'bubble_drift_direction', 'random').lower()
-    dd_index = tab.bubble_drift_direction.findData(saved_dd)
+    # If stored value is a swirl direction, default drift combo to "none"
+    if saved_dd in ('swirl_cw', 'swirl_ccw'):
+        dd_index = tab.bubble_drift_direction.findData('none')
+    else:
+        dd_index = tab.bubble_drift_direction.findData(saved_dd)
     if dd_index < 0:
         dd_index = tab.bubble_drift_direction.findData('random')
     tab.bubble_drift_direction.setCurrentIndex(max(0, dd_index))
     tab.bubble_drift_direction.currentIndexChanged.connect(tab._save_settings)
     drift_direction_row.addWidget(tab.bubble_drift_direction)
     drift_direction_row.addStretch()
+
+    # ── Swirl Mode ────────────────────────────────────────────────
+    swirl_row = _aligned_row(_adv_layout, "Swirl Mode:")
+    tab.bubble_swirl_enabled = QCheckBox("Enable")
+    tab.bubble_swirl_enabled.setProperty("circleIndicator", True)
+    tab.bubble_swirl_enabled.setChecked(saved_dd in ('swirl_cw', 'swirl_ccw'))
+    swirl_row.addWidget(tab.bubble_swirl_enabled)
+
+    tab.bubble_swirl_direction = StyledComboBox(size_variant="compact")
+    tab.bubble_swirl_direction.addItem("Clockwise", "swirl_cw")
+    tab.bubble_swirl_direction.addItem("Counter-Clockwise", "swirl_ccw")
+    if saved_dd == 'swirl_ccw':
+        tab.bubble_swirl_direction.setCurrentIndex(1)
+    else:
+        tab.bubble_swirl_direction.setCurrentIndex(0)
+    tab.bubble_swirl_direction.setEnabled(saved_dd in ('swirl_cw', 'swirl_ccw'))
+    tab.bubble_swirl_direction.currentIndexChanged.connect(tab._save_settings)
+    swirl_row.addWidget(tab.bubble_swirl_direction)
+    swirl_row.addStretch()
+
+    def _on_swirl_toggled(checked: bool) -> None:
+        tab.bubble_swirl_direction.setEnabled(checked)
+        tab.bubble_drift_direction.setEnabled(not checked)
+        tab.bubble_stream_direction.setEnabled(not checked)
+        tab._save_settings()
+
+    tab.bubble_swirl_enabled.toggled.connect(_on_swirl_toggled)
+    # Apply initial enable/disable state
+    _on_swirl_toggled(tab.bubble_swirl_enabled.isChecked())
 
     # ── Bubble Count & Lifecycle ──────────────────────────────────
     _adv_layout.addWidget(QLabel("<b>Bubble Count & Lifecycle</b>"))
@@ -395,6 +426,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     for label, key in direction_options:
         tab.bubble_specular_direction.addItem(label, key)
         tab.bubble_gradient_direction.addItem(label, key)
+    tab.bubble_gradient_direction.addItem("Center Out", "center_out")
 
     saved_sd = tab._default_str('spotify_visualizer', 'bubble_specular_direction', 'top_left').lower()
     idx = tab.bubble_specular_direction.findData(saved_sd)

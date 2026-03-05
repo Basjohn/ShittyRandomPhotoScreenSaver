@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QWidget,
     QCheckBox, QSpinBox, QGroupBox,
-    QLineEdit, QCompleter, QSlider,
+    QLineEdit, QSlider,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -115,7 +115,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     info_label.setStyleSheet("color: #4CAF50; font-size: 11px; font-family: 'Jost'; font-weight: 600;")
     _weather_ctrl_layout.addWidget(info_label)
 
-    # Location with autocomplete
+    # Location with live geocode autocomplete
     location_row = _aligned_row(_weather_ctrl_layout, "Location:")
     tab.weather_location = QLineEdit()
     default_city = tab._default_str('weather', 'location', '')
@@ -123,32 +123,10 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_location.setPlaceholderText("City name...")
     tab.weather_location.textChanged.connect(tab._save_settings)
 
-    common_cities = [
-        "London", "New York", "Tokyo", "Paris", "Berlin", "Sydney", "Toronto",
-        "Los Angeles", "Chicago", "Houston", "Phoenix", "Philadelphia",
-        "San Antonio", "San Diego", "Dallas", "San Jose", "Austin", "Jacksonville",
-        "Fort Worth", "Columbus", "Charlotte", "San Francisco", "Indianapolis",
-        "Seattle", "Denver", "Washington", "Boston", "El Paso", "Nashville",
-        "Detroit", "Portland", "Las Vegas", "Memphis", "Louisville", "Baltimore",
-        "Milwaukee", "Albuquerque", "Tucson", "Fresno", "Mesa", "Sacramento",
-        "Atlanta", "Kansas City", "Colorado Springs", "Omaha", "Raleigh", "Miami",
-        "Long Beach", "Virginia Beach", "Oakland", "Minneapolis", "Tulsa",
-        "Arlington", "Tampa", "New Orleans", "Wichita", "Cleveland", "Bakersfield",
-        "Munich", "Madrid", "Rome", "Amsterdam", "Barcelona", "Vienna",
-        "Hamburg", "Warsaw", "Budapest", "Prague", "Copenhagen", "Stockholm",
-        "Brussels", "Dublin", "Lisbon", "Athens", "Helsinki", "Oslo",
-        "Shanghai", "Beijing", "Hong Kong", "Singapore", "Seoul", "Bangkok",
-        "Mumbai", "Delhi", "Bangalore", "Chennai", "Kolkata", "Hyderabad",
-        "Melbourne", "Brisbane", "Perth", "Auckland", "Wellington",
-        "Cape Town", "Johannesburg", "Durban", "Cairo", "Lagos", "Nairobi",
-        "Buenos Aires", "Rio de Janeiro", "S\u00e3o Paulo", "Lima", "Bogot\u00e1",
-        "Santiago", "Mexico City", "Guadalajara", "Monterrey", "Havana",
-        "Tel Aviv", "Jerusalem", "Dubai", "Abu Dhabi", "Doha", "Istanbul",
-        "Moscow", "St Petersburg", "Kyiv", "Minsk", "Bucharest", "Sofia"
-    ]
-    completer = QCompleter(sorted(common_cities))
-    completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-    tab.weather_location.setCompleter(completer)
+    # Live geocode completer — queries Open-Meteo as user types,
+    # falls back to a static city list when offline.
+    from ui.widgets.geocode_completer import GeocodeCompleter
+    tab._geocode_completer = GeocodeCompleter(tab.weather_location)
 
     location_row.addWidget(tab.weather_location)
     location_row.addStretch()
@@ -401,7 +379,7 @@ def load_weather_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.weather_position.setCurrentIndex(index)
 
     tab.weather_font_combo.setCurrentFont(QFont(tab._config_str('weather', weather_config, 'font_family', 'Segoe UI')))
-    tab.weather_font_size.setValue(tab._config_int('weather', weather_config, 'font_size', 24))
+    tab.weather_font_size.setValue(tab._config_int('weather', weather_config, 'font_size', 28))
     tab.weather_show_forecast.setChecked(tab._config_bool('weather', weather_config, 'show_forecast', True))
     tab.weather_show_details.setChecked(tab._config_bool('weather', weather_config, 'show_details_row', True))
     tab.weather_show_icon.setChecked(tab._config_bool('weather', weather_config, 'show_condition_icon', True))

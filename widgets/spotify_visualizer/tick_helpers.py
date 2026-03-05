@@ -226,7 +226,7 @@ def apply_visual_smoothing(widget: Any, target_bars: List[float], now_ts: float)
 
     dt = max(1e-4, now_ts - last_ts)
     tau_rise = widget._visual_smoothing_tau
-    tau_decay = tau_rise * 2.6
+    tau_decay = tau_rise * 2.0
     alpha_rise = 1.0 - math.exp(-dt / tau_rise)
     alpha_decay = 1.0 - math.exp(-dt / tau_decay)
     alpha_rise = max(0.0, min(1.0, alpha_rise))

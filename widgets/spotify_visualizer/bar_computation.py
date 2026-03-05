@@ -422,6 +422,11 @@ def _compute_noise_floor(
             target_floor = max(worker._min_floor, target_floor * (1.0 - drop_relief * 0.45))
     else:
         target_floor = max(worker._min_floor, min(worker._max_floor, manual_floor))
+        # Compensate expansion when floor is lowered: more signal passes through,
+        # so scale down expansion to prevent bar pinning at max height.
+        if noise_floor_base > 0.01 and target_floor < noise_floor_base * 0.9:
+            floor_ratio = max(0.15, target_floor / noise_floor_base)
+            expansion *= max(0.35, floor_ratio ** 0.5)
 
     try:
         applied_floor = getattr(worker, "_applied_noise_floor", target_floor)
@@ -563,9 +568,14 @@ def _apply_low_resolution_adjustments(
 
 
 def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands: int, np) -> None:
-    """Apply reactive smoothing with attack/decay dynamics."""
-    decay_rate = 0.35
+    """Apply reactive smoothing with attack/decay dynamics.
 
+    Attack: lerp toward target at 0.65 (smooth rise).
+    Decay: lerp toward target (not toward zero) at different rates depending
+    on whether the drop is large (snap) or gradual (glide).  This prevents
+    the old multiplicative-toward-zero pattern that caused center bars to
+    oscillate between snapping up and decaying past the sustained level.
+    """
     now_ts = time.time()
     dt = now_ts - worker._last_fft_ts if worker._last_fft_ts > 0 else 0.0
     worker._last_fft_ts = now_ts
@@ -579,10 +589,12 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
         bar_history.fill(0.0)
         hold_timers.fill(0)
 
-    drop_threshold = 0.01
-    drop_decay = 0.25
-    hold_frames = 2
-    snap_fraction = 0.15
+    drop_threshold = 0.04
+    hold_frames = 3
+    attack_speed = 0.75
+    decay_snap = 0.22
+    decay_hold = 0.16
+    decay_glide = 0.12
 
     for i in range(bands):
         target = arr[i]
@@ -590,7 +602,6 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
         hold = hold_timers[i]
 
         if target > current:
-            attack_speed = 0.85
             new_val = current + (target - current) * attack_speed
             hold_timers[i] = 0
         else:
@@ -598,16 +609,12 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
 
             if drop > drop_threshold:
                 hold_timers[i] = hold_frames
-                new_val = current * snap_fraction + target * (1.0 - snap_fraction)
+                new_val = current + (target - current) * decay_snap
             elif hold > 0:
                 hold_timers[i] = hold - 1
-                new_val = current * drop_decay
-                if new_val < target:
-                    new_val = target
+                new_val = current + (target - current) * decay_hold
             else:
-                new_val = current * decay_rate
-                if new_val < target:
-                    new_val = target
+                new_val = current + (target - current) * decay_glide
 
         arr[i] = new_val
         bar_history[i] = new_val

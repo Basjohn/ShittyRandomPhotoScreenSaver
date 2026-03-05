@@ -24,6 +24,7 @@ from ui.tabs.shared_styles import (
     CIRCLE_CHECKBOX_STYLE,
     SLIDER_STYLE,
     SPINBOX_STYLE,
+    PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     NoWheelSlider,
     style_group_box,
@@ -108,12 +109,7 @@ class TransitionsTab(QWidget):
         
         # Title
         title = QLabel("Transition Settings")
-        title.setStyleSheet(
-            "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-            "font-weight: 700;"
-            "font-size: 18px;"
-            "color: #ffffff;"
-        )
+        title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
         
         # Transition type group

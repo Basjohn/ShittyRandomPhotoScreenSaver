@@ -2,7 +2,7 @@
 
 **Purpose**: Detailed reference for all tests - what they check and when to use them.
 
-**Total Tests**: ~300+ tests across 100 test files
+**Total Tests**: ~300+ tests across 99 test files
 
 ---
 
@@ -51,6 +51,7 @@
 | `test_threading.py` | Threading utilities, run_on_ui_thread, locks | Low-level threading changes |
 | `test_qt_timer_threading.py` | QTimer behavior in threads | Timer-related threading issues |
 | `test_decorators.py` | @rate_limited, @memoize, @timing decorators | Changes to decorator implementations |
+| `test_storage_paths.py` | `get_app_data_dir()`, `get_cache_dir()`, canonical path resolution | Storage path changes |
 
 ### Process Management
 
@@ -61,7 +62,6 @@
 | `test_fft_worker.py` | FFT worker for visualizer audio processing | Audio/FFT pipeline changes |
 | `test_fft_worker_gating.py` | FFT worker gating when Spotify not playing | Visualizer playback gating |
 | `test_worker_latency_tuning.py` | Worker latency thresholds and tuning | Performance tuning, latency issues |
-| `test_eco_mode_worker_control.py` | Worker suspension in eco mode | Eco mode changes, worker control |
 
 ### Events & Messaging
 
@@ -98,6 +98,7 @@
 | `test_gl_compositor_cleanup.py` | GL compositor resource cleanup | GL resource leaks |
 | `test_gl_texture_streaming.py` | Texture upload, PBO pooling, LRU cache | Texture streaming changes |
 | `test_gl_overlay_no_black_frames.py` | No black frames during startup/transition | Black frame bugs |
+| `test_rendering_backends.py` | Render backend selection and fallback | Backend changes |
 
 ### Transitions
 
@@ -113,6 +114,7 @@
 | `test_diffuse_transition.py` | Diffuse transition (Rectangle/Membrane) | Diffuse effect changes |
 | `test_particle_transition.py` | Particle transition (8 directions, swirl, converge) | Particle effect changes |
 | `test_slide_transition.py` | Slide transition cardinal directions | Slide-specific issues |
+| `test_transitions_tab.py` | Transitions tab UI controls, duration persistence | Transition settings UI |
 
 ### Adaptive Timing
 
@@ -159,7 +161,9 @@
 | `test_reddit_widget.py` | RedditWidget, fetch, display, clicks | Reddit widget issues |
 | `test_spotify_visualizer_widget.py` | SpotifyVisualizerWidget, BeatEngine, bar rendering | Visualizer widget changes |
 | `test_spotify_visualizer_integration.py` | Visualizer integration with DisplayWidget | Visualizer integration |
-| ~~`test_painter_shadow.py`~~ | *(Removed — superseded by `shadow_utils.py`)* | — |
+| `test_imgur_cache.py` | Imgur LRU disk cache, GIF conversion | Imgur cache changes |
+| `test_imgur_scraper.py` | Imgur web scraping, rate limiting | Imgur scraper changes |
+| `test_imgur_widget.py` | Imgur gallery widget lifecycle, grid rendering | Imgur widget changes |
 
 ### Widget Behavior
 
@@ -170,6 +174,8 @@
 | `test_widget_performance.py` | Widget rendering performance | Widget perf issues |
 | `test_pixel_shift.py` | Burn-in prevention pixel shifting | Pixel shift changes |
 | `test_no_legacy_widget_position_strings.py` | Settings don't use WidgetPosition. strings | Settings migration validation |
+| `test_settings_binding.py` | SliderBinding, CheckBinding, ComboDataBinding declarative bindings | Settings binding utility changes |
+| `test_save_debounce.py` | Settings save debounce timer behavior | Save timing changes |
 
 ---
 
@@ -313,6 +319,14 @@
 | `test_visualizer_preservation.py` | Visualizer state preservation | Visualizer reset bugs |
 | `test_visualizer_playback_gating.py` | Visualizer playback state gating | Bars when paused |
 | `test_visualizer_modes.py` | Visualizer direction/swirl/converge modes | Mode switching |
+| `test_visualizer_architecture_split.py` | 36 tests: module exports, delegation wiring, monolith size guards for the Mar 2026 architecture split | Architecture split regressions |
+| `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity | New uniform/kwarg additions |
+| `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering | Preset file changes |
+| `test_visualizer_settings_plumbing.py` | End-to-end settings plumbing (model → widget → overlay → shader) | New visualizer settings |
+| `test_visualizer_alignment.py` | Visualizer positioning relative to other widgets | Positioning changes |
+| `test_blob_intensity_reserve.py` | Blob intensity reserve and core floor clamp math | Blob stage tuning |
+| `test_micro_wobble_math.py` | Micro wobble amplitude/frequency math | Wobble parameter changes |
+| `test_sine_wave_gl_fix.py` | Sine wave GL uniform gating regression | Sine mode uniform issues |
 | `test_action_plan_3_0.py` | Action Plan 3.0: heartbeat settings/math, artwork double-click fix, halo forwarding guard, halo shapes, sine line positioning, rainbow/ghosting roundtrip, shader source validation (37 tests) | Tasks 5/6.1/6.2/7/8 |
 
 ---
@@ -354,9 +368,10 @@ python tests\pytest.py tests\test_frame_timing_workload.py -v
 
 | File | Purpose |
 |------|---------|
-| `conftest.py` | Pytest fixtures, shared test utilities |
+| `conftest.py` | Pytest fixtures, shared test utilities. Supports `--chunk`/`--total-chunks` CLI for chunked execution |
 | `pytest.ini` | Pytest configuration |
-| `pytest.py` | Custom test runner with logging setup |
+| `pytest.py` | Custom test runner with logging setup. Supports `-k`, `-v`, and module paths for targeted runs |
+| `run_chunked.py` | Chunked test runner — splits full suite into N subprocess chunks (default 4) for memory/timeout isolation |
 | `_gl_test_utils.py` | GL testing utilities |
 
 ### Key Fixtures (from conftest.py)
@@ -372,18 +387,18 @@ python tests\pytest.py tests\test_frame_timing_workload.py -v
 
 | Category | Count | Files |
 |----------|-------|-------|
-| Core Infrastructure | 11 | Threading, process, events, resources |
-| Rendering & GL | 18 | GL state, compositor, transitions |
-| Widgets & Overlays | 24 | All widget types, positioning |
+| Core Infrastructure | 12 | Threading, process, events, resources, storage paths |
+| Rendering & GL | 20 | GL state, compositor, transitions, rendering backends |
+| Widgets & Overlays | 27 | All widget types, positioning, Imgur |
 | Image Pipeline | 6 | Queue, processing, display |
-| Settings & Config | 11 | Settings, dialogs, presets |
+| Settings & Config | 13 | Settings, dialogs, presets, bindings |
 | Input & Interaction | 6 | Keys, mouse, media controls |
 | Integration & Workflow | 7 | End-to-end, Reddit, lifecycle |
 | Performance & Telemetry | 7 | Timing, logging, perf |
-| MC | 4 | Manual Controller specific |
-| Regression | 7 | Specific bug fix tests |
-| **Total** | **101** | |
+| MC | 3 | Manual Controller specific |
+| Regression | 18 | Bug fixes, architecture split, visualizer plumbing |
+| **Total** | **99 files** | |
 
 ---
 
-**Last Updated**: Feb 20, 2026 (added test_action_plan_3_0.py: 37 tests for Tasks 5/6.1/6.2/7/8)
+**Last Updated**: Mar 5, 2026 (added 15+ missing test files, chunked runner, architecture split tests, visualizer plumbing/preset/overlay kwarg tests, Imgur tests, settings binding tests)

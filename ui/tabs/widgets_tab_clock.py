@@ -432,7 +432,7 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.clock_show_numerals.setChecked(tab._config_bool('clock', clock_config, 'show_numerals', True))
     tab.clock_analog_shadow.setChecked(tab._config_bool('clock', clock_config, 'analog_face_shadow', True))
     tab.clock_analog_shadow_intense.setChecked(
-        tab._config_bool('clock', clock_config, 'analog_shadow_intense', False)
+        tab._config_bool('clock', clock_config, 'analog_shadow_intense', True)
     )
     tab.clock_digital_shadow_intense.setChecked(
         tab._config_bool('clock', clock_config, 'digital_shadow_intense', False)
@@ -444,9 +444,9 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.clock_position.setCurrentIndex(index)
 
     tab.clock_font_combo.setCurrentFont(QFont(tab._config_str('clock', clock_config, 'font_family', 'Segoe UI')))
-    tab.clock_font_size.setValue(tab._config_int('clock', clock_config, 'font_size', 48))
+    tab.clock_font_size.setValue(tab._config_int('clock', clock_config, 'font_size', 78))
     tab.clock_margin.setValue(tab._config_int('clock', clock_config, 'margin', 30))
-    tab.clock_show_background.setChecked(tab._config_bool('clock', clock_config, 'show_background', True))
+    tab.clock_show_background.setChecked(tab._config_bool('clock', clock_config, 'show_background', False))
     opacity_pct = int(tab._config_float('clock', clock_config, 'bg_opacity', 0.6) * 100)
     tab.clock_bg_opacity.setValue(opacity_pct)
     tab.clock_opacity_label.setText(f"{opacity_pct}%")

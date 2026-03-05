@@ -29,6 +29,7 @@ from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
     TOOLTIP_STYLE,
     COMBOBOX_STYLE,
+    PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     NAV_TAB_FONT_STYLE,
     style_group_box,
@@ -342,12 +343,7 @@ class WidgetsTab(QWidget):
         
         # Title
         title = QLabel("Overlay Widgets")
-        title.setStyleSheet(
-            "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-            "font-weight: 700;"
-            "font-size: 18px;"
-            "color: #ffffff;"
-        )
+        title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
 
         # Global widget options

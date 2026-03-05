@@ -31,7 +31,9 @@ uniform float u_blob_core_floor_bias; // 0..0.6 fraction of staged radius preser
 uniform float u_blob_stage_bias;  // -0.35..0.35 shifts stage thresholds up/down before smoothing
 uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.0)
 uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
-uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.0)
+uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.35)
+uniform float u_blob_stretch_inner;  // 0..1 how deep inward dents can go (default 0.5)
+uniform float u_blob_stretch_outer;  // 0..1 how far outward protrusions extend (default 0.5)
 uniform vec3 u_blob_stage_progress_override;  // (-1,-1,-1) when unused
 uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
@@ -198,21 +200,28 @@ float blob_sdf_ex(vec2 p, float time,
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
     float rw = clamp(u_blob_reactive_wobble, 0.0, 2.0);
     float st = clamp(u_blob_stretch_tendency, 0.0, 1.0);
+    float s_inner = clamp(u_blob_stretch_inner, 0.0, 1.0);
+    float s_outer = clamp(u_blob_stretch_outer, 0.0, 1.0);
     float wobble_component = 0.0;
 
-    wobble_component += sin(angle * 3.0 + time * 1.5) * 0.045 * 0.3 * cw;
-    wobble_component += sin(angle * 5.0 - time * 2.3) * 0.028 * 0.2 * cw;
-    wobble_component += sin(angle * 7.0 + time * 3.1) * 0.017 * 0.1 * cw;
-    wobble_component += sin(angle * 1.0 + time * 0.2) * 0.013 * cw;
+    // Constant wobble — always-present amorphous distortion.
+    // Low harmonics give broad lobes, high harmonics add fine detail.
+    wobble_component += sin(angle * 2.0 + time * 0.4)  * 0.035 * cw;
+    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.030 * cw;
+    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.020 * cw;
+    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.012 * cw;
+    wobble_component += sin(angle * 1.0 + time * 0.2)  * 0.040 * cw;
 
-    wobble_component += sin(angle * 3.0 + time * 1.5) * 0.067 * e_mid * 0.7 * rw;
-    wobble_component += sin(angle * 5.0 - time * 2.3) * 0.042 * e_mid * 0.8 * rw;
-    wobble_component += sin(angle * 7.0 + time * 3.1) * 0.025 * e_high * 0.9 * rw;
-    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.013 * e_high * rw;
+    // Reactive wobble — energy-driven shape distortion.
+    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.055 * e_mid * rw;
+    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.040 * e_mid * rw;
+    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.025 * e_high * rw;
+    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.015 * e_high * rw;
 
+    // Vocal emphasis — mid-range creates broad amorphous lobes.
     float vocal = clamp(e_mid, 0.0, 1.0);
-    wobble_component += sin(angle * 2.0 + time * 0.9) * 0.080 * vocal * rw;
-    wobble_component += sin(angle * 4.0 - time * 1.1) * 0.050 * vocal * vocal * rw;
+    wobble_component += sin(angle * 2.0 + time * 0.9)  * 0.065 * vocal * rw;
+    wobble_component += sin(angle * 4.0 - time * 1.1)  * 0.045 * vocal * vocal * rw;
 
     float stretch_component = 0.0;
     if (st > 0.01) {
@@ -220,24 +229,38 @@ float blob_sdf_ex(vec2 p, float time,
         float peak2 = peak * peak;
         float peak3 = peak2 * peak;
         float stretch = 0.0;
-        stretch += sin(angle * 2.0 + time * 0.7) * peak3 * 1.8;
+        stretch += sin(angle * 2.0 + time * 0.7)  * peak3 * 1.8;
         stretch += sin(angle * 1.0 + time * 0.15) * peak2 * 1.2;
-        stretch += sin(angle * 3.0 - time * 1.3) * e_bass * e_bass * 1.4;
-        stretch += sin(angle * 5.0 + time * 2.1) * e_mid * e_mid * 0.9;
-        stretch += sin(angle * 7.0 - time * 0.5) * e_mid * e_mid * 0.7;
-        stretch += sin(angle * 9.0 + time * 3.3) * e_high * 0.5;
+        stretch += sin(angle * 3.0 - time * 1.3)  * e_bass * e_bass * 1.4;
+        stretch += sin(angle * 5.0 + time * 2.1)  * e_mid * e_mid * 0.9;
+        stretch += sin(angle * 7.0 - time * 0.5)  * e_mid * e_mid * 0.7;
+        stretch += sin(angle * 9.0 + time * 3.3)  * e_high * 0.5;
         stretch_component += stretch * st;
     }
 
+    // Scale total deformation by reactive deformation factor
+    // Cubic scaling above 1.0 for truly dramatic stretching at high values
     float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
     wobble_component *= rd_scale;
     stretch_component *= rd_scale;
+
+    // Asymmetric inner/outer scaling on stretch ONLY (not wobble), AFTER rd_scale.
+    // Inner controls depth of inward stretch dents, outer controls outward protrusions.
+    // Applied after rd_scale so the suppression is final and cannot be amplified back.
+    if (stretch_component < 0.0) {
+        stretch_component *= mix(0.05, 1.0, s_inner);
+    } else {
+        stretch_component *= mix(0.05, 1.0, s_outer);
+    }
+
+    // Stage-aware core floor clamp: preserve a minimum fraction of staged radius
     float stage_floor = compute_stage_floor_fraction(u_blob_core_floor_bias, stage_progress);
     float min_radius = staged_r * stage_floor;
     float stretch_floor = min_radius - staged_r;
     stretch_floor = min(stretch_floor, 0.0);
     stretch_component = max(stretch_component, stretch_floor);
     float core_radius = staged_r + stretch_component;
+    // Wobble always applies in full — the blob must NEVER be a circle.
     float final_radius = core_radius + wobble_component;
 
     return dist - final_radius;
@@ -336,28 +359,29 @@ void main() {
 
     // Ghost shape: re-evaluate blob SDF at peak per-band energies so the
     // ghost captures the actual deformed shape (tendrils, warping, stretch).
-    // Driven entirely by spatial SDF difference (peak shape vs current shape)
-    // so the ghost is visible at ALL stages, not just low energy.
+    // CPU side enforces a minimum peak offset so ghost is always visible.
     float ghost_ring_alpha = 0.0;
     if (u_ghost_alpha > 0.001) {
         float ghost_d = blob_sdf_ex(uv, u_time,
             u_blob_peak_bass, u_blob_peak_mid, u_blob_peak_high,
             u_blob_peak_overall, u_blob_peak_energy);
 
-        // outside_current: 1.0 when pixel is outside the current blob, 0 inside
-        float outside_current = smoothstep(-0.005, 0.01, d);
-        // inside_peak: 1.0 when pixel is inside the peak shape, fading at edge
-        float inside_peak = 1.0 - smoothstep(-0.01, 0.025, ghost_d);
+        // outside_current: 1.0 when pixel is outside the current blob
+        // Wide transition zone so ghost fill extends well past the edge
+        float outside_current = smoothstep(-0.01, 0.02, d);
+        // inside_peak: 1.0 when pixel is inside the peak shape
+        // Wide fade so the ghost doesn't clip abruptly at the peak boundary
+        float inside_peak = 1.0 - smoothstep(-0.02, 0.04, ghost_d);
 
-        // Ghost region = outside current blob AND inside peak blob shape
-        float ghost_mask = outside_current * inside_peak;
+        // Ghost fill = outside current blob AND inside peak blob shape
+        float ghost_fill = outside_current * inside_peak;
 
         // Soft outer glow halo around the peak shape boundary
         float ghost_d_px = ghost_d * inner_height;
-        float edge_glow = exp(-ghost_d_px * ghost_d_px * 0.008) * outside_current;
-        edge_glow *= smoothstep(0.04, -0.01, ghost_d);
+        float edge_glow = exp(-ghost_d_px * ghost_d_px * 0.005) * outside_current;
+        edge_glow *= smoothstep(0.06, -0.02, ghost_d);
 
-        ghost_ring_alpha = (ghost_mask * 0.65 + edge_glow * 0.35) * u_ghost_alpha;
+        ghost_ring_alpha = (ghost_fill * 0.7 + edge_glow * 0.4) * u_ghost_alpha;
     }
 
     float total_alpha = max(fill_alpha, max(edge_alpha, max(glow_alpha, max(outline_band_alpha, ghost_ring_alpha))));

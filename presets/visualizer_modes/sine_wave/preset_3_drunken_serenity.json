@@ -33,7 +33,7 @@
         "rainbow_enabled": true,
         "rainbow_speed": 0.71,
         "sensitivity": 0.4,
-        "sine_card_adaptation": 0.05,
+        "sine_card_adaptation": 0.35,
         "sine_crawl_amount": 0.4,
         "sine_density": 1.0,
         "sine_displacement": 0.1,

@@ -581,16 +581,16 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     sine_lob_row.addWidget(tab.sine_line_offset_bias_label)
 
-    # Card Adaptation
+    # Card Adaptation — controls how much of the card height the wave uses
     sine_adapt_row = _aligned_row(_adv, "Card Adaptation:")
     tab.sine_card_adaptation = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.sine_card_adaptation.setMinimum(3)
+    tab.sine_card_adaptation.setMinimum(5)
     tab.sine_card_adaptation.setMaximum(100)
-    sine_adapt_val = int(tab._default_float('spotify_visualizer', 'sine_card_adaptation', 0.3) * 100)
-    tab.sine_card_adaptation.setValue(max(3, min(100, sine_adapt_val)))
+    sine_adapt_val = int(tab._default_float('spotify_visualizer', 'sine_card_adaptation', 0.30) * 100)
+    tab.sine_card_adaptation.setValue(max(5, min(100, sine_adapt_val)))
     tab.sine_card_adaptation.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_card_adaptation.setTickInterval(10)
-    tab.sine_card_adaptation.setToolTip("How much of the card height the sine wave uses. Lower = less vertical stretch.")
+    tab.sine_card_adaptation.setToolTip("How much of the card height the wave uses. Higher = taller waves.")
     tab.sine_card_adaptation.valueChanged.connect(tab._save_settings)
     sine_adapt_row.addWidget(tab.sine_card_adaptation)
     tab.sine_card_adaptation_label = QLabel(f"{sine_adapt_val}%")
