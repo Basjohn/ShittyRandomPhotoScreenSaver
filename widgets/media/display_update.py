@@ -253,7 +253,7 @@ def _build_and_apply_metadata(
     header_html = (
         f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
         f"letter-spacing:1px; margin-left:{widget._header_logo_margin + 5}px; "
-        f"color:rgba(255,255,255,255);'>SPOTIFY</div>"
+        f"color:rgba(255,255,255,255);'>{widget.provider_display_name}</div>"
     )
     body_wrapper = f"<div style='margin-top:8px;'>{body_html}</div>"
 

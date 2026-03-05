@@ -182,6 +182,7 @@ QComboBox[customCombo='true'] {
     font-family: 'Jost';
     font-weight: 700;
     font-size: 14px;
+    letter-spacing: 0.4px;
     color: #ffffff;
     border: none;
     background: transparent;
@@ -247,6 +248,7 @@ QListWidget[customComboPopup='true'] {
     font-family: 'Jost';
     font-weight: 600;
     font-size: 14px;
+    letter-spacing: 0.4px;
 }
 
 QListView[customComboPopup='true']::item,
@@ -273,76 +275,54 @@ PAGE_TITLE_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 700;"
     "font-size: 18px;"
-    "letter-spacing: 0.3px;"
+    "letter-spacing: 0.5px;"
     "color: #ffffff;"
 )
 
 SECTION_HEADING_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 600;"
+    "font-weight: 650;"
     "font-size: 14px;"
-    "letter-spacing: 0.4px;"
+    "letter-spacing: 0.5px;"
     "color: #ffffff;"
 )
 
 SECTION_HEADING_STYLE_DISABLED = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 600;"
+    "font-weight: 650;"
     "font-size: 14px;"
-    "letter-spacing: 0.4px;"
+    "letter-spacing: 0.5px;"
     "color: #666666;"
 )
 
 SUBSECTION_DIVIDER_STYLE = (
-    "background-color: rgba(40, 40, 40, 0.8);"
     "border: 1px solid rgba(255, 255, 255, 0.8);"
     "border-radius: 18px;"
-    "margin-top: 20px;"
-    "margin-bottom: 12px;"
-    "padding: 18px 14px 12px 14px;"
-    "color: #ffffff;"
-)
-
-SUBSECTION_DIVIDER_TITLE_STYLE = (
-    "QGroupBox::title {"
-    "  subcontrol-origin: margin;"
-    "  subcontrol-position: top left;"
-    "  padding: 2px 10px;"
-    "  margin-top: 5px;"
-    "  background-color: rgba(40, 40, 40, 0.8);"
-    "  color: #ffffff;"
-    "  font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "  font-weight: 700;"
-    "  font-size: 14px;"
-    "}"
 )
 
 
 def style_group_box(box) -> None:
-    """Apply the standard subsection divider style to a QGroupBox.
+    """Apply the subsection border style to a QGroupBox.
 
-    Combines the border/radius body rule with a ::title subcontrol rule
-    to eliminate corner seam artefacts that appear when the title area
-    disrupts the border arc.  All tabs should call this instead of
-    inlining ``setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")``.
+    Only sets border + border-radius per-widget.  All other QGroupBox
+    properties (background, padding, margins, ::title font/color) are
+    inherited from the dialog-level stylesheet in settings_theme.py.
+    Keeping the per-widget rule minimal avoids overriding the theme.
     """
-    box.setStyleSheet(
-        f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}"
-        f" {SUBSECTION_DIVIDER_TITLE_STYLE}"
-    )
+    box.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
 
 NAV_TAB_FONT_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
     "font-size: 13px;"
-    "letter-spacing: 0.3px;"
+    "letter-spacing: 0.4px;"
 )
 
 NAV_TAB_FONT_STYLE_ACTIVE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 700;"
     "font-size: 13px;"
-    "letter-spacing: 0.3px;"
+    "letter-spacing: 0.5px;"
 )
 
 STATUS_LABEL_STYLE = (
@@ -357,6 +337,7 @@ INFO_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"
+    "letter-spacing: 0.3px;"
 )
 
 ADV_HELPER_LABEL_STYLE = (
@@ -364,6 +345,7 @@ ADV_HELPER_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"
+    "letter-spacing: 0.3px;"
 )
 
 INFO_LABEL_STYLE_DISABLED = (
@@ -371,6 +353,7 @@ INFO_LABEL_STYLE_DISABLED = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 500;"
     "font-size: 11px;"
+    "letter-spacing: 0.3px;"
 )
 
 SLIDER_STYLE = """

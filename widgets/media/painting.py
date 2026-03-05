@@ -31,20 +31,34 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def load_brand_pixmap() -> Optional[QPixmap]:
-    """Best-effort load of a Spotify logo from the shared images folder.
+_BRAND_LOGO_CANDIDATES: dict[str, list[str]] = {
+    "spotify": [
+        "Spotify_Primary_Logo_RGB_Black.png",
+        "spotify_logo.png",
+        "SpotifyLogo.png",
+        "spotify.png",
+    ],
+    "musicbee": [
+        "icons8-musicbee-96.png",
+        "MusicBee_Logo.png",
+        "musicbee_logo.png",
+        "musicbee.png",
+    ],
+}
+
+
+def load_brand_pixmap(provider: str = "spotify") -> Optional[QPixmap]:
+    """Best-effort load of a brand logo from the shared images folder.
+
+    Args:
+        provider: Media provider name ('spotify' or 'musicbee').
 
     We prefer the high-resolution primary logo asset when present so that
     the glyph remains sharp even when scaled up on high-DPI displays.
     """
     try:
         images_dir = Path(__file__).resolve().parent.parent.parent / "images"
-        candidates = [
-            "Spotify_Primary_Logo_RGB_Black.png",
-            "spotify_logo.png",
-            "SpotifyLogo.png",
-            "spotify.png",
-        ]
+        candidates = _BRAND_LOGO_CANDIDATES.get(provider.lower(), _BRAND_LOGO_CANDIDATES["spotify"])
         for name in candidates:
             candidate = images_dir / name
             if candidate.exists() and candidate.is_file():
@@ -52,7 +66,7 @@ def load_brand_pixmap() -> Optional[QPixmap]:
                 if not pm.isNull():
                     return pm
     except Exception:
-        logger.debug("[MEDIA] Failed to load Spotify logo", exc_info=True)
+        logger.debug("[MEDIA] Failed to load %s logo", provider, exc_info=True)
     return None
 
 
@@ -83,7 +97,7 @@ def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
 
     font = QFont(widget._font_family, header_font_pt, QFont.Weight.Bold)
     fm = QFontMetrics(font)
-    text_w = fm.horizontalAdvance("SPOTIFY")
+    text_w = fm.horizontalAdvance(widget.provider_display_name)
     text_h = fm.height()
 
     logo_size = max(1, int(widget._header_logo_size))

@@ -70,7 +70,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Settings | core/settings/json_store.py | JsonSettingsStore | JSON persistence layer (structured roots: widgets, transitions, custom_preset_backup, ui) |
 | Storage Paths | core/settings/storage_paths.py | get_app_data_dir(), get_cache_dir(), get_rss_cache_dir(), get_feed_health_file(), run_all_migrations() | Canonical path resolver for all app data (settings, cache, state, logs). Replaces scattered %TEMP% paths. |
 | Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
-| Media | core/media/media_controller.py | MediaController | GSMTC media state |
+| Media | core/media/media_controller.py | WindowsGlobalMediaController, create_media_controller(app_filter) | GSMTC media state; app_filter selects provider session (spotify/musicbee) |
 | Media | core/media/spotify_volume.py | SpotifyVolumeController | pycaw per-session volume control |
 | Media | core/media/system_mute.py | is_available(), get_mute(), set_mute(), toggle_mute() | System-wide mute via IAudioEndpointVolume (pycaw) |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |

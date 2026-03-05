@@ -162,7 +162,7 @@ def load_theme(widget) -> None:
                     border-radius: 18px;
                     margin-top: 20px;
                     margin-bottom: 12px;
-                    padding: 18px 14px 12px 14px;
+                    padding: 18px 24px 18px 24px;
                     color: #ffffff;
                 }
                 
@@ -171,11 +171,11 @@ def load_theme(widget) -> None:
                     subcontrol-position: top left;
                     padding: 2px 10px;
                     margin-top: 5px;
-                    background-color: rgba(40, 40, 40, 0.8);
                     color: #ffffff;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
-                    font-weight: 700;
+                    font-weight: 650;
                     font-size: 14px;
+                    letter-spacing: 0.5px;
                 }
                 
                 QCheckBox {

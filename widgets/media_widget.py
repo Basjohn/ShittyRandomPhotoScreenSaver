@@ -93,6 +93,7 @@ class MediaWidget(BaseOverlayWidget):
         position: MediaPosition = MediaPosition.BOTTOM_LEFT,
         controller: Optional[BaseMediaController] = None,
         thread_manager: Optional[ThreadManager] = None,
+        provider: str = "spotify",
     ) -> None:
         # Convert MediaPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
@@ -102,11 +103,17 @@ class MediaWidget(BaseOverlayWidget):
         self._defer_visibility_for_fade_sync = True
 
         self._media_position = position  # Keep original enum for compatibility
+        
+        # Media provider: "spotify" or "musicbee" — drives GSMTC session filter + branding
+        self._provider: str = self._validate_provider(provider)
+
         self._pending_controller_tm: Optional[ThreadManager] = None
         if thread_manager is not None:
             self.set_thread_manager(thread_manager)
         controller_tm = thread_manager or self._thread_manager or self._pending_controller_tm
-        self._controller: BaseMediaController = controller or create_media_controller(thread_manager=controller_tm)
+        self._controller: BaseMediaController = controller or create_media_controller(
+            thread_manager=controller_tm, app_filter=self._provider
+        )
         if controller_tm is not None:
             try:
                 self._controller.set_thread_manager(controller_tm)
@@ -115,7 +122,7 @@ class MediaWidget(BaseOverlayWidget):
         else:
             self._pending_controller_tm = None
         try:
-            logger.info("[MEDIA_WIDGET] Using controller: %s", type(self._controller).__name__)
+            logger.info("[MEDIA_WIDGET] Using controller: %s (provider=%s)", type(self._controller).__name__, self._provider)
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
@@ -228,6 +235,26 @@ class MediaWidget(BaseOverlayWidget):
         self._setup_ui()
 
         logger.debug("MediaWidget created (position=%s)", position.value)
+
+    # ------------------------------------------------------------------
+    # Provider helpers
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _validate_provider(raw: object) -> str:
+        """Validate and normalize a provider value to 'spotify' or 'musicbee'."""
+        if isinstance(raw, str) and raw.strip().lower() in ("spotify", "musicbee"):
+            return raw.strip().lower()
+        return "spotify"
+
+    @property
+    def provider(self) -> str:
+        """Current media provider name ('spotify' or 'musicbee')."""
+        return self._provider
+
+    @property
+    def provider_display_name(self) -> str:
+        """Human-readable provider name for the header text."""
+        return "MUSICBEE" if self._provider == "musicbee" else "SPOTIFY"
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -1331,7 +1358,7 @@ class MediaWidget(BaseOverlayWidget):
     def _load_brand_pixmap(self) -> Optional[QPixmap]:
         """Delegates to widgets.media.painting."""
         from widgets.media.painting import load_brand_pixmap
-        return load_brand_pixmap()
+        return load_brand_pixmap(provider=self._provider)
 
     def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""

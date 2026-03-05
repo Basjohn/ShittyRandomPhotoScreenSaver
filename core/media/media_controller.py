@@ -115,8 +115,9 @@ class WindowsGlobalMediaController(BaseMediaController):
     widget hiding.
     """
 
-    def __init__(self, thread_manager=None) -> None:
+    def __init__(self, thread_manager=None, app_filter: str = "spotify") -> None:
         super().__init__(thread_manager)
+        self._app_filter: str = app_filter.lower()
         self._available: bool = False
         self._MediaManager = None
         self._PlaybackStatus = None
@@ -243,13 +244,13 @@ class WindowsGlobalMediaController(BaseMediaController):
         finally:
             self._gsmc_inflight = False
 
-    def _select_spotify_session(self, mgr):
-        """Select the Spotify media session from a GSMTC manager.
+    def _select_media_session(self, mgr):
+        """Select a media session from a GSMTC manager by app filter.
 
-        This prefers sessions whose ``source_app_user_model_id`` contains
-        "spotify" (case-insensitive). If no such session is found, this
-        returns ``None`` so that the Spotify-specific widget treats the
-        situation as "no media" rather than showing some other player.
+        Prefers sessions whose ``source_app_user_model_id`` contains
+        ``self._app_filter`` (case-insensitive). If no matching session
+        is found, returns ``None`` so the widget treats the situation as
+        "no media" rather than showing an unrelated player.
         """
 
         sessions = []
@@ -280,14 +281,13 @@ class WindowsGlobalMediaController(BaseMediaController):
                 app_id = getattr(session, "source_app_user_model_id", None)
             except Exception as _:
                 app_id = None
-            if isinstance(app_id, str) and "spotify" in app_id.lower():
+            if isinstance(app_id, str) and self._app_filter in app_id.lower():
                 if is_verbose_logging():
-                    logger.debug("[MEDIA] Selected Spotify session: %r", app_id)
+                    logger.debug("[MEDIA] Selected %s session: %r", self._app_filter, app_id)
                 return session
 
-        # No Spotify-specific session; for this widget we treat this as
-        # "no media" rather than falling back to another player.
-        logger.debug("[MEDIA] No Spotify GSMTC session found")
+        # No matching session; treat as "no media".
+        logger.debug("[MEDIA] No %s GSMTC session found", self._app_filter)
         return None
 
     def _map_status(self, status) -> MediaPlaybackState:
@@ -318,9 +318,9 @@ class WindowsGlobalMediaController(BaseMediaController):
                 return None
 
             try:
-                session = self._select_spotify_session(mgr)
+                session = self._select_media_session(mgr)
             except Exception:
-                logger.debug("[MEDIA] Failed to select Spotify session", exc_info=True)
+                logger.debug("[MEDIA] Failed to select %s session", self._app_filter, exc_info=True)
                 session = None
 
             if session is None:
@@ -451,14 +451,13 @@ class WindowsGlobalMediaController(BaseMediaController):
             if mgr is None:
                 return
 
-            # For the Spotify widget we must send controls to the same
-            # Spotify-specific session that `get_current_track` uses,
-            # rather than whatever `get_current_session()` happens to
-            # return (which might be another player).
+            # Send controls to the same provider-filtered session that
+            # `get_current_track` uses, not whatever
+            # `get_current_session()` happens to return.
             try:
-                session = self._select_spotify_session(mgr)
+                session = self._select_media_session(mgr)
             except Exception:
-                logger.debug("[MEDIA] Failed to select Spotify session for %s", action_name, exc_info=True)
+                logger.debug("[MEDIA] Failed to select %s session for %s", self._app_filter, action_name, exc_info=True)
                 session = None
             if session is None:
                 return
@@ -481,16 +480,20 @@ class WindowsGlobalMediaController(BaseMediaController):
         self._invoke_simple_action("previous", lambda s: s.try_skip_previous_async())
 
 
-def create_media_controller(thread_manager=None) -> BaseMediaController:
+def create_media_controller(thread_manager=None, app_filter: str = "spotify") -> BaseMediaController:
     """Factory that returns the best available media controller.
 
     On Windows this prefers the GSMTC-based controller and falls back
     to a NoOp controller when unavailable so that callers never have to
     branch on platform or dependency details.
+
+    Args:
+        thread_manager: Engine-owned ThreadManager for async IO.
+        app_filter: GSMTC session filter string (e.g. "spotify", "musicbee").
     """
 
     try:
-        controller = WindowsGlobalMediaController(thread_manager=thread_manager)
+        controller = WindowsGlobalMediaController(thread_manager=thread_manager, app_filter=app_filter)
         if getattr(controller, "_available", False):
             return controller
     except Exception:

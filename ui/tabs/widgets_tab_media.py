@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox,
-    QSlider, QWidget,
+    QSlider, QWidget, QPushButton,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -105,6 +105,14 @@ def _update_sine_multi_line_visibility(tab) -> None:
             w.setVisible(bool(show_l3))
 
 
+def _update_musicbee_plugin_visibility(tab) -> None:
+    """Show/hide the MusicBee plugin button based on the selected provider."""
+    btn = getattr(tab, '_musicbee_plugin_btn', None)
+    combo = getattr(tab, 'media_provider_combo', None)
+    if btn is not None and combo is not None:
+        btn.setVisible(combo.currentData() == "musicbee")
+
+
 def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """Build media + spotify visualizer section UI.
 
@@ -129,19 +137,61 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         parent.addLayout(row)
         return content
 
-    # --- Media (Spotify) Widget Group ---
-    media_group = QGroupBox("Spotify Widget")
+    # --- Media Widget Group ---
+    media_group = QGroupBox("Media Widget")
     style_group_box(media_group)
     media_layout = QVBoxLayout(media_group)
 
-    tab.media_enabled = QCheckBox("Enable Spotify Widget")
+    tab.media_enabled = QCheckBox("Enable Media Widget")
     tab.media_enabled.setProperty("circleIndicator", True)
     tab.media_enabled.setToolTip(
-        "Shows current Spotify playback using Windows media controls when available."
+        "Shows current media playback using Windows media controls (GSMTC)."
     )
     tab.media_enabled.stateChanged.connect(tab._save_settings)
     tab.media_enabled.stateChanged.connect(tab._update_stack_status)
     media_layout.addWidget(tab.media_enabled)
+
+    # Provider toggle row
+    _provider_row = QHBoxLayout()
+    _provider_row.setSpacing(8)
+    _provider_lbl = QLabel("Provider:")
+    _provider_lbl.setStyleSheet(SECTION_HEADING_STYLE)
+    _provider_lbl.setFixedWidth(LABEL_WIDTH)
+    _provider_row.addWidget(_provider_lbl)
+    tab.media_provider_combo = StyledComboBox()
+    tab.media_provider_combo.addItem("Spotify", "spotify")
+    tab.media_provider_combo.addItem("MusicBee", "musicbee")
+    tab.media_provider_combo.setMinimumWidth(150)
+    tab.media_provider_combo.setToolTip(
+        "Select which media player to monitor via Windows GSMTC.\n"
+        "Change takes effect on next screensaver launch."
+    )
+    tab.media_provider_combo.currentIndexChanged.connect(tab._save_settings)
+    tab.media_provider_combo.currentIndexChanged.connect(
+        lambda: _update_musicbee_plugin_visibility(tab)
+    )
+    _provider_row.addWidget(tab.media_provider_combo)
+
+    # GET PLUGIN button — visible only when MusicBee is selected
+    tab._musicbee_plugin_btn = QPushButton("Get GSMTC Plugin")
+    tab._musicbee_plugin_btn.setToolTip(
+        "Opens the MusicBee Windows 10 Media Control Overlay plugin page.\n"
+        "This plugin lets MusicBee register with Windows GSMTC for\n"
+        "track info, artwork, and playback controls."
+    )
+    tab._musicbee_plugin_btn.setMinimumHeight(28)
+    tab._musicbee_plugin_btn.setStyleSheet("padding: 4px 12px;")
+    tab._musicbee_plugin_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    tab._musicbee_plugin_btn.clicked.connect(
+        lambda: __import__('webbrowser').open(
+            "https://www.getmusicbee.com/addons/plugins/98/windows-10-media-control-overlay/"
+        )
+    )
+    tab._musicbee_plugin_btn.setVisible(False)
+    _provider_row.addWidget(tab._musicbee_plugin_btn)
+
+    _provider_row.addStretch()
+    media_layout.addLayout(_provider_row)
 
     # Container for all media controls gated by enable checkbox
     tab._media_controls_container = QWidget()
@@ -535,6 +585,15 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     media_config = widgets.get('media', {}) if isinstance(widgets, dict) else {}
     spotify_vis_config = widgets.get('spotify_visualizer', {}) if isinstance(widgets, dict) else {}
     tab.media_enabled.setChecked(tab._config_bool('media', media_config, 'enabled', True))
+
+    # Provider (spotify / musicbee)
+    provider = tab._config_str('media', media_config, 'provider', 'spotify').lower()
+    combo = getattr(tab, 'media_provider_combo', None)
+    if combo is not None:
+        idx = combo.findData(provider)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+    _update_musicbee_plugin_visibility(tab)
 
     media_pos = tab._config_str('media', media_config, 'position', 'Bottom Left')
     index = tab.media_position.findText(media_pos)
@@ -1266,8 +1325,11 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
 
 def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     """Return (media_config, spotify_vis_config) from current UI state."""
+    _provider_combo = getattr(tab, 'media_provider_combo', None)
+    _provider_val = _provider_combo.currentData() if _provider_combo is not None else "spotify"
     media_config = {
         'enabled': tab.media_enabled.isChecked(),
+        'provider': _provider_val or "spotify",
         'position': tab.media_position.currentText(),
         'font_family': tab.media_font_combo.currentFont().family(),
         'font_size': tab.media_font_size.value(),

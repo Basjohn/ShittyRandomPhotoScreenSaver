@@ -25,6 +25,7 @@ SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
+WizardSmallImageFile=..\images\LogoBMP.bmp
 VersionInfoVersion=2.8.0
 
 [Languages]
@@ -36,6 +37,9 @@ Source: "..\release\SRPSS.scr"; DestDir: "{sys}"; Flags: ignoreversion
 
 ; Application icon used for shortcuts and ARP entry
 Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
+
+; Media provider logos (Spotify is bundled via images dir; MusicBee icon)
+Source: "..\images\icons8-musicbee-96.png"; DestDir: "{app}\images"; Flags: ignoreversion
 
 [InstallDelete]
 ; Remove any legacy SRPSS screen saver binaries that can cause duplicate
