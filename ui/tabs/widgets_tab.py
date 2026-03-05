@@ -12,6 +12,7 @@ Per-widget UI, load, and save logic is delegated to extraction modules:
   widgets_tab_clock.py, widgets_tab_weather.py, widgets_tab_media.py,
   widgets_tab_reddit.py, widgets_tab_imgur.py
 """
+import os
 from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -221,7 +222,6 @@ class WidgetsTab(QWidget):
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
         # Check dev features gate once at the start
-        import os
         dev_features_enabled = os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
         
         # Create scroll area
@@ -231,18 +231,8 @@ class WidgetsTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setStyleSheet("""
-            QScrollArea { 
-                border: none; 
-                background: transparent; 
-            }
-            QScrollArea > QWidget > QWidget {
-                background: transparent;
-            }
-            QScrollArea QWidget {
-                background: transparent;
-            }
-        """)
+        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
+        scroll.setStyleSheet(SCROLL_AREA_STYLE)
         
         # Create content widget
         content = QWidget()
@@ -1017,7 +1007,7 @@ class WidgetsTab(QWidget):
             self.spotify_vis_manual_floor_label.setEnabled(not dynamic)
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-    
+
     def _populate_timezones_for_combo(self, combo) -> None:
         timezones = get_common_timezones()
         for display_name, tz_str in timezones:

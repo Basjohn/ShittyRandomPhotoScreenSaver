@@ -10,6 +10,7 @@ import uuid
 from PySide6.QtGui import QColor
 
 from ui.tabs.widgets_tab import WidgetsTab
+from ui.tabs.shared_styles import SPINBOX_STYLE
 from core.settings import SettingsManager
 
 
@@ -150,5 +151,18 @@ class TestWidgetsTab:
             gradient_combo.currentTextChanged.emit("Bottom")
 
             assert preset_slider.preset_index() == preset_slider.custom_index()
+        finally:
+            tab.deleteLater()
+
+    def test_spinbox_stylesheet_attached(self, qt_app, settings_manager):
+        """WidgetsTab stylesheet must keep the shared QSpinBox skin."""
+        tab = WidgetsTab(settings_manager)
+        try:
+            css = tab.styleSheet()
+            assert css, "WidgetsTab stylesheet should not be empty"
+            assert "QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox" in css
+            assert "QSpinBox::up-button" in css
+            expected_token = "background-color: #282828"
+            assert SPINBOX_STYLE.strip() in css or expected_token in css
         finally:
             tab.deleteLater()

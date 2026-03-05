@@ -44,33 +44,42 @@ class NoWheelSlider(QSlider):
 
 SPINBOX_STYLE = """
 /* Rounded inputs with opaque borders + circular stepper controls */
-QSpinBox, QDoubleSpinBox, QLineEdit {
+QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
     min-height: 36px;
     padding: 4px 48px 4px 16px;
     color: #ffffff;
     font-family: 'Jost';
     font-weight: 600;
-    background-color: #101010;
+    background-color: #282828;
     border: 2px solid #ffffff;
     border-radius: 18px;
+}
+
+QSpinBox > QLineEdit,
+QDoubleSpinBox > QLineEdit,
+QAbstractSpinBox > QLineEdit {
+    background-color: #282828;
+    border: none;
+    padding: 0px;
+    margin: 0px;
 }
 
 QLineEdit {
     padding-right: 16px;
 }
 
-QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover {
+QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover, QAbstractSpinBox:hover {
     border-color: #ffffff;
 }
 
-QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus {
+QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus, QAbstractSpinBox:focus {
     border-color: #ffffff;
 }
 
-QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled {
+QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled, QAbstractSpinBox:disabled {
     color: rgba(255, 255, 255, 0.45);
     border-color: #6a6a6a;
-    background-color: #202020;
+    background-color: #282828;
 }
 
 QSpinBox::up-button, QDoubleSpinBox::up-button,
@@ -314,7 +323,6 @@ INFO_LABEL_STYLE_DISABLED = (
 SCROLL_AREA_STYLE = """
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
-QScrollArea QWidget { background: transparent; }
 """
 
 # --- Accessibility tab styles ---

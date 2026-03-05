@@ -7,6 +7,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFontComboBox
 
 from ui.tabs import shared_styles
+from ui.widgets.combo_knob_overlay import ComboKnobController
+from ui.widgets.control_shadow import attach_control_shadow
 from ui.widgets.styled_combo_box import SizeVariant
 
 
@@ -26,6 +28,8 @@ class StyledFontComboBox(QFontComboBox):
         self._popup_stylesheet = popup_stylesheet or shared_styles.COMBOBOX_POPUP_VIEW_STYLE
         self._apply_base_properties()
         self._style_popup_view()
+        self._knob_overlay = ComboKnobController(self)
+        attach_control_shadow(self)
 
     # ------------------------------------------------------------------
     # Qt overrides

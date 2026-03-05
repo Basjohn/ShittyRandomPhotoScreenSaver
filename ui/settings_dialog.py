@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
     QFileDialog, QMenu, QScrollArea,
 )
-from PySide6.QtCore import Qt, QPoint, Signal, QUrl, QTimer
+from PySide6.QtCore import Qt, QPoint, QRect, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPen, QGuiApplication
 
 from core.logging.logger import get_logger
@@ -22,6 +22,7 @@ from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, PresetsTab
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
+from ui.widgets.control_shadow import apply_shadows_to_inputs
 
 logger = get_logger(__name__)
 
@@ -104,6 +105,14 @@ class CustomTitleBar(QWidget):
         if event.buttons() == Qt.MouseButton.LeftButton:
             self.window().move(event.globalPosition().toPoint() - self._drag_pos)
             event.accept()
+    
+    def mouseDoubleClickEvent(self, event):
+        """Toggle maximize on double-click."""
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.maximize_clicked.emit()
+            event.accept()
+        else:
+            super().mouseDoubleClickEvent(event)
 
 
 class TabButton(QPushButton):
@@ -444,13 +453,6 @@ class SettingsDialog(QDialog):
             "about",
         ]
         self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
-        stored_scroll = self._settings.get('ui.last_tab_scroll', {})
-        if isinstance(stored_scroll, dict):
-            for key, value in stored_scroll.items():
-                try:
-                    self._tab_scroll_cache[str(key)] = int(value)
-                except Exception:
-                    logger.debug("Invalid stored scroll position for %s: %r", key, value)
         self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
         stored_states = self._settings.get('ui.tab_state', {})
         if isinstance(stored_states, dict):
@@ -460,7 +462,8 @@ class SettingsDialog(QDialog):
                         self._tab_state_cache[str(key)] = dict(value)
                     except Exception:
                         logger.debug("Invalid stored tab state for %s", key)
-        
+        self._normal_geometry = None
+
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
 
@@ -516,7 +519,8 @@ class SettingsDialog(QDialog):
         self._shell_shadow.setXOffset(0)
         self._shell_shadow.setYOffset(0)
         self._shell_shadow.setColor(QColor(0, 0, 0, 180))
-    
+        self._outer_margin = 10
+
     def _load_theme(self) -> None:
         """Delegates to ui.settings_theme."""
         from ui.settings_theme import load_theme
@@ -611,20 +615,23 @@ class SettingsDialog(QDialog):
         self._register_tab_scroll_area(4, self.accessibility_tab)
         self._register_tab_scroll_area(5, self.presets_tab)
         self._register_tab_scroll_area(6, self.about_tab)
-        
+
         content_layout.addWidget(sidebar)
         content_layout.addWidget(self.content_stack, 1)
-        
+
         main_layout.addLayout(content_layout)
-        
+
+        # Apply crisp drop shadows to all combo/spinbox/entry controls now that the UI tree exists.
+        apply_shadows_to_inputs(container)
+
         # Size grip for resizing
         self.size_grip = CornerSizeGrip(container)
         self.size_grip.setFixedSize(20, 20)
         
         # Set main layout
-        outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(10, 10, 10, 10)
-        outer_layout.addWidget(container)
+        self._outer_layout = QVBoxLayout(self)
+        self._outer_layout.setContentsMargins(self._outer_margin, self._outer_margin, self._outer_margin, self._outer_margin)
+        self._outer_layout.addWidget(container)
         
         # Default selection
         self.sources_tab_btn.setChecked(True)
@@ -1252,13 +1259,44 @@ class SettingsDialog(QDialog):
             )
     
     def _toggle_maximize(self) -> None:
-        """Toggle window maximize state."""
+        """Toggle window maximize state manually."""
         if self._is_maximized:
-            self.showNormal()
-            self._is_maximized = False
+            self._restore_from_maximize()
         else:
-            self.showMaximized()
-            self._is_maximized = True
+            self._apply_maximized_geometry()
+
+    def _screen_available_rect(self) -> QRect:
+        screen = QGuiApplication.screenAt(self.frameGeometry().center())
+        if screen is None:
+            screen = QGuiApplication.primaryScreen()
+        return screen.geometry() if screen is not None else self.geometry()
+
+    def _apply_maximized_geometry(self) -> None:
+        self._normal_geometry = self.geometry()
+        self._is_maximized = True
+        available = self._screen_available_rect()
+        # Reduce by a pixel to avoid overlapping taskbar bounds on some DPIs
+        available.adjust(0, 0, -1, -1)
+        self.setGeometry(available)
+        self._update_shell_chrome()
+
+    def _restore_from_maximize(self) -> None:
+        target = self._normal_geometry
+        self._is_maximized = False
+        if target is not None:
+            self.setGeometry(target)
+        self._normal_geometry = self.geometry()
+        self._update_shell_chrome()
+
+    def _update_shell_chrome(self) -> None:
+        """Adjust layout margins and shadow visibility for current state."""
+        margin = 0 if self._is_maximized else self._outer_margin
+        if hasattr(self, "_outer_layout"):
+            self._outer_layout.setContentsMargins(margin, margin, margin, margin)
+        if hasattr(self, "_shell_shadow"):
+            self._shell_shadow.setEnabled(not self._is_maximized)
+        if hasattr(self, "size_grip"):
+            self.size_grip.setVisible(not self._is_maximized)
     
     def resizeEvent(self, event):
         """Handle resize event to position size grip and save geometry."""
@@ -1358,6 +1396,17 @@ class SettingsDialog(QDialog):
                 super().mousePressEvent(event)
                 return
             
+            if self._is_maximized:
+                cursor_ratio = 0.5
+                if self.width() > 0:
+                    cursor_ratio = max(0.05, min(0.95, event.position().x() / self.width()))
+                self._restore_from_maximize()
+                # Position window so cursor stays over same relative spot
+                new_x = int(event.globalPosition().x() - self.width() * cursor_ratio)
+                new_y = int(event.globalPosition().y() - self.title_bar.height() // 2)
+                self.move(new_x, new_y)
+                self._normal_geometry = self.geometry()
+            
             # Otherwise, dragging
             self._dragging = True
             self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -1372,8 +1421,17 @@ class SettingsDialog(QDialog):
     def mouseReleaseEvent(self, event):
         """Handle mouse release to stop dragging."""
         if event.button() == Qt.MouseButton.LeftButton:
+            was_dragging = self._dragging
             self._dragging = False
             event.accept()
+            if was_dragging and not self._is_maximized:
+                screen = QGuiApplication.screenAt(event.globalPosition().toPoint())
+                if screen is None:
+                    screen = QGuiApplication.primaryScreen()
+                if screen is not None:
+                    top_threshold = screen.availableGeometry().top() + 5
+                    if event.globalPosition().toPoint().y() <= top_threshold:
+                        self._apply_maximized_geometry()
     
     def _save_geometry(self):
         """Save window geometry to settings."""

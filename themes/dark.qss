@@ -255,117 +255,6 @@ QCheckBox {
 }
 /* Reusable components used across dialogs */
 
-/* ===== COMBO BOX ===== */
-/* Base combobox styling */
-QComboBox {
-    /* color-picker: background-color: rgba(42, 42, 42, 1.0); */
-    background-color: rgba(42, 42, 42, 1.0);
-    /* color-picker: color: rgba(255, 255, 255, 1.0); */
-    color: rgba(255, 255, 255, 1.0);
-    /* color-picker: border-color: rgba(255, 255, 255, 1.0); */
-    border: 2px solid rgba(255, 255, 255, 1.0);
-    border-radius: 16px;
-    padding: 6px 15px 6px 30px;
-    font-family: 'Segoe UI';
-    font-size: 12px;
-    font-weight: bold;
-    text-transform: uppercase;
-    min-height: 32px;
-    min-width: 200px;
-    text-align: left;
-    /* color-picker: selection-background-color: rgba(58, 58, 58, 1.0); */
-    selection-background-color: rgba(58, 58, 58, 1.0);
-    /* color-picker: selection-color: rgba(255, 255, 255, 1.0); */
-    selection-color: rgba(255, 255, 255, 1.0);
-}
-
-/* Hover state */
-QComboBox:hover {
-    /* color-picker: hover-background-color: rgba(58, 58, 58, 1.0); */
-    background-color: rgba(58, 58, 58, 1.0);
-    /* color-picker: hover-border-color: rgba(153, 153, 153, 1.0); */
-    border-color: rgba(153, 153, 153, 1.0);
-}
-
-/* Dropdown button */
-QComboBox::drop-down {
-    subcontrol-origin: padding;
-    subcontrol-position: right center;
-    width: 24px;
-    border: none;
-    background: transparent;
-    padding-right: 4px;
-}
-
-QComboBox::down-arrow {
-    width: 6px;
-    height: 6px;
-    /* color-picker: arrow-color: #FFFFFF; */
-    background: rgba(255, 255, 255, 1.0);
-    border-radius: 3px;
-    margin-right: 8px;
-    image: none;
-    border: none;
-}
-
-/* Dropdown menu */
-QComboBox QAbstractItemView {
-    /* color-picker: menu-background: #2A2A2A; */
-    background-color: rgba(42, 42, 42, 1.0);
-    /* color-picker: menu-text: #FFFFFF; */
-    color: rgba(255, 255, 255, 1.0);
-    /* color-picker: menu-border: #666666; */
-    border: 2px solid rgba(102, 102, 102, 1.0);
-    border-radius: 8px;
-    padding: 4px;
-    /* color-picker: menu-selection-background: rgba(58, 58, 58, 1.0); */
-    background-color: rgba(42, 42, 42, 1.0);
-    /* color-picker: menu-selection-text: rgba(255, 255, 255, 1.0); */
-    color: rgba(255, 255, 255, 1.0);
-    selection-background-color: rgba(58, 58, 58, 1.0);
-    selection-color: rgba(255, 255, 255, 1.0);
-    outline: none;
-    margin: 2px 0;
-}
-
-/* Dropdown items */
-QComboBox QAbstractItemView::item {
-    /* color-picker: item-background: #2A2A2A; */
-    background-color: rgba(42, 42, 42, 1.0);
-    /* color-picker: item-text: #FFFFFF; */
-    color: rgba(255, 255, 255, 1.0);
-    padding: 8px 12px;
-    border-radius: 4px;
-    margin: 2px 0;
-}
-
-QComboBox QAbstractItemView::item:hover {
-    /* color-picker: item-hover-background: #3A3A3A; */
-    background-color: rgba(58, 58, 58, 1.0);
-}
-
-QComboBox QAbstractItemView::item:selected {
-    /* color-picker: item-selected-background: #3A3A3A; */
-    background-color: rgba(58, 58, 58, 1.0);
-    /* color-picker: item-selected-border: #666666; */
-    border: 1px solid rgba(102, 102, 102, 1.0);
-}
-
-/* Disabled state */
-QComboBox:disabled {
-    /* color-picker: disabled-text: #666666; */
-    color: rgba(102, 102, 102, 1.0);
-    /* color-picker: disabled-border: #444444; */
-    border-color: rgba(68, 68, 68, 1.0);
-    /* color-picker: disabled-background: #222222; */
-    background-color: rgba(34, 34, 34, 1.0);
-}
-
-/* Focus state - explicitly set to match normal state to prevent system focus styling */
-QComboBox:focus {
-    border: 2px solid rgba(102, 102, 102, 1.0);
-    outline: none;
-}
 
 /* ===== MAIN DIALOG TITLE BAR (Legacy rules removed) ===== */
 /* Cleanup: Removed generic #titleBar/#titleFrame/#titleLabel/#appTitle and
@@ -487,8 +376,8 @@ QDialog#aboutDialog {
     min-height: 24px;
 }
 
-/* Also ensure any immediate content holder under the viewport is transparent */
-#subsettingsDialog QScrollArea QWidget {
+/* Ensure scroll area structure is transparent (viewport + content widget only) */
+#subsettingsDialog QScrollArea > QWidget > QWidget {
     background: transparent;
 }
 
@@ -634,94 +523,6 @@ QToolTip {
 #loadingOverlay {
     /* color-picker: background-color: #000000; */
     background-color: rgba(0, 0, 0, 0.7);
-}
-
-/* Line edits */
-QLineEdit {
-    /* color-picker: background-color: #1E1E1E; */
-    background-color: rgba(30, 30, 30, 1.0);
-    /* color-picker: color: #FFFFFF; */
-    color: rgba(255, 255, 255, 1.0);
-    /* color-picker: border: #444444; */
-    border: 1px solid rgba(68, 68, 68, 1.0);
-    border-radius: 4px;
-    padding: 4px 8px;
-    /* color-picker: selection-background-color:rgb(255, 255, 255); */
-    selection-background-color: rgba(0, 120, 215, 1.0);
-}
-
-/* ===== SMOL SELECT BUTTON ===== */
-/* Combo Box */
-QComboBox {
-    /* color-picker: background-color: #2A2A2A; */
-    background-color: rgba(35, 35, 35, 1.0);
-    /* color-picker: color: #FFFFFF; */
-    color: rgba(255, 255, 255, 1.0);
-    /* color-picker: border: #FFFFFF; */
-    border: 2px solid rgba(255, 255, 255, 0.95);
-    border-radius: 4px;
-    padding: 5px 10px;
-    font-family: 'Segoe UI';
-    font-size: 12px;
-    font-weight: bold;
-    min-height: 28px;
-    min-width: 220px;
-    max-width: 220px;
-    text-align: left;
-    padding-right: 25px;
-}
-
-QComboBox:hover {
-    /* color-picker: hover-background:rgba(0, 0, 0, 1.0); */
-    background-color: rgba(0, 0, 0, 1.0);
-    /* color-picker: border-color:rgb(255, 255, 255); */
-    border-color: rgba(153, 153, 153, 1.0);
-}
-
-QComboBox::drop-down {
-    subcontrol-origin: padding;
-    subcontrol-position: right center;
-    width: 24px;
-    border: none;
-    background: transparent;
-}
-
-QComboBox::down-arrow {
-    width: 6px;
-    height: 6px;
-    background: rgba(255, 255, 255, 1.0);
-    border-radius: 3px;
-    margin-right: 8px;
-    image: none;
-    border: none;
-}
-
-QComboBox QAbstractItemView {
-    /* color-picker: background-color: #2A2A2A; */
-    background-color: rgba(35, 35, 35, 1.0);
-    /* color-picker: color: #FFFFFF; */
-    color: rgba(255, 255, 255, 1.0);
-    /* color-picker: border: #FFFFFF; */
-    border: 1px solid rgba(255, 255, 255, 0.95);
-    border-radius: 12px;
-    padding: 4px;
-    selection-background-color: rgba(58, 58, 58, 1.0);
-    outline: none;
-}
-
-QComboBox QAbstractItemView::item {
-    padding: 4px 8px;
-    border-radius: 4px;
-}
-
-QComboBox QAbstractItemView::item:selected {
-    /* color-picker: selection-background: #3A3A3A; */
-    background-color: rgba(58, 58, 58, 1.0);
-}
-
-QComboBox:disabled {
-    /* color-picker: disabled-color: #666666; */
-    color: rgba(102, 102, 102, 1.0);
 }
 
 /* Combo Arrow Button - Matches combobox styling but narrow with >> */

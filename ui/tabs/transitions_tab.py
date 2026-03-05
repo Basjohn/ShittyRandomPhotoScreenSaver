@@ -76,11 +76,8 @@ class TransitionsTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setStyleSheet("""
-            QScrollArea { border: none; background: transparent; }
-            QScrollArea > QWidget > QWidget { background: transparent; }
-            QScrollArea QWidget { background: transparent; }
-        """)
+        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
+        scroll.setStyleSheet(SCROLL_AREA_STYLE)
         
         LABEL_WIDTH = 160
 
