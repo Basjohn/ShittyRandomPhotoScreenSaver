@@ -136,6 +136,8 @@ The RSS system is split into focused modules under `sources/rss/`:
 - Inflight check prevents query pileup (only one query at a time).
 - Coroutine factory pattern: `_run_coroutine()` accepts a callable that returns a fresh coroutine to avoid "cannot reuse already awaited coroutine" errors.
 - Timeouts return `None` but do not disable future queries - widget handles `None` gracefully.
+- **Artwork stream cap**: `max_bytes = 8 * 1024 * 1024` (8MB) to handle high-res embedded artwork from players like MusicBee. Previously 2MB, which caused truncation and corrupt JPEG errors.
+- **Playback status mapping**: `_map_status()` handles both winrt enum members and raw integer values. Tries `.value` attribute first (winrt enum pattern), then `int()` conversion, with `int()`-based comparison on both sides. This accommodates MusicBee's GSMTC plugin which may report playback status as raw integers instead of proper enum members.
 
 
 ## Image Sources
@@ -394,6 +396,7 @@ The table below clarifies which transitions currently have CPU, compositor (QPai
 - UI updates only on the main thread (`run_on_ui_thread`).
 - Simple locks (Lock/RLock) guard mutable state; no raw QThread or `ThreadPoolExecutor` in production code.
 - **Shiboken validity guards**: All widget callbacks dispatched from background threads via `run_on_ui_thread()` must check `Shiboken.isValid(self)` before touching Qt objects, preventing crashes when widgets are destroyed during shutdown while deferred callbacks are still queued. All overlay widgets audited and guarded (Feb 2026).
+- **Deferred lambda C++ deletion guards**: `QTimer.singleShot` lambdas that capture widget references must guard against the widget being destroyed before the timer fires. Pattern: wrap `widget.objectName()` in `try/except RuntimeError` at the top of the closure and bail out if the C++ object is deleted. Applied in `widget_manager.py` `_register_spotify_secondary_fade` closures (Mar 2026).
 - Qt objects registered with `ResourceManager` where appropriate.
 
 ## Semantics Audit
@@ -701,4 +704,8 @@ Settings dialog exposes “Adaptive Sensitivity” (bool) with a manual multipli
 
 Bubble drift directions remain centralized through the settings pipeline (`bubble_drift_direction`) with the widget combo → model → defaults → config applier → simulation chain. Modes now include **Swish (Horizontal/Vertical)** for axis-locked wobble as well as **Swirl (Clockwise/Counter-Clockwise)**, which drive tangential drift around the card centre while keeping per-bubble bias deterministic, in addition to none/left/right/diagonal/random.
 
-Bubble specular direction follows the same pipeline (`bubble_specular_direction`) and now exposes the four cardinal headings (`top`, `bottom`, `left`, `right`) in addition to the diagonal presets. The overlay maps each string to a normalized 2D vector that the shader uses for both gradient tilt and highlight placement, so presets/SST exports can pick exact lighting angles without custom values.
+Bubble specular direction follows the same pipeline (`bubble_specular_direction`) and now exposes the four cardinal headings (`top`, `bottom`, `left`, `right`) in addition to the diagonal presets. The overlay maps each string to a normalized 2D vector that the shader uses for highlight placement, while `bubble_gradient_direction` independently controls gradient tilt, so presets/SST exports can pick exact lighting angles without custom values.
+
+**Bubble specular coordinate fix (Mar 2026)**: The specular crescent projection vectors in `bubble.frag` must use aspect-corrected, Y-flipped coordinates matching the `spec_center` offset space. Previously, raw `u_specular_dir` was used with inconsistent negation, producing distorted crescents on diagonals. Fixed by building `adj_dir` with the same conventions as the spec_center offset (aspect-corrected X, negated Y), normalizing, and projecting directly without extra negation.
+
+**Default visualizer mode**: Changed to `bubble` for both MC and normal builds (Mar 2026).
