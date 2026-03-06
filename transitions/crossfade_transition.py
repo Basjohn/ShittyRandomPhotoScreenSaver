@@ -17,7 +17,7 @@ from transitions.overlay_manager import (
     schedule_raise_when_ready,
     set_overlay_geometry,
 )
-from core.animation.types import EasingCurve
+from core.animation.types import EasingCurve, resolve_easing
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -248,13 +248,6 @@ class CrossfadeTransition(BaseTransition):
         if self._state not in [TransitionState.FINISHED, TransitionState.CANCELLED]:
             self._set_state(TransitionState.IDLE)
     
-    def _show_image_immediately(self) -> None:
-        """Show new image immediately without transition."""
-        self._set_state(TransitionState.FINISHED)
-        self._emit_progress(1.0)
-        self.finished.emit()
-        logger.debug("Image shown immediately")
-    
     def _on_anim_update(self, progress: float) -> None:
         if self._state != TransitionState.RUNNING or not self._overlay:
             return
@@ -283,31 +276,7 @@ class CrossfadeTransition(BaseTransition):
         self.finished.emit()
     
     def _resolve_easing(self) -> EasingCurve:
-        name = (self._easing or 'Auto').strip()
-        if name == 'Auto':
-            return EasingCurve.QUAD_IN_OUT
-        mapping = {
-            'Linear': EasingCurve.LINEAR,
-            'InQuad': EasingCurve.QUAD_IN,
-            'OutQuad': EasingCurve.QUAD_OUT,
-            'InOutQuad': EasingCurve.QUAD_IN_OUT,
-            'InCubic': EasingCurve.CUBIC_IN,
-            'OutCubic': EasingCurve.CUBIC_OUT,
-            'InOutCubic': EasingCurve.CUBIC_IN_OUT,
-            'InQuart': EasingCurve.QUART_IN,
-            'OutQuart': EasingCurve.QUART_OUT,
-            'InOutQuart': EasingCurve.QUART_IN_OUT,
-            'InSine': EasingCurve.SINE_IN,
-            'OutSine': EasingCurve.SINE_OUT,
-            'InOutSine': EasingCurve.SINE_IN_OUT,
-            'InExpo': EasingCurve.EXPO_IN,
-            'OutExpo': EasingCurve.EXPO_OUT,
-            'InOutExpo': EasingCurve.EXPO_IN_OUT,
-            'InCirc': EasingCurve.CIRC_IN,
-            'OutCirc': EasingCurve.CIRC_OUT,
-            'InOutCirc': EasingCurve.CIRC_IN_OUT,
-        }
-        return mapping.get(name, EasingCurve.QUAD_IN_OUT)
+        return resolve_easing(self._easing)
     
     def set_easing(self, easing: str) -> None:
         """

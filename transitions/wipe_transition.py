@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap, QRegion
 from transitions.base_transition import BaseTransition, TransitionState
-from core.animation.types import EasingCurve
+from core.animation.types import EasingCurve, resolve_easing
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -184,7 +184,7 @@ class WipeTransition(BaseTransition):
         
         # If no old image, show immediately
         if not old_pixmap or old_pixmap.isNull():
-            self._show_image_immediately(widget)
+            self._show_image_immediately()
             return True
         
         # Begin telemetry tracking for animated wipe
@@ -330,13 +330,6 @@ class WipeTransition(BaseTransition):
         self._emit_progress(1.0)
         self.finished.emit()
     
-    def _show_image_immediately(self, widget: QWidget) -> None:
-        """Show new image immediately without transition."""
-        self._set_state(TransitionState.FINISHED)
-        self._emit_progress(1.0)
-        self.finished.emit()
-        logger.debug("Image shown immediately (no old image)")
-    
     def set_direction(self, direction: WipeDirection) -> None:
         """
         Set wipe direction.
@@ -349,34 +342,7 @@ class WipeTransition(BaseTransition):
     
     def _resolve_easing(self) -> EasingCurve:
         """Map UI easing string to core EasingCurve with 'Auto' default."""
-        name = (self._easing_str or 'Auto').strip()
-        if name == 'Auto':
-            return EasingCurve.QUAD_IN_OUT
-        mapping = {
-            'Linear': EasingCurve.LINEAR,
-            'InQuad': EasingCurve.QUAD_IN,
-            'OutQuad': EasingCurve.QUAD_OUT,
-            'InOutQuad': EasingCurve.QUAD_IN_OUT,
-            'InCubic': EasingCurve.CUBIC_IN,
-            'OutCubic': EasingCurve.CUBIC_OUT,
-            'InOutCubic': EasingCurve.CUBIC_IN_OUT,
-            'InQuart': EasingCurve.QUART_IN,
-            'OutQuart': EasingCurve.QUART_OUT,
-            'InOutQuart': EasingCurve.QUART_IN_OUT,
-            'InExpo': EasingCurve.EXPO_IN,
-            'OutExpo': EasingCurve.EXPO_OUT,
-            'InOutExpo': EasingCurve.EXPO_IN_OUT,
-            'InSine': EasingCurve.SINE_IN,
-            'OutSine': EasingCurve.SINE_OUT,
-            'InOutSine': EasingCurve.SINE_IN_OUT,
-            'InCirc': EasingCurve.CIRC_IN,
-            'OutCirc': EasingCurve.CIRC_OUT,
-            'InOutCirc': EasingCurve.CIRC_IN_OUT,
-            'InBack': EasingCurve.BACK_IN,
-            'OutBack': EasingCurve.BACK_OUT,
-            'InOutBack': EasingCurve.BACK_IN_OUT,
-        }
-        return mapping.get(name, EasingCurve.QUAD_IN_OUT)
+        return resolve_easing(self._easing_str)
     
     def set_duration(self, duration_ms: int) -> None:
         """

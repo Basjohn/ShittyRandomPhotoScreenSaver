@@ -295,12 +295,35 @@ class WindowsGlobalMediaController(BaseMediaController):
             ps = self._PlaybackStatus
             if ps is None:
                 return MediaPlaybackState.UNKNOWN
+            # Direct enum comparison (works for Spotify)
             if status == ps.PLAYING:
                 return MediaPlaybackState.PLAYING
             if status == ps.PAUSED:
                 return MediaPlaybackState.PAUSED
             if status == ps.STOPPED:
                 return MediaPlaybackState.STOPPED
+            # Value/int fallback (MusicBee GSMTC may report as .value or raw int)
+            status_val = getattr(status, "value", None)
+            if status_val is None:
+                try:
+                    status_val = int(status)
+                except (TypeError, ValueError):
+                    status_val = None
+            if status_val is not None:
+                for member, mapped in (
+                    (ps.PLAYING, MediaPlaybackState.PLAYING),
+                    (ps.PAUSED, MediaPlaybackState.PAUSED),
+                    (ps.STOPPED, MediaPlaybackState.STOPPED),
+                ):
+                    ref = getattr(member, "value", None)
+                    if ref is None:
+                        try:
+                            ref = int(member)
+                        except (TypeError, ValueError):
+                            continue
+                    if status_val == ref:
+                        return mapped
+            logger.debug("[MEDIA] Unknown playback status: %r (type=%s)", status, type(status).__name__)
             return MediaPlaybackState.UNKNOWN
         except Exception as _:
             return MediaPlaybackState.UNKNOWN
@@ -393,7 +416,7 @@ class WindowsGlobalMediaController(BaseMediaController):
                                 logger.debug("[MEDIA] Failed to get stream size")
                                 size = 0
                             if size > 0:
-                                max_bytes = 2 * 1024 * 1024
+                                max_bytes = 8 * 1024 * 1024
                                 requested = min(size, max_bytes)
                                 reader = DataReader(stream)
                                 loaded = await reader.load_async(requested)

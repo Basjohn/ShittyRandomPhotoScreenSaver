@@ -341,25 +341,6 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
     frame_w = size
     frame_h = size
 
-    try:
-        src_w = float(pm.width())
-        src_h = float(pm.height())
-        aspect = src_w / src_h if (src_w > 0.0 and src_h > 0.0) else 1.0
-    except Exception as e:
-        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        aspect = 1.0
-
-    if aspect > 0.0:
-        if aspect >= 1.4:
-            natural_w = int(size * min(aspect, 2.4))
-            max_card_w = max(48, widget.width() - 80)
-            frame_w = max(48, min(natural_w, max_card_w))
-            frame_h = size
-        elif aspect <= 0.7:
-            natural_h = int(size * min(1.0 / max(aspect, 0.1), 2.4))
-            max_card_h = max(48, widget.height() - 80)
-            frame_h = max(48, min(natural_h, max_card_h))
-
     # PERF: Cache scaled artwork to avoid expensive SmoothTransformation on every paint
     cache_key = (id(pm), frame_w, frame_h, scale_dpr)
     if widget._scaled_artwork_cache_key == cache_key and widget._scaled_artwork_cache is not None:

@@ -179,6 +179,7 @@ COMBOBOX_STYLE = """
 QComboBox[customCombo='true'] {
     min-height: 38px;
     padding: 4px 44px 4px 16px;
+    margin-bottom: 6px;
     font-family: 'Jost';
     font-weight: 700;
     font-size: 14px;
@@ -228,6 +229,7 @@ QComboBox[customCombo='true'][comboSize='mini'] {
 
 QComboBox[customCombo='true'][comboSize='hero'] {
     min-width: 220px;
+    max-width: 340px;
     max-height: 46px;
     padding: 6px 54px 6px 18px;
     font-size: 15px;

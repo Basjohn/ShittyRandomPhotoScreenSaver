@@ -178,6 +178,12 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         progress = max(0.0, min(1.0, progress))
         self.progress.emit(progress)
     
+    def _show_image_immediately(self) -> None:
+        """Immediate completion — skip animation and jump to finished state."""
+        self._set_state(TransitionState.FINISHED)
+        self._emit_progress(1.0)
+        self.finished.emit()
+
     # --- Telemetry helpers (Phase 2.2) ---------------------------------------
     def _mark_start(self) -> None:
         """Mark transition start time for telemetry.

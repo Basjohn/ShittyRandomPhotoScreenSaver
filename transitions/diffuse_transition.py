@@ -363,13 +363,6 @@ class DiffuseTransition(BaseTransition):
         # Now finish
         self._finish_transition()
     
-    def _show_image_immediately(self) -> None:
-        """Show new image immediately without transition."""
-        self._set_state(TransitionState.FINISHED)
-        self._emit_progress(1.0)
-        self.finished.emit()
-        logger.debug("Image shown immediately")
-
     def set_block_size(self, size: int) -> None:
         """
         Set block size for diffuse effect.

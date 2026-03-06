@@ -10,7 +10,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QWidget, QLabel
 
 from transitions.base_transition import BaseTransition, TransitionState
-from core.animation.types import EasingCurve
+from core.animation.types import EasingCurve, resolve_easing
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -287,13 +287,6 @@ class SlideTransition(BaseTransition):
         
         return old_start, old_end, new_start, new_end
     
-    def _show_image_immediately(self) -> None:
-        """Show new image immediately without transition."""
-        self._set_state(TransitionState.FINISHED)
-        self._emit_progress(1.0)
-        self.finished.emit()
-        logger.debug("Image shown immediately")
-    
     def _on_anim_update(self, progress: float, old_start: QPoint, old_end: QPoint, new_start: QPoint, new_end: QPoint) -> None:
         """AnimationManager update: move labels according to eased progress."""
         if self._state != TransitionState.RUNNING:
@@ -336,31 +329,7 @@ class SlideTransition(BaseTransition):
     
     def _resolve_easing(self) -> EasingCurve:
         """Map UI easing string to core EasingCurve with 'Auto' default."""
-        name = (self._easing or 'Auto').strip()
-        if name == 'Auto':
-            return EasingCurve.LINEAR
-        mapping = {
-            'Linear': EasingCurve.LINEAR,
-            'InQuad': EasingCurve.QUAD_IN,
-            'OutQuad': EasingCurve.QUAD_OUT,
-            'InOutQuad': EasingCurve.QUAD_IN_OUT,
-            'InCubic': EasingCurve.CUBIC_IN,
-            'OutCubic': EasingCurve.CUBIC_OUT,
-            'InOutCubic': EasingCurve.CUBIC_IN_OUT,
-            'InQuart': EasingCurve.QUART_IN,
-            'OutQuart': EasingCurve.QUART_OUT,
-            'InOutQuart': EasingCurve.QUART_IN_OUT,
-            'InSine': EasingCurve.SINE_IN,
-            'OutSine': EasingCurve.SINE_OUT,
-            'InOutSine': EasingCurve.SINE_IN_OUT,
-            'InExpo': EasingCurve.EXPO_IN,
-            'OutExpo': EasingCurve.EXPO_OUT,
-            'InOutExpo': EasingCurve.EXPO_IN_OUT,
-            'InCirc': EasingCurve.CIRC_IN,
-            'OutCirc': EasingCurve.CIRC_OUT,
-            'InOutCirc': EasingCurve.CIRC_IN_OUT,
-        }
-        return mapping.get(name, EasingCurve.QUAD_IN_OUT)
+        return resolve_easing(self._easing, EasingCurve.LINEAR)
     
     def set_direction(self, direction: SlideDirection) -> None:
         """

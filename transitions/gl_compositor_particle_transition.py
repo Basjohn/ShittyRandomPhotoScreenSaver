@@ -243,8 +243,3 @@ class GLCompositorParticleTransition(BaseTransition):
         self.finished.emit()
         logger.debug("GLCompositorParticleTransition finished")
 
-    def _show_image_immediately(self) -> None:
-        """Immediate completion when no GL compositor path is available."""
-        self._set_state(TransitionState.FINISHED)
-        self._emit_progress(1.0)
-        self.finished.emit()

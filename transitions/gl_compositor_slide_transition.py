@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QPoint
 
 from core.logging.logger import get_logger
-from core.animation.types import EasingCurve
+from core.animation.types import EasingCurve, resolve_easing
 
 from transitions.base_transition import BaseTransition, TransitionState
 from transitions.slide_transition import SlideDirection
@@ -223,28 +223,6 @@ class GLCompositorSlideTransition(BaseTransition):
         self.finished.emit()
         logger.debug("GLCompositorSlideTransition finished")
 
-    def _show_image_immediately(self) -> None:
-        """Immediate completion when no GL compositor path is available."""
-        self._set_state(TransitionState.FINISHED)
-        self._emit_progress(1.0)
-        self.finished.emit()
-
     def _resolve_easing(self) -> EasingCurve:
-        """Map UI easing string to core EasingCurve with 'Auto' default.
-
-        Uses the same mapping as GLSlideTransition to keep visual behaviour
-        aligned with the legacy GL slide overlay.
-        """
-        name = (self._easing_str or "Auto").strip()
-        if name == "Auto":
-            return EasingCurve.QUAD_IN_OUT
-        mapping = {
-            "Linear": EasingCurve.LINEAR,
-            "InQuad": EasingCurve.QUAD_IN,
-            "OutQuad": EasingCurve.QUAD_OUT,
-            "InOutQuad": EasingCurve.QUAD_IN_OUT,
-            "InCubic": EasingCurve.CUBIC_IN,
-            "OutCubic": EasingCurve.CUBIC_OUT,
-            "InOutCubic": EasingCurve.CUBIC_IN_OUT,
-        }
-        return mapping.get(name, EasingCurve.QUAD_IN_OUT)
+        """Map UI easing string to core EasingCurve with 'Auto' default."""
+        return resolve_easing(self._easing_str)

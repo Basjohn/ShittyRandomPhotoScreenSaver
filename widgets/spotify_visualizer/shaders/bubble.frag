@@ -285,7 +285,7 @@ void main() {
         // --- Specular highlight (small filled ellipse) ---
         // Offset from bubble center toward light source, with per-bubble mutation
         float spec_offset = r * 0.35;
-        vec2 spec_center = bxy + vec2(-u_specular_dir.x / aspect, -u_specular_dir.y) * spec_offset
+        vec2 spec_center = bxy + vec2(u_specular_dir.x / aspect, -u_specular_dir.y) * spec_offset
                          + vec2(spec_ox * r, spec_oy * r);
         
         vec2 spec_delta = uv - spec_center;
@@ -297,12 +297,14 @@ void main() {
         
         // Crescent shape: elongate in the light direction for larger bubbles
         // For the crescent effect, use an ellipse stretched perpendicular to light
-        vec2 spec_dir_norm = normalize(u_specular_dir);
+        // Use aspect-corrected direction matching spec_delta coordinate space
+        vec2 adj_dir = vec2(u_specular_dir.x * aspect, -u_specular_dir.y);
+        vec2 spec_dir_norm = normalize(adj_dir);
         vec2 spec_perp = vec2(-spec_dir_norm.y, spec_dir_norm.x);
         
         // Project delta onto light dir and perpendicular
-        float d_along = dot(spec_delta, vec2(-spec_dir_norm.x, -spec_dir_norm.y));
-        float d_perp = dot(spec_delta, vec2(-spec_perp.x, -spec_perp.y));
+        float d_along = dot(spec_delta, spec_dir_norm);
+        float d_perp = dot(spec_delta, spec_perp);
         
         // Elliptical distance (stretched along perpendicular for crescent look)
         float crescent_stretch = mix(1.0, 1.6, smoothstep(0.02, 0.06, r));

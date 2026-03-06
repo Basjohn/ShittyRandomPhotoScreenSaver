@@ -148,11 +148,10 @@ class DisplayTab(QWidget):
         mode_row = _aligned_row(mode_layout, "Mode:")
         self.mode_combo = StyledComboBox(size_variant="hero")
         self.mode_combo.addItems([
-            "Fill - Scale to fill screen (crop if needed)",
-            "Fit - Scale to fit screen (show all, may have bars)",
-            "Shrink - Only shrink large images (never enlarge)"
+            "Fill — Crop to fill",
+            "Fit — Show all (may letterbox)",
+            "Shrink — Never enlarge"
         ])
-        self.mode_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.mode_combo.currentIndexChanged.connect(self._save_settings)
         mode_row.addWidget(self.mode_combo)
         mode_row.addStretch()
