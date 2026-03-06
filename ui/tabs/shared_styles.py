@@ -281,7 +281,7 @@ PAGE_TITLE_STYLE = (
 
 SECTION_HEADING_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 650;"
+    "font-weight: 700;"
     "font-size: 14px;"
     "letter-spacing: 0.5px;"
     "color: #ffffff;"
@@ -289,7 +289,7 @@ SECTION_HEADING_STYLE = (
 
 SECTION_HEADING_STYLE_DISABLED = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 650;"
+    "font-weight: 700;"
     "font-size: 14px;"
     "letter-spacing: 0.5px;"
     "color: #666666;"

@@ -1,6 +1,8 @@
 """Starfield mode uniform renderer."""
 from __future__ import annotations
 
+from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f
+
 
 def get_uniform_names() -> list[str]:
     return [
@@ -38,8 +40,3 @@ def upload_uniforms(gl, u: dict, s) -> bool:
 
     return True
 
-
-def _set1f(gl, u, name, val):
-    loc = u.get(name, -1)
-    if loc >= 0:
-        gl.glUniform1f(loc, float(val))

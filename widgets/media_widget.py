@@ -1069,9 +1069,17 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Invalid artwork payload: %s", e)
             return None
 
+        # Log payload diagnostics for debugging artwork decode issues
+        header_hex = data[:16].hex() if len(data) >= 16 else data.hex()
+        logger.debug(
+            "[MEDIA_WIDGET] Artwork decode: %d bytes, header=%s",
+            len(data), header_hex,
+        )
+
         pm = QPixmap()
         try:
             if not pm.loadFromData(data):
+                logger.debug("[MEDIA_WIDGET] loadFromData returned False (%d bytes)", len(data))
                 return None
         except MemoryError:
             logger.error("[MEDIA_WIDGET] Out of memory decoding artwork", exc_info=True)
@@ -1081,9 +1089,12 @@ class MediaWidget(BaseOverlayWidget):
             return None
 
         if pm.isNull():
+            logger.debug("[MEDIA_WIDGET] Decoded pixmap is null")
             return None
         if pm.width() <= 0 or pm.height() <= 0:
+            logger.debug("[MEDIA_WIDGET] Decoded pixmap has zero dimensions: %dx%d", pm.width(), pm.height())
             return None
+        logger.debug("[MEDIA_WIDGET] Artwork decoded OK: %dx%d", pm.width(), pm.height())
         return pm
     
     def _controls_row_min_height(self) -> int:

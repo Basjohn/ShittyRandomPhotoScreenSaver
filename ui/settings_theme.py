@@ -173,7 +173,7 @@ def load_theme(widget) -> None:
                     margin-top: 5px;
                     color: #ffffff;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
-                    font-weight: 650;
+                    font-weight: 700;
                     font-size: 14px;
                     letter-spacing: 0.5px;
                 }

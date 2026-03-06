@@ -393,14 +393,30 @@ class WindowsGlobalMediaController(BaseMediaController):
                                 logger.debug("[MEDIA] Failed to get stream size")
                                 size = 0
                             if size > 0:
-                                max_bytes = 512 * 1024
-                                size = min(size, max_bytes)
+                                max_bytes = 2 * 1024 * 1024
+                                requested = min(size, max_bytes)
                                 reader = DataReader(stream)
-                                await reader.load_async(size)
-                                buf = bytearray(size)
-                                reader.read_bytes(buf)
-                                reader.close()
-                                info.artwork = bytes(buf)
+                                loaded = await reader.load_async(requested)
+                                actual = int(loaded) if loaded is not None else 0
+                                if actual <= 0:
+                                    try:
+                                        actual = int(getattr(reader, "unconsumed_buffer_length", 0))
+                                    except Exception:
+                                        actual = 0
+                                logger.debug(
+                                    "[MEDIA] Thumbnail stream: reported=%d requested=%d loaded=%d",
+                                    size, requested, actual,
+                                )
+                                if actual > 0:
+                                    buf = bytearray(actual)
+                                    reader.read_bytes(buf)
+                                    info.artwork = bytes(buf)
+                                else:
+                                    logger.debug("[MEDIA] Thumbnail stream loaded 0 bytes (reported size=%d)", size)
+                                try:
+                                    reader.close()
+                                except Exception:
+                                    pass
             except Exception:
                 logger.debug("[MEDIA] Failed to read artwork thumbnail", exc_info=True)
 

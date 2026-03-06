@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
+
 
 _DIRECTION_VECS = {
     'top_left': (-0.707, 0.707),
@@ -98,19 +100,3 @@ def upload_uniforms(gl, u: dict, s) -> bool:
 
     return True
 
-
-def _set1f(gl, u, name, val):
-    loc = u.get(name, -1)
-    if loc >= 0:
-        gl.glUniform1f(loc, float(val))
-
-def _set1i(gl, u, name, val):
-    loc = u.get(name, -1)
-    if loc >= 0:
-        gl.glUniform1i(loc, int(val))
-
-def _set_color4(gl, u, name, qc):
-    loc = u.get(name, -1)
-    if loc >= 0:
-        gl.glUniform4f(loc, float(qc.redF()), float(qc.greenF()),
-                        float(qc.blueF()), float(qc.alphaF()))

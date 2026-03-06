@@ -71,7 +71,8 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Storage Paths | core/settings/storage_paths.py | get_app_data_dir(), get_cache_dir(), get_rss_cache_dir(), get_feed_health_file(), run_all_migrations() | Canonical path resolver for all app data (settings, cache, state, logs). Replaces scattered %TEMP% paths. |
 | Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
 | Media | core/media/media_controller.py | WindowsGlobalMediaController, create_media_controller(app_filter) | GSMTC media state; app_filter selects provider session (spotify/musicbee) |
-| Media | core/media/spotify_volume.py | SpotifyVolumeController | pycaw per-session volume control |
+| Media | core/media/spotify_volume.py | SpotifyVolumeController(provider=) | pycaw per-session volume control; provider-aware (spotify/musicbee process filter) |
+| Animation | core/animation/types.py | EasingCurve, resolve_easing(name, auto_default) | Shared easing name→enum mapper for all transitions (replaces 12× _resolve_easing duplication) |
 | Media | core/media/system_mute.py | is_available(), get_mute(), set_mute(), toggle_mute() | System-wide mute via IAudioEndpointVolume (pycaw) |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
 | Presets | core/settings/presets.py | PresetDefinition, apply_preset() | Widget presets system (moved from core/presets.py) |
@@ -279,6 +280,7 @@ Extracted from the monolithic `_render_with_shader` method in `spotify_bars_gl_o
 
 | Renderer | File | Purpose |
 |----------|------|---------|
+| GL Helpers | renderers/gl_helpers.py | `set1f()`, `set1i()`, `set_color4()` — shared GL uniform upload helpers (extracted from 7× duplication) |
 | Registry | renderers/__init__.py | `RENDERERS` dict, `upload_mode_uniforms()`, `get_all_uniform_names()` dispatch |
 | Spectrum | renderers/spectrum.py | Bar data, peaks, ghost alpha, fill/border colours, height scale |
 | Oscilloscope | renderers/oscilloscope.py | Waveform, ghost waveform, shared line/glow, smoothed energy bands |

@@ -187,7 +187,8 @@ def create_spotify_volume_widget(
         return None
 
     try:
-        vol = SpotifyVolumeWidget(mgr._parent)
+        provider = str(getattr(media_model, 'provider', 'spotify') or 'spotify')
+        vol = SpotifyVolumeWidget(mgr._parent, provider=provider)
 
         if thread_manager is not None and hasattr(vol, "set_thread_manager"):
             try:

@@ -333,6 +333,8 @@ class ShadowFadeProfile:
             logger.debug("[SHADOW] Exception suppressed: %s", e)
 
         def _on_value_changed(value: float) -> None:
+            if not Shiboken.isValid(effect):
+                return
             try:
                 t = float(value)
             except Exception as e:
@@ -353,6 +355,8 @@ class ShadowFadeProfile:
                 setattr(widget, "_shadowfade_shadow_anim", None)
             except Exception as e:
                 logger.debug("[SHADOW] Exception suppressed: %s", e)
+            if not Shiboken.isValid(effect):
+                return
             try:
                 final_color = QColor(r, g, b, target_alpha)
                 effect.setColor(final_color)
@@ -427,6 +431,8 @@ class ShadowFadeProfile:
             widget_shown = [False]
 
             def _on_value_changed(value: float) -> None:
+                if not Shiboken.isValid(effect):
+                    return
                 try:
                     f = float(value)
                 except Exception as e:
@@ -566,6 +572,8 @@ class ShadowFadeProfile:
                 logger.debug("[SHADOW] Exception suppressed: %s", e)
 
             def _on_value_changed(value: float) -> None:
+                if not Shiboken.isValid(opacity_effect):
+                    return
                 try:
                     opacity_effect.setOpacity(max(0.0, min(1.0, float(value))))
                 except Exception as e:

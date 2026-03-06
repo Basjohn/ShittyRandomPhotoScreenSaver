@@ -42,10 +42,10 @@ class SpotifyVolumeWidget(QWidget):
     _instances = weakref.WeakSet()
     _broadcasting: bool = False
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None, provider: str = "spotify") -> None:
         super().__init__(parent)
 
-        self._controller = SpotifyVolumeController()
+        self._controller = SpotifyVolumeController(provider=provider)
         self._thread_manager: Optional[ThreadManager] = None
         self._shadow_config = None
         self._enabled: bool = False

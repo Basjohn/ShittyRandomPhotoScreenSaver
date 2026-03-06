@@ -142,6 +142,52 @@ class AnimationGroupConfig:
             raise ValueError("AnimationGroupConfig requires at least one animation")
 
 
+# ── Shared easing resolution ─────────────────────────────────────────────
+
+# Mapping from UI easing name strings to EasingCurve enum values.
+# Used by all transition _resolve_easing() implementations.
+_EASING_NAME_MAP: dict[str, EasingCurve] = {
+    "Linear": EasingCurve.LINEAR,
+    "InQuad": EasingCurve.QUAD_IN,
+    "OutQuad": EasingCurve.QUAD_OUT,
+    "InOutQuad": EasingCurve.QUAD_IN_OUT,
+    "InCubic": EasingCurve.CUBIC_IN,
+    "OutCubic": EasingCurve.CUBIC_OUT,
+    "InOutCubic": EasingCurve.CUBIC_IN_OUT,
+    "InQuart": EasingCurve.QUART_IN,
+    "OutQuart": EasingCurve.QUART_OUT,
+    "InOutQuart": EasingCurve.QUART_IN_OUT,
+    "InExpo": EasingCurve.EXPO_IN,
+    "OutExpo": EasingCurve.EXPO_OUT,
+    "InOutExpo": EasingCurve.EXPO_IN_OUT,
+    "InSine": EasingCurve.SINE_IN,
+    "OutSine": EasingCurve.SINE_OUT,
+    "InOutSine": EasingCurve.SINE_IN_OUT,
+    "InCirc": EasingCurve.CIRC_IN,
+    "OutCirc": EasingCurve.CIRC_OUT,
+    "InOutCirc": EasingCurve.CIRC_IN_OUT,
+    "InBack": EasingCurve.BACK_IN,
+    "OutBack": EasingCurve.BACK_OUT,
+    "InOutBack": EasingCurve.BACK_IN_OUT,
+}
+
+
+def resolve_easing(name: str | None, auto_default: EasingCurve = EasingCurve.QUAD_IN_OUT) -> EasingCurve:
+    """Map a UI easing name string to an EasingCurve enum value.
+
+    Args:
+        name: Raw easing string from settings (e.g. "InOutCubic", "Auto", None).
+        auto_default: The EasingCurve to return when *name* is ``"Auto"`` or empty.
+
+    Returns:
+        Resolved EasingCurve; falls back to *auto_default* for unknown names.
+    """
+    cleaned = (name or "Auto").strip()
+    if cleaned == "Auto":
+        return auto_default
+    return _EASING_NAME_MAP.get(cleaned, auto_default)
+
+
 # Type aliases for callbacks
 AnimationStartCallback = Callable[[], None]
 AnimationUpdateCallback = Callable[[float], None]  # progress: 0.0-1.0

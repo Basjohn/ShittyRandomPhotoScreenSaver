@@ -28,22 +28,34 @@ else:
     _PYCAW_AVAILABLE = True
 
 
+# Map media provider names to the process name substring used by Core Audio.
+_PROVIDER_PROCESS_FILTERS: dict[str, str] = {
+    "spotify": "spotify",
+    "musicbee": "musicbee",
+}
+
+
 class SpotifyVolumeController:
-    """Best-effort per-session volume controller for Spotify.
+    """Best-effort per-session volume controller.
 
     The controller searches Core Audio sessions for ones whose process name
-    contains ``"spotify"`` and exposes a minimal API to read and write that
-    session's master volume via ``ISimpleAudioVolume``. It deliberately does
-    not touch the system/master volume.
+    contains a configurable filter (default ``"spotify"``) and exposes a
+    minimal API to read and write that session's master volume via
+    ``ISimpleAudioVolume``. It deliberately does not touch the system/master
+    volume.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, provider: str = "spotify") -> None:
         self._available: bool = bool(_PYCAW_AVAILABLE)
         self._last_pid: Optional[int] = None
+        self._process_filter: str = _PROVIDER_PROCESS_FILTERS.get(
+            provider.lower(), provider.lower()
+        )
 
         if not self._available:
             logger.info(
-                "[SPOTIFY_VOL] pycaw/Core Audio not available; Spotify volume control disabled"
+                "[SPOTIFY_VOL] pycaw/Core Audio not available; volume control disabled (provider=%s)",
+                provider,
             )
 
     # ------------------------------------------------------------------
@@ -163,14 +175,21 @@ class SpotifyVolumeController:
         
         return None, None
     
+    def set_process_filter(self, provider: str) -> None:
+        """Update the process name filter at runtime (e.g. when provider changes)."""
+        self._process_filter = _PROVIDER_PROCESS_FILTERS.get(
+            provider.lower(), provider.lower()
+        )
+
     def _search_sessions_for_spotify(self, sessions) -> tuple[Optional[Any], Optional[str]]:
-        """Search a list of audio sessions for Spotify.
+        """Search a list of audio sessions for the configured provider.
         
         Returns (volume_interface, session_name) tuple.
         """
         if not sessions:
             return None, None
         
+        target = self._process_filter
         for session in sessions:
             proc = None
             try:
@@ -191,16 +210,15 @@ class SpotifyVolumeController:
             if not isinstance(name, str):
                 continue
 
-            if "spotify" not in name.lower():
+            if target not in name.lower():
                 continue
 
-            # We have a Spotify session – try to obtain its ISimpleAudioVolume.
             try:
                 ctl = getattr(session, "_ctl", None)
                 if ctl is None:
                     continue
                 volume = ctl.QueryInterface(ISimpleAudioVolume)  # type: ignore[call-arg]
-                logger.debug("[SPOTIFY_VOL] Found Spotify session: %s", name)
+                logger.debug("[SPOTIFY_VOL] Found %s session: %s", target, name)
                 return volume, name
             except Exception:
                 logger.debug(

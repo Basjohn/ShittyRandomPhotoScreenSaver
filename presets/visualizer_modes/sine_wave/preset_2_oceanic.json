@@ -17,7 +17,7 @@
     "sine_micro_wobble": 0.4,
     "sine_width_reaction": 0.6,
     "sine_line_offset_bias": 0.0,
-    "sine_card_adaptation": 0.25,
+    "sine_card_adaptation": 0.05,
     "sine_vertical_shift": 40,
     "sine_glow_enabled": true,
     "sine_glow_intensity": 0.6,
