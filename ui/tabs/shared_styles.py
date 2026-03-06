@@ -47,6 +47,7 @@ SPINBOX_STYLE = """
 QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
     min-height: 36px;
     padding: 4px 48px 4px 16px;
+    margin-bottom: 6px;
     color: #ffffff;
     font-family: 'Jost';
     font-weight: 600;

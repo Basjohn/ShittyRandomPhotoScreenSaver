@@ -815,7 +815,7 @@ class BaseOverlayWidget(QLabel):
         """
         with self._lifecycle_lock:
             if self._lifecycle_state != WidgetLifecycleState.CREATED:
-                logger.warning(
+                logger.debug(
                     f"[LIFECYCLE] Cannot initialize {self._overlay_name} from state "
                     f"{self._lifecycle_state.name}"
                 )

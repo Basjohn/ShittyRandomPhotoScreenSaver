@@ -405,7 +405,7 @@ class ColorSwatchButton(QPushButton):
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setMinimumSize(self._MIN_WIDTH, self._MIN_HEIGHT)
         self.setMaximumHeight(self._MIN_HEIGHT + 6)
-        self.setStyleSheet("border: none; background: transparent;")
+        self.setStyleSheet("border: none; background: transparent; margin-bottom: 6px;")
 
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(18)

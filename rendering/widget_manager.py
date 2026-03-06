@@ -1361,6 +1361,10 @@ class WidgetManager:
 
         def _run_sync() -> None:
             try:
+                widget.objectName()
+            except RuntimeError:
+                return
+            try:
                 sync = getattr(widget, "sync_visibility_with_anchor", None)
                 if callable(sync):
                     sync()
@@ -1368,6 +1372,11 @@ class WidgetManager:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
 
         def _starter(attempt: int = 0) -> None:
+            # Guard: widget may have been destroyed during settings restart
+            try:
+                widget.objectName()
+            except RuntimeError:
+                return
             try:
                 anchor_visible = True
                 if anchor is not None and hasattr(anchor, "isVisible"):

@@ -447,6 +447,7 @@ value = settings.get("display.mode", "fill")
 | Audits/pixel_shift_regression_audit.md | Pixel shift double-shifting regression root cause + fix |
 | Audits/settings_persistence_audit.md | Settings persistence consistency: hardcoded defaults vs canonical defaults.py (live checklist) |
 | Audits/threading_resource_audit.md | ThreadManager/ResourceManager async path coverage: raw QTimer/Thread usage, injection, singleton (live checklist) |
+| Audits/duplication_memory_audit.md | Code duplication, memory/resource cleanup, GL helpers extraction, resolve_easing, shadow guards, bak/archive cleanup (live checklist) |
 
 ## Test Organization
 
