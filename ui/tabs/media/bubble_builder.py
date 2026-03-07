@@ -331,7 +331,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # ── Bubble Count & Lifecycle ──────────────────────────────────
     _adv_layout.addWidget(QLabel("<b>Bubble Count & Lifecycle</b>"))
 
-    big_size_row = _aligned_row(_adv_layout, "Big Bubble Max Size:")
+    big_size_row = _aligned_row(_adv_layout, "Big Bubble Size:")
     tab.bubble_big_size_max = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_size_max.setMinimum(10)
     tab.bubble_big_size_max.setMaximum(60)
@@ -339,7 +339,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_size_max.setValue(max(10, min(60, val)))
     tab.bubble_big_size_max.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_size_max.setTickInterval(10)
-    tab.bubble_big_size_max.setToolTip("Maximum radius for big bubbles (normalised UV units × 1000).")
+    tab.bubble_big_size_max.setToolTip("Base starting radius for big bubbles. Actual size varies ±40% around this value.")
     tab.bubble_big_size_max.valueChanged.connect(tab._save_settings)
     big_size_row.addWidget(tab.bubble_big_size_max)
     tab.bubble_big_size_max_label = QLabel(f"{val}")
@@ -348,7 +348,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     big_size_row.addWidget(tab.bubble_big_size_max_label)
 
-    small_size_row = _aligned_row(_adv_layout, "Small Bubble Max Size:")
+    small_size_row = _aligned_row(_adv_layout, "Small Bubble Size:")
     tab.bubble_small_size_max = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_small_size_max.setMinimum(4)
     tab.bubble_small_size_max.setMaximum(30)
@@ -356,7 +356,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_size_max.setValue(max(4, min(30, val)))
     tab.bubble_small_size_max.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_small_size_max.setTickInterval(5)
-    tab.bubble_small_size_max.setToolTip("Maximum radius for small bubbles (normalised UV units × 1000).")
+    tab.bubble_small_size_max.setToolTip("Base starting radius for small bubbles. Actual size varies ±45% around this value.")
     tab.bubble_small_size_max.valueChanged.connect(tab._save_settings)
     small_size_row.addWidget(tab.bubble_small_size_max)
     tab.bubble_small_size_max_label = QLabel(f"{val}")

@@ -443,6 +443,8 @@
           68,
           255
         ],
+        "bubble_rainbow_enabled": true,
+        "bubble_rainbow_speed": 0.34,
         "bubble_rotation_amount": 0.3,
         "bubble_small_count": 34,
         "bubble_small_freq_pulse": 0.56,
@@ -468,8 +470,6 @@
         "ghosting_enabled": true,
         "manual_floor": 2.1,
         "mode": "bubble",
-        "rainbow_enabled": true,
-        "rainbow_speed": 0.34,
         "sensitivity": 0.4,
         "software_visualizer_enabled": false
       },

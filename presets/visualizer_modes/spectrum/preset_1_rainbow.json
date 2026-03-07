@@ -29,13 +29,13 @@
         "ghosting_enabled": true,
         "manual_floor": 2.1,
         "mode": "spectrum",
-        "rainbow_enabled": true,
-        "rainbow_speed": 0.3,
         "sensitivity": 0.4,
         "spectrum_bar_profile": "curved",
         "spectrum_border_radius": 2.0,
         "spectrum_growth": 3.96,
+        "spectrum_rainbow_enabled": true,
         "spectrum_rainbow_per_bar": true,
+        "spectrum_rainbow_speed": 0.3,
         "spectrum_single_piece": true
       }
     }

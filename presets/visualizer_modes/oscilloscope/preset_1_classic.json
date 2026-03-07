@@ -73,13 +73,13 @@
         "osc_line_count": 1,
         "osc_line_dim": false,
         "osc_line_offset_bias": 0.0,
+        "osc_rainbow_enabled": false,
+        "osc_rainbow_speed": 0.3,
         "osc_reactive_glow": true,
         "osc_sensitivity": 4.7,
         "osc_smoothing": 0.6,
         "osc_speed": 0.33,
         "osc_vertical_shift": 25,
-        "rainbow_enabled": true,
-        "rainbow_speed": 0.3,
         "sensitivity": 0.4
       }
     }

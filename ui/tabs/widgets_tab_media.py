@@ -456,13 +456,15 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _svctl.setContentsMargins(0, 0, 0, 0)
     _svctl.setSpacing(4)
 
-    # --- Taste The Rainbow (global hue shift) ---
+    # --- Taste The Rainbow (per-mode hue shift) ---
+    # Cache dict: stores {mode: (enabled, speed)} so mode switches are instant.
+    tab._rainbow_per_mode: dict = {}
     rainbow_row = QHBoxLayout()
     tab.rainbow_enabled = QCheckBox("Taste The Rainbow")
     tab.rainbow_enabled.setProperty("circleIndicator", True)
     tab.rainbow_enabled.setToolTip(
-        "Slowly shift the hue of all visualizer colours through the spectrum. "
-        "Retains state across mode switches."
+        "Slowly shift the hue of visualiser colours through the spectrum. "
+        "Saved independently per visualizer mode."
     )
     tab.rainbow_enabled.setChecked(False)
     tab.rainbow_enabled.stateChanged.connect(tab._save_settings)
@@ -908,7 +910,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.blob_core_floor_bias_label.setText(f"{blob_core_floor_val}%")
     if hasattr(tab, 'blob_stage_bias'):
         blob_stage_bias_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_stage_bias', 0.0) * 100)
-        blob_stage_bias_val = max(-30, min(30, blob_stage_bias_val))
+        blob_stage_bias_val = max(-60, min(60, blob_stage_bias_val))
         tab.blob_stage_bias.setValue(blob_stage_bias_val)
         tab.blob_stage_bias_label.setText(f"{blob_stage_bias_val / 100.0:+.2f}")
     if hasattr(tab, 'blob_stage2_release_ms'):
@@ -1160,15 +1162,27 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.blob_ghost_decay_slider.setValue(max(10, min(100, bgd)))
         tab.blob_ghost_decay_label.setText(f"{bgd / 100.0:.2f}x")
 
-    # Rainbow (Taste The Rainbow)
+    # Rainbow (Taste The Rainbow) — per-mode
+    # Populate cache from per-mode keys on disk, falling back to global key.
+    _all_modes = ['spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave', 'bubble']
+    _global_re = tab._config_bool('spotify_visualizer', spotify_vis_config, 'rainbow_enabled', False)
+    _global_rs = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'rainbow_speed', 0.5) * 100)
+    _rainbow_cache = getattr(tab, '_rainbow_per_mode', {})
+    for _m in _all_modes:
+        _pm_enabled = spotify_vis_config.get(f'{_m}_rainbow_enabled', None)
+        _pm_speed = spotify_vis_config.get(f'{_m}_rainbow_speed', None)
+        _re = bool(_pm_enabled) if _pm_enabled is not None else _global_re
+        _rs = int(float(_pm_speed) * 100) if _pm_speed is not None else _global_rs
+        _rainbow_cache[_m] = (_re, max(1, min(100, _rs)))
+    tab._rainbow_per_mode = _rainbow_cache
+    # Set checkbox/slider to the current mode's cached state
+    _cur_mode = spotify_vis_config.get('mode', 'spectrum')
+    _cur_re, _cur_rs = _rainbow_cache.get(_cur_mode, (False, 50))
     if hasattr(tab, 'rainbow_enabled'):
-        tab.rainbow_enabled.setChecked(
-            tab._config_bool('spotify_visualizer', spotify_vis_config, 'rainbow_enabled', False)
-        )
+        tab.rainbow_enabled.setChecked(_cur_re)
     if hasattr(tab, 'rainbow_speed_slider'):
-        rs = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'rainbow_speed', 0.5) * 100)
-        tab.rainbow_speed_slider.setValue(max(1, min(100, rs)))
-        tab.rainbow_speed_label.setText(f"{rs / 100.0:.2f}")
+        tab.rainbow_speed_slider.setValue(_cur_rs)
+        tab.rainbow_speed_label.setText(f"{_cur_rs / 100.0:.2f}")
     tab._update_rainbow_visibility()
 
     # Bubble settings load
@@ -1476,6 +1490,22 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'sine_line3_shift': (tab.sine_line3_shift.value() if hasattr(tab, 'sine_line3_shift') else 0) / 100.0,
         'rainbow_enabled': tab.rainbow_enabled.isChecked() if hasattr(tab, 'rainbow_enabled') else False,
         'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
+    }
+    # --- Per-mode rainbow keys ---
+    # Write {mode}_rainbow_enabled / {mode}_rainbow_speed for the current mode
+    # AND for all cached modes so every mode's state persists to disk.
+    _cur_mode = spotify_vis_config.get('mode', 'spectrum')
+    _rainbow_cache = getattr(tab, '_rainbow_per_mode', {})
+    # Update cache with current UI state for the active mode
+    if hasattr(tab, 'rainbow_enabled') and hasattr(tab, 'rainbow_speed_slider'):
+        _rainbow_cache[_cur_mode] = (
+            tab.rainbow_enabled.isChecked(),
+            tab.rainbow_speed_slider.value(),
+        )
+    for _rm, (_re, _rs) in _rainbow_cache.items():
+        spotify_vis_config[f'{_rm}_rainbow_enabled'] = _re
+        spotify_vis_config[f'{_rm}_rainbow_speed'] = _rs / 100.0
+    spotify_vis_config.update({
         'osc_ghosting_enabled': tab.osc_ghost_enabled.isChecked() if hasattr(tab, 'osc_ghost_enabled') else False,
         'osc_ghost_intensity': (tab.osc_ghost_intensity.value() if hasattr(tab, 'osc_ghost_intensity') else 40) / 100.0,
         'blob_ghosting_enabled': tab.blob_ghost_enabled.isChecked() if hasattr(tab, 'blob_ghost_enabled') else False,
@@ -1521,7 +1551,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
         'bubble_trail_strength': (tab.bubble_trail_strength.value() if hasattr(tab, 'bubble_trail_strength') else 0) / 100.0,
         'bubble_tail_opacity': (tab.bubble_tail_opacity.value() if hasattr(tab, 'bubble_tail_opacity') else 0) / 100.0,
-    }
+    })
     spotify_vis_config.update(collect_bindings_save(tab, _OSC_MULTI_LINE_COLOR_BINDINGS))
     # Preset indices per mode
     _ps_map = {

@@ -119,8 +119,9 @@ vec2 heartbeat_amp_params() {
     float pulse = slider * shaped;
     // Up to +120% amplitude at max pulse (dramatic visible swell).
     float multiplier = 1.0 + pulse * 1.20;
-    // Cap rises substantially so the wave can grow to nearly fill the card.
-    float cap = 0.48 + pulse * 0.30;
+    // Base cap raised from 0.48→0.49 so peaks can breathe.
+    // Heartbeat pulse pushes cap further so the wave can nearly fill the card.
+    float cap = 0.49 + pulse * 0.30;
     return vec2(multiplier, cap);
 }
 
@@ -275,14 +276,19 @@ void main() {
     // adapt=1.0 → wave peaks touch card edges, adapt=0.3 → wave uses 30% of card
     float sens = clamp(u_sensitivity, 0.1, 5.0);
 
-    // Per-line energy: sensitivity only drives amplitude pulse, NOT glow.
-    // bass_pulse = sensitivity-scaled bass for amplitude pulsing only.
-    float bass_pulse = u_bass_energy * sens * 2.0;
+    // Per-line energy: sensitivity scales the energy-driven amplitude pulse.
+    // bass_pulse is sensitivity-scaled bass used ONLY for amplitude (not glow).
+    float bass_pulse = u_bass_energy * sens;
 
     float adapt = clamp(u_card_adaptation, 0.05, 1.0);
-    float base_amp_min = adapt * 0.24;
-    float base_amp_max = min(0.48, adapt * 0.62);
-    float bass_drive = clamp(u_bass_energy * 1.6 + bass_pulse * 0.5, 0.0, 1.0);
+    // Wider range: quiet passages use ~10% of card, loud peaks ~49%.
+    // Old min was adapt*0.24 which was too high — wave looked the same
+    // during verse and chorus because bass_drive saturated instantly.
+    float base_amp_min = adapt * 0.10;
+    float base_amp_max = min(0.49, adapt * 0.62);
+    // bass_drive: reduced multiplier so it takes real energy to saturate.
+    // Old: bass*2.6 → saturated at bass=0.38.  New: bass*1.15 → saturates ~0.87.
+    float bass_drive = clamp(u_bass_energy * 0.85 + bass_pulse * 0.30, 0.0, 1.0);
     float base_amplitude = mix(base_amp_min, base_amp_max, bass_drive);
     vec2 hb_params = heartbeat_amp_params();
     float hb_mult = hb_params.x;
@@ -294,14 +300,15 @@ void main() {
     // Line Offset Bias: declared early — used in energy and wfx/mw blends below.
     float lob = clamp(u_sine_line_offset_bias, 0.0, 1.0);
 
-    // Amplitude energy (includes sensitivity via bass_pulse)
-    // All lines share the SAME base energy so they align at LOB=0/VShift=0.
-    float e_base = u_bass_energy * 0.4 + bass_pulse + u_mid_energy * 0.15 + u_high_energy * 0.05;
+    // Amplitude energy: per-line additional amplitude on top of base_amplitude.
+    // bass_pulse is NOT included here — it already drives base_amplitude via
+    // bass_drive.  Old code double-counted it, causing instant saturation.
+    float e_base = u_bass_energy * 0.35 + u_mid_energy * 0.25 + u_high_energy * 0.10;
     float e1 = e_base;
     // Lines 2/3: same base energy + slight band tinting scaled by LOB
     // At LOB=0 they are identical to line 1; at LOB=1 they diverge slightly.
-    float e2_band = mix(e_base, u_mid_energy * 0.50 + bass_pulse * 0.50, lob * 0.4);
-    float e3_band = mix(e_base, u_high_energy * 0.40 + bass_pulse * 0.60, lob * 0.4);
+    float e2_band = mix(e_base, u_mid_energy * 0.45 + u_bass_energy * 0.20, lob * 0.4);
+    float e3_band = mix(e_base, u_high_energy * 0.35 + u_bass_energy * 0.25, lob * 0.4);
 
     // Glow energy: raw band energy WITHOUT sensitivity scaling.
     // Reactive glow should respond to actual audio levels, not the sensitivity knob.
@@ -401,7 +408,9 @@ void main() {
     // LINE 1 (primary) — always centered vertically
     // =====================================================================
     // Energy drives amplitude pulsing; heartbeat multiplier enlarges all lines uniformly.
-    float amp1_raw = base_amplitude * (1.0 + e1 * 0.8);
+    // Multiplier reduced from 0.8 to 0.35 so amplitude stays within cap during
+    // normal music (old value pushed amp far above cap, wasting all variation).
+    float amp1_raw = base_amplitude * (1.0 + e1 * 0.35);
     float amp1 = min(amp1_raw * hb_mult, hb_cap);
     float amp1_safe = max(amp1_raw, 0.01);
     float crawl_offset1 = 0.0;
@@ -480,7 +489,7 @@ void main() {
     // Line 2 is affected 70% as much as Line 3
     // =====================================================================
     if (lines >= 2) {
-        float amp2_raw = base_amplitude * (1.0 + e2_band * 0.75);
+        float amp2_raw = base_amplitude * (1.0 + e2_band * 0.30);
         float amp2 = min(amp2_raw * hb_mult, hb_cap);
         float amp2_safe = max(amp2_raw, 0.01);
         float lob_phase2 = lob * 0.45 * 0.7;  // X-axis separation — tight to line 1
@@ -566,7 +575,7 @@ void main() {
     // Line 3 is affected 100% (full factor)
     // =====================================================================
     if (lines >= 3) {
-        float amp3_raw = base_amplitude * (1.0 + e3_band * 0.75);
+        float amp3_raw = base_amplitude * (1.0 + e3_band * 0.30);
         float amp3 = min(amp3_raw * hb_mult, hb_cap);
         float amp3_safe = max(amp3_raw, 0.01);
         float lob_phase3 = lob * 0.90;  // X-axis separation — tight to line 1

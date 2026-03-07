@@ -709,6 +709,8 @@
           225
         ],
         "blob_pulse": 1.88,
+        "blob_rainbow_enabled": true,
+        "blob_rainbow_speed": 0.34,
         "blob_reactive_deformation": 1.25,
         "blob_reactive_glow": true,
         "blob_reactive_wobble": 1.03,
@@ -862,8 +864,6 @@
         "preset_sine_wave": 2,
         "preset_spectrum": 1,
         "preset_starfield": 3,
-        "rainbow_enabled": true,
-        "rainbow_speed": 0.34,
         "sensitivity": 0.4,
         "sine_card_adaptation": 0.3,
         "sine_crawl_amount": 0.27,

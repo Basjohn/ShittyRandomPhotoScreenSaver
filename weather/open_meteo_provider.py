@@ -267,9 +267,11 @@ class OpenMeteoProvider:
                 'latitude': latitude,
                 'longitude': longitude,
                 'current_weather': 'true',
-                'current': 'relative_humidity_2m,precipitation_probability,precipitation,rain',
+                'current': 'relative_humidity_2m,precipitation,rain',
+                'hourly': 'precipitation_probability',
                 'daily': 'temperature_2m_max,temperature_2m_min,weathercode',
                 'forecast_days': 2,  # Today + tomorrow
+                'forecast_hours': 1,  # Only need current hour for precip probability
                 'timezone': 'auto'
             }
             
@@ -294,18 +296,26 @@ class OpenMeteoProvider:
             windspeed = current_weather.get('windspeed', 0.0)
             is_day = current_weather.get('is_day', 1)  # 1 = day, 0 = night
             
-            # Extract humidity + precipitation from the 'current' block.
-            # All requested via the 'current' param so they are scalar values.
+            # Extract humidity from the 'current' block (scalar value).
             humidity = None
             precipitation = None
             if current_extended:
                 humidity = current_extended.get('relative_humidity_2m')
-                precipitation = current_extended.get('precipitation_probability')
                 logger.debug(
                     f"[WEATHER_API] current_extended: humidity={humidity}, "
-                    f"precip_prob={precipitation}, "
                     f"rain={current_extended.get('rain')}, "
                     f"precipitation={current_extended.get('precipitation')}"
+                )
+            
+            # precipitation_probability is only available in hourly data,
+            # not in the 'current' block.  Extract the first hourly value.
+            hourly = data.get('hourly', {})
+            if hourly:
+                precip_prob_list = hourly.get('precipitation_probability')
+                if isinstance(precip_prob_list, list) and precip_prob_list:
+                    precipitation = precip_prob_list[0]
+                logger.debug(
+                    f"[WEATHER_API] hourly precipitation_probability: {precip_prob_list}"
                 )
             
             logger.debug(f"[WEATHER_API] Final values: humidity={humidity}, precipitation={precipitation}, windspeed={windspeed}")

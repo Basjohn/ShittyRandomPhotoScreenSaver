@@ -42,7 +42,9 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
     glow_burst = presets[4]
     assert glow_burst.name == "Preset 5 (Glow Burst)"
     assert glow_burst.settings.get("sine_wave_effect") == 0.42
-    assert glow_burst.settings.get("rainbow_enabled") is True
+    # rainbow_enabled migrated to per-mode key sine_rainbow_enabled
+    assert glow_burst.settings.get("sine_rainbow_enabled") is True
+    assert "rainbow_enabled" not in glow_burst.settings
     assert "blob_growth" not in glow_burst.settings
 
     # Update global registry temporarily to validate helper behavior

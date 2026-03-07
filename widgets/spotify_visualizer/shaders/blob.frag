@@ -28,7 +28,7 @@ uniform float u_blob_reactive_deformation;  // 0..2 scales outward energy growth
 uniform float u_blob_stage_gain;  // 0..2 multiplier for staged core sizing
 uniform float u_blob_core_scale;  // 0.25..2.5 post-stage scaling of the core radius
 uniform float u_blob_core_floor_bias; // 0..0.6 fraction of staged radius preserved during deformations
-uniform float u_blob_stage_bias;  // -0.35..0.35 shifts stage thresholds up/down before smoothing
+uniform float u_blob_stage_bias;  // -0.60..0.60 shifts stage thresholds up/down before smoothing
 uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.0)
 uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
 uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.35)
@@ -106,7 +106,7 @@ vec3 compute_stage_progress_values(
     float stage2_t = smoothstep(0.58, 0.86, stage2_drive);
     float stage3_t = smoothstep(0.68, 0.94, chorus_drive);
 
-    float bias = clamp(u_blob_stage_bias, -0.35, 0.35);
+    float bias = clamp(u_blob_stage_bias, -0.60, 0.60);
     if (abs(bias) > 0.00001) {
         stage1_t = clamp(stage1_t + bias, 0.0, 1.0);
         stage2_t = clamp(stage2_t + bias, 0.0, 1.0);

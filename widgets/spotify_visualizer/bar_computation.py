@@ -426,7 +426,7 @@ def _compute_noise_floor(
         # so scale down expansion to prevent bar pinning at max height.
         if noise_floor_base > 0.01 and target_floor < noise_floor_base * 0.9:
             floor_ratio = max(0.15, target_floor / noise_floor_base)
-            expansion *= max(0.35, floor_ratio ** 0.5)
+            expansion *= max(0.50, floor_ratio ** 0.35)
 
     try:
         applied_floor = getattr(worker, "_applied_noise_floor", target_floor)
@@ -589,12 +589,12 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
         bar_history.fill(0.0)
         hold_timers.fill(0)
 
-    drop_threshold = 0.04
-    hold_frames = 3
+    drop_threshold = 0.08
+    hold_frames = 2
     attack_speed = 0.75
-    decay_snap = 0.22
-    decay_hold = 0.16
-    decay_glide = 0.12
+    decay_snap = 0.38
+    decay_hold = 0.22
+    decay_glide = 0.18
 
     for i in range(bands):
         target = arr[i]

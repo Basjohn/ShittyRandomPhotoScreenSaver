@@ -64,6 +64,8 @@ class BubbleState:
     trail_tail_y: float = 0.5
     trail_strength: float = 0.0
     trail_ready: bool = False
+    exiting: bool = False       # bubble head left the card; trail draining out
+    exit_timer: float = 0.0     # time since exit began (safety destroy after grace)
 
 
 # Direction vectors for stream directions
@@ -212,13 +214,23 @@ class BubbleSimulation:
         # Raw mid/high would jerk on every transient.
         smooth_mid = float(energy_bands.get('smooth_mid', mid)) if isinstance(energy_bands, dict) else mid
         smooth_high = float(energy_bands.get('smooth_high', high)) if isinstance(energy_bands, dict) else high
-        vocal_speed = smooth_mid * 0.7 + smooth_high * 0.3
+
+        # Perceptual curve: expand low-energy region so quiet→loud feels
+        # gradual instead of "off → full".  x^1.4 compresses the top end
+        # (chorus still hits hard) while stretching the bottom (verse has
+        # visible but modest speed).
+        vocal_raw = smooth_mid * 0.65 + smooth_high * 0.35
+        vocal_speed = min(1.0, max(0.0, vocal_raw)) ** 1.4
+
+        # Smoother: fast attack so beats register, moderate decay so speed
+        # drops noticeably between phrases (old decay dt*1.5 was far too
+        # slow — speed never fell during verse→chorus transitions).
         if vocal_speed > self._smoothed_speed_energy:
-            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 18.0)
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 14.0)
         else:
-            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 1.5)
-        # Baseline + reactive cap (0 ≤ bubble speeds ≤ cap)
-        speed_energy = min(1.0, self._smoothed_speed_energy)
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 4.5)
+
+        speed_energy = min(1.0, max(0.0, self._smoothed_speed_energy))
         cap = max(0.1, stream_cap)
         baseline = max(0.05, min(cap, stream_const))
         reactivity_cap = 1.25
@@ -227,41 +239,31 @@ class BubbleSimulation:
         overdrive_norm = overdrive_margin / (reactivity_cap - 1.0) if reactivity_cap > 1.0 else 0.0
         reactivity = min(1.0, reactivity_raw)
 
-        if speed_energy <= 0.0:
-            energy_gate = 0.0
-            energy_curve = 0.0
+        # --- Simplified speed mapping ---
+        # Direct power-curve from energy to speed factor.
+        # Reactivity controls the exponent: high reactivity → linear (every
+        # dB of energy maps to speed), low reactivity → steep curve (only
+        # loud passages push speed up significantly).
+        if speed_energy <= 0.0 or reactivity <= 0.0:
+            energy_factor = 0.0
         else:
-            cap_span = max(0.0, cap - baseline)
-            hardness = 1.0 + cap_span * (0.18 + 0.32 * (1.0 - reactivity))
-            gate_exp = max(0.45, 1.25 - 0.6 * reactivity)
-            gated = speed_energy ** gate_exp
-            energy_gate = min(1.0, gated ** hardness)
-            curve_exp = 0.58 + 0.22 * (1.0 - reactivity)
-            energy_curve = min(1.0, speed_energy ** curve_exp)
+            curve_exp = 2.0 - reactivity * 1.3  # 2.0 at react=0 → 0.7 at react=1.0
+            energy_factor = min(1.0, speed_energy ** max(0.4, curve_exp))
 
-        cap_mix = baseline + (cap - baseline) * energy_gate
-        if reactivity <= 0.0:
-            reactivity_weight = 0.0
-        else:
-            reactivity_weight = reactivity * (0.55 + 0.45 * energy_gate)
-        if reactivity_weight <= 0.0:
-            speed_scale = baseline
-        else:
-            speed_scale = baseline * (1.0 - reactivity_weight) + cap_mix * reactivity_weight
-
-        energy_scale = 0.10 + 0.82 * energy_curve
-        effective_speed = speed_scale * energy_scale
+        # Blend: at zero reactivity we sit at baseline; at full reactivity
+        # the energy factor drives the full baseline→cap range.
+        effective_speed = baseline + (cap - baseline) * energy_factor * reactivity
 
         # --- Overdrive band (reactivity slider 101-125%) ---
         overdrive_threshold_gate = 0.12
         if overdrive_margin <= 0.0:
             if self._overdrive_active:
-                self._log_overdrive_state("release", reactivity_raw, energy_gate)
+                self._log_overdrive_state("release", reactivity_raw, energy_factor)
             self._overdrive_active = False
             self._overdrive_hold_timer = 0.0
             self._overdrive_consec_frames = 0
         else:
-            if energy_gate >= overdrive_threshold_gate:
+            if energy_factor >= overdrive_threshold_gate:
                 self._overdrive_consec_frames += 1
             else:
                 if not self._overdrive_active:
@@ -269,17 +271,17 @@ class BubbleSimulation:
             if (not self._overdrive_active) and self._overdrive_consec_frames >= 3:
                 self._overdrive_active = True
                 self._overdrive_hold_timer = 0.5
-                self._log_overdrive_state("enter", reactivity_raw, energy_gate)
+                self._log_overdrive_state("enter", reactivity_raw, energy_factor)
 
             if self._overdrive_active:
-                if energy_gate >= overdrive_threshold_gate:
+                if energy_factor >= overdrive_threshold_gate:
                     self._overdrive_hold_timer = 0.5
                 else:
                     self._overdrive_hold_timer = max(0.0, self._overdrive_hold_timer - dt)
                     if self._overdrive_hold_timer <= 0.0:
                         self._overdrive_active = False
                         self._overdrive_consec_frames = 0
-                        self._log_overdrive_state("release", reactivity_raw, energy_gate)
+                        self._log_overdrive_state("release", reactivity_raw, energy_factor)
 
         if self._overdrive_active:
             overdrive_boost = 0.10 + 0.30 * overdrive_norm
@@ -287,7 +289,7 @@ class BubbleSimulation:
             if is_viz_diagnostics_enabled():
                 now = time.time()
                 if now - self._overdrive_last_log_ts >= 0.5:
-                    self._log_overdrive_state("hold", reactivity_raw, energy_gate)
+                    self._log_overdrive_state("hold", reactivity_raw, energy_factor)
                     self._overdrive_last_log_ts = now
         base_vel = effective_speed * 0.35  # normalised units/sec
 
@@ -352,7 +354,7 @@ class BubbleSimulation:
             elif drift_dir == "swish_vertical":
                 move_y += drift_offset * dt
             elif is_swirl:
-                swirl_dx, swirl_dy = self._swirl_motion(b, drift_dir, drift_amount, drift_speed, dt)
+                swirl_dx, swirl_dy = self._swirl_motion(b, drift_dir, drift_amount, drift_speed, dt, base_vel)
                 move_x += swirl_dx
                 move_y += swirl_dy
             else:
@@ -370,18 +372,37 @@ class BubbleSimulation:
                 self._bleed_trail_smear(b, dt)
 
             # Pulse energy: smooth per-bubble energy for visible beat-sync thump.
-            raw_energy = bass if b.is_big else (mid * 0.6 + high * 0.4)
-            raw_energy = min(1.0, max(0.0, raw_energy))
-            # Small bubbles below ~6px rendered radius flicker between dot and
-            # outline when pulsing rapidly.  Use much slower decay for them.
-            is_tiny = (not b.is_big) and b.radius < 0.008
-            if raw_energy > b.pulse_energy:
-                # Fast attack: ramp up in ~80ms (dt*12)
-                b.pulse_energy += (raw_energy - b.pulse_energy) * min(1.0, dt * 12.0)
+            # Size-dependent threshold: bigger bubbles need more energy to
+            # pulse (more visual "mass"), while small bubbles respond to
+            # lighter sounds.  This prevents hi-hats from shaking big
+            # bubbles and makes bass drops really punch them.
+            if b.is_big:
+                raw_src = bass
+                size_range = max(0.001, self._big_size_max - 0.015)
+                size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
+                threshold = 0.08 + size_t * 0.22  # 0.08 at smallest big → 0.30 at largest
+                attack_rate = 10.0 - size_t * 3.0  # 10 at smallest → 7 at largest (slower)
+                decay_rate = 4.5 + size_t * 1.5    # 4.5 → 6.0 (settle faster)
             else:
-                # Decay: fast for big/normal, very slow for tiny to avoid flicker
-                decay_rate = 1.2 if is_tiny else 4.0
-                b.pulse_energy += (raw_energy - b.pulse_energy) * min(1.0, dt * decay_rate)
+                raw_src = mid * 0.6 + high * 0.4
+                size_range = max(0.001, self._small_size_max - 0.004)
+                size_t = min(1.0, max(0.0, (b.radius - 0.004) / size_range))
+                threshold = size_t * 0.12  # 0 at tiniest → 0.12 at largest small
+                attack_rate = 14.0 - size_t * 3.0  # 14 at tiniest → 11 at largest
+                decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
+
+            raw_energy = min(1.0, max(0.0, raw_src))
+            # Gate: energy below threshold produces no pulse; above it, rescale
+            # into 0..1 so the full slider range is usable.
+            if raw_energy <= threshold:
+                gated_energy = 0.0
+            else:
+                gated_energy = min(1.0, (raw_energy - threshold) / max(0.01, 1.0 - threshold))
+
+            if gated_energy > b.pulse_energy:
+                b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * attack_rate)
+            else:
+                b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * decay_rate)
 
             # Rotation (wobble)
             vocal_energy = mid * 0.7 + bass * 0.2 + high * 0.1
@@ -389,9 +410,25 @@ class BubbleSimulation:
 
             # Check if bubble exited the card
             margin = 0.1
-            if (b.x < -margin or b.x > 1.0 + margin or
-                    b.y < -margin or b.y > 1.0 + margin):
-                if b.reaches_surface:
+            head_outside = (b.x < -margin or b.x > 1.0 + margin or
+                            b.y < -margin or b.y > 1.0 + margin)
+
+            if head_outside and b.reaches_surface and not b.exiting:
+                # Bubble head left the visible area — start exit phase.
+                # Don't destroy yet: let the trail tail drift out of frame.
+                b.exiting = True
+                b.exit_timer = 0.0
+
+            if b.exiting:
+                b.exit_timer += dt
+                # Accelerate trail fade so it drains away smoothly
+                b.trail_strength = max(0.0, b.trail_strength - dt * 2.5)
+                # Check if trail tail is also outside the card (primary exit)
+                tail_outside = (b.trail_tail_x < -margin or b.trail_tail_x > 1.0 + margin or
+                                b.trail_tail_y < -margin or b.trail_tail_y > 1.0 + margin)
+                # Destroy when: trail tail is offscreen OR trail fully faded,
+                # OR grace period exceeded (safety net, ~0.8s)
+                if tail_outside or b.trail_strength <= 0.001 or b.exit_timer > 0.8:
                     to_remove.append(i)
 
         # Remove dead bubbles (reverse order)
@@ -400,8 +437,9 @@ class BubbleSimulation:
                 self._bubbles.pop(i)
 
         # --- Spawn new bubbles to maintain targets ---
-        big_count = sum(1 for b in self._bubbles if b.is_big)
-        small_count = sum(1 for b in self._bubbles if not b.is_big)
+        # Exiting bubbles are draining out and shouldn't hold spawn slots.
+        big_count = sum(1 for b in self._bubbles if b.is_big and not b.exiting)
+        small_count = sum(1 for b in self._bubbles if not b.is_big and not b.exiting)
 
         is_initial = self._time < 0.5
         while big_count < big_target and len(self._bubbles) < MAX_BUBBLES:
@@ -466,9 +504,15 @@ class BubbleSimulation:
                          drift_dir: str, *,
                          initial_fill: bool = False) -> None:
         if is_big:
-            radius = random.uniform(0.015, max(0.016, self._big_size_max))
+            center = max(0.016, self._big_size_max)
+            lo = center * 0.6
+            hi = center * 1.4
+            radius = random.uniform(lo, hi)
         else:
-            radius = random.uniform(0.004, max(0.005, self._small_size_max))
+            center = max(0.005, self._small_size_max)
+            lo = center * 0.55
+            hi = center * 1.45
+            radius = random.uniform(lo, hi)
 
         # Overlap prevention: retry up to 15 times with increasing jitter
         for _attempt in range(15):
@@ -544,6 +588,7 @@ class BubbleSimulation:
         drift_amount: float,
         drift_speed: float,
         dt: float,
+        base_vel: float = 0.0,
     ) -> Tuple[float, float]:
         """Return (move_x, move_y) for expanding-spiral motion.
 
@@ -555,6 +600,10 @@ class BubbleSimulation:
 
         Bubbles spawn near the center, trace an Archimedean spiral outward,
         and die when they leave the card bounds.
+
+        *base_vel* is the audio-reactive travel speed (normalised units/sec)
+        computed by the main tick loop.  It drives both angular velocity and
+        radial push so the Stream Reactivity slider works in swirl mode.
         """
         # Vector from centre in screen space (0,0 = top-left).
         sx = bubble.x - 0.5
@@ -583,15 +632,20 @@ class BubbleSimulation:
             tx = -ny
             ty =  nx
 
+        # Audio-reactive speed boost: base_vel encodes stream reactivity +
+        # audio energy.  Scale it so silent → 1.0× (drift sliders only),
+        # loud → up to ~3× angular speed.
+        audio_mult = 1.0 + base_vel * 5.0
+
         angular_speed = (0.3 + drift_amount * 0.7) * (0.5 + drift_speed * 1.0)
         per_bubble_var = 0.8 + 0.4 * abs(bubble.drift_bias)
-        force = angular_speed * per_bubble_var
+        force = angular_speed * per_bubble_var * audio_mult
 
         out_x = tx * force
         out_y = ty * force
 
         # Outward radial push — drives the expanding spiral.
-        radial_push = (0.04 + drift_amount * 0.10) * per_bubble_var
+        radial_push = (0.04 + drift_amount * 0.10) * per_bubble_var * audio_mult
         out_x += nx * radial_push
         out_y += ny * radial_push
 

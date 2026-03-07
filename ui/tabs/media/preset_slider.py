@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 from ui.tabs.shared_styles import NoWheelSlider
 
 from core.logging.logger import get_logger
@@ -22,6 +23,7 @@ from core.settings.visualizer_presets import (
     get_custom_preset_index,
     get_preset_count,
     get_preset_names,
+    get_preset_file_path,
 )
 
 if TYPE_CHECKING:
@@ -84,10 +86,27 @@ class VisualizerPresetSlider(QWidget):
         self._slider.valueChanged.connect(self._on_slider_changed)
         slider_column.addWidget(self._slider)
 
+        # Label row: preset name + EDIT PRESET button
+        label_row = QHBoxLayout()
+        label_row.setContentsMargins(0, 0, 0, 0)
+        label_row.setSpacing(6)
+
         self._value_label = QLabel(self._preset_names[0])
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._value_label.setWordWrap(True)
-        slider_column.addWidget(self._value_label)
+        label_row.addWidget(self._value_label, 1)
+
+        self._edit_btn = QPushButton("Edit Preset")
+        self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
+        self._edit_btn.setFixedHeight(22)
+        self._edit_btn.setStyleSheet(
+            "QPushButton { font-size: 9pt; padding: 2px 8px; }"
+        )
+        self._edit_btn.clicked.connect(self._open_preset_json)
+        self._edit_btn.setVisible(False)
+        label_row.addWidget(self._edit_btn)
+
+        slider_column.addLayout(label_row)
 
         row.addLayout(slider_column, 1)
 
@@ -152,6 +171,25 @@ class VisualizerPresetSlider(QWidget):
         return None
 
     def _update_advanced_visibility(self) -> None:
+        idx = self._slider.value()
+        is_custom = idx == self._custom_index
         if self._advanced_container is not None:
-            is_custom = self._slider.value() == self._custom_index
             self._advanced_container.setVisible(is_custom)
+        # Show EDIT PRESET only for non-Custom presets that have a JSON file
+        if is_custom:
+            self._edit_btn.setVisible(False)
+        else:
+            path = get_preset_file_path(self._mode, idx)
+            self._edit_btn.setVisible(path is not None)
+
+    def _open_preset_json(self) -> None:
+        """Open the current preset's JSON file in the OS default editor."""
+        idx = self._slider.value()
+        path = get_preset_file_path(self._mode, idx)
+        if path is None or not path.is_file():
+            logger.warning("[VIS_PRESETS] No JSON file for %s preset %d", self._mode, idx)
+            return
+        try:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+        except Exception:
+            logger.debug("[VIS_PRESETS] Failed to open preset file", exc_info=True)

@@ -136,7 +136,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'blob_core_floor_bias' in kwargs:
         widget._blob_core_floor_bias = max(0.0, min(0.6, float(kwargs['blob_core_floor_bias'])))
     if 'blob_stage_bias' in kwargs:
-        widget._blob_stage_bias = max(-0.35, min(0.35, float(kwargs['blob_stage_bias'])))
+        widget._blob_stage_bias = max(-0.60, min(0.60, float(kwargs['blob_stage_bias'])))
     if 'blob_stage2_release_ms' in kwargs:
         widget._blob_stage2_release_ms = max(200.0, min(4000.0, float(kwargs['blob_stage2_release_ms'])))
     if 'blob_stage3_release_ms' in kwargs:
@@ -304,10 +304,19 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if c is not None:
             widget._sine_line3_glow_color = c
 
-    # --- Rainbow (global, all modes) -----------------------------------
-    if 'rainbow_enabled' in kwargs:
+    # --- Rainbow (per-mode, falls back to global key for compat) --------
+    # Per-mode keys like spectrum_rainbow_enabled take priority over the
+    # legacy global rainbow_enabled.  The UI writes both.
+    _mode_str = getattr(widget, '_vis_mode_str', None) or ''
+    _pm_re = f'{_mode_str}_rainbow_enabled' if _mode_str else ''
+    _pm_rs = f'{_mode_str}_rainbow_speed' if _mode_str else ''
+    if _pm_re and _pm_re in kwargs:
+        widget._rainbow_enabled = bool(kwargs[_pm_re])
+    elif 'rainbow_enabled' in kwargs:
         widget._rainbow_enabled = bool(kwargs['rainbow_enabled'])
-    if 'rainbow_speed' in kwargs:
+    if _pm_rs and _pm_rs in kwargs:
+        widget._rainbow_speed = max(0.01, min(5.0, float(kwargs[_pm_rs])))
+    elif 'rainbow_speed' in kwargs:
         widget._rainbow_speed = max(0.01, min(5.0, float(kwargs['rainbow_speed'])))
     if 'rainbow_per_bar' in kwargs:
         widget._rainbow_per_bar = bool(kwargs['rainbow_per_bar'])
@@ -435,7 +444,13 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
 
     if engine is not None:
         extra['waveform'] = engine.get_waveform()
-        extra['energy_bands'] = engine.get_energy_bands()
+        # Sine wave needs RAW (pre-normalization) energy so amplitude reacts
+        # to actual audio intensity.  Normalized energy is near-constant
+        # whenever any audio plays, killing all reactivity.
+        if mode_str == 'sine_wave':
+            extra['energy_bands'] = engine.get_raw_energy_bands()
+        else:
+            extra['energy_bands'] = engine.get_energy_bands()
 
     _is_sine = (mode_str == 'sine_wave')
     extra['glow_enabled'] = widget._sine_glow_enabled if _is_sine else widget._osc_glow_enabled

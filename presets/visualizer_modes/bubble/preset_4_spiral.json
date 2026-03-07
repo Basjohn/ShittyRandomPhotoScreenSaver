@@ -755,6 +755,8 @@
           68,
           255
         ],
+        "bubble_rainbow_enabled": true,
+        "bubble_rainbow_speed": 0.34,
         "bubble_rotation_amount": 0.2,
         "bubble_small_count": 30,
         "bubble_small_freq_pulse": 0.63,
@@ -863,8 +865,6 @@
         "preset_sine_wave": 2,
         "preset_spectrum": 1,
         "preset_starfield": 3,
-        "rainbow_enabled": true,
-        "rainbow_speed": 0.34,
         "sensitivity": 0.4,
         "sine_card_adaptation": 0.07,
         "sine_crawl_amount": 0.27,

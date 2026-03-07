@@ -676,7 +676,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stage_gain = max(0.0, min(2.0, float(blob_stage_gain)))
         self._blob_core_scale = max(0.25, min(2.5, float(blob_core_scale)))
         self._blob_core_floor_bias = max(0.0, min(0.6, float(blob_core_floor_bias)))
-        self._blob_stage_bias = max(-0.3, min(0.3, float(blob_stage_bias)))
+        self._blob_stage_bias = max(-0.60, min(0.60, float(blob_stage_bias)))
         self._blob_stage2_release_ms = max(50.0, min(5000.0, float(blob_stage2_release_ms)))
         self._blob_stage3_release_ms = max(50.0, min(5000.0, float(blob_stage3_release_ms)))
         self._blob_constant_wobble = max(0.0, min(2.0, float(blob_constant_wobble)))

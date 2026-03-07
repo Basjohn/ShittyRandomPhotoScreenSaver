@@ -1077,6 +1077,28 @@ class WidgetsTab(QWidget):
         if prev_mode != mode:
             self.restore_scroll_position(mode)
 
+        # --- Per-mode rainbow sync ---
+        # Stash the outgoing mode's rainbow state, restore the incoming mode's.
+        cache = getattr(self, '_rainbow_per_mode', None)
+        if cache is not None and hasattr(self, 'rainbow_enabled') and hasattr(self, 'rainbow_speed_slider'):
+            if prev_mode and prev_mode != mode:
+                cache[prev_mode] = (
+                    self.rainbow_enabled.isChecked(),
+                    self.rainbow_speed_slider.value(),
+                )
+            if mode in cache:
+                enabled, speed = cache[mode]
+            else:
+                enabled, speed = False, 50
+            self.rainbow_enabled.blockSignals(True)
+            self.rainbow_speed_slider.blockSignals(True)
+            self.rainbow_enabled.setChecked(enabled)
+            self.rainbow_speed_slider.setValue(speed)
+            self.rainbow_speed_label.setText(f"{speed / 100.0:.2f}")
+            self.rainbow_enabled.blockSignals(False)
+            self.rainbow_speed_slider.blockSignals(False)
+            self._update_rainbow_visibility()
+
     _RAINBOW_COLORS = [
         "#FF0000", "#FF7F00", "#FFFF00", "#00FF00",
         "#0000FF", "#4B0082", "#8F00FF",

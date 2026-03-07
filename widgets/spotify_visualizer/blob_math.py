@@ -21,7 +21,7 @@ def _apply_stage_bias(
 ) -> tuple[float, float, float]:
     if abs(stage_bias) <= 1e-6:
         return (stage1_t, stage2_t, stage3_t)
-    bias = _clamp(stage_bias, -0.35, 0.35)
+    bias = _clamp(stage_bias, -0.60, 0.60)
     return (
         _clamp(stage1_t + bias, 0.0, 1.0),
         _clamp(stage2_t + bias, 0.0, 1.0),
