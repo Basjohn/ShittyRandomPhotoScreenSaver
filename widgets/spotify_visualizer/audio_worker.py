@@ -96,11 +96,11 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._max_floor: float = 4.0
         self._raw_bass_avg: float = 2.1
         # Slightly higher dynamic floor baseline (10% harder to peak).
-        self._dynamic_floor_ratio: float = 0.462
-        self._dynamic_floor_alpha: float = 0.15
-        self._dynamic_floor_decay_alpha: float = 0.4
+        self._dynamic_floor_ratio: float = 0.44
+        self._dynamic_floor_alpha: float = 0.08
+        self._dynamic_floor_decay_alpha: float = 0.12
         self._applied_noise_floor: float = 2.1
-        self._floor_response: float = 0.12
+        self._floor_response: float = 0.08
         self._floor_mid_weight: float = 0.18
         self._floor_headroom: float = 0.18
         self._silence_floor_threshold: float = 0.05
@@ -108,10 +108,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._last_bass_drop_ratio: float = 0.0
         self._bass_drop_accum: float = 0.0
         # Drop handling configuration
-        self._drop_hold_frames: int = 3
-        self._drop_threshold: float = 0.18
-        self._drop_decay_fast: float = 0.6
-        self._drop_snap_fraction: float = 0.45
+        self._drop_hold_frames: int = 2
+        self._drop_threshold: float = 0.16
+        self._drop_decay_fast: float = 0.72
+        self._drop_snap_fraction: float = 0.58
         self._preferred_block_size: int = 0
 
         # Sensitivity configuration (driven from Settings UI).

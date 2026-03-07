@@ -1630,6 +1630,27 @@ class SpotifyVisualizerWidget(QWidget):
         """Set the visualization display mode."""
         if mode != self._vis_mode:
             self._vis_mode = mode
+            try:
+                wm = getattr(self, '_widget_manager', None)
+                sm = getattr(wm, '_settings_manager', None) if wm is not None else None
+                if sm is not None:
+                    from core.settings.visualizer_presets import apply_preset_to_config
+
+                    cfg = sm.get('widgets', {}) or {}
+                    vis_cfg = dict(cfg.get('spotify_visualizer', {}) or {})
+                    mode_str = self._vis_mode_str
+                    preset_idx = int(vis_cfg.get(f'preset_{mode_str}', 0) or 0)
+                    vis_cfg = apply_preset_to_config(mode_str, preset_idx, vis_cfg)
+
+                    pm_re = f'{mode_str}_rainbow_enabled'
+                    pm_rs = f'{mode_str}_rainbow_speed'
+                    self._rainbow_enabled = bool(vis_cfg.get(pm_re, vis_cfg.get('rainbow_enabled', False)))
+                    self._rainbow_speed = max(
+                        0.01,
+                        min(5.0, float(vis_cfg.get(pm_rs, vis_cfg.get('rainbow_speed', 0.5))))
+                    )
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to sync per-mode rainbow on mode switch", exc_info=True)
             # Reset display bars so returning modes start clean
             for i in range(len(self._display_bars)):
                 self._display_bars[i] = 0.0

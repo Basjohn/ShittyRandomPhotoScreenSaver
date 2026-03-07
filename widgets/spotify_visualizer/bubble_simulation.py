@@ -632,20 +632,17 @@ class BubbleSimulation:
             tx = -ny
             ty =  nx
 
-        # Audio-reactive speed boost: base_vel encodes stream reactivity +
-        # audio energy.  Scale it so silent → 1.0× (drift sliders only),
-        # loud → up to ~3× angular speed.
-        audio_mult = 1.0 + base_vel * 5.0
+        swirl_drive = min(1.0, max(0.0, base_vel / 0.70))
+        audio_mult = 0.30 + 1.20 * (swirl_drive ** 2.6)
 
-        angular_speed = (0.3 + drift_amount * 0.7) * (0.5 + drift_speed * 1.0)
+        angular_speed = (0.16 + drift_amount * 0.42) * (0.35 + drift_speed * 0.75)
         per_bubble_var = 0.8 + 0.4 * abs(bubble.drift_bias)
         force = angular_speed * per_bubble_var * audio_mult
 
         out_x = tx * force
         out_y = ty * force
 
-        # Outward radial push — drives the expanding spiral.
-        radial_push = (0.04 + drift_amount * 0.10) * per_bubble_var * audio_mult
+        radial_push = (0.018 + drift_amount * 0.055) * per_bubble_var * (0.40 + 1.05 * (swirl_drive ** 2.2))
         out_x += nx * radial_push
         out_y += ny * radial_push
 
