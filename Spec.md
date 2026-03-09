@@ -443,9 +443,16 @@ The monolithic `SpotifyVisualizerWidget` and `SpotifyBarsGLOverlay` have been de
 - **Per-mode renderers** (`widgets/spotify_visualizer/renderers/`): 7 modules (spectrum, oscilloscope, sine_wave, blob, helix, starfield, bubble) each export `get_uniform_names()` and `upload_uniforms()`. Dispatched via `upload_mode_uniforms(mode, gl, u, state)` — only the active mode's uniforms are pushed, preventing cross-mode bleed.
 - **Tick pipeline** (`widgets/spotify_visualizer/tick_pipeline.py`): Extracted `_on_tick()` (~415 lines) from the widget.
 - **Mode transition** (`widgets/spotify_visualizer/mode_transition.py`): Extracted mode cycling, fade, teardown (~300 lines). `reset_visualizer_state()` is the single reset surface for cold starts, settings applies, and double-click switches.
-- **Bubble simulation** (`widgets/spotify_visualizer/bubble_simulation.py`): CPU-side particle sim with per-bubble state, trail smear, swirl orbits.
+- **Bubble simulation** (`widgets/spotify_visualizer/bubble_simulation.py`): CPU-side particle sim with per-bubble state, trail smear, swirl orbits. Mar 2026 retune: swirl motion now derives a curved `swirl_drive` from `base_vel` instead of a large linear multiplier, so quiet passages remain genuinely slow and only intense audio reaches fast spiral motion.
 - **Result**: `spotify_visualizer_widget.py` 2407→1482 lines. `spotify_bars_gl_overlay.py` 2049→1518 lines.
 - **Mode isolation**: `_reset_mode_state()` clears per-mode accumulators on switch. Non-active modes get their blob/osc state zeroed. No data bleeds between modes on double-click transitions.
+
+- **Per-mode rainbow resolution**: The authoritative rainbow state is mode-local. UI save/load writes `{mode}_rainbow_enabled` and `{mode}_rainbow_speed`; `SpotifyVisualizerSettings` now resolves rainbow from the active mode's keys with fallback to legacy global keys, and live double-click mode switches resync rainbow from persisted mode+preset config instead of reusing stale cached kwargs from the previous mode.
+
+- **Raw vs normalized energy policy**: `sine_wave` uses raw energy bands for GPU frame push because its amplitude/glow were collapsing to near-constant values under normalized bars. Other modes remain on normalized/smoothed energy for now because their motion/deformation paths are already flicker-sensitive and no additional raw-energy migration was high-confidence enough to land safely.
+
+- **Spectrum floor/drop policy**: Spectrum now prioritizes large, readable dips over constant micro-motion. Dynamic floor tracking is intentionally slower, micro-drops are frozen, large drops release faster, and adaptive normalization now yields more aggressively on real drop events so mirrored bars can collapse visibly without adding jitter.
+- **Preset hygiene tool**: `tools/visualizer_preset_repair.py` is the official GUI for pruning curated preset JSON/SST payloads. It uses the same `_migrate_preset_settings()` + `_filter_settings_for_mode()` helpers as runtime, merges in live defaults from `core/settings/default_settings.py`, writes `.bak` backups, and offers per-session undo.
 
 ### Spotify Visualizer lifecycle & debugging checklist
 

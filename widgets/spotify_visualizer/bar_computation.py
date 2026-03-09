@@ -418,7 +418,9 @@ def _compute_noise_floor(
             blended = (floor_signal * (1.0 - headroom)) + (base_target * headroom)
             target_floor = max(worker._min_floor, min(base_noise_floor, blended))
         drop_relief = getattr(worker, "_last_bass_drop_ratio", 0.0)
-        if low_resolution and drop_relief > 0.05:
+        if drop_relief > 0.18:
+            target_floor = max(worker._min_floor, target_floor * (1.0 - drop_relief * 0.18))
+        elif low_resolution and drop_relief > 0.05:
             target_floor = max(worker._min_floor, target_floor * (1.0 - drop_relief * 0.45))
     else:
         target_floor = max(worker._min_floor, min(worker._max_floor, manual_floor))
@@ -589,12 +591,14 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
         bar_history.fill(0.0)
         hold_timers.fill(0)
 
-    drop_threshold = 0.08
-    hold_frames = 2
-    attack_speed = 0.75
-    decay_snap = 0.38
-    decay_hold = 0.22
-    decay_glide = 0.18
+    drop_threshold = max(0.08, float(getattr(worker, "_drop_threshold", 0.16) or 0.16))
+    hold_frames = max(1, int(getattr(worker, "_drop_hold_frames", 2) or 2))
+    attack_speed = 0.72
+    decay_snap = max(0.45, float(getattr(worker, "_drop_snap_fraction", 0.58) or 0.58))
+    decay_hold = 0.28
+    decay_glide = 0.12
+    micro_drop_threshold = min(0.045, drop_threshold * 0.28)
+    large_drop_threshold = max(drop_threshold, 0.18)
 
     for i in range(bands):
         target = arr[i]
@@ -607,9 +611,15 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
         else:
             drop = current - target
 
-            if drop > drop_threshold:
+            if drop <= micro_drop_threshold:
+                hold_timers[i] = max(0, hold - 1)
+                new_val = current
+            elif drop > large_drop_threshold:
                 hold_timers[i] = hold_frames
                 new_val = current + (target - current) * decay_snap
+            elif drop > drop_threshold:
+                hold_timers[i] = hold_frames
+                new_val = current + (target - current) * 0.34
             elif hold > 0:
                 hold_timers[i] = hold - 1
                 new_val = current + (target - current) * decay_hold
@@ -646,8 +656,10 @@ def _apply_adaptive_normalization(
     else:
         fast_decay = 0.9 if peak_val < running_peak * 0.5 else 0.965
         running_peak = running_peak * fast_decay + peak_val * (1.0 - fast_decay)
-    drop_relief = drop_signal if low_resolution else 0.0
-    if low_resolution and drop_relief > 0.35:
+    drop_relief = max(0.0, float(drop_signal or 0.0))
+    if drop_relief > 0.22:
+        running_peak *= max(0.78, 1.0 - drop_relief * 0.22)
+    elif low_resolution and drop_relief > 0.35:
         running_peak *= max(0.95, 1.0 - drop_relief * 0.08)
     running_peak = max(0.18, min(1.35, running_peak))
     worker._running_peak = running_peak
