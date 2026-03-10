@@ -147,6 +147,13 @@ class _SpotifyBeatEngine(QObject):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply curved profile config", exc_info=True)
 
+    def set_energy_boost(self, boost: float) -> None:
+        """Forward energy boost scaling to the audio worker."""
+        try:
+            self._audio_worker.set_energy_boost(boost)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply energy boost config", exc_info=True)
+
     def set_playback_state(self, is_playing: bool) -> None:
         """Set Spotify playback state for FFT processing gating."""
         self._is_spotify_playing = bool(is_playing)

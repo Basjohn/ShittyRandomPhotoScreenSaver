@@ -16,6 +16,7 @@ from core.logging.logger import (
 )
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
+from core.settings.models import SpotifyVisualizerSettings, PER_MODE_TECHNICAL_MODES
 from widgets.shadow_utils import configure_overlay_widget_attributes
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -277,6 +278,11 @@ class SpotifyVisualizerWidget(QWidget):
         self._engine: Optional[_SpotifyBeatEngine] = get_shared_spotify_beat_engine(self._bar_count)
         self._last_floor_config = (True, 2.1)
         self._last_sensitivity_config = (True, 1.0)
+        self._last_energy_boost: float = 0.85
+        self._last_audio_block_size: int = 0
+        self._settings_model: Optional[SpotifyVisualizerSettings] = None
+        self._technical_config_cache: Dict[str, Dict[str, Any]] = {}
+        self._process_supervisor: Optional[ProcessSupervisor] = None
         try:
             engine = self._engine
             if engine is not None:
@@ -292,10 +298,7 @@ class SpotifyVisualizerWidget(QWidget):
                     self._target_bars = [0.0] * self._bar_count
                     self._per_bar_energy = [0.0] * self._bar_count
                     self._visual_bars = [0.0] * self._bar_count
-                # Test/diagnostic aliases – these reference shared state.
-                self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
-                self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
-                self._bars_result_buffer = engine._bars_result_buffer  # type: ignore[attr-defined]
+                self._bind_engine_aliases(engine)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to attach shared beat engine", exc_info=True)
 
@@ -422,6 +425,10 @@ class SpotifyVisualizerWidget(QWidget):
             engine.set_curved_profile(self._spectrum_bar_profile != 'legacy')
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay curved profile config", exc_info=True)
+        try:
+            engine.set_energy_boost(self._last_energy_boost)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay energy boost config", exc_info=True)
 
     # ------------------------------------------------------------------
     # Public configuration
@@ -434,11 +441,13 @@ class SpotifyVisualizerWidget(QWidget):
             self._engine = engine
             engine.set_thread_manager(thread_manager)
             self._replay_engine_config(engine)
+            self._bind_engine_aliases(engine)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
 
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
         """Set the ProcessSupervisor for worker integration."""
+        self._process_supervisor = supervisor
         try:
             engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
             if engine is not None:
@@ -481,6 +490,32 @@ class SpotifyVisualizerWidget(QWidget):
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to push sensitivity config via apply_sensitivity_config", exc_info=True)
 
+    def _apply_energy_boost(self, boost: float) -> None:
+        try:
+            value = float(boost)
+        except Exception as exc:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
+            value = 1.0
+        if abs(value - self._last_energy_boost) <= 1e-4:
+            return
+        self._last_energy_boost = value
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+        except Exception as exc:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
+            engine = None
+        if engine is None:
+            return
+        try:
+            engine.set_energy_boost(value)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to push energy boost config", exc_info=True)
+
+    @staticmethod
+    def _compute_energy_boost(enabled: bool) -> float:
+        """Map dynamic range flag to a safe energy boost multiplier."""
+        return 1.18 if enabled else 0.85
+
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         self.apply_sensitivity_config(recommended, sensitivity)
 
@@ -522,6 +557,166 @@ class SpotifyVisualizerWidget(QWidget):
     @property
     def _vis_mode_str(self) -> str:
         return self._vis_mode.name.lower()
+
+    def set_settings_model(self, model: SpotifyVisualizerSettings) -> None:
+        if model is None:
+            return
+        try:
+            snapshot = copy.deepcopy(model)
+        except Exception:
+            snapshot = model
+        self._settings_model = snapshot
+        self._technical_config_cache = self._build_technical_cache(snapshot)
+        self._apply_technical_config_for_mode(self._vis_mode, reason="settings_model_update")
+
+    def _build_technical_cache(self, model: SpotifyVisualizerSettings) -> Dict[str, Dict[str, Any]]:
+        cache: Dict[str, Dict[str, Any]] = {}
+        for mode_key in PER_MODE_TECHNICAL_MODES:
+            try:
+                cache[mode_key] = {
+                    "bar_count": model.resolve_bar_count(mode_key),
+                    "dynamic_floor": model.resolve_dynamic_floor(mode_key),
+                    "manual_floor": model.resolve_manual_floor(mode_key),
+                    "adaptive_sensitivity": model.resolve_adaptive_sensitivity(mode_key),
+                    "sensitivity": model.resolve_sensitivity(mode_key),
+                    "audio_block_size": model.resolve_audio_block_size(mode_key),
+                    "dynamic_range_enabled": model.resolve_dynamic_range_enabled(mode_key),
+                }
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to cache technical config for mode=%s", mode_key, exc_info=True)
+        return cache
+
+    def _get_mode_technical_config(self, mode: VisualizerMode) -> Optional[Dict[str, Any]]:
+        if not self._technical_config_cache:
+            return None
+        mode_key = mode.name.lower()
+        config = self._technical_config_cache.get(mode_key)
+        if config is None:
+            # Fallback to the first cached entry
+            try:
+                config = next(iter(self._technical_config_cache.values()))
+            except StopIteration:
+                return None
+        return config
+
+    def _apply_technical_config_for_mode(self, mode: VisualizerMode, *, reason: str) -> None:
+        config = self._get_mode_technical_config(mode)
+        if config is None:
+            return
+        try:
+            target_bars = int(config.get("bar_count", self._bar_count))
+        except Exception:
+            target_bars = self._bar_count
+        if target_bars != self._bar_count:
+            self._resize_bar_buffers(target_bars)
+
+        dynamic_floor = bool(config.get("dynamic_floor", True))
+        manual_floor = float(config.get("manual_floor", 2.1))
+        adaptive = bool(config.get("adaptive_sensitivity", True))
+        sensitivity = float(config.get("sensitivity", 1.0))
+        audio_block_size = int(config.get("audio_block_size", 0) or 0)
+        dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
+        energy_boost = self._compute_energy_boost(dynamic_range_enabled)
+
+        self.apply_floor_config(dynamic_floor, manual_floor)
+        self.apply_sensitivity_config(adaptive, sensitivity)
+        self._apply_audio_block_size(audio_block_size)
+        self._apply_energy_boost(energy_boost)
+
+        try:
+            logger.info(
+                "[SPOTIFY_VIS][TECHNICAL] mode=%s reason=%s bar_count=%d dyn_floor=%s manual_floor=%.2f adaptive=%s sensitivity=%.2f block=%d dyn_range=%s energy_boost=%.2f",
+                mode.name,
+                reason,
+                self._bar_count,
+                dynamic_floor,
+                manual_floor,
+                adaptive,
+                sensitivity,
+                audio_block_size,
+                dynamic_range_enabled,
+                energy_boost,
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to log technical config", exc_info=True)
+
+    def _apply_audio_block_size(self, block_size: int) -> None:
+        try:
+            value = max(0, int(block_size))
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            value = 0
+        if value == self._last_audio_block_size:
+            return
+        self._last_audio_block_size = value
+        engine = self._engine
+        if engine is None:
+            try:
+                engine = get_shared_spotify_beat_engine(self._bar_count)
+                self._engine = engine
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to resolve beat engine for block size", exc_info=True)
+                engine = None
+        worker = getattr(engine, "_audio_worker", None) if engine is not None else None
+        if worker is None or not hasattr(worker, "set_audio_block_size"):
+            return
+        try:
+            worker.set_audio_block_size(value)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to push audio block size", exc_info=True)
+
+    def _resize_bar_buffers(self, new_bar_count: int) -> None:
+        new_count = max(1, int(new_bar_count))
+        if new_count == self._bar_count:
+            return
+        was_enabled = self._enabled
+        old_engine = self._engine
+        if was_enabled and old_engine is not None:
+            try:
+                old_engine.release()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to release old beat engine during resize", exc_info=True)
+        self._engine = None
+        self._bar_count = new_count
+        self._display_bars = [0.0] * new_count
+        self._target_bars = [0.0] * new_count
+        self._per_bar_energy = [0.0] * new_count
+        self._visual_bars = [0.0] * new_count
+        self._geom_cache_rect = None
+        self._geom_cache_bar_count = new_count
+        self._geom_bar_x = []
+        self._geom_seg_y = []
+        self._geom_bar_width = 0
+        self._geom_seg_height = 0
+        self._last_gpu_geom = None
+        self._last_gpu_fade_sent = -1.0
+        self._has_pushed_first_frame = False
+        self._waiting_for_fresh_engine_frame = True
+        self._waiting_for_fresh_frame = True
+        try:
+            engine = get_shared_spotify_beat_engine(new_count)
+            self._engine = engine
+            if self._thread_manager is not None:
+                engine.set_thread_manager(self._thread_manager)
+            if self._process_supervisor is not None:
+                engine.set_process_supervisor(self._process_supervisor)
+            self._bind_engine_aliases(engine)
+            if was_enabled:
+                engine.acquire()
+                self._replay_engine_config(engine)
+                engine.ensure_started()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to resize beat engine", exc_info=True)
+
+    def _bind_engine_aliases(self, engine: Optional[_SpotifyBeatEngine]) -> None:
+        if engine is None:
+            return
+        try:
+            self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
+            self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
+            self._bars_result_buffer = engine._bars_result_buffer  # type: ignore[attr-defined]
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to bind beat engine aliases", exc_info=True)
 
     def get_preferred_height(self) -> int:
         """Return the ideal card height for the current visualizer mode."""
@@ -1630,6 +1825,7 @@ class SpotifyVisualizerWidget(QWidget):
         """Set the visualization display mode."""
         if mode != self._vis_mode:
             self._vis_mode = mode
+            self._apply_technical_config_for_mode(mode, reason="mode_switch")
             try:
                 wm = getattr(self, '_widget_manager', None)
                 sm = getattr(wm, '_settings_manager', None) if wm is not None else None

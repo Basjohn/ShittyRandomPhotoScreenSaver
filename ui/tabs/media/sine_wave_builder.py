@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QSlider, QWidget, QToolButton,
 )
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
 from PySide6.QtCore import Qt
 from ui.widgets import StyledComboBox
@@ -84,6 +85,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv = QVBoxLayout(tab._sine_advanced)
     _adv.setContentsMargins(0, 0, 0, 0)
     _adv.setSpacing(4)
+    build_per_mode_technical_group(tab, _adv, "sine_wave")
     _adv_host.addWidget(tab._sine_advanced)
 
     tab._sine_preset_slider.set_advanced_container(tab._sine_advanced_host)

@@ -165,7 +165,7 @@ class VisualizerPresetSlider(QWidget):
             if hasattr(w, '_preset_slider_changing'):
                 return w
             # WidgetsTab is the top-level tab widget with _save_settings
-            if hasattr(w, '_save_settings') and hasattr(w, 'spotify_vis_type_combo'):
+            if hasattr(w, '_save_settings') and hasattr(w, 'vis_mode_combo'):
                 return w
             w = w.parent()
         return None

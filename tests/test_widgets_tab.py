@@ -137,7 +137,7 @@ class TestWidgetsTab:
         tab = WidgetsTab(settings_manager)
         try:
             # Force Spotify tab visible and preset slider available
-            tab.spotify_vis_type_combo.setCurrentIndex(tab.spotify_vis_type_combo.findData("bubble"))
+            tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("bubble"))
             preset_slider = getattr(tab, "_bubble_preset_slider", None)
             assert preset_slider is not None
 

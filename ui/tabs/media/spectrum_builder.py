@@ -5,11 +5,12 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QSpinBox, QCheckBox, QSlider, QWidget, QToolButton,
+    QCheckBox, QSlider, QWidget, QToolButton,
 )
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
 from ui.widgets import StyledComboBox
 
@@ -18,7 +19,7 @@ if TYPE_CHECKING:
 
 
 def _update_ghost_visibility(tab) -> None:
-    show = getattr(tab, 'spotify_vis_ghost_enabled', None) and tab.spotify_vis_ghost_enabled.isChecked()
+    show = getattr(tab, 'vis_ghost_enabled', None) and tab.vis_ghost_enabled.isChecked()
     container = getattr(tab, '_ghost_sub_container', None)
     if container is not None:
         container.setVisible(bool(show))
@@ -126,147 +127,56 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         _, content = _aligned_row_widget(parent_layout, label_text)
         return content
 
-    spotify_vis_bar_row = _aligned_row(_normal_layout, "Bar Count:")
-    tab.spotify_vis_bar_count = QSpinBox()
-    tab.spotify_vis_bar_count.setRange(8, 96)
-    tab.spotify_vis_bar_count.setValue(tab._default_int('spotify_visualizer', 'bar_count', 32))
-    tab.spotify_vis_bar_count.setAccelerated(True)
-    tab.spotify_vis_bar_count.setToolTip("Number of frequency bars to display (8-96)")
-    tab.spotify_vis_bar_count.valueChanged.connect(tab._save_settings)
-    spotify_vis_bar_row.addWidget(tab.spotify_vis_bar_count)
-    spotify_vis_bar_row.addWidget(QLabel("bars"))
-    spotify_vis_bar_row.addStretch()
-
-    spotify_vis_block_row = _aligned_row(_adv_layout, "Audio Block Size:")
-    tab.spotify_vis_block_size = StyledComboBox(size_variant="compact")
-    tab.spotify_vis_block_size.setMinimumWidth(140)
-    tab.spotify_vis_block_size.addItem("Auto (Driver)", 0)
-    tab.spotify_vis_block_size.addItem("256 samples", 256)
-    tab.spotify_vis_block_size.addItem("512 samples", 512)
-    tab.spotify_vis_block_size.addItem("1024 samples", 1024)
-    tab.spotify_vis_block_size.currentIndexChanged.connect(tab._save_settings)
-    spotify_vis_block_row.addWidget(tab.spotify_vis_block_size)
-    default_block = tab._default_int('spotify_visualizer', 'audio_block_size', 512)
-    block_idx = tab.spotify_vis_block_size.findData(default_block)
-    if block_idx >= 0:
-        tab.spotify_vis_block_size.setCurrentIndex(block_idx)
-    spotify_vis_block_row.addStretch()
-
     spotify_vis_fill_row = _aligned_row(_normal_layout, "Bar Fill Color:")
-    tab.spotify_vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
-    tab.spotify_vis_fill_color_btn.set_color(tab._spotify_vis_fill_color)
-    tab.spotify_vis_fill_color_btn.color_changed.connect(
+    tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
+    tab.vis_fill_color_btn.set_color(tab._spotify_vis_fill_color)
+    tab.vis_fill_color_btn.color_changed.connect(
         lambda c: (setattr(tab, '_spotify_vis_fill_color', c), tab._save_settings())
     )
-    spotify_vis_fill_row.addWidget(tab.spotify_vis_fill_color_btn)
+    spotify_vis_fill_row.addWidget(tab.vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
 
     spotify_vis_border_color_row = _aligned_row(_normal_layout, "Bar Border Color:")
-    tab.spotify_vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
-    tab.spotify_vis_border_color_btn.set_color(tab._spotify_vis_border_color)
-    tab.spotify_vis_border_color_btn.color_changed.connect(
+    tab.vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
+    tab.vis_border_color_btn.set_color(tab._spotify_vis_border_color)
+    tab.vis_border_color_btn.color_changed.connect(
         lambda c: (setattr(tab, '_spotify_vis_border_color', c), tab._save_settings())
     )
-    spotify_vis_border_color_row.addWidget(tab.spotify_vis_border_color_btn)
+    spotify_vis_border_color_row.addWidget(tab.vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
 
     spotify_vis_border_opacity_row = _aligned_row(_normal_layout, "Bar Border Opacity:")
-    tab.spotify_vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spotify_vis_border_opacity.setMinimum(0)
-    tab.spotify_vis_border_opacity.setMaximum(100)
+    tab.vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.vis_border_opacity.setMinimum(0)
+    tab.vis_border_opacity.setMaximum(100)
     spotify_vis_border_opacity_pct = int(
         tab._default_float('spotify_visualizer', 'bar_border_opacity', 0.85) * 100
     )
-    tab.spotify_vis_border_opacity.setValue(spotify_vis_border_opacity_pct)
-    tab.spotify_vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spotify_vis_border_opacity.setTickInterval(5)
-    tab.spotify_vis_border_opacity.valueChanged.connect(tab._save_settings)
-    spotify_vis_border_opacity_row.addWidget(tab.spotify_vis_border_opacity)
-    tab.spotify_vis_border_opacity_label = QLabel(f"{spotify_vis_border_opacity_pct}%")
-    tab.spotify_vis_border_opacity.valueChanged.connect(
-        lambda v: tab.spotify_vis_border_opacity_label.setText(f"{v}%")
+    tab.vis_border_opacity.setValue(spotify_vis_border_opacity_pct)
+    tab.vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.vis_border_opacity.setTickInterval(5)
+    tab.vis_border_opacity.valueChanged.connect(tab._save_settings)
+    spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity)
+    tab.vis_border_opacity_label = QLabel(f"{spotify_vis_border_opacity_pct}%")
+    tab.vis_border_opacity.valueChanged.connect(
+        lambda v: tab.vis_border_opacity_label.setText(f"{v}%")
     )
-    spotify_vis_border_opacity_row.addWidget(tab.spotify_vis_border_opacity_label)
+    spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity_label)
 
-    spotify_vis_recommended_row = _aligned_row(_normal_layout, "")
-    tab.spotify_vis_recommended = QCheckBox("Suggest Sensitivity")
-    tab.spotify_vis_recommended.setProperty("circleIndicator", True)
-    tab.spotify_vis_recommended.setChecked(
-        tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
-    )
-    tab.spotify_vis_recommended.setToolTip(
-        "Let the visualizer suggest a safe baseline sensitivity. Uncheck to tune the multiplier manually."
-    )
-    tab.spotify_vis_recommended.stateChanged.connect(tab._save_settings)
-    tab.spotify_vis_recommended.stateChanged.connect(lambda _: tab._update_spotify_vis_sensitivity_enabled_state())
-    spotify_vis_recommended_row.addWidget(tab.spotify_vis_recommended)
-    spotify_vis_recommended_row.addStretch()
-
-    tab._spotify_vis_sensitivity_widget, spotify_vis_sensitivity_slider_row = _aligned_row_widget(_normal_layout, "Sensitivity:")
-    tab.spotify_vis_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spotify_vis_sensitivity.setMinimum(25)
-    tab.spotify_vis_sensitivity.setMaximum(250)
-    spotify_sens_slider = int(max(0.25, min(2.5, tab._default_float('spotify_visualizer', 'sensitivity', 1.0))) * 100)
-    tab.spotify_vis_sensitivity.setValue(spotify_sens_slider)
-    tab.spotify_vis_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spotify_vis_sensitivity.setTickInterval(25)
-    tab.spotify_vis_sensitivity.valueChanged.connect(tab._save_settings)
-    spotify_vis_sensitivity_slider_row.addWidget(tab.spotify_vis_sensitivity)
-    tab.spotify_vis_sensitivity_label = QLabel(f"{spotify_sens_slider / 100.0:.2f}x")
-    tab.spotify_vis_sensitivity.valueChanged.connect(
-        lambda v: tab.spotify_vis_sensitivity_label.setText(f"{v / 100.0:.2f}x")
-    )
-    spotify_vis_sensitivity_slider_row.addWidget(tab.spotify_vis_sensitivity_label)
-
-    dynamic_floor_row = _aligned_row(_normal_layout, "")
-    tab.spotify_vis_dynamic_floor = QCheckBox("Dynamic Noise Floor")
-    tab.spotify_vis_dynamic_floor.setProperty("circleIndicator", True)
-    tab.spotify_vis_dynamic_floor.setChecked(
-        tab._default_bool('spotify_visualizer', 'dynamic_range_enabled', True)
-    )
-    tab.spotify_vis_dynamic_floor.setToolTip(
-        "Automatically adjust the noise floor based on recent Spotify loopback energy."
-    )
-    tab.spotify_vis_dynamic_floor.stateChanged.connect(tab._save_settings)
-    tab.spotify_vis_dynamic_floor.stateChanged.connect(
-        lambda _: tab._update_spotify_vis_floor_enabled_state()
-    )
-    dynamic_floor_row.addWidget(tab.spotify_vis_dynamic_floor)
-    dynamic_floor_row.addStretch()
-
-    tab._manual_floor_widget, spotify_vis_manual_floor_row = _aligned_row_widget(_normal_layout, "Manual Floor:")
-    tab.spotify_vis_manual_floor = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spotify_vis_manual_floor.setMinimum(12)
-    tab.spotify_vis_manual_floor.setMaximum(400)
-    manual_floor_default = tab._default_float('spotify_visualizer', 'manual_floor', 2.1)
-    tab.spotify_vis_manual_floor.setValue(int(max(0.12, min(4.0, manual_floor_default)) * 100))
-    tab.spotify_vis_manual_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spotify_vis_manual_floor.setTickInterval(10)
-    tab.spotify_vis_manual_floor.valueChanged.connect(tab._save_settings)
-    spotify_vis_manual_floor_row.addWidget(tab.spotify_vis_manual_floor)
-    tab.spotify_vis_manual_floor_label = QLabel(f"{manual_floor_default:.2f}")
-    tab.spotify_vis_manual_floor.valueChanged.connect(
-        lambda v: tab.spotify_vis_manual_floor_label.setText(f"{v / 100.0:.2f}")
-    )
-    spotify_vis_manual_floor_row.addWidget(tab.spotify_vis_manual_floor_label)
-
-    def _update_manual_floor_vis(_s=None):
-        tab._manual_floor_widget.setVisible(not tab.spotify_vis_dynamic_floor.isChecked())
-    tab.spotify_vis_dynamic_floor.stateChanged.connect(_update_manual_floor_vis)
-    _update_manual_floor_vis()
+    build_per_mode_technical_group(tab, _adv_layout, "spectrum")
 
     # Ghosting controls
     ghost_toggle_row = _aligned_row(_adv_layout, "")
-    tab.spotify_vis_ghost_enabled = QCheckBox("Enable Ghosting")
-    tab.spotify_vis_ghost_enabled.setProperty("circleIndicator", True)
-    tab.spotify_vis_ghost_enabled.setChecked(
+    tab.vis_ghost_enabled = QCheckBox("Enable Ghosting")
+    tab.vis_ghost_enabled.setProperty("circleIndicator", True)
+    tab.vis_ghost_enabled.setChecked(
         tab._default_bool('spotify_visualizer', 'ghosting_enabled', True)
     )
-    tab.spotify_vis_ghost_enabled.setToolTip(
+    tab.vis_ghost_enabled.setToolTip(
         "When enabled, the visualizer draws trailing ghost bars above the current height."
     )
-    tab.spotify_vis_ghost_enabled.stateChanged.connect(tab._save_settings)
-    ghost_toggle_row.addWidget(tab.spotify_vis_ghost_enabled)
+    tab.vis_ghost_enabled.stateChanged.connect(tab._save_settings)
+    ghost_toggle_row.addWidget(tab.vis_ghost_enabled)
     ghost_toggle_row.addStretch()
 
     tab._ghost_sub_container = QWidget()
@@ -275,39 +185,39 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _ghost_layout.setSpacing(4)
 
     spotify_vis_ghost_opacity_row = _aligned_row(_ghost_layout, "Ghost Opacity:")
-    tab.spotify_vis_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spotify_vis_ghost_opacity.setMinimum(0)
-    tab.spotify_vis_ghost_opacity.setMaximum(100)
+    tab.vis_ghost_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.vis_ghost_opacity_slider.setMinimum(0)
+    tab.vis_ghost_opacity_slider.setMaximum(100)
     ghost_alpha_pct = int(tab._default_float('spotify_visualizer', 'ghost_alpha', 0.4) * 100)
-    tab.spotify_vis_ghost_opacity.setValue(ghost_alpha_pct)
-    tab.spotify_vis_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spotify_vis_ghost_opacity.setTickInterval(5)
-    tab.spotify_vis_ghost_opacity.valueChanged.connect(tab._save_settings)
-    spotify_vis_ghost_opacity_row.addWidget(tab.spotify_vis_ghost_opacity)
-    tab.spotify_vis_ghost_opacity_label = QLabel(f"{ghost_alpha_pct}%")
-    tab.spotify_vis_ghost_opacity.valueChanged.connect(
-        lambda v: tab.spotify_vis_ghost_opacity_label.setText(f"{v}%")
+    tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
+    tab.vis_ghost_opacity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.vis_ghost_opacity_slider.setTickInterval(5)
+    tab.vis_ghost_opacity_slider.valueChanged.connect(tab._save_settings)
+    spotify_vis_ghost_opacity_row.addWidget(tab.vis_ghost_opacity_slider)
+    tab.vis_ghost_opacity_label = QLabel(f"{ghost_alpha_pct}%")
+    tab.vis_ghost_opacity_slider.valueChanged.connect(
+        lambda v: tab.vis_ghost_opacity_label.setText(f"{v}%")
     )
-    spotify_vis_ghost_opacity_row.addWidget(tab.spotify_vis_ghost_opacity_label)
+    spotify_vis_ghost_opacity_row.addWidget(tab.vis_ghost_opacity_label)
 
     spotify_vis_ghost_decay_row = _aligned_row(_ghost_layout, "Ghost Decay Speed:")
-    tab.spotify_vis_ghost_decay = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spotify_vis_ghost_decay.setMinimum(10)
-    tab.spotify_vis_ghost_decay.setMaximum(100)
+    tab.vis_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.vis_ghost_decay_slider.setMinimum(10)
+    tab.vis_ghost_decay_slider.setMaximum(100)
     ghost_decay_slider = int(tab._default_float('spotify_visualizer', 'ghost_decay', 0.4) * 100)
-    tab.spotify_vis_ghost_decay.setValue(max(10, min(100, ghost_decay_slider)))
-    tab.spotify_vis_ghost_decay.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spotify_vis_ghost_decay.setTickInterval(5)
-    tab.spotify_vis_ghost_decay.valueChanged.connect(tab._save_settings)
-    spotify_vis_ghost_decay_row.addWidget(tab.spotify_vis_ghost_decay)
-    tab.spotify_vis_ghost_decay_label = QLabel(f"{tab.spotify_vis_ghost_decay.value() / 100.0:.2f}x")
-    tab.spotify_vis_ghost_decay.valueChanged.connect(
-        lambda v: tab.spotify_vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
+    tab.vis_ghost_decay_slider.setValue(max(10, min(100, ghost_decay_slider)))
+    tab.vis_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.vis_ghost_decay_slider.setTickInterval(5)
+    tab.vis_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    spotify_vis_ghost_decay_row.addWidget(tab.vis_ghost_decay_slider)
+    tab.vis_ghost_decay_label = QLabel(f"{tab.vis_ghost_decay_slider.value() / 100.0:.2f}x")
+    tab.vis_ghost_decay_slider.valueChanged.connect(
+        lambda v: tab.vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
     )
-    spotify_vis_ghost_decay_row.addWidget(tab.spotify_vis_ghost_decay_label)
+    spotify_vis_ghost_decay_row.addWidget(tab.vis_ghost_decay_label)
 
     _adv_layout.addWidget(tab._ghost_sub_container)
-    tab.spotify_vis_ghost_enabled.stateChanged.connect(lambda: _update_ghost_visibility(tab))
+    tab.vis_ghost_enabled.stateChanged.connect(lambda: _update_ghost_visibility(tab))
     _update_ghost_visibility(tab)
 
     # Single Piece Mode (solid bars, no segment gaps)

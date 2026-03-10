@@ -299,13 +299,12 @@ def create_spotify_visualizer_widget(
                 media_monitor_sel,
             )
 
-        # Preferred audio block size (0=auto)
-        try:
-            block_size = int(model.audio_block_size or 0)
-            if hasattr(vis, 'set_audio_block_size'):
-                vis.set_audio_block_size(block_size)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        # Cache full settings model for per-mode technical controls
+        if hasattr(vis, 'set_settings_model'):
+            try:
+                vis.set_settings_model(model)
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         # ThreadManager for animation tick scheduling
         if thread_manager is not None and hasattr(vis, 'set_thread_manager'):
@@ -388,27 +387,9 @@ def create_spotify_visualizer_widget(
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
-        # Sensitivity configuration
-        try:
-            recommended = SettingsManager.to_bool(model.adaptive_sensitivity, True)
-            sens = max(0.25, min(2.5, float(model.sensitivity)))
-            if hasattr(vis, 'set_sensitivity_config'):
-                vis.set_sensitivity_config(recommended, sens)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
         # Visualization mode + per-mode settings
         try:
             apply_spotify_vis_model_config(vis, model)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        # Noise floor configuration
-        try:
-            dynamic_floor = SettingsManager.to_bool(model.dynamic_floor, True)
-            manual_floor = float(model.manual_floor)
-            if hasattr(vis, 'set_floor_config'):
-                vis.set_floor_config(dynamic_floor, manual_floor)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 

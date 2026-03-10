@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
 
 if TYPE_CHECKING:
@@ -206,6 +207,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     adv_layout = QVBoxLayout(tab._blob_advanced)
     adv_layout.setContentsMargins(0, 0, 0, 0)
     adv_layout.setSpacing(4)
+    build_per_mode_technical_group(tab, host_layout, "blob")
     host_layout.addWidget(tab._blob_advanced)
 
     blob_layout.addWidget(tab._blob_advanced_host)

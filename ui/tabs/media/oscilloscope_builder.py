@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QSlider, QWidget, QToolButton,
 )
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
 from PySide6.QtCore import Qt
 
@@ -83,6 +84,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     _adv_layout = QVBoxLayout(tab._osc_advanced)
     _adv_layout.setContentsMargins(0, 0, 0, 0)
     _adv_layout.setSpacing(4)
+    build_per_mode_technical_group(tab, _adv_layout, "oscilloscope")
     _adv_host.addWidget(tab._osc_advanced)
 
     tab._osc_preset_slider.set_advanced_container(tab._osc_advanced_host)

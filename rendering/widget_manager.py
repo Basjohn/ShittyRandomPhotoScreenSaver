@@ -508,9 +508,9 @@ class WidgetManager:
             logger.debug("[WIDGET_MANAGER] Failed to apply media card style to visualizer", exc_info=True)
 
     def _refresh_spotify_visualizer_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
-        """Apply latest Spotify VIS sensitivity / floor settings to the live widget."""
+        """Apply latest Spotify visualizer configuration to the live widget."""
         vis = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
-        if vis is None or not hasattr(vis, 'set_sensitivity_config'):
+        if vis is None or not hasattr(vis, 'set_settings_model'):
             return
 
         cfg = widgets_config
@@ -543,22 +543,11 @@ class WidgetManager:
         except Exception:
             logger.debug("[SPOTIFY_VIS][REFRESH] Failed to log model snapshot", exc_info=True)
 
-        # Sensitivity (adaptive or manual multiplier)
+        # Push full settings model so widget can resolve per-mode technical config
         try:
-            recommended = SettingsManager.to_bool(model.adaptive_sensitivity, True)
-            sens_raw = float(model.sensitivity)
-            sensitivity = max(0.25, min(2.5, sens_raw))
-            vis.set_sensitivity_config(recommended, sensitivity)
+            vis.set_settings_model(model)
         except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify sensitivity config", exc_info=True)
-
-        # Noise floor (dynamic/manual)
-        try:
-            dynamic_floor = SettingsManager.to_bool(model.dynamic_floor, True)
-            manual_floor = float(model.manual_floor)
-            vis.set_floor_config(dynamic_floor, manual_floor)
-        except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply Spotify floor config", exc_info=True)
+            logger.debug("[WIDGET_MANAGER] Failed to push Spotify model to widget", exc_info=True)
 
         # Full vis mode config refresh — ensures ALL per-mode settings
         # (wobble, wave effect, glow, colors, etc.) apply immediately on save

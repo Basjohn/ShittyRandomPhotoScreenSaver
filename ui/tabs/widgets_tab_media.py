@@ -30,6 +30,10 @@ from ui.tabs.settings_binding import (
     apply_bindings_load,
     collect_bindings_save,
 )
+from ui.tabs.media.technical_controls import (
+    collect_per_mode_technical_controls,
+    load_per_mode_technical_controls,
+)
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -55,15 +59,16 @@ def _update_media_enabled_visibility(tab) -> None:
 
 def _update_spotify_vis_enabled_visibility(tab) -> None:
     """Show/hide all visualizer controls based on spotify_vis_enabled checkbox."""
-    enabled = getattr(tab, 'spotify_vis_enabled', None) and tab.spotify_vis_enabled.isChecked()
-    container = getattr(tab, '_spotify_vis_controls_container', None)
+    enabled_box = getattr(tab, 'vis_enabled_checkbox', None)
+    enabled = enabled_box is not None and enabled_box.isChecked()
+    container = getattr(tab, '_vis_controls_container', None)
     if container is not None:
         container.setVisible(bool(enabled))
 
 
 def _update_ghost_visibility(tab) -> None:
     """Show/hide ghost opacity/decay sliders based on ghost_enabled checkbox."""
-    show = getattr(tab, 'spotify_vis_ghost_enabled', None) and tab.spotify_vis_ghost_enabled.isChecked()
+    show = getattr(tab, 'vis_ghost_enabled', None) and tab.vis_ghost_enabled.isChecked()
     container = getattr(tab, '_ghost_sub_container', None)
     if container is not None:
         container.setVisible(bool(show))
@@ -428,31 +433,31 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     spotify_vis_layout = QVBoxLayout(spotify_vis_group)
 
     spotify_vis_enable_row = QHBoxLayout()
-    tab.spotify_vis_enabled = QCheckBox("Enable Spotify Beat Visualizer")
-    tab.spotify_vis_enabled.setProperty("circleIndicator", True)
-    tab.spotify_vis_enabled.setChecked(tab._default_bool('spotify_visualizer', 'enabled', True))
-    tab.spotify_vis_enabled.setToolTip(
+    tab.vis_enabled_checkbox = QCheckBox("Enable Spotify Beat Visualizer")
+    tab.vis_enabled_checkbox.setProperty("circleIndicator", True)
+    tab.vis_enabled_checkbox.setChecked(tab._default_bool('spotify_visualizer', 'enabled', True))
+    tab.vis_enabled_checkbox.setToolTip(
         "Shows a thin bar visualizer tied to Spotify playback, positioned just above the Spotify widget."
     )
-    tab.spotify_vis_enabled.stateChanged.connect(tab._save_settings)
-    spotify_vis_enable_row.addWidget(tab.spotify_vis_enabled)
+    tab.vis_enabled_checkbox.stateChanged.connect(tab._save_settings)
+    spotify_vis_enable_row.addWidget(tab.vis_enabled_checkbox)
 
-    tab.spotify_vis_software_enabled = QCheckBox("FORCE Software Visualizer")
-    tab.spotify_vis_software_enabled.setProperty("circleIndicator", True)
-    tab.spotify_vis_software_enabled.setChecked(
+    tab.vis_software_checkbox = QCheckBox("FORCE Software Visualizer")
+    tab.vis_software_checkbox.setProperty("circleIndicator", True)
+    tab.vis_software_checkbox.setChecked(
         tab._default_bool('spotify_visualizer', 'software_visualizer_enabled', False)
     )
-    tab.spotify_vis_software_enabled.setToolTip(
+    tab.vis_software_checkbox.setToolTip(
         "Force the legacy CPU bar visualizer even when the renderer backend is set to Software or when OpenGL is unavailable."
     )
-    tab.spotify_vis_software_enabled.stateChanged.connect(tab._save_settings)
+    tab.vis_software_checkbox.stateChanged.connect(tab._save_settings)
     spotify_vis_enable_row.addStretch()
-    spotify_vis_enable_row.addWidget(tab.spotify_vis_software_enabled)
+    spotify_vis_enable_row.addWidget(tab.vis_software_checkbox)
     spotify_vis_layout.addLayout(spotify_vis_enable_row)
 
     # Container for all visualizer controls gated by enable checkbox
-    tab._spotify_vis_controls_container = QWidget()
-    _svctl = QVBoxLayout(tab._spotify_vis_controls_container)
+    tab._vis_controls_container = QWidget()
+    _svctl = QVBoxLayout(tab._vis_controls_container)
     _svctl.setContentsMargins(0, 0, 0, 0)
     _svctl.setSpacing(4)
 
@@ -502,30 +507,30 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     vis_label = QLabel("Visualizer Type:")
     vis_label.setStyleSheet(SECTION_HEADING_STYLE)
     vis_type_row.addWidget(vis_label)
-    tab.spotify_vis_type_combo = StyledComboBox(size_variant="hero")
-    tab.spotify_vis_type_combo.setMinimumWidth(160)
+    tab.vis_mode_combo = StyledComboBox(size_variant="hero")
+    tab.vis_mode_combo.setMinimumWidth(160)
     import os as _os
     _dev_features = _os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
-    tab.spotify_vis_type_combo.addItem("Spectrum", "spectrum")
-    tab.spotify_vis_type_combo.addItem("Oscilloscope", "oscilloscope")
+    tab.vis_mode_combo.addItem("Spectrum", "spectrum")
+    tab.vis_mode_combo.addItem("Oscilloscope", "oscilloscope")
     if _dev_features:
-        tab.spotify_vis_type_combo.addItem("Starfield", "starfield")
-    tab.spotify_vis_type_combo.addItem("Blob", "blob")
-    tab.spotify_vis_type_combo.addItem("Sine Waves", "sine_wave")
-    tab.spotify_vis_type_combo.addItem("Bubble", "bubble")
+        tab.vis_mode_combo.addItem("Starfield", "starfield")
+    tab.vis_mode_combo.addItem("Blob", "blob")
+    tab.vis_mode_combo.addItem("Sine Waves", "sine_wave")
+    tab.vis_mode_combo.addItem("Bubble", "bubble")
 
     default_mode = tab._default_str('spotify_visualizer', 'mode', 'spectrum')
-    mode_idx = tab.spotify_vis_type_combo.findData(default_mode)
+    mode_idx = tab.vis_mode_combo.findData(default_mode)
     if mode_idx >= 0:
-        tab.spotify_vis_type_combo.setCurrentIndex(mode_idx)
-    tab.spotify_vis_type_combo.setToolTip(
+        tab.vis_mode_combo.setCurrentIndex(mode_idx)
+    tab.vis_mode_combo.setToolTip(
         "Select the visualization style. Spectrum is the classic segmented bar display."
     )
-    tab.spotify_vis_type_combo.currentIndexChanged.connect(tab._save_settings)
-    tab.spotify_vis_type_combo.currentIndexChanged.connect(
+    tab.vis_mode_combo.currentIndexChanged.connect(tab._save_settings)
+    tab.vis_mode_combo.currentIndexChanged.connect(
         lambda _: tab._update_vis_mode_sections()
     )
-    vis_type_row.addWidget(tab.spotify_vis_type_combo)
+    vis_type_row.addWidget(tab.vis_mode_combo)
     vis_type_row.addStretch()
     _svctl.addLayout(vis_type_row)
 
@@ -552,8 +557,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     build_starfield_growth(tab)
     build_blob_growth(tab)
 
-    spotify_vis_layout.addWidget(tab._spotify_vis_controls_container)
-    tab.spotify_vis_enabled.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
+    spotify_vis_layout.addWidget(tab._vis_controls_container)
+    tab.vis_enabled_checkbox.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
     _update_spotify_vis_enabled_visibility(tab)
 
     # Initial visibility
@@ -663,36 +668,12 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
 
     # Spotify Visualizer
     spotify_vis_config = widgets.get('spotify_visualizer', {})
-    tab.spotify_vis_enabled.setChecked(
+    tab.vis_enabled_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
     )
-    tab.spotify_vis_bar_count.setValue(
-        tab._config_int('spotify_visualizer', spotify_vis_config, 'bar_count', 32)
-    )
-    block_size_val = tab._config_int('spotify_visualizer', spotify_vis_config, 'audio_block_size', 0)
-    block_idx = tab.spotify_vis_block_size.findData(block_size_val)
-    if block_idx < 0:
-        block_idx = 0
-    tab.spotify_vis_block_size.setCurrentIndex(block_idx)
+    load_per_mode_technical_controls(tab, spotify_vis_config)
 
-    tab.spotify_vis_recommended.setChecked(
-        tab._config_bool('spotify_visualizer', spotify_vis_config, 'adaptive_sensitivity', True)
-    )
-    sens_f = tab._config_float('spotify_visualizer', spotify_vis_config, 'sensitivity', 1.0)
-    sens_slider = int(max(0.25, min(2.5, sens_f)) * 100)
-    tab.spotify_vis_sensitivity.setValue(sens_slider)
-    tab.spotify_vis_sensitivity_label.setText(f"{sens_slider / 100.0:.2f}x")
-    tab._update_spotify_vis_sensitivity_enabled_state()
-
-    dynamic_floor = tab._config_bool('spotify_visualizer', spotify_vis_config, 'dynamic_range_enabled', True)
-    tab.spotify_vis_dynamic_floor.setChecked(dynamic_floor)
-    manual_floor_f = tab._config_float('spotify_visualizer', spotify_vis_config, 'manual_floor', 2.1)
-    manual_slider = int(max(0.12, min(4.0, manual_floor_f)) * 100)
-    tab.spotify_vis_manual_floor.setValue(manual_slider)
-    tab.spotify_vis_manual_floor_label.setText(f"{manual_slider / 100.0:.2f}")
-    tab._update_spotify_vis_floor_enabled_state()
-
-    tab.spotify_vis_software_enabled.setChecked(
+    tab.vis_software_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'software_visualizer_enabled', False)
     )
 
@@ -711,14 +692,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab._spotify_vis_border_color = QColor(255, 255, 255, 230)
 
     border_opacity_pct = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bar_border_opacity', 0.85) * 100)
-    tab.spotify_vis_border_opacity.setValue(border_opacity_pct)
-    tab.spotify_vis_border_opacity_label.setText(f"{border_opacity_pct}%")
+    tab.vis_border_opacity.setValue(border_opacity_pct)
+    tab.vis_border_opacity_label.setText(f"{border_opacity_pct}%")
 
     # Visualizer mode combobox
     saved_mode = tab._config_str('spotify_visualizer', spotify_vis_config, 'mode', 'spectrum')
-    mode_idx = tab.spotify_vis_type_combo.findData(saved_mode)
+    mode_idx = tab.vis_mode_combo.findData(saved_mode)
     if mode_idx >= 0:
-        tab.spotify_vis_type_combo.setCurrentIndex(mode_idx)
+        tab.vis_mode_combo.setCurrentIndex(mode_idx)
 
     # Per-mode settings: Oscilloscope
     if hasattr(tab, 'osc_glow_enabled'):
@@ -1110,18 +1091,18 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab._update_vis_mode_sections()
 
     # Ghosting
-    tab.spotify_vis_ghost_enabled.setChecked(
+    tab.vis_ghost_enabled.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'ghosting_enabled', True)
     )
     ghost_alpha_pct = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'ghost_alpha', 0.4) * 100)
     ghost_alpha_pct = max(0, min(100, ghost_alpha_pct))
-    tab.spotify_vis_ghost_opacity.setValue(ghost_alpha_pct)
-    tab.spotify_vis_ghost_opacity_label.setText(f"{ghost_alpha_pct}%")
+    tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
+    tab.vis_ghost_opacity_label.setText(f"{ghost_alpha_pct}%")
 
     ghost_decay_f = tab._config_float('spotify_visualizer', spotify_vis_config, 'ghost_decay', 0.4)
     ghost_decay_slider = max(10, min(100, int(ghost_decay_f * 100.0)))
-    tab.spotify_vis_ghost_decay.setValue(ghost_decay_slider)
-    tab.spotify_vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
+    tab.vis_ghost_decay_slider.setValue(ghost_decay_slider)
+    tab.vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
     _update_ghost_visibility(tab)
 
     # Sine Density / Heartbeat / Displacement
@@ -1375,13 +1356,9 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
 
     spotify_vis_config = {
-        'enabled': tab.spotify_vis_enabled.isChecked(),
-        'mode': tab.spotify_vis_type_combo.currentData() if hasattr(tab, 'spotify_vis_type_combo') else 'spectrum',
-        'bar_count': tab.spotify_vis_bar_count.value(),
-        'software_visualizer_enabled': tab.spotify_vis_software_enabled.isChecked(),
-        'adaptive_sensitivity': tab.spotify_vis_recommended.isChecked(),
-        'audio_block_size': int(tab.spotify_vis_block_size.currentData() or 0),
-        'sensitivity': max(0.25, min(2.5, tab.spotify_vis_sensitivity.value() / 100.0)),
+        'enabled': tab.vis_enabled_checkbox.isChecked(),
+        'mode': tab.vis_mode_combo.currentData() if hasattr(tab, 'vis_mode_combo') else 'spectrum',
+        'software_visualizer_enabled': tab.vis_software_checkbox.isChecked(),
         'bar_fill_color': [
             tab._spotify_vis_fill_color.red(),
             tab._spotify_vis_fill_color.green(),
@@ -1394,13 +1371,10 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
             tab._spotify_vis_border_color.blue(),
             tab._spotify_vis_border_color.alpha(),
         ],
-        'bar_border_opacity': tab.spotify_vis_border_opacity.value() / 100.0,
-        'ghosting_enabled': tab.spotify_vis_ghost_enabled.isChecked(),
-        'ghost_alpha': tab.spotify_vis_ghost_opacity.value() / 100.0,
-        'ghost_decay': max(0.1, tab.spotify_vis_ghost_decay.value() / 100.0),
-        'dynamic_floor': tab.spotify_vis_dynamic_floor.isChecked(),
-        'dynamic_range_enabled': tab.spotify_vis_dynamic_floor.isChecked(),
-        'manual_floor': max(0.12, min(4.0, tab.spotify_vis_manual_floor.value() / 100.0)),
+        'bar_border_opacity': tab.vis_border_opacity.value() / 100.0,
+        'ghosting_enabled': tab.vis_ghost_enabled.isChecked(),
+        'ghost_alpha': tab.vis_ghost_opacity_slider.value() / 100.0,
+        'ghost_decay': max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
         'osc_glow_enabled': tab.osc_glow_enabled.isChecked() if hasattr(tab, 'osc_glow_enabled') else False,
         'osc_glow_intensity': (tab.osc_glow_intensity.value() if hasattr(tab, 'osc_glow_intensity') else 50) / 100.0,
         'osc_reactive_glow': tab.osc_reactive_glow.isChecked() if hasattr(tab, 'osc_reactive_glow') else False,
@@ -1552,6 +1526,33 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_trail_strength': (tab.bubble_trail_strength.value() if hasattr(tab, 'bubble_trail_strength') else 0) / 100.0,
         'bubble_tail_opacity': (tab.bubble_tail_opacity.value() if hasattr(tab, 'bubble_tail_opacity') else 0) / 100.0,
     })
+    collect_per_mode_technical_controls(tab, spotify_vis_config)
+
+    def _per_mode_value(key: str, fallback):
+        return spotify_vis_config.get(f'{_cur_mode}_{key}', fallback)
+
+    spotify_vis_config['bar_count'] = _per_mode_value(
+        'bar_count', tab._default_int('spotify_visualizer', 'bar_count', 32)
+    )
+    spotify_vis_config['audio_block_size'] = _per_mode_value(
+        'audio_block_size', tab._default_int('spotify_visualizer', 'audio_block_size', 0)
+    )
+    spotify_vis_config['adaptive_sensitivity'] = _per_mode_value(
+        'adaptive_sensitivity', tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
+    )
+    spotify_vis_config['sensitivity'] = _per_mode_value(
+        'sensitivity', tab._default_float('spotify_visualizer', 'sensitivity', 1.0)
+    )
+    spotify_vis_config['dynamic_floor'] = _per_mode_value(
+        'dynamic_floor', tab._default_bool('spotify_visualizer', 'dynamic_floor', True)
+    )
+    spotify_vis_config['manual_floor'] = _per_mode_value(
+        'manual_floor', tab._default_float('spotify_visualizer', 'manual_floor', 2.1)
+    )
+    spotify_vis_config['dynamic_range_enabled'] = _per_mode_value(
+        'dynamic_range_enabled', tab._default_bool('spotify_visualizer', 'dynamic_range_enabled', False)
+    )
+
     spotify_vis_config.update(collect_bindings_save(tab, _OSC_MULTI_LINE_COLOR_BINDINGS))
     # Preset indices per mode
     _ps_map = {
@@ -1568,8 +1569,5 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         spotify_vis_config[f'preset_{mk}'] = (
             s.preset_index() if s is not None else 0
         )
-
-    tab._update_spotify_vis_sensitivity_enabled_state()
-    tab._update_spotify_vis_floor_enabled_state()
 
     return media_config, spotify_vis_config

@@ -592,9 +592,9 @@ class WidgetsTab(QWidget):
                 'media_artwork_size', 'media_rounded_artwork',
                 'media_show_header_frame', 'media_show_controls',
                 'media_spotify_volume_enabled',
-                'spotify_vis_enabled', 'spotify_vis_bar_count',
-                'spotify_vis_border_opacity', 'spotify_vis_ghost_enabled',
-                'spotify_vis_ghost_opacity', 'spotify_vis_ghost_decay',
+                'vis_enabled_checkbox',
+                'vis_border_opacity', 'vis_ghost_enabled',
+                'vis_ghost_opacity_slider', 'vis_ghost_decay_slider',
                 'reddit_enabled', 'reddit_subreddit', 'reddit_items',
                 'reddit_position', 'reddit_monitor_combo',
                 'reddit_font_combo', 'reddit_font_size', 'reddit_margin',
@@ -1009,7 +1009,7 @@ class WidgetsTab(QWidget):
         }
 
         try:
-            mode = self.spotify_vis_type_combo.currentData() or 'spectrum'
+            mode = self.vis_mode_combo.currentData() or 'spectrum'
         except Exception:
             return
 
@@ -1050,7 +1050,7 @@ class WidgetsTab(QWidget):
     def _update_vis_mode_sections(self) -> None:
         """Show/hide per-mode settings containers based on selected visualizer type."""
         try:
-            mode = self.spotify_vis_type_combo.currentData() or 'spectrum'
+            mode = self.vis_mode_combo.currentData() or 'spectrum'
         except Exception:
             mode = 'spectrum'
 
@@ -1135,34 +1135,6 @@ class WidgetsTab(QWidget):
                 lbl = getattr(self, '_rainbow_label', None)
                 if lbl is not None:
                     lbl.hide()
-        except Exception as e:
-            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-
-    def _update_spotify_vis_sensitivity_enabled_state(self) -> None:
-        try:
-            recommended = self.spotify_vis_recommended.isChecked()
-        except Exception as e:
-            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-            recommended = True
-        try:
-            container = getattr(self, '_spotify_vis_sensitivity_container', None)
-            if container is not None:
-                container.setVisible(not recommended)
-            self.spotify_vis_sensitivity.setEnabled(not recommended)
-            self.spotify_vis_sensitivity_label.setEnabled(not recommended)
-        except Exception as e:
-            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-
-    def _update_spotify_vis_floor_enabled_state(self) -> None:
-        try:
-            dynamic = self.spotify_vis_dynamic_floor.isChecked()
-        except Exception as e:
-            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-            dynamic = True
-
-        try:
-            self.spotify_vis_manual_floor.setEnabled(not dynamic)
-            self.spotify_vis_manual_floor_label.setEnabled(not dynamic)
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
@@ -1325,10 +1297,11 @@ class WidgetsTab(QWidget):
         
         # Spotify Visualizer
         config['spotify_visualizer'] = {
-            'enabled': getattr(self, 'spotify_vis_enabled', None) and self.spotify_vis_enabled.isChecked(),
-            'monitor': getattr(self, 'spotify_vis_monitor_combo', None) and self.spotify_vis_monitor_combo.currentText() or 'ALL',
-            'bar_count': getattr(self, 'spotify_vis_bar_count', None) and self.spotify_vis_bar_count.value() or 16,
-            'mode': getattr(self, 'spotify_vis_type_combo', None) and self.spotify_vis_type_combo.currentData() or 'spectrum',
+            'enabled': getattr(self, 'vis_enabled_checkbox', None) and self.vis_enabled_checkbox.isChecked(),
+            'monitor': getattr(self, 'vis_monitor_combo', None) and self.vis_monitor_combo.currentText() or 'ALL',
+            # Legacy key: helper now writes per-mode values; UI no longer owns this spinbox.
+            'bar_count': 16,
+            'mode': getattr(self, 'vis_mode_combo', None) and self.vis_mode_combo.currentData() or 'spectrum',
             'osc_glow_enabled': getattr(self, 'osc_glow_enabled', None) and self.osc_glow_enabled.isChecked(),
             'osc_glow_intensity': (getattr(self, 'osc_glow_intensity', None) and self.osc_glow_intensity.value() or 50) / 100.0,
             'osc_reactive_glow': getattr(self, 'osc_reactive_glow', None) and self.osc_reactive_glow.isChecked(),
