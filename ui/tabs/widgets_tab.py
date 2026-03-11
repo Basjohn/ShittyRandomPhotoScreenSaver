@@ -1334,7 +1334,7 @@ class WidgetsTab(QWidget):
             'visualizers_enabled': getattr(self, 'visualizers_enabled', None) and self.visualizers_enabled.isChecked(),
             'enabled': getattr(self, 'vis_enabled_checkbox', None) and self.vis_enabled_checkbox.isChecked(),
             'monitor': getattr(self, 'vis_monitor_combo', None) and self.vis_monitor_combo.currentText() or 'ALL',
-            # Legacy key: helper now writes per-mode values; UI no longer owns this spinbox.
+            # Per-mode values are managed by technical controls helpers; bar_count here is placeholder legacy.
             'bar_count': 16,
             'mode': getattr(self, 'vis_mode_combo', None) and self.vis_mode_combo.currentData() or 'spectrum',
             'osc_glow_enabled': getattr(self, 'osc_glow_enabled', None) and self.osc_glow_enabled.isChecked(),

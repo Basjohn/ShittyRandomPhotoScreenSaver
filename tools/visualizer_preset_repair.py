@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMessageBox,
-    PlainTextEdit,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -186,7 +186,7 @@ class VisualizerPresetRepairApp(QWidget):
         self.status_label = QLabel("Ready.")
         main_layout.addWidget(self.status_label)
 
-        self.log = PlainTextEdit()
+        self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         main_layout.addWidget(self.log, stretch=1)
 

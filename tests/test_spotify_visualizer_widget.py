@@ -91,8 +91,8 @@ def test_spotify_visualizer_set_floor_config_clamps_and_snaps(np_module):
     worker.set_floor_config(dynamic_enabled=True, manual_floor=99.0)
     assert worker._use_dynamic_floor is True  # type: ignore[attr-defined]
     assert worker._manual_floor == pytest.approx(worker._max_floor)  # type: ignore[attr-defined]
-    # Re-enabling dynamic should not disturb the snapped running average.
-    assert worker._raw_bass_avg == pytest.approx(worker._min_floor)  # type: ignore[attr-defined]
+    # Re-enabling dynamic should reseed the running average to the baseline.
+    assert worker._raw_bass_avg == pytest.approx(worker._manual_floor)  # type: ignore[attr-defined]
 
 
 def test_dynamic_floor_updates_running_average(np_module):

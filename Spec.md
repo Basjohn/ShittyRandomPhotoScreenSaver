@@ -16,6 +16,19 @@ Single source of truth for architecture and key decisions.
 - **Rollout Tracking**: `Current_Plan.md` maintains a live, auto-generated checklist of every checkbox/combobox across the UI. Any new widget must be added to this manifest before implementation and marked complete only after verifying styling + runtime behavior.
 - **Visualizer buckets (ordering + persistence)**: For Spectrum, Bubble, Blob, Sine Wave, and Oscilloscope, each mode layout presents an **Advanced** collapsible group first, followed immediately by a **Technical** collapsible group. Both buckets are top-level siblings (not nested) and use the shared helper styles (toolbutton + helper label). Expanded/collapsed state persists per mode via `WidgetsTab._visualizer_adv_state` / `_visualizer_tech_state`. Starfield/Helix remain gated/dev-only and may omit UI buckets.
 
+**Visualizer subtab + master toggle**: Widgets tab now exposes a dedicated **Visualizers** subtab beside Media. The subtab hosts a master toggle `spotify_visualizer.visualizers_enabled` that gates all Beat Visualizer controls. UX toggle is independent; runtime spawning of the visualizer remains linked to Media enablement/monitor positioning. Persistence: `spotify_visualizer.visualizers_enabled` and `spotify_visualizer.enabled` are saved independently; both must be true (and Media enabled) for runtime activation.
+
+**Per-mode technical schema + presets**:
+- Canonical per-mode technical keys live in `SpotifyVisualizerSettings` (`PER_MODE_TECHNICAL_MODES`). All Spectrum/Bubble/Blob/Sine/Osc advanced/technical controls persist per mode via `widgets.spotify_visualizer.<mode>_<key>`.
+- Migration helpers (`core/settings/visualizer_presets.py::_migrate_preset_settings`) convert legacy fields (e.g., `sine_min_height`, `blob_stretch_x_bias`, global `rainbow_enabled`) into the new per-mode schema. Preset ingestion filters keys via `GLOBAL_ALLOWED_KEYS` + mode prefixes.
+- Manual floor baseline slider now clamps 0.05 – 4.0 and immediately reseeds the dynamic floor accumulator on every change, even when Dynamic Floor stays enabled. Engine activation, mode switches, widget resets, and preset reloads all pull the fresh per-mode manual floor before audio ticks resume, eliminating stale high floors bleeding between modes.
+- 2026‑03‑11 audit: all curated preset JSONs under `presets/visualizer_modes/` validated to include the required `<mode>_{manual_floor,dynamic_floor,adaptive_sensitivity,sensitivity,audio_block_size,dynamic_range_enabled}` keys plus `mode`. Any future curated edits must be run through `tools/visualizer_preset_repair.py` (or the batch helper) to preserve that structure.
+- Repair workflow:
+  1. `tools/visualizer_preset_repair.py` (GUI) uses `_collect_visualizer_sections()` to load JSON or SST snapshots, runs migrations/filtering, writes sanitized payloads back to `snapshot.widgets.spotify_visualizer`, `snapshot.custom_preset_backup`, and top-level `widgets.spotify_visualizer` while emitting `.bak*` backups and undo history.
+  2. `tools/repair_all_visualizer_presets.py` batch-runs `repair_file()` for every curated preset JSON so schema changes can be applied repo-wide.
+  3. Regression coverage lives in `tests/test_visualizer_settings_plumbing.py::TestVisualizerPresetRepair`, asserting blob stretch bias → inner/outer conversion and sine card adaptation derivation (plus rainbow migration).
+- Preset JSON authoring requirements: include either a `snapshot.widgets.spotify_visualizer` block or top-level `widgets.spotify_visualizer`. Minimal `{"settings": {…}}` presets are auto-wrapped by the repair tool before shipping.
+
 ## Architecture Overview
 - Engine orchestrates sources → queue → display → transitions.
 - DisplayWidget is the fullscreen presenter; transitions are created per-settings.

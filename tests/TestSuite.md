@@ -232,3 +232,16 @@ When policy exemptions change:
 1. Update `EXCLUDED_PATHS` in `test_policy_compliance.py`
 2. Document reason for exemption
 3. Plan migration path if applicable
+
+## Latest Targeted Runs (Mar 11 2026)
+
+| Command | Scope | Result |
+| --- | --- | --- |
+| `python -m pytest tests/test_visualizer_settings_plumbing.py` | Visualizer settings plumbing, including new per-mode technical + preset repair cases | ✅ 44 passed |
+| `python -m pytest tests/test_settings_manager.py` | Settings manager persistence + IO guards | ✅ 22 passed |
+| `python -m pytest tests/test_settings_defaults_parity.py` | Canonical defaults parity | ✅ 16 passed, 7 skipped (documented in-file: platform-specific verifications) |
+| `python -m pytest tests/test_settings_profile_separation.py` | Profile isolation/persistence | ✅ 8 passed |
+| `python -m pytest tests/test_settings_schema.py` | Schema definitions (static) | ⚠️ 26 skipped (tests are schema mirrors; marked skip in-file pending schema regeneration) |
+| `python -m pytest tests/test_visualizer_modes.py` | Mode switching + runtime safeguards | ✅ 13 passed |
+
+All targeted suites now cover the newly added per-mode technical regressions and preset repair sanitation. No regressions observed; existing skip markers remain valid with documented reasons.

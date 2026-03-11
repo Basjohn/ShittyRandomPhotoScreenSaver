@@ -417,6 +417,86 @@ class TestBubbleSimulationThreadSafety:
         sim.tick(0.016, None, settings)
 
 
+# ===========================================================================
+# 9a. Per-mode technical load/save round-trip
+# ===========================================================================
+
+
+class TestPerModeTechnicalRoundTrip:
+    """Ensure per-mode technical overrides survive load/save paths."""
+
+    def _sample_payload(self):
+        from core.settings.models import PER_MODE_TECHNICAL_MODES
+
+        payload = {
+            "widgets.spotify_visualizer.bar_count": 64,
+            "widgets.spotify_visualizer.manual_floor": 2.5,
+            "widgets.spotify_visualizer.dynamic_floor": True,
+            "widgets.spotify_visualizer.dynamic_range_enabled": False,
+            "widgets.spotify_visualizer.audio_block_size": 0,
+            "widgets.spotify_visualizer.adaptive_sensitivity": True,
+            "widgets.spotify_visualizer.sensitivity": 1.0,
+        }
+        per_mode = {}
+        for idx, mode in enumerate(PER_MODE_TECHNICAL_MODES, start=1):
+            overrides = {
+                "bar_count": 12 + idx,
+                "manual_floor": round(1.0 + idx * 0.1, 2),
+                "dynamic_floor": idx % 2 == 0,
+                "dynamic_range_enabled": idx % 3 == 0,
+                "audio_block_size": 64 * idx,
+                "adaptive_sensitivity": idx % 2 == 1,
+                "sensitivity": round(0.5 + idx * 0.15, 2),
+            }
+            prefix = f"widgets.spotify_visualizer.{mode}_"
+            for key, value in overrides.items():
+                payload[f"{prefix}{key}"] = value
+            per_mode[mode] = overrides
+        return payload, per_mode
+
+    def _assert_model_matches(self, model, per_mode):
+        for mode, overrides in per_mode.items():
+            assert model.resolve_bar_count(mode) == overrides["bar_count"]
+            assert model.resolve_manual_floor(mode) == overrides["manual_floor"]
+            assert model.resolve_dynamic_floor(mode) == overrides["dynamic_floor"]
+            assert model.resolve_dynamic_range_enabled(mode) == overrides["dynamic_range_enabled"]
+            assert model.resolve_audio_block_size(mode) == overrides["audio_block_size"]
+            assert model.resolve_adaptive_sensitivity(mode) == overrides["adaptive_sensitivity"]
+            assert model.resolve_sensitivity(mode) == overrides["sensitivity"]
+
+    def _assert_dict_matches(self, data, per_mode):
+        for mode, overrides in per_mode.items():
+            prefix = f"widgets.spotify_visualizer.{mode}_"
+            for key, value in overrides.items():
+                assert data[f"{prefix}{key}"] == value
+
+    def test_from_mapping_round_trip(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        payload, per_mode = self._sample_payload()
+        model = SpotifyVisualizerSettings.from_mapping(payload)
+        serialized = model.to_dict()
+        self._assert_model_matches(model, per_mode)
+        self._assert_dict_matches(serialized, per_mode)
+
+    def test_from_settings_round_trip(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        payload, per_mode = self._sample_payload()
+        settings = _DummySettings(payload)
+        model = SpotifyVisualizerSettings.from_settings(settings)
+        serialized = model.to_dict()
+        self._assert_model_matches(model, per_mode)
+        self._assert_dict_matches(serialized, per_mode)
+
+
 # ==========================================================================
 # 9b. Bubble swirl plumbing + behaviour
 # ==========================================================================
@@ -428,6 +508,8 @@ class TestBubbleSwirlSettings:
         from core.settings.models import SpotifyVisualizerSettings
 
         model = SpotifyVisualizerSettings.from_mapping({
+            "mode": "bubble",
+            "preset_bubble": 3,  # custom slot to prevent preset overlay
             "bubble_drift_direction": "swirl_ccw",
         })
         assert model.bubble_drift_direction == "swirl_ccw"
@@ -481,32 +563,37 @@ class TestBubbleSwirlMotion:
 
 
 class TestBubbleSpecularDirection:
-    """Verify specular direction options stay wired through all layers."""
+    """Verify specular/gradient direction options stay wired through all layers."""
 
-    def test_specular_direction_round_trip_in_settings_model(self):
+    def test_gradient_direction_round_trip_in_settings_model(self):
         from core.settings.models import SpotifyVisualizerSettings
 
         model = SpotifyVisualizerSettings.from_mapping({
-            "bubble_specular_direction": "right",
+            "mode": "bubble",
+            "preset_bubble": 3,
+            "bubble_gradient_direction": "center_out",
         })
-        assert model.bubble_specular_direction == "right"
+        assert model.bubble_gradient_direction == "center_out"
 
         payload = model.to_dict()
-        key = "widgets.spotify_visualizer.bubble_specular_direction"
-        assert payload[key] == "right"
+        key = "widgets.spotify_visualizer.bubble_gradient_direction"
+        assert payload[key] == "center_out"
 
     def test_config_applier_accepts_cardinal_directions(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
 
         class DummyWidget:
             _bubble_specular_direction = "top_left"
+            _bubble_gradient_direction = "top"
 
         widget = DummyWidget()
         for val in ("top", "bottom", "left", "right"):
             apply_vis_mode_kwargs(widget, {
                 "bubble_specular_direction": val,
+                "bubble_gradient_direction": val,
             })
             assert widget._bubble_specular_direction == val
+            assert widget._bubble_gradient_direction == val
 
 
 # ===========================================================================
@@ -545,3 +632,89 @@ class TestSineWaveUIBuilder:
         assert "sine_width_reaction" in src and "sine_width_reaction_label" in src, (
             "sine_width_reaction missing from load path"
         )
+
+
+# ==========================================================================
+# 12. Preset repair sanitization + migrations
+# ==========================================================================
+
+
+class TestVisualizerPresetRepair:
+    """Validate the preset repair helper normalizes legacy payloads."""
+
+    def test_repair_file_sanitizes_blob_stretch_biases(self, tmp_path):
+        import json
+        from tools.visualizer_preset_repair import repair_file
+
+        payload = {
+            "name": "Preset 1 (Test)",
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "mode": "blob",
+                        "blob_stretch_x_bias": 0.25,
+                        "blob_stretch_y_bias": 0.75,
+                    }
+                },
+                "custom_preset_backup": {
+                    "widgets.spotify_visualizer.blob_stretch_x_bias": 0.25,
+                    "widgets.spotify_visualizer.blob_stretch_y_bias": 0.75,
+                },
+            },
+            "widgets": {
+                "spotify_visualizer": {
+                    "blob_stretch_x_bias": 0.25,
+                }
+            },
+        }
+        preset_path = tmp_path / "blob_preset.json"
+        preset_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        backup, stats = repair_file(preset_path, "blob")
+
+        assert backup.exists()
+        assert "snapshot.widgets.spotify_visualizer" in stats["updated_paths"]
+
+        repaired = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
+        assert "blob_stretch_inner" in sv and "blob_stretch_outer" in sv
+        assert "blob_stretch_x_bias" not in sv
+        assert "blob_stretch_y_bias" not in sv
+
+        backup_section = repaired["snapshot"]["custom_preset_backup"]
+        assert backup_section["widgets.spotify_visualizer.blob_stretch_inner"] == sv["blob_stretch_inner"]
+        assert backup_section["widgets.spotify_visualizer.blob_stretch_outer"] == sv["blob_stretch_outer"]
+        assert all(
+            not key.endswith(("blob_stretch_x_bias", "blob_stretch_y_bias"))
+            for key in backup_section.keys()
+        )
+
+    def test_repair_file_derives_sine_card_adaptation(self, tmp_path):
+        import json
+        from tools.visualizer_preset_repair import repair_file
+
+        payload = {
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "mode": "sine_wave",
+                        "sine_min_height": 0.12,
+                        "rainbow_enabled": True,
+                        "rainbow_speed": 0.4,
+                    }
+                }
+            }
+        }
+        preset_path = tmp_path / "sine_preset.json"
+        preset_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        _, stats = repair_file(preset_path, "sine_wave")
+        assert stats["added"]  # new fields injected
+
+        repaired = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
+        assert "sine_card_adaptation" in sv
+        assert "sine_min_height" not in sv
+        assert "rainbow_enabled" not in sv  # migrated to per-mode key
+        # Derived adaptation clamps min height ratio (0.12 / 0.24 = 0.5)
+        assert abs(sv["sine_card_adaptation"] - 0.5) < 1e-6

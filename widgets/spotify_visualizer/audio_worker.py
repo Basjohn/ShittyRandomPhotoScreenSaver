@@ -92,7 +92,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Floor control configuration (dynamic/manual)
         self._use_dynamic_floor: bool = True
         self._manual_floor: float = 2.1
-        self._min_floor: float = 0.12
+        self._min_floor: float = 0.05
         self._max_floor: float = 4.0
         self._raw_bass_avg: float = 2.1
         # Slightly higher dynamic floor baseline (10% harder to peak).
@@ -100,6 +100,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._dynamic_floor_alpha: float = 0.08
         self._dynamic_floor_decay_alpha: float = 0.12
         self._applied_noise_floor: float = 2.1
+        self._last_noise_floor: float = 2.1
         self._floor_response: float = 0.08
         self._floor_mid_weight: float = 0.18
         self._floor_headroom: float = 0.18
@@ -176,9 +177,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         with self._cfg_lock:
             self._use_dynamic_floor = dyn
             self._manual_floor = floor
-        self._last_floor_config = (dyn, floor)
-        if not dyn:
             self._raw_bass_avg = floor
+            self._applied_noise_floor = floor
+            self._last_noise_floor = floor
+        self._last_floor_config = (dyn, floor)
 
     def set_audio_block_size(self, block_size: int) -> None:
         try:

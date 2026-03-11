@@ -21,6 +21,16 @@ from ui.tabs.widgets_tab import NoWheelSlider
 
 
 _PER_MODE_TECH_ATTR = "_per_mode_technical_controls"
+MANUAL_FLOOR_MIN = 0.05
+MANUAL_FLOOR_MAX = 4.0
+
+
+def _ensure_per_mode_cache(tab) -> Dict[str, Dict[str, Any]]:
+    cache = getattr(tab, "_per_mode_technical_config", None)
+    if not isinstance(cache, dict):
+        cache = {}
+        setattr(tab, "_per_mode_technical_config", cache)
+    return cache
 
 
 def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
@@ -221,19 +231,23 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     dyn_floor_row.addStretch()
 
     # Manual floor slider
-    manual_container = _aligned_row(layout, "Manual Floor:")
+    manual_container = _aligned_row(layout, "Manual Floor\nBaseline:")
     manual_floor = NoWheelSlider(Qt.Orientation.Horizontal)
-    manual_floor.setMinimum(12)
-    manual_floor.setMaximum(400)
+    manual_floor.setMinimum(int(MANUAL_FLOOR_MIN * 100))
+    manual_floor.setMaximum(int(MANUAL_FLOOR_MAX * 100))
     manual_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
     manual_floor.setTickInterval(10)
     default_manual = _per_mode_default_float(tab, mode_key, 'manual_floor', 2.1)
     manual_floor.blockSignals(True)
-    manual_floor.setValue(int(max(0.12, min(4.0, default_manual)) * 100))
+    clamped_manual = max(MANUAL_FLOOR_MIN, min(MANUAL_FLOOR_MAX, default_manual))
+    manual_floor.setValue(int(clamped_manual * 100))
     manual_floor.blockSignals(False)
+    manual_floor.setToolTip(
+        "Sets the baseline noise floor used by both Manual and Dynamic modes."
+    )
     _connect_setting(manual_floor.valueChanged, tab)
     manual_container.addWidget(manual_floor)
-    manual_label = QLabel(f"{default_manual:.2f}")
+    manual_label = QLabel(f"{clamped_manual:.2f}")
     manual_floor.valueChanged.connect(lambda v: manual_label.setText(f"{v / 100.0:.2f}"))
     manual_container.addWidget(manual_label)
 
@@ -248,9 +262,14 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
             widget.setEnabled(visible)
 
     def _update_manual_floor_visibility() -> None:
-        manual = not dynamic_floor.isChecked()
-        manual_floor.setEnabled(manual)
-        manual_label.setEnabled(manual)
+        if dynamic_floor.isChecked():
+            manual_floor.setToolTip(
+                "Baseline floor feeding the dynamic algorithm. Lower = more reactive."
+            )
+        else:
+            manual_floor.setToolTip(
+                "Absolute manual floor when Dynamic Noise Floor is disabled."
+            )
 
     adaptive_checkbox.stateChanged.connect(lambda _: _update_sensitivity_visibility())
     dynamic_floor.stateChanged.connect(lambda _: _update_manual_floor_visibility())
@@ -347,7 +366,9 @@ def _coerce_float(value: Any, fallback: float) -> float:
 def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[str, Any]]) -> None:
     """Populate per-mode technical widgets from the config mapping."""
     controls_map = get_per_mode_controls(tab)
+    cache = _ensure_per_mode_cache(tab)
     for mode_key, controls in controls_map.items():
+        mode_cache = cache.setdefault(mode_key, {})
         bar = controls.get('bar_count')
         if bar is not None:
             default_bar = _per_mode_default_int(tab, mode_key, 'bar_count', 32)
@@ -355,6 +376,7 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
             bar.blockSignals(True)
             bar.setValue(max(bar.minimum(), min(bar.maximum(), bar_val)))
             bar.blockSignals(False)
+            mode_cache['bar_count'] = bar_val
 
         block_combo: Optional[StyledComboBox] = controls.get('block_size')  # type: ignore[assignment]
         if block_combo is not None:
@@ -366,6 +388,7 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
                 idx = 0
             block_combo.setCurrentIndex(idx)
             block_combo.blockSignals(False)
+            mode_cache['audio_block_size'] = block_val
 
         adaptive = controls.get('adaptive')
         if adaptive is not None:
@@ -374,6 +397,7 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
             adaptive.blockSignals(True)
             adaptive.setChecked(adaptive_val)
             adaptive.blockSignals(False)
+            mode_cache['adaptive_sensitivity'] = adaptive_val
 
         sens_slider = controls.get('sensitivity_slider')
         if sens_slider is not None:
@@ -385,6 +409,7 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
             sensitivity_label = controls.get('sensitivity_label')
             if sensitivity_label is not None:
                 sensitivity_label.setText(f"{max(0.25, min(2.5, sens_val)):.2f}x")
+            mode_cache['sensitivity'] = max(0.25, min(2.5, sens_val))
 
         dyn_range = controls.get('dynamic_range')
         if dyn_range is not None:
@@ -393,6 +418,7 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
             dyn_range.blockSignals(True)
             dyn_range.setChecked(dyn_range_val)
             dyn_range.blockSignals(False)
+            mode_cache['dynamic_range_enabled'] = dyn_range_val
 
         dyn_floor = controls.get('dynamic_floor')
         if dyn_floor is not None:
@@ -401,18 +427,20 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
             dyn_floor.blockSignals(True)
             dyn_floor.setChecked(dyn_floor_val)
             dyn_floor.blockSignals(False)
+            mode_cache['dynamic_floor'] = dyn_floor_val
 
         manual_slider = controls.get('manual_floor')
         if manual_slider is not None:
             default_manual = _per_mode_default_float(tab, mode_key, 'manual_floor', 2.1)
             manual_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'manual_floor'), default_manual)
-            clamped = max(0.12, min(4.0, manual_val))
+            clamped = max(MANUAL_FLOOR_MIN, min(MANUAL_FLOOR_MAX, manual_val))
             manual_slider.blockSignals(True)
             manual_slider.setValue(int(clamped * 100))
             manual_slider.blockSignals(False)
             manual_label = controls.get('manual_label')
             if manual_label is not None:
                 manual_label.setText(f"{clamped:.2f}")
+            mode_cache['manual_floor'] = clamped
 
         update_sensitivity = controls.get('update_sensitivity')
         if callable(update_sensitivity):
@@ -425,27 +453,40 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
 def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any]) -> None:
     """Write per-mode technical values into the spotify_vis_config mapping."""
     controls_map = get_per_mode_controls(tab)
+    cache = _ensure_per_mode_cache(tab)
     for mode_key, controls in controls_map.items():
+        mode_cache = cache.setdefault(mode_key, {})
+
+        def _set(key: str, value: Any) -> None:
+            spotify_vis_config[f'{mode_key}_{key}'] = value
+            mode_cache[key] = value
+
         bar = controls.get('bar_count')
         if bar is not None:
-            spotify_vis_config[f'{mode_key}_bar_count'] = bar.value()
+            _set('bar_count', bar.value())
         block_combo = controls.get('block_size')
         if block_combo is not None:
-            spotify_vis_config[f'{mode_key}_audio_block_size'] = int(block_combo.currentData() or 0)
+            _set('audio_block_size', int(block_combo.currentData() or 0))
         adaptive = controls.get('adaptive')
         if adaptive is not None:
-            spotify_vis_config[f'{mode_key}_adaptive_sensitivity'] = adaptive.isChecked()
+            _set('adaptive_sensitivity', adaptive.isChecked())
         sens_slider = controls.get('sensitivity_slider')
         if sens_slider is not None:
-            spotify_vis_config[f'{mode_key}_sensitivity'] = max(0.25, min(2.5, sens_slider.value() / 100.0))
+            _set('sensitivity', max(0.25, min(2.5, sens_slider.value() / 100.0)))
         dyn_floor = controls.get('dynamic_floor')
         if dyn_floor is not None:
-            spotify_vis_config[f'{mode_key}_dynamic_floor'] = dyn_floor.isChecked()
+            _set('dynamic_floor', dyn_floor.isChecked())
         manual_slider = controls.get('manual_floor')
         if manual_slider is not None:
-            spotify_vis_config[f'{mode_key}_manual_floor'] = max(0.12, min(4.0, manual_slider.value() / 100.0))
+            _set('manual_floor', max(MANUAL_FLOOR_MIN, min(MANUAL_FLOOR_MAX, manual_slider.value() / 100.0)))
         dyn_range = controls.get('dynamic_range')
         if dyn_range is not None:
-            spotify_vis_config[f'{mode_key}_dynamic_range_enabled'] = dyn_range.isChecked()
+            _set('dynamic_range_enabled', dyn_range.isChecked())
+
+    # Ensure cached values for all modes (including dev-gated ones without UI)
+    # are flushed back into the config so custom presets can persist them.
+    for mode_key, mode_cache in cache.items():
+        for key, value in mode_cache.items():
+            spotify_vis_config[f'{mode_key}_{key}'] = value
 
 

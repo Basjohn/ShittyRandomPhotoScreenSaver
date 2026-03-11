@@ -624,19 +624,22 @@ class SpotifyVisualizerWidget(QWidget):
         self._apply_energy_boost(energy_boost)
 
         try:
-            logger.info(
-                "[SPOTIFY_VIS][TECHNICAL] mode=%s reason=%s bar_count=%d dyn_floor=%s manual_floor=%.2f adaptive=%s sensitivity=%.2f block=%d dyn_range=%s energy_boost=%.2f",
-                mode.name,
-                reason,
-                self._bar_count,
-                dynamic_floor,
-                manual_floor,
-                adaptive,
-                sensitivity,
-                audio_block_size,
-                dynamic_range_enabled,
-                energy_boost,
-            )
+            from os import getenv
+
+            if getenv('SRPSS_VIZ_DIAGNOSTICS', 'false').lower() == 'true':
+                logger.info(
+                    "[SPOTIFY_VIS][TECHNICAL] mode=%s reason=%s bar_count=%d dyn_floor=%s manual_floor=%.2f adaptive=%s sensitivity=%.2f block=%d dyn_range=%s energy_boost=%.2f",
+                    mode.name,
+                    reason,
+                    self._bar_count,
+                    dynamic_floor,
+                    manual_floor,
+                    adaptive,
+                    sensitivity,
+                    audio_block_size,
+                    dynamic_range_enabled,
+                    energy_boost,
+                )
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to log technical config", exc_info=True)
 
@@ -1172,6 +1175,12 @@ class SpotifyVisualizerWidget(QWidget):
                 engine.reset_floor_state()
                 engine.set_smoothing(self._smoothing)
                 self._replay_engine_config(engine)
+                # Reapply the active mode's technical config so manual/dynamic floors
+                # and sensitivity caches refresh whenever the engine is reset.
+                self._apply_technical_config_for_mode(
+                    self._vis_mode,
+                    reason=f"engine_reset:{reason}" if reason else "engine_reset",
+                )
                 engine.ensure_started()
                 self._track_engine_generation(engine)
             except Exception:
@@ -1287,6 +1296,10 @@ class SpotifyVisualizerWidget(QWidget):
             engine.acquire()
             self._replay_engine_config(engine)
             engine.ensure_started()
+            # Ensure the active mode's technical configuration is re-sent on every
+            # activation so shared engine caches (floors, sensitivity, block size)
+            # cannot bleed between runs.
+            self._apply_technical_config_for_mode(self._vis_mode, reason="activate_impl")
         except Exception:
             logger.debug("[LIFECYCLE] Failed to start shared beat engine", exc_info=True)
         

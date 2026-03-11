@@ -17,6 +17,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Visualizer_Debug.md | Spotify visualizer architecture, diagnostics, per-mode notes |
 | Docs/Visualizer_Reset_Matrix.md | Reset sequencing matrix for visualizer subsystems |
 | Docs/Visualizer_Presets_Plan.md | Per-visualizer preset workflow, curated rebuild tooling |
+| Current_Plan.md (Visualizers) | Tracks Visualizers subtab master toggle (`spotify_visualizer.visualizers_enabled`), Media linkage, pending diagnostics/presets/tests |
 | Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
 | Current_Plan.md | Live backlog + checkbox/combobox rollout manifest (auto-generated inventory for styled controls) |
@@ -28,6 +29,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 |------|---------|
 | tools/regen_qrc.py | Regenerates `ui/resources/icons_rc.py` from `icons.qrc`, wraps `pyside6-rcc`, shows success popup |
 | tools/visualizer_preset_repair.py | DPI-aware GUI that loads curated preset JSON/SST files, prunes keys using the live visualizer preset filter/migration helpers, and fills missing defaults before saving with `.bak` backups + undo |
+| tools/repair_all_visualizer_presets.py | Batch runner that iterates every curated preset JSON, invokes the repair helper per mode, and emits `.bak*` backups + console stats. Use after schema changes to guarantee all presets/preset_backups contain `snapshot.widgets.spotify_visualizer`. |
 | tests/run_chunked.py | Chunked test runner — splits full suite into N subprocess chunks (default 4) for memory/timeout isolation |
 
 ## Entry Points
@@ -314,14 +316,6 @@ Extracted from the monolithic `_render_with_shader` method in `spotify_bars_gl_o
 | WeatherComponents | widgets/weather_components.py | WeatherConditionIcon, WeatherDetailIcon, WeatherDetailRow, WeatherPosition, WeatherFetcher | Extracted helper classes for weather widget |
 | OpenMeteoProvider | weather/open_meteo_provider.py | OpenMeteoProvider | Open-Meteo API integration, geocoding, caching |
 
-**Features:**
-- Day/night icon variants (auto-selected based on `is_day` from API)
-- Monochrome icon mode (grayscale conversion on load, zero paint overhead)
-- Font size hierarchy (location 100%, condition 80%, detail 50%)
-- Detail metrics row (rain chance, humidity, wind speed)
-- Icon alignment (LEFT/RIGHT/NONE)
-- 30-minute refresh with early 30s refresh after startup
-- Dual cache (provider + widget) with 30-minute TTL
 
 ## Image Processing
 

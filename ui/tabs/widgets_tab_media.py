@@ -1,9 +1,7 @@
 """Media + Beat Visualizer section for widgets tab.
 
 Extracted from widgets_tab.py to reduce monolith size.
-Contains UI building, settings loading/saving for Media widget and the
-Beat Visualizer (stored under the legacy `spotify_visualizer` settings key
-until backend rename).
+Contains UI building, settings loading/saving for Media widget and the Beat Visualizer.
 """
 from __future__ import annotations
 
