@@ -146,6 +146,7 @@ class WidgetsTab(QWidget):
         self._imgur_border_color = self._color_from_default('imgur', 'border_color', [255, 255, 255, 255])
         self._media_artwork_size = int(self._widget_default('media', 'artwork_size', 200))
         self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
+        self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
         self._loading = True
         self._save_coalesce_pending = False
         self._setup_ui()
@@ -249,11 +250,19 @@ class WidgetsTab(QWidget):
     # --- Visualizer advanced toggle persistence helpers -------------------
 
     _ADV_STATE_KEY = "ui.visualizer_adv_states"
+    _TECH_STATE_KEY = "ui.visualizer_tech_states"
     _SCROLL_POS_KEY = "ui.visualizer_scroll_positions"
 
     def _load_adv_states(self) -> Dict[str, bool]:
         """Load persisted advanced toggle states from SettingsManager."""
         raw = self._settings.get(self._ADV_STATE_KEY, {})
+        if isinstance(raw, dict):
+            return {k: bool(v) for k, v in raw.items()}
+        return {}
+
+    def _load_tech_states(self) -> Dict[str, bool]:
+        """Load persisted Technical bucket toggle states from SettingsManager."""
+        raw = self._settings.get(self._TECH_STATE_KEY, {})
         if isinstance(raw, dict):
             return {k: bool(v) for k, v in raw.items()}
         return {}
@@ -267,6 +276,18 @@ class WidgetsTab(QWidget):
         self._visualizer_adv_state[mode] = bool(expanded)
         try:
             self._settings.set(self._ADV_STATE_KEY, dict(self._visualizer_adv_state))
+        except Exception:
+            pass
+
+    def get_visualizer_tech_state(self, mode: str) -> bool:
+        """Return remembered Technical bucket state for a visualizer mode."""
+        return bool(self._visualizer_tech_state.get(mode, True))
+
+    def set_visualizer_tech_state(self, mode: str, expanded: bool) -> None:
+        """Persist Technical bucket expanded/collapsed state for a visualizer mode."""
+        self._visualizer_tech_state[mode] = bool(expanded)
+        try:
+            self._settings.set(self._TECH_STATE_KEY, dict(self._visualizer_tech_state))
         except Exception:
             pass
 
@@ -390,6 +411,7 @@ class WidgetsTab(QWidget):
         self._btn_clocks = QPushButton("Clocks")
         self._btn_weather = QPushButton("Weather")
         self._btn_media = QPushButton("Media")
+        self._btn_visualizers = QPushButton("Visualizers")
         self._btn_reddit = QPushButton("Reddit")
         
         # Imgur button - gated by SRPSS_ENABLE_DEV
@@ -423,7 +445,13 @@ class WidgetsTab(QWidget):
         )
 
         # Build button list conditionally
-        buttons = [self._btn_clocks, self._btn_weather, self._btn_media, self._btn_reddit]
+        buttons = [
+            self._btn_clocks,
+            self._btn_weather,
+            self._btn_media,
+            self._btn_visualizers,
+            self._btn_reddit,
+        ]
         if dev_features_enabled:
             buttons.append(self._btn_imgur)
         
@@ -442,7 +470,7 @@ class WidgetsTab(QWidget):
         # --- Per-widget sections (delegated to extraction modules) ---
         from ui.tabs.widgets_tab_clock import build_clock_ui
         from ui.tabs.widgets_tab_weather import build_weather_ui
-        from ui.tabs.widgets_tab_media import build_media_ui
+        from ui.tabs.widgets_tab_media import build_media_ui, build_visualizers_ui
         from ui.tabs.widgets_tab_reddit import build_reddit_ui
 
         self._clocks_container = build_clock_ui(self, layout)
@@ -453,6 +481,9 @@ class WidgetsTab(QWidget):
 
         self._media_container = build_media_ui(self, layout)
         layout.addWidget(self._media_container)
+
+        self._visualizers_container = build_visualizers_ui(self, layout)
+        layout.addWidget(self._visualizers_container)
 
         self._reddit_container = build_reddit_ui(self, layout)
         layout.addWidget(self._reddit_container)
@@ -494,8 +525,11 @@ class WidgetsTab(QWidget):
             self._clocks_container.setVisible(subtab_id == 0)
             self._weather_container.setVisible(subtab_id == 1)
             self._media_container.setVisible(subtab_id == 2)
-            self._reddit_container.setVisible(subtab_id == 3)
-            self._imgur_container.setVisible(subtab_id == 4)
+            self._visualizers_container.setVisible(subtab_id == 3)
+            self._reddit_container.setVisible(subtab_id == 4)
+            imgur_container = getattr(self, '_imgur_container', None)
+            if imgur_container is not None:
+                imgur_container.setVisible(subtab_id == 5)
         except Exception:
             # If containers are not yet initialized, ignore
             pass
@@ -592,7 +626,7 @@ class WidgetsTab(QWidget):
                 'media_artwork_size', 'media_rounded_artwork',
                 'media_show_header_frame', 'media_show_controls',
                 'media_spotify_volume_enabled',
-                'vis_enabled_checkbox',
+                'visualizers_enabled', 'vis_enabled_checkbox',
                 'vis_border_opacity', 'vis_ghost_enabled',
                 'vis_ghost_opacity_slider', 'vis_ghost_decay_slider',
                 'reddit_enabled', 'reddit_subreddit', 'reddit_items',
@@ -1297,6 +1331,7 @@ class WidgetsTab(QWidget):
         
         # Spotify Visualizer
         config['spotify_visualizer'] = {
+            'visualizers_enabled': getattr(self, 'visualizers_enabled', None) and self.visualizers_enabled.isChecked(),
             'enabled': getattr(self, 'vis_enabled_checkbox', None) and self.vis_enabled_checkbox.isChecked(),
             'monitor': getattr(self, 'vis_monitor_combo', None) and self.vis_monitor_combo.currentText() or 'ALL',
             # Legacy key: helper now writes per-mode values; UI no longer owns this spinbox.

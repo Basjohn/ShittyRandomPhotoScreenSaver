@@ -106,6 +106,9 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._spectrum_preset_slider.advanced_toggled.connect(_handle_spectrum_preset_adv)
     _handle_spectrum_preset_adv(True)
 
+    # Technical bucket (ordered after Advanced)
+    build_per_mode_technical_group(tab, spectrum_layout, "spectrum")
+
     LABEL_WIDTH = 150
 
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
@@ -162,8 +165,6 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.vis_border_opacity_label.setText(f"{v}%")
     )
     spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity_label)
-
-    build_per_mode_technical_group(tab, _adv_layout, "spectrum")
 
     # Ghosting controls
     ghost_toggle_row = _aligned_row(_adv_layout, "")

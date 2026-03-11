@@ -1,8 +1,9 @@
-"""Media & Spotify Visualizer section for widgets tab.
+"""Media + Beat Visualizer section for widgets tab.
 
 Extracted from widgets_tab.py to reduce monolith size.
-Contains UI building, settings loading/saving for Media (Spotify) widget
-and Spotify Beat Visualizer.
+Contains UI building, settings loading/saving for Media widget and the
+Beat Visualizer (stored under the legacy `spotify_visualizer` settings key
+until backend rename).
 """
 from __future__ import annotations
 
@@ -58,10 +59,18 @@ def _update_media_enabled_visibility(tab) -> None:
 
 
 def _update_spotify_vis_enabled_visibility(tab) -> None:
-    """Show/hide all visualizer controls based on spotify_vis_enabled checkbox."""
+    """Show/hide all visualizer controls based on the Beat Visualizer toggle."""
     enabled_box = getattr(tab, 'vis_enabled_checkbox', None)
     enabled = enabled_box is not None and enabled_box.isChecked()
     container = getattr(tab, '_vis_controls_container', None)
+    if container is not None:
+        container.setVisible(bool(enabled))
+
+
+def _update_visualizers_enabled_visibility(tab) -> None:
+    """Gate the entire Visualizers section off the top-level toggle."""
+    enabled = getattr(tab, 'visualizers_enabled', None) and tab.visualizers_enabled.isChecked()
+    container = getattr(tab, '_visualizers_controls_container', None)
     if container is not None:
         container.setVisible(bool(enabled))
 
@@ -119,9 +128,9 @@ def _update_musicbee_plugin_visibility(tab) -> None:
 
 
 def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
-    """Build media + spotify visualizer section UI.
+    """Build the Media widget UI section.
 
-    Returns the media container widget (includes both groups).
+    Returns the media container widget.
     """
     from ui.tabs.widgets_tab import NoWheelSlider
 
@@ -427,13 +436,42 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_enabled.stateChanged.connect(lambda: _update_media_enabled_visibility(tab))
     _update_media_enabled_visibility(tab)
 
-    # --- Spotify Beat Visualizer Group ---
-    spotify_vis_group = QGroupBox("Spotify Beat Visualizer")
+    container = QWidget()
+    container_layout = QVBoxLayout(container)
+    container_layout.setContentsMargins(0, 20, 0, 0)
+    container_layout.addWidget(media_group)
+    return container
+
+
+def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
+    """Build the Visualizers widget UI section (separate toggle)."""
+
+    from ui.tabs.widgets_tab import NoWheelSlider
+
+    visualizers_group = QGroupBox("Visualizers")
+    style_group_box(visualizers_group)
+    visualizers_layout = QVBoxLayout(visualizers_group)
+
+    tab.visualizers_enabled = QCheckBox("Enable Visualizers")
+    tab.visualizers_enabled.setProperty("circleIndicator", True)
+    tab.visualizers_enabled.setChecked(tab._default_bool('spotify_visualizer', 'visualizers_enabled', True))
+    tab.visualizers_enabled.setToolTip("Master switch for all visualizer controls.")
+    tab.visualizers_enabled.stateChanged.connect(tab._save_settings)
+    tab.visualizers_enabled.stateChanged.connect(lambda: _update_visualizers_enabled_visibility(tab))
+    visualizers_layout.addWidget(tab.visualizers_enabled)
+
+    tab._visualizers_controls_container = QWidget()
+    _viz_ctrls = QVBoxLayout(tab._visualizers_controls_container)
+    _viz_ctrls.setContentsMargins(0, 0, 0, 0)
+    _viz_ctrls.setSpacing(8)
+
+    # --- Beat Visualizer Group ---
+    spotify_vis_group = QGroupBox("Beat Visualizer")
     style_group_box(spotify_vis_group)
     spotify_vis_layout = QVBoxLayout(spotify_vis_group)
 
     spotify_vis_enable_row = QHBoxLayout()
-    tab.vis_enabled_checkbox = QCheckBox("Enable Spotify Beat Visualizer")
+    tab.vis_enabled_checkbox = QCheckBox("Enable Beat Visualizer")
     tab.vis_enabled_checkbox.setProperty("circleIndicator", True)
     tab.vis_enabled_checkbox.setChecked(tab._default_bool('spotify_visualizer', 'enabled', True))
     tab.vis_enabled_checkbox.setToolTip(
@@ -561,15 +599,17 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.vis_enabled_checkbox.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
     _update_spotify_vis_enabled_visibility(tab)
 
+    _viz_ctrls.addWidget(spotify_vis_group)
+    visualizers_layout.addWidget(tab._visualizers_controls_container)
+    _update_visualizers_enabled_visibility(tab)
+
     # Initial visibility
     tab._update_vis_mode_sections()
 
-    # Container for both groups
     container = QWidget()
     container_layout = QVBoxLayout(container)
     container_layout.setContentsMargins(0, 20, 0, 0)
-    container_layout.addWidget(media_group)
-    container_layout.addWidget(spotify_vis_group)
+    container_layout.addWidget(visualizers_group)
     return container
 
 
@@ -665,6 +705,13 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.media_monitor_combo.setCurrentIndex(midx)
 
     _update_media_bg_visibility(tab)
+
+    # Visualizers toggle
+    if hasattr(tab, 'visualizers_enabled'):
+        tab.visualizers_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'visualizers_enabled', True)
+        )
+    _update_visualizers_enabled_visibility(tab)
 
     # Spotify Visualizer
     spotify_vis_config = widgets.get('spotify_visualizer', {})
@@ -1356,6 +1403,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
 
     spotify_vis_config = {
+        'visualizers_enabled': tab.visualizers_enabled.isChecked() if hasattr(tab, 'visualizers_enabled') else True,
         'enabled': tab.vis_enabled_checkbox.isChecked(),
         'mode': tab.vis_mode_combo.currentData() if hasattr(tab, 'vis_mode_combo') else 'spectrum',
         'software_visualizer_enabled': tab.vis_software_checkbox.isChecked(),

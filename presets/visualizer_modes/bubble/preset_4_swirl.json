@@ -13,7 +13,7 @@
   "snapshot": {
     "accessibility": {
       "dimming.enabled": true,
-      "dimming.opacity": 20,
+      "dimming.opacity": 50,
       "pixel_shift.enabled": true,
       "pixel_shift.rate": 1
     },
@@ -333,7 +333,7 @@
       "burn": {
         "ash_density": 0.8,
         "ash_enabled": true,
-        "char_width": 0.1,
+        "char_width": 0.15,
         "direction": "Random",
         "glow_color": [
           255,
@@ -342,7 +342,7 @@
           255
         ],
         "glow_intensity": 1.0,
-        "jaggedness": 1.0,
+        "jaggedness": 0.81,
         "smoke_density": 0.8,
         "smoke_enabled": true
       },
@@ -373,7 +373,7 @@
         "Wipe": 4000
       },
       "easing": "Auto",
-      "last_random_choice": "Warp Dissolve",
+      "last_random_choice": "Crumble",
       "particle": {
         "direction": "Random",
         "gloss_size": 72.0,
@@ -409,7 +409,7 @@
         "Wipe": true
       },
       "random_always": true,
-      "random_choice": "Warp Dissolve",
+      "random_choice": "Crumble",
       "ripple": {
         "ripple_count": 3
       },
@@ -418,43 +418,51 @@
       },
       "type": "Burn",
       "wipe": {
-        "direction": "Left to Right",
-        "last_direction": "Left to Right"
+        "direction": "Right to Left",
+        "last_direction": "Right to Left"
       }
     },
     "ui": {
       "dialog_geometry": {
         "height": 900,
         "width": 1402,
-        "x": 109,
+        "x": 194,
         "y": 0
       },
       "last_tab_index": 6,
       "last_tab_scroll": {
+        "accessibility": 0,
         "presets": 0,
-        "widgets": 0
+        "widgets": 1381
       },
       "tab_state": {
         "widgets": {
           "view_state": {
-            "scroll": 0,
+            "scroll": 1381,
             "subtab": 2
           }
         }
       },
       "visualizer_adv_states": {
         "blob": true,
-        "bubble": true,
+        "bubble": false,
         "oscilloscope": false,
-        "sine_wave": true,
-        "spectrum": true
+        "sine_wave": false,
+        "spectrum": false
       },
       "visualizer_scroll_positions": {
-        "blob": 1085,
+        "blob": 1216,
         "bubble": 0,
-        "oscilloscope": 885,
-        "sine_wave": 1065,
-        "spectrum": 1023
+        "oscilloscope": 1271,
+        "sine_wave": 1361,
+        "spectrum": 1349
+      },
+      "visualizer_tech_states": {
+        "blob": true,
+        "bubble": true,
+        "oscilloscope": true,
+        "sine_wave": false,
+        "spectrum": true
       }
     },
     "widgets": {
@@ -588,7 +596,7 @@
         "monitor": 2,
         "mute_button_enabled": true,
         "position": "Bottom Left",
-        "provider": "musicbee",
+        "provider": "spotify",
         "rounded_artwork_border": true,
         "show_background": true,
         "show_controls": true,
@@ -633,14 +641,14 @@
         "position": "Bottom Center",
         "show_background": true,
         "show_separators": true,
-        "subreddit": "All"
+        "subreddit": "SubredditDrama"
       },
       "reddit2": {
         "enabled": true,
         "limit": 20,
         "monitor": 2,
         "position": "Bottom Right",
-        "subreddit": "Games"
+        "subreddit": "All"
       },
       "shadows": {
         "blur_radius": 18,
@@ -660,7 +668,7 @@
       },
       "spotify_visualizer": {
         "adaptive_sensitivity": true,
-        "audio_block_size": 512,
+        "audio_block_size": 256,
         "bar_border_color": [
           255,
           255,
@@ -668,13 +676,16 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 21,
+        "bar_count": 17,
         "bar_fill_color": [
           255,
           255,
           255,
           230
         ],
+        "blob_adaptive_sensitivity": true,
+        "blob_audio_block_size": 256,
+        "blob_bar_count": 19,
         "blob_color": [
           0,
           105,
@@ -682,8 +693,10 @@
           230
         ],
         "blob_constant_wobble": 0.25,
-        "blob_core_floor_bias": 0.6,
-        "blob_core_scale": 1.1,
+        "blob_core_floor_bias": 0.33,
+        "blob_core_scale": 0.8,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
         "blob_edge_color": [
           208,
           223,
@@ -700,9 +713,10 @@
           180
         ],
         "blob_glow_intensity": 0.45,
-        "blob_glow_max_size": 1.05,
+        "blob_glow_max_size": 1.12,
         "blob_glow_reactivity": 1.6,
         "blob_growth": 5.0,
+        "blob_manual_floor": 0.12,
         "blob_outline_color": [
           84,
           150,
@@ -710,25 +724,33 @@
           225
         ],
         "blob_pulse": 1.88,
-        "blob_reactive_deformation": 1.25,
+        "blob_rainbow_enabled": true,
+        "blob_rainbow_speed": 0.25,
+        "blob_reactive_deformation": 1.5,
         "blob_reactive_glow": true,
-        "blob_reactive_wobble": 1.03,
-        "blob_size": 0.5,
-        "blob_stage2_release_ms": 603,
-        "blob_stage3_release_ms": 503,
-        "blob_stage_bias": 0.25,
-        "blob_stage_gain": 0.25,
-        "blob_stretch_inner": 0.0,
-        "blob_stretch_outer": 1.0,
-        "blob_stretch_tendency": 0.2,
+        "blob_reactive_wobble": 1.45,
+        "blob_sensitivity": 1.12,
+        "blob_size": 0.35,
+        "blob_stage2_release_ms": 402,
+        "blob_stage3_release_ms": 502,
+        "blob_stage_bias": -0.4,
+        "blob_stage_gain": 0.3,
+        "blob_stretch_inner": 0.05,
+        "blob_stretch_outer": 0.4,
+        "blob_stretch_tendency": 0.15,
         "blob_width": 1.0,
-        "bubble_big_bass_pulse": 1.76,
+        "bubble_adaptive_sensitivity": true,
+        "bubble_audio_block_size": 256,
+        "bubble_bar_count": 17,
+        "bubble_big_bass_pulse": 1.5,
         "bubble_big_count": 8,
         "bubble_big_size_max": 0.028,
         "bubble_drift_amount": 0.55,
         "bubble_drift_direction": "swirl_ccw",
         "bubble_drift_frequency": 0.39,
-        "bubble_drift_speed": 0.15,
+        "bubble_drift_speed": 0.25,
+        "bubble_dynamic_floor": true,
+        "bubble_dynamic_range_enabled": true,
         "bubble_gradient_dark": [
           7,
           42,
@@ -743,6 +765,7 @@
           255
         ],
         "bubble_growth": 5.0,
+        "bubble_manual_floor": 2.1,
         "bubble_outline_color": [
           255,
           255,
@@ -756,10 +779,11 @@
           255
         ],
         "bubble_rainbow_enabled": true,
-        "bubble_rainbow_speed": 0.34,
+        "bubble_rainbow_speed": 0.25,
         "bubble_rotation_amount": 0.2,
+        "bubble_sensitivity": 0.4,
         "bubble_small_count": 30,
-        "bubble_small_freq_pulse": 0.63,
+        "bubble_small_freq_pulse": 1.4,
         "bubble_small_size_max": 0.01,
         "bubble_specular_color": [
           255,
@@ -768,18 +792,18 @@
           255
         ],
         "bubble_specular_direction": "top_left",
-        "bubble_stream_constant_speed": 0.4,
+        "bubble_stream_constant_speed": 0.5,
         "bubble_stream_direction": "up",
-        "bubble_stream_reactivity": 1.12,
-        "bubble_stream_speed_cap": 2.45,
-        "bubble_surface_reach": 0.81,
+        "bubble_stream_reactivity": 1.25,
+        "bubble_stream_speed_cap": 2.5,
+        "bubble_surface_reach": 0.85,
         "bubble_tail_opacity": 0.65,
         "bubble_trail_strength": 0.85,
-        "dynamic_floor": false,
+        "dynamic_floor": true,
         "dynamic_range_enabled": true,
         "enabled": true,
-        "ghost_alpha": 0.45,
-        "ghost_decay": 0.3,
+        "ghost_alpha": 0.6,
+        "ghost_decay": 0.17,
         "ghosting_enabled": true,
         "helix_double": true,
         "helix_glow_color": [
@@ -791,10 +815,12 @@
         "helix_glow_enabled": true,
         "helix_glow_intensity": 0.5,
         "helix_growth": 2.5,
+        "helix_rainbow_enabled": true,
+        "helix_rainbow_speed": 0.25,
         "helix_reactive_glow": false,
         "helix_speed": 1.0,
         "helix_turns": 6,
-        "manual_floor": 0.3,
+        "manual_floor": 2.1,
         "mode": "bubble",
         "nebula_cycle_speed": 0.59,
         "nebula_tint1": [
@@ -809,7 +835,7 @@
           100,
           255
         ],
-        "osc_ghost_intensity": 0.4,
+        "osc_ghost_intensity": 0.35,
         "osc_ghosting_enabled": true,
         "osc_glow_color": [
           255,
@@ -818,8 +844,8 @@
           255
         ],
         "osc_glow_enabled": true,
-        "osc_glow_intensity": 0.6,
-        "osc_growth": 3.01,
+        "osc_glow_intensity": 0.55,
+        "osc_growth": 3.5,
         "osc_line2_color": [
           21,
           21,
@@ -854,22 +880,33 @@
         "osc_line_dim": false,
         "osc_line_offset_bias": 0.0,
         "osc_reactive_glow": true,
-        "osc_sensitivity": 4.7,
-        "osc_smoothing": 0.6,
+        "osc_sensitivity": 3.4,
+        "osc_smoothing": 0.75,
         "osc_speed": 0.33,
         "osc_vertical_shift": 25,
+        "oscilloscope_adaptive_sensitivity": true,
+        "oscilloscope_audio_block_size": 256,
+        "oscilloscope_bar_count": 21,
+        "oscilloscope_dynamic_floor": false,
+        "oscilloscope_dynamic_range_enabled": false,
+        "oscilloscope_manual_floor": 2.1,
+        "oscilloscope_rainbow_enabled": false,
+        "oscilloscope_rainbow_speed": 0.25,
+        "oscilloscope_sensitivity": 0.4,
         "preset_blob": 1,
-        "preset_bubble": 3,
+        "preset_bubble": 4,
         "preset_helix": 3,
-        "preset_oscilloscope": 0,
-        "preset_sine_wave": 2,
+        "preset_oscilloscope": 1,
+        "preset_sine_wave": 3,
         "preset_spectrum": 1,
         "preset_starfield": 3,
+        "rainbow_enabled": true,
+        "rainbow_speed": 0.25,
         "sensitivity": 0.4,
         "sine_card_adaptation": 0.07,
-        "sine_crawl_amount": 0.27,
+        "sine_crawl_amount": 0.9,
         "sine_density": 2.09,
-        "sine_displacement": 0.43,
+        "sine_displacement": 1.0,
         "sine_glow_color": [
           0,
           107,
@@ -877,8 +914,8 @@
           240
         ],
         "sine_glow_enabled": true,
-        "sine_glow_intensity": 0.6,
-        "sine_heartbeat": 0.05,
+        "sine_glow_intensity": 0.65,
+        "sine_heartbeat": 0.2,
         "sine_line1_shift": 0.0,
         "sine_line2_color": [
           255,
@@ -915,27 +952,47 @@
         "sine_line_count": 3,
         "sine_line_dim": false,
         "sine_line_offset_bias": 0.0,
-        "sine_micro_wobble": 0.2,
+        "sine_micro_wobble": 1.0,
         "sine_reactive_glow": true,
-        "sine_sensitivity": 2.63,
+        "sine_sensitivity": 3.37,
         "sine_speed": 0.56,
         "sine_travel_line2": 0,
         "sine_travel_line3": 0,
         "sine_vertical_shift": 40,
-        "sine_wave_effect": 0.8,
+        "sine_wave_adaptive_sensitivity": true,
+        "sine_wave_audio_block_size": 512,
+        "sine_wave_bar_count": 21,
+        "sine_wave_dynamic_floor": true,
+        "sine_wave_dynamic_range_enabled": false,
+        "sine_wave_effect": 0.85,
         "sine_wave_growth": 5.0,
+        "sine_wave_manual_floor": 2.1,
+        "sine_wave_rainbow_enabled": true,
+        "sine_wave_rainbow_speed": 0.25,
+        "sine_wave_sensitivity": 0.4,
         "sine_wave_travel": 2,
-        "sine_width_reaction": 0.13,
+        "sine_width_reaction": 0.33,
         "software_visualizer_enabled": false,
-        "spectrum_bar_profile": "curved",
-        "spectrum_border_radius": 2.0,
-        "spectrum_growth": 4.48,
+        "spectrum_adaptive_sensitivity": true,
+        "spectrum_audio_block_size": 1024,
+        "spectrum_bar_count": 21,
+        "spectrum_bar_profile": "legacy",
+        "spectrum_border_radius": 3.0,
+        "spectrum_dynamic_floor": true,
+        "spectrum_dynamic_range_enabled": true,
+        "spectrum_growth": 5.0,
+        "spectrum_manual_floor": 2.1,
+        "spectrum_rainbow_enabled": true,
         "spectrum_rainbow_per_bar": true,
+        "spectrum_rainbow_speed": 0.25,
+        "spectrum_sensitivity": 0.4,
         "spectrum_single_piece": true,
         "star_density": 1.0,
         "star_reactivity": 1.95,
         "star_travel_speed": 0.93,
-        "starfield_growth": 3.01
+        "starfield_growth": 3.01,
+        "starfield_rainbow_enabled": true,
+        "starfield_rainbow_speed": 0.25
       },
       "weather": {
         "bg_color": [
@@ -966,7 +1023,7 @@
         "intense_shadow": true,
         "location": "Sandton, South Africa",
         "margin": 30,
-        "monitor": 2,
+        "monitor": "ALL",
         "position": "Top Left",
         "show_background": true,
         "show_condition_icon": true,

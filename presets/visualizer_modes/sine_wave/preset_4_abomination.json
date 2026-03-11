@@ -426,17 +426,17 @@
       "dialog_geometry": {
         "height": 900,
         "width": 1402,
-        "x": 224,
+        "x": 194,
         "y": 0
       },
       "last_tab_index": 6,
       "last_tab_scroll": {
-        "widgets": 1361
+        "widgets": 1637
       },
       "tab_state": {
         "widgets": {
           "view_state": {
-            "scroll": 1361,
+            "scroll": 1637,
             "subtab": 2
           }
         }
@@ -445,7 +445,7 @@
         "blob": true,
         "bubble": false,
         "oscilloscope": false,
-        "sine_wave": true,
+        "sine_wave": false,
         "spectrum": false
       },
       "visualizer_scroll_positions": {
@@ -666,7 +666,7 @@
       },
       "spotify_visualizer": {
         "adaptive_sensitivity": true,
-        "audio_block_size": 1024,
+        "audio_block_size": 512,
         "bar_border_color": [
           255,
           255,
@@ -674,7 +674,7 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 30,
+        "bar_count": 21,
         "bar_fill_color": [
           255,
           255,
@@ -797,7 +797,7 @@
         "bubble_surface_reach": 0.85,
         "bubble_tail_opacity": 0.65,
         "bubble_trail_strength": 0.85,
-        "dynamic_floor": false,
+        "dynamic_floor": true,
         "dynamic_range_enabled": true,
         "enabled": true,
         "ghost_alpha": 0.6,
@@ -818,7 +818,7 @@
         "helix_reactive_glow": false,
         "helix_speed": 1.0,
         "helix_turns": 6,
-        "manual_floor": 0.74,
+        "manual_floor": 2.1,
         "mode": "sine_wave",
         "nebula_cycle_speed": 0.59,
         "nebula_tint1": [
@@ -901,10 +901,10 @@
         "rainbow_enabled": true,
         "rainbow_speed": 0.25,
         "sensitivity": 0.4,
-        "sine_card_adaptation": 0.1,
-        "sine_crawl_amount": 0.0,
+        "sine_card_adaptation": 0.07,
+        "sine_crawl_amount": 0.9,
         "sine_density": 2.09,
-        "sine_displacement": 0.32,
+        "sine_displacement": 1.0,
         "sine_glow_color": [
           0,
           107,
@@ -912,7 +912,7 @@
           240
         ],
         "sine_glow_enabled": true,
-        "sine_glow_intensity": 0.3,
+        "sine_glow_intensity": 0.65,
         "sine_heartbeat": 0.2,
         "sine_line1_shift": 0.0,
         "sine_line2_color": [
@@ -950,26 +950,26 @@
         "sine_line_count": 3,
         "sine_line_dim": false,
         "sine_line_offset_bias": 0.0,
-        "sine_micro_wobble": 0.15,
+        "sine_micro_wobble": 1.0,
         "sine_reactive_glow": true,
-        "sine_sensitivity": 4.68,
-        "sine_speed": 0.8,
+        "sine_sensitivity": 3.37,
+        "sine_speed": 0.56,
         "sine_travel_line2": 0,
         "sine_travel_line3": 0,
-        "sine_vertical_shift": 60,
+        "sine_vertical_shift": 40,
         "sine_wave_adaptive_sensitivity": true,
-        "sine_wave_audio_block_size": 1024,
-        "sine_wave_bar_count": 30,
-        "sine_wave_dynamic_floor": false,
+        "sine_wave_audio_block_size": 512,
+        "sine_wave_bar_count": 21,
+        "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": true,
-        "sine_wave_effect": 0.4,
+        "sine_wave_effect": 0.85,
         "sine_wave_growth": 5.0,
-        "sine_wave_manual_floor": 0.74,
+        "sine_wave_manual_floor": 2.1,
         "sine_wave_rainbow_enabled": true,
         "sine_wave_rainbow_speed": 0.25,
         "sine_wave_sensitivity": 0.4,
         "sine_wave_travel": 2,
-        "sine_width_reaction": 0.0,
+        "sine_width_reaction": 0.33,
         "software_visualizer_enabled": false,
         "spectrum_adaptive_sensitivity": true,
         "spectrum_audio_block_size": 1024,

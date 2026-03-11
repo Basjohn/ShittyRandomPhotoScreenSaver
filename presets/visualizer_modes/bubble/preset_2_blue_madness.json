@@ -27,6 +27,6 @@
     "bubble_small_size_max": 0.016,
     "bubble_growth": 5.0,
     "bubble_tail_opacity": 0.25,
-    "bubble_trail_strength": 0.25,
+    "bubble_trail_strength": 0.25
   }
 }

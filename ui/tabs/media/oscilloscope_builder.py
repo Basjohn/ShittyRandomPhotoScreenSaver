@@ -84,7 +84,6 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     _adv_layout = QVBoxLayout(tab._osc_advanced)
     _adv_layout.setContentsMargins(0, 0, 0, 0)
     _adv_layout.setSpacing(4)
-    build_per_mode_technical_group(tab, _adv_layout, "oscilloscope")
     _adv_host.addWidget(tab._osc_advanced)
 
     tab._osc_preset_slider.set_advanced_container(tab._osc_advanced_host)
@@ -108,6 +107,9 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
 
     tab._osc_preset_slider.advanced_toggled.connect(_handle_osc_preset_adv)
     _handle_osc_preset_adv(True)
+
+    # Technical bucket (after Advanced)
+    build_per_mode_technical_group(tab, osc_layout, "oscilloscope")
 
     LABEL_WIDTH = 150
 

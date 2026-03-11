@@ -6,15 +6,16 @@ from typing import Any, Callable, Dict, Mapping, Optional
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QSlider,
     QSpinBox,
+    QToolButton,
     QVBoxLayout,
+    QWidget,
 )
 
-from ui.tabs.shared_styles import SECTION_HEADING_STYLE, style_group_box
+from ui.tabs.shared_styles import SECTION_HEADING_STYLE, ADV_HELPER_LABEL_STYLE
 from ui.widgets import StyledComboBox
 from ui.tabs.widgets_tab import NoWheelSlider
 
@@ -77,12 +78,58 @@ def _per_mode_default_float(tab, mode_key: str, key: str, base_default: float) -
 
 
 def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: str) -> None:
-    """Attach the per-mode Technical group to the given layout."""
-    group = QGroupBox("Technical")
-    style_group_box(group)
+    """Attach the per-mode Technical group to the given layout (collapsible)."""
+    # Host with toggle + helper (mirrors Advanced styling)
+    host = QWidget()
+    host_layout = QVBoxLayout(host)
+    host_layout.setContentsMargins(0, 0, 0, 0)
+    host_layout.setSpacing(4)
+
+    toggle_row = QHBoxLayout()
+    toggle_row.setContentsMargins(0, 0, 0, 0)
+    toggle_row.setSpacing(6)
+    toggle = QToolButton()
+    toggle.setText("Technical")
+    toggle.setCheckable(True)
+    default_expanded = True
+    getter = getattr(tab, "get_visualizer_tech_state", None)
+    if callable(getter):
+        try:
+            default_expanded = bool(getter(mode_key))
+        except Exception:
+            default_expanded = True
+    toggle.setChecked(default_expanded)
+    toggle.setArrowType(Qt.DownArrow if default_expanded else Qt.RightArrow)
+    toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    toggle.setAutoRaise(True)
+    toggle_row.addWidget(toggle)
+    toggle_row.addStretch()
+    host_layout.addLayout(toggle_row)
+
+    helper = QLabel("Technical controls still apply when hidden.")
+    helper.setProperty("class", "adv-helper")
+    helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    host_layout.addWidget(helper)
+
+    group = QWidget()
     layout = QVBoxLayout(group)
-    layout.setContentsMargins(16, 10, 16, 10)
-    layout.setSpacing(8)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(6)
+    host_layout.addWidget(group)
+
+    def _apply_toggle_state(checked: bool) -> None:
+        toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        group.setVisible(checked)
+        helper.setVisible(not checked)
+        setter = getattr(tab, "set_visualizer_tech_state", None)
+        if callable(setter):
+            try:
+                setter(mode_key, checked)
+            except Exception:
+                pass
+
+    toggle.toggled.connect(_apply_toggle_state)
+    _apply_toggle_state(default_expanded)
 
     # Bar count
     bar_row = _aligned_row(layout, "Bar Count:")
@@ -191,7 +238,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     manual_container.addWidget(manual_label)
 
     layout.addStretch()
-    parent_layout.addWidget(group)
+    parent_layout.addWidget(host)
 
     per_mode_controls: Dict[str, Dict[str, object]] = getattr(tab, _PER_MODE_TECH_ATTR, {})
 

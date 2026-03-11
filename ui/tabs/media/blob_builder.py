@@ -207,7 +207,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     adv_layout = QVBoxLayout(tab._blob_advanced)
     adv_layout.setContentsMargins(0, 0, 0, 0)
     adv_layout.setSpacing(4)
-    build_per_mode_technical_group(tab, host_layout, "blob")
     host_layout.addWidget(tab._blob_advanced)
 
     blob_layout.addWidget(tab._blob_advanced_host)
@@ -232,6 +231,9 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._blob_preset_slider.advanced_toggled.connect(_handle_blob_preset_adv)
     _handle_blob_preset_adv(True)
+
+    # --- Technical bucket (after Advanced) ---
+    build_per_mode_technical_group(tab, blob_layout, "blob")
 
     # Glow intensity (advanced)
     glow_row, glow_layout = _aligned_row("Glow Intensity:")

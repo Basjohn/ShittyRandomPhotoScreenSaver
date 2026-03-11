@@ -85,7 +85,6 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv = QVBoxLayout(tab._sine_advanced)
     _adv.setContentsMargins(0, 0, 0, 0)
     _adv.setSpacing(4)
-    build_per_mode_technical_group(tab, _adv, "sine_wave")
     _adv_host.addWidget(tab._sine_advanced)
 
     tab._sine_preset_slider.set_advanced_container(tab._sine_advanced_host)
@@ -109,6 +108,9 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._sine_preset_slider.advanced_toggled.connect(_handle_sine_preset_adv)
     _handle_sine_preset_adv(True)
+
+    # Technical bucket (after Advanced)
+    build_per_mode_technical_group(tab, sine_layout, "sine_wave")
 
     LABEL_WIDTH = 150
 

@@ -138,20 +138,23 @@ def compute_expected_overlays(
     media_monitor = media_settings.get('monitor', 'ALL')
     if media_enabled and resolve_monitor_visibility(media_monitor, screen_index):
         expected.add("media")
-        
-        # Spotify visualizer (only if media is also enabled)
-        spotify_vis_settings = widgets_map.get('spotify_visualizer', {})
-        spotify_vis_enabled = SettingsManager.to_bool(
-            spotify_vis_settings.get('enabled', False), False
-        )
-        if spotify_vis_enabled:
-            expected.add("spotify_visualizer")
-
         # Spotify volume slider (inherits media monitor selection)
         spotify_volume_enabled = SettingsManager.to_bool(
             media_settings.get('spotify_volume_enabled', True), True
         )
         if spotify_volume_enabled:
             expected.add("spotify_volume")
-    
+
+        # Visualizers remain positioned with media; require media enabled
+        spotify_vis_settings = widgets_map.get('spotify_visualizer', {})
+        visualizers_enabled = SettingsManager.to_bool(
+            spotify_vis_settings.get('visualizers_enabled', True), True
+        )
+        spotify_vis_enabled = SettingsManager.to_bool(
+            spotify_vis_settings.get('enabled', False), False
+        )
+        vis_monitor = spotify_vis_settings.get('monitor', media_monitor)
+        if visualizers_enabled and spotify_vis_enabled and resolve_monitor_visibility(vis_monitor, screen_index):
+            expected.add("spotify_visualizer")
+
     return expected

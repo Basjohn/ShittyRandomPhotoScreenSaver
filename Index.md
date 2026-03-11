@@ -20,6 +20,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
 | Current_Plan.md | Live backlog + checkbox/combobox rollout manifest (auto-generated inventory for styled controls) |
+| Spec.md (Visualizer buckets) | Advanced then Technical collapsible buckets per mode (Spectrum/Bubble/Blob/Sine/Osc); state persisted via `_visualizer_adv_state`/`_visualizer_tech_state` (Starfield/Helix gated) |
 
 ## Tooling
 

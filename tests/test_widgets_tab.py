@@ -5,6 +5,7 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 roundtrips behave as expected.
 """
 import pytest
+import sip
 import uuid
 
 from PySide6.QtGui import QColor
@@ -166,3 +167,30 @@ class TestWidgetsTab:
             assert SPINBOX_STYLE.strip() in css or expected_token in css
         finally:
             tab.deleteLater()
+
+    def test_visualizers_toggle_gates_controls(self, qt_app, settings_manager):
+        """Visualizers master toggle should gate Beat Visualizer controls and persist flag."""
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            # Should be visible by default
+            assert tab._visualizers_controls_container.isVisible()
+
+            # Disable and confirm hidden
+            tab.visualizers_enabled.setChecked(False)
+            tab.visualizers_enabled.stateChanged.emit(tab.visualizers_enabled.checkState())
+            assert not tab._visualizers_controls_container.isVisible()
+
+            tab._save_settings_now()
+            tab.deleteLater()
+
+            # Reload and expect persisted False
+            reloaded = WidgetsTab(settings_manager)
+            try:
+                assert not reloaded.visualizers_enabled.isChecked()
+                assert not reloaded._visualizers_controls_container.isVisible()
+            finally:
+                reloaded.deleteLater()
+        finally:
+            if tab is not None and not sip.isdeleted(tab):
+                tab.deleteLater()
