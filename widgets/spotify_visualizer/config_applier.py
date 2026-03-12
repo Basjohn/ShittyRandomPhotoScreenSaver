@@ -51,8 +51,11 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             widget._osc_glow_color = c
     if 'osc_reactive_glow' in kwargs:
         widget._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
-    if 'osc_sensitivity' in kwargs:
-        widget._osc_sensitivity = max(0.5, min(10.0, float(kwargs['osc_sensitivity'])))
+    if 'osc_line_amplitude' in kwargs:
+        widget._osc_line_amplitude = max(0.5, min(10.0, float(kwargs['osc_line_amplitude'])))
+    elif 'osc_sensitivity' in kwargs:
+        # Legacy key fallback (pre-Mar 2026 builds)
+        widget._osc_line_amplitude = max(0.5, min(10.0, float(kwargs['osc_sensitivity'])))
     if 'osc_smoothing' in kwargs:
         widget._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
     if 'osc_line_color' in kwargs:
@@ -457,7 +460,7 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['glow_intensity'] = widget._sine_glow_intensity if _is_sine else widget._osc_glow_intensity
     extra['glow_color'] = widget._sine_glow_color if _is_sine else widget._osc_glow_color
     extra['reactive_glow'] = widget._sine_reactive_glow if _is_sine else widget._osc_reactive_glow
-    extra['osc_sensitivity'] = widget._sine_sensitivity if _is_sine else widget._osc_sensitivity
+    extra['osc_line_amplitude'] = widget._sine_sensitivity if _is_sine else widget._osc_line_amplitude
     extra['osc_smoothing'] = widget._osc_smoothing
     extra['star_density'] = widget._star_density
     extra['travel_speed'] = widget._star_travel_speed

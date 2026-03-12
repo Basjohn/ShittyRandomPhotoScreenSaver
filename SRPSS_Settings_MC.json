@@ -881,7 +881,7 @@
         "osc_line_dim": false,
         "osc_line_offset_bias": 0.0,
         "osc_reactive_glow": true,
-        "osc_sensitivity": 4.7,
+        "osc_line_amplitude": 4.7,
         "osc_smoothing": 0.6,
         "osc_speed": 0.33,
         "osc_vertical_shift": 25,

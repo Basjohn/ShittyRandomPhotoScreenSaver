@@ -97,7 +97,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._glow_color: QColor = QColor(0, 200, 255, 230)
         self._line_color: QColor = QColor(255, 255, 255, 255)
         self._reactive_glow: bool = True
-        self._osc_sensitivity: float = 3.0
+        self._osc_line_amplitude: float = 3.0
         self._osc_smoothing: float = 0.7
 
         # Oscilloscope multi-line
@@ -347,7 +347,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         glow_intensity: float = 0.5,
         glow_color: QColor | None = None,
         reactive_glow: bool = True,
-        osc_sensitivity: float = 3.0,
+        osc_line_amplitude: float = 3.0,
+        osc_sensitivity: float | None = None,
         osc_smoothing: float = 0.7,
         star_density: float = 1.0,
         travel_speed: float = 0.5,
@@ -632,7 +633,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if line_color is not None:
             self._line_color = QColor(line_color)
         self._reactive_glow = bool(reactive_glow)
-        self._osc_sensitivity = max(0.5, min(10.0, float(osc_sensitivity)))
+        _amp_value = osc_line_amplitude if osc_sensitivity is None else osc_sensitivity
+        self._osc_line_amplitude = max(0.5, min(10.0, float(_amp_value)))
         self._osc_smoothing = max(0.0, min(1.0, float(osc_smoothing)))
 
         # Multi-line oscilloscope

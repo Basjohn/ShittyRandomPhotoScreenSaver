@@ -217,21 +217,26 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_ghost_enabled.stateChanged.connect(_update_osc_ghost_vis)
     _update_osc_ghost_vis()
 
-    osc_sens_row = _aligned_row(_normal_layout, "Sensitivity:")
-    tab.osc_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.osc_sensitivity.setMinimum(5)
-    tab.osc_sensitivity.setMaximum(100)
-    osc_sens_val = int(tab._default_float('spotify_visualizer', 'osc_sensitivity', 3.0) * 10)
-    tab.osc_sensitivity.setValue(max(5, min(100, osc_sens_val)))
-    tab.osc_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.osc_sensitivity.setTickInterval(10)
-    tab.osc_sensitivity.valueChanged.connect(tab._save_settings)
-    osc_sens_row.addWidget(tab.osc_sensitivity)
-    tab.osc_sensitivity_label = QLabel(f"{osc_sens_val / 10.0:.1f}x")
-    tab.osc_sensitivity.valueChanged.connect(
-        lambda v: tab.osc_sensitivity_label.setText(f"{v / 10.0:.1f}x")
+    osc_amp_row = _aligned_row(_normal_layout, "Line Amplitude:")
+    tab.osc_line_amplitude = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_line_amplitude.setMinimum(5)
+    tab.osc_line_amplitude.setMaximum(100)
+    osc_amp_default = tab._default_float(
+        'spotify_visualizer',
+        'osc_line_amplitude',
+        tab._default_float('spotify_visualizer', 'osc_sensitivity', 3.0),
     )
-    osc_sens_row.addWidget(tab.osc_sensitivity_label)
+    osc_amp_val = int(osc_amp_default * 10)
+    tab.osc_line_amplitude.setValue(max(5, min(100, osc_amp_val)))
+    tab.osc_line_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_line_amplitude.setTickInterval(10)
+    tab.osc_line_amplitude.valueChanged.connect(tab._save_settings)
+    osc_amp_row.addWidget(tab.osc_line_amplitude)
+    tab.osc_line_amplitude_label = QLabel(f"{osc_amp_val / 10.0:.1f}x")
+    tab.osc_line_amplitude.valueChanged.connect(
+        lambda v: tab.osc_line_amplitude_label.setText(f"{v / 10.0:.1f}x")
+    )
+    osc_amp_row.addWidget(tab.osc_line_amplitude_label)
 
     osc_smooth_row = _aligned_row(_normal_layout, "Smoothing:")
     tab.osc_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)

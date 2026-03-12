@@ -759,10 +759,18 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.osc_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_reactive_glow', True)
         )
-    if hasattr(tab, 'osc_sensitivity'):
-        osc_sens_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_sensitivity', 3.0) * 10)
-        tab.osc_sensitivity.setValue(max(5, min(100, osc_sens_val)))
-        tab.osc_sensitivity_label.setText(f"{osc_sens_val / 10.0:.1f}x")
+    if hasattr(tab, 'osc_line_amplitude'):
+        osc_amp_val = int(
+            tab._config_float(
+                'spotify_visualizer',
+                spotify_vis_config,
+                'osc_line_amplitude',
+                tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_sensitivity', 3.0),
+            )
+            * 10
+        )
+        tab.osc_line_amplitude.setValue(max(5, min(100, osc_amp_val)))
+        tab.osc_line_amplitude_label.setText(f"{osc_amp_val / 10.0:.1f}x")
     if hasattr(tab, 'osc_smoothing'):
         osc_smooth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_smoothing', 0.7) * 100)
         tab.osc_smoothing.setValue(max(0, min(100, osc_smooth_val)))
@@ -1424,7 +1432,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_glow_enabled': tab.osc_glow_enabled.isChecked() if hasattr(tab, 'osc_glow_enabled') else False,
         'osc_glow_intensity': (tab.osc_glow_intensity.value() if hasattr(tab, 'osc_glow_intensity') else 50) / 100.0,
         'osc_reactive_glow': tab.osc_reactive_glow.isChecked() if hasattr(tab, 'osc_reactive_glow') else False,
-        'osc_sensitivity': (tab.osc_sensitivity.value() if hasattr(tab, 'osc_sensitivity') else 30) / 10.0,
+        'osc_line_amplitude': (tab.osc_line_amplitude.value() if hasattr(tab, 'osc_line_amplitude') else 30) / 10.0,
         'osc_smoothing': (tab.osc_smoothing.value() if hasattr(tab, 'osc_smoothing') else 70) / 100.0,
         'osc_line_color': _qcolor_to_list(getattr(tab, '_osc_line_color', None), [255, 255, 255, 255]),
         'osc_glow_color': _qcolor_to_list(getattr(tab, '_osc_glow_color', None), [0, 200, 255, 230]),

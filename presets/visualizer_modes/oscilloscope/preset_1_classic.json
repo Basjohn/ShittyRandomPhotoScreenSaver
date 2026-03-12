@@ -75,90 +75,12 @@
         "osc_rainbow_enabled": false,
         "osc_rainbow_speed": 0.3,
         "osc_reactive_glow": true,
-        "osc_sensitivity": 4.7,
+        "osc_line_amplitude": 4.7,
         "osc_smoothing": 0.6,
         "osc_speed": 0.33,
         "osc_vertical_shift": 25,
         "sensitivity": 0.4
       }
-    }
-  },
-  "widgets": {
-    "spotify_visualizer": {
-      "adaptive_sensitivity": true,
-      "bar_border_color": [
-        255,
-        255,
-        255,
-        255
-      ],
-      "bar_border_opacity": 1.0,
-      "bar_count": 21,
-      "bar_fill_color": [
-        255,
-        255,
-        255,
-        230
-      ],
-      "dynamic_floor": false,
-      "dynamic_range_enabled": false,
-      "ghost_alpha": 0.4,
-      "ghost_decay": 0.35,
-      "ghosting_enabled": true,
-      "manual_floor": 2.1,
-      "mode": "oscilloscope",
-      "osc_ghost_intensity": 0.4,
-      "osc_ghosting_enabled": true,
-      "osc_glow_color": [
-        255,
-        255,
-        255,
-        255
-      ],
-      "osc_glow_enabled": true,
-      "osc_glow_intensity": 0.6,
-      "osc_growth": 3.01,
-      "osc_line2_color": [
-        21,
-        21,
-        21,
-        255
-      ],
-      "osc_line2_glow_color": [
-        255,
-        255,
-        255,
-        230
-      ],
-      "osc_line3_color": [
-        21,
-        21,
-        21,
-        250
-      ],
-      "osc_line3_glow_color": [
-        255,
-        255,
-        255,
-        240
-      ],
-      "osc_line_color": [
-        0,
-        0,
-        0,
-        255
-      ],
-      "osc_line_count": 1,
-      "osc_line_dim": false,
-      "osc_line_offset_bias": 0.0,
-      "osc_rainbow_enabled": false,
-      "osc_rainbow_speed": 0.3,
-      "osc_reactive_glow": true,
-      "osc_sensitivity": 4.7,
-      "osc_smoothing": 0.6,
-      "osc_speed": 0.33,
-      "osc_vertical_shift": 25,
-      "sensitivity": 0.4
     }
   }
 }

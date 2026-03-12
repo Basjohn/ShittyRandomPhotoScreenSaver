@@ -103,7 +103,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_glow_color: QColor = QColor(0, 200, 255, 230)
         self._osc_line_color: QColor = QColor(255, 255, 255, 255)
         self._osc_reactive_glow: bool = True
-        self._osc_sensitivity: float = 3.0
+        self._osc_line_amplitude: float = 3.0
         self._osc_smoothing: float = 0.7
         self._osc_line_count: int = 1
         self._osc_line2_color: QColor = QColor(255, 120, 50, 230)

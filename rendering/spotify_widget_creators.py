@@ -38,7 +38,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         osc_glow_intensity=model.osc_glow_intensity,
         osc_glow_color=model.osc_glow_color,
         osc_reactive_glow=model.osc_reactive_glow,
-        osc_sensitivity=model.osc_sensitivity,
+        osc_line_amplitude=model.osc_line_amplitude,
         osc_smoothing=model.osc_smoothing,
         star_density=model.star_density,
         star_travel_speed=model.star_travel_speed,

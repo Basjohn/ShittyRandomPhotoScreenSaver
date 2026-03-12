@@ -144,35 +144,7 @@ def _build_clean_payload(payload: Mapping[str, Any], mode: str, cleaned: Mapping
 
     sv_block = deepcopy(dict(cleaned))
 
-    snapshot_section: Dict[str, Any] = {}
-    snapshot_widgets: Dict[str, Any] = {}
-    original_snapshot = payload.get("snapshot")
-    if isinstance(original_snapshot, Mapping):
-        original_widgets = original_snapshot.get("widgets")
-        if isinstance(original_widgets, Mapping):
-            for name, cfg in original_widgets.items():
-                if name == "spotify_visualizer":
-                    continue
-                snapshot_widgets[name] = deepcopy(cfg)
-        for key, value in original_snapshot.items():
-            if key in {"widgets", "custom_preset_backup"}:
-                continue
-            snapshot_section[key] = deepcopy(value)
-    snapshot_widgets["spotify_visualizer"] = deepcopy(sv_block)
-    snapshot_section["widgets"] = snapshot_widgets
-
-    custom_backup: Dict[str, Any] = {}
-    if isinstance(original_snapshot, Mapping):
-        original_backup = original_snapshot.get("custom_preset_backup")
-        if isinstance(original_backup, Mapping):
-            for key, value in original_backup.items():
-                if isinstance(key, str) and key.startswith("widgets.spotify_visualizer."):
-                    continue
-                custom_backup[key] = deepcopy(value)
-    if custom_backup:
-        snapshot_section["custom_preset_backup"] = custom_backup
-
-    lean["snapshot"] = snapshot_section
+    lean["snapshot"] = {"widgets": {"spotify_visualizer": deepcopy(sv_block)}}
 
     widgets_section: Dict[str, Any] = {}
     original_widgets_root = payload.get("widgets")
@@ -182,15 +154,11 @@ def _build_clean_payload(payload: Mapping[str, Any], mode: str, cleaned: Mapping
                 continue
             widgets_section[name] = deepcopy(cfg)
     if widgets_section:
-        widgets_section["spotify_visualizer"] = deepcopy(sv_block)
         lean["widgets"] = widgets_section
-    else:
-        lean["widgets"] = {"spotify_visualizer": deepcopy(sv_block)}
 
     updated_paths = ["snapshot.widgets.spotify_visualizer"]
-    if custom_backup:
-        updated_paths.append("snapshot.custom_preset_backup")
-    updated_paths.append("widgets.spotify_visualizer")
+    if widgets_section:
+        updated_paths.append("widgets")
 
     return lean, updated_paths
 

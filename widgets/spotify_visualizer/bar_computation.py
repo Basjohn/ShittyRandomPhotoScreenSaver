@@ -270,7 +270,8 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         return get_zero_bars(worker)
 
-    # REACTIVE SMOOTHING
+    # BAR GATING (median + hysteresis) then REACTIVE SMOOTHING
+    _apply_bar_gate(worker, arr, np)
     _apply_reactive_smoothing(worker, arr, bands, np)
 
     # Scale
@@ -457,6 +458,48 @@ def _compute_noise_floor(
     )
 
     return noise_floor, expansion
+
+
+def _apply_bar_gate(worker: "SpotifyVisualizerAudioWorker", arr, np) -> None:
+    """Suppress tiny bar oscillations via median filter + hysteresis."""
+    if arr.size == 0:
+        return
+
+    bands = arr.shape[0]
+    current_raw = np.array(arr, copy=True)
+
+    prev1 = getattr(worker, "_bar_gate_prev1", None)
+    prev2 = getattr(worker, "_bar_gate_prev2", None)
+    prev_out = getattr(worker, "_bar_gate_output", None)
+
+    if (
+        prev1 is None or prev2 is None or prev_out is None
+        or prev1.shape[0] != bands or prev2.shape[0] != bands or prev_out.shape[0] != bands
+    ):
+        worker._bar_gate_prev1 = current_raw
+        worker._bar_gate_prev2 = current_raw
+        worker._bar_gate_output = np.array(arr, copy=True)
+        return
+
+    # 3-sample median to kill impulsive spikes
+    stack = np.stack((current_raw, prev1, prev2), axis=0)
+    median = np.partition(stack, 1, axis=0)[1]
+
+    prev_vals = prev_out
+    threshold_base = np.maximum(0.015, prev_vals * 0.08)
+    delta = median - prev_vals
+
+    effective_threshold = np.where(delta >= 0.0, threshold_base, threshold_base * 0.7)
+    mask = np.abs(delta) >= effective_threshold
+
+    gated = prev_vals.copy()
+    gated[mask] = median[mask]
+
+    arr[:] = gated
+
+    worker._bar_gate_prev2 = prev1
+    worker._bar_gate_prev1 = current_raw
+    worker._bar_gate_output = gated
 
 
 def _apply_low_resolution_adjustments(

@@ -571,7 +571,7 @@ class WidgetManager:
                         sine_travel_line2=model.sine_travel_line2,
                         sine_travel_line3=model.sine_travel_line3,
                         osc_speed=model.osc_speed,
-                        osc_sensitivity=model.osc_sensitivity,
+                        osc_line_amplitude=model.osc_line_amplitude,
                         osc_smoothing=model.osc_smoothing,
                         osc_glow_enabled=model.osc_glow_enabled,
                         osc_glow_intensity=model.osc_glow_intensity,
