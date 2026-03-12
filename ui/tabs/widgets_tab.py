@@ -25,6 +25,7 @@ from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
 from core.settings.defaults import get_default_settings
+from core.settings.visualizer_presets import apply_preset_to_config, get_custom_preset_index
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
     TOOLTIP_STYLE,
@@ -40,6 +41,7 @@ from ui.tabs.shared_styles import (
 from ui.styled_popup import StyledColorPicker
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
+from ui.tabs.media.technical_controls import load_per_mode_technical_controls
 
 logger = get_logger(__name__)
 
@@ -1080,6 +1082,34 @@ class WidgetsTab(QWidget):
                 return
 
         slider.set_preset_index(custom_index)
+
+    def _on_visualizer_preset_changed(self, mode_key: str, preset_index: int) -> None:
+        """Handle preset slider changes by applying curated settings before save."""
+        if getattr(self, '_loading', False):
+            return
+
+        slider_attr = f"_{mode_key}_preset_slider"
+        slider = getattr(self, slider_attr, None)
+        if slider is None:
+            return
+
+        custom_index = slider.custom_index() if hasattr(slider, 'custom_index') else get_custom_preset_index(mode_key)
+        if preset_index == custom_index:
+            self._save_settings()
+            return
+
+        widgets_cfg = self._settings.get('widgets', {}) or {}
+        spotify_vis_config = widgets_cfg.get('spotify_visualizer', {})
+        if not isinstance(spotify_vis_config, dict):
+            spotify_vis_config = {}
+
+        working_config = dict(spotify_vis_config)
+        working_config['mode'] = mode_key
+        applied = apply_preset_to_config(mode_key, preset_index, working_config)
+        spotify_vis_config.update(applied)
+
+        load_per_mode_technical_controls(self, spotify_vis_config)
+        self._save_settings()
 
     def _update_vis_mode_sections(self) -> None:
         """Show/hide per-mode settings containers based on selected visualizer type."""

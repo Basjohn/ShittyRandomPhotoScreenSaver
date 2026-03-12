@@ -36,7 +36,9 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # --- Preset slider (always visible) ---
     tab._spectrum_preset_slider = VisualizerPresetSlider("spectrum")
-    tab._spectrum_preset_slider.preset_changed.connect(tab._save_settings)
+    tab._spectrum_preset_slider.preset_changed.connect(
+        lambda idx: tab._on_visualizer_preset_changed("spectrum", idx)
+    )
     spectrum_layout.addWidget(tab._spectrum_preset_slider)
 
     tab._spectrum_normal = QWidget()

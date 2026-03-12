@@ -39,7 +39,9 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
 
     # --- Preset slider ---
     tab._osc_preset_slider = VisualizerPresetSlider("oscilloscope")
-    tab._osc_preset_slider.preset_changed.connect(tab._save_settings)
+    tab._osc_preset_slider.preset_changed.connect(
+        lambda idx: tab._on_visualizer_preset_changed("oscilloscope", idx)
+    )
     osc_layout.addWidget(tab._osc_preset_slider)
 
     tab._osc_normal = QWidget()

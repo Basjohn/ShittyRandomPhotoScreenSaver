@@ -32,7 +32,9 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # --- Preset slider ---
     tab._blob_preset_slider = VisualizerPresetSlider("blob")
-    tab._blob_preset_slider.preset_changed.connect(tab._save_settings)
+    tab._blob_preset_slider.preset_changed.connect(
+        lambda idx: tab._on_visualizer_preset_changed("blob", idx)
+    )
     blob_layout.addWidget(tab._blob_preset_slider)
 
     # --- Normal controls container ---

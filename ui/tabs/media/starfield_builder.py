@@ -26,7 +26,9 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # --- Preset slider ---
     tab._starfield_preset_slider = VisualizerPresetSlider("starfield")
-    tab._starfield_preset_slider.preset_changed.connect(tab._save_settings)
+    tab._starfield_preset_slider.preset_changed.connect(
+        lambda idx: tab._on_visualizer_preset_changed("starfield", idx)
+    )
     star_layout.addWidget(tab._starfield_preset_slider)
 
     tab._starfield_advanced = QWidget()

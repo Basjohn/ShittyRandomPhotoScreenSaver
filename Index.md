@@ -28,8 +28,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Tool | Purpose |
 |------|---------|
 | tools/regen_qrc.py | Regenerates `ui/resources/icons_rc.py` from `icons.qrc`, wraps `pyside6-rcc`, shows success popup |
-| tools/visualizer_preset_repair.py | DPI-aware GUI that loads curated preset JSON/SST files, prunes keys using the live visualizer preset filter/migration helpers, and fills missing defaults before saving with `.bak` backups + undo |
-| tools/repair_all_visualizer_presets.py | Batch runner that iterates every curated preset JSON, invokes the repair helper per mode, and emits `.bak*` backups + console stats. Use after schema changes to guarantee all presets/preset_backups contain `snapshot.widgets.spotify_visualizer`. |
+| tools/visualizer_preset_repair.py | DPI-aware GUI + CLI batch runner. Repairs curated preset JSON/SST files (prunes junk keys, backfills per-mode defaults), writes `.bak*` backups, supports undo, and offers a "Repair All Presets Found" button or `--repair-all` flag to sanitize every file under `presets/visualizer_modes/`. |
 | tests/run_chunked.py | Chunked test runner — splits full suite into N subprocess chunks (default 4) for memory/timeout isolation |
 
 ## Entry Points

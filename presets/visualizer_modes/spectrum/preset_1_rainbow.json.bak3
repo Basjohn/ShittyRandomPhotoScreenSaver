@@ -219,74 +219,28 @@
         255,
         230
       ],
-      "widgets.spotify_visualizer.bubble_adaptive_sensitivity": true,
-      "widgets.spotify_visualizer.bubble_audio_block_size": 256,
-      "widgets.spotify_visualizer.bubble_bar_count": 17,
-      "widgets.spotify_visualizer.bubble_big_bass_pulse": 1.5,
-      "widgets.spotify_visualizer.bubble_big_count": 8,
-      "widgets.spotify_visualizer.bubble_big_size_max": 0.028,
-      "widgets.spotify_visualizer.bubble_drift_amount": 0.55,
-      "widgets.spotify_visualizer.bubble_drift_direction": "swirl_ccw",
-      "widgets.spotify_visualizer.bubble_drift_frequency": 0.39,
-      "widgets.spotify_visualizer.bubble_drift_speed": 0.25,
-      "widgets.spotify_visualizer.bubble_dynamic_floor": true,
-      "widgets.spotify_visualizer.bubble_dynamic_range_enabled": true,
-      "widgets.spotify_visualizer.bubble_gradient_dark": [
-        7,
-        42,
-        53,
-        255
-      ],
-      "widgets.spotify_visualizer.bubble_gradient_direction": "center_out",
-      "widgets.spotify_visualizer.bubble_gradient_light": [
-        0,
-        179,
-        255,
-        255
-      ],
-      "widgets.spotify_visualizer.bubble_growth": 5.0,
-      "widgets.spotify_visualizer.bubble_manual_floor": 2.1,
-      "widgets.spotify_visualizer.bubble_outline_color": [
-        255,
-        255,
-        255,
-        230
-      ],
-      "widgets.spotify_visualizer.bubble_pop_color": [
-        68,
-        68,
-        68,
-        255
-      ],
-      "widgets.spotify_visualizer.bubble_rainbow_enabled": true,
-      "widgets.spotify_visualizer.bubble_rainbow_speed": 0.25,
-      "widgets.spotify_visualizer.bubble_rotation_amount": 0.2,
-      "widgets.spotify_visualizer.bubble_sensitivity": 0.4,
-      "widgets.spotify_visualizer.bubble_small_count": 30,
-      "widgets.spotify_visualizer.bubble_small_freq_pulse": 1.4,
-      "widgets.spotify_visualizer.bubble_small_size_max": 0.01,
-      "widgets.spotify_visualizer.bubble_specular_color": [
-        255,
-        255,
-        255,
-        255
-      ],
-      "widgets.spotify_visualizer.bubble_specular_direction": "top_left",
-      "widgets.spotify_visualizer.bubble_stream_constant_speed": 0.5,
-      "widgets.spotify_visualizer.bubble_stream_direction": "up",
-      "widgets.spotify_visualizer.bubble_stream_reactivity": 1.25,
-      "widgets.spotify_visualizer.bubble_stream_speed_cap": 2.5,
-      "widgets.spotify_visualizer.bubble_surface_reach": 0.85,
-      "widgets.spotify_visualizer.bubble_tail_opacity": 0.65,
-      "widgets.spotify_visualizer.bubble_trail_strength": 0.85,
       "widgets.spotify_visualizer.dynamic_floor": true,
       "widgets.spotify_visualizer.dynamic_range_enabled": true,
       "widgets.spotify_visualizer.ghost_alpha": 0.4,
       "widgets.spotify_visualizer.ghost_decay": 0.35,
       "widgets.spotify_visualizer.ghosting_enabled": true,
       "widgets.spotify_visualizer.manual_floor": 2.1,
-      "widgets.spotify_visualizer.mode": "bubble",
+      "widgets.spotify_visualizer.mode": "spectrum",
       "widgets.spotify_visualizer.sensitivity": 1.0,
+      "widgets.spotify_visualizer.spectrum_adaptive_sensitivity": true,
+      "widgets.spotify_visualizer.spectrum_audio_block_size": 256,
+      "widgets.spotify_visualizer.spectrum_bar_count": 21,
+      "widgets.spotify_visualizer.spectrum_bar_profile": "curved",
+      "widgets.spotify_visualizer.spectrum_border_radius": 3.0,
+      "widgets.spotify_visualizer.spectrum_dynamic_floor": true,
+      "widgets.spotify_visualizer.spectrum_dynamic_range_enabled": true,
+      "widgets.spotify_visualizer.spectrum_growth": 5.0,
+      "widgets.spotify_visualizer.spectrum_manual_floor": 2.1,
+      "widgets.spotify_visualizer.spectrum_rainbow_enabled": true,
+      "widgets.spotify_visualizer.spectrum_rainbow_per_bar": true,
+      "widgets.spotify_visualizer.spectrum_rainbow_speed": 0.25,
+      "widgets.spotify_visualizer.spectrum_sensitivity": 0.4,
+      "widgets.spotify_visualizer.spectrum_single_piece": true,
       "widgets.weather.bg_color": [
         35,
         35,
@@ -431,7 +385,7 @@
         "Wipe": 4000
       },
       "easing": "Auto",
-      "last_random_choice": "Crumble",
+      "last_random_choice": "Particle",
       "particle": {
         "direction": "Random",
         "gloss_size": 72.0,
@@ -467,7 +421,7 @@
         "Wipe": true
       },
       "random_always": true,
-      "random_choice": "Crumble",
+      "random_choice": "Particle",
       "ripple": {
         "ripple_count": 3
       },
@@ -484,19 +438,19 @@
       "dialog_geometry": {
         "height": 900,
         "width": 1402,
-        "x": 194,
+        "x": 224,
         "y": 0
       },
       "last_tab_index": 6,
       "last_tab_scroll": {
         "accessibility": 0,
         "presets": 0,
-        "widgets": 1381
+        "widgets": 1349
       },
       "tab_state": {
         "widgets": {
           "view_state": {
-            "scroll": 1381,
+            "scroll": 1349,
             "subtab": 2
           }
         }
@@ -505,21 +459,21 @@
         "blob": true,
         "bubble": false,
         "oscilloscope": false,
-        "sine_wave": false,
-        "spectrum": false
+        "sine_wave": true,
+        "spectrum": true
       },
       "visualizer_scroll_positions": {
         "blob": 1216,
         "bubble": 0,
         "oscilloscope": 1271,
-        "sine_wave": 1361,
+        "sine_wave": 1115,
         "spectrum": 1349
       },
       "visualizer_tech_states": {
         "blob": true,
         "bubble": true,
         "oscilloscope": true,
-        "sine_wave": false,
+        "sine_wave": true,
         "spectrum": true
       }
     },
@@ -741,74 +695,28 @@
           255,
           230
         ],
-        "bubble_adaptive_sensitivity": true,
-        "bubble_audio_block_size": 256,
-        "bubble_bar_count": 17,
-        "bubble_big_bass_pulse": 1.5,
-        "bubble_big_count": 8,
-        "bubble_big_size_max": 0.028,
-        "bubble_drift_amount": 0.55,
-        "bubble_drift_direction": "swirl_ccw",
-        "bubble_drift_frequency": 0.39,
-        "bubble_drift_speed": 0.25,
-        "bubble_dynamic_floor": true,
-        "bubble_dynamic_range_enabled": true,
-        "bubble_gradient_dark": [
-          7,
-          42,
-          53,
-          255
-        ],
-        "bubble_gradient_direction": "center_out",
-        "bubble_gradient_light": [
-          0,
-          179,
-          255,
-          255
-        ],
-        "bubble_growth": 5.0,
-        "bubble_manual_floor": 2.1,
-        "bubble_outline_color": [
-          255,
-          255,
-          255,
-          230
-        ],
-        "bubble_pop_color": [
-          68,
-          68,
-          68,
-          255
-        ],
-        "bubble_rainbow_enabled": true,
-        "bubble_rainbow_speed": 0.25,
-        "bubble_rotation_amount": 0.2,
-        "bubble_sensitivity": 0.4,
-        "bubble_small_count": 30,
-        "bubble_small_freq_pulse": 1.4,
-        "bubble_small_size_max": 0.01,
-        "bubble_specular_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "bubble_specular_direction": "top_left",
-        "bubble_stream_constant_speed": 0.5,
-        "bubble_stream_direction": "up",
-        "bubble_stream_reactivity": 1.25,
-        "bubble_stream_speed_cap": 2.5,
-        "bubble_surface_reach": 0.85,
-        "bubble_tail_opacity": 0.65,
-        "bubble_trail_strength": 0.85,
         "dynamic_floor": true,
         "dynamic_range_enabled": true,
         "ghost_alpha": 0.4,
         "ghost_decay": 0.35,
         "ghosting_enabled": true,
         "manual_floor": 2.1,
-        "mode": "bubble",
-        "sensitivity": 1.0
+        "mode": "spectrum",
+        "sensitivity": 1.0,
+        "spectrum_adaptive_sensitivity": true,
+        "spectrum_audio_block_size": 256,
+        "spectrum_bar_count": 21,
+        "spectrum_bar_profile": "curved",
+        "spectrum_border_radius": 3.0,
+        "spectrum_dynamic_floor": true,
+        "spectrum_dynamic_range_enabled": true,
+        "spectrum_growth": 5.0,
+        "spectrum_manual_floor": 2.1,
+        "spectrum_rainbow_enabled": true,
+        "spectrum_rainbow_per_bar": true,
+        "spectrum_rainbow_speed": 0.25,
+        "spectrum_sensitivity": 0.4,
+        "spectrum_single_piece": true
       },
       "weather": {
         "bg_color": [

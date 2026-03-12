@@ -433,7 +433,6 @@ class TestPerModeTechnicalRoundTrip:
             "widgets.spotify_visualizer.manual_floor": 2.5,
             "widgets.spotify_visualizer.dynamic_floor": True,
             "widgets.spotify_visualizer.dynamic_range_enabled": False,
-            "widgets.spotify_visualizer.audio_block_size": 0,
             "widgets.spotify_visualizer.adaptive_sensitivity": True,
             "widgets.spotify_visualizer.sensitivity": 1.0,
         }

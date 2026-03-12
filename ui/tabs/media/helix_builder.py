@@ -26,7 +26,9 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # --- Preset slider ---
     tab._helix_preset_slider = VisualizerPresetSlider("helix")
-    tab._helix_preset_slider.preset_changed.connect(tab._save_settings)
+    tab._helix_preset_slider.preset_changed.connect(
+        lambda idx: tab._on_visualizer_preset_changed("helix", idx)
+    )
     helix_layout.addWidget(tab._helix_preset_slider)
 
     tab._helix_advanced = QWidget()

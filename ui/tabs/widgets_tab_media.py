@@ -1580,9 +1580,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     spotify_vis_config['bar_count'] = _per_mode_value(
         'bar_count', tab._default_int('spotify_visualizer', 'bar_count', 32)
     )
-    spotify_vis_config['audio_block_size'] = _per_mode_value(
-        'audio_block_size', tab._default_int('spotify_visualizer', 'audio_block_size', 0)
-    )
     spotify_vis_config['adaptive_sensitivity'] = _per_mode_value(
         'adaptive_sensitivity', tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
     )

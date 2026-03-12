@@ -40,7 +40,9 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # --- Preset slider ---
     tab._sine_preset_slider = VisualizerPresetSlider("sine_wave")
-    tab._sine_preset_slider.preset_changed.connect(tab._save_settings)
+    tab._sine_preset_slider.preset_changed.connect(
+        lambda idx: tab._on_visualizer_preset_changed("sine_wave", idx)
+    )
     sine_layout.addWidget(tab._sine_preset_slider)
 
     tab._sine_normal = QWidget()

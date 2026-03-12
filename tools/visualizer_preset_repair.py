@@ -4,16 +4,20 @@ This GUI utility lets us select a visualizer mode, pick a curated preset JSON or
 an SST snapshot, then prunes irrelevant keys and fills any missing defaults for
 that mode. Every repair writes a .bak copy next to the file and exposes an Undo
 button to revert the most recent change per session.
+
+It also exposes a batch "Repair All" action (both via CLI and GUI button) that
+walks the curated preset tree, sanitising every JSON file automatically.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import shutil
 import sys
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -37,6 +41,15 @@ if str(ROOT) not in sys.path:
 from core.settings import visualizer_presets as vp  # noqa: E402
 
 _DEFAULTS_CACHE: Dict[str, Any] | None = None
+_MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
+    "manual_floor",
+    "dynamic_floor",
+    "adaptive_sensitivity",
+    "sensitivity",
+    "audio_block_size",
+    "dynamic_range_enabled",
+    "bar_count",
+)
 
 
 def _load_visualizer_defaults() -> Dict[str, Any]:
@@ -47,6 +60,25 @@ def _load_visualizer_defaults() -> Dict[str, Any]:
         defaults = deepcopy(default_settings.DEFAULT_SETTINGS["widgets"]["spotify_visualizer"])
         _DEFAULTS_CACHE = defaults
     return deepcopy(_DEFAULTS_CACHE)
+
+
+def _canonical_mode_prefix(mode: str) -> str:
+    prefixes = vp.MODE_KEY_PREFIXES.get(mode)  # type: ignore[attr-defined]
+    if prefixes:
+        return prefixes[0]
+    return f"{mode}_"
+
+
+def _ensure_mandatory_per_mode_defaults(
+    mode: str,
+    sanitized: Dict[str, Any],
+    defaults: Mapping[str, Any],
+) -> None:
+    prefix = _canonical_mode_prefix(mode)
+    for suffix in _MANDATORY_TECH_SUFFIXES:
+        key = f"{prefix}{suffix}"
+        if key not in sanitized and key in defaults:
+            sanitized[key] = defaults[key]
 
 
 def _collect_sections(payload: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
@@ -63,7 +95,9 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
 
     defaults = _load_visualizer_defaults()
     defaults["mode"] = mode
-    base = vp._filter_settings_for_mode(mode, defaults)  # type: ignore[attr-defined]
+    filtered_defaults = vp._filter_settings_for_mode(mode, defaults)  # type: ignore[attr-defined]
+
+    base: Dict[str, Any] = {}
 
     original_filtered: Dict[str, Any] = {}
     for section in sections:
@@ -73,6 +107,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
         base.update(filtered)
 
     sanitized = dict(base)
+    _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
 
     orig_keys = set(original_filtered.keys())
     new_keys = set(sanitized.keys())
@@ -87,35 +122,77 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     return sanitized, stats
 
 
-def _apply_cleaned_settings(payload: Dict[str, Any], cleaned: Mapping[str, Any]) -> list[str]:
-    updated_paths: list[str] = []
+def _build_clean_payload(payload: Mapping[str, Any], mode: str, cleaned: Mapping[str, Any]) -> Tuple[Dict[str, Any], list[str]]:
+    """Rebuild a lean preset payload containing only sanitized visualizer settings."""
 
-    snapshot = payload.get("snapshot")
-    if isinstance(snapshot, dict):
-        widgets = snapshot.get("widgets")
-        if isinstance(widgets, dict):
-            widgets["spotify_visualizer"] = dict(cleaned)
-            updated_paths.append("snapshot.widgets.spotify_visualizer")
-        custom_backup = snapshot.get("custom_preset_backup")
-        if isinstance(custom_backup, dict):
-            prefix = "widgets.spotify_visualizer."
-            for key in list(custom_backup.keys()):
-                if key.startswith(prefix):
-                    del custom_backup[key]
-            for key, value in cleaned.items():
-                custom_backup[f"{prefix}{key}"] = value
-            updated_paths.append("snapshot.custom_preset_backup")
+    lean: Dict[str, Any] = {}
+    for meta_key in ("name", "description", "preset_index"):
+        value = payload.get(meta_key)
+        if value is None:
+            continue
+        if meta_key == "preset_index" and isinstance(value, str):
+            try:
+                value = int(value)
+            except ValueError:
+                continue
+        lean[meta_key] = value
 
-    widgets_section = payload.get("widgets")
-    if isinstance(widgets_section, dict):
-        widgets_section["spotify_visualizer"] = dict(cleaned)
-        updated_paths.append("widgets.spotify_visualizer")
+    if "name" not in lean:
+        lean["name"] = f"Preset ({mode})"
 
-    if not updated_paths and isinstance(payload.get("spotify_visualizer"), dict):
-        payload["spotify_visualizer"] = dict(cleaned)
-        updated_paths.append("spotify_visualizer")
+    lean["mode"] = mode
 
-    return updated_paths
+    sv_block = deepcopy(dict(cleaned))
+
+    snapshot_section: Dict[str, Any] = {}
+    snapshot_widgets: Dict[str, Any] = {}
+    original_snapshot = payload.get("snapshot")
+    if isinstance(original_snapshot, Mapping):
+        original_widgets = original_snapshot.get("widgets")
+        if isinstance(original_widgets, Mapping):
+            for name, cfg in original_widgets.items():
+                if name == "spotify_visualizer":
+                    continue
+                snapshot_widgets[name] = deepcopy(cfg)
+        for key, value in original_snapshot.items():
+            if key in {"widgets", "custom_preset_backup"}:
+                continue
+            snapshot_section[key] = deepcopy(value)
+    snapshot_widgets["spotify_visualizer"] = deepcopy(sv_block)
+    snapshot_section["widgets"] = snapshot_widgets
+
+    custom_backup: Dict[str, Any] = {}
+    if isinstance(original_snapshot, Mapping):
+        original_backup = original_snapshot.get("custom_preset_backup")
+        if isinstance(original_backup, Mapping):
+            for key, value in original_backup.items():
+                if isinstance(key, str) and key.startswith("widgets.spotify_visualizer."):
+                    continue
+                custom_backup[key] = deepcopy(value)
+    if custom_backup:
+        snapshot_section["custom_preset_backup"] = custom_backup
+
+    lean["snapshot"] = snapshot_section
+
+    widgets_section: Dict[str, Any] = {}
+    original_widgets_root = payload.get("widgets")
+    if isinstance(original_widgets_root, Mapping):
+        for name, cfg in original_widgets_root.items():
+            if name == "spotify_visualizer":
+                continue
+            widgets_section[name] = deepcopy(cfg)
+    if widgets_section:
+        widgets_section["spotify_visualizer"] = deepcopy(sv_block)
+        lean["widgets"] = widgets_section
+    else:
+        lean["widgets"] = {"spotify_visualizer": deepcopy(sv_block)}
+
+    updated_paths = ["snapshot.widgets.spotify_visualizer"]
+    if custom_backup:
+        updated_paths.append("snapshot.custom_preset_backup")
+    updated_paths.append("widgets.spotify_visualizer")
+
+    return lean, updated_paths
 
 
 def _ensure_backup(path: Path) -> Path:
@@ -140,12 +217,10 @@ def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
         raise ValueError("Payload root must be a JSON object")
 
     cleaned, stats = _sanitize_settings(mode, payload)
-    updated_paths = _apply_cleaned_settings(payload, cleaned)
-    if not updated_paths:
-        raise ValueError("Unable to locate spotify_visualizer section to update")
+    lean_payload, updated_paths = _build_clean_payload(payload, mode, cleaned)
 
     backup_path = _ensure_backup(path)
-    new_text = json.dumps(payload, indent=2, sort_keys=True)
+    new_text = json.dumps(lean_payload, indent=2, sort_keys=True)
     path.write_text(new_text + "\n", encoding="utf-8")
 
     stats = {
@@ -155,6 +230,40 @@ def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
         "changed": stats["changed"],
     }
     return backup_path, stats
+
+
+def _discover_preset_files() -> List[Tuple[str, Path]]:
+    files: List[Tuple[str, Path]] = []
+    root = ROOT / "presets" / "visualizer_modes"
+    for mode in vp.MODES:
+        mode_dir = root / mode
+        if not mode_dir.exists():
+            continue
+        for path in sorted(mode_dir.glob("*.json")):
+            files.append((mode, path))
+    return files
+
+
+def repair_all_presets(
+    *,
+    on_result: Callable[[str, Path, Path, Dict[str, Any]], None] | None = None,
+    on_error: Callable[[str, Path, Exception], None] | None = None,
+) -> List[Tuple[str, Path, Path, Dict[str, Any]]]:
+    """Repair every curated preset JSON under presets/visualizer_modes."""
+
+    processed: List[Tuple[str, Path, Path, Dict[str, Any]]] = []
+    for mode, path in _discover_preset_files():
+        try:
+            backup, stats = repair_file(path, mode)
+        except Exception as exc:  # pragma: no cover - batch path logging
+            if on_error:
+                on_error(mode, path, exc)
+            continue
+        entry = (mode, path, backup, stats)
+        processed.append(entry)
+        if on_result:
+            on_result(*entry)
+    return processed
 
 
 class VisualizerPresetRepairApp(QWidget):
@@ -181,6 +290,10 @@ class VisualizerPresetRepairApp(QWidget):
         self.undo_btn.setEnabled(False)
         self.undo_btn.clicked.connect(self._on_undo_clicked)
         btn_row.addWidget(self.undo_btn)
+
+        self.repair_all_btn = QPushButton("Repair All Presets Found")
+        self.repair_all_btn.clicked.connect(self._on_repair_all_clicked)
+        btn_row.addWidget(self.repair_all_btn)
         main_layout.addLayout(btn_row)
 
         self.status_label = QLabel("Ready.")
@@ -237,6 +350,48 @@ class VisualizerPresetRepairApp(QWidget):
         self._append_log(msg)
         self.status_label.setText(f"Saved changes to {path.name} (backup: {backup.name}).")
 
+    def _on_repair_all_clicked(self) -> None:
+        files = _discover_preset_files()
+        if not files:
+            self._append_log("No preset JSON files found under presets/visualizer_modes.")
+            self.status_label.setText("No preset files found.")
+            return
+
+        self.repair_all_btn.setEnabled(False)
+        repaired = 0
+        failed = 0
+
+        def _handle_result(mode: str, path: Path, backup: Path, stats: Dict[str, Any]) -> None:
+            nonlocal repaired
+            repaired += 1
+            self._history.append((path, backup))
+            rel = path.relative_to(ROOT)
+            msg = (
+                f"Repaired {rel} ({mode}). Updated {', '.join(stats['updated_paths'])}. "
+                f"Added {len(stats['added'])}, removed {len(stats['removed'])}, changed {len(stats['changed'])}."
+            )
+            self._append_log(msg)
+
+        def _handle_error(mode: str, path: Path, exc: Exception) -> None:
+            nonlocal failed
+            failed += 1
+            rel = path.relative_to(ROOT)
+            self._append_log(f"Failed to repair {rel} ({mode}): {exc}")
+
+        try:
+            repair_all_presets(on_result=_handle_result, on_error=_handle_error)
+        finally:
+            self.repair_all_btn.setEnabled(True)
+
+        if self._history:
+            self.undo_btn.setEnabled(True)
+
+        summary = f"Batch repair complete: {repaired} updated"
+        if failed:
+            summary += f", {failed} failed"
+        summary += "."
+        self.status_label.setText(summary)
+
     def _on_undo_clicked(self) -> None:
         if not self._history:
             return
@@ -262,7 +417,34 @@ class VisualizerPresetRepairApp(QWidget):
         self.status_label.setText("Error")
 
 
-def main() -> None:
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Spotify visualizer preset repair tool")
+    parser.add_argument(
+        "--repair-all",
+        action="store_true",
+        help="Repair every preset JSON under presets/visualizer_modes and exit.",
+    )
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if args.repair_all:
+        results: List[Tuple[str, Path, Path, Dict[str, Any]]] = []
+
+        def _cli_result(mode: str, path: Path, backup: Path, stats: Dict[str, Any]) -> None:
+            rel = path.relative_to(ROOT)
+            print(
+                f"Repaired {rel} ({mode}). Backup: {backup.name}. Added {len(stats['added'])}, "
+                f"removed {len(stats['removed'])}, changed {len(stats['changed'])}.",
+                flush=True,
+            )
+
+        def _cli_error(mode: str, path: Path, exc: Exception) -> None:
+            rel = path.relative_to(ROOT)
+            print(f"Failed to repair {rel} ({mode}): {exc}", file=sys.stderr, flush=True)
+
+        results = repair_all_presets(on_result=_cli_result, on_error=_cli_error)
+        print(f"Completed batch repair for {len(results)} preset(s).", flush=True)
+        return
+
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
     app = QApplication.instance() or QApplication(sys.argv)
     window = VisualizerPresetRepairApp()

@@ -29,7 +29,9 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # --- Preset slider ---
     tab._bubble_preset_slider = VisualizerPresetSlider("bubble")
-    tab._bubble_preset_slider.preset_changed.connect(tab._save_settings)
+    tab._bubble_preset_slider.preset_changed.connect(
+        lambda idx: tab._on_visualizer_preset_changed("bubble", idx)
+    )
     layout.addWidget(tab._bubble_preset_slider)
 
     tab._bubble_normal = QWidget()
