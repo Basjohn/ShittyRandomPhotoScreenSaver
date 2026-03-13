@@ -10,7 +10,6 @@ Usage:
     BINDINGS = [
         SliderBinding('osc_speed', scale=100, default=1.0, label_fmt='{}%'),
         CheckBinding('osc_glow_enabled', default=False),
-        ComboDataBinding('spectrum_bar_profile', default='legacy'),
         ColorBinding('osc_line_color', attr='_osc_line_color', default=[255, 255, 255, 255]),
     ]
 

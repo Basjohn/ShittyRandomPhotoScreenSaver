@@ -385,8 +385,8 @@ def push_gpu_frame(
         ghost_decay=widget._ghost_decay_rate,
         vis_mode=mode_str,
         single_piece=widget._spectrum_single_piece,
-        slanted=(widget._spectrum_bar_profile == 'slanted'),
-        border_radius=widget._spectrum_border_radius if widget._spectrum_bar_profile == 'curved' else 0.0,
+        slanted=False,
+        border_radius=widget._spectrum_border_radius,
         border_width_px=border_width_px,
         **extra,
     )

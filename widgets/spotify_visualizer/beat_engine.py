@@ -147,6 +147,27 @@ class _SpotifyBeatEngine(QObject):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply curved profile config", exc_info=True)
 
+    def set_spectrum_shape_config(self, config) -> None:
+        """Forward SpectrumShapeConfig to the audio worker DSP pipeline."""
+        try:
+            self._audio_worker.set_spectrum_shape_config(config)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply spectrum shape config", exc_info=True)
+
+    def set_spectrum_mirrored(self, mirrored: bool) -> None:
+        """Forward mirrored layout toggle to the audio worker."""
+        try:
+            self._audio_worker.set_spectrum_mirrored(mirrored)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply spectrum mirrored config", exc_info=True)
+
+    def set_spectrum_shape_nodes(self, nodes: list) -> None:
+        """Forward shape editor nodes to the audio worker."""
+        try:
+            self._audio_worker.set_spectrum_shape_nodes(nodes)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply spectrum shape nodes", exc_info=True)
+
     def set_energy_boost(self, boost: float) -> None:
         """Forward energy boost scaling to the audio worker."""
         try:

@@ -51,6 +51,16 @@ _MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
     "bar_count",
 )
 
+_MANDATORY_SPECTRUM_SHAPING: Dict[str, Any] = {
+    "spectrum_bass_emphasis": 0.5,
+    "spectrum_vocal_position": 0.4,
+    "spectrum_mid_suppression": 0.5,
+    "spectrum_wave_amplitude": 0.5,
+    "spectrum_profile_floor": 0.12,
+    "spectrum_mirrored": True,
+    "spectrum_shape_nodes": [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
+}
+
 
 def _load_visualizer_defaults() -> Dict[str, Any]:
     global _DEFAULTS_CACHE
@@ -108,6 +118,10 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
 
     sanitized = dict(base)
     _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
+    if mode == "spectrum":
+        for _sk, _sv in _MANDATORY_SPECTRUM_SHAPING.items():
+            if _sk not in sanitized:
+                sanitized[_sk] = _sv
 
     orig_keys = set(original_filtered.keys())
     new_keys = set(sanitized.keys())

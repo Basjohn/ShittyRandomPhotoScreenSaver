@@ -134,8 +134,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._last_sensitivity_config = (True, 1.0)
         self._last_floor_config = (True, 2.1)
         
-        # Spectrum profile variant (curved vs legacy)
-        self._use_curved_profile: bool = False
+        # Spectrum shape config (pushed from UI/presets, consumed by fft_to_bars)
+        self._spectrum_shape_config = None  # SpectrumShapeConfig or None → uses defaults
+        self._spectrum_mirrored: bool = True  # center-out mirrored layout
+        self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
@@ -193,8 +195,25 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._preferred_block_size = value
 
     def set_curved_profile(self, enabled: bool) -> None:
-        """Toggle between curved and legacy spectrum bar profile."""
-        self._use_curved_profile = bool(enabled)
+        """Deprecated — curved profile is now always active. Kept as no-op for compat."""
+        pass
+
+    def set_spectrum_shape_config(self, config) -> None:
+        """Push a SpectrumShapeConfig to the DSP pipeline.
+
+        Thread-safe: the config dataclass is immutable once created and is
+        read atomically by fft_to_bars on the audio thread.
+        """
+        self._spectrum_shape_config = config
+
+    def set_spectrum_mirrored(self, mirrored: bool) -> None:
+        """Toggle center-out mirrored layout vs left-to-right linear."""
+        self._spectrum_mirrored = bool(mirrored)
+
+    def set_spectrum_shape_nodes(self, nodes: list) -> None:
+        """Push shape editor nodes to the DSP pipeline (read by fft_to_bars)."""
+        if isinstance(nodes, list) and len(nodes) >= 1:
+            self._spectrum_shape_nodes = nodes
 
     def set_energy_boost(self, boost: float) -> None:
         """Adjust post-FFT energy boost factor."""

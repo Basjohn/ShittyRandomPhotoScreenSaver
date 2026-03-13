@@ -802,20 +802,41 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.spectrum_rainbow_per_bar.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_rainbow_per_bar', False)
         )
-    if hasattr(tab, 'spectrum_bar_profile'):
-        profile_val = spotify_vis_config.get('spectrum_bar_profile', 'legacy')
-        # Backward compat: old bool key
-        if profile_val is True or profile_val == 'True':
-            profile_val = 'curved'
-        elif profile_val is False or profile_val == 'False':
-            profile_val = 'legacy'
-        idx = tab.spectrum_bar_profile.findData(str(profile_val))
-        if idx >= 0:
-            tab.spectrum_bar_profile.setCurrentIndex(idx)
+    if hasattr(tab, 'spectrum_bass_emphasis'):
+        _be = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_bass_emphasis', 0.50) * 100)
+        tab.spectrum_bass_emphasis.setValue(max(0, min(100, _be)))
+        tab.spectrum_bass_emphasis_label.setText(f"{_be}%")
+    if hasattr(tab, 'spectrum_vocal_position'):
+        _vp = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_vocal_position', 0.40) * 100)
+        tab.spectrum_vocal_position.setValue(max(20, min(60, _vp)))
+    if hasattr(tab, 'spectrum_mid_suppression'):
+        _ms = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_mid_suppression', 0.50) * 100)
+        tab.spectrum_mid_suppression.setValue(max(0, min(100, _ms)))
+        tab.spectrum_mid_suppression_label.setText(f"{_ms}%")
+    if hasattr(tab, 'spectrum_wave_amplitude'):
+        _wa = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_wave_amplitude', 0.50) * 100)
+        tab.spectrum_wave_amplitude.setValue(max(0, min(100, _wa)))
+        tab.spectrum_wave_amplitude_label.setText(f"{_wa}%")
+    if hasattr(tab, 'spectrum_profile_floor'):
+        _pf = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_profile_floor', 0.12) * 100)
+        tab.spectrum_profile_floor.setValue(max(5, min(30, _pf)))
+        tab.spectrum_profile_floor_label.setText(f"{_pf / 100.0:.2f}")
     if hasattr(tab, 'spectrum_border_radius'):
         br_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_border_radius', 0.0))
         tab.spectrum_border_radius.setValue(max(0, min(12, br_val)))
         tab.spectrum_border_radius_label.setText(f"{br_val}px")
+    if hasattr(tab, 'spectrum_mirrored'):
+        tab.spectrum_mirrored.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_mirrored', True)
+        )
+    if hasattr(tab, 'spectrum_shape_editor'):
+        _default_nodes = [[0.0, 0.45], [0.4, 0.62], [1.0, 0.70]]
+        _saved_nodes = spotify_vis_config.get('spectrum_shape_nodes', _default_nodes)
+        if isinstance(_saved_nodes, list) and len(_saved_nodes) >= 1:
+            tab.spectrum_shape_editor.set_nodes(_saved_nodes)
+        tab.spectrum_shape_editor.set_mirrored(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_mirrored', True)
+        )
 
     # Oscilloscope colours
     osc_line_color_data = spotify_vis_config.get('osc_line_color', [255, 255, 255, 255])
@@ -1476,8 +1497,14 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'spectrum_growth': (tab.spectrum_growth.value() if hasattr(tab, 'spectrum_growth') else 100) / 100.0,
         'spectrum_single_piece': tab.spectrum_single_piece.isChecked() if hasattr(tab, 'spectrum_single_piece') else False,
         'spectrum_rainbow_per_bar': tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, 'spectrum_rainbow_per_bar') else False,
-        'spectrum_bar_profile': tab.spectrum_bar_profile.currentData() if hasattr(tab, 'spectrum_bar_profile') else 'legacy',
         'spectrum_border_radius': float(tab.spectrum_border_radius.value()) if hasattr(tab, 'spectrum_border_radius') else 0.0,
+        'spectrum_mirrored': tab.spectrum_mirrored.isChecked() if hasattr(tab, 'spectrum_mirrored') else True,
+        'spectrum_shape_nodes': tab.spectrum_shape_editor.get_nodes() if hasattr(tab, 'spectrum_shape_editor') else [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
+        'spectrum_bass_emphasis': (tab.spectrum_bass_emphasis.value() if hasattr(tab, 'spectrum_bass_emphasis') else 50) / 100.0,
+        'spectrum_vocal_position': (tab.spectrum_vocal_position.value() if hasattr(tab, 'spectrum_vocal_position') else 40) / 100.0,
+        'spectrum_mid_suppression': (tab.spectrum_mid_suppression.value() if hasattr(tab, 'spectrum_mid_suppression') else 50) / 100.0,
+        'spectrum_wave_amplitude': (tab.spectrum_wave_amplitude.value() if hasattr(tab, 'spectrum_wave_amplitude') else 50) / 100.0,
+        'spectrum_profile_floor': (tab.spectrum_profile_floor.value() if hasattr(tab, 'spectrum_profile_floor') else 12) / 100.0,
         'starfield_growth': (tab.starfield_growth.value() if hasattr(tab, 'starfield_growth') else 200) / 100.0,
         'blob_growth': (tab.blob_growth.value() if hasattr(tab, 'blob_growth') else 250) / 100.0,
         'helix_growth': (tab.helix_growth.value() if hasattr(tab, 'helix_growth') else 200) / 100.0,

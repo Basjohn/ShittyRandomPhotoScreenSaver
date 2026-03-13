@@ -91,8 +91,15 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_ghost_alpha: float = 0.4
         self._blob_ghost_decay: float = 0.3
         self._spectrum_single_piece: bool = False
-        self._spectrum_bar_profile: str = 'legacy'
         self._spectrum_border_radius: float = 0.0
+        self._spectrum_mirrored: bool = True
+        self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
+        # Spectrum shaping config (pushed to audio worker DSP pipeline)
+        self._spectrum_bass_emphasis: float = 0.50
+        self._spectrum_vocal_position: float = 0.40
+        self._spectrum_mid_suppression: float = 0.50
+        self._spectrum_wave_amplitude: float = 0.50
+        self._spectrum_profile_floor: float = 0.12
 
         # Visualization mode (Spectrum, Waveform, Abstract)
         self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
@@ -424,9 +431,16 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay sensitivity config", exc_info=True)
         try:
-            engine.set_curved_profile(self._spectrum_bar_profile != 'legacy')
+            from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
+            engine.set_spectrum_shape_config(SpectrumShapeConfig(
+                bass_emphasis=self._spectrum_bass_emphasis,
+                vocal_peak_position=self._spectrum_vocal_position,
+                mid_suppression=self._spectrum_mid_suppression,
+                wave_amplitude=self._spectrum_wave_amplitude,
+                profile_floor=self._spectrum_profile_floor,
+            ))
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay curved profile config", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Failed to replay spectrum shape config", exc_info=True)
         try:
             engine.set_energy_boost(self._last_energy_boost)
         except Exception:

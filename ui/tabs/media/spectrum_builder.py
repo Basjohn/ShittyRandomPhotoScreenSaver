@@ -12,7 +12,6 @@ from PySide6.QtCore import Qt
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
-from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -255,29 +254,8 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     rainbow_row.addWidget(tab.spectrum_rainbow_per_bar)
     rainbow_row.addStretch()
 
-    # Bar Profile selector (Legacy / Curved)
-    _profile_row = _aligned_row(_adv_layout, "Bar Profile:")
-    tab.spectrum_bar_profile = StyledComboBox(size_variant="compact")
-    tab.spectrum_bar_profile.addItem("Legacy", "legacy")
-    tab.spectrum_bar_profile.addItem("Curved Bar Profile", "curved")
-    _profile_default = tab._default_str('spotify_visualizer', 'spectrum_bar_profile', 'legacy')
-    _profile_idx = tab.spectrum_bar_profile.findData(_profile_default)
-    if _profile_idx >= 0:
-        tab.spectrum_bar_profile.setCurrentIndex(_profile_idx)
-    tab.spectrum_bar_profile.setToolTip(
-        "Legacy: classic flat profile. "
-        "Curved: dual-peak wave profile with rounded bar corners."
-    )
-    tab.spectrum_bar_profile.currentIndexChanged.connect(tab._save_settings)
-    _profile_row.addWidget(tab.spectrum_bar_profile)
-    _profile_row.addStretch()
-
-    # --- Profile sub-options: border radius (Curved only) ---
-    tab._profile_sub_container = QWidget()
-    _profile_sub_layout = QVBoxLayout(tab._profile_sub_container)
-    _profile_sub_layout.setContentsMargins(0, 0, 0, 0)
-
-    _br_row = _aligned_row(_profile_sub_layout, "Border Radius:")
+    # Border Radius
+    _br_row = _aligned_row(_adv_layout, "Border Radius:")
     tab.spectrum_border_radius = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_border_radius.setMinimum(0)
     tab.spectrum_border_radius.setMaximum(12)
@@ -292,14 +270,136 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     _br_row.addWidget(tab.spectrum_border_radius_label)
 
-    _adv_layout.addWidget(tab._profile_sub_container)
+    # Mirrored Layout
+    _mirror_row = QHBoxLayout()
+    _mirror_row.setSpacing(6)
+    _mirror_lbl = QLabel("Mirrored Layout:")
+    _mirror_lbl.setFixedWidth(130)
+    _mirror_row.addWidget(_mirror_lbl)
+    tab.spectrum_mirrored = QCheckBox("Center-out (bass on edges)")
+    _mirror_default = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
+    tab.spectrum_mirrored.setChecked(_mirror_default)
+    tab.spectrum_mirrored.setToolTip(
+        "On: bars mirror from center outward (bass on edges, mids in center).\n"
+        "Off: bars run left-to-right (low→high frequency)."
+    )
+    tab.spectrum_mirrored.stateChanged.connect(tab._save_settings)
+    _mirror_row.addWidget(tab.spectrum_mirrored)
+    _mirror_row.addStretch()
+    _adv_layout.addLayout(_mirror_row)
 
-    # Conditional visibility for curved sub-options
-    def _update_profile_sub_vis(_idx=None):
-        profile = tab.spectrum_bar_profile.currentData()
-        tab._profile_sub_container.setVisible(profile == 'curved')
-    tab.spectrum_bar_profile.currentIndexChanged.connect(_update_profile_sub_vis)
-    _update_profile_sub_vis()
+    # --- Spectrum Shaping section ---
+    _shape_header = QLabel("Spectrum Shaping")
+    _shape_header.setStyleSheet("font-weight: 600; margin-top: 8px; margin-bottom: 2px;")
+    _adv_layout.addWidget(_shape_header)
+    _shape_hint = QLabel(
+        "Left-click to add a control node (max 5). "
+        "Right-click a node to remove it. Drag to reshape."
+    )
+    _shape_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    _shape_hint.setWordWrap(True)
+    _adv_layout.addWidget(_shape_hint)
+
+    # Visual shape editor
+    from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
+    _mirror_default_for_editor = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
+    tab.spectrum_shape_editor = SpectrumShapeEditor(
+        parent=None, mirrored=_mirror_default_for_editor,
+    )
+    tab.spectrum_shape_editor.nodes_changed.connect(tab._save_settings)
+    _adv_layout.addWidget(tab.spectrum_shape_editor)
+    # Connect mirrored checkbox to update editor display
+    tab.spectrum_mirrored.stateChanged.connect(
+        lambda state: tab.spectrum_shape_editor.set_mirrored(bool(state))
+    )
+
+    # --- Audio Influence sliders (control energy zone weights, not shape) ---
+    _influence_header = QLabel("Audio Influence")
+    _influence_header.setStyleSheet("font-weight: 600; margin-top: 8px; margin-bottom: 2px;")
+    _adv_layout.addWidget(_influence_header)
+    _influence_hint = QLabel("How much each frequency band drives bar height.")
+    _influence_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    _adv_layout.addWidget(_influence_hint)
+
+    # Bass Influence (0–100 → 0.0–1.0)
+    _bass_row = _aligned_row(_adv_layout, "Bass Influence:")
+    tab.spectrum_bass_emphasis = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_bass_emphasis.setMinimum(0)
+    tab.spectrum_bass_emphasis.setMaximum(100)
+    _bass_default = int(tab._default_float('spotify_visualizer', 'spectrum_bass_emphasis', 0.50) * 100)
+    tab.spectrum_bass_emphasis.setValue(max(0, min(100, _bass_default)))
+    tab.spectrum_bass_emphasis.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_bass_emphasis.setTickInterval(25)
+    tab.spectrum_bass_emphasis.setToolTip("How strongly bass energy drives edge bars. 0 = subtle, 100 = dominant.")
+    tab.spectrum_bass_emphasis.valueChanged.connect(tab._save_settings)
+    _bass_row.addWidget(tab.spectrum_bass_emphasis)
+    tab.spectrum_bass_emphasis_label = QLabel(f"{_bass_default}%")
+    tab.spectrum_bass_emphasis.valueChanged.connect(
+        lambda v: tab.spectrum_bass_emphasis_label.setText(f"{v}%")
+    )
+    _bass_row.addWidget(tab.spectrum_bass_emphasis_label)
+
+    # Vocal Position (kept for preset compat, hidden — still saved)
+    tab.spectrum_vocal_position = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_vocal_position.setMinimum(20)
+    tab.spectrum_vocal_position.setMaximum(60)
+    _vocal_default = int(tab._default_float('spotify_visualizer', 'spectrum_vocal_position', 0.40) * 100)
+    tab.spectrum_vocal_position.setValue(max(20, min(60, _vocal_default)))
+    tab.spectrum_vocal_position.hide()
+
+    # Mid Dampening (0–100 → 0.0–1.0)
+    _mid_row = _aligned_row(_adv_layout, "Mid Dampening:")
+    tab.spectrum_mid_suppression = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_mid_suppression.setMinimum(0)
+    tab.spectrum_mid_suppression.setMaximum(100)
+    _mid_default = int(tab._default_float('spotify_visualizer', 'spectrum_mid_suppression', 0.50) * 100)
+    tab.spectrum_mid_suppression.setValue(max(0, min(100, _mid_default)))
+    tab.spectrum_mid_suppression.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_mid_suppression.setTickInterval(25)
+    tab.spectrum_mid_suppression.setToolTip("Reduce mid-frequency energy contribution. 0 = full mid, 100 = heavily dampened.")
+    tab.spectrum_mid_suppression.valueChanged.connect(tab._save_settings)
+    _mid_row.addWidget(tab.spectrum_mid_suppression)
+    tab.spectrum_mid_suppression_label = QLabel(f"{_mid_default}%")
+    tab.spectrum_mid_suppression.valueChanged.connect(
+        lambda v: tab.spectrum_mid_suppression_label.setText(f"{v}%")
+    )
+    _mid_row.addWidget(tab.spectrum_mid_suppression_label)
+
+    # Reactivity (0–100 → 0.0–1.0)
+    _wave_row = _aligned_row(_adv_layout, "Reactivity:")
+    tab.spectrum_wave_amplitude = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_wave_amplitude.setMinimum(0)
+    tab.spectrum_wave_amplitude.setMaximum(100)
+    _wave_default = int(tab._default_float('spotify_visualizer', 'spectrum_wave_amplitude', 0.50) * 100)
+    tab.spectrum_wave_amplitude.setValue(max(0, min(100, _wave_default)))
+    tab.spectrum_wave_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_wave_amplitude.setTickInterval(25)
+    tab.spectrum_wave_amplitude.setToolTip("Overall audio reactivity scaling. 0 = calm, 100 = intense.")
+    tab.spectrum_wave_amplitude.valueChanged.connect(tab._save_settings)
+    _wave_row.addWidget(tab.spectrum_wave_amplitude)
+    tab.spectrum_wave_amplitude_label = QLabel(f"{_wave_default}%")
+    tab.spectrum_wave_amplitude.valueChanged.connect(
+        lambda v: tab.spectrum_wave_amplitude_label.setText(f"{v}%")
+    )
+    _wave_row.addWidget(tab.spectrum_wave_amplitude_label)
+
+    # Profile Floor (5–30 → 0.05–0.30)
+    _floor_row = _aligned_row(_adv_layout, "Min Height:")
+    tab.spectrum_profile_floor = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_profile_floor.setMinimum(5)
+    tab.spectrum_profile_floor.setMaximum(30)
+    _floor_default = int(tab._default_float('spotify_visualizer', 'spectrum_profile_floor', 0.12) * 100)
+    tab.spectrum_profile_floor.setValue(max(5, min(30, _floor_default)))
+    tab.spectrum_profile_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_profile_floor.setTickInterval(5)
+    tab.spectrum_profile_floor.setToolTip("Minimum bar height floor. Lower = bars can shrink more.")
+    tab.spectrum_profile_floor.valueChanged.connect(tab._save_settings)
+    _floor_row.addWidget(tab.spectrum_profile_floor)
+    tab.spectrum_profile_floor_label = QLabel(f"{_floor_default / 100.0:.2f}")
+    tab.spectrum_profile_floor.valueChanged.connect(
+        lambda v: tab.spectrum_profile_floor_label.setText(f"{v / 100.0:.2f}")
+    )
+    _floor_row.addWidget(tab.spectrum_profile_floor_label)
 
     # Spectrum card height growth slider (1.0 .. 3.0)
     spectrum_growth_row = _aligned_row(_adv_layout, "Card Height:")

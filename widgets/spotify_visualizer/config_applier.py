@@ -183,39 +183,58 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
 
     if 'spectrum_border_radius' in kwargs:
         widget._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
+    if 'spectrum_mirrored' in kwargs:
+        _new_mirrored = bool(kwargs['spectrum_mirrored'])
+        if _new_mirrored != getattr(widget, '_spectrum_mirrored', True):
+            widget._spectrum_mirrored = _new_mirrored
+            try:
+                from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+                engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
+                if engine is not None:
+                    engine.set_spectrum_mirrored(_new_mirrored)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum mirrored", exc_info=True)
+    if 'spectrum_shape_nodes' in kwargs:
+        _nodes = kwargs['spectrum_shape_nodes']
+        if isinstance(_nodes, list) and len(_nodes) >= 1:
+            widget._spectrum_shape_nodes = _nodes
+            try:
+                from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+                engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
+                if engine is not None:
+                    engine.set_spectrum_shape_nodes(_nodes)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum shape nodes", exc_info=True)
 
-    if 'spectrum_bar_profile' in kwargs:
-        new_profile = str(kwargs['spectrum_bar_profile'])
-        if new_profile not in ('legacy', 'curved', 'slanted'):
-            new_profile = 'legacy'
-        old_profile = getattr(widget, '_spectrum_bar_profile', 'legacy')
-        widget._spectrum_bar_profile = new_profile
-        # Curved profile flag for beat engine (both curved and slanted use non-legacy profile)
-        new_curved = (new_profile != 'legacy')
-        old_curved = (old_profile != 'legacy')
-        if new_curved != old_curved:
-            try:
-                from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-                engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-                if engine is not None:
-                    engine.set_curved_profile(new_curved)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to propagate bar profile to engine", exc_info=True)
-    elif 'spectrum_curved_profile' in kwargs:
-        # Backward compat: old bool key → new string
-        new_curved = bool(kwargs['spectrum_curved_profile'])
-        new_profile = 'curved' if new_curved else 'legacy'
-        old_profile = getattr(widget, '_spectrum_bar_profile', 'legacy')
-        widget._spectrum_bar_profile = new_profile
-        old_curved = (old_profile != 'legacy')
-        if new_curved != old_curved:
-            try:
-                from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
-                engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-                if engine is not None:
-                    engine.set_curved_profile(new_curved)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to propagate bar profile to engine", exc_info=True)
+    # --- Spectrum shaping parameters ----------------------------------
+    _shape_dirty = False
+    for _shape_key, _shape_attr, _shape_lo, _shape_hi in (
+        ('spectrum_bass_emphasis', '_spectrum_bass_emphasis', 0.0, 1.0),
+        ('spectrum_vocal_position', '_spectrum_vocal_position', 0.20, 0.60),
+        ('spectrum_mid_suppression', '_spectrum_mid_suppression', 0.0, 1.0),
+        ('spectrum_wave_amplitude', '_spectrum_wave_amplitude', 0.0, 1.0),
+        ('spectrum_profile_floor', '_spectrum_profile_floor', 0.05, 0.30),
+    ):
+        if _shape_key in kwargs:
+            val = max(_shape_lo, min(_shape_hi, float(kwargs[_shape_key])))
+            if val != getattr(widget, _shape_attr, None):
+                setattr(widget, _shape_attr, val)
+                _shape_dirty = True
+    if _shape_dirty:
+        try:
+            from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
+            from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+            engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
+            if engine is not None:
+                engine.set_spectrum_shape_config(SpectrumShapeConfig(
+                    bass_emphasis=widget._spectrum_bass_emphasis,
+                    vocal_peak_position=widget._spectrum_vocal_position,
+                    mid_suppression=widget._spectrum_mid_suppression,
+                    wave_amplitude=widget._spectrum_wave_amplitude,
+                    profile_floor=widget._spectrum_profile_floor,
+                ))
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum shape config", exc_info=True)
 
     # --- Height growth factors ----------------------------------------
     if 'spectrum_growth' in kwargs:

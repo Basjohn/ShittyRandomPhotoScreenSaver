@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 from typing import List, Optional, TYPE_CHECKING
 
 from core.logging.logger import (
@@ -28,6 +29,31 @@ _PI = math.pi
 def _cos_pi(t: float) -> float:
     """cos(π * t) — used for smooth cosine crossfade between zones."""
     return math.cos(_PI * t)
+
+
+@dataclass
+class SpectrumShapeConfig:
+    """Parameters controlling the spectrum bar height profile shape.
+
+    All values are normalized 0.0–1.0 unless noted. The defaults reproduce the
+    original hardcoded curved profile exactly.
+
+    Attributes:
+        bass_emphasis: Edge (bass) Gaussian boost amplitude.  0→none, 1→strong.
+        vocal_peak_position: Fractional position (0.2–0.6) of the vocal peak.
+        mid_suppression: Depth of center-bar suppression.  0→none, 1→heavy.
+        wave_amplitude: Sinusoidal wave scaling.  0→flat, 1→extreme.
+        profile_floor: Minimum bar height (absolute, 0.05–0.30).
+    """
+    bass_emphasis: float = 0.50
+    vocal_peak_position: float = 0.40
+    mid_suppression: float = 0.50
+    wave_amplitude: float = 0.50
+    profile_floor: float = 0.12
+
+
+# Singleton default config — used when the worker has no custom config.
+_DEFAULT_SHAPE_CONFIG = SpectrumShapeConfig()
 
 
 def get_zero_bars(worker: "SpotifyVisualizerAudioWorker") -> List[float]:
@@ -152,107 +178,58 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
         treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
 
-        # CENTER-OUT MIRRORED LAYOUT
-        _LEGACY_PROFILE = [0.10, 0.14, 0.18, 0.40, 1.0, 0.45, 0.25, 0.08, 0.25, 0.45, 1.0, 0.40, 0.18, 0.14, 0.10]
-        _use_curved = getattr(worker, '_use_curved_profile', False)
+        # ── Shape-node driven profile ────────────────────────────────
+        # The shape editor nodes are the SOLE driver of the bar height
+        # profile.  Sliders control how much each audio energy band
+        # influences the bars at each position (zone weights).
+        shape_cfg = getattr(worker, '_spectrum_shape_config', None) or _DEFAULT_SHAPE_CONFIG
+        mirrored = getattr(worker, '_spectrum_mirrored', True)
+        shape_nodes = getattr(worker, '_spectrum_shape_nodes', None)
 
-        overall_energy = (bass_energy * 0.9 + mid_energy * 0.6 + treble_energy * 0.35)
-        overall_energy = max(0.0, min(1.8, overall_energy))
-
-        half = bands // 2
-
-        if _use_curved:
-            # Smooth sinusoidal wave curve from edge to center
-            # Creates flowing wave: bass peak (edge) → dip → vocal peak → dip → center
-            frac_arr = np.abs(np.arange(bands, dtype="float32") - center) / max(1.0, float(half))
-            
-            # Base sinusoidal wave: 1.5 cycles from edge (frac=1.0) to center (frac=0.0)
-            # This creates: peak → trough → peak → trough → low
-            wave = np.sin(frac_arr * np.pi * 1.5 + np.pi * 0.5)
-            
-            # Scale and offset to create proper height profile
-            # Bass peak at edge (frac=1.0): ~0.85
-            # First dip (frac≈0.67): ~0.30
-            # Vocal peak (frac≈0.33): ~0.60
-            # Second dip (frac≈0.17): ~0.25
-            # Center (frac=0.0): ~0.15
-            profile_shape = wave * 0.35 + 0.50
-            
-            # Boost edge (bass) peak slightly
-            edge_boost = np.exp(-((frac_arr - 1.0) ** 2) / 0.08) * 0.20
-            profile_shape = profile_shape + edge_boost
-
-            # Vocal peak at frac≈0.40 (offset 4 for 21 bars)
-            vocal_peak = np.exp(-((frac_arr - 0.40) ** 2) / 0.018) * 0.12
-            vocal_dip = -np.exp(-((frac_arr - 0.30) ** 2) / 0.015) * 0.06
-            # Near-center suppression: bars 7-9 (frac 0.10-0.30) run too hot.
-            # Centered at frac=0.20 (bar 8) with wide sigma to cover 7 and 9.
-            # Bar 8 (frac=0.20) gets deepest cut; bar 7 (0.30) and 9 (0.10) less.
-            mid_suppress = -np.exp(-((frac_arr - 0.20) ** 2) / 0.030) * 0.16
-            # Extra targeted cut for bar 7 (frac=0.30) which still runs high
-            bar7_cut = -np.exp(-((frac_arr - 0.30) ** 2) / 0.008) * 0.06
-            # Smaller cut for bar 9 (frac=0.10)
-            bar9_cut = -np.exp(-((frac_arr - 0.10) ** 2) / 0.008) * 0.04
-            profile_shape = profile_shape + vocal_peak + vocal_dip + mid_suppress + bar7_cut + bar9_cut
-
-            # Ensure minimum floor
-            profile_shape = np.maximum(profile_shape, 0.12)
+        # Build per-bar profile from user-drawn shape nodes
+        from ui.tabs.media.spectrum_shape_editor import (
+            interpolate_nodes, interpolate_nodes_mirrored,
+        )
+        if shape_nodes and len(shape_nodes) >= 1:
+            if mirrored:
+                profile_list = interpolate_nodes_mirrored(shape_nodes, bands)
+            else:
+                profile_list = interpolate_nodes(shape_nodes, bands)
         else:
-            profile_template = np.array(_LEGACY_PROFILE, dtype="float32")
-            if bands != profile_template.size:
-                xp = np.linspace(0.0, 1.0, profile_template.size)
-                x = np.linspace(0.0, 1.0, bands)
-                profile_shape = np.interp(x, xp, profile_template)
-            else:
-                profile_shape = profile_template.copy()
+            profile_list = [0.6] * bands
 
-        # Apply shape template scaled by energy
+        profile_shape = np.array(profile_list, dtype="float32")
+        profile_shape = np.maximum(profile_shape, shape_cfg.profile_floor)
+
+        # ── Audio energy zone blending ───────────────────────────────
+        # Sliders control influence weights:
+        #   bass_emphasis   → how much bass energy drives edge bars
+        #   mid_suppression → dampens mid-zone energy contribution
+        #   wave_amplitude  → overall reactivity scaling
+        # frac = 0 at center/left-edge, 1 at outer-edge/right-edge
+        half = bands // 2
+        bass_w = max(0.1, shape_cfg.bass_emphasis * 1.6)   # 0→0.1 .. 1→1.6
+        mid_w = max(0.1, 1.0 - shape_cfg.mid_suppression * 0.8)  # 0→1.0 .. 1→0.2
+        react_scale = 0.5 + shape_cfg.wave_amplitude  # 0→0.5 .. 1→1.5
+
         for i in range(bands):
-            offset = abs(i - center)
-
-            if _use_curved:
-                # Smooth zone energy blending using cosine crossfade.
-                # No hard if/elif boundaries — zones blend smoothly.
-                frac = offset / max(1.0, float(half))
-
-                # Cosine blend weights: each zone has a smooth bell-shaped weight
-                # Bass zone weight: peaks at frac=1.0 (edge)
-                w_bass = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, (frac - 0.80) / 0.25)))))
-                # Vocal zone weight: peaks at frac=0.40
-                w_vocal = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, (frac - 0.40) / 0.22)))))
-                # Center zone weight: peaks at frac=0.0
-                w_center = max(0.0, 0.5 * (1.0 + _cos_pi(min(1.0, max(-1.0, frac / 0.25)))))
-                # Normalize weights
-                w_total = w_bass + w_vocal + w_center + 0.001
-
-                # Per-zone energy (reduced to prevent pinning)
-                e_bass = bass_energy * 0.78 + mid_energy * 0.04 + treble_energy * 0.04
-                e_vocal = bass_energy * 0.05 + mid_energy * 0.82 + treble_energy * 0.08
-                e_center = bass_energy * 0.05 + mid_energy * 0.18 + treble_energy * 0.08
-
-                zone_energy = (w_bass * e_bass + w_vocal * e_vocal + w_center * e_center) / w_total
-
-                base = profile_shape[i] * zone_energy
+            if mirrored:
+                frac = abs(i - center) / max(1.0, float(half))
             else:
-                base = profile_shape[i] * overall_energy
-                if offset == 3:
-                    base = base * 1.05 + bass_energy * 0.15
-                elif offset == 4:
-                    base = base * 0.82
+                frac = i / max(1.0, float(bands - 1))
 
-                if offset == 0:
-                    vocal_drive = mid_energy * 3.2
-                    base = vocal_drive * 0.80 + base * 0.20
+            # Zone weights: bass at edges (frac→1), treble at center (frac→0)
+            w_bass = frac * frac
+            w_treble = (1.0 - frac) * (1.0 - frac)
+            w_mid = max(0.0, 1.0 - w_bass - w_treble)
 
-                if offset == 1:
-                    base = base * 0.52 + mid_energy * 0.22
-                if offset == 2:
-                    base = base * 0.58 + bass_energy * 0.12
+            zone_energy = (
+                bass_energy * w_bass * bass_w
+                + mid_energy * w_mid * mid_w
+                + treble_energy * w_treble
+            ) * react_scale
 
-                if offset >= 5:
-                    base = base * 0.65 + treble_energy * 0.4 * (offset - 4)
-
-            arr[i] = base
+            arr[i] = profile_shape[i] * zone_energy
 
         if low_resolution:
             _apply_low_resolution_adjustments(

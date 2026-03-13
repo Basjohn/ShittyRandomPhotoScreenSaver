@@ -576,19 +576,18 @@ class WidgetManager:
                         osc_glow_enabled=model.osc_glow_enabled,
                         osc_glow_intensity=model.osc_glow_intensity,
                         osc_reactive_glow=model.osc_reactive_glow,
-                        spectrum_bar_profile=model.spectrum_bar_profile,
+                        spectrum_mirrored=model.spectrum_mirrored,
+                        spectrum_shape_nodes=model.spectrum_shape_nodes,
+                        spectrum_bass_emphasis=model.spectrum_bass_emphasis,
+                        spectrum_vocal_position=model.spectrum_vocal_position,
+                        spectrum_mid_suppression=model.spectrum_mid_suppression,
+                        spectrum_wave_amplitude=model.spectrum_wave_amplitude,
+                        spectrum_profile_floor=model.spectrum_profile_floor,
                     )
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply vis mode config", exc_info=True)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply full vis mode config", exc_info=True)
-
-        # Bar profile (curved/slanted/legacy)
-        try:
-            if hasattr(vis, 'apply_curved_profile'):
-                vis.apply_curved_profile(model.spectrum_bar_profile != 'legacy')
-        except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply bar profile", exc_info=True)
 
         media_cfg = cfg.get('media', {}) if isinstance(cfg, Mapping) else {}
         self._apply_media_card_style_to_visualizer(vis, media_cfg)

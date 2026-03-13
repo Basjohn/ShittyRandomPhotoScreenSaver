@@ -39,18 +39,11 @@
         "spectrum_growth": 5.0,
         "spectrum_manual_floor": 0.1,
         "spectrum_mid_suppression": 0.5,
-        "spectrum_mirrored": true,
         "spectrum_profile_floor": 0.12,
         "spectrum_rainbow_enabled": true,
         "spectrum_rainbow_per_bar": true,
         "spectrum_rainbow_speed": 0.25,
         "spectrum_sensitivity": 0.4,
-        "spectrum_shape_nodes": [
-          [0.0, 0.40],
-          [0.35, 0.75],
-          [0.65, 0.55],
-          [1.0, 0.80]
-        ],
         "spectrum_single_piece": true,
         "spectrum_vocal_position": 0.4,
         "spectrum_wave_amplitude": 0.5
