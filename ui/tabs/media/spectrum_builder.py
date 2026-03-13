@@ -103,13 +103,15 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _apply_spectrum_adv_toggle_state(tab._spectrum_adv_toggle.isChecked())
 
     def _handle_spectrum_preset_adv(is_custom: bool) -> None:
+        tab._spectrum_normal.setVisible(is_custom)
         tab._spectrum_advanced_host.setVisible(is_custom)
 
     tab._spectrum_preset_slider.advanced_toggled.connect(_handle_spectrum_preset_adv)
     _handle_spectrum_preset_adv(True)
 
     # Technical bucket (ordered after Advanced)
-    build_per_mode_technical_group(tab, spectrum_layout, "spectrum")
+    _spectrum_tech_host = build_per_mode_technical_group(tab, spectrum_layout, "spectrum")
+    tab._spectrum_preset_slider.set_technical_container(_spectrum_tech_host)
 
     LABEL_WIDTH = 150
 

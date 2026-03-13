@@ -31,7 +31,6 @@ class _GLPipelineState:
     warp_program: int = 0
     diffuse_program: int = 0
     blockflip_program: int = 0
-    peel_program: int = 0
     crossfade_program: int = 0
     slide_program: int = 0
     wipe_program: int = 0
@@ -55,7 +54,6 @@ class _GLPipelineState:
     warp_uniforms: dict = field(default_factory=dict)
     diffuse_uniforms: dict = field(default_factory=dict)
     blockflip_uniforms: dict = field(default_factory=dict)
-    peel_uniforms: dict = field(default_factory=dict)
     blinds_uniforms: dict = field(default_factory=dict)
     crumble_uniforms: dict = field(default_factory=dict)
     particle_uniforms: dict = field(default_factory=dict)

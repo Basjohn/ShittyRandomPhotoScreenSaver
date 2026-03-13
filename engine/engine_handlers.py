@@ -36,7 +36,7 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 
     raw_hw = engine.settings_manager.get('display.hw_accel', False)
     hw = SettingsManager.to_bool(raw_hw, False)
-    gl_only = {"Blinds", "Peel", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble", "Particle"}
+    gl_only = {"Blinds", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble", "Particle"}
 
     transitions_config = engine.settings_manager.get('transitions', {})
     if not isinstance(transitions_config, dict):

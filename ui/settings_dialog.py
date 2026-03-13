@@ -443,6 +443,13 @@ class SettingsDialog(QDialog):
         self._drag_pos = QPoint()
         self._dragging = False
         self._tab_scroll_cache: Dict[str, int] = {}
+        stored_scroll = self._settings.get('ui.last_tab_scroll', {})
+        if isinstance(stored_scroll, dict):
+            for key, value in stored_scroll.items():
+                try:
+                    self._tab_scroll_cache[str(key)] = int(value)
+                except (TypeError, ValueError):
+                    pass
         self._suppress_scroll_capture: bool = False
         self._tab_keys = [
             "sources",
@@ -467,6 +474,10 @@ class SettingsDialog(QDialog):
 
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
+
+        # Hide the dialog during construction to prevent a flash of the
+        # unstyled/unpositioned window while heavyweight tabs are created.
+        self.setVisible(False)
 
         self._setup_window()
         self._load_theme()
@@ -849,14 +860,21 @@ class SettingsDialog(QDialog):
             return
         key = self._tab_key_for_index(index)
         value = self._tab_scroll_cache.get(key, 0)
+        if value <= 0:
+            return
         scrollbar = scroll.verticalScrollBar()
-        try:
-            self._suppress_scroll_capture = True
-            scrollbar.setValue(value)
-        except Exception:
-            logger.debug("Failed to restore scroll for tab %s", key, exc_info=True)
-        finally:
-            self._suppress_scroll_capture = False
+
+        def _apply_scroll() -> None:
+            try:
+                self._suppress_scroll_capture = True
+                scrollbar.setValue(value)
+            except Exception:
+                logger.debug("Failed to restore scroll for tab %s", key, exc_info=True)
+            finally:
+                self._suppress_scroll_capture = False
+
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(0, _apply_scroll)
 
     def _save_last_tab(self, index: int) -> None:
         if index < 0:

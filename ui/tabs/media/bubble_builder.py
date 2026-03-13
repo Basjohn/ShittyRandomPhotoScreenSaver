@@ -95,13 +95,15 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _apply_bubble_adv_toggle_state(tab._bubble_adv_toggle.isChecked())
 
     def _handle_bubble_preset_adv(is_custom: bool) -> None:
+        tab._bubble_normal.setVisible(is_custom)
         tab._bubble_advanced_host.setVisible(is_custom)
 
     tab._bubble_preset_slider.advanced_toggled.connect(_handle_bubble_preset_adv)
     _handle_bubble_preset_adv(True)
 
     # Technical bucket (after Advanced)
-    build_per_mode_technical_group(tab, layout, "bubble")
+    _bubble_tech_host = build_per_mode_technical_group(tab, layout, "bubble")
+    tab._bubble_preset_slider.set_technical_container(_bubble_tech_host)
 
     LABEL_WIDTH = 150
 
@@ -414,7 +416,9 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     surface_reach_row.addWidget(tab.bubble_surface_reach_label)
 
     # ── Styling ───────────────────────────────────────────────────
-    _normal_layout.addWidget(QLabel("<b>Styling</b>"))
+    _styling_label = QLabel("<b>Styling</b>")
+    _styling_label.setContentsMargins(0, 12, 0, 0)
+    _normal_layout.addWidget(_styling_label)
 
     specular_row = _aligned_row(_normal_layout, "Specular Direction:")
     tab.bubble_specular_direction = StyledComboBox(size_variant="mini")

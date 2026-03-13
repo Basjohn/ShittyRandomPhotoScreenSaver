@@ -27,8 +27,8 @@ Deliver a modern Windows screensaver and media controller that blends curated im
 ### 3.2 Rendering & Transitions
 
 - Display modes: Fill (primary), Fit, Shrink. DPR-aware scaling plus optional Lanczos + sharpen toggles.
-- `GLCompositorWidget` pre-warms shaders/programs per transition, caches the detected refresh rate (falls back to 240 Hz if Qt fails). All GL-only transitions (Peel, Ripple, Block Spins, Crumble, Particle, Burn) demote to QPainter/CPU groups when hardware acceleration is off or shader init fails mid-session.
-- Transition catalog (March 2026): Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, Peel, 3D Block Spins, Ripple (Rain Drops), Warp Dissolve, Crumble, Particle, Burn. Each entry has a GL implementation with automatic CPU fallback where feasible.
+- `GLCompositorWidget` pre-warms shaders/programs per transition, caches the detected refresh rate (falls back to 240 Hz if Qt fails). All GL-only transitions (Ripple, Block Spins, Crumble, Particle, Burn) demote to QPainter/CPU groups when hardware acceleration is off or shader init fails mid-session.
+- Transition catalog (March 2026): Crossfade, Slide, Wipe, Diffuse, Block Puzzle Flip, Blinds, 3D Block Spins, Ripple (Rain Drops), Warp Dissolve, Crumble, Particle, Burn. Each entry has a GL implementation with automatic CPU fallback where feasible.
 
 ### 3.3 Spotify Visualizer
 

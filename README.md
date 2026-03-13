@@ -24,7 +24,6 @@ Shitty Showcase of Vizualisers & Transitions
     - 3D Block Spin (Actual 3D like 1998!)
     - Crumble (More work than it was worth!)
     - Particle (Somehow does not look shit!)
-    - Peel
     - Warp Dissolve
     - Crossfade
     - Slide

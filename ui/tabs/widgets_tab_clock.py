@@ -402,7 +402,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     container = QWidget()
     container_layout = QVBoxLayout(container)
-    container_layout.setContentsMargins(0, 10, 0, 0)
+    container_layout.setContentsMargins(0, 20, 0, 0)
     container_layout.addWidget(clock_group)
     return container
 

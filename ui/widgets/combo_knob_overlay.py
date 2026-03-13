@@ -190,8 +190,8 @@ class ComboKnobController(QObject):
         right_margin = (design.width() - (slice_rect.left() + slice_rect.width())) * scale
         top_margin = slice_rect.top() * scale
 
-        x = host_rect.width() - knob_width - right_margin
-        y = top_margin
+        x = host_rect.width() - knob_width - right_margin - 2
+        y = top_margin - 6
 
         if host_rect.width() <= knob_width:
             x = host_rect.width() - knob_width

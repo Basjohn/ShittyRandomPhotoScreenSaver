@@ -12,11 +12,12 @@ pytestmark = pytest.mark.skip(reason="Transition tests hang in CI - run manually
 
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import QPixmap, QColor
-from transitions.crossfade_transition import CrossfadeTransition
-from transitions.slide_transition import SlideTransition, SlideDirection
-from transitions.wipe_transition import WipeTransition, WipeDirection
-from transitions.diffuse_transition import DiffuseTransition
-from transitions.block_puzzle_flip_transition import BlockPuzzleFlipTransition
+from transitions.base_transition import SlideDirection, WipeDirection
+from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition as CrossfadeTransition
+from transitions.gl_compositor_slide_transition import GLCompositorSlideTransition as SlideTransition
+from transitions.gl_compositor_wipe_transition import GLCompositorWipeTransition as WipeTransition
+from transitions.gl_compositor_diffuse_transition import GLCompositorDiffuseTransition as DiffuseTransition
+from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlipTransition as BlockPuzzleFlipTransition
 
 
 @pytest.fixture
@@ -212,7 +213,6 @@ def test_gl_compositor_endframe_placeholder(qtbot):
     - GLCompositorBlockFlipTransition
     - GLCompositorBlindsTransition
     - GLCompositorDiffuseTransition
-    - GLCompositorPeelTransition
     - GLCompositorBlockSpinTransition
     - GLCompositorRainDropsTransition
     - GLCompositorWarpTransition

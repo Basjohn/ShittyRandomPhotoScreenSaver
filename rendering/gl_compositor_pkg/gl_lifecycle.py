@@ -148,7 +148,6 @@ def init_gl_pipeline(widget) -> None:
             (GLProgramCache.WARP, "warp_program", "warp_uniforms"),
             (GLProgramCache.DIFFUSE, "diffuse_program", "diffuse_uniforms"),
             (GLProgramCache.BLOCK_FLIP, "blockflip_program", "blockflip_uniforms"),
-            (GLProgramCache.PEEL, "peel_program", "peel_uniforms"),
             (GLProgramCache.CROSSFADE, "crossfade_program", "crossfade_uniforms"),
             (GLProgramCache.SLIDE, "slide_program", "slide_uniforms"),
             (GLProgramCache.WIPE, "wipe_program", "wipe_uniforms"),
@@ -233,7 +232,7 @@ def cleanup_gl_pipeline(widget) -> None:
         # Delete shader programs
         program_attrs = [
             "basic_program", "raindrops_program", "warp_program", "diffuse_program",
-            "blockflip_program", "peel_program", "crossfade_program", "slide_program",
+            "blockflip_program", "crossfade_program", "slide_program",
             "wipe_program", "blinds_program", "crumble_program", "particle_program", "burn_program",
         ]
         try:
@@ -537,9 +536,6 @@ FragColor = vec4(color, 1.0);
         gl.glDeleteShader(frag)
 
     return int(program)
-
-# NOTE: _create_peel_program() has been moved to rendering/gl_programs/peel_program.py
-# The PeelProgram helper is now responsible for shader compilation and rendering.
 
 # NOTE: _create_wipe_program() has been moved to rendering/gl_programs/wipe_program.py
 # The WipeProgram helper is now responsible for shader compilation and rendering.

@@ -3,6 +3,8 @@
 Centralises repeated styling blocks and common widgets so individual tabs
 don't duplicate them.
 """
+import weakref
+
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import QApplication, QSlider
 
@@ -37,8 +39,36 @@ def ensure_custom_fonts() -> None:
     _ensure_jost_registered()
 
 
+_last_moved_slider: weakref.ref | None = None
+
+
 class NoWheelSlider(QSlider):
-    """Slider that ignores mouse wheel events to prevent accidental changes."""
+    """Slider that ignores mouse wheel events to prevent accidental changes.
+
+    Also tracks the most-recently-moved slider via a module-level weakref
+    so the QSS ``QSlider[lastMoved="true"]`` selector highlights its handle.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setProperty("lastMoved", False)
+        self.sliderPressed.connect(self._mark_last_moved)
+        self.valueChanged.connect(self._mark_last_moved)
+
+    def _mark_last_moved(self, *_args) -> None:
+        global _last_moved_slider
+        prev = _last_moved_slider() if _last_moved_slider is not None else None
+        if prev is self:
+            return
+        if prev is not None:
+            prev.setProperty("lastMoved", False)
+            prev.style().unpolish(prev)
+            prev.style().polish(prev)
+        self.setProperty("lastMoved", True)
+        self.style().unpolish(self)
+        self.style().polish(self)
+        _last_moved_slider = weakref.ref(self)
+
     def wheelEvent(self, event):  # type: ignore[override]
         event.ignore()
 
@@ -47,7 +77,7 @@ SPINBOX_STYLE = """
 QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
     min-height: 36px;
     padding: 4px 48px 4px 16px;
-    margin-bottom: 6px;
+    margin-bottom: 14px;
     color: #ffffff;
     font-family: 'Jost';
     font-weight: 600;
@@ -180,7 +210,7 @@ COMBOBOX_STYLE = """
 QComboBox[customCombo='true'] {
     min-height: 38px;
     padding: 4px 44px 4px 16px;
-    margin-bottom: 6px;
+    margin-bottom: 14px;
     font-family: 'Jost';
     font-weight: 700;
     font-size: 14px;
@@ -419,6 +449,15 @@ QSlider::handle:horizontal:disabled {
 
 QSlider::add-page:horizontal {
     background: transparent;
+}
+
+/* Active indicator on the most-recently-moved slider handle */
+QSlider[lastMoved="true"]::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #3a3a4a, stop:0.4 #2a2a38, stop:0.85 #1e1e2c, stop:1 #141420);
+    border: 2px solid rgba(130, 140, 200, 0.85);
+    border-top-color: rgba(160, 170, 230, 0.9);
+    border-bottom-color: rgba(10, 10, 20, 0.9);
 }
 """
 

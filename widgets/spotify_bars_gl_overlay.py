@@ -94,6 +94,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Oscilloscope glow settings
         self._glow_enabled: bool = True
         self._glow_intensity: float = 0.5
+        self._glow_size: float = 1.0
         self._glow_color: QColor = QColor(0, 200, 255, 230)
         self._line_color: QColor = QColor(255, 255, 255, 255)
         self._reactive_glow: bool = True
@@ -345,6 +346,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         energy_bands: EnergyBands | None = None,
         glow_enabled: bool = True,
         glow_intensity: float = 0.5,
+        glow_size: float = 1.0,
         glow_color: QColor | None = None,
         reactive_glow: bool = True,
         osc_line_amplitude: float = 3.0,
@@ -628,6 +630,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Oscilloscope glow settings
         self._glow_enabled = bool(glow_enabled)
         self._glow_intensity = max(0.0, float(glow_intensity))
+        self._glow_size = max(0.1, min(3.0, float(glow_size)))
         if glow_color is not None:
             self._glow_color = QColor(glow_color)
         if line_color is not None:

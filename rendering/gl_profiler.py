@@ -53,16 +53,16 @@ class TransitionProfiler:
         profiler = TransitionProfiler()
         
         # On transition start:
-        profiler.start("peel")
+        profiler.start("crossfade")
         
         # On each frame:
-        profiler.tick("peel")
+        profiler.tick("crossfade")
         
         # On transition complete:
-        profiler.complete("peel", viewport_size=(1920, 1080))
+        profiler.complete("crossfade", viewport_size=(1920, 1080))
         
         # For debug overlay:
-        metrics = profiler.get_metrics("peel")
+        metrics = profiler.get_metrics("crossfade")
     """
     
     def __init__(self) -> None:

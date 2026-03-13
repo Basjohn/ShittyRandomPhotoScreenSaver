@@ -117,13 +117,6 @@ class DiffuseState(TransitionStateBase):
 
 
 @dataclass
-class PeelState(TransitionStateBase):
-    """State for a compositor-driven peel transition."""
-    direction: int = 0
-    strips: int = 8
-
-
-@dataclass
 class WarpState(TransitionStateBase):
     """State for a compositor-driven warp dissolve transition."""
     pass
@@ -201,7 +194,6 @@ class TransitionStateManager:
         self._blockspin: Optional[BlockSpinState] = None
         self._blinds: Optional[BlindsState] = None
         self._diffuse: Optional[DiffuseState] = None
-        self._peel: Optional[PeelState] = None
         self._warp: Optional[WarpState] = None
         self._raindrops: Optional[RaindropsState] = None
         self._crumble: Optional[CrumbleState] = None
@@ -269,18 +261,6 @@ class TransitionStateManager:
         is_active = value is not None
         if was_active != is_active:
             self._notify("diffuse", is_active)
-    
-    @property
-    def peel(self) -> Optional[PeelState]:
-        return self._peel
-    
-    @peel.setter
-    def peel(self, value: Optional[PeelState]) -> None:
-        was_active = self._peel is not None
-        self._peel = value
-        is_active = value is not None
-        if was_active != is_active:
-            self._notify("peel", is_active)
     
     @property
     def blockspin(self) -> Optional[BlockSpinState]:
@@ -388,8 +368,6 @@ class TransitionStateManager:
             return "wipe"
         if self._diffuse is not None:
             return "diffuse"
-        if self._peel is not None:
-            return "peel"
         if self._blockspin is not None:
             return "blockspin"
         if self._blockflip is not None:
@@ -417,7 +395,6 @@ class TransitionStateManager:
         self._blockspin = None
         self._blinds = None
         self._diffuse = None
-        self._peel = None
         self._warp = None
         self._raindrops = None
         self._crumble = None

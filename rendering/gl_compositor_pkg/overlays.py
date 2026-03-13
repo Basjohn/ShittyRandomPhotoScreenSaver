@@ -34,7 +34,6 @@ def paint_debug_overlay(widget, painter: QPainter) -> None:
     transitions = [
         ("slide", widget._slide, "Slide"),
         ("wipe", widget._wipe, "Wipe"),
-        ("peel", widget._peel, "Peel"),
         ("blockspin", widget._blockspin, "BlockSpin"),
         ("warp", widget._warp, "Warp"),
         ("raindrops", widget._raindrops, "Ripple"),

@@ -7,7 +7,6 @@ transition state.
 """
 
 from rendering.gl_programs.base_program import BaseGLProgram
-from rendering.gl_programs.peel_program import PeelProgram, peel_program
 from rendering.gl_programs.blockflip_program import BlockFlipProgram, blockflip_program
 from rendering.gl_programs.crossfade_program import CrossfadeProgram, crossfade_program
 from rendering.gl_programs.blinds_program import BlindsProgram, blinds_program
@@ -21,8 +20,6 @@ from rendering.gl_programs.geometry_manager import GLGeometryManager, get_geomet
 
 __all__ = [
     "BaseGLProgram",
-    "PeelProgram",
-    "peel_program",
     "BlockFlipProgram",
     "blockflip_program",
     "CrossfadeProgram",

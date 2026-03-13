@@ -23,7 +23,6 @@ from ui.tabs.shared_styles import (
     COMBOBOX_STYLE,
     PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
-    INFO_LABEL_STYLE,
     style_group_box,
 )
 from ui.widgets import StyledComboBox
@@ -216,28 +215,6 @@ class DisplayTab(QWidget):
         
         # Pan and Scan has been removed in v1.2; no dedicated UI group remains.
 
-        # Renderer backend group
-        backend_group = QGroupBox("Renderer Backend")
-        style_group_box(backend_group)
-        backend_layout = QVBoxLayout(backend_group)
-
-        backend_row = _aligned_row(backend_layout, "Preferred backend:")
-        self.backend_combo = StyledComboBox(size_variant="compact")
-        self.backend_combo.addItem("OpenGL (recommended)", userData="opengl")
-        self.backend_combo.addItem("Software (fallback)", userData="software")
-        self.backend_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
-        self.backend_combo.currentIndexChanged.connect(self._save_settings)
-        backend_row.addWidget(self.backend_combo)
-        backend_row.addStretch()
-
-        backend_hint = QLabel(
-            "OpenGL is the primary renderer. If it fails during startup, the software fallback engages automatically."
-        )
-        backend_hint.setWordWrap(True)
-        backend_hint.setStyleSheet(INFO_LABEL_STYLE)
-        backend_layout.addWidget(backend_hint)
-
-        layout.addWidget(backend_group)
         # Input & Exit group
         input_group = QGroupBox("Input && Exit")
         style_group_box(input_group)
@@ -307,7 +284,6 @@ class DisplayTab(QWidget):
         self.shuffle_check.blockSignals(True)
         self.lanczos_check.blockSignals(True)
         self.sharpen_check.blockSignals(True)
-        self.backend_combo.blockSignals(True)
         # Block input toggles
         self.hard_exit_check.blockSignals(True)
         
@@ -405,17 +381,13 @@ class DisplayTab(QWidget):
             self.halo_shape_combo.setCurrentIndex(shape_map.get(halo_shape, 0))
             self.halo_shape_combo.blockSignals(False)
 
-            # Renderer backend preferences
+            # Renderer backend — always OpenGL, normalize legacy values
             backend_mode_raw = self._settings.get('display.render_backend_mode', 'opengl')
             backend_mode = str(backend_mode_raw).lower()
-            if backend_mode == 'd3d11':
-                logger.info("[DISPLAY] Legacy Direct3D setting detected; normalizing to OpenGL")
-                backend_mode = 'opengl'
+            if backend_mode != 'opengl':
+                logger.info("[DISPLAY] Legacy backend '%s' detected; normalizing to OpenGL", backend_mode)
                 self._settings.set('display.render_backend_mode', 'opengl')
-            index = self.backend_combo.findData(backend_mode)
-            if index == -1:
-                index = 0
-            self.backend_combo.setCurrentIndex(index)
+                self._settings.set('display.hw_accel', True)
 
             logger.debug(f"Loaded display settings: lanczos={lanczos}, sharpen={sharpen}")
         finally:
@@ -426,7 +398,6 @@ class DisplayTab(QWidget):
             self.shuffle_check.blockSignals(False)
             self.lanczos_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
-            self.backend_combo.blockSignals(False)
             self.hard_exit_check.blockSignals(False)
             self._loading = False
     
@@ -485,10 +456,9 @@ class DisplayTab(QWidget):
         halo_idx = self.halo_shape_combo.currentIndex()
         self._settings.set('input.halo_shape', shape_names[halo_idx] if 0 <= halo_idx < len(shape_names) else 'circle')
 
-        # Renderer backend
-        backend_value = self.backend_combo.currentData() or 'opengl'
-        self._settings.set('display.render_backend_mode', backend_value)
-        self._settings.set('display.hw_accel', backend_value == 'opengl')
+        # Renderer backend — always OpenGL
+        self._settings.set('display.render_backend_mode', 'opengl')
+        self._settings.set('display.hw_accel', True)
 
         self._settings.save()
         self.display_changed.emit()

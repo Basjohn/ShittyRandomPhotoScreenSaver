@@ -23,12 +23,10 @@ from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlip
 from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpinTransition
 from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
 from transitions.gl_compositor_diffuse_transition import GLCompositorDiffuseTransition
-from transitions.gl_compositor_peel_transition import GLCompositorPeelTransition
 from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
 from transitions.gl_compositor_slide_transition import GLCompositorSlideTransition
 from transitions.gl_compositor_wipe_transition import GLCompositorWipeTransition
-from transitions.slide_transition import SlideDirection
-from transitions.wipe_transition import WipeDirection
+from transitions.base_transition import SlideDirection, WipeDirection
 from tests._gl_test_utils import (
     fraction_dark_pixels,
     fraction_matching_color,
@@ -125,15 +123,6 @@ TRANSITION_CASES: List[pytest.param] = [
             frames=28,
         ),
         id="diffuse",
-    ),
-    pytest.param(
-        TransitionCase(
-            name="peel",
-            factory=lambda: GLCompositorPeelTransition(duration_ms=700, strips=10),
-            frames=32,
-            wait_ms=25,
-        ),
-        id="peel",
     ),
     pytest.param(
         TransitionCase(

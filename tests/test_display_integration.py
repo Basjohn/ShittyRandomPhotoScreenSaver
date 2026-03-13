@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QLabel
 
 from rendering.display_widget import DisplayWidget
 from rendering.display_modes import DisplayMode
-from transitions.slide_transition import SlideDirection
+from transitions.base_transition import SlideDirection
 from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
 from engine.display_manager import DisplayManager
 from engine.screensaver_engine import ScreensaverEngine, EngineState
@@ -1013,10 +1013,11 @@ class TestRegressionGuards:
     """Static checks to prevent regressions."""
 
     def test_transitions_do_not_call_process_events(self):
-        import transitions.gl_compositor_crossfade_transition as gl_gl
-        import transitions.crossfade_transition as sw
+        import transitions.gl_compositor_crossfade_transition as gl_crossfade
+        import transitions.gl_compositor_slide_transition as gl_slide
+        import transitions.gl_compositor_wipe_transition as gl_wipe
 
-        for module in (gl_gl, sw):
+        for module in (gl_crossfade, gl_slide, gl_wipe):
             source = inspect.getsource(module)
             tree = ast.parse(source)
             for node in ast.walk(tree):

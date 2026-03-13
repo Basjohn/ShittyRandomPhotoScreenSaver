@@ -115,8 +115,6 @@ def paintGL_impl(widget) -> None:
          widget._paint_warp_shader, None),
         ("diffuse", widget._diffuse, widget._can_use_diffuse_shader,
          widget._paint_diffuse_shader, None),
-        ("peel", widget._peel, widget._can_use_peel_shader,
-         widget._paint_peel_shader, None),
         ("blinds", widget._blinds, widget._can_use_blinds_shader,
          widget._paint_blinds_shader, None),
         ("crumble", widget._crumble, widget._can_use_crumble_shader,
@@ -133,85 +131,35 @@ def paintGL_impl(widget) -> None:
          widget._paint_wipe_shader, None),
     ]
 
+    # Check if ANY transition state is active (non-None).
+    # When idle (between transitions), all states are None — that's normal.
+    any_transition_active = any(state is not None for _, state, *_ in shader_paths)
+
     shader_success = False
-    for name, state, can_use_fn, paint_fn, prep_fn in shader_paths:
-        if widget._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
-            shader_success = True
-            break
+    if any_transition_active:
+        for name, state, can_use_fn, paint_fn, prep_fn in shader_paths:
+            if widget._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
+                shader_success = True
+                break
 
-    # If all shader paths failed or are inactive, fall back to QPainter
+    _mark_section("shader_render" if shader_success else "shader_attempt")
+
     if not shader_success:
-        _mark_section("shader_attempt")
-    else:
-        _mark_section("shader_render")
-        # Log section times if any section took >10ms
-        if is_perf_metrics_enabled() and _section_times:
-            total = sum(_section_times.values())
-            if total > 10.0:
-                sections_str = ", ".join(f"{k}={v:.1f}ms" for k, v in _section_times.items() if v > 1.0)
-                logger.debug("[PERF] [GL PAINT] Section times (total=%.1fms): %s", total, sections_str)
-        return
+        # Idle or shader failure — render base image via QPainter.
+        if any_transition_active:
+            logger.error("[GL PAINT] All shader paths failed — rendering base image only")
+        painter = QPainter(widget)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+            target = widget.rect()
+            widget._transition_renderer.render_base_image(painter, target, widget._base_pixmap)
+            widget._paint_dimming(painter)
+            paint_spotify_visualizer(widget, painter)
+            paint_debug_overlay(widget, painter)
+        finally:
+            painter.end()
+            _mark_section("qpainter_base_only")
 
-    # QPainter fallback path (Group B) - delegates to GLTransitionRenderer
-    painter = QPainter(widget)
-    try:
-        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
-        target = widget.rect()
-        
-        # Try each transition type in priority order
-        if widget._peel is not None:
-            widget._transition_renderer.render_peel_fallback(painter, target, widget._peel)
-            return
-        
-        if widget._warp is not None:
-            widget._transition_renderer.render_warp_fallback(painter, target, widget._warp)
-            paint_spotify_visualizer(widget, painter)
-            paint_debug_overlay(widget, painter)
-            return
-        
-        if widget._blockspin is not None:
-            widget._transition_renderer.render_blockspin_fallback(painter, target, widget._blockspin)
-            paint_spotify_visualizer(widget, painter)
-            return
-        
-        # Region-based transitions (blockflip, blinds, diffuse)
-        for st, paint_vis in [(widget._blockflip, True), (widget._blinds, False), (widget._diffuse, False)]:
-            if st is not None:
-                widget._transition_renderer.render_region_fallback(painter, target, st)
-                if paint_vis:
-                    paint_spotify_visualizer(widget, painter)
-                paint_debug_overlay(widget, painter)
-                return
-        
-        if widget._wipe is not None:
-            widget._transition_renderer.render_wipe_fallback(painter, target, widget._wipe)
-            paint_spotify_visualizer(widget, painter)
-            paint_debug_overlay(widget, painter)
-            return
-        
-        if widget._slide is not None:
-            widget._transition_renderer.render_slide_fallback(painter, target, widget._slide)
-            widget._paint_dimming(painter)
-            paint_spotify_visualizer(widget, painter)
-            paint_debug_overlay(widget, painter)
-            return
-        
-        if widget._crossfade is not None:
-            widget._transition_renderer.render_crossfade_fallback(painter, target, widget._crossfade)
-            widget._paint_dimming(painter)
-            paint_spotify_visualizer(widget, painter)
-            paint_debug_overlay(widget, painter)
-            return
-        
-        # No active transition -> draw base pixmap
-        widget._transition_renderer.render_base_image(painter, target, widget._base_pixmap)
-        widget._paint_dimming(painter)
-        paint_spotify_visualizer(widget, painter)
-        paint_debug_overlay(widget, painter)
-    finally:
-        painter.end()
-        _mark_section("qpainter_fallback")
-        
     # Log section times if any section took >10ms
     if is_perf_metrics_enabled() and _section_times:
         total = sum(_section_times.values())

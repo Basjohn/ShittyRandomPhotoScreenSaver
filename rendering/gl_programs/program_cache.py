@@ -48,7 +48,6 @@ class GLProgramCache:
     BLOCK_FLIP = "blockflip"
     BLINDS = "blinds"
     DIFFUSE = "diffuse"
-    PEEL = "peel"
     WARP = "warp"
     RAINDROPS = "raindrops"
     CRUMBLE = "crumble"
@@ -101,9 +100,6 @@ class GLProgramCache:
             elif name == self.DIFFUSE:
                 from rendering.gl_programs.diffuse_program import diffuse_program
                 return diffuse_program
-            elif name == self.PEEL:
-                from rendering.gl_programs.peel_program import peel_program
-                return peel_program
             elif name == self.WARP:
                 from rendering.gl_programs.warp_program import warp_program
                 return warp_program
@@ -210,7 +206,7 @@ class GLProgramCache:
         """
         all_names = [
             self.CROSSFADE, self.SLIDE, self.WIPE, self.BLOCK_FLIP,
-            self.BLINDS, self.DIFFUSE, self.PEEL, self.WARP,
+            self.BLINDS, self.DIFFUSE, self.WARP,
             self.RAINDROPS, self.CRUMBLE, self.PARTICLE, self.BURN,
         ]
         results = {}

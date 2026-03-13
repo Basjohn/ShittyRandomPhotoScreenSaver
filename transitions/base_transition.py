@@ -28,6 +28,93 @@ class TransitionState(Enum):
     CANCELLED = "cancelled"
 
 
+class SlideDirection(Enum):
+    """Direction for slide transition."""
+    LEFT = "left"
+    RIGHT = "right"
+    UP = "up"
+    DOWN = "down"
+    DIAG_TL_BR = "diag_tl_br"
+    DIAG_TR_BL = "diag_tr_bl"
+
+
+class WipeDirection(Enum):
+    """Wipe direction options."""
+    LEFT_TO_RIGHT = "left_to_right"
+    RIGHT_TO_LEFT = "right_to_left"
+    TOP_TO_BOTTOM = "top_to_bottom"
+    BOTTOM_TO_TOP = "bottom_to_top"
+    DIAG_TL_BR = "diag_tl_br"
+    DIAG_TR_BL = "diag_tr_bl"
+
+
+def compute_wipe_region(direction: "WipeDirection", w: int, h: int, progress: float):
+    """Compute the QRegion used for wipe reveal based on direction and progress."""
+    from PySide6.QtGui import QPolygon, QRegion
+    from PySide6.QtCore import QPoint
+
+    p = max(0.0, min(1.0, float(progress)))
+
+    if direction == WipeDirection.LEFT_TO_RIGHT:
+        rw = int(w * p)
+        return QRegion(0, 0, rw, h)
+    if direction == WipeDirection.RIGHT_TO_LEFT:
+        x = int(w * (1.0 - p))
+        return QRegion(x, 0, w - x, h)
+    if direction == WipeDirection.TOP_TO_BOTTOM:
+        rh = int(h * p)
+        return QRegion(0, 0, w, rh)
+    if direction == WipeDirection.BOTTOM_TO_TOP:
+        y = int(h * (1.0 - p))
+        return QRegion(0, y, w, h - y)
+
+    if direction == WipeDirection.DIAG_TL_BR:
+        diag = int((w + h) * p)
+        if diag <= 0:
+            return QRegion()
+        if diag >= w + h:
+            return QRegion(0, 0, w, h)
+        if diag > max(w, h):
+            points = [
+                QPoint(0, 0), QPoint(w, 0), QPoint(w, diag - w),
+                QPoint(diag - h, h), QPoint(0, h),
+            ]
+            return QRegion(QPolygon(points))
+        if diag > min(w, h):
+            if w < h:
+                points = [QPoint(0, 0), QPoint(w, 0), QPoint(w, diag - w), QPoint(0, diag)]
+            else:
+                points = [QPoint(0, 0), QPoint(diag, 0), QPoint(diag - h, h), QPoint(0, h)]
+            return QRegion(QPolygon(points))
+        points = [QPoint(0, 0), QPoint(diag, 0), QPoint(0, diag)]
+        return QRegion(QPolygon(points))
+
+    if direction == WipeDirection.DIAG_TR_BL:
+        diag = int((w + h) * p)
+        if diag <= 0:
+            return QRegion()
+        if diag >= w + h:
+            return QRegion(0, 0, w, h)
+        if diag > max(w, h):
+            points = [
+                QPoint(w, 0), QPoint(0, 0), QPoint(0, diag - w),
+                QPoint(w - (diag - h), h), QPoint(w, h),
+            ]
+            return QRegion(QPolygon(points))
+        if diag > min(w, h):
+            if w < h:
+                points = [QPoint(w, 0), QPoint(0, 0), QPoint(0, diag - w), QPoint(w, diag)]
+            else:
+                points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w - (diag - h), h), QPoint(w, h)]
+            return QRegion(QPolygon(points))
+        points = [QPoint(w, 0), QPoint(w - diag, 0), QPoint(w, diag)]
+        return QRegion(QPolygon(points))
+
+    # Fallback
+    rw = int(w * p)
+    return QRegion(0, 0, rw, h)
+
+
 # Combine QObject and ABC metaclasses
 class QABCMeta(type(QObject), ABCMeta):
     """Metaclass combining QObject and ABC."""

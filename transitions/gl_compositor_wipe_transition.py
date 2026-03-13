@@ -16,7 +16,7 @@ from core.logging.logger import get_logger
 from core.animation.types import EasingCurve, resolve_easing
 
 from transitions.base_transition import BaseTransition, TransitionState
-from transitions.wipe_transition import WipeDirection
+from transitions.base_transition import WipeDirection
 from rendering.gl_compositor import GLCompositorWidget
 
 

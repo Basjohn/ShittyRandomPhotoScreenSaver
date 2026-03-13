@@ -295,7 +295,7 @@ void main() {
                 return (1.0, 0.0)
             
             # Import here to avoid circular imports
-            from transitions.slide_transition import SlideDirection
+            from transitions.base_transition import SlideDirection
             
             if direction == SlideDirection.LEFT:
                 return (1.0, 0.0)

@@ -167,8 +167,7 @@ class ScreensaverEngine(QObject):
             "Diffuse",           # 4. Particle dissolve
             "Slide",             # 5. Directional
             "Crossfade",         # 6. Classic fallback
-            "Peel",              # 7. GL-only, directional
-            "Block Puzzle Flip", # 8. Tile flip
+            "Block Puzzle Flip", # 7. Tile flip
             "Warp Dissolve",     # 9. GL-only
             "Blinds",            # 10. GL-only
             "Crumble",           # 11. GL-only, falling pieces
@@ -930,7 +929,7 @@ class ScreensaverEngine(QObject):
             # Treat legacy 'Rain Drops' entries as equivalent to 'Ripple' when
             # evaluating GL-only pools. "Claw Marks" and "Shuffle" have been
             # removed from the runtime and are no longer part of the random pool.
-            gl_only_types = ["Blinds", "Peel", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble", "Particle"]
+            gl_only_types = ["Blinds", "3D Block Spins", "Ripple", "Warp Dissolve", "Crumble", "Particle"]
 
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)

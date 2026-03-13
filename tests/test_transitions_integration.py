@@ -12,8 +12,8 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QPixmap
 import sys
 
-from transitions.crossfade_transition import CrossfadeTransition
-from transitions.diffuse_transition import DiffuseTransition
+from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition as CrossfadeTransition
+from transitions.gl_compositor_diffuse_transition import GLCompositorDiffuseTransition as DiffuseTransition
 from rendering.display_widget import DisplayWidget
 from core.settings.settings_manager import SettingsManager
 from engine.display_manager import DisplayMode

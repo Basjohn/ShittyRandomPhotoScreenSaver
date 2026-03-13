@@ -17,7 +17,7 @@ from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QCheckBox, QPushButton, QSpinBox,
-    QScrollArea, QButtonGroup, QGroupBox,
+    QScrollArea, QButtonGroup, QToolButton,
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
@@ -33,7 +33,6 @@ from ui.tabs.shared_styles import (
     PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     NAV_TAB_FONT_STYLE,
-    style_group_box,
     NAV_TAB_FONT_STYLE_ACTIVE,
     STATUS_LABEL_STYLE,
     NoWheelSlider,  # noqa: F401 — re-exported
@@ -117,6 +116,7 @@ class WidgetsTab(QWidget):
         self._settings = settings
         self._widget_defaults = self._load_widget_defaults()
         self._current_subtab = 0
+        self._subtab_scroll_cache: Dict[int, int] = {}
         self._scroll_area: Optional[QScrollArea] = None
         self._global_card_border_width = int(self._widget_default('global', 'card_border_width_px', 3))
         self._clock_color = self._color_from_default('clock', 'color', [255, 255, 255, 230])
@@ -369,12 +369,34 @@ class WidgetsTab(QWidget):
         title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
 
-        # Global widget options
-        global_group = QGroupBox("Global Widget Defaults")
-        style_group_box(global_group)
-        global_layout = QVBoxLayout(global_group)
-        global_layout.setContentsMargins(16, 12, 16, 12)
-        global_layout.setSpacing(10)
+        # Global widget options — collapsible with triangle toggle
+        _global_defaults_host = QWidget()
+        _global_host_layout = QVBoxLayout(_global_defaults_host)
+        _global_host_layout.setContentsMargins(0, 0, 0, 0)
+        _global_host_layout.setSpacing(4)
+
+        _global_toggle_row = QHBoxLayout()
+        _global_toggle_row.setContentsMargins(0, 0, 0, 0)
+        _global_toggle_row.setSpacing(6)
+        self._global_defaults_toggle = QToolButton()
+        self._global_defaults_toggle.setText("Global Widget Defaults")
+        self._global_defaults_toggle.setCheckable(True)
+        _gwd_expanded = bool(self._settings.get('ui.global_widget_defaults_expanded', True))
+        self._global_defaults_toggle.setChecked(_gwd_expanded)
+        self._global_defaults_toggle.setArrowType(Qt.DownArrow if _gwd_expanded else Qt.RightArrow)
+        self._global_defaults_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self._global_defaults_toggle.setAutoRaise(True)
+        self._global_defaults_toggle.setStyleSheet(
+            "QToolButton { font-weight: 800; font-size: 15px; letter-spacing: 0.5px; }"
+        )
+        _global_toggle_row.addWidget(self._global_defaults_toggle)
+        _global_toggle_row.addStretch()
+        _global_host_layout.addLayout(_global_toggle_row)
+
+        _global_content = QWidget()
+        _global_content_layout = QVBoxLayout(_global_content)
+        _global_content_layout.setContentsMargins(16, 8, 16, 8)
+        _global_content_layout.setSpacing(10)
 
         global_row = QHBoxLayout()
         self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
@@ -402,8 +424,20 @@ class WidgetsTab(QWidget):
         global_row.addWidget(self.card_border_width_spin)
 
         global_row.addStretch()
-        global_layout.addLayout(global_row)
-        layout.addWidget(global_group)
+        _global_content_layout.addLayout(global_row)
+        _global_host_layout.addWidget(_global_content)
+        _global_content.setVisible(_gwd_expanded)
+
+        def _toggle_global_defaults(checked: bool) -> None:
+            self._global_defaults_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+            _global_content.setVisible(checked)
+            try:
+                self._settings.set('ui.global_widget_defaults_expanded', checked)
+            except Exception:
+                pass
+
+        self._global_defaults_toggle.toggled.connect(_toggle_global_defaults)
+        layout.addWidget(_global_defaults_host)
 
         # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit)
         subtab_row = QHBoxLayout()
@@ -522,6 +556,15 @@ class WidgetsTab(QWidget):
 
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""
+        prev = self._current_subtab
+        # Save outgoing subtab scroll position
+        sa = getattr(self, '_scroll_area', None)
+        if sa is not None and prev != subtab_id:
+            try:
+                self._subtab_scroll_cache[prev] = sa.verticalScrollBar().value()
+            except Exception:
+                pass
+
         self._current_subtab = int(subtab_id)
         try:
             self._clocks_container.setVisible(subtab_id == 0)
@@ -535,6 +578,12 @@ class WidgetsTab(QWidget):
         except Exception:
             # If containers are not yet initialized, ignore
             pass
+
+        # Restore incoming subtab scroll position (deferred so layout settles)
+        if sa is not None and subtab_id in self._subtab_scroll_cache:
+            saved = self._subtab_scroll_cache[subtab_id]
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(0, lambda: sa.verticalScrollBar().setValue(saved))
     
     def _on_imgur_tag_changed(self, tag: str) -> None:
         """Handle imgur tag selection change - enable/disable custom tag field."""
@@ -559,17 +608,27 @@ class WidgetsTab(QWidget):
 
     def get_view_state(self) -> Dict[str, Any]:
         state: Dict[str, Any] = {"subtab": int(getattr(self, "_current_subtab", 0))}
-        scroll = getattr(self, "_scroll_area", None)
-        if scroll is not None:
+        # Snapshot current subtab's scroll position into cache before saving
+        sa = getattr(self, "_scroll_area", None)
+        if sa is not None:
             try:
-                state["scroll"] = int(scroll.verticalScrollBar().value())
+                self._subtab_scroll_cache[self._current_subtab] = sa.verticalScrollBar().value()
             except Exception as e:
                 logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+        state["subtab_scrolls"] = dict(self._subtab_scroll_cache)
         return state
 
     def restore_view_state(self, state: Dict[str, Any]) -> None:
         if not isinstance(state, dict):
             return
+        # Restore per-subtab scroll cache
+        saved_scrolls = state.get("subtab_scrolls")
+        if isinstance(saved_scrolls, dict):
+            for k, v in saved_scrolls.items():
+                try:
+                    self._subtab_scroll_cache[int(k)] = int(v)
+                except (TypeError, ValueError):
+                    pass
         subtab = state.get("subtab")
         try:
             subtab_id = int(subtab)
@@ -579,14 +638,6 @@ class WidgetsTab(QWidget):
         if button is not None:
             button.setChecked(True)
             self._on_subtab_changed(subtab_id)
-        scroll_value = state.get("scroll")
-        if scroll_value is not None:
-            scroll = getattr(self, "_scroll_area", None)
-            if scroll is not None:
-                try:
-                    scroll.verticalScrollBar().setValue(int(scroll_value))
-                except Exception as e:
-                    logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
     
     def _load_settings(self) -> None:
         """Load settings from settings manager.
@@ -1017,11 +1068,14 @@ class WidgetsTab(QWidget):
 
         Only fires when:
         1. The change did NOT come from the preset slider itself.
-        2. The sender widget is a descendant of the current mode's advanced
+        2. We are not programmatically loading settings (_loading guard).
+        3. The sender widget is a descendant of the current mode's advanced
            container (so clock/weather/etc. changes never trigger this).
-        3. The current preset is NOT already Custom.
+        4. The current preset is NOT already Custom.
         """
         if getattr(self, '_preset_slider_changing', False):
+            return
+        if getattr(self, '_loading', False):
             return
 
         # Identify the sender and the current mode's advanced container
@@ -1108,7 +1162,20 @@ class WidgetsTab(QWidget):
         applied = apply_preset_to_config(mode_key, preset_index, working_config)
         spotify_vis_config.update(applied)
 
-        load_per_mode_technical_controls(self, spotify_vis_config)
+        # Push preset values into UI widgets so the debounced save reads
+        # the correct (preset) values instead of stale widget state.
+        # Pass full widgets dict (with media intact) so load_media_settings
+        # doesn't reset unrelated widgets to defaults.
+        full_widgets = dict(widgets_cfg)
+        full_widgets['spotify_visualizer'] = applied
+        self._loading = True
+        try:
+            from ui.tabs.widgets_tab_media import load_media_settings
+            load_media_settings(self, full_widgets)
+            load_per_mode_technical_controls(self, applied)
+        finally:
+            self._loading = False
+
         self._save_settings()
 
     def _update_vis_mode_sections(self) -> None:

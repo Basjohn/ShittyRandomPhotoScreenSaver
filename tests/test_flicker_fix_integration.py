@@ -161,23 +161,20 @@ class TestRegressionPrevention:
         """Transitions should not call processEvents() (causes races)."""
         import ast
         import inspect
-        import transitions.gl_compositor_crossfade_transition as gl_compositor_crossfade_transition
-        import transitions.crossfade_transition as crossfade_transition
+        import transitions.gl_compositor_crossfade_transition as gl_crossfade
+        import transitions.gl_compositor_slide_transition as gl_slide
+        import transitions.gl_compositor_wipe_transition as gl_wipe
         
-        # Get source code
-        modules_to_check = [gl_compositor_crossfade_transition, crossfade_transition]
+        modules_to_check = [gl_crossfade, gl_slide, gl_wipe]
         
         for module in modules_to_check:
             source = inspect.getsource(module)
             tree = ast.parse(source)
             
-            # Search for processEvents calls in transition start/update methods
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):
                     if isinstance(node.func, ast.Attribute):
                         if node.func.attr == 'processEvents':
-                            # Found processEvents call - check context
-                            # It's OK in pre-warming but NOT in start/update
                             pytest.fail(f"Found processEvents() call in {module.__name__} - "
                                       f"this can cause race conditions")
     

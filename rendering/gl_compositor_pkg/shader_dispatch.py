@@ -80,13 +80,6 @@ def can_use_blockflip_shader(comp: "GLCompositorWidget") -> bool:
     return can_use_grid_shader(comp, comp._blockflip, "blockflip_program")
 
 
-def can_use_peel_shader(comp: "GLCompositorWidget") -> bool:
-    st = comp._peel
-    if st is None or getattr(st, "strips", 0) <= 0:
-        return False
-    return can_use_simple_shader(comp, st, getattr(comp._gl_pipeline, "peel_program", 0))
-
-
 def can_use_blinds_shader(comp: "GLCompositorWidget") -> bool:
     return can_use_grid_shader(comp, comp._blinds, "blinds_program")
 
@@ -172,9 +165,6 @@ def prepare_diffuse_textures(comp: "GLCompositorWidget") -> bool:
 
 def prepare_blockflip_textures(comp: "GLCompositorWidget") -> bool:
     return prepare_transition_textures(comp, lambda: can_use_blockflip_shader(comp), comp._blockflip)
-
-def prepare_peel_textures(comp: "GLCompositorWidget") -> bool:
-    return prepare_transition_textures(comp, lambda: can_use_peel_shader(comp), comp._peel)
 
 def prepare_blinds_textures(comp: "GLCompositorWidget") -> bool:
     return prepare_transition_textures(comp, lambda: can_use_blinds_shader(comp), comp._blinds)
@@ -275,13 +265,6 @@ def render_simple_shader(
         can_use_fn, state, prep_fn, program_attr, uniforms_attr, helper_name
     )
 
-
-def paint_peel_shader(comp: "GLCompositorWidget", target: QRect) -> None:
-    render_simple_shader(
-        comp, lambda: can_use_peel_shader(comp), comp._peel,
-        lambda: prepare_peel_textures(comp),
-        "peel_program", "peel_uniforms", "peel"
-    )
 
 def paint_crumble_shader(comp: "GLCompositorWidget", target: QRect) -> None:
     render_simple_shader(

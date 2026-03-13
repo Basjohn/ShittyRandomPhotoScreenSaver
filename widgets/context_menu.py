@@ -136,7 +136,7 @@ class ScreensaverContextMenu(QMenu):
         self._always_on_top = always_on_top
         self._transition_types = transition_types or [
             "Ripple", "Wipe", "3D Block Spins", "Diffuse", "Slide",
-            "Crossfade", "Peel", "Block Puzzle Flip", "Warp Dissolve",
+            "Crossfade", "Block Puzzle Flip", "Warp Dissolve",
             "Blinds", "Crumble", "Particle", "Burn",
         ]
         self._current_transition = current_transition

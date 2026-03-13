@@ -229,13 +229,15 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _apply_blob_adv_toggle_state(tab._blob_adv_toggle.isChecked())
 
     def _handle_blob_preset_adv(is_custom: bool) -> None:
+        tab._blob_normal.setVisible(is_custom)
         tab._blob_advanced_host.setVisible(is_custom)
 
     tab._blob_preset_slider.advanced_toggled.connect(_handle_blob_preset_adv)
     _handle_blob_preset_adv(True)
 
     # --- Technical bucket (after Advanced) ---
-    build_per_mode_technical_group(tab, blob_layout, "blob")
+    _blob_tech_host = build_per_mode_technical_group(tab, blob_layout, "blob")
+    tab._blob_preset_slider.set_technical_container(_blob_tech_host)
 
     # Glow intensity (advanced)
     glow_row, glow_layout = _aligned_row("Glow Intensity:")

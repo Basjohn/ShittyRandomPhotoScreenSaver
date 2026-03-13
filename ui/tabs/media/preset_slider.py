@@ -16,7 +16,7 @@ from typing import Optional, TYPE_CHECKING
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
-from ui.tabs.shared_styles import NoWheelSlider
+from ui.tabs.shared_styles import NoWheelSlider, SECTION_HEADING_STYLE
 
 from core.logging.logger import get_logger
 from core.settings.visualizer_presets import (
@@ -49,6 +49,7 @@ class VisualizerPresetSlider(QWidget):
         super().__init__(parent)
         self._mode = mode
         self._advanced_container: Optional[QWidget] = None
+        self._technical_container: Optional[QWidget] = None
         self._preset_names = get_preset_names(mode)
         self._preset_count = get_preset_count(mode)
         self._custom_index = get_custom_preset_index(mode)
@@ -60,19 +61,22 @@ class VisualizerPresetSlider(QWidget):
         layout.setContentsMargins(0, 2, 0, 2)
         layout.setSpacing(2)
 
-        # Row: label + slider column
+        # Single row: "Preset:" label | preset name | slider | Edit button
         row = QHBoxLayout()
         row.setSpacing(6)
 
         lbl = QLabel("Preset:")
+        lbl.setStyleSheet(SECTION_HEADING_STYLE)
         lbl.setFixedWidth(48)
         row.addWidget(lbl)
 
-        slider_column = QVBoxLayout()
-        slider_column.setContentsMargins(0, 0, 0, 0)
-        slider_column.setSpacing(2)
+        self._value_label = QLabel(self._preset_names[0])
+        self._value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self._value_label.setMinimumWidth(140)
+        row.addWidget(self._value_label)
 
         self._slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        self._slider.setObjectName("presetModeSlider")
         self._slider.setMinimum(0)
         self._slider.setMaximum(self._preset_count - 1)
         self._slider.setValue(0)
@@ -84,17 +88,7 @@ class VisualizerPresetSlider(QWidget):
             "Choose a visualizer preset. Custom (rightmost) shows all settings."
         )
         self._slider.valueChanged.connect(self._on_slider_changed)
-        slider_column.addWidget(self._slider)
-
-        # Label row: preset name + EDIT PRESET button
-        label_row = QHBoxLayout()
-        label_row.setContentsMargins(0, 0, 0, 0)
-        label_row.setSpacing(6)
-
-        self._value_label = QLabel(self._preset_names[0])
-        self._value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self._value_label.setWordWrap(True)
-        label_row.addWidget(self._value_label, 1)
+        row.addWidget(self._slider, 1)
 
         self._edit_btn = QPushButton("Edit Preset")
         self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
@@ -104,11 +98,7 @@ class VisualizerPresetSlider(QWidget):
         )
         self._edit_btn.clicked.connect(self._open_preset_json)
         self._edit_btn.setVisible(False)
-        label_row.addWidget(self._edit_btn)
-
-        slider_column.addLayout(label_row)
-
-        row.addLayout(slider_column, 1)
+        row.addWidget(self._edit_btn)
 
         layout.addLayout(row)
 
@@ -121,6 +111,11 @@ class VisualizerPresetSlider(QWidget):
         self._advanced_container = container
         self._update_advanced_visibility()
 
+    def set_technical_container(self, container: QWidget) -> None:
+        """Register the Technical group widget for auto-hide on non-Custom presets."""
+        self._technical_container = container
+        self._update_advanced_visibility()
+
     def set_preset_index(self, index: int) -> None:
         """Programmatically set the slider without triggering save."""
         idx = max(0, min(self._preset_count - 1, index))
@@ -129,6 +124,7 @@ class VisualizerPresetSlider(QWidget):
         self._slider.blockSignals(False)
         self._value_label.setText(self._preset_names[idx])
         self._update_advanced_visibility()
+        self.advanced_toggled.emit(idx == self._custom_index)
 
     def preset_index(self) -> int:
         return self._slider.value()
@@ -175,6 +171,8 @@ class VisualizerPresetSlider(QWidget):
         is_custom = idx == self._custom_index
         if self._advanced_container is not None:
             self._advanced_container.setVisible(is_custom)
+        if self._technical_container is not None:
+            self._technical_container.setVisible(is_custom)
         # Show EDIT PRESET only for non-Custom presets that have a JSON file
         if is_custom:
             self._edit_btn.setVisible(False)

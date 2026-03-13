@@ -106,13 +106,15 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _apply_sine_adv_toggle_state(tab._sine_adv_toggle.isChecked())
 
     def _handle_sine_preset_adv(is_custom: bool) -> None:
+        tab._sine_normal.setVisible(is_custom)
         tab._sine_advanced_host.setVisible(is_custom)
 
     tab._sine_preset_slider.advanced_toggled.connect(_handle_sine_preset_adv)
     _handle_sine_preset_adv(True)
 
     # Technical bucket (after Advanced)
-    build_per_mode_technical_group(tab, sine_layout, "sine_wave")
+    _sine_tech_host = build_per_mode_technical_group(tab, sine_layout, "sine_wave")
+    tab._sine_preset_slider.set_technical_container(_sine_tech_host)
 
     LABEL_WIDTH = 150
 
@@ -160,6 +162,23 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_glow_intensity_label.setText(f"{v}%")
     )
     sine_glow_row.addWidget(tab.sine_glow_intensity_label)
+
+    glow_size_widget, sine_glow_size_row = _aligned_row_widget(_normal, "Glow Size:")
+    tab._sine_glow_widgets.append(glow_size_widget)
+    tab.sine_glow_size = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_glow_size.setMinimum(10)
+    tab.sine_glow_size.setMaximum(300)
+    sine_glow_size_val = int(tab._default_float('spotify_visualizer', 'sine_glow_size', 1.0) * 100)
+    tab.sine_glow_size.setValue(max(10, min(300, sine_glow_size_val)))
+    tab.sine_glow_size.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_glow_size.setTickInterval(25)
+    tab.sine_glow_size.valueChanged.connect(tab._save_settings)
+    sine_glow_size_row.addWidget(tab.sine_glow_size)
+    tab.sine_glow_size_label = QLabel(f"{sine_glow_size_val}%")
+    tab.sine_glow_size.valueChanged.connect(
+        lambda v: tab.sine_glow_size_label.setText(f"{v}%")
+    )
+    sine_glow_size_row.addWidget(tab.sine_glow_size_label)
 
     glow_color_widget, sine_glow_color_row = _aligned_row_widget(_normal, "Glow Color:")
     tab._sine_glow_widgets.append(glow_color_widget)

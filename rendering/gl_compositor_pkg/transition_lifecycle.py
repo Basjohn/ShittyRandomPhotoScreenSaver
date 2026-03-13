@@ -80,15 +80,6 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             new_pm = None
 
-    # Peel keeps its own state but participates in snap-to-new when
-    # cancelling, so the compositor can finish on the correct frame.
-    if new_pm is None and widget._peel is not None:
-        try:
-            new_pm = widget._peel.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-
     if new_pm is None and widget._blockspin is not None:
         try:
             new_pm = widget._blockspin.new_pixmap
@@ -124,7 +115,6 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     widget._blinds = None
     widget._diffuse = None
     widget._raindrops = None
-    widget._peel = None
     widget._crumble = None
 
     # Ensure any transition textures are freed when a transition is

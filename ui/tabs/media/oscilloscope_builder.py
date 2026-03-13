@@ -105,13 +105,15 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     _apply_osc_adv_toggle_state(tab._osc_adv_toggle.isChecked())
 
     def _handle_osc_preset_adv(is_custom: bool) -> None:
+        tab._osc_normal.setVisible(is_custom)
         tab._osc_advanced_host.setVisible(is_custom)
 
     tab._osc_preset_slider.advanced_toggled.connect(_handle_osc_preset_adv)
     _handle_osc_preset_adv(True)
 
     # Technical bucket (after Advanced)
-    build_per_mode_technical_group(tab, osc_layout, "oscilloscope")
+    _osc_tech_host = build_per_mode_technical_group(tab, osc_layout, "oscilloscope")
+    tab._osc_preset_slider.set_technical_container(_osc_tech_host)
 
     LABEL_WIDTH = 150
 
@@ -161,6 +163,23 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
         lambda v: tab.osc_glow_intensity_label.setText(f"{v}%")
     )
     osc_glow_row.addWidget(tab.osc_glow_intensity_label)
+
+    glow_size_widget, osc_glow_size_row = _aligned_row_widget(_normal_layout, "Glow Size:")
+    tab._osc_glow_widgets.append(glow_size_widget)
+    tab.osc_glow_size = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_glow_size.setMinimum(10)
+    tab.osc_glow_size.setMaximum(300)
+    osc_glow_size_val = int(tab._default_float('spotify_visualizer', 'osc_glow_size', 1.0) * 100)
+    tab.osc_glow_size.setValue(max(10, min(300, osc_glow_size_val)))
+    tab.osc_glow_size.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_glow_size.setTickInterval(25)
+    tab.osc_glow_size.valueChanged.connect(tab._save_settings)
+    osc_glow_size_row.addWidget(tab.osc_glow_size)
+    tab.osc_glow_size_label = QLabel(f"{osc_glow_size_val}%")
+    tab.osc_glow_size.valueChanged.connect(
+        lambda v: tab.osc_glow_size_label.setText(f"{v}%")
+    )
+    osc_glow_size_row.addWidget(tab.osc_glow_size_label)
 
     glow_reactive_widget, glow_reactive_row = _aligned_row_widget(_normal_layout, "")
     tab._osc_glow_widgets.append(glow_reactive_widget)

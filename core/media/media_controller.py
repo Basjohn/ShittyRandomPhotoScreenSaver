@@ -198,6 +198,9 @@ class WindowsGlobalMediaController(BaseMediaController):
                         except asyncio.TimeoutError:
                             logger.debug("[MEDIA] Coroutine timed out, returning None")
                             return None
+                        except MemoryError:
+                            logger.error("[MEDIA] MemoryError in GSMTC coroutine — returning None")
+                            return None
 
                     return loop.run_until_complete(_runner())
                 finally:
@@ -205,6 +208,9 @@ class WindowsGlobalMediaController(BaseMediaController):
                         loop.close()
                     except Exception:
                         logger.debug("[MEDIA] Loop close failed")
+            except MemoryError:
+                logger.error("[MEDIA] MemoryError in GSMTC loop runner — returning None")
+                return None
             except Exception:
                 logger.debug("[MEDIA] GSMTC loop runner failed", exc_info=True)
                 return None

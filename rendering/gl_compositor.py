@@ -37,8 +37,7 @@ from core.animation.animator import AnimationManager
 from core.animation.frame_interpolator import FrameState
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_profiler import TransitionProfiler
-from transitions.wipe_transition import WipeDirection
-from transitions.slide_transition import SlideDirection
+from transitions.base_transition import WipeDirection, SlideDirection
 from core.resources.manager import ResourceManager
 from rendering.transition_state import (
     CrossfadeState,
@@ -48,7 +47,6 @@ from rendering.transition_state import (
     BlockFlipState,
     RaindropsState,
     BlockSpinState,
-    PeelState,
     BlindsState,
     DiffuseState,
     CrumbleState,
@@ -77,10 +75,6 @@ from rendering.gl_transition_renderer import GLTransitionRenderer
 from rendering.gl_error_handler import get_gl_error_handler
 from rendering.gl_state_manager import GLStateManager, GLContextState
 
-
-def _get_peel_program():
-    """Get the PeelProgram instance via cache."""
-    return get_program_cache().get_program_instance(GLProgramCache.PEEL)
 
 def _get_blockflip_program():
     """Get the BlockFlipProgram instance via cache."""
@@ -157,7 +151,7 @@ def _blockspin_spin_from_progress(p: float) -> float:
 
 
 # NOTE: State dataclasses (CrossfadeState, SlideState, WipeState, WarpState,
-# BlockFlipState, RaindropsState, BlockSpinState, PeelState, BlindsState,
+# BlockFlipState, RaindropsState, BlockSpinState, BlindsState,
 # DiffuseState, CrumbleState) are imported from rendering.transition_state
 
 # NOTE: Metrics dataclasses (_GLPipelineState, _AnimationRunMetrics, 
@@ -201,7 +195,6 @@ class GLCompositorWidget(QOpenGLWidget):
         self._blinds: Optional[BlindsState] = None
         self._diffuse: Optional[DiffuseState] = None
         self._raindrops: Optional[RaindropsState] = None
-        self._peel: Optional[PeelState] = None
         self._crumble: Optional[CrumbleState] = None
         self._particle: Optional[ParticleState] = None
         self._burn = None  # BurnState — imported lazily in transitions.py
@@ -276,7 +269,6 @@ class GLCompositorWidget(QOpenGLWidget):
         self._desync_delay_ms: int = random.randint(0, 500)  # Atomic int, no lock needed
         # Set program getters after init
         self._transition_renderer.set_program_getters({
-            "peel": _get_peel_program,
             "blockflip": _get_blockflip_program,
             "crossfade": _get_crossfade_program,
             "blinds": _get_blinds_program,
@@ -327,7 +319,6 @@ class GLCompositorWidget(QOpenGLWidget):
             "GLCompositorBlockFlipTransition": GLProgramCache.BLOCK_FLIP,
             "GLCompositorBlindsTransition": GLProgramCache.BLINDS,
             "GLCompositorDiffuseTransition": GLProgramCache.DIFFUSE,
-            "GLCompositorPeelTransition": GLProgramCache.PEEL,
             "GLCompositorBlockSpinTransition": GLProgramCache.WARP,  # Uses warp helpers for card flip
             "GLCompositorRainDropsTransition": GLProgramCache.RAINDROPS,
             "GLCompositorWarpTransition": GLProgramCache.WARP,
@@ -708,7 +699,6 @@ class GLCompositorWidget(QOpenGLWidget):
         self._blockspin = None
         self._blinds = None
         self._diffuse = None
-        self._peel = None
         self._raindrops = None
         self._crumble = None
         self._particle = None
@@ -952,7 +942,6 @@ class GLCompositorWidget(QOpenGLWidget):
             "GLCompositorBlockSpinTransition": self._warm_blockspin_state,
             "GLCompositorBlindsTransition": self._warm_blinds_state,
             "GLCompositorDiffuseTransition": self._warm_diffuse_state,
-            "GLCompositorPeelTransition": self._warm_peel_state,
             "GLCompositorWarpTransition": self._warm_warp_state,
             "GLCompositorRainDropsTransition": self._warm_raindrops_state,
             "GLCompositorCrumbleTransition": self._warm_crumble_state,
@@ -1028,15 +1017,6 @@ class GLCompositorWidget(QOpenGLWidget):
             shape_mode=0,
         )
         return self._with_temp_state("_diffuse", state, self._prepare_diffuse_textures)
-
-    def _warm_peel_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
-        state = PeelState(
-            old_pixmap=old_pixmap,
-            new_pixmap=new_pixmap,
-            direction=SlideDirection.LEFT,
-            strips=8,
-        )
-        return self._with_temp_state("_peel", state, self._prepare_peel_textures)
 
     def _warm_warp_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
         state = WarpState(old_pixmap=old_pixmap, new_pixmap=new_pixmap)
@@ -1209,22 +1189,6 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.transitions import start_slide
         return start_slide(self, old_pixmap, new_pixmap, old_start=old_start, old_end=old_end, new_start=new_start, new_end=new_end, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished)
 
-    def start_peel(
-        self,
-        old_pixmap: Optional[QPixmap],
-        new_pixmap: QPixmap,
-        *,
-        direction: SlideDirection,
-        strips: int,
-        duration_ms: int,
-        easing: EasingCurve,
-        animation_manager: AnimationManager,
-        on_finished: Optional[Callable[[], None]] = None,
-    ) -> Optional[str]:
-        """Delegates to gl_compositor_pkg.transitions."""
-        from rendering.gl_compositor_pkg.transitions import start_peel
-        return start_peel(self, old_pixmap, new_pixmap, direction=direction, strips=strips, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished)
-
     def start_block_flip(
         self,
         old_pixmap: Optional[QPixmap],
@@ -1379,12 +1343,6 @@ class GLCompositorWidget(QOpenGLWidget):
     def _on_raindrops_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         self._complete_transition("raindrops", "_raindrops", on_finished, release_textures=True)
 
-    def _on_peel_update(self, progress: float) -> None:
-        self._update_transition_progress("_peel", "peel", progress)
-
-    def _on_peel_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
-        self._complete_transition("peel", "_peel", on_finished)
-
     def _on_blockflip_complete(self, on_finished: Optional[Callable[[], None]]) -> None:
         self._complete_transition("blockflip", "_blockflip", on_finished)
 
@@ -1445,7 +1403,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._release_transition_textures()
         program_attrs = [
             "basic_program", "raindrops_program", "warp_program", "diffuse_program",
-            "blockflip_program", "peel_program", "crossfade_program", "slide_program",
+            "blockflip_program", "crossfade_program", "slide_program",
             "wipe_program", "blinds_program", "crumble_program", "particle_program",
             "burn_program",
         ]
@@ -1530,10 +1488,6 @@ class GLCompositorWidget(QOpenGLWidget):
     def _can_use_blockflip_shader(self) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import can_use_blockflip_shader
         return can_use_blockflip_shader(self)
-
-    def _can_use_peel_shader(self) -> bool:
-        from rendering.gl_compositor_pkg.shader_dispatch import can_use_peel_shader
-        return can_use_peel_shader(self)
 
     def _can_use_blinds_shader(self) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import can_use_blinds_shader
@@ -1633,10 +1587,6 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_blockflip_textures
         return prepare_blockflip_textures(self)
 
-    def _prepare_peel_textures(self) -> bool:
-        from rendering.gl_compositor_pkg.shader_dispatch import prepare_peel_textures
-        return prepare_peel_textures(self)
-
     def _prepare_blinds_textures(self) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import prepare_blinds_textures
         return prepare_blinds_textures(self)
@@ -1686,10 +1636,6 @@ class GLCompositorWidget(QOpenGLWidget):
     def _paint_blockspin_shader(self, target: QRect) -> None:
         from rendering.gl_compositor_pkg.shader_dispatch import paint_blockspin_shader
         paint_blockspin_shader(self, target)
-
-    def _paint_peel_shader(self, target: QRect) -> None:
-        from rendering.gl_compositor_pkg.shader_dispatch import paint_peel_shader
-        paint_peel_shader(self, target)
 
     def _paint_crumble_shader(self, target: QRect) -> None:
         from rendering.gl_compositor_pkg.shader_dispatch import paint_crumble_shader

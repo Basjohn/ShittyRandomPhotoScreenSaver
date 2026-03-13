@@ -16,19 +16,13 @@ from core.resources.manager import ResourceManager
 from core.process import ProcessSupervisor, WorkerType, MessageType
 
 # Transition imports
-from transitions.base_transition import BaseTransition
-from transitions.crossfade_transition import CrossfadeTransition
-from transitions.slide_transition import SlideTransition, SlideDirection
-from transitions.wipe_transition import WipeTransition, WipeDirection
-from transitions.diffuse_transition import DiffuseTransition
-from transitions.block_puzzle_flip_transition import BlockPuzzleFlipTransition
+from transitions.base_transition import BaseTransition, SlideDirection, WipeDirection
 
 # GL Compositor transitions
 from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
 from transitions.gl_compositor_slide_transition import GLCompositorSlideTransition
 from transitions.gl_compositor_wipe_transition import GLCompositorWipeTransition
 from transitions.gl_compositor_diffuse_transition import GLCompositorDiffuseTransition
-from transitions.gl_compositor_peel_transition import GLCompositorPeelTransition
 from transitions.gl_compositor_blockspin_transition import GLCompositorBlockSpinTransition
 from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlipTransition
 from transitions.gl_compositor_blinds_transition import GLCompositorBlindsTransition
@@ -234,13 +228,12 @@ class TransitionFactory:
         # Get duration
         duration_ms = self._get_duration(transitions_settings, transition_type)
         
-        # Get easing and hw_accel
+        # Get easing
         easing_str = transitions_settings.get('easing') or 'Auto'
-        hw_accel = self._get_hw_accel()
         
         # Create the appropriate transition
         transition = self._create_by_type(
-            transition_type, transitions_settings, duration_ms, easing_str, hw_accel
+            transition_type, transitions_settings, duration_ms, easing_str
         )
         
         if transition:
@@ -251,7 +244,7 @@ class TransitionFactory:
     
     # Concrete transition names the factory can instantiate directly.
     _CONCRETE_TYPES = frozenset({
-        'Crossfade', 'Slide', 'Wipe', 'Peel', 'Shuffle', 'Claw Marks',
+        'Crossfade', 'Slide', 'Wipe', 'Shuffle', 'Claw Marks',
         'Warp Dissolve', 'Diffuse', 'Rain Drops', 'Ripple',
         'Block Puzzle Flip', '3D Block Spins', 'Blinds', 'Crumble', 'Particle', 'Burn',
     })
@@ -293,12 +286,9 @@ class TransitionFactory:
     def _pick_random_transition(self, settings: dict) -> str:
         """Pick a concrete random transition type (factory-side fallback)."""
         try:
-            hw = SettingsManager.to_bool(
-                self._settings.get('display.hw_accel', True), True,
-            )
-            base = ['Crossfade', 'Slide', 'Wipe', 'Diffuse', 'Block Puzzle Flip']
-            gl_only = [
-                'Blinds', 'Peel', '3D Block Spins', 'Ripple',
+            all_types = [
+                'Crossfade', 'Slide', 'Wipe', 'Diffuse', 'Block Puzzle Flip',
+                'Blinds', '3D Block Spins', 'Ripple',
                 'Warp Dissolve', 'Crumble', 'Particle', 'Burn',
             ]
             pool_cfg = (
@@ -314,9 +304,7 @@ class TransitionFactory:
                     raw = pool_cfg.get(name, True)
                 return bool(SettingsManager.to_bool(raw, True))
 
-            available = [n for n in base if _in_pool(n)]
-            if hw:
-                available.extend(n for n in gl_only if _in_pool(n))
+            available = [n for n in all_types if _in_pool(n)]
             if not available:
                 available = ['Crossfade']
 
@@ -362,24 +350,12 @@ class TransitionFactory:
         
         return duration_ms
     
-    def _get_hw_accel(self) -> bool:
-        """Check if hardware acceleration is enabled."""
-        try:
-            hw_raw = self._settings.get('display.hw_accel', True)
-        except Exception as e:
-            logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
-            hw_raw = True
-        return SettingsManager.to_bool(hw_raw, True)
-    
-    def _use_compositor(self, hw_accel: bool) -> bool:
-        """Check if compositor should be used."""
-        if not hw_accel:
-            return False
+    def _ensure_gl(self) -> None:
+        """Ensure GL compositor is initialized."""
         try:
             self._ensure_compositor()
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to ensure compositor", exc_info=True)
-        return self._check_compositor()
     
     def _create_by_type(
         self,
@@ -387,112 +363,82 @@ class TransitionFactory:
         settings: dict,
         duration_ms: int,
         easing_str: str,
-        hw_accel: bool,
     ) -> Optional[BaseTransition]:
-        """Create transition by type name."""
-        use_compositor = self._use_compositor(hw_accel)
+        """Create transition by type name (GL-only, no SW fallbacks)."""
+        self._ensure_gl()
         
         if transition_type == 'Crossfade':
-            return self._create_crossfade(duration_ms, easing_str, use_compositor)
+            return self._create_crossfade(duration_ms, easing_str)
         
         if transition_type == 'Slide':
-            return self._create_slide(settings, duration_ms, easing_str, use_compositor)
+            return self._create_slide(settings, duration_ms, easing_str)
         
         if transition_type == 'Wipe':
-            return self._create_wipe(settings, duration_ms, easing_str, use_compositor)
-        
-        if transition_type == 'Peel':
-            return self._create_peel(settings, duration_ms, easing_str, use_compositor)
+            return self._create_wipe(settings, duration_ms, easing_str)
         
         if transition_type in ('Shuffle', 'Claw Marks'):
-            # Retired transitions map to Crossfade
-            return CrossfadeTransition(duration_ms, easing_str)
+            return self._create_crossfade(duration_ms, easing_str)
         
         if transition_type == 'Warp Dissolve':
-            return self._create_warp(duration_ms, easing_str, use_compositor)
+            return self._create_warp(duration_ms, easing_str)
         
         if transition_type == 'Diffuse':
-            return self._create_diffuse(settings, duration_ms, easing_str, use_compositor)
+            return self._create_diffuse(settings, duration_ms, easing_str)
         
         if transition_type in ('Rain Drops', 'Ripple'):
-            return self._create_raindrops(settings, duration_ms, easing_str, use_compositor)
+            return self._create_raindrops(settings, duration_ms, easing_str)
         
         if transition_type == 'Block Puzzle Flip':
-            return self._create_blockflip(settings, duration_ms, use_compositor)
+            return self._create_blockflip(settings, duration_ms)
         
         if transition_type == '3D Block Spins':
-            return self._create_blockspin(settings, duration_ms, easing_str, use_compositor)
+            return self._create_blockspin(settings, duration_ms, easing_str)
         
         if transition_type == 'Blinds':
-            return self._create_blinds(settings, duration_ms, use_compositor)
+            return self._create_blinds(settings, duration_ms)
         
         if transition_type == 'Crumble':
-            return self._create_crumble(settings, duration_ms, use_compositor)
+            return self._create_crumble(settings, duration_ms)
         
         if transition_type == 'Particle':
-            return self._create_particle(settings, duration_ms, use_compositor)
+            return self._create_particle(settings, duration_ms)
         
         if transition_type == 'Burn':
-            return self._create_burn(settings, duration_ms, easing_str, use_compositor)
+            return self._create_burn(settings, duration_ms, easing_str)
         
-        # Unknown type - fallback to Crossfade (use same path as normal creation)
         logger.warning("Unknown transition type: %s, using Crossfade", transition_type)
-        return self._create_crossfade(duration_ms, easing_str, use_compositor)
+        return self._create_crossfade(duration_ms, easing_str)
     
     # Individual transition creators
     
-    def _create_crossfade(self, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
-        if use_compositor:
-            return GLCompositorCrossfadeTransition(duration_ms, easing_str)
-        return CrossfadeTransition(duration_ms, easing_str)
+    def _create_crossfade(self, duration_ms: int, easing_str: str) -> BaseTransition:
+        return GLCompositorCrossfadeTransition(duration_ms, easing_str)
     
-    def _create_slide(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+    def _create_slide(self, settings: dict, duration_ms: int, easing_str: str) -> BaseTransition:
         slide_settings = settings.get('slide', {}) if isinstance(settings.get('slide', {}), dict) else {}
         direction = self._get_slide_direction(settings, slide_settings, 'slide')
-        
-        if use_compositor:
-            return GLCompositorSlideTransition(duration_ms, direction, easing_str)
-        return SlideTransition(duration_ms, direction, easing_str)
+        return GLCompositorSlideTransition(duration_ms, direction, easing_str)
     
-    def _create_wipe(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+    def _create_wipe(self, settings: dict, duration_ms: int, easing_str: str) -> BaseTransition:
         wipe_settings = settings.get('wipe', {}) if isinstance(settings.get('wipe', {}), dict) else {}
         direction = self._get_wipe_direction(settings, wipe_settings)
-        
-        if use_compositor:
-            return GLCompositorWipeTransition(duration_ms, direction, easing_str)
-        return WipeTransition(duration_ms, direction, easing_str)
+        return GLCompositorWipeTransition(duration_ms, direction, easing_str)
     
-    def _create_peel(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
-        peel_settings = settings.get('peel', {}) if isinstance(settings.get('peel', {}), dict) else {}
-        direction = self._get_slide_direction(settings, peel_settings, 'peel')
-        strips = 12
-        
-        if use_compositor:
-            return GLCompositorPeelTransition(duration_ms, direction, strips, easing_str)
-        return CrossfadeTransition(duration_ms, easing_str)  # CPU fallback
+    def _create_warp(self, duration_ms: int, easing_str: str) -> BaseTransition:
+        return GLCompositorWarpTransition(duration_ms, easing_str)
     
-    def _create_warp(self, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
-        if use_compositor:
-            return GLCompositorWarpTransition(duration_ms, easing_str)
-        return CrossfadeTransition(duration_ms, easing_str)
-    
-    def _create_diffuse(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+    def _create_diffuse(self, settings: dict, duration_ms: int, easing_str: str) -> BaseTransition:
         diffuse_settings = settings.get('diffuse', {}) if isinstance(settings.get('diffuse', {}), dict) else {}
         block_size = self._safe_int(diffuse_settings.get('block_size', 50), 50)
         shape = diffuse_settings.get('shape', 'Rectangle') or 'Rectangle'
-        
-        if use_compositor:
-            return GLCompositorDiffuseTransition(duration_ms, block_size, shape, easing_str)
-        return DiffuseTransition(duration_ms, block_size, shape)
+        return GLCompositorDiffuseTransition(duration_ms, block_size, shape, easing_str)
     
-    def _create_raindrops(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+    def _create_raindrops(self, settings: dict, duration_ms: int, easing_str: str) -> BaseTransition:
         ripple_settings = settings.get('ripple', {}) if isinstance(settings.get('ripple', {}), dict) else {}
         ripple_count = self._safe_int(ripple_settings.get('ripple_count', 3), 3)
-        if use_compositor:
-            return GLCompositorRainDropsTransition(duration_ms, easing_str, ripple_count)
-        return CrossfadeTransition(duration_ms, easing_str)
+        return GLCompositorRainDropsTransition(duration_ms, easing_str, ripple_count)
     
-    def _create_blockflip(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+    def _create_blockflip(self, settings: dict, duration_ms: int) -> BaseTransition:
         block_flip_settings = settings.get('block_flip', {}) if isinstance(settings.get('block_flip', {}), dict) else {}
         rows = self._safe_int(block_flip_settings.get('rows', 4), 4)
         cols = self._safe_int(block_flip_settings.get('cols', 6), 6)
@@ -508,11 +454,9 @@ class TransitionFactory:
         else:
             direction = SLIDE_DIRECTION_MAP.get(dir_str, SlideDirection.LEFT)
         
-        if use_compositor:
-            return GLCompositorBlockFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=direction)
-        return BlockPuzzleFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=direction)
+        return GLCompositorBlockFlipTransition(duration_ms, rows, cols, flip_duration_ms=500, direction=direction)
     
-    def _create_blockspin(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+    def _create_blockspin(self, settings: dict, duration_ms: int, easing_str: str) -> BaseTransition:
         blockspin_settings = settings.get('blockspin', {}) if isinstance(settings.get('blockspin', {}), dict) else {}
         dir_str = blockspin_settings.get('direction', 'Random') or 'Random'
         
@@ -521,33 +465,29 @@ class TransitionFactory:
         else:
             direction = SLIDE_DIRECTION_MAP.get(dir_str, SlideDirection.LEFT)
         
-        if use_compositor:
-            return GLCompositorBlockSpinTransition(duration_ms, easing_str, direction)
-        return CrossfadeTransition(duration_ms, easing_str)
+        return GLCompositorBlockSpinTransition(duration_ms, easing_str, direction)
     
-    def _create_blinds(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+    def _create_blinds(self, settings: dict, duration_ms: int) -> BaseTransition:
         from core.settings.defaults import get_default_settings
         canonical = get_default_settings().get('transitions', {}).get('blinds', {})
 
-        if use_compositor:
-            blinds_cfg = settings.get('blinds', {})
-            if not isinstance(blinds_cfg, dict):
-                blinds_cfg = {}
-            feather = float(blinds_cfg.get('feather', canonical.get('feather', 2))) / 25.0
-            feather = max(0.001, min(0.5, feather * 0.5))
-            direction_str = str(blinds_cfg.get('direction', canonical.get('direction', 'Horizontal')))
-            if direction_str == 'Random':
-                direction_str = random.choice(['Horizontal', 'Vertical', 'Diagonal'])
-            direction_map = {'Horizontal': 0, 'Vertical': 1, 'Diagonal': 2}
-            direction = direction_map.get(direction_str, 0)
-            return GLCompositorBlindsTransition(
-                duration_ms=duration_ms,
-                feather=feather,
-                direction=direction,
-            )
-        return CrossfadeTransition(duration_ms)
+        blinds_cfg = settings.get('blinds', {})
+        if not isinstance(blinds_cfg, dict):
+            blinds_cfg = {}
+        feather = float(blinds_cfg.get('feather', canonical.get('feather', 2))) / 25.0
+        feather = max(0.001, min(0.5, feather * 0.5))
+        direction_str = str(blinds_cfg.get('direction', canonical.get('direction', 'Horizontal')))
+        if direction_str == 'Random':
+            direction_str = random.choice(['Horizontal', 'Vertical', 'Diagonal'])
+        direction_map = {'Horizontal': 0, 'Vertical': 1, 'Diagonal': 2}
+        direction = direction_map.get(direction_str, 0)
+        return GLCompositorBlindsTransition(
+            duration_ms=duration_ms,
+            feather=feather,
+            direction=direction,
+        )
     
-    def _create_crumble(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+    def _create_crumble(self, settings: dict, duration_ms: int) -> BaseTransition:
         # Get canonical defaults from defaults.py
         from core.settings.defaults import get_default_settings
         canonical = get_default_settings().get('transitions', {}).get('crumble', {})
@@ -565,11 +505,9 @@ class TransitionFactory:
         }
         weight_mode = weight_map.get(weight_str, 0.0)
         
-        if use_compositor:
-            return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, False, weight_mode)
-        return CrossfadeTransition(duration_ms)
+        return GLCompositorCrumbleTransition(duration_ms, piece_count, crack_complexity, False, weight_mode)
     
-    def _create_burn(self, settings: dict, duration_ms: int, easing_str: str, use_compositor: bool) -> BaseTransition:
+    def _create_burn(self, settings: dict, duration_ms: int, easing_str: str) -> BaseTransition:
         from core.settings.defaults import get_default_settings
         canonical = get_default_settings().get('transitions', {}).get('burn', {})
 
@@ -593,22 +531,20 @@ class TransitionFactory:
         smoke_density = self._safe_float(burn_cfg.get('smoke_density', canonical.get('smoke_density', 0.5)), 0.5)
         ash_enabled = SettingsManager.to_bool(burn_cfg.get('ash_enabled', canonical.get('ash_enabled', True)), True)
         ash_density = self._safe_float(burn_cfg.get('ash_density', canonical.get('ash_density', 0.5)), 0.5)
-        if use_compositor:
-            return GLCompositorBurnTransition(
-                duration_ms=duration_ms,
-                direction=direction,
-                jaggedness=jaggedness,
-                glow_intensity=glow_intensity,
-                char_width=char_width,
-                smoke_enabled=smoke_enabled,
-                smoke_density=smoke_density,
-                ash_enabled=ash_enabled,
-                ash_density=ash_density,
-                easing=easing_str,
-            )
-        return CrossfadeTransition(duration_ms, easing_str)
+        return GLCompositorBurnTransition(
+            duration_ms=duration_ms,
+            direction=direction,
+            jaggedness=jaggedness,
+            glow_intensity=glow_intensity,
+            char_width=char_width,
+            smoke_enabled=smoke_enabled,
+            smoke_density=smoke_density,
+            ash_enabled=ash_enabled,
+            ash_density=ash_density,
+            easing=easing_str,
+        )
 
-    def _create_particle(self, settings: dict, duration_ms: int, use_compositor: bool) -> BaseTransition:
+    def _create_particle(self, settings: dict, duration_ms: int) -> BaseTransition:
         # Get canonical defaults from defaults.py
         from core.settings.defaults import get_default_settings
         canonical = get_default_settings().get('transitions', {}).get('particle', {})
@@ -652,14 +588,12 @@ class TransitionFactory:
         light_direction = int(particle_settings.get('light_direction', canonical.get('light_direction', 0)))
         swirl_order = int(particle_settings.get('swirl_order', canonical.get('swirl_order', 0)))
         
-        if use_compositor:
-            return GLCompositorParticleTransition(
-                duration_ms, mode, direction, particle_radius, overlap,
-                trail_length, trail_strength, swirl_strength, swirl_turns,
-                use_3d_shading, texture_mapping, wobble, gloss_size,
-                light_direction, swirl_order
-            )
-        return CrossfadeTransition(duration_ms)
+        return GLCompositorParticleTransition(
+            duration_ms, mode, direction, particle_radius, overlap,
+            trail_length, trail_strength, swirl_strength, swirl_turns,
+            use_3d_shading, texture_mapping, wobble, gloss_size,
+            light_direction, swirl_order
+        )
     
     # Direction helpers
     

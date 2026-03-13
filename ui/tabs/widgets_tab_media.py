@@ -465,7 +465,12 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
 
     # --- Beat Visualizer Group ---
     spotify_vis_group = QGroupBox("Beat Visualizer")
+    spotify_vis_group.setObjectName("beatVisualizerGroup")
     style_group_box(spotify_vis_group)
+    spotify_vis_group.setStyleSheet(
+        spotify_vis_group.styleSheet() +
+        "\nQGroupBox#beatVisualizerGroup::title { font-size: 15px; }"
+    )
     spotify_vis_layout = QVBoxLayout(spotify_vis_group)
 
     spotify_vis_enable_row = QHBoxLayout()
@@ -478,17 +483,7 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.vis_enabled_checkbox.stateChanged.connect(tab._save_settings)
     spotify_vis_enable_row.addWidget(tab.vis_enabled_checkbox)
 
-    tab.vis_software_checkbox = QCheckBox("FORCE Software Visualizer")
-    tab.vis_software_checkbox.setProperty("circleIndicator", True)
-    tab.vis_software_checkbox.setChecked(
-        tab._default_bool('spotify_visualizer', 'software_visualizer_enabled', False)
-    )
-    tab.vis_software_checkbox.setToolTip(
-        "Force the legacy CPU bar visualizer even when the renderer backend is set to Software or when OpenGL is unavailable."
-    )
-    tab.vis_software_checkbox.stateChanged.connect(tab._save_settings)
     spotify_vis_enable_row.addStretch()
-    spotify_vis_enable_row.addWidget(tab.vis_software_checkbox)
     spotify_vis_layout.addLayout(spotify_vis_enable_row)
 
     # Container for all visualizer controls gated by enable checkbox
@@ -718,10 +713,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     )
     load_per_mode_technical_controls(tab, spotify_vis_config)
 
-    tab.vis_software_checkbox.setChecked(
-        tab._config_bool('spotify_visualizer', spotify_vis_config, 'software_visualizer_enabled', False)
-    )
-
     fill_color_data = spotify_vis_config.get('bar_fill_color', tab._widget_default('spotify_visualizer', 'bar_fill_color', [0, 255, 128, 230]))
     try:
         tab._spotify_vis_fill_color = QColor(*fill_color_data)
@@ -755,6 +746,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         osc_glow_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_glow_intensity', 0.5) * 100)
         tab.osc_glow_intensity.setValue(max(0, min(100, osc_glow_val)))
         tab.osc_glow_intensity_label.setText(f"{osc_glow_val}%")
+    if hasattr(tab, 'osc_glow_size'):
+        osc_gs_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_glow_size', 1.0) * 100)
+        tab.osc_glow_size.setValue(max(10, min(300, osc_gs_val)))
+        tab.osc_glow_size_label.setText(f"{osc_gs_val}%")
     if hasattr(tab, 'osc_reactive_glow'):
         tab.osc_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_reactive_glow', True)
@@ -1028,6 +1023,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         sine_gi_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_glow_intensity', 0.5) * 100)
         tab.sine_glow_intensity.setValue(max(0, min(100, sine_gi_val)))
         tab.sine_glow_intensity_label.setText(f"{sine_gi_val}%")
+    if hasattr(tab, 'sine_glow_size'):
+        sine_gs_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_glow_size', 1.0) * 100)
+        tab.sine_glow_size.setValue(max(10, min(300, sine_gs_val)))
+        tab.sine_glow_size_label.setText(f"{sine_gs_val}%")
     sine_glow_color_data = spotify_vis_config.get('sine_glow_color', [0, 200, 255, 230])
     try:
         tab._sine_glow_color = QColor(*sine_glow_color_data)
@@ -1412,7 +1411,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'visualizers_enabled': tab.visualizers_enabled.isChecked() if hasattr(tab, 'visualizers_enabled') else True,
         'enabled': tab.vis_enabled_checkbox.isChecked(),
         'mode': tab.vis_mode_combo.currentData() if hasattr(tab, 'vis_mode_combo') else 'spectrum',
-        'software_visualizer_enabled': tab.vis_software_checkbox.isChecked(),
+        'software_visualizer_enabled': False,
         'bar_fill_color': [
             tab._spotify_vis_fill_color.red(),
             tab._spotify_vis_fill_color.green(),
@@ -1431,6 +1430,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'ghost_decay': max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
         'osc_glow_enabled': tab.osc_glow_enabled.isChecked() if hasattr(tab, 'osc_glow_enabled') else False,
         'osc_glow_intensity': (tab.osc_glow_intensity.value() if hasattr(tab, 'osc_glow_intensity') else 50) / 100.0,
+        'osc_glow_size': (tab.osc_glow_size.value() if hasattr(tab, 'osc_glow_size') else 100) / 100.0,
         'osc_reactive_glow': tab.osc_reactive_glow.isChecked() if hasattr(tab, 'osc_reactive_glow') else False,
         'osc_line_amplitude': (tab.osc_line_amplitude.value() if hasattr(tab, 'osc_line_amplitude') else 30) / 10.0,
         'osc_smoothing': (tab.osc_smoothing.value() if hasattr(tab, 'osc_smoothing') else 70) / 100.0,
@@ -1488,6 +1488,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_vertical_shift': tab.osc_vertical_shift.value() if hasattr(tab, 'osc_vertical_shift') else 0,
         'sine_glow_enabled': tab.sine_glow_enabled.isChecked() if hasattr(tab, 'sine_glow_enabled') else False,
         'sine_glow_intensity': (tab.sine_glow_intensity.value() if hasattr(tab, 'sine_glow_intensity') else 50) / 100.0,
+        'sine_glow_size': (tab.sine_glow_size.value() if hasattr(tab, 'sine_glow_size') else 100) / 100.0,
         'sine_glow_color': _qcolor_to_list(getattr(tab, '_sine_glow_color', None), [0, 200, 255, 230]),
         'sine_line_color': _qcolor_to_list(getattr(tab, '_sine_line_color', None), [255, 255, 255, 255]),
         'sine_reactive_glow': tab.sine_reactive_glow.isChecked() if hasattr(tab, 'sine_reactive_glow') else False,

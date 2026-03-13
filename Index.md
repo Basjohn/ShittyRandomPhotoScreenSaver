@@ -163,29 +163,20 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| InputHandler | 
-endering/input_handler.py | InputHandler | Mouse/keyboard/media keys |
-| TransitionController | 
-endering/transition_controller.py | TransitionController | Transition lifecycle |
-| ImagePresenter | 
-endering/image_presenter.py | ImagePresenter | Pixmap management |
-| MultiMonitorCoordinator | 
-endering/multi_monitor_coordinator.py | MultiMonitorCoordinator | Cross-display coordination |
+| InputHandler | rendering/input_handler.py | InputHandler | Mouse/keyboard/media keys |
+| TransitionController | rendering/transition_controller.py | TransitionController | Transition lifecycle |
+| ImagePresenter | rendering/image_presenter.py | ImagePresenter | Pixmap management |
+| MultiMonitorCoordinator | rendering/multi_monitor_coordinator.py | MultiMonitorCoordinator | Cross-display coordination |
 
 ## Rendering - GL Infrastructure
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| GL State | 
-endering/gl_state_manager.py | GLStateManager, GLStateGuard | GL context state |
-| GL Error | 
-endering/gl_error_handler.py | GLErrorHandler | Centralized error handling |
-| GL Profiler | 
-endering/gl_profiler.py | TransitionProfiler | Frame timing metrics |
-| Render Strategy | 
-endering/render_strategy.py | TimerRenderStrategy | Timer-based rendering |
-| Adaptive Timer | 
-endering/adaptive_timer.py | AdaptiveTimerStrategy | Adaptive frame pacing |
+| GL State | rendering/gl_state_manager.py | GLStateManager, GLStateGuard | GL context state |
+| GL Error | rendering/gl_error_handler.py | GLErrorHandler | Centralized error handling |
+| GL Profiler | rendering/gl_profiler.py | TransitionProfiler | Frame timing metrics |
+| Render Strategy | rendering/render_strategy.py | TimerRenderStrategy | Timer-based rendering |
+| Adaptive Timer | rendering/adaptive_timer.py | AdaptiveTimerStrategy | Adaptive frame pacing |
 
 > **Render timing defaults:** `GLCompositorWidget` now caches the first successfully detected refresh rate per display and reuses it for subsequent restarts/settings-dialog hops. If hardware/Qt fails to report a Hz value, the compositor, display setup, display widget, and adaptive timer all fall back to an uncapped 240 Hz target instead of 60 Hz so high-refresh panels never get stuck at 60 fps.
 
@@ -193,45 +184,40 @@ endering/adaptive_timer.py | AdaptiveTimerStrategy | Adaptive frame pacing |
 
 | Module | File | Key Class | Transition |
 |--------|------|-----------|------------|
-| Program Cache | 
-endering/gl_programs/program_cache.py | GLProgramCache | All |
-| Geometry | 
-endering/gl_programs/geometry_manager.py | GLGeometryManager | All |
-| Texture | 
-endering/gl_programs/texture_manager.py | GLTextureManager | All |
-| Crossfade | 
-endering/gl_programs/crossfade_program.py | CrossfadeProgram | Crossfade |
-| Slide | 
-endering/gl_programs/slide_program.py | SlideProgram | Slide |
-| Wipe | 
-endering/gl_programs/wipe_program.py | WipeProgram | Wipe |
-| Blinds | 
-endering/gl_programs/blinds_program.py | BlindsProgram | Blinds |
-| Diffuse | 
-endering/gl_programs/diffuse_program.py | DiffuseProgram | Diffuse |
-| BlockFlip | 
-endering/gl_programs/blockflip_program.py | BlockFlipProgram | Block Puzzle Flip |
-| BlockSpin | 
+| Program Cache | rendering/gl_programs/program_cache.py | GLProgramCache | All |
+| Geometry | rendering/gl_programs/geometry_manager.py | GLGeometryManager | All |
+| Texture | rendering/gl_programs/texture_manager.py | GLTextureManager | All |
+| Crossfade | rendering/gl_programs/crossfade_program.py | CrossfadeProgram | Crossfade |
+| Slide | rendering/gl_programs/slide_program.py | SlideProgram | Slide |
+| Wipe | rendering/gl_programs/wipe_program.py | WipeProgram | Wipe |
+| Blinds | rendering/gl_programs/blinds_program.py | BlindsProgram | Blinds |
+| Diffuse | rendering/gl_programs/diffuse_program.py | DiffuseProgram | Diffuse |
+| BlockFlip | rendering/gl_programs/blockflip_program.py | BlockFlipProgram | Block Puzzle Flip |
+| BlockSpin | (uses blockflip card-flip shader) | — | 3D Block Spins |
+| Ripple | rendering/gl_programs/raindrops_program.py | RainDropsProgram | Ripple |
+| Warp | rendering/gl_programs/warp_program.py | WarpProgram | Warp Dissolve |
+| Crumble | rendering/gl_programs/crumble_program.py | CrumbleProgram | Crumble |
+| Particle | rendering/gl_programs/particle_program.py | ParticleProgram | Particle |
+| Burn | rendering/gl_programs/burn_program.py | BurnProgram | Burn |
 
 ## Transitions
 
-| Transition | CPU File | GL File | Notes |
-|------------|----------|---------|-------|
-| Crossfade | 	ransitions/crossfade_transition.py | 	ransitions/gl_compositor_crossfade_transition.py | Basic fade |
-| Slide | 	ransitions/slide_transition.py | 	ransitions/gl_compositor_slide_transition.py | 4 directions |
-| Wipe | 	ransitions/wipe_transition.py | 	ransitions/gl_compositor_wipe_transition.py | 8 directions |
-| Diffuse | 	ransitions/diffuse_transition.py | 	ransitions/gl_compositor_diffuse_transition.py | Rectangle/Membrane/Lines/Diamonds/Amorph shapes |
-| Block Flip | 	ransitions/block_puzzle_flip_transition.py | 	ransitions/gl_compositor_blockflip_transition.py | Puzzle effect |
-| Blinds | - | 	ransitions/gl_compositor_blinds_transition.py | GL only |
-| Peel | - | 	ransitions/gl_compositor_peel_transition.py | GL only |
-| Block Spin | - | 	ransitions/gl_compositor_blockspin_transition.py | GL only, 3D, 6 directions incl. diagonals |
-| Raindrops | - | transitions/gl_compositor_raindrops_transition.py | GL only (Ripple), configurable ripple count 1-8, per-transition random seed for position variety; Feb 2026 shader hotfix fades the additive ring highlight out once pixels finish blending, eliminating the brightness spike at T=1.0 |
-| Warp | - | 	ransitions/gl_compositor_warp_transition.py | GL only |
-| Crumble | - | 	ransitions/gl_compositor_crumble_transition.py | GL only |
-| Particle | - | 	ransistions/gl_compositor_particle_transition.py | GL only |
-| Burn | - | transitions/gl_compositor_burn_transition.py | GL only, 4 directions (L→R, R→L, T→B, B→T; center-out removed), jaggedness/glow/char params |
-| Base | 	ransitions/base_transition.py | - | Abstract base |
-| Overlay Manager | 	ransitions/overlay_manager.py | - | GL overlay helpers |
+| Transition | GL File | Notes |
+|------------|---------|-------|
+| Crossfade | transitions/gl_compositor_crossfade_transition.py | Basic fade |
+| Slide | transitions/gl_compositor_slide_transition.py | 4 directions |
+| Wipe | transitions/gl_compositor_wipe_transition.py | 8 directions |
+| Diffuse | transitions/gl_compositor_diffuse_transition.py | Rectangle/Membrane/Lines/Diamonds/Amorph shapes |
+| Block Flip | transitions/gl_compositor_blockflip_transition.py | Puzzle effect |
+| Blinds | transitions/gl_compositor_blinds_transition.py | GL only |
+| Block Spin | transitions/gl_compositor_blockspin_transition.py | GL only, 3D, 6 directions incl. diagonals |
+| Ripple | transitions/gl_compositor_raindrops_transition.py | GL only, configurable ripple count 1-8 |
+| Warp Dissolve | transitions/gl_compositor_warp_transition.py | GL only |
+| Crumble | transitions/gl_compositor_crumble_transition.py | GL only |
+| Particle | transitions/gl_compositor_particle_transition.py | GL only |
+| Burn | transitions/gl_compositor_burn_transition.py | GL only, 4 directions, jaggedness/glow/char params |
+| Base | transitions/base_transition.py | Abstract base, SlideDirection, WipeDirection, compute_wipe_region |
+| Overlay Manager | transitions/overlay_manager.py | GL overlay helpers |
 
 ## Widgets
 
@@ -320,12 +306,9 @@ Extracted from the monolithic `_render_with_shader` method in `spotify_bars_gl_o
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| Image Processor | 
-endering/image_processor.py | ImageProcessor | Synchronous wrapper |
-| Async Processor | 
-endering/image_processor_async.py | AsyncImageProcessor | ThreadManager-based |
-| Display Modes | 
-endering/display_modes.py | DisplayMode | FILL/FIT/SHRINK enums |
+| Image Processor | rendering/image_processor.py | ImageProcessor | Synchronous wrapper |
+| Async Processor | rendering/image_processor_async.py | AsyncImageProcessor | ThreadManager-based |
+| Display Modes | rendering/display_modes.py | DisplayMode | FILL/FIT/SHRINK enums |
 
 ## Key Settings
 

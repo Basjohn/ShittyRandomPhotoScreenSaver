@@ -1,12 +1,7 @@
 """GLTransitionRenderer - Centralized transition rendering for GL compositor.
 
-Handles both shader-based (Group A) and QPainter-based (Group B) transition rendering.
+Handles shader-based transition rendering (GL-only, no QPainter fallbacks).
 Provides clean boundary between base image rendering and overlay visuals.
-
-Phase E Relevance:
-- Isolates overlay visuals from base-image rendering
-- Enables future shader-backed shadow implementations
-- Provides foundation for OverlayShadowRenderer component
 """
 
 from __future__ import annotations
@@ -16,7 +11,7 @@ import time
 import logging
 from typing import TYPE_CHECKING, Optional, Callable, Tuple, Any
 
-from PySide6.QtCore import Qt, QRect, QPoint
+from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QPainter, QPixmap
 
 try:
@@ -24,8 +19,7 @@ try:
 except ImportError:
     gl = None
 
-from transitions.slide_transition import SlideDirection
-from transitions.wipe_transition import _compute_wipe_region
+from transitions.base_transition import SlideDirection
 
 if TYPE_CHECKING:
     from rendering.gl_compositor import GLCompositorWidget, _GLPipelineState
@@ -273,214 +267,6 @@ class GLTransitionRenderer:
             profiler.tick_gpu("slide", gpu_ms)
         except Exception as e:
             logger.debug("[GL TRANSITION] Exception suppressed: %s", e)
-    
-    # -------------------------------------------------------------------------
-    # QPainter Fallback Rendering
-    # -------------------------------------------------------------------------
-    
-    def render_peel_fallback(self, painter: QPainter, target: QRect, state: Any) -> None:
-        """Render Peel transition via QPainter (Group B fallback)."""
-        w = target.width()
-        h = target.height()
-        t = max(0.0, min(1.0, state.progress))
-        
-        # Draw new image as background
-        if state.new_pixmap and not state.new_pixmap.isNull():
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.new_pixmap)
-        
-        if not state.old_pixmap or state.old_pixmap.isNull():
-            return
-        
-        strips = max(1, int(state.strips))
-        delay_per_strip = 0.7 / max(1, strips - 1) if strips > 1 else 0.0
-        
-        for i in range(strips):
-            if state.direction in (SlideDirection.LEFT, SlideDirection.RIGHT):
-                strip_w = max(1, w // strips)
-                x0 = i * strip_w
-                if i == strips - 1:
-                    strip_w = max(1, w - x0)
-                base_rect = QRect(x0, 0, strip_w, h)
-            else:
-                strip_h = max(1, h // strips)
-                y0 = i * strip_h
-                if i == strips - 1:
-                    strip_h = max(1, h - y0)
-                base_rect = QRect(0, y0, w, strip_h)
-            
-            start = i * delay_per_strip
-            if t <= start:
-                local = 0.0
-            else:
-                local = (t - start) / max(0.0001, 1.0 - start)
-                if local >= 1.0:
-                    continue
-            
-            dx = 0
-            dy = 0
-            if local > 0.0:
-                if state.direction in (SlideDirection.LEFT, SlideDirection.RIGHT):
-                    sign = 1 if state.direction == SlideDirection.RIGHT else -1
-                    max_offset = w + base_rect.width()
-                    dx = int(sign * max_offset * local)
-                else:
-                    sign = 1 if state.direction == SlideDirection.DOWN else -1
-                    max_offset = h + base_rect.height()
-                    dy = int(sign * max_offset * local)
-            
-            rect = base_rect.translated(dx, dy)
-            if not rect.intersects(target):
-                continue
-            
-            float_alpha = 1.0
-            if local > 0.5:
-                float_alpha = 1.0 - min(1.0, (local - 0.5) / 0.5)
-            if float_alpha <= 0.0:
-                continue
-            
-            painter.save()
-            painter.setClipRect(rect)
-            painter.setOpacity(float_alpha)
-            try:
-                painter.translate(dx, dy)
-                painter.drawPixmap(target, state.old_pixmap)
-            except Exception as e:
-                logger.debug("[GL TRANSITION] Exception suppressed: %s", e)
-                painter.restore()
-                continue
-            painter.restore()
-    
-    def render_warp_fallback(self, painter: QPainter, target: QRect, state: Any) -> None:
-        """Render Warp Dissolve transition via QPainter (Group B fallback)."""
-        w = target.width()
-        h = target.height()
-        t = max(0.0, min(1.0, state.progress))
-        
-        # Draw new image as background
-        if state.new_pixmap and not state.new_pixmap.isNull():
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.new_pixmap)
-        else:
-            painter.fillRect(target, Qt.GlobalColor.black)
-        
-        if not state.old_pixmap or state.old_pixmap.isNull():
-            return
-        
-        band_h = max(4, h // 80)
-        amp = max(4.0, w * 0.03)
-        fade = max(0.0, 1.0 - t * 1.25)
-        if fade <= 0.0:
-            return
-        
-        y = 0
-        while y < h:
-            band_height = band_h if y + band_h <= h else h - y
-            band_rect = QRect(0, y, w, band_height)
-            
-            base = (y / float(max(1, h))) * math.pi * 2.0
-            wave = math.sin(base + t * 6.0) * math.cos(base * 1.3)
-            offset_x = int(wave * amp * (1.0 - t))
-            
-            shifted = band_rect.translated(offset_x, 0) if offset_x != 0 else band_rect
-            
-            painter.save()
-            painter.setClipRect(band_rect)
-            painter.setOpacity(fade)
-            try:
-                painter.drawPixmap(shifted, state.old_pixmap)
-            except Exception as e:
-                logger.debug("[GL TRANSITION] Exception suppressed: %s", e)
-                painter.restore()
-                break
-            painter.restore()
-            
-            y += band_height
-    
-    def render_blockspin_fallback(self, painter: QPainter, target: QRect, state: Any) -> None:
-        """Render BlockSpin as simple crossfade (Group B fallback)."""
-        if not state.old_pixmap or state.old_pixmap.isNull() or not state.new_pixmap or state.new_pixmap.isNull():
-            return
-        
-        t = max(0.0, min(1.0, state.progress))
-        
-        if t <= 0.0:
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.old_pixmap)
-            return
-        if t >= 1.0:
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.new_pixmap)
-            return
-        
-        painter.setOpacity(1.0)
-        painter.drawPixmap(target, state.old_pixmap)
-        painter.setOpacity(t)
-        painter.drawPixmap(target, state.new_pixmap)
-    
-    def render_region_fallback(self, painter: QPainter, target: QRect, state: Any) -> None:
-        """Render region-based transitions (blockflip, blinds, diffuse) via QPainter."""
-        if state.old_pixmap and not state.old_pixmap.isNull():
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.old_pixmap)
-        if state.new_pixmap and not state.new_pixmap.isNull() and state.region is not None and not state.region.isEmpty():
-            painter.save()
-            painter.setClipRegion(state.region)
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.new_pixmap)
-            painter.restore()
-    
-    def render_wipe_fallback(self, painter: QPainter, target: QRect, state: Any) -> None:
-        """Render Wipe transition via QPainter."""
-        w = target.width()
-        h = target.height()
-        t = max(0.0, min(1.0, state.progress))
-        
-        if state.old_pixmap and not state.old_pixmap.isNull():
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.old_pixmap)
-        
-        if state.new_pixmap and not state.new_pixmap.isNull():
-            region = _compute_wipe_region(state.direction, w, h, t)
-            if not region.isEmpty():
-                painter.save()
-                painter.setClipRegion(region)
-                painter.setOpacity(1.0)
-                painter.drawPixmap(target, state.new_pixmap)
-                painter.restore()
-    
-    def render_slide_fallback(self, painter: QPainter, target: QRect, state: Any) -> None:
-        """Render Slide transition via QPainter."""
-        w = target.width()
-        h = target.height()
-        t = max(0.0, min(1.0, state.progress))
-        
-        old_pos = QPoint(
-            int(state.old_start.x() + (state.old_end.x() - state.old_start.x()) * t),
-            int(state.old_start.y() + (state.old_end.y() - state.old_start.y()) * t),
-        )
-        new_pos = QPoint(
-            int(state.new_start.x() + (state.new_end.x() - state.new_start.x()) * t),
-            int(state.new_start.y() + (state.new_end.y() - state.new_start.y()) * t),
-        )
-        
-        if state.old_pixmap and not state.old_pixmap.isNull():
-            painter.setOpacity(1.0)
-            old_rect = QRect(old_pos.x(), old_pos.y(), w, h)
-            painter.drawPixmap(old_rect, state.old_pixmap)
-        if state.new_pixmap and not state.new_pixmap.isNull():
-            painter.setOpacity(1.0)
-            new_rect = QRect(new_pos.x(), new_pos.y(), w, h)
-            painter.drawPixmap(new_rect, state.new_pixmap)
-    
-    def render_crossfade_fallback(self, painter: QPainter, target: QRect, state: Any) -> None:
-        """Render Crossfade transition via QPainter."""
-        if state.old_pixmap and not state.old_pixmap.isNull():
-            painter.setOpacity(1.0)
-            painter.drawPixmap(target, state.old_pixmap)
-        if state.new_pixmap and not state.new_pixmap.isNull():
-            painter.setOpacity(state.progress)
-            painter.drawPixmap(target, state.new_pixmap)
     
     def render_base_image(self, painter: QPainter, target: QRect, pixmap: Optional[QPixmap]) -> None:
         """Render base image when no transition is active."""

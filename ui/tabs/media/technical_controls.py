@@ -87,8 +87,12 @@ def _per_mode_default_float(tab, mode_key: str, key: str, base_default: float) -
     return tab._default_float('spotify_visualizer', f"{mode_key}_{key}", baseline)
 
 
-def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: str) -> None:
-    """Attach the per-mode Technical group to the given layout (collapsible)."""
+def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: str) -> QWidget:
+    """Attach the per-mode Technical group to the given layout (collapsible).
+
+    Returns the host widget so callers can register it with the preset
+    slider for auto-hide when a non-Custom preset is selected.
+    """
     # Host with toggle + helper (mirrors Advanced styling)
     host = QWidget()
     host_layout = QVBoxLayout(host)
@@ -293,6 +297,8 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         'mode_key': mode_key,
     }
     setattr(tab, _PER_MODE_TECH_ATTR, per_mode_controls)
+
+    return host
 
 
 def register_per_mode_technical_controls(

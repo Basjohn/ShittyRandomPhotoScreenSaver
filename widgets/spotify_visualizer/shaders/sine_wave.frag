@@ -21,6 +21,7 @@ uniform vec4 u_line_color;
 // Glow configuration
 uniform int u_glow_enabled;
 uniform float u_glow_intensity;
+uniform float u_glow_size;
 uniform vec4 u_glow_color;
 uniform int u_reactive_glow;
 
@@ -293,7 +294,7 @@ void main() {
     vec2 hb_params = heartbeat_amp_params();
     float hb_mult = hb_params.x;
     float hb_cap = hb_params.y;
-    float glow_sigma_base = u_glow_intensity * 8.0;
+    float glow_sigma_base = u_glow_intensity * 8.0 * max(u_glow_size, 0.1);
 
     int lines = clamp(u_line_count, 1, 3);
 

@@ -1,7 +1,7 @@
 """GL Compositor Transition Start Methods - Extracted from gl_compositor.py.
 
 Contains all transition-specific start methods (crossfade, warp, raindrops,
-wipe, slide, peel, block_flip, block_spin, diffuse, blinds, crumble, particle).
+wipe, slide, block_flip, block_spin, diffuse, blinds, crumble, particle).
 All functions accept the compositor widget instance as the first parameter.
 """
 
@@ -15,8 +15,7 @@ from PySide6.QtGui import QPixmap
 from core.logging.logger import get_logger
 from core.animation import AnimationManager
 from core.animation.easing import EasingCurve
-from transitions.wipe_transition import WipeDirection
-from transitions.slide_transition import SlideDirection
+from transitions.base_transition import WipeDirection, SlideDirection
 from rendering.transition_state import (
     SlideState,
     WipeState,
@@ -24,7 +23,6 @@ from rendering.transition_state import (
     BlockFlipState,
     RaindropsState,
     BlockSpinState,
-    PeelState,
     BlindsState,
     DiffuseState,
     CrumbleState,
@@ -231,41 +229,6 @@ def start_slide(
         widget._on_slide_update,
         lambda: widget._on_slide_complete(on_finished),
         transition_label="slide",
-    )
-
-def start_peel(
-    widget,
-    old_pixmap: Optional[QPixmap],
-    new_pixmap: QPixmap,
-    *,
-    direction: SlideDirection,
-    strips: int,
-    duration_ms: int,
-    easing: EasingCurve,
-    animation_manager: AnimationManager,
-    on_finished: Optional[Callable[[], None]] = None,
-) -> Optional[str]:
-    """Begin a strip-based peel between two pixmaps using the compositor."""
-    if not new_pixmap or new_pixmap.isNull():
-        logger.error("[GL COMPOSITOR] Invalid new pixmap for peel")
-        return None
-
-    if old_pixmap is None or old_pixmap.isNull():
-        if widget._handle_no_old_image(new_pixmap, on_finished, "peel"):
-            return None
-
-    widget._clear_all_transitions()
-    widget._peel = PeelState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap,
-        direction=direction, strips=max(1, int(strips)), progress=0.0,
-    )
-    widget._pre_upload_textures(widget._prepare_peel_textures)
-    widget._profiler.start("peel")
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        widget._on_peel_update,
-        lambda: widget._on_peel_complete(on_finished),
-        transition_label="peel",
     )
 
 def start_block_flip(

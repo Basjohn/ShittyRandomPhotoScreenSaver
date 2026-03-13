@@ -23,6 +23,7 @@ uniform vec4 u_line_color;
 // Glow configuration
 uniform int u_glow_enabled;
 uniform float u_glow_intensity;
+uniform float u_glow_size;
 uniform vec4 u_glow_color;
 uniform int u_reactive_glow;
 
@@ -269,8 +270,8 @@ void main() {
     float fb_height = height * dpr;
     vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
 
-    // Margins matching the card inset (tight X, minimal Y for full waveform)
-    float margin_x = 3.0;
+    // Margins matching the card inset — enough to prevent glow bleeding past frame
+    float margin_x = 5.0;
     float margin_y = 1.0;
     float inner_width = width - margin_x * 2.0;
     float inner_height = height - margin_y * 2.0;
@@ -291,7 +292,7 @@ void main() {
 
     // Dynamic amplitude: wave peaks reach within 1px of card edges
     float amplitude = 0.5 - 1.0 / max(inner_height, 2.0);
-    float glow_sigma_base = u_glow_intensity * 8.0;
+    float glow_sigma_base = u_glow_intensity * 8.0 * max(u_glow_size, 0.1);
 
     int lines = clamp(u_line_count, 1, 3);
 
