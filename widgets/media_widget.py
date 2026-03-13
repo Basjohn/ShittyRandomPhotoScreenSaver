@@ -174,7 +174,9 @@ class MediaWidget(BaseOverlayWidget):
         self._consecutive_none_count: int = 0
         self._idle_threshold: int = 12  # ~30s at 2500ms interval before entering idle
         self._is_idle: bool = False
-        self._idle_poll_interval: int = 5000  # Poll every 5s when idle to detect Spotify opening
+        self._idle_poll_interval: int = 5000  # Poll every 5s when idle (app running, no media)
+        self._deep_idle_poll_interval: int = 30000  # Poll every 30s when app process not found
+        self._app_process_running: bool = False  # Last known process existence state
         
         # Adaptive poll interval: 1000ms → 2000ms → 2500ms
         # Faster initial detection, then slow down for efficiency
@@ -1261,7 +1263,10 @@ class MediaWidget(BaseOverlayWidget):
             return
 
         self._telemetry_logged_missing_tm = False
-        interval = self._idle_poll_interval if self._is_idle else self._poll_intervals[self._current_poll_stage]
+        if self._is_idle:
+            interval = self._deep_idle_poll_interval if not self._app_process_running else self._idle_poll_interval
+        else:
+            interval = self._poll_intervals[self._current_poll_stage]
         try:
             handle = create_overlay_timer(self, interval, self._refresh, description="MediaWidget smart poll")
         except RuntimeError as exc:

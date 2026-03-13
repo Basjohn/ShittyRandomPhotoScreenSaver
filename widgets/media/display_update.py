@@ -137,6 +137,24 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
     _build_and_apply_metadata(widget, info, prev_info)
 
 
+def _update_app_process_state(widget: "MediaWidget") -> None:
+    """Check whether the target media app process is running and update widget state.
+
+    Called during idle mode to choose between normal idle (5s) and deep idle (30s).
+    The actual check is delegated to the media controller's lightweight process
+    detection (ctypes Toolhelp32 on Windows) — no GSMTC overhead.
+    """
+    try:
+        controller = getattr(widget, "_controller", None)
+        if controller is not None and hasattr(controller, "is_app_process_running"):
+            widget._app_process_running = controller.is_app_process_running()
+        else:
+            widget._app_process_running = False
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Process detection failed: %s", e)
+        widget._app_process_running = False
+
+
 def _handle_no_media(widget: "MediaWidget") -> None:
     """Handle case where no media info is available — idle/hide logic."""
     # Check grace period after activation - don't hide immediately
@@ -156,15 +174,32 @@ def _handle_no_media(widget: "MediaWidget") -> None:
     if widget._consecutive_none_count >= widget._idle_threshold and not widget._is_idle:
         widget._is_idle = True
         widget._last_track_identity = None
+        # Check if the media app process is still running to choose idle interval
+        _update_app_process_state(widget)
         if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget entering idle mode (Spotify closed)")
+            logger.debug(
+                "[PERF] Media widget entering idle mode (process_running=%s, interval=%s)",
+                widget._app_process_running,
+                widget._idle_poll_interval if widget._app_process_running else widget._deep_idle_poll_interval,
+            )
         else:
             logger.info(
-                "[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls",
+                "[MEDIA_WIDGET] Entering idle mode after %d consecutive empty polls (app running: %s)",
                 widget._consecutive_none_count,
+                widget._app_process_running,
             )
-        # Update timer interval from active (2.5s) to idle (5s)
+        # Update timer interval from active (2.5s) to idle (5s or 30s)
         widget._ensure_timer(force=True)
+    elif widget._is_idle and widget._consecutive_none_count % 6 == 0:
+        # Periodically re-check process state during idle to detect app launch/exit
+        prev_running = widget._app_process_running
+        _update_app_process_state(widget)
+        if prev_running != widget._app_process_running:
+            logger.info(
+                "[MEDIA_WIDGET] App process state changed: %s → %s",
+                prev_running, widget._app_process_running,
+            )
+            widget._ensure_timer(force=True)
 
     # No active media session – hide widget with graceful fade
     last_vis = widget._telemetry_last_visibility

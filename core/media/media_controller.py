@@ -83,6 +83,15 @@ class BaseMediaController:
     def previous(self) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def is_app_process_running(self) -> bool:
+        """Lightweight check whether the target media app process exists.
+
+        Used by idle polling to distinguish 'app not running' (deep idle,
+        ~30s) from 'app running but no media session' (normal idle, ~5s).
+        Default returns False; platform implementations override.
+        """
+        return False
+
 
 class NoOpMediaController(BaseMediaController):
     """Fallback controller used when no platform integration is available."""
@@ -293,7 +302,19 @@ class WindowsGlobalMediaController(BaseMediaController):
                 return session
 
         # No matching session; treat as "no media".
-        logger.debug("[MEDIA] No %s GSMTC session found", self._app_filter)
+        # Log at info level when sessions exist but none match — helps debug
+        # MusicBee GSMTC registration when paused/stopped.
+        if sessions:
+            try:
+                all_ids = [getattr(s, "source_app_user_model_id", "?") for s in sessions]
+            except Exception:
+                all_ids = ["<error>"]
+            logger.debug(
+                "[MEDIA] No %s session among %d GSMTC sessions: %s",
+                self._app_filter, len(sessions), all_ids,
+            )
+        else:
+            logger.debug("[MEDIA] No %s GSMTC session found (0 sessions)", self._app_filter)
         return None
 
     def _map_status(self, status) -> MediaPlaybackState:
@@ -523,6 +544,76 @@ class WindowsGlobalMediaController(BaseMediaController):
 
     def previous(self) -> None:  # pragma: no cover - requires winrt
         self._invoke_simple_action("previous", lambda s: s.try_skip_previous_async())
+
+    # ------------------------------------------------------------------
+    # Process detection (lightweight, no GSMTC overhead)
+    # ------------------------------------------------------------------
+    # Map app_filter → exe names for process enumeration
+    _PROCESS_NAME_MAP = {
+        "spotify": "spotify.exe",
+        "musicbee": "musicbee.exe",
+    }
+
+    def is_app_process_running(self) -> bool:
+        """Check if the target media app is running via Windows process snapshot.
+
+        Uses CreateToolhelp32Snapshot (ctypes) — fast, zero-dependency,
+        does not touch GSMTC. Safe to call from IO thread.
+        """
+        target_exe = self._PROCESS_NAME_MAP.get(self._app_filter)
+        if target_exe is None:
+            return False
+        try:
+            return _win_process_exists(target_exe)
+        except Exception:
+            logger.debug("[MEDIA] Process detection failed", exc_info=True)
+            return False
+
+
+def _win_process_exists(exe_name: str) -> bool:
+    """Return True if a process matching *exe_name* (case-insensitive) exists.
+
+    Uses the Windows Toolhelp32 API via ctypes — no external dependencies.
+    """
+    import ctypes
+    import ctypes.wintypes
+
+    TH32CS_SNAPPROCESS = 0x00000002
+    INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", ctypes.wintypes.DWORD),
+            ("cntUsage", ctypes.wintypes.DWORD),
+            ("th32ProcessID", ctypes.wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+            ("th32ModuleID", ctypes.wintypes.DWORD),
+            ("cntThreads", ctypes.wintypes.DWORD),
+            ("th32ParentProcessID", ctypes.wintypes.DWORD),
+            ("pcPriClassBase", ctypes.wintypes.LONG),
+            ("dwFlags", ctypes.wintypes.DWORD),
+            ("szExeFile", ctypes.c_wchar * 260),
+        ]
+
+    kernel32 = ctypes.windll.kernel32
+    snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snapshot == INVALID_HANDLE_VALUE:
+        return False
+
+    pe = PROCESSENTRY32W()
+    pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+    target = exe_name.lower()
+
+    try:
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(pe)):
+            return False
+        while True:
+            if pe.szExeFile.lower() == target:
+                return True
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(pe)):
+                return False
+    finally:
+        kernel32.CloseHandle(snapshot)
 
 
 def create_media_controller(thread_manager=None, app_filter: str = "spotify") -> BaseMediaController:

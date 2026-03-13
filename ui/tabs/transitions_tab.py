@@ -136,14 +136,6 @@ class TransitionsTab(QWidget):
         type_row.addWidget(self.transition_combo)
         type_row.addStretch()
 
-        # Random transitions option
-        random_row = _aligned_row(type_layout, "")
-        self.random_checkbox = QCheckBox("Always use random transitions")
-        self.random_checkbox.setProperty("circleIndicator", True)
-        self.random_checkbox.stateChanged.connect(self._save_settings)
-        random_row.addWidget(self.random_checkbox)
-        random_row.addStretch()
-
         # Per-transition pool membership: controls whether the selected
         # transition participates in the engine's random rotation and C-key
         # cycling. Explicit selection via the dropdown remains available
@@ -700,7 +692,6 @@ class TransitionsTab(QWidget):
         blockers = []
         for w in [
             getattr(self, 'transition_combo', None),
-            getattr(self, 'random_checkbox', None),
             getattr(self, 'pool_checkbox', None),
             getattr(self, 'duration_slider', None),
             getattr(self, 'direction_combo', None),
@@ -789,11 +780,6 @@ class TransitionsTab(QWidget):
             index = self.easing_combo.findText(easing)
             if index >= 0:
                 self.easing_combo.setCurrentIndex(index)
-
-            # Load random transitions flag (prefer nested config)
-            rnd = transitions_config.get('random_always', False)
-            rnd = SettingsManager.to_bool(rnd, False)
-            self.random_checkbox.setChecked(rnd)
 
             # Note: GPU acceleration is controlled globally in Display tab
             
@@ -1127,7 +1113,9 @@ class TransitionsTab(QWidget):
             'type': cur_type,
             'duration_ms': cur_duration,
             'easing': self.easing_combo.currentText(),
-            'random_always': self.random_checkbox.isChecked(),
+            'random_always': SettingsManager.to_bool(
+                (self._settings.get('transitions', {}) or {}).get('random_always', False), False
+            ),
             'block_flip': {
                 'rows': self.grid_rows_spin.value(),
                 'cols': self.grid_cols_spin.value(),
