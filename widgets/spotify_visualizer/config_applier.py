@@ -47,6 +47,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._osc_glow_intensity = max(0.0, float(kwargs['osc_glow_intensity']))
     if 'osc_glow_size' in kwargs:
         widget._osc_glow_size = max(0.1, min(3.0, float(kwargs['osc_glow_size'])))
+    if 'osc_glow_reactivity' in kwargs:
+        widget._osc_glow_reactivity = max(0.0, min(2.0, float(kwargs['osc_glow_reactivity'])))
     if 'osc_glow_color' in kwargs:
         c = _color_or_none(kwargs['osc_glow_color'])
         if c is not None:
@@ -293,6 +295,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._sine_glow_intensity = max(0.0, float(kwargs['sine_glow_intensity']))
     if 'sine_glow_size' in kwargs:
         widget._sine_glow_size = max(0.1, min(3.0, float(kwargs['sine_glow_size'])))
+    if 'sine_glow_reactivity' in kwargs:
+        widget._sine_glow_reactivity = max(0.0, min(2.0, float(kwargs['sine_glow_reactivity'])))
     if 'sine_glow_color' in kwargs:
         c = _color_or_none(kwargs['sine_glow_color'])
         if c is not None:
@@ -482,6 +486,11 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['glow_enabled'] = widget._sine_glow_enabled if _is_sine else widget._osc_glow_enabled
     extra['glow_intensity'] = widget._sine_glow_intensity if _is_sine else widget._osc_glow_intensity
     extra['glow_size'] = widget._sine_glow_size if _is_sine else widget._osc_glow_size
+    extra['glow_reactivity'] = (
+        getattr(widget, '_sine_glow_reactivity', 1.0)
+        if _is_sine
+        else getattr(widget, '_osc_glow_reactivity', 1.0)
+    )
     extra['glow_color'] = widget._sine_glow_color if _is_sine else widget._osc_glow_color
     extra['reactive_glow'] = widget._sine_reactive_glow if _is_sine else widget._osc_reactive_glow
     extra['osc_line_amplitude'] = widget._sine_sensitivity if _is_sine else widget._osc_line_amplitude

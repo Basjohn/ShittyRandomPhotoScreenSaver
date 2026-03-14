@@ -10,7 +10,7 @@ def get_uniform_names() -> list[str]:
     return [
         "u_waveform_count", "u_waveform",
         "u_osc_ghost_alpha", "u_prev_waveform",
-        "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_color",
+        "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity", "u_glow_color",
         "u_reactive_glow", "u_sensitivity", "u_smoothing",
         "u_line_color", "u_line_count",
         "u_line2_color", "u_line2_glow_color",
@@ -69,6 +69,7 @@ def _upload_shared_line_glow(gl, u, s):
     _set1i(gl, u, "u_glow_enabled", 1 if s._glow_enabled else 0)
     _set1f(gl, u, "u_glow_intensity", s._glow_intensity)
     _set1f(gl, u, "u_glow_size", getattr(s, '_glow_size', 1.0))
+    _set1f(gl, u, "u_glow_reactivity", getattr(s, '_glow_reactivity', 1.0))
     _set_color4(gl, u, "u_glow_color", s._glow_color)
     _set1i(gl, u, "u_reactive_glow", 1 if s._reactive_glow else 0)
     _set1f(gl, u, "u_sensitivity", s._osc_line_amplitude)

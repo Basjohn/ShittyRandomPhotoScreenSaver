@@ -699,15 +699,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
 
     _update_media_bg_visibility(tab)
 
-    # Visualizers toggle
-    if hasattr(tab, 'visualizers_enabled'):
-        tab.visualizers_enabled.setChecked(
-            tab._config_bool('spotify_visualizer', spotify_vis_config, 'visualizers_enabled', True)
-        )
-    _update_visualizers_enabled_visibility(tab)
-
-    # Spotify Visualizer
-    spotify_vis_config = widgets.get('spotify_visualizer', {})
     tab.vis_enabled_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
     )
@@ -746,10 +737,17 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         osc_glow_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_glow_intensity', 0.5) * 100)
         tab.osc_glow_intensity.setValue(max(0, min(100, osc_glow_val)))
         tab.osc_glow_intensity_label.setText(f"{osc_glow_val}%")
-    if hasattr(tab, 'osc_glow_size'):
-        osc_gs_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_glow_size', 1.0) * 100)
-        tab.osc_glow_size.setValue(max(10, min(300, osc_gs_val)))
-        tab.osc_glow_size_label.setText(f"{osc_gs_val}%")
+    if hasattr(tab, 'osc_glow_reactivity'):
+        osc_gr_val = int(
+            tab._config_float(
+                'spotify_visualizer',
+                spotify_vis_config,
+                'osc_glow_reactivity',
+                tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_glow_size', 1.0),
+            ) * 100
+        )
+        tab.osc_glow_reactivity.setValue(max(0, min(200, osc_gr_val)))
+        tab.osc_glow_reactivity_label.setText(f"{osc_gr_val}%")
     if hasattr(tab, 'osc_reactive_glow'):
         tab.osc_reactive_glow.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_reactive_glow', True)
@@ -851,6 +849,8 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set osc_glow_color=%s", osc_glow_color_data, exc_info=True)
         tab._osc_glow_color = QColor(0, 200, 255, 230)
+    _apply_color_to_button('osc_line_color_btn', '_osc_line_color')
+    _apply_color_to_button('osc_glow_color_btn', '_osc_glow_color')
 
     # Multi-line
     osc_line_count = int(spotify_vis_config.get('osc_line_count', 1))
@@ -1044,10 +1044,17 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         sine_gi_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_glow_intensity', 0.5) * 100)
         tab.sine_glow_intensity.setValue(max(0, min(100, sine_gi_val)))
         tab.sine_glow_intensity_label.setText(f"{sine_gi_val}%")
-    if hasattr(tab, 'sine_glow_size'):
-        sine_gs_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_glow_size', 1.0) * 100)
-        tab.sine_glow_size.setValue(max(10, min(300, sine_gs_val)))
-        tab.sine_glow_size_label.setText(f"{sine_gs_val}%")
+    if hasattr(tab, 'sine_glow_reactivity'):
+        sine_gr_val = int(
+            tab._config_float(
+                'spotify_visualizer',
+                spotify_vis_config,
+                'sine_glow_reactivity',
+                tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_glow_size', 1.0),
+            ) * 100
+        )
+        tab.sine_glow_reactivity.setValue(max(0, min(200, sine_gr_val)))
+        tab.sine_glow_reactivity_label.setText(f"{sine_gr_val}%")
     sine_glow_color_data = spotify_vis_config.get('sine_glow_color', [0, 200, 255, 230])
     try:
         tab._sine_glow_color = QColor(*sine_glow_color_data)
@@ -1449,10 +1456,10 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'ghosting_enabled': tab.vis_ghost_enabled.isChecked(),
         'ghost_alpha': tab.vis_ghost_opacity_slider.value() / 100.0,
         'ghost_decay': max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
-        'osc_glow_enabled': tab.osc_glow_enabled.isChecked() if hasattr(tab, 'osc_glow_enabled') else False,
+        'osc_glow_enabled': tab.osc_glow_enabled.isChecked() if hasattr(tab, 'osc_glow_enabled') else True,
         'osc_glow_intensity': (tab.osc_glow_intensity.value() if hasattr(tab, 'osc_glow_intensity') else 50) / 100.0,
-        'osc_glow_size': (tab.osc_glow_size.value() if hasattr(tab, 'osc_glow_size') else 100) / 100.0,
-        'osc_reactive_glow': tab.osc_reactive_glow.isChecked() if hasattr(tab, 'osc_reactive_glow') else False,
+        'osc_glow_reactivity': (tab.osc_glow_reactivity.value() if hasattr(tab, 'osc_glow_reactivity') else 100) / 100.0,
+        'osc_reactive_glow': tab.osc_reactive_glow.isChecked() if hasattr(tab, 'osc_reactive_glow') else True,
         'osc_line_amplitude': (tab.osc_line_amplitude.value() if hasattr(tab, 'osc_line_amplitude') else 30) / 10.0,
         'osc_smoothing': (tab.osc_smoothing.value() if hasattr(tab, 'osc_smoothing') else 70) / 100.0,
         'osc_line_color': _qcolor_to_list(getattr(tab, '_osc_line_color', None), [255, 255, 255, 255]),
@@ -1513,12 +1520,12 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_line_dim': tab.osc_line_dim.isChecked() if hasattr(tab, 'osc_line_dim') else False,
         'osc_line_offset_bias': (tab.osc_line_offset_bias.value() if hasattr(tab, 'osc_line_offset_bias') else 0) / 100.0,
         'osc_vertical_shift': tab.osc_vertical_shift.value() if hasattr(tab, 'osc_vertical_shift') else 0,
-        'sine_glow_enabled': tab.sine_glow_enabled.isChecked() if hasattr(tab, 'sine_glow_enabled') else False,
+        'sine_glow_enabled': tab.sine_glow_enabled.isChecked() if hasattr(tab, 'sine_glow_enabled') else True,
         'sine_glow_intensity': (tab.sine_glow_intensity.value() if hasattr(tab, 'sine_glow_intensity') else 50) / 100.0,
-        'sine_glow_size': (tab.sine_glow_size.value() if hasattr(tab, 'sine_glow_size') else 100) / 100.0,
+        'sine_glow_reactivity': (tab.sine_glow_reactivity.value() if hasattr(tab, 'sine_glow_reactivity') else 100) / 100.0,
         'sine_glow_color': _qcolor_to_list(getattr(tab, '_sine_glow_color', None), [0, 200, 255, 230]),
         'sine_line_color': _qcolor_to_list(getattr(tab, '_sine_line_color', None), [255, 255, 255, 255]),
-        'sine_reactive_glow': tab.sine_reactive_glow.isChecked() if hasattr(tab, 'sine_reactive_glow') else False,
+        'sine_reactive_glow': tab.sine_reactive_glow.isChecked() if hasattr(tab, 'sine_reactive_glow') else True,
         'sine_sensitivity': (tab.sine_sensitivity.value() if hasattr(tab, 'sine_sensitivity') else 100) / 100.0,
         'sine_speed': (tab.sine_speed.value() if hasattr(tab, 'sine_speed') else 100) / 100.0,
         'sine_wave_effect': (tab.sine_wave_effect.value() if hasattr(tab, 'sine_wave_effect') else 0) / 100.0,

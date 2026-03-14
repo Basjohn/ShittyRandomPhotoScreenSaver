@@ -163,22 +163,31 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     sine_glow_row.addWidget(tab.sine_glow_intensity_label)
 
-    glow_size_widget, sine_glow_size_row = _aligned_row_widget(_normal, "Glow Size:")
-    tab._sine_glow_widgets.append(glow_size_widget)
-    tab.sine_glow_size = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.sine_glow_size.setMinimum(10)
-    tab.sine_glow_size.setMaximum(300)
-    sine_glow_size_val = int(tab._default_float('spotify_visualizer', 'sine_glow_size', 1.0) * 100)
-    tab.sine_glow_size.setValue(max(10, min(300, sine_glow_size_val)))
-    tab.sine_glow_size.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.sine_glow_size.setTickInterval(25)
-    tab.sine_glow_size.valueChanged.connect(tab._save_settings)
-    sine_glow_size_row.addWidget(tab.sine_glow_size)
-    tab.sine_glow_size_label = QLabel(f"{sine_glow_size_val}%")
-    tab.sine_glow_size.valueChanged.connect(
-        lambda v: tab.sine_glow_size_label.setText(f"{v}%")
+    glow_reactivity_widget, sine_glow_reactivity_row = _aligned_row_widget(_normal, "Glow Reactivity:")
+    tab._sine_glow_widgets.append(glow_reactivity_widget)
+    tab.sine_glow_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_glow_reactivity.setMinimum(0)
+    tab.sine_glow_reactivity.setMaximum(200)
+    sine_glow_reactivity_val = int(
+        tab._default_float(
+            'spotify_visualizer',
+            'sine_glow_reactivity',
+            tab._default_float('spotify_visualizer', 'sine_glow_size', 1.0),
+        ) * 100
     )
-    sine_glow_size_row.addWidget(tab.sine_glow_size_label)
+    tab.sine_glow_reactivity.setValue(max(0, min(200, sine_glow_reactivity_val)))
+    tab.sine_glow_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_glow_reactivity.setTickInterval(20)
+    tab.sine_glow_reactivity.valueChanged.connect(tab._save_settings)
+    sine_glow_reactivity_row.addWidget(tab.sine_glow_reactivity)
+    tab.sine_glow_reactivity_label = QLabel(f"{sine_glow_reactivity_val}%")
+    tab.sine_glow_reactivity.valueChanged.connect(
+        lambda v: tab.sine_glow_reactivity_label.setText(f"{v}%")
+    )
+    sine_glow_reactivity_row.addWidget(tab.sine_glow_reactivity_label)
+    # Backward-compat alias: legacy code paths may still reference sine_glow_size.
+    tab.sine_glow_size = tab.sine_glow_reactivity
+    tab.sine_glow_size_label = tab.sine_glow_reactivity_label
 
     glow_color_widget, sine_glow_color_row = _aligned_row_widget(_normal, "Glow Color:")
     tab._sine_glow_widgets.append(glow_color_widget)

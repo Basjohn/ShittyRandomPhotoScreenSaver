@@ -1,0 +1,171 @@
+{
+  "mode": "blob",
+  "name": "Preset (blob)",
+  "preset_index": 0,
+  "snapshot": {
+    "custom_preset_backup": {
+      "widgets.spotify_visualizer.adaptive_sensitivity": true,
+      "widgets.spotify_visualizer.bar_border_color": [
+        255,
+        255,
+        255,
+        255
+      ],
+      "widgets.spotify_visualizer.bar_border_opacity": 1.0,
+      "widgets.spotify_visualizer.bar_count": 21,
+      "widgets.spotify_visualizer.bar_fill_color": [
+        255,
+        255,
+        255,
+        230
+      ],
+      "widgets.spotify_visualizer.blob_adaptive_sensitivity": true,
+      "widgets.spotify_visualizer.blob_audio_block_size": 256,
+      "widgets.spotify_visualizer.blob_bar_count": 32,
+      "widgets.spotify_visualizer.blob_color": [
+        0,
+        105,
+        243,
+        230
+      ],
+      "widgets.spotify_visualizer.blob_constant_wobble": 0.25,
+      "widgets.spotify_visualizer.blob_core_floor_bias": 0.33,
+      "widgets.spotify_visualizer.blob_core_scale": 0.8,
+      "widgets.spotify_visualizer.blob_dynamic_floor": true,
+      "widgets.spotify_visualizer.blob_dynamic_range_enabled": false,
+      "widgets.spotify_visualizer.blob_edge_color": [
+        208,
+        223,
+        255,
+        215
+      ],
+      "widgets.spotify_visualizer.blob_ghost_alpha": 0.2,
+      "widgets.spotify_visualizer.blob_ghost_decay": 0.65,
+      "widgets.spotify_visualizer.blob_ghosting_enabled": true,
+      "widgets.spotify_visualizer.blob_glow_color": [
+        3,
+        104,
+        255,
+        180
+      ],
+      "widgets.spotify_visualizer.blob_glow_intensity": 0.45,
+      "widgets.spotify_visualizer.blob_glow_max_size": 1.12,
+      "widgets.spotify_visualizer.blob_glow_reactivity": 1.6,
+      "widgets.spotify_visualizer.blob_growth": 5.0,
+      "widgets.spotify_visualizer.blob_manual_floor": 0.06,
+      "widgets.spotify_visualizer.blob_outline_color": [
+        84,
+        150,
+        255,
+        225
+      ],
+      "widgets.spotify_visualizer.blob_pulse": 1.18,
+      "widgets.spotify_visualizer.blob_rainbow_enabled": true,
+      "widgets.spotify_visualizer.blob_rainbow_speed": 0.25,
+      "widgets.spotify_visualizer.blob_reactive_deformation": 1.3,
+      "widgets.spotify_visualizer.blob_reactive_glow": true,
+      "widgets.spotify_visualizer.blob_reactive_wobble": 0.9,
+      "widgets.spotify_visualizer.blob_sensitivity": 1.1,
+      "widgets.spotify_visualizer.blob_size": 0.35,
+      "widgets.spotify_visualizer.blob_stage2_release_ms": 1001,
+      "widgets.spotify_visualizer.blob_stage3_release_ms": 1304,
+      "widgets.spotify_visualizer.blob_stage_bias": 0.25,
+      "widgets.spotify_visualizer.blob_stage_gain": 1.35,
+      "widgets.spotify_visualizer.blob_stretch_inner": 0.05,
+      "widgets.spotify_visualizer.blob_stretch_outer": 0.33,
+      "widgets.spotify_visualizer.blob_stretch_tendency": 0.17,
+      "widgets.spotify_visualizer.blob_width": 1.0,
+      "widgets.spotify_visualizer.dynamic_floor": true,
+      "widgets.spotify_visualizer.dynamic_range_enabled": true,
+      "widgets.spotify_visualizer.ghost_alpha": 0.4,
+      "widgets.spotify_visualizer.ghost_decay": 0.35,
+      "widgets.spotify_visualizer.ghosting_enabled": true,
+      "widgets.spotify_visualizer.manual_floor": 2.1,
+      "widgets.spotify_visualizer.mode": "blob",
+      "widgets.spotify_visualizer.sensitivity": 1.0
+    },
+    "widgets": {
+      "spotify_visualizer": {
+        "adaptive_sensitivity": true,
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_count": 21,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "blob_adaptive_sensitivity": true,
+        "blob_audio_block_size": 256,
+        "blob_bar_count": 32,
+        "blob_color": [
+          0,
+          105,
+          243,
+          230
+        ],
+        "blob_constant_wobble": 0.25,
+        "blob_core_floor_bias": 0.33,
+        "blob_core_scale": 0.8,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
+        "blob_edge_color": [
+          208,
+          223,
+          255,
+          215
+        ],
+        "blob_ghost_alpha": 0.2,
+        "blob_ghost_decay": 0.65,
+        "blob_ghosting_enabled": true,
+        "blob_glow_color": [
+          3,
+          104,
+          255,
+          180
+        ],
+        "blob_glow_intensity": 0.45,
+        "blob_glow_max_size": 1.12,
+        "blob_glow_reactivity": 1.6,
+        "blob_growth": 5.0,
+        "blob_manual_floor": 0.06,
+        "blob_outline_color": [
+          84,
+          150,
+          255,
+          225
+        ],
+        "blob_pulse": 1.18,
+        "blob_rainbow_enabled": true,
+        "blob_rainbow_speed": 0.25,
+        "blob_reactive_deformation": 1.3,
+        "blob_reactive_glow": true,
+        "blob_reactive_wobble": 0.9,
+        "blob_sensitivity": 1.1,
+        "blob_size": 0.35,
+        "blob_stage2_release_ms": 1001,
+        "blob_stage3_release_ms": 1304,
+        "blob_stage_bias": 0.25,
+        "blob_stage_gain": 1.35,
+        "blob_stretch_inner": 0.05,
+        "blob_stretch_outer": 0.33,
+        "blob_stretch_tendency": 0.17,
+        "blob_width": 1.0,
+        "dynamic_floor": true,
+        "dynamic_range_enabled": true,
+        "ghost_alpha": 0.4,
+        "ghost_decay": 0.35,
+        "ghosting_enabled": true,
+        "manual_floor": 2.1,
+        "mode": "blob",
+        "sensitivity": 1.0
+      }
+    }
+  }
+}

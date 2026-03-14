@@ -108,6 +108,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_glow_enabled: bool = True
         self._osc_glow_intensity: float = 0.5
         self._osc_glow_size: float = 1.0
+        self._osc_glow_reactivity: float = 1.0
         self._osc_glow_color: QColor = QColor(0, 200, 255, 230)
         self._osc_line_color: QColor = QColor(255, 255, 255, 255)
         self._osc_reactive_glow: bool = True
@@ -190,6 +191,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_glow_enabled: bool = True
         self._sine_glow_intensity: float = 0.5
         self._sine_glow_size: float = 1.0
+        self._sine_glow_reactivity: float = 1.0
         self._sine_glow_color: QColor = QColor(0, 200, 255, 230)
         self._sine_line_color: QColor = QColor(255, 255, 255, 255)
         self._sine_line2_color: QColor = QColor(255, 120, 50, 230)

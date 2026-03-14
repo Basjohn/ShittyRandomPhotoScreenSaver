@@ -22,6 +22,7 @@ uniform vec4 u_line_color;
 uniform int u_glow_enabled;
 uniform float u_glow_intensity;
 uniform float u_glow_size;
+uniform float u_glow_reactivity;
 uniform vec4 u_glow_color;
 uniform int u_reactive_glow;
 
@@ -205,13 +206,15 @@ vec4 eval_line(
     if (u_glow_enabled == 1 && glowSigmaBase > 0.0) {
         float sigma = glowSigmaBase;
         if (u_reactive_glow == 1) {
-            // Boosted: reach visible glow at lower energy (+10% min/max)
-            sigma *= (0.66 + band_energy * 2.64);
+            float react = clamp(u_glow_reactivity, 0.0, 2.0);
+            sigma *= (0.85 + band_energy * (1.80 * react));
         }
         if (sigma > 0.0) {
             glow_alpha = exp(-(dist_px * dist_px) / (2.0 * sigma * sigma));
+            glow_alpha *= clamp(u_glow_intensity, 0.0, 2.0);
             if (u_reactive_glow == 1) {
-                glow_alpha *= (0.66 + band_energy * 1.54);
+                float react = clamp(u_glow_reactivity, 0.0, 2.0);
+                glow_alpha *= (0.80 + band_energy * (0.95 * react));
             }
         }
     }
@@ -294,7 +297,8 @@ void main() {
     vec2 hb_params = heartbeat_amp_params();
     float hb_mult = hb_params.x;
     float hb_cap = hb_params.y;
-    float glow_sigma_base = u_glow_intensity * 8.0 * max(u_glow_size, 0.1);
+    // Size controls spread radius only; intensity controls visible strength.
+    float glow_sigma_base = 8.0 * max(u_glow_size, 0.1);
 
     int lines = clamp(u_line_count, 1, 3);
 

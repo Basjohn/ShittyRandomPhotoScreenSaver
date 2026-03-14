@@ -13,9 +13,17 @@ from __future__ import annotations
 
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QLabel, QSlider, QPushButton
+from PySide6.QtWidgets import (
+    QWidget,
+    QHBoxLayout,
+    QVBoxLayout,
+    QLabel,
+    QSlider,
+    QPushButton,
+    QSizePolicy,
+)
 from PySide6.QtCore import Qt, Signal, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QPainter, QPen, QPalette
 from ui.tabs.shared_styles import NoWheelSlider, SECTION_HEADING_STYLE
 
 from core.logging.logger import get_logger
@@ -30,6 +38,40 @@ if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
+
+
+class _PresetNotchBar(QWidget):
+    """Lightweight notch renderer that mirrors the preset slider span."""
+
+    def __init__(self, notch_count: int, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._notch_count = max(0, notch_count)
+        self.setFixedHeight(8)
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(policy)
+
+    def set_notch_count(self, count: int) -> None:
+        if count != self._notch_count:
+            self._notch_count = max(0, count)
+            self.update()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        if self._notch_count <= 1:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        palette = self.palette()
+        color = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
+        pen = QPen(color)
+        pen.setWidth(1)
+        painter.setPen(pen)
+        width = self.width()
+        height = self.height()
+        step = width / (self._notch_count - 1)
+        for i in range(self._notch_count):
+            x = round(i * step)
+            painter.drawLine(x, 0, x, height)
+        painter.end()
 
 
 class VisualizerPresetSlider(QWidget):
@@ -75,6 +117,9 @@ class VisualizerPresetSlider(QWidget):
         self._value_label.setMinimumWidth(140)
         row.addWidget(self._value_label)
 
+        slider_column = QVBoxLayout()
+        slider_column.setSpacing(2)
+
         self._slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self._slider.setObjectName("presetModeSlider")
         self._slider.setMinimum(0)
@@ -84,20 +129,26 @@ class VisualizerPresetSlider(QWidget):
         self._slider.setTickInterval(1)
         self._slider.setPageStep(1)
         self._slider.setSingleStep(1)
+        self._slider.setMinimumHeight(28)
         self._slider.setToolTip(
             "Choose a visualizer preset. Custom (rightmost) shows all settings."
         )
         self._slider.valueChanged.connect(self._on_slider_changed)
-        row.addWidget(self._slider, 1)
+        slider_column.addWidget(self._slider)
+
+        self._notch_bar = _PresetNotchBar(self._preset_count)
+        slider_column.addWidget(self._notch_bar)
+        row.addLayout(slider_column, 1)
 
         self._edit_btn = QPushButton("Edit Preset")
         self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
         self._edit_btn.setFixedHeight(22)
+        self._edit_btn.setFixedWidth(90)
         self._edit_btn.setStyleSheet(
             "QPushButton { font-size: 9pt; padding: 2px 8px; }"
         )
         self._edit_btn.clicked.connect(self._open_preset_json)
-        self._edit_btn.setVisible(False)
+        self._edit_btn.setVisible(True)
         row.addWidget(self._edit_btn)
 
         layout.addLayout(row)
@@ -173,12 +224,17 @@ class VisualizerPresetSlider(QWidget):
             self._advanced_container.setVisible(is_custom)
         if self._technical_container is not None:
             self._technical_container.setVisible(is_custom)
-        # Show EDIT PRESET only for non-Custom presets that have a JSON file
-        if is_custom:
-            self._edit_btn.setVisible(False)
+        # Keep Edit button footprint stable to avoid slider flicker. Disable
+        # it when Custom is selected or when no backing file exists.
+        path = get_preset_file_path(self._mode, idx)
+        has_file = path is not None
+        self._edit_btn.setEnabled((not is_custom) and has_file)
+        if not has_file:
+            self._edit_btn.setToolTip("Preset JSON not found on disk.")
+        elif is_custom:
+            self._edit_btn.setToolTip("Switch to a curated preset to edit its JSON.")
         else:
-            path = get_preset_file_path(self._mode, idx)
-            self._edit_btn.setVisible(path is not None)
+            self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
 
     def _open_preset_json(self) -> None:
         """Open the current preset's JSON file in the OS default editor."""

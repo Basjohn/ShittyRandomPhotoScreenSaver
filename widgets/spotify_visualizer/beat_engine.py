@@ -116,6 +116,7 @@ class _SpotifyBeatEngine(QObject):
             aw._last_floor_config = (aw._use_dynamic_floor, aw._manual_floor)
             aw._last_bass_drop_ratio = 0.0
             aw._bass_drop_accum = 0.0
+            aw._running_peak = 0.5  # reset peak tracker to prevent stale compression
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to reset floor state", exc_info=True)
 

@@ -6,7 +6,6 @@ center-out frequency mapping, reactive smoothing, and adaptive normalization.
 """
 from __future__ import annotations
 
-import math
 import time
 from dataclasses import dataclass
 from typing import List, Optional, TYPE_CHECKING
@@ -23,27 +22,21 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-_PI = math.pi
-
-
-def _cos_pi(t: float) -> float:
-    """cos(π * t) — used for smooth cosine crossfade between zones."""
-    return math.cos(_PI * t)
-
 
 @dataclass
 class SpectrumShapeConfig:
-    """Parameters controlling the spectrum bar height profile shape.
+    """Audio-influence weights for the uniform energy model.
 
-    All values are normalized 0.0–1.0 unless noted. The defaults reproduce the
-    original hardcoded curved profile exactly.
+    The node-driven profile is the sole bar-height shaper.  These sliders
+    control how much each audio band contributes to the single energy
+    value that is multiplied against the profile.
 
     Attributes:
-        bass_emphasis: Edge (bass) Gaussian boost amplitude.  0→none, 1→strong.
-        vocal_peak_position: Fractional position (0.2–0.6) of the vocal peak.
-        mid_suppression: Depth of center-bar suppression.  0→none, 1→heavy.
-        wave_amplitude: Sinusoidal wave scaling.  0→flat, 1→extreme.
-        profile_floor: Minimum bar height (absolute, 0.05–0.30).
+        bass_emphasis: Bass energy contribution weight.  0→minimal, 1→strong.
+        vocal_peak_position: (Legacy, unused) kept for preset compat.
+        mid_suppression: Dampens mid-band energy contribution.  0→full, 1→heavy cut.
+        wave_amplitude: Overall reactivity scaling.  0→subdued, 1→punchy.
+        profile_floor: Minimum bar height multiplier (0.05–0.30).
     """
     bass_emphasis: float = 0.50
     vocal_peak_position: float = 0.40
@@ -201,35 +194,21 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         profile_shape = np.array(profile_list, dtype="float32")
         profile_shape = np.maximum(profile_shape, shape_cfg.profile_floor)
 
-        # ── Audio energy zone blending ───────────────────────────────
-        # Sliders control influence weights:
-        #   bass_emphasis   → how much bass energy drives edge bars
-        #   mid_suppression → dampens mid-zone energy contribution
-        #   wave_amplitude  → overall reactivity scaling
-        # frac = 0 at center/left-edge, 1 at outer-edge/right-edge
-        half = bands // 2
+        # ── Uniform audio energy (profile is sole shaper) ────────────
+        # Sliders scale how much each band contributes to a single
+        # combined energy value.  Every bar gets the SAME energy;
+        # profile_shape alone controls relative heights.
         bass_w = max(0.1, shape_cfg.bass_emphasis * 1.6)   # 0→0.1 .. 1→1.6
         mid_w = max(0.1, 1.0 - shape_cfg.mid_suppression * 0.8)  # 0→1.0 .. 1→0.2
         react_scale = 0.5 + shape_cfg.wave_amplitude  # 0→0.5 .. 1→1.5
 
-        for i in range(bands):
-            if mirrored:
-                frac = abs(i - center) / max(1.0, float(half))
-            else:
-                frac = i / max(1.0, float(bands - 1))
+        uniform_energy = (
+            bass_energy * bass_w
+            + mid_energy * mid_w
+            + treble_energy
+        ) * react_scale
 
-            # Zone weights: bass at edges (frac→1), treble at center (frac→0)
-            w_bass = frac * frac
-            w_treble = (1.0 - frac) * (1.0 - frac)
-            w_mid = max(0.0, 1.0 - w_bass - w_treble)
-
-            zone_energy = (
-                bass_energy * w_bass * bass_w
-                + mid_energy * w_mid * mid_w
-                + treble_energy * w_treble
-            ) * react_scale
-
-            arr[i] = profile_shape[i] * zone_energy
+        arr[:bands] = profile_shape[:bands] * uniform_energy
 
         if low_resolution:
             _apply_low_resolution_adjustments(
@@ -374,8 +353,21 @@ def _compute_noise_floor(
             alpha_decay = alpha_rise
         alpha_rise = max(0.0, min(1.0, alpha_rise))
         alpha_decay = max(0.0, min(1.0, alpha_decay))
+
+        # Keep decay behavior tied to the current configured rates rather than
+        # hardcoding one multiplier.  We still enforce a minimum asymmetry that
+        # grows when floor signal is elevated vs baseline to prevent ratchet-up.
+        configured_ratio = alpha_decay / max(alpha_rise, 1e-6)
+        floor_elev = max(0.0, min(2.0, (floor_signal / max(base_noise_floor, 1e-6)) - 1.0))
+        min_ratio = 1.6 + floor_elev * 0.9
+        decay_ratio = max(configured_ratio, min_ratio)
+        alpha_decay = min(1.0, max(alpha_decay, alpha_rise * decay_ratio))
+
         alpha = alpha_rise if floor_signal >= avg else alpha_decay
         avg = (1.0 - alpha) * avg + alpha * floor_signal
+        # Cap avg so floor cannot drift far above what the static
+        # analysis (base_noise_floor) considers reasonable.
+        avg = min(avg, base_noise_floor * 2.5)
         worker._raw_bass_avg = avg
         dyn_ratio = getattr(worker, "_dynamic_floor_ratio", 0.42)
         if low_resolution:
@@ -484,21 +476,12 @@ def _apply_low_resolution_adjustments(
     prev_raw_bass: float, raw_bass: float, noise_floor: float,
     drop_accum: float, np,
 ) -> None:
-    """Apply low-resolution specific adjustments (ridge boost, drop damping, etc.)."""
-    # Ridge boost
-    for i in range(bands):
-        offset = abs(i - center)
-        ridge_boost = 1.0
-        if offset == 3:
-            ridge_boost = 1.35
-        elif offset == 2 or offset == 4:
-            ridge_boost = 1.2
-        elif offset == 1:
-            ridge_boost = 1.05
-        elif offset == 0:
-            ridge_boost = 0.78
-        arr[i] *= ridge_boost
+    """Apply low-resolution audio-reactive adjustments (drop damping only).
 
+    All legacy center-suppression shaping (ridge boosts, center caps,
+    target_map ratios, neighbor smoothing) has been removed.
+    The node-driven profile is the sole bar-height shaper.
+    """
     drop_signal = bass_drop_ratio
     valley_signal = 0.0
     if prev_raw_bass > 1e-3:
@@ -516,77 +499,8 @@ def _apply_low_resolution_adjustments(
     drop_signal = max(drop_signal, drop_accum)
 
     if drop_signal > 0.05:
-        drop_strength = min(0.92, 0.22 + drop_signal * 1.45)
-        band_span = max(1, center)
-        for i in range(bands):
-            dist = abs(i - center) / float(band_span)
-            emphasis = max(0.25, 1.0 - dist * 1.35)
-            arr[i] *= max(0.0, 1.0 - drop_strength * emphasis)
-
-    peak_left_idx = max(0, center - 3)
-    peak_right_idx = min(bands - 1, center + 3)
-    peak_val = max(arr[peak_left_idx], arr[peak_right_idx], 1e-3)
-    drop_soften = max(0.0, 0.6 - drop_signal)
-    center_cap_ratio = max(0.95, min(1.1, 0.97 + drop_soften * 0.18))
-    center_cap = peak_val * center_cap_ratio
-    center_val = arr[center]
-    if center_val > center_cap:
-        arr[center] = center_cap
-        center_val = center_cap
-    neighbor_ratio_outer = max(0.6, center_cap_ratio - 0.06)
-    neighbor_ratio_inner = max(0.52, center_cap_ratio - 0.12)
-    left_neighbor = max(0, center - 1)
-    right_neighbor = min(bands - 1, center + 1)
-    peak_neighbor_val_outer = peak_val * neighbor_ratio_outer
-    if arr[left_neighbor] > peak_neighbor_val_outer:
-        arr[left_neighbor] = peak_neighbor_val_outer
-    if arr[right_neighbor] > peak_neighbor_val_outer:
-        arr[right_neighbor] = peak_neighbor_val_outer
-    left_outer = max(0, center - 2)
-    right_outer = min(bands - 1, center + 2)
-    outer_cap = peak_val * neighbor_ratio_inner
-    if arr[left_outer] > outer_cap:
-        arr[left_outer] = outer_cap
-    if arr[right_outer] > outer_cap:
-        arr[right_outer] = outer_cap
-    if drop_signal > 0.02:
-        damp = min(0.38, 0.06 + drop_signal * 0.4)
-        center_scale = max(0.45, 1.0 - damp)
-        arr[center] *= center_scale
-        for offset in (1, 2):
-            left_idx = max(0, center - offset)
-            right_idx = min(bands - 1, center + offset)
-            neighbor_scale = max(0.55, 1.0 - damp * (0.36 if offset == 1 else 0.22))
-            arr[left_idx] *= neighbor_scale
-            arr[right_idx] *= neighbor_scale
-    ridge_avg = 0.5 * (arr[peak_left_idx] + arr[peak_right_idx])
-    center_floor = ridge_avg * (0.08 + drop_signal * 0.05) + 0.025
-    center_cap_soft = ridge_avg * (0.28 + drop_signal * 0.1) + 0.05
-    arr[center] = min(max(arr[center], center_floor), max(center_cap_soft, center_floor))
-    target_map = {
-        0: 0.25 + drop_signal * 0.1,
-        1: 0.53 + drop_signal * 0.07,
-        2: 0.7,
-        3: 1.08,
-        4: 0.6,
-        5: 0.36,
-    }
-    max_offset = min(6, center + 1, bands - center)
-    ridge_anchor = max(ridge_avg, 1e-3)
-    for offset in range(max_offset):
-        ratio = target_map.get(offset, max(0.15, 0.5 - offset * 0.07))
-        desired_val = ridge_anchor * ratio
-        left_idx = center - offset
-        right_idx = center + offset
-        if left_idx >= 0:
-            arr[left_idx] = arr[left_idx] * 0.55 + desired_val * 0.45
-        if right_idx < bands:
-            arr[right_idx] = arr[right_idx] * 0.55 + desired_val * 0.45
-    if bands > 2:
-        tmp = arr.copy()
-        arr[1:-1] = tmp[1:-1] * 0.46 + (tmp[:-2] + tmp[2:]) * 0.27
-        arr[0] = tmp[0] * 0.64 + tmp[1] * 0.36
-        arr[-1] = tmp[-1] * 0.64 + tmp[-2] * 0.36
+        drop_strength = min(0.70, 0.15 + drop_signal * 1.0)
+        arr *= max(0.08, 1.0 - drop_strength)
 
 
 def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands: int, np) -> None:
@@ -654,34 +568,43 @@ def _apply_adaptive_normalization(
     worker: "SpotifyVisualizerAudioWorker", arr, drop_signal: float,
     low_resolution: bool, np,
 ) -> None:
-    """Adaptive normalization to keep peaks near 1.0."""
+    """Adaptive normalization to keep peaks near 1.0.
+
+    Decay is aggressive enough to prevent long-term ratchet-up during
+    sustained loud passages (the root cause of reactivity degradation
+    across all visualizer modes).
+    """
     try:
         peak_val = float(arr.max())
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         peak_val = 0.0
-    max_tracked_peak = 1.35
+    max_tracked_peak = 1.20
     if peak_val > max_tracked_peak:
         peak_val = max_tracked_peak
     running_peak = getattr(worker, "_running_peak", 0.5)
-    try:
-        floor_baseline = float(worker._applied_noise_floor)
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        floor_baseline = 2.0
-    base_headroom = 0.45 + 0.1 * max(0.0, min(4.0, floor_baseline))
-    _ = max(0.7, min(1.0, base_headroom))
+
     if peak_val > running_peak:
-        running_peak += (peak_val - running_peak) * 0.32
+        running_peak += (peak_val - running_peak) * 0.28
     else:
-        fast_decay = 0.9 if peak_val < running_peak * 0.5 else 0.965
-        running_peak = running_peak * fast_decay + peak_val * (1.0 - fast_decay)
+        # Tiered decay: large drops decay fast, small drops decay moderately.
+        # Old values (0.965 / 0.9) were far too slow — running_peak would
+        # stay elevated for 10+ seconds, compressing all dynamic range.
+        if peak_val < running_peak * 0.4:
+            decay = 0.82          # heavy drop → fast reset
+        elif peak_val < running_peak * 0.7:
+            decay = 0.90          # moderate drop
+        else:
+            decay = 0.94          # gentle drop — still much faster than old 0.965
+        running_peak = running_peak * decay + peak_val * (1.0 - decay)
+
     drop_relief = max(0.0, float(drop_signal or 0.0))
-    if drop_relief > 0.22:
-        running_peak *= max(0.78, 1.0 - drop_relief * 0.22)
-    elif low_resolution and drop_relief > 0.35:
-        running_peak *= max(0.95, 1.0 - drop_relief * 0.08)
-    running_peak = max(0.18, min(1.35, running_peak))
+    if drop_relief > 0.15:
+        running_peak *= max(0.75, 1.0 - drop_relief * 0.28)
+    elif low_resolution and drop_relief > 0.25:
+        running_peak *= max(0.90, 1.0 - drop_relief * 0.12)
+
+    running_peak = max(0.18, min(1.20, running_peak))
     worker._running_peak = running_peak
     target_peak = 1.0
     if running_peak > target_peak * 1.1 and peak_val > 0.0:

@@ -276,12 +276,12 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _mirror_lbl = QLabel("Mirrored Layout:")
     _mirror_lbl.setFixedWidth(130)
     _mirror_row.addWidget(_mirror_lbl)
-    tab.spectrum_mirrored = QCheckBox("Center-out (bass on edges)")
+    tab.spectrum_mirrored = QCheckBox("Center-out (mirrored shape)")
     _mirror_default = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
     tab.spectrum_mirrored.setChecked(_mirror_default)
     tab.spectrum_mirrored.setToolTip(
-        "On: bars mirror from center outward (bass on edges, mids in center).\n"
-        "Off: bars run left-to-right (low→high frequency)."
+        "On: mirrored shape profile around the center divider (center ↔ edge symmetry).\n"
+        "Off: bars use left-to-right linear profile mapping."
     )
     tab.spectrum_mirrored.stateChanged.connect(tab._save_settings)
     _mirror_row.addWidget(tab.spectrum_mirrored)
@@ -384,7 +384,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _wave_row.addWidget(tab.spectrum_wave_amplitude_label)
 
     # Profile Floor (5–30 → 0.05–0.30)
-    _floor_row = _aligned_row(_adv_layout, "Min Height:")
+    _floor_row = _aligned_row(_adv_layout, "Profile Floor:")
     tab.spectrum_profile_floor = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_profile_floor.setMinimum(5)
     tab.spectrum_profile_floor.setMaximum(30)
@@ -392,7 +392,10 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_profile_floor.setValue(max(5, min(30, _floor_default)))
     tab.spectrum_profile_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_profile_floor.setTickInterval(5)
-    tab.spectrum_profile_floor.setToolTip("Minimum bar height floor. Lower = bars can shrink more.")
+    tab.spectrum_profile_floor.setToolTip(
+        "Minimum profile-shape floor (visual floor, not technical Manual Floor/noise floor). "
+        "Lower = bars can shrink more according to the shape profile."
+    )
     tab.spectrum_profile_floor.valueChanged.connect(tab._save_settings)
     _floor_row.addWidget(tab.spectrum_profile_floor)
     tab.spectrum_profile_floor_label = QLabel(f"{_floor_default / 100.0:.2f}")

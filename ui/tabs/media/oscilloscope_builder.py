@@ -164,22 +164,31 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     )
     osc_glow_row.addWidget(tab.osc_glow_intensity_label)
 
-    glow_size_widget, osc_glow_size_row = _aligned_row_widget(_normal_layout, "Glow Size:")
-    tab._osc_glow_widgets.append(glow_size_widget)
-    tab.osc_glow_size = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.osc_glow_size.setMinimum(10)
-    tab.osc_glow_size.setMaximum(300)
-    osc_glow_size_val = int(tab._default_float('spotify_visualizer', 'osc_glow_size', 1.0) * 100)
-    tab.osc_glow_size.setValue(max(10, min(300, osc_glow_size_val)))
-    tab.osc_glow_size.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.osc_glow_size.setTickInterval(25)
-    tab.osc_glow_size.valueChanged.connect(tab._save_settings)
-    osc_glow_size_row.addWidget(tab.osc_glow_size)
-    tab.osc_glow_size_label = QLabel(f"{osc_glow_size_val}%")
-    tab.osc_glow_size.valueChanged.connect(
-        lambda v: tab.osc_glow_size_label.setText(f"{v}%")
+    glow_reactivity_widget, osc_glow_reactivity_row = _aligned_row_widget(_normal_layout, "Glow Reactivity:")
+    tab._osc_glow_widgets.append(glow_reactivity_widget)
+    tab.osc_glow_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_glow_reactivity.setMinimum(0)
+    tab.osc_glow_reactivity.setMaximum(200)
+    osc_glow_reactivity_val = int(
+        tab._default_float(
+            'spotify_visualizer',
+            'osc_glow_reactivity',
+            tab._default_float('spotify_visualizer', 'osc_glow_size', 1.0),
+        ) * 100
     )
-    osc_glow_size_row.addWidget(tab.osc_glow_size_label)
+    tab.osc_glow_reactivity.setValue(max(0, min(200, osc_glow_reactivity_val)))
+    tab.osc_glow_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_glow_reactivity.setTickInterval(20)
+    tab.osc_glow_reactivity.valueChanged.connect(tab._save_settings)
+    osc_glow_reactivity_row.addWidget(tab.osc_glow_reactivity)
+    tab.osc_glow_reactivity_label = QLabel(f"{osc_glow_reactivity_val}%")
+    tab.osc_glow_reactivity.valueChanged.connect(
+        lambda v: tab.osc_glow_reactivity_label.setText(f"{v}%")
+    )
+    osc_glow_reactivity_row.addWidget(tab.osc_glow_reactivity_label)
+    # Backward-compat alias: legacy code paths may still reference osc_glow_size.
+    tab.osc_glow_size = tab.osc_glow_reactivity
+    tab.osc_glow_size_label = tab.osc_glow_reactivity_label
 
     glow_reactive_widget, glow_reactive_row = _aligned_row_widget(_normal_layout, "")
     tab._osc_glow_widgets.append(glow_reactive_widget)

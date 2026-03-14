@@ -11,6 +11,7 @@ from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from core.logging.logger import (
     get_logger,
     is_perf_metrics_enabled,
+    is_viz_diagnostics_enabled,
 )
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
@@ -95,6 +96,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._glow_enabled: bool = True
         self._glow_intensity: float = 0.5
         self._glow_size: float = 1.0
+        self._glow_reactivity: float = 1.0
         self._glow_color: QColor = QColor(0, 200, 255, 230)
         self._line_color: QColor = QColor(255, 255, 255, 255)
         self._reactive_glow: bool = True
@@ -169,6 +171,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
+        self._glow_diag_last_ts: float = 0.0
+        self._glow_diag_last_sig: tuple | None = None
 
         self._blob_stage_progress_raw: tuple[float, float, float] = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_filtered: tuple[float, float, float] = (-1.0, -1.0, -1.0)
@@ -347,6 +351,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         glow_enabled: bool = True,
         glow_intensity: float = 0.5,
         glow_size: float = 1.0,
+        glow_reactivity: float = 1.0,
         glow_color: QColor | None = None,
         reactive_glow: bool = True,
         osc_line_amplitude: float = 3.0,
@@ -631,6 +636,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._glow_enabled = bool(glow_enabled)
         self._glow_intensity = max(0.0, float(glow_intensity))
         self._glow_size = max(0.1, min(3.0, float(glow_size)))
+        self._glow_reactivity = max(0.0, min(2.0, float(glow_reactivity)))
         if glow_color is not None:
             self._glow_color = QColor(glow_color)
         if line_color is not None:
@@ -639,6 +645,37 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         _amp_value = osc_line_amplitude if osc_sensitivity is None else osc_sensitivity
         self._osc_line_amplitude = max(0.5, min(10.0, float(_amp_value)))
         self._osc_smoothing = max(0.0, min(1.0, float(osc_smoothing)))
+        if is_viz_diagnostics_enabled() and self._vis_mode in ('oscilloscope', 'sine_wave'):
+            now_diag = time.time()
+            diag_sig = (
+                self._vis_mode,
+                int(self._glow_enabled),
+                round(float(self._glow_intensity), 3),
+                round(float(self._glow_reactivity), 3),
+                int(self._reactive_glow),
+                round(float(getattr(self._energy_bands, 'bass', 0.0) or 0.0), 3),
+                round(float(getattr(self._energy_bands, 'mid', 0.0) or 0.0), 3),
+                round(float(getattr(self._energy_bands, 'high', 0.0) or 0.0), 3),
+                round(float(getattr(self._energy_bands, 'overall', 0.0) or 0.0), 3),
+            )
+            if (
+                (now_diag - self._glow_diag_last_ts) >= 0.5
+                or diag_sig != self._glow_diag_last_sig
+            ):
+                logger.info(
+                    "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f reactivity=%.3f reactive=%s energy(b=%.3f m=%.3f h=%.3f o=%.3f)",
+                    self._vis_mode,
+                    self._glow_enabled,
+                    self._glow_intensity,
+                    self._glow_reactivity,
+                    self._reactive_glow,
+                    float(getattr(self._energy_bands, 'bass', 0.0) or 0.0),
+                    float(getattr(self._energy_bands, 'mid', 0.0) or 0.0),
+                    float(getattr(self._energy_bands, 'high', 0.0) or 0.0),
+                    float(getattr(self._energy_bands, 'overall', 0.0) or 0.0),
+                )
+                self._glow_diag_last_ts = now_diag
+                self._glow_diag_last_sig = diag_sig
 
         # Multi-line oscilloscope
         self._osc_line_count = max(1, min(3, int(osc_line_count)))

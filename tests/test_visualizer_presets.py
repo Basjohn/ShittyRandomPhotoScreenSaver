@@ -8,6 +8,7 @@ from pathlib import Path
 from core.settings import visualizer_presets as vp
 from core.settings.settings_manager import SettingsManager
 from core.settings import sst_io
+from tools import visualizer_preset_repair as repair
 
 
 def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch):
@@ -22,6 +23,9 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
 
     payload = {
+        "visualizer_preset_override": True,
+        "visualizer_preset_mode": "sine_wave",
+        "preset_index": 4,
         "snapshot": {
             "widgets": {
                 "spotify_visualizer": {
@@ -55,6 +59,67 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
     finally:
         if original is not None:
             monkeypatch.setitem(vp._PRESETS, "sine_wave", original)
+
+
+def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkeypatch):
+    curated_root = tmp_path / "curated"
+    snapshots_root = tmp_path / "snapshots"
+    (curated_root / "spectrum").mkdir(parents=True)
+    snapshots_root.mkdir()
+
+    monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+
+    generic_sst = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "spectrum",
+                    "spectrum_growth": 4.0,
+                    "spectrum_bass_emphasis": 1.0,
+                }
+            }
+        }
+    }
+    (snapshots_root / "preset_1_exported_profile.json").write_text(json.dumps(generic_sst), encoding="utf-8")
+
+    presets = vp._build_presets_for_mode("spectrum")
+    # No explicit override marker -> snapshot should be ignored.
+    assert len(presets) == 4
+    assert presets[0].settings == {}
+
+
+def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
+    curated_root = tmp_path / "curated"
+    snapshots_root = tmp_path / "snapshots"
+    (curated_root / "spectrum").mkdir(parents=True)
+    snapshots_root.mkdir()
+
+    monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+
+    payload = {
+        # No visualizer_preset_override / visualizer_preset_mode markers
+        "preset_index": 2,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "spectrum",
+                    "spectrum_growth": 6.0,
+                    "spectrum_profile_floor": 0.2,
+                }
+            }
+        }
+    }
+    (snapshots_root / "preset_3_markerless.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    presets = vp._build_presets_for_mode("spectrum")
+
+    # Slot count should expand and slot index 2 should carry the override payload.
+    assert len(presets) == 5  # 4 curated slots (0-3) + Custom once index 2 exists
+    slot = presets[2]
+    assert slot.settings["spectrum_growth"] == 6.0
+    assert slot.settings["spectrum_profile_floor"] == 0.2
 
 
 def test_curated_bubble_preset_is_pre_filtered_and_tracks_gradient_direction():
@@ -139,3 +204,15 @@ def test_all_curated_presets_have_unique_keys_and_filtered_settings():
             assert sv.get("mode") == mode, f"{preset_path} must declare mode={mode}"
             filtered = vp._filter_settings_for_mode(mode, sv)
             assert filtered == sv, f"{preset_path} contains disallowed keys for mode {mode}"
+
+
+def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
+    mode = "sine_wave"
+    preset_path = tmp_path / "preset_5_sine.json"
+    cleaned = {"sine_glow_intensity": 0.75, "mode": mode}
+    payload = {"preset_index": 4, "snapshot": {}}
+
+    lean, _ = repair._build_clean_payload(preset_path, payload, mode, cleaned)
+
+    assert lean["visualizer_preset_override"] is True
+    assert lean["visualizer_preset_mode"] == mode

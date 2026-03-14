@@ -1161,20 +1161,25 @@ class WidgetsTab(QWidget):
         working_config['mode'] = mode_key
         applied = apply_preset_to_config(mode_key, preset_index, working_config)
         spotify_vis_config.update(applied)
+        spotify_vis_config[f"preset_{mode_key}"] = preset_index
 
         # Push preset values into UI widgets so the debounced save reads
         # the correct (preset) values instead of stale widget state.
         # Pass full widgets dict (with media intact) so load_media_settings
         # doesn't reset unrelated widgets to defaults.
-        full_widgets = dict(widgets_cfg)
-        full_widgets['spotify_visualizer'] = applied
-        self._loading = True
-        try:
-            from ui.tabs.widgets_tab_media import load_media_settings
-            load_media_settings(self, full_widgets)
-            load_per_mode_technical_controls(self, applied)
-        finally:
-            self._loading = False
+        if applied != working_config:
+            full_widgets = dict(widgets_cfg)
+            # Pass the full spotify_vis_config (with all global keys) so the
+            # media loader doesn't drop unrelated settings when the preset
+            # only overrides a per-mode subset.
+            full_widgets['spotify_visualizer'] = dict(spotify_vis_config)
+            self._loading = True
+            try:
+                from ui.tabs.widgets_tab_media import load_media_settings
+                load_media_settings(self, full_widgets)
+                load_per_mode_technical_controls(self, spotify_vis_config)
+            finally:
+                self._loading = False
 
         self._save_settings()
 

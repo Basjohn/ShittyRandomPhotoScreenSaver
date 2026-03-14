@@ -51,6 +51,27 @@ _MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
     "bar_count",
 )
 
+_MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
+    "oscilloscope": (
+        "glow_enabled",
+        "glow_intensity",
+        "glow_reactivity",
+        "glow_size",
+        "glow_color",
+        "reactive_glow",
+        "line_color",
+    ),
+    "sine_wave": (
+        "glow_enabled",
+        "glow_intensity",
+        "glow_reactivity",
+        "glow_size",
+        "glow_color",
+        "reactive_glow",
+        "line_color",
+    ),
+}
+
 _MANDATORY_SPECTRUM_SHAPING: Dict[str, Any] = {
     "spectrum_bass_emphasis": 0.5,
     "spectrum_vocal_position": 0.4,
@@ -86,6 +107,11 @@ def _ensure_mandatory_per_mode_defaults(
 ) -> None:
     prefix = _canonical_mode_prefix(mode)
     for suffix in _MANDATORY_TECH_SUFFIXES:
+        key = f"{prefix}{suffix}"
+        if key not in sanitized and key in defaults:
+            sanitized[key] = defaults[key]
+
+    for suffix in _MANDATORY_MODE_VISUAL_SUFFIXES.get(mode, ()): 
         key = f"{prefix}{suffix}"
         if key not in sanitized and key in defaults:
             sanitized[key] = defaults[key]
@@ -136,7 +162,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     return sanitized, stats
 
 
-def _build_clean_payload(payload: Mapping[str, Any], mode: str, cleaned: Mapping[str, Any]) -> Tuple[Dict[str, Any], list[str]]:
+def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, cleaned: Mapping[str, Any]) -> Tuple[Dict[str, Any], list[str]]:
     """Rebuild a lean preset payload containing only sanitized visualizer settings."""
 
     lean: Dict[str, Any] = {}
@@ -151,14 +177,39 @@ def _build_clean_payload(payload: Mapping[str, Any], mode: str, cleaned: Mapping
                 continue
         lean[meta_key] = value
 
-    if "name" not in lean:
-        lean["name"] = f"Preset ({mode})"
+    if "preset_index" not in lean:
+        inferred_index = vp._infer_preset_index_from_name(path.stem)  # type: ignore[attr-defined]
+        if inferred_index is not None:
+            lean["preset_index"] = inferred_index
+
+    if "name" not in lean or not lean["name"]:
+        inferred_name: str | None = None
+        idx = lean.get("preset_index")
+        if isinstance(idx, int):
+            suffix = vp._infer_suffix_from_name(path.stem)  # type: ignore[attr-defined]
+            inferred_name = vp._friendly_name_from_suffix(idx, suffix)  # type: ignore[attr-defined]
+        if not inferred_name:
+            idx_val = int(idx) + 1 if isinstance(idx, int) else None
+            inferred_name = f"Preset {idx_val}" if idx_val is not None else f"Preset ({mode})"
+        lean["name"] = inferred_name
 
     lean["mode"] = mode
+    # Mark the payload so the loader recognizes it as an override even when the
+    # user places it alongside curated presets. This mirrors the manual marker
+    # contract in core/settings/visualizer_presets.
+    lean["visualizer_preset_override"] = True
+    lean["visualizer_preset_mode"] = mode
 
     sv_block = deepcopy(dict(cleaned))
 
-    lean["snapshot"] = {"widgets": {"spotify_visualizer": deepcopy(sv_block)}}
+    custom_backup = {
+        f"widgets.spotify_visualizer.{key}": deepcopy(value)
+        for key, value in sv_block.items()
+    }
+    lean["snapshot"] = {
+        "widgets": {"spotify_visualizer": deepcopy(sv_block)},
+        "custom_preset_backup": custom_backup,
+    }
 
     widgets_section: Dict[str, Any] = {}
     original_widgets_root = payload.get("widgets")
@@ -170,7 +221,7 @@ def _build_clean_payload(payload: Mapping[str, Any], mode: str, cleaned: Mapping
     if widgets_section:
         lean["widgets"] = widgets_section
 
-    updated_paths = ["snapshot.widgets.spotify_visualizer"]
+    updated_paths = ["snapshot.widgets.spotify_visualizer", "snapshot.custom_preset_backup"]
     if widgets_section:
         updated_paths.append("widgets")
 
@@ -199,7 +250,7 @@ def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
         raise ValueError("Payload root must be a JSON object")
 
     cleaned, stats = _sanitize_settings(mode, payload)
-    lean_payload, updated_paths = _build_clean_payload(payload, mode, cleaned)
+    lean_payload, updated_paths = _build_clean_payload(path, payload, mode, cleaned)
 
     backup_path = _ensure_backup(path)
     new_text = json.dumps(lean_payload, indent=2, sort_keys=True)

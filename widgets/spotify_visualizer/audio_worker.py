@@ -182,6 +182,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._raw_bass_avg = floor
             self._applied_noise_floor = floor
             self._last_noise_floor = floor
+            self._running_peak = 0.5
         self._last_floor_config = (dyn, floor)
 
     def set_audio_block_size(self, block_size: int) -> None:

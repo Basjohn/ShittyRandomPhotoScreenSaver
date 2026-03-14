@@ -134,6 +134,30 @@ class TestWidgetsTab:
         finally:
             reloaded_tab.deleteLater()
 
+    def test_oscilloscope_swatch_persistence(self, qt_app, settings_manager):
+        """Oscilloscope glow + line swatches persist through save/load and sync button UI."""
+
+        def _rgba_tuple(color: QColor) -> tuple[int, int, int, int]:
+            return color.red(), color.green(), color.blue(), color.alpha()
+
+        first_tab = WidgetsTab(settings_manager)
+
+        custom_glow = QColor(33, 77, 190, 210)
+        custom_line = QColor(240, 245, 250, 180)
+        first_tab._osc_glow_color = custom_glow
+        first_tab._osc_line_color = custom_line
+        first_tab._save_settings_now()
+        first_tab.deleteLater()
+
+        reloaded_tab = WidgetsTab(settings_manager)
+        try:
+            assert _rgba_tuple(reloaded_tab._osc_glow_color) == _rgba_tuple(custom_glow)
+            assert _rgba_tuple(reloaded_tab._osc_line_color) == _rgba_tuple(custom_line)
+            assert _rgba_tuple(reloaded_tab.osc_glow_color_btn.color()) == _rgba_tuple(custom_glow)
+            assert _rgba_tuple(reloaded_tab.osc_line_color_btn.color()) == _rgba_tuple(custom_line)
+        finally:
+            reloaded_tab.deleteLater()
+
     def test_visualizer_advanced_edit_switches_to_custom(self, qt_app, settings_manager):
         tab = WidgetsTab(settings_manager)
         try:

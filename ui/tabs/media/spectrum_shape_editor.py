@@ -213,15 +213,26 @@ class SpectrumShapeEditor(QWidget):
 
     def _node_to_pixel(self, nx: float, ny: float) -> QPointF:
         er = self._edit_rect()
-        px = er.left() + nx * er.width()
+        if self._mirrored:
+            # Mirrored editing uses the left half where the center divider is
+            # on the RIGHT side of the edit rect.  Keep node semantics as
+            # x=0 -> center, x=1 -> edge.
+            px = er.right() - nx * er.width()
+        else:
+            px = er.left() + nx * er.width()
         py = er.bottom() - ny * er.height()
         return QPointF(px, py)
 
     def _pixel_to_node(self, px: float, py: float) -> Tuple[float, float]:
         er = self._edit_rect()
-        nx = (px - er.left()) / max(1.0, er.width())
+        if self._mirrored:
+            nx = (er.right() - px) / max(1.0, er.width())
+        else:
+            nx = (px - er.left()) / max(1.0, er.width())
         ny = (er.bottom() - py) / max(1.0, er.height())
-        return (max(0.0, min(1.0, nx)), max(0.0, min(1.0, ny)))
+        nx = max(0.0, min(1.0, nx))
+        ny = max(0.0, min(1.0, ny))
+        return nx, ny
 
     def _hit_test(self, px: float, py: float) -> int:
         for i, (nx, ny) in enumerate(self._nodes):
@@ -343,7 +354,10 @@ class SpectrumShapeEditor(QWidget):
         # Interpolated curve — editing half
         num_pts = max(2, int(er.width()))
         samples = interpolate_nodes(self._nodes, num_pts)
-        self._draw_curve_in_rect(p, er, samples, primary=True)
+        # Node semantics are center->edge.  The editable half is left->right
+        # edge->center, so mirrored mode draws the editable curve reversed.
+        draw_samples_edit = list(reversed(samples)) if self._mirrored else samples
+        self._draw_curve_in_rect(p, er, draw_samples_edit, primary=True)
 
         # Mirrored ghost on the right half
         if self._mirrored:
@@ -351,8 +365,9 @@ class SpectrumShapeEditor(QWidget):
                 r.left() + r.width() * 0.5, r.top(),
                 r.width() * 0.5, r.height(),
             )
-            reversed_samples = list(reversed(samples))
-            self._draw_curve_in_rect(p, mirror_rect, reversed_samples, primary=False)
+            # Right ghost is center->edge (left->right), same orientation as
+            # the underlying sample domain.
+            self._draw_curve_in_rect(p, mirror_rect, samples, primary=False)
 
         # Nodes (drawn on top)
         self._draw_nodes(p)
@@ -453,11 +468,13 @@ class SpectrumShapeEditor(QWidget):
 
         for frac, label in notches:
             if self._mirrored:
+                center_x = r.left() + r.width() * 0.5
+                half_w = r.width() * 0.5
                 # Left half notch
-                x_left = r.left() + frac * r.width() * 0.5
+                x_left = center_x - frac * half_w
                 self._draw_single_notch(p, r, x_left, label)
                 # Right half mirrored notch
-                x_right = r.right() - frac * r.width() * 0.5
+                x_right = center_x + frac * half_w
                 if abs(x_left - x_right) > 4:
                     self._draw_single_notch(p, r, x_right, label)
             else:
