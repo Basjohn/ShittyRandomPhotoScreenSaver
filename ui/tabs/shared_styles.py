@@ -454,10 +454,11 @@ QSlider::add-page:horizontal {
 /* Active indicator on the most-recently-moved slider handle */
 QSlider[lastMoved="true"]::handle:horizontal {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #3a3a4a, stop:0.4 #2a2a38, stop:0.85 #1e1e2c, stop:1 #141420);
-    border: 2px solid rgba(130, 140, 200, 0.85);
-    border-top-color: rgba(160, 170, 230, 0.9);
-    border-bottom-color: rgba(10, 10, 20, 0.9);
+        stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
+    margin: -4px 0;
+    border-radius: 5px;
+    border: 2px solid #202020;
+    border-bottom-color: rgba(0, 0, 0, 0.85);
 }
 """
 

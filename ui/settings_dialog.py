@@ -7,6 +7,7 @@ Features gorgeous UI with:
 - Resizable window
 """
 import sys
+import time
 from typing import Dict, Optional, Any
 from pathlib import Path
 from PySide6.QtWidgets import (
@@ -17,13 +18,14 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, QPoint, QRect, Signal, QUrl, QTimer
 from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPen, QGuiApplication
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, PresetsTab
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import apply_shadows_to_inputs
+from ui.settings_dialog_cache import get_settings_dialog_cache
 
 logger = get_logger(__name__)
 
@@ -443,6 +445,15 @@ class SettingsDialog(QDialog):
         self._drag_pos = QPoint()
         self._dragging = False
         self._tab_scroll_cache: Dict[str, int] = {}
+        self._tab_widgets: Dict[str, QWidget] = {}
+        self._tab_builders: Dict[str, Any] = {}
+        self._built_tab_indices: set[int] = set()
+        self._styled_tabs: set[int] = set()
+        self._background_build_scheduled = False
+        self._background_tab_queue: list[int] = []
+        self._presets_signal_connected = False
+        cache = get_settings_dialog_cache()
+        self._ordered_presets = cache.ordered_presets
         stored_scroll = self._settings.get('ui.last_tab_scroll', {})
         if isinstance(stored_scroll, dict):
             for key, value in stored_scroll.items():
@@ -475,12 +486,9 @@ class SettingsDialog(QDialog):
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
 
-        # Hide the dialog during construction to prevent a flash of the
-        # unstyled/unpositioned window while heavyweight tabs are created.
-        self.setVisible(False)
-
         self._setup_window()
         self._load_theme()
+        self._determine_initial_tab()
         self._setup_ui()
         self._apply_circle_checkbox_style()
         self._connect_signals()
@@ -488,6 +496,16 @@ class SettingsDialog(QDialog):
         self._restore_last_tab_selection()
 
         logger.info("Settings dialog created")
+    
+    def _determine_initial_tab(self) -> None:
+        stored = self._settings.get('ui.last_tab_index', 0)
+        try:
+            index = int(stored)
+        except Exception:
+            index = 0
+        if index < 0 or index >= len(self._tab_keys):
+            index = 0
+        self._initial_tab_index = index
     
     def _setup_window(self) -> None:
         """Setup window properties."""
@@ -604,37 +622,36 @@ class SettingsDialog(QDialog):
         self.content_stack = QStackedWidget()
         self.content_stack.setObjectName("contentArea")
         
-        # Create actual tabs
-        self.sources_tab = SourcesTab(self._settings)
-        self.display_tab = DisplayTab(self._settings)
-        self.transitions_tab = TransitionsTab(self._settings)
-        self.widgets_tab = WidgetsTab(self._settings)
-        self.accessibility_tab = AccessibilityTab(self._settings)
-        self.presets_tab = PresetsTab(self._settings)
-        self.about_tab = self._create_about_tab()
-        
-        self.content_stack.addWidget(self.sources_tab)
-        self.content_stack.addWidget(self.display_tab)
-        self.content_stack.addWidget(self.transitions_tab)
-        self.content_stack.addWidget(self.widgets_tab)
-        self.content_stack.addWidget(self.accessibility_tab)
-        self.content_stack.addWidget(self.presets_tab)
-        self.content_stack.addWidget(self.about_tab)
-        self._register_tab_scroll_area(0, self.sources_tab)
-        self._register_tab_scroll_area(1, self.display_tab)
-        self._register_tab_scroll_area(2, self.transitions_tab)
-        self._register_tab_scroll_area(3, self.widgets_tab)
-        self._register_tab_scroll_area(4, self.accessibility_tab)
-        self._register_tab_scroll_area(5, self.presets_tab)
-        self._register_tab_scroll_area(6, self.about_tab)
+        # Create actual tabs lazily
+        cache = get_settings_dialog_cache()
+        self._tab_builders = {
+            "sources": lambda: SourcesTab(self._settings),
+            "display": lambda: DisplayTab(self._settings),
+            "transitions": lambda: TransitionsTab(self._settings),
+            "widgets": lambda: WidgetsTab(
+                self._settings,
+                widget_defaults=cache.widget_defaults,
+            ),
+            "accessibility": lambda: AccessibilityTab(self._settings),
+            "presets": lambda: PresetsTab(self._settings),
+            "about": self._create_about_tab,
+        }
+
+        for key in self._tab_keys:
+            placeholder = QWidget()
+            placeholder.setObjectName(f"{key}_placeholder")
+            self.content_stack.addWidget(placeholder)
+            self._tab_widgets[key] = placeholder
+
+        self._ensure_tab_built(self._initial_tab_index)
+        self._hydrate_remaining_tabs_async()
 
         content_layout.addWidget(sidebar)
         content_layout.addWidget(self.content_stack, 1)
 
         main_layout.addLayout(content_layout)
 
-        # Apply crisp drop shadows to all combo/spinbox/entry controls now that the UI tree exists.
-        apply_shadows_to_inputs(container)
+        self._style_tab_widget(self.content_stack.widget(self._initial_tab_index))
 
         # Size grip for resizing
         self.size_grip = CornerSizeGrip(container)
@@ -645,15 +662,109 @@ class SettingsDialog(QDialog):
         self._outer_layout.setContentsMargins(self._outer_margin, self._outer_margin, self._outer_margin, self._outer_margin)
         self._outer_layout.addWidget(container)
         
-        # Default selection
-        self.sources_tab_btn.setChecked(True)
-        self.content_stack.setCurrentIndex(0)
+        self.tab_buttons[self._initial_tab_index].setChecked(True)
+        self.content_stack.setCurrentIndex(self._initial_tab_index)
 
 
     def _create_about_tab(self) -> QWidget:
         """Create about tab. Delegates to ui.settings_about_tab."""
         from ui.settings_about_tab import build_about_tab
         return build_about_tab(self)
+
+    def _get_tab_instance(self, key: str) -> Optional[QWidget]:
+        index = self._tab_index_for_key(key)
+        if index < 0:
+            return None
+        self._ensure_tab_built(index)
+        return getattr(self, f"{key}_tab", None)
+
+    def _tab_index_for_key(self, key: str) -> int:
+        try:
+            return self._tab_keys.index(key)
+        except ValueError:
+            return -1
+
+    def _ensure_tab_built(self, index: int) -> None:
+        if index in self._built_tab_indices:
+            return
+        if index < 0 or index >= len(self._tab_keys):
+            return
+        key = self._tab_key_for_index(index)
+        widget = self._build_tab_by_key(key, index)
+        self._built_tab_indices.add(index)
+        self._style_tab_widget(widget)
+
+    def _build_tab_by_key(self, key: str, index: int) -> QWidget:
+        builder = self._tab_builders.get(key)
+        if builder is None:
+            return self._tab_widgets.get(key)
+
+        build_start = time.perf_counter()
+        widget = builder()
+
+        placeholder = self.content_stack.widget(index)
+        if placeholder is not None:
+            self.content_stack.removeWidget(placeholder)
+            placeholder.deleteLater()
+        self.content_stack.insertWidget(index, widget)
+        self._register_tab_scroll_area(index, widget)
+        setattr(self, f"{key}_tab", widget)
+
+        if key == "presets" and not self._presets_signal_connected and hasattr(widget, "settings_reloaded"):
+            try:
+                widget.settings_reloaded.connect(self._reload_all_tab_settings)
+                self._presets_signal_connected = True
+            except Exception:
+                logger.debug("Failed to connect presets tab refresh signal", exc_info=True)
+
+        # Restore view state + scroll as soon as the tab exists so subsections pick up saved positions.
+        self._restore_tab_view_state(index, widget)
+        self._restore_scroll_for_tab(index, widget)
+
+        if is_perf_metrics_enabled():
+            elapsed_ms = (time.perf_counter() - build_start) * 1000.0
+            logger.info(
+                "[PERF][SETTINGS] Tab '%s' built in %.1f ms",
+                key,
+                elapsed_ms,
+            )
+
+        return widget
+
+    def _hydrate_remaining_tabs_async(self) -> None:
+        remaining = [i for i in range(len(self._tab_keys)) if i not in self._built_tab_indices]
+        if not remaining:
+            return
+        self._background_tab_queue.extend(remaining)
+        self._schedule_next_background_build()
+
+    def _schedule_next_background_build(self) -> None:
+        if self._background_build_scheduled or not self._background_tab_queue:
+            return
+        self._background_build_scheduled = True
+
+        def _run():
+            self._background_build_scheduled = False
+            if not self._background_tab_queue:
+                return
+            index = self._background_tab_queue.pop(0)
+            self._ensure_tab_built(index)
+            self._schedule_next_background_build()
+
+        QTimer.singleShot(0, _run)
+
+    def _style_tab_widget(self, widget: Optional[QWidget]) -> None:
+        if widget is None:
+            return
+        idx = self.content_stack.indexOf(widget)
+        if idx < 0 or idx in self._styled_tabs:
+            return
+        try:
+            apply_shadows_to_inputs(widget)
+        except Exception:
+            logger.debug("Failed to apply tab control shadows", exc_info=True)
+            return
+        self._styled_tabs.add(idx)
 
     def _update_about_header_images(self) -> None:
         """Scale About header images responsively. Delegates to ui.settings_about_tab."""
@@ -676,9 +787,8 @@ class SettingsDialog(QDialog):
         self.presets_tab_btn.clicked.connect(lambda: self._switch_tab(5))
         self.about_tab_btn.clicked.connect(lambda: self._switch_tab(6))
         
-        # Connect preset changes to refresh all tabs
-        self.presets_tab.settings_reloaded.connect(self._reload_all_tab_settings)
-    
+        # Presets tab signal is wired when the tab is built (lazy)
+
     def _switch_tab(self, index: int, animate: bool = True) -> None:
         """
         Switch to tab with animation.
@@ -686,6 +796,7 @@ class SettingsDialog(QDialog):
         Args:
             index: Tab index
         """
+        self._ensure_tab_built(index)
         previous_index = self.content_stack.currentIndex()
         if previous_index >= 0:
             if not self._suppress_scroll_capture:
@@ -715,6 +826,7 @@ class SettingsDialog(QDialog):
                     logger.debug("[SETTINGS] Exception suppressed")
             self._restore_tab_view_state(index, current_widget)
             self._restore_scroll_for_tab(index, current_widget)
+            self._style_tab_widget(current_widget)
             self._save_last_tab(index)
             logger.debug(f"Switched to tab {index}")
         if animate and old_widget is not None:
@@ -943,17 +1055,18 @@ class SettingsDialog(QDialog):
     
     def _reload_all_tab_settings(self) -> None:
         """Reload settings in all tabs after preset change."""
-        # Reload settings in each tab by calling their load/refresh methods
-        tabs_to_reload = [
-            (0, self.sources_tab),
-            (1, self.display_tab),
-            (2, self.transitions_tab),
-            (3, self.widgets_tab),
-            (4, self.accessibility_tab),
+        tab_attrs = [
+            (0, "sources_tab"),
+            (1, "display_tab"),
+            (2, "transitions_tab"),
+            (3, "widgets_tab"),
+            (4, "accessibility_tab"),
         ]
-        
-        for idx, tab in tabs_to_reload:
-            # Check if tab has a refresh/reload method
+
+        for idx, attr in tab_attrs:
+            tab = getattr(self, attr, None)
+            if tab is None:
+                continue
             if hasattr(tab, 'load_from_settings'):
                 try:
                     tab.load_from_settings()
@@ -964,8 +1077,8 @@ class SettingsDialog(QDialog):
                     tab.refresh()
                 except Exception as e:
                     logger.debug("[SETTINGS] Failed to refresh tab %d: %s", idx, e)
-        
-        logger.debug("[SETTINGS] Reloaded all tab settings after preset change")
+
+        logger.debug("[SETTINGS] Reloaded tab settings after preset change")
     
     def _on_add_default_sources(self) -> None:
         """Add curated RSS feeds as default sources."""
@@ -988,8 +1101,9 @@ class SettingsDialog(QDialog):
             self._settings.save()
             
             # Reload sources tab if it exists
-            if hasattr(self, 'sources_tab'):
-                self.sources_tab._load_settings()
+            tab = self._get_tab_instance('sources')
+            if tab and hasattr(tab, '_load_settings'):
+                tab._load_settings()
             
             logger.info("Added %d curated RSS feeds as default sources", len(curated_feeds))
             
@@ -1012,14 +1126,10 @@ class SettingsDialog(QDialog):
             # immediately, avoiding a confusing mismatch between on-disk
             # configuration and visible controls.
             try:
-                if hasattr(self, "sources_tab"):
-                    self.sources_tab._load_settings()  # type: ignore[attr-defined]
-                if hasattr(self, "display_tab"):
-                    self.display_tab._load_settings()  # type: ignore[attr-defined]
-                if hasattr(self, "transitions_tab"):
-                    self.transitions_tab._load_settings()  # type: ignore[attr-defined]
-                if hasattr(self, "widgets_tab"):
-                    self.widgets_tab._load_settings()  # type: ignore[attr-defined]
+                for key in ("sources", "display", "transitions", "widgets"):
+                    tab = self._get_tab_instance(key)
+                    if tab and hasattr(tab, '_load_settings'):
+                        tab._load_settings()
             except Exception:
                 logger.debug("Failed to reload settings tabs after reset_to_defaults", exc_info=True)
 
@@ -1055,8 +1165,9 @@ class SettingsDialog(QDialog):
             self._settings.reset_visualizers_to_defaults()
 
             try:
-                if hasattr(self, "widgets_tab"):
-                    self.widgets_tab._load_settings()  # type: ignore[attr-defined]
+                tab = self._get_tab_instance('widgets')
+                if tab and hasattr(tab, '_load_settings'):
+                    tab._load_settings()
             except Exception:
                 logger.debug("Failed to reload widgets tab after visualizer reset", exc_info=True)
 

@@ -103,7 +103,12 @@ class WidgetsTab(QWidget):
     # Signals
     widgets_changed = Signal()
     
-    def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
+    def __init__(
+        self,
+        settings: SettingsManager,
+        parent: Optional[QWidget] = None,
+        widget_defaults: Optional[Dict[str, Any]] = None,
+    ):
         """
         Initialize widgets tab.
         
@@ -114,7 +119,7 @@ class WidgetsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
-        self._widget_defaults = self._load_widget_defaults()
+        self._widget_defaults = widget_defaults or self._load_widget_defaults()
         self._current_subtab = 0
         self._subtab_scroll_cache: Dict[int, int] = {}
         self._scroll_area: Optional[QScrollArea] = None

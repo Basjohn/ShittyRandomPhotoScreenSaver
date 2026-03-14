@@ -43,10 +43,12 @@ logger = get_logger(__name__)
 class _PresetNotchBar(QWidget):
     """Lightweight notch renderer that mirrors the preset slider span."""
 
+    _H_MARGIN = 14
+
     def __init__(self, notch_count: int, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._notch_count = max(0, notch_count)
-        self.setFixedHeight(8)
+        self.setFixedHeight(10)
         policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setSizePolicy(policy)
 
@@ -63,13 +65,17 @@ class _PresetNotchBar(QWidget):
         palette = self.palette()
         color = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
         pen = QPen(color)
-        pen.setWidth(1)
+        pen.setWidth(2)
         painter.setPen(pen)
-        width = self.width()
+        total_width = max(1, self.width() - 1)
         height = self.height()
-        step = width / (self._notch_count - 1)
+        span = self._notch_count - 1
+        usable = max(0, total_width - 2 * self._H_MARGIN)
         for i in range(self._notch_count):
-            x = round(i * step)
+            if span <= 0:
+                x = self._H_MARGIN
+            else:
+                x = self._H_MARGIN + round((i / span) * usable)
             painter.drawLine(x, 0, x, height)
         painter.end()
 

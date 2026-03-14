@@ -8,11 +8,12 @@ All functions accept the engine instance as the first parameter.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+import time
 
 from PySide6.QtWidgets import QApplication
 
-from core.animation import AnimationManager
 from core.logging.logger import get_logger
+from core.animation import AnimationManager
 from core.settings import SettingsManager
 from ui.settings_dialog import SettingsDialog
 
@@ -99,6 +100,7 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 def on_settings_requested(engine: ScreensaverEngine) -> None:
     """Handle settings request (S key)."""
     logger.info("Settings requested - pausing screensaver and opening config")
+    request_start = time.perf_counter()
 
     # Wake media widget from idle mode when returning from settings
     # This ensures Spotify detection resumes if user opened Spotify while in settings
@@ -133,17 +135,51 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
             except Exception as _e:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
 
+    # Create shield overlays on every screen so tearing down the display
+    # windows doesn't flash the desktop at the user.  Keep them visible for the
+    # entire duration of the settings dialog / display restart so no OS
+    # placeholders ever bleed through.
+    from rendering.settings_shield import SettingsShieldManager
+    shields: SettingsShieldManager | None = None
+    try:
+        shields = SettingsShieldManager()
+        shields.show()
+    except Exception:
+        logger.debug("[ENGINE] Failed to show settings shields", exc_info=True)
+        shields = None
+
     # Stop the engine but DON'T exit the app
+    stop_start = time.perf_counter()
     engine.stop(exit_app=False)
+    stop_ms = (time.perf_counter() - stop_start) * 1000
+    overall_ms = (time.perf_counter() - request_start) * 1000
+    logger.info("Settings stop() completed in %.1f ms (%.1f ms since request)", stop_ms, overall_ms)
 
     app = QApplication.instance()
 
     try:
         if app:
             animations = AnimationManager(resource_manager=engine.resource_manager)
+            dialog_init_start = time.perf_counter()
             dialog = SettingsDialog(engine.settings_manager, animations)
+            init_ms = (time.perf_counter() - dialog_init_start) * 1000
+            since_request_ms = (time.perf_counter() - request_start) * 1000
+            logger.info(
+                "Settings dialog instantiated in %.1f ms (%.1f ms since request)",
+                init_ms,
+                since_request_ms,
+            )
+            try:
+                dialog.raise_()
+                dialog.activateWindow()
+                logger.info("Settings dialog raised + activated (%.1f ms since request)", (time.perf_counter() - request_start) * 1000)
+            except Exception:
+                logger.debug("Failed to raise/activate settings dialog", exc_info=True)
             # Result intentionally ignored - dialog handles its own state
+            exec_start = time.perf_counter()
+            logger.info("Entering settings dialog exec (%.1f ms since request)", (exec_start - request_start) * 1000)
             _ = dialog.exec()
+            exec_duration = (time.perf_counter() - exec_start) * 1000
 
             # After dialog closes, fully reset displays and restart
             logger.info("Settings dialog closed, performing full-style restart of screensaver")
@@ -183,6 +219,15 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
             if not engine.start():
                 logger.error("Failed to restart screensaver after settings; quitting")
                 QApplication.quit()
+                return
+
+            if shields is not None:
+                try:
+                    shields.hide()
+                except Exception:
+                    logger.debug("[ENGINE] Failed to hide settings shields", exc_info=True)
+            total_duration = (time.perf_counter() - request_start) * 1000
+            logger.info("Settings lifecycle complete in %.1f ms (dialog exec %.1f ms)", total_duration, exec_duration)
     except Exception as e:
         logger.exception(f"Failed to open settings dialog: {e}")
         QApplication.quit()

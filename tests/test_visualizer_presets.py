@@ -115,8 +115,9 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
 
     presets = vp._build_presets_for_mode("spectrum")
 
-    # Slot count should expand and slot index 2 should carry the override payload.
-    assert len(presets) == 5  # 4 curated slots (0-3) + Custom once index 2 exists
+    # Marker-less snapshots reuse the existing curated slot; they no longer grow
+    # the preset count beyond the curated allocation.
+    assert len(presets) == 4
     slot = presets[2]
     assert slot.settings["spectrum_growth"] == 6.0
     assert slot.settings["spectrum_profile_floor"] == 0.2
@@ -134,6 +135,40 @@ def test_curated_bubble_preset_is_pre_filtered_and_tracks_gradient_direction():
     # Curated payloads should already be filtered to allowed keys for the mode
     filtered = vp._filter_settings_for_mode("bubble", sv)
     assert filtered == sv
+
+
+def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
+    curated_root = tmp_path / "curated"
+    (curated_root / "spectrum").mkdir(parents=True)
+
+    monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
+
+    payload = {
+        "mode": "spectrum",
+        "preset_index": 1,
+        "snapshot": {
+            "custom_preset_backup": {
+                "widgets.spotify_visualizer.spectrum_growth": 2.0,
+                "widgets.spotify_visualizer.spectrum_profile_floor": 0.05,
+            },
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "spectrum",
+                    "spectrum_growth": 4.5,
+                    "spectrum_profile_floor": 0.3,
+                }
+            },
+        },
+    }
+    (curated_root / "spectrum" / "preset_2_custom_curve.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+    presets = vp._build_presets_for_mode("spectrum")
+    slot = presets[1]
+    # snapshot.widgets should win over backup defaults
+    assert slot.settings["spectrum_growth"] == 4.5
+    assert slot.settings["spectrum_profile_floor"] == 0.3
 
 
 def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
