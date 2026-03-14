@@ -489,14 +489,22 @@ class SettingsDialog(QDialog):
         self._setup_window()
         self._load_theme()
         self._determine_initial_tab()
+        _ui_start = time.perf_counter()
         self._setup_ui()
+        self._log_perf_event("SettingsDialog._setup_ui", _ui_start)
         self._apply_circle_checkbox_style()
         self._connect_signals()
         self._restore_geometry()
         self._restore_last_tab_selection()
 
         logger.info("Settings dialog created")
-    
+
+    def _log_perf_event(self, label: str, start_time: float) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.info("[PERF][SETTINGS] %s in %.1f ms", label, elapsed_ms)
+
     def _determine_initial_tab(self) -> None:
         stored = self._settings.get('ui.last_tab_index', 0)
         try:

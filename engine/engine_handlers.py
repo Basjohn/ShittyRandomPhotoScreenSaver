@@ -135,19 +135,6 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
             except Exception as _e:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
 
-    # Create shield overlays on every screen so tearing down the display
-    # windows doesn't flash the desktop at the user.  Keep them visible for the
-    # entire duration of the settings dialog / display restart so no OS
-    # placeholders ever bleed through.
-    from rendering.settings_shield import SettingsShieldManager
-    shields: SettingsShieldManager | None = None
-    try:
-        shields = SettingsShieldManager()
-        shields.show()
-    except Exception:
-        logger.debug("[ENGINE] Failed to show settings shields", exc_info=True)
-        shields = None
-
     # Stop the engine but DON'T exit the app
     stop_start = time.perf_counter()
     engine.stop(exit_app=False)
@@ -221,11 +208,6 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
                 QApplication.quit()
                 return
 
-            if shields is not None:
-                try:
-                    shields.hide()
-                except Exception:
-                    logger.debug("[ENGINE] Failed to hide settings shields", exc_info=True)
             total_duration = (time.perf_counter() - request_start) * 1000
             logger.info("Settings lifecycle complete in %.1f ms (dialog exec %.1f ms)", total_duration, exec_duration)
     except Exception as e:

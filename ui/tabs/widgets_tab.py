@@ -13,6 +13,7 @@ Per-widget UI, load, and save logic is delegated to extraction modules:
   widgets_tab_reddit.py, widgets_tab_imgur.py
 """
 import os
+import time
 from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -23,7 +24,7 @@ from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 
 from core.settings.settings_manager import SettingsManager
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.defaults import get_default_settings
 from core.settings.visualizer_presets import apply_preset_to_config, get_custom_preset_index
 from ui.tabs.shared_styles import (
@@ -35,6 +36,7 @@ from ui.tabs.shared_styles import (
     NAV_TAB_FONT_STYLE,
     NAV_TAB_FONT_STYLE_ACTIVE,
     STATUS_LABEL_STYLE,
+    SCROLL_AREA_STYLE,
     NoWheelSlider,  # noqa: F401 — re-exported
 )
 from ui.styled_popup import StyledColorPicker
@@ -156,8 +158,12 @@ class WidgetsTab(QWidget):
         self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
         self._loading = True
         self._save_coalesce_pending = False
+        _ui_start = time.perf_counter()
         self._setup_ui()
+        self._perf_log("_setup_ui", _ui_start)
+        _load_start = time.perf_counter()
         self._load_settings()
+        self._perf_log("_load_settings", _load_start)
         self._loading = False
         
         logger.debug("WidgetsTab created")
@@ -350,6 +356,7 @@ class WidgetsTab(QWidget):
     
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
+        perf_scope = time.perf_counter()
         # Check dev features gate once at the start
         dev_features_enabled = os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
         
@@ -359,16 +366,14 @@ class WidgetsTab(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setFrameShape(QScrollArea.NoFrame)
-        from ui.tabs.shared_styles import SCROLL_AREA_STYLE
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         scroll.setStyleSheet(SCROLL_AREA_STYLE)
-        
-        # Create content widget
+
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-        
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+
         # Title
         title = QLabel("Overlay Widgets")
         title.setStyleSheet(PAGE_TITLE_STYLE)
@@ -514,19 +519,29 @@ class WidgetsTab(QWidget):
         from ui.tabs.widgets_tab_media import build_media_ui, build_visualizers_ui
         from ui.tabs.widgets_tab_reddit import build_reddit_ui
 
+        section_start = time.perf_counter()
         self._clocks_container = build_clock_ui(self, layout)
+        self._perf_log("build_clock_ui", section_start)
         layout.addWidget(self._clocks_container)
 
+        section_start = time.perf_counter()
         self._weather_container = build_weather_ui(self, layout)
+        self._perf_log("build_weather_ui", section_start)
         layout.addWidget(self._weather_container)
 
+        section_start = time.perf_counter()
         self._media_container = build_media_ui(self, layout)
+        self._perf_log("build_media_ui", section_start)
         layout.addWidget(self._media_container)
 
+        section_start = time.perf_counter()
         self._visualizers_container = build_visualizers_ui(self, layout)
+        self._perf_log("build_visualizers_ui", section_start)
         layout.addWidget(self._visualizers_container)
 
+        section_start = time.perf_counter()
         self._reddit_container = build_reddit_ui(self, layout)
+        self._perf_log("build_reddit_ui", section_start)
         layout.addWidget(self._reddit_container)
 
         # NOTE: Gmail widget removed - archived in archive/gmail_feature/
@@ -534,7 +549,9 @@ class WidgetsTab(QWidget):
         # Imgur widget group - gated by SRPSS_ENABLE_DEV
         if dev_features_enabled:
             from ui.tabs.widgets_tab_imgur import build_imgur_ui
+            section_start = time.perf_counter()
             self._imgur_container = build_imgur_ui(self, layout)
+            self._perf_log("build_imgur_ui", section_start)
             layout.addWidget(self._imgur_container)
 
         layout.addStretch()
@@ -558,6 +575,7 @@ class WidgetsTab(QWidget):
 
         # Default to "Clocks" subtab
         self._on_subtab_changed(0)
+        self._perf_log("_setup_ui_sections", perf_scope)
 
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""
@@ -589,6 +607,12 @@ class WidgetsTab(QWidget):
             saved = self._subtab_scroll_cache[subtab_id]
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: sa.verticalScrollBar().setValue(saved))
+
+    def _perf_log(self, label: str, start_time: float) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+        logger.info("[PERF][SETTINGS][WidgetsTab] %s in %.1f ms", label, elapsed_ms)
     
     def _on_imgur_tag_changed(self, tag: str) -> None:
         """Handle imgur tag selection change - enable/disable custom tag field."""

@@ -93,8 +93,9 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
 
 
 # Toggle for MC window style experiments. Leave False to use the historical
-# Qt.Tool behavior; switch to True when testing the splash-style flag.
-MC_USE_SPLASH_FLAGS = True
+# Qt.Tool behavior (keeps MC windows off the taskbar/Alt+Tab); switch to True
+# when testing the splash-style flag.
+MC_USE_SPLASH_FLAGS = False
 
 # Windows-specific constants for diagnostics and input handling
 WM_APPCOMMAND = 0x0319
@@ -365,29 +366,29 @@ class DisplayWidget(QWidget):
                 logger.debug("[DISPLAY_WIDGET] Failed to bind screen: %s", e)
 
         # Setup widget: frameless, always-on-top display window.
-        # Use SplashScreen flag to ensure WM_APPCOMMAND messages are received
-        # for media key passthrough (works for both screensaver and MC builds)
+        # Standard builds keep SplashScreen to ensure WM_APPCOMMAND messages are
+        # received. MC builds default to Qt.Tool (historical behaviour) to stay
+        # off the taskbar/Alt+Tab unless MC_USE_SPLASH_FLAGS is enabled.
         self._mc_window_flag_mode: Optional[str] = None
 
-        flags = (
-            Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-            | Qt.WindowType.SplashScreen  # Ensures WM_APPCOMMAND reception
-        )
-        try:
-            exe0 = str(getattr(sys, "argv", [""])[0]).lower()
-            if (
-                "srpss_mc" in exe0
-                or "srpss mc" in exe0
-                or "srpss_media_center" in exe0
-                or "srpss media center" in exe0
-                or "main_mc.py" in exe0
-            ):
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
+        if self._is_mc_build:
+            if MC_USE_SPLASH_FLAGS:
+                flags |= Qt.WindowType.SplashScreen
                 self._mc_window_flag_mode = "splash"
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Failed to detect MC build: %s", e)
+            else:
+                flags |= Qt.WindowType.Tool
+                self._mc_window_flag_mode = "tool"
+        else:
+            flags |= Qt.WindowType.SplashScreen  # Ensures WM_APPCOMMAND reception
 
         self.setWindowFlags(flags)
+        if self._is_mc_build:
+            logger.info(
+                "[DISPLAY_WIDGET] MC window flag mode=%s flags=0x%x",
+                self._mc_window_flag_mode or "standard",
+                int(flags),
+            )
         self.setCursor(Qt.CursorShape.BlankCursor)
         self.setMouseTracking(True)
         # Phase 5: Use MultiMonitorCoordinator for focus ownership
