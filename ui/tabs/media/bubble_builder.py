@@ -11,7 +11,11 @@ from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
+from ui.tabs.shared_styles import (
+    ADV_HELPER_LABEL_STYLE,
+    SECTION_HEADING_STYLE,
+    add_swatch_label,
+)
 from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
@@ -114,6 +118,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         row_layout.setSpacing(8)
         label = QLabel(label_text)
         label.setFixedWidth(LABEL_WIDTH)
+        label.setStyleSheet(SECTION_HEADING_STYLE)
         row_layout.addWidget(label)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
@@ -124,6 +129,19 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     def _aligned_row(parent_layout: QVBoxLayout, label_text: str):
         _, content = _aligned_row_widget(parent_layout, label_text)
+        return content
+
+    def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+        add_swatch_label(row_layout, label_text, LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(8)
+        row_layout.addLayout(content, 1)
+        parent_layout.addWidget(row_widget)
         return content
 
     # ── Audio Reactivity ──────────────────────────────────────────────
@@ -466,7 +484,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         ("bubble_gradient_dark_btn", "Gradient Dark", "_bubble_gradient_dark", "Choose Bubble Gradient Dark"),
         ("bubble_pop_color_btn", "Pop Colour", "_bubble_pop_color", "Choose Bubble Pop Color"),
     ):
-        color_row = _aligned_row(_normal_layout, f"{label_text}:")
+        color_row = _swatch_row(_normal_layout, f"{label_text}:")
         btn = ColorSwatchButton(title=title)
         btn.set_color(getattr(tab, color_attr, None))
         btn.color_changed.connect(

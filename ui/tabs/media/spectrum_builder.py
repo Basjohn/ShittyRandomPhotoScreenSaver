@@ -11,7 +11,7 @@ from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
+from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_swatch_label
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -133,7 +133,19 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         _, content = _aligned_row_widget(parent_layout, label_text)
         return content
 
-    spotify_vis_fill_row = _aligned_row(_normal_layout, "Bar Fill Color:")
+    def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        add_swatch_label(row, label_text, LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(8)
+        row.addLayout(content, 1)
+        parent_layout.addLayout(row)
+        return content
+
+    spotify_vis_fill_row = _swatch_row(_normal_layout, "Bar Fill Color:")
     tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
     tab.vis_fill_color_btn.set_color(tab._spotify_vis_fill_color)
     tab.vis_fill_color_btn.color_changed.connect(
@@ -142,7 +154,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_fill_row.addWidget(tab.vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
 
-    spotify_vis_border_color_row = _aligned_row(_normal_layout, "Bar Border Color:")
+    spotify_vis_border_color_row = _swatch_row(_normal_layout, "Bar Border Color:")
     tab.vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
     tab.vis_border_color_btn.set_color(tab._spotify_vis_border_color)
     tab.vis_border_color_btn.color_changed.connect(

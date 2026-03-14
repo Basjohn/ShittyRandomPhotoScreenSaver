@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
+from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_swatch_label
 from PySide6.QtCore import Qt
 
 if TYPE_CHECKING:
@@ -134,6 +134,23 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
 
     def _aligned_row(parent_layout: QVBoxLayout, label_text: str):
         _, content = _aligned_row_widget(parent_layout, label_text)
+        return content
+
+    def _swatch_row_widget(parent_layout: QVBoxLayout, label_text: str):
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+        add_swatch_label(row_layout, label_text, LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(8)
+        row_layout.addLayout(content, 1)
+        parent_layout.addWidget(row_widget)
+        return row_widget, content
+
+    def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
+        _, content = _swatch_row_widget(parent_layout, label_text)
         return content
 
     glow_toggle_row = _aligned_row(_normal_layout, "")
@@ -349,12 +366,12 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     )
     osc_vshift_row.addWidget(tab.osc_vertical_shift_label)
 
-    osc_line_color_row = _aligned_row(_adv_layout, "Line Color:")
+    osc_line_color_row = _swatch_row(_adv_layout, "Line Color:")
     tab.osc_line_color_btn = ColorSwatchButton(title="Choose Oscilloscope Line Color")
     tab.osc_line_color_btn.color_changed.connect(lambda c: (setattr(tab, '_osc_line_color', c), tab._save_settings()))
     osc_line_color_row.addWidget(tab.osc_line_color_btn)
     osc_line_color_row.addStretch()
-    osc_glow_color_row = _aligned_row(_adv_layout, "Glow Color:")
+    osc_glow_color_row = _swatch_row(_adv_layout, "Glow Color:")
     tab.osc_glow_color_btn = ColorSwatchButton(title="Choose Oscilloscope Glow Color")
     tab.osc_glow_color_btn.color_changed.connect(lambda c: (setattr(tab, '_osc_glow_color', c), tab._save_settings()))
     osc_glow_color_row.addWidget(tab.osc_glow_color_btn)
@@ -389,7 +406,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     )
     osc_line_count_row.addWidget(tab.osc_line_count_label)
 
-    osc_l2_widget, osc_l2_row = _aligned_row_widget(ml_layout, "Line 2:")
+    osc_l2_widget, osc_l2_row = _swatch_row_widget(ml_layout, "Line 2:")
     osc_l2_color_col = QVBoxLayout()
     osc_l2_color_label = QLabel("Line Color")
     osc_l2_color_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -411,7 +428,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     osc_l2_row.addLayout(osc_l2_glow_col)
     osc_l2_row.addStretch()
 
-    tab._osc_l3_row_widget, osc_l3_row = _aligned_row_widget(ml_layout, "Line 3:")
+    tab._osc_l3_row_widget, osc_l3_row = _swatch_row_widget(ml_layout, "Line 3:")
 
     osc_l3_color_col = QVBoxLayout()
     osc_l3_color_label = QLabel("Line Color")

@@ -21,6 +21,7 @@ from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
     STATUS_LABEL_STYLE,
+    add_swatch_label,
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
@@ -85,6 +86,18 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         label.setFixedWidth(LABEL_WIDTH)
         label.setStyleSheet(SECTION_HEADING_STYLE)
         row.addWidget(label)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content
+
+    def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(6)
@@ -187,7 +200,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     weather_font_row.addStretch()
 
     # Text color
-    weather_color_row = _aligned_row(_weather_ctrl_layout, "Text Color:")
+    weather_color_row = _swatch_row(_weather_ctrl_layout, "Text Color:")
     tab.weather_color_btn = ColorSwatchButton(title="Choose Weather Text Color")
     tab.weather_color_btn.set_color(tab._weather_color)
     tab.weather_color_btn.color_changed.connect(
@@ -287,7 +300,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_opacity_label.setMinimumWidth(50)
     weather_opacity_row.addWidget(tab.weather_opacity_label)
 
-    weather_bg_color_row = _aligned_row(_bg_layout, "Background Color:")
+    weather_bg_color_row = _swatch_row(_bg_layout, "Background Color:")
     tab.weather_bg_color_btn = ColorSwatchButton(title="Choose Weather Background Color")
     tab.weather_bg_color_btn.set_color(tab._weather_bg_color)
     tab.weather_bg_color_btn.color_changed.connect(
@@ -296,7 +309,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     weather_bg_color_row.addWidget(tab.weather_bg_color_btn)
     weather_bg_color_row.addStretch()
 
-    weather_border_color_row = _aligned_row(_bg_layout, "Border Color:")
+    weather_border_color_row = _swatch_row(_bg_layout, "Border Color:")
     tab.weather_border_color_btn = ColorSwatchButton(title="Choose Weather Border Color")
     tab.weather_border_color_btn.set_color(tab._weather_border_color)
     tab.weather_border_color_btn.color_changed.connect(

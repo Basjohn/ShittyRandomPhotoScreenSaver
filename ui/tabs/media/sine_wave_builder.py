@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
 )
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
+from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_swatch_label
 from PySide6.QtCore import Qt
 from ui.widgets import StyledComboBox
 
@@ -137,6 +137,25 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         _, content = _aligned_row_widget(parent_layout, label_text)
         return content
 
+    def _swatch_row_widget(
+        parent_layout: QVBoxLayout, label_text: str
+    ) -> tuple[QWidget, QHBoxLayout, QLabel]:
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
+        label = add_swatch_label(row_layout, label_text, LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(8)
+        row_layout.addLayout(content, 1)
+        parent_layout.addWidget(row_widget)
+        return row_widget, content, label
+
+    def _swatch_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        _, content, _ = _swatch_row_widget(parent_layout, label_text)
+        return content
+
     # Glow
     tab.sine_glow_enabled = QCheckBox("Enable Glow")
     tab.sine_glow_enabled.setProperty("circleIndicator", True)
@@ -189,7 +208,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_glow_size = tab.sine_glow_reactivity
     tab.sine_glow_size_label = tab.sine_glow_reactivity_label
 
-    glow_color_widget, sine_glow_color_row = _aligned_row_widget(_normal, "Glow Color:")
+    glow_color_widget, sine_glow_color_row, _ = _swatch_row_widget(_normal, "Glow Color:")
     tab._sine_glow_widgets.append(glow_color_widget)
     tab.sine_glow_color_btn = ColorSwatchButton(title="Choose Sine Wave Glow Color")
     tab.sine_glow_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_glow_color', c), tab._save_settings()))
@@ -210,7 +229,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_glow_enabled.stateChanged.connect(_update_sine_glow_vis)
     _update_sine_glow_vis()
 
-    sine_line_color_row = _aligned_row(_normal, "Line Color:")
+    sine_line_color_row = _swatch_row(_normal, "Line Color:")
     tab.sine_line_color_btn = ColorSwatchButton(title="Choose Sine Wave Line Color")
     tab.sine_line_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line_color', c), tab._save_settings()))
     sine_line_color_row.addWidget(tab.sine_line_color_btn)
@@ -475,7 +494,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     sine_lc_row.addWidget(tab.sine_line_count_label)
 
-    sine_l2_row = _aligned_row(sine_ml_layout, "Line 2:")
+    sine_l2_row = _swatch_row(sine_ml_layout, "Line 2:")
     sine_l2_color_col = QVBoxLayout()
     sine_l2_color_label = QLabel("Line Color")
     sine_l2_color_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
@@ -528,18 +547,11 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l2_shift_row.addWidget(tab.sine_line2_shift)
     sine_l2_shift_row.addWidget(tab.sine_line2_shift_label)
 
-    tab._sine_l3_row_widget = QWidget()
-    sine_ml_layout.addWidget(tab._sine_l3_row_widget)
-    sine_l3_row = QHBoxLayout(tab._sine_l3_row_widget)
-    sine_l3_row.setContentsMargins(0, 0, 0, 0)
-    sine_l3_row.setSpacing(8)
-    tab._sine_line3_label = QLabel("Line 3:")
-    tab._sine_line3_label.setFixedWidth(LABEL_WIDTH)
-    sine_l3_row.addWidget(tab._sine_line3_label)
-    sine_l3_content = QHBoxLayout()
-    sine_l3_content.setContentsMargins(0, 0, 0, 0)
-    sine_l3_content.setSpacing(8)
-    sine_l3_row.addLayout(sine_l3_content, 1)
+    (
+        tab._sine_l3_row_widget,
+        sine_l3_content,
+        tab._sine_line3_label,
+    ) = _swatch_row_widget(sine_ml_layout, "Line 3:")
 
     sine_l3_color_col = QVBoxLayout()
     sine_l3_color_label = QLabel("Line Color")

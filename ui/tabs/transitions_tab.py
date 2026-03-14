@@ -27,6 +27,7 @@ from ui.tabs.shared_styles import (
     PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     NoWheelSlider,
+    add_swatch_label,
     style_group_box,
 )
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
@@ -90,6 +91,18 @@ class TransitionsTab(QWidget):
             label.setFixedWidth(LABEL_WIDTH)
             label.setStyleSheet(SECTION_HEADING_STYLE)
             row.addWidget(label)
+            content = QHBoxLayout()
+            content.setContentsMargins(0, 0, 0, 0)
+            content.setSpacing(6)
+            row.addLayout(content, 1)
+            parent_layout.addLayout(row)
+            return content
+
+        def _swatch_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 0, 0, 0)
+            row.setSpacing(6)
+            add_swatch_label(row, label_text, LABEL_WIDTH)
             content = QHBoxLayout()
             content.setContentsMargins(0, 0, 0, 0)
             content.setSpacing(6)
@@ -544,7 +557,7 @@ class TransitionsTab(QWidget):
             lambda v: self.burn_char_width_label.setText(f"{v}%")
         )
 
-        burn_color_row = _aligned_row(burn_layout, "Glow Colour:")
+        burn_color_row = _swatch_row(burn_layout, "Glow Colour:")
         self.burn_glow_color_btn = ColorSwatchButton(
             title="Choose Burn Glow Colour", show_alpha=True, auto_picker=False
         )

@@ -21,6 +21,7 @@ from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE,
     STATUS_LABEL_STYLE,
     INFO_LABEL_STYLE,
+    add_swatch_label,
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
@@ -81,6 +82,18 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         label.setFixedWidth(LABEL_WIDTH)
         label.setStyleSheet(SECTION_HEADING_STYLE)
         row.addWidget(label)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content
+
+    def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(6)
@@ -269,7 +282,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     font_row.addStretch()
 
     # Text color
-    color_row = _aligned_row(_clock_ctrl_layout, "Text Color:")
+    color_row = _swatch_row(_clock_ctrl_layout, "Text Color:")
     tab.clock_color_btn = ColorSwatchButton(title="Choose Clock Color")
     tab.clock_color_btn.set_color(tab._clock_color)
     tab.clock_color_btn.color_changed.connect(
@@ -315,7 +328,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     opacity_row.addWidget(tab.clock_opacity_label)
 
     # Background color
-    clock_bg_color_row = _aligned_row(_clock_ctrl_layout, "Background Color:")
+    clock_bg_color_row = _swatch_row(_clock_ctrl_layout, "Background Color:")
     tab.clock_bg_color_btn = ColorSwatchButton(title="Choose Clock Background Color")
     tab.clock_bg_color_btn.set_color(tab._clock_bg_color)
     tab.clock_bg_color_btn.color_changed.connect(
@@ -325,7 +338,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     clock_bg_color_row.addStretch()
 
     # Background border color
-    clock_border_color_row = _aligned_row(_clock_ctrl_layout, "Border Color:")
+    clock_border_color_row = _swatch_row(_clock_ctrl_layout, "Border Color:")
     tab.clock_border_color_btn = ColorSwatchButton(title="Choose Clock Border Color")
     tab.clock_border_color_btn.set_color(tab._clock_border_color)
     tab.clock_border_color_btn.color_changed.connect(

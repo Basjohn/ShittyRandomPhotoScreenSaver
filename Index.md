@@ -379,6 +379,12 @@ settings = SettingsManager()
 value = settings.get("display.mode", "fill")
 `
 
+### Label Alignment Helpers
+
+- `ui/tabs/shared_styles.py::add_section_label()` — standard combo/spin/text row labels. Applies `SECTION_HEADING_STYLE` (Jost bold 14px) with a fixed 34 px height and `margin-top: -12px` so all control baselines match.
+- `ui/tabs/shared_styles.py::add_swatch_label()` — dedicated helper for color swatch rows. Uses `SWATCH_LABEL_STYLE` (shorter 28 px height, positive top margin) so ColorSwatchButton rows stay visually centered even though the controls sit taller due to drop shadows.
+- All settings tabs must run swatch rows through `add_swatch_label()` (or its wrappers such as `_swatch_row`) instead of local label math. Existing adopters: Media visualizer builders, Widgets tab (Media/Weather/Clock/Reddit), and Transitions → Burn.
+
 ## UI - Settings Dialog Tabs
 
 | Module | File | Key Classes/Functions | Purpose |

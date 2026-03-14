@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE
+from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_swatch_label
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -58,6 +58,18 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         row_layout.addLayout(inner, 1)
         return row_widget, inner
 
+    def _swatch_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(6)
+        add_swatch_label(row_layout, label_text, LABEL_WIDTH)
+        inner = QHBoxLayout()
+        inner.setContentsMargins(0, 0, 0, 0)
+        inner.setSpacing(6)
+        row_layout.addLayout(inner, 1)
+        return row_widget, inner
+
     def _bind_slider(slider: QSlider, updater=None) -> None:
         slider.valueChanged.connect(tab._save_settings)
         slider.valueChanged.connect(tab._auto_switch_preset_to_custom)
@@ -96,7 +108,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     normal_layout.addWidget(tab.blob_reactive_glow)
 
     # Glow color (visible only when Reactive Glow is on)
-    glow_widget, glow_layout = _aligned_row("Glow Color:")
+    glow_widget, glow_layout = _swatch_row("Glow Color:")
     tab.blob_glow_color_btn = ColorSwatchButton(title="Choose Blob Glow Color")
     tab.blob_glow_color_btn.set_color(getattr(tab, '_blob_glow_color', None))
     _bind_color(tab.blob_glow_color_btn, '_blob_glow_color')
@@ -111,7 +123,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _update_glow_row()
 
     # Fill / Edge / Outline colors (always visible, aligned)
-    fill_widget, fill_layout = _aligned_row("Fill Color:")
+    fill_widget, fill_layout = _swatch_row("Fill Color:")
     tab.blob_fill_color_btn = ColorSwatchButton(title="Choose Blob Fill Color")
     tab.blob_fill_color_btn.set_color(getattr(tab, '_blob_color', None))
     _bind_color(tab.blob_fill_color_btn, '_blob_color')
@@ -119,7 +131,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     fill_layout.addStretch()
     normal_layout.addWidget(fill_widget)
 
-    edge_widget, edge_layout = _aligned_row("Edge Color:")
+    edge_widget, edge_layout = _swatch_row("Edge Color:")
     tab.blob_edge_color_btn = ColorSwatchButton(title="Choose Blob Edge Color")
     tab.blob_edge_color_btn.set_color(getattr(tab, '_blob_edge_color', None))
     _bind_color(tab.blob_edge_color_btn, '_blob_edge_color')
@@ -127,7 +139,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     edge_layout.addStretch()
     normal_layout.addWidget(edge_widget)
 
-    outline_widget, outline_layout = _aligned_row("Outline Color:")
+    outline_widget, outline_layout = _swatch_row("Outline Color:")
     tab.blob_outline_color_btn = ColorSwatchButton(title="Choose Blob Outline Color")
     tab.blob_outline_color_btn.set_color(getattr(tab, '_blob_outline_color', None))
     _bind_color(tab.blob_outline_color_btn, '_blob_outline_color')

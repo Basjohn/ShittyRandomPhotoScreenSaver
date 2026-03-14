@@ -19,8 +19,9 @@ from core.logging.logger import get_logger
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
-    SECTION_HEADING_STYLE,
     STATUS_LABEL_STYLE,
+    add_section_label,
+    add_swatch_label,
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
@@ -138,10 +139,19 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
-        label = QLabel(label_text)
-        label.setFixedWidth(LABEL_WIDTH)
-        label.setStyleSheet(SECTION_HEADING_STYLE)
-        row.addWidget(label)
+        add_section_label(row, label_text, LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content
+
+    def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(6)
@@ -166,10 +176,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Provider toggle row
     _provider_row = QHBoxLayout()
     _provider_row.setSpacing(8)
-    _provider_lbl = QLabel("Provider:")
-    _provider_lbl.setStyleSheet(SECTION_HEADING_STYLE)
-    _provider_lbl.setFixedWidth(LABEL_WIDTH)
-    _provider_row.addWidget(_provider_lbl)
+    add_section_label(_provider_row, "Provider:", LABEL_WIDTH)
     tab.media_provider_combo = StyledComboBox()
     tab.media_provider_combo.addItem("Spotify", "spotify")
     tab.media_provider_combo.addItem("MusicBee", "musicbee")
@@ -274,7 +281,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_margin_row.addWidget(margin_px)
     media_margin_row.addStretch()
 
-    media_color_row = _aligned_row(_media_ctrl_layout, "Text Color:")
+    media_color_row = _swatch_row(_media_ctrl_layout, "Text Color:")
     tab.media_color_btn = ColorSwatchButton(title="Choose Spotify Text Color")
     tab.media_color_btn.set_color(tab._media_color)
     tab.media_color_btn.color_changed.connect(
@@ -321,7 +328,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_bg_opacity_label.setMinimumWidth(50)
     media_opacity_row.addWidget(tab.media_bg_opacity_label)
 
-    media_bg_color_row = _aligned_row(_mbg_layout, "Background Color:")
+    media_bg_color_row = _swatch_row(_mbg_layout, "Background Color:")
     tab.media_bg_color_btn = ColorSwatchButton(title="Choose Spotify Background Color")
     tab.media_bg_color_btn.set_color(tab._media_bg_color)
     tab.media_bg_color_btn.color_changed.connect(
@@ -330,7 +337,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_bg_color_row.addWidget(tab.media_bg_color_btn)
     media_bg_color_row.addStretch()
 
-    media_border_color_row = _aligned_row(_mbg_layout, "Border Color:")
+    media_border_color_row = _swatch_row(_mbg_layout, "Border Color:")
     tab.media_border_color_btn = ColorSwatchButton(title="Choose Spotify Border Color")
     tab.media_border_color_btn.set_color(tab._media_border_color)
     tab.media_border_color_btn.color_changed.connect(
@@ -360,7 +367,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_background.stateChanged.connect(lambda: _update_media_bg_visibility(tab))
     _update_media_bg_visibility(tab)
 
-    media_volume_fill_row = _aligned_row(_media_ctrl_layout, "Volume Fill Color:")
+    media_volume_fill_row = _swatch_row(_media_ctrl_layout, "Volume Fill Color:")
     tab.media_volume_fill_color_btn = ColorSwatchButton(title="Choose Spotify Volume Fill Color")
     tab.media_volume_fill_color_btn.set_color(getattr(tab, '_media_volume_fill_color', tab._media_color))
     tab.media_volume_fill_color_btn.color_changed.connect(
@@ -516,9 +523,7 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     _rsc_layout = QHBoxLayout(tab._rainbow_speed_container)
     _rsc_layout.setContentsMargins(20, 0, 0, 0)
     _rsc_layout.setSpacing(4)
-    speed_label = QLabel("Speed:")
-    speed_label.setStyleSheet(SECTION_HEADING_STYLE)
-    _rsc_layout.addWidget(speed_label)
+    add_section_label(_rsc_layout, "Speed:")
     tab.rainbow_speed_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.rainbow_speed_slider.setRange(1, 100)
     tab.rainbow_speed_slider.setValue(50)
@@ -535,9 +540,7 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
 
     # --- Visualizer Type Selector ---
     vis_type_row = QHBoxLayout()
-    vis_label = QLabel("Visualizer Type:")
-    vis_label.setStyleSheet(SECTION_HEADING_STYLE)
-    vis_type_row.addWidget(vis_label)
+    add_section_label(vis_type_row, "Visualizer Type:")
     tab.vis_mode_combo = StyledComboBox(size_variant="hero")
     tab.vis_mode_combo.setMinimumWidth(160)
     import os as _os

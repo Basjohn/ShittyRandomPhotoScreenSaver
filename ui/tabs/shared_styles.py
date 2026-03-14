@@ -5,8 +5,9 @@ don't duplicate them.
 """
 import weakref
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase
-from PySide6.QtWidgets import QApplication, QSlider
+from PySide6.QtWidgets import QApplication, QLabel, QSlider
 
 # Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
 # shared_styles is imported before ui/__init__.py. Safe no-op if already loaded.
@@ -39,7 +40,77 @@ def ensure_custom_fonts() -> None:
     _ensure_jost_registered()
 
 
+FORM_LABEL_HEIGHT = 34
+SWATCH_LABEL_HEIGHT = 28
+
 _last_moved_slider: weakref.ref | None = None
+
+
+def apply_section_heading_style(
+    label: QLabel,
+    *,
+    disabled: bool = False,
+    style: str | None = None,
+    height: int | None = None,
+) -> None:
+    """Normalize section heading labels so they align with adjacent controls."""
+
+    ensure_custom_fonts()
+    style_sheet = style or (
+        SECTION_HEADING_STYLE_DISABLED if disabled else SECTION_HEADING_STYLE
+    )
+    label.setStyleSheet(style_sheet)
+    label.setFixedHeight(height if height is not None else FORM_LABEL_HEIGHT)
+    label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+
+
+def create_section_label(
+    text: str,
+    width: int | None = None,
+    *,
+    disabled: bool = False,
+    style: str | None = None,
+    height: int | None = None,
+) -> QLabel:
+    label = QLabel(text)
+    if width is not None:
+        label.setFixedWidth(width)
+    apply_section_heading_style(label, disabled=disabled, style=style, height=height)
+    return label
+
+
+def add_section_label(
+    layout,
+    text: str,
+    width: int | None = None,
+    *,
+    disabled: bool = False,
+    style: str | None = None,
+    height: int | None = None,
+) -> QLabel:
+    label = create_section_label(
+        text,
+        width,
+        disabled=disabled,
+        style=style,
+        height=height,
+    )
+    layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignVCenter)
+    return label
+
+
+def add_swatch_label(
+    layout,
+    text: str,
+    width: int | None = None,
+) -> QLabel:
+    return add_section_label(
+        layout,
+        text,
+        width,
+        style=SWATCH_LABEL_STYLE,
+        height=SWATCH_LABEL_HEIGHT,
+    )
 
 
 class NoWheelSlider(QSlider):
@@ -318,6 +389,12 @@ SECTION_HEADING_STYLE = (
     "font-size: 14px;"
     "letter-spacing: 0.5px;"
     "color: #ffffff;"
+    "min-height: 34px;"
+    "padding-top: 0px;"
+    "padding-bottom: 0px;"
+    "margin-top: -12px;"
+    "margin-bottom: 10px;"
+    "qproperty-alignment: AlignVCenter;"
 )
 
 SECTION_HEADING_STYLE_DISABLED = (
@@ -326,6 +403,26 @@ SECTION_HEADING_STYLE_DISABLED = (
     "font-size: 14px;"
     "letter-spacing: 0.5px;"
     "color: #666666;"
+    "min-height: 34px;"
+    "padding-top: 0px;"
+    "padding-bottom: 0px;"
+    "margin-top: -12px;"
+    "margin-bottom: 10px;"
+    "qproperty-alignment: AlignVCenter;"
+)
+
+SWATCH_LABEL_STYLE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 700;"
+    "font-size: 13px;"
+    "letter-spacing: 0.4px;"
+    "color: #ffffff;"
+    f"min-height: {SWATCH_LABEL_HEIGHT}px;"
+    "padding-top: 0px;"
+    "padding-bottom: 0px;"
+    "margin-top: 2px;"
+    "margin-bottom: 4px;"
+    "qproperty-alignment: AlignVCenter;"
 )
 
 SUBSECTION_DIVIDER_STYLE = (

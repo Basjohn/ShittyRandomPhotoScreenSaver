@@ -284,6 +284,16 @@ Both sources now use identical weight (700) for visual consistency. When adding 
 section headings, use `SECTION_HEADING_STYLE` for standalone labels and rely on
 `style_group_box()` + the theme cascade for `QGroupBox` titles.
 
+### Color Swatch Label Alignment
+
+Rows that host `ColorSwatchButton` controls sit taller because of their drop shadows,
+so standard 34 px labels look low next to the chips. `ui/tabs/shared_styles.py`
+exports `add_swatch_label()` / `SWATCH_LABEL_STYLE` (28 px height, positive top
+margin) to keep those labels vertically centered. Each tab should create a local
+`_swatch_row()` helper that mirrors `_aligned_row()` but calls `add_swatch_label()`
+instead of `add_section_label()`. Tabs adopting the new helper: Media visualizer
+builders, Widgets → Media/Weather/Clock/Reddit, and Transitions → Burn.
+
 ## Shadow Clearance (`margin-bottom`)
 
 All input controls with `QGraphicsDropShadowEffect` need bottom margin to prevent
