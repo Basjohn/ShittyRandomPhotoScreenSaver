@@ -547,7 +547,7 @@ SWATCH_LABEL_STYLE = (
 
 SUBSECTION_DIVIDER_STYLE = (
     "border: 2px solid rgba(255, 255, 255, 0.8);"
-    "border-radius: 20px;"
+    "border-radius: 18px;"
 )
 
 
@@ -560,12 +560,8 @@ def style_group_box(box) -> None:
             "QGroupBox::title {"
             "  subcontrol-origin: margin;"
             "  subcontrol-position: top left;"
-            "  padding: 2px 14px;"
-            "  margin-top: 6px;"
-            "  margin-left: 18px;"
-            "  margin-right: 18px;"
-            "  background-color: #131313;"
-            "  border-radius: 12px;"
+            "  padding: 2px 10px;"
+            "  margin-top: 5px;"
             "  color: #ffffff;"
             "  font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
             "  font-weight: 800;"
