@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox,
     QSlider, QWidget, QPushButton,
-    QStackedLayout,
+    QStackedLayout, QSizePolicy,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -510,11 +510,12 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     rainbow_row.setSpacing(12)
     rainbow_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-    rainbow_checkbox_wrapper = QWidget()
-    rainbow_checkbox_wrapper.setMinimumHeight(FORM_LABEL_HEIGHT)
-    checkbox_layout = QHBoxLayout(rainbow_checkbox_wrapper)
-    checkbox_layout.setContentsMargins(0, 0, 0, 0)
-    checkbox_layout.setSpacing(0)
+    rainbow_toggle_container = QWidget()
+    rainbow_toggle_container.setFixedHeight(FORM_LABEL_HEIGHT)
+    rainbow_toggle_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    toggle_layout = QHBoxLayout(rainbow_toggle_container)
+    toggle_layout.setContentsMargins(0, 0, 0, 0)
+    toggle_layout.setSpacing(10)
 
     tab.rainbow_enabled = QCheckBox()
     tab.rainbow_enabled.setProperty("circleIndicator", True)
@@ -529,13 +530,12 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.rainbow_enabled.stateChanged.connect(
         lambda _: tab._update_rainbow_visibility()
     )
-    checkbox_layout.addWidget(tab.rainbow_enabled)
-    checkbox_layout.addStretch()
-    rainbow_row.addWidget(rainbow_checkbox_wrapper)
+    tab.rainbow_enabled.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    toggle_layout.addWidget(tab.rainbow_enabled)
+
     rainbow_label_wrapper = QWidget()
     rainbow_label_wrapper.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-    rainbow_label_wrapper.setMinimumHeight(FORM_LABEL_HEIGHT)
-    rainbow_label_wrapper.setContentsMargins(0, 0, 0, 0)
+    rainbow_label_wrapper.setFixedHeight(FORM_LABEL_HEIGHT)
     rainbow_stack = QStackedLayout(rainbow_label_wrapper)
     rainbow_stack.setContentsMargins(0, 0, 0, 0)
     rainbow_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
@@ -543,15 +543,18 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     rainbow_plain_label.setStyleSheet(FORM_LABEL_STYLE)
     rainbow_plain_label.setMinimumHeight(FORM_LABEL_HEIGHT)
     rainbow_plain_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+    rainbow_plain_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     rainbow_stack.addWidget(rainbow_plain_label)
     rainbow_glow_label = _RainbowGlowLabel(rainbow_label_wrapper, left_pad=0)
     rainbow_glow_label.setMinimumHeight(FORM_LABEL_HEIGHT)
+    rainbow_glow_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
     rainbow_stack.addWidget(rainbow_glow_label)
     rainbow_stack.setCurrentWidget(rainbow_plain_label)
     tab._rainbow_label_stack = rainbow_stack
     tab._rainbow_plain_label = rainbow_plain_label
     tab._rainbow_glow_label = rainbow_glow_label
-    rainbow_row.addWidget(rainbow_label_wrapper, stretch=1)
+    toggle_layout.addWidget(rainbow_label_wrapper, 1)
+    rainbow_row.addWidget(rainbow_toggle_container)
     rainbow_row.addStretch()
     _svctl.addLayout(rainbow_row)
 

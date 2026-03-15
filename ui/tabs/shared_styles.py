@@ -41,7 +41,7 @@ def ensure_custom_fonts() -> None:
 
 
 FORM_LABEL_HEIGHT = 34
-SWATCH_LABEL_HEIGHT = 28
+SWATCH_LABEL_HEIGHT = 34
 
 _last_moved_slider: weakref.ref | None = None
 
@@ -53,7 +53,7 @@ FORM_LABEL_STYLE = (
     "letter-spacing: 0.35px;"
     "color: #ffffff;"
     f"min-height: {FORM_LABEL_HEIGHT}px;"
-    "line-height: 32px;"
+    "line-height: 34px;"
     "padding-top: 0px;"
     "padding-bottom: 0px;"
     "margin-top: 0px;"
@@ -68,7 +68,7 @@ FORM_LABEL_STYLE_DISABLED = (
     "letter-spacing: 0.35px;"
     "color: #666666;"
     f"min-height: {FORM_LABEL_HEIGHT}px;"
-    "line-height: 32px;"
+    "line-height: 34px;"
     "padding-top: 0px;"
     "padding-bottom: 0px;"
     "margin-top: 0px;"
@@ -184,7 +184,7 @@ QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
     color: #ffffff;
     font-family: 'Jost';
     font-weight: 600;
-    background-color: #282828;
+    background-color: #1f1f1f;
     border: 2px solid #ffffff;
     border-radius: 18px;
 }
@@ -192,7 +192,7 @@ QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
 QSpinBox > QLineEdit,
 QDoubleSpinBox > QLineEdit,
 QAbstractSpinBox > QLineEdit {
-    background-color: #282828;
+    background-color: #1f1f1f;
     border: none;
     padding: 0px;
     margin: 0px;
@@ -213,7 +213,7 @@ QSpinBox:focus, QDoubleSpinBox:focus, QLineEdit:focus, QAbstractSpinBox:focus {
 QSpinBox:disabled, QDoubleSpinBox:disabled, QLineEdit:disabled, QAbstractSpinBox:disabled {
     color: rgba(255, 255, 255, 0.45);
     border-color: #6a6a6a;
-    background-color: #282828;
+    background-color: #1f1f1f;
 }
 
 QSpinBox::up-button, QDoubleSpinBox::up-button,
@@ -269,14 +269,14 @@ CIRCLE_CHECKBOX_STYLE = """
 QCheckBox[circleIndicator='true'] {
     spacing: 10px;
     padding: 4px 16px 4px 6px;
-    min-height: 28px;
+    min-height: 34px;
 }
 
 QCheckBox[circleIndicator='true']::indicator {
     width: 22px;
     height: 22px;
     border-radius: 11px;
-    margin: 2px 12px 2px 0px;
+    margin: 6px 12px 6px 0px;
     border: none;
     background: transparent;
     image: none;
@@ -312,23 +312,33 @@ COMBOBOX_STYLE = """
 /* StyledComboBox base skin */
 QComboBox[customCombo='true'] {
     min-height: 34px;
-    padding: 4px 44px 4px 16px;
+    padding: 4px 56px 4px 18px;
     margin-bottom: 0px;
     font-family: 'Jost';
     font-weight: 700;
     font-size: 14px;
     letter-spacing: 0.4px;
     color: #ffffff;
-    border: none;
-    background: transparent;
-    border-image: url(:/ui/assets/combobox_closed.svg) 0 0 0 0 stretch stretch;
+    border: 2px solid #ffffff;
+    border-radius: 18px;
+    background-color: #1f1f1f;
 }
 
-QComboBox[customCombo='true']:hover,
+QComboBox[customCombo='true']:hover {
+    background-color: #161616;
+}
+
 QComboBox[customCombo='true']:focus,
 QComboBox[customCombo='true']:on {
-    border-image: url(:/ui/assets/combobox_closed_hover.svg) 0 0 0 0 stretch stretch;
+    background-color: #141414;
+    border-color: #ffffff;
     outline: none;
+}
+
+QComboBox[customCombo='true']:disabled {
+    color: rgba(255, 255, 255, 0.45);
+    border-color: #6a6a6a;
+    background-color: #1f1f1f;
 }
 
 QComboBox[customCombo='true']::drop-down,
@@ -343,29 +353,33 @@ QComboBox[customCombo='true']::down-arrow {
 
 QComboBox[customCombo='true'][comboSize='regular'] {
     min-width: 188px;
-    max-height: 40px;
-    padding: 4px 48px 4px 16px;
+    min-height: 38px;
+    padding: 4px 60px 4px 18px;
+    border-radius: 20px;
 }
 
 QComboBox[customCombo='true'][comboSize='compact'] {
     min-width: 164px;
-    max-height: 36px;
-    padding: 3px 40px 3px 14px;
+    min-height: 34px;
+    padding: 3px 52px 3px 16px;
+    border-radius: 17px;
     font-size: 13px;
 }
 
 QComboBox[customCombo='true'][comboSize='mini'] {
     min-width: 136px;
-    max-height: 34px;
-    padding: 2px 34px 2px 12px;
+    min-height: 32px;
+    padding: 2px 46px 2px 14px;
+    border-radius: 16px;
     font-size: 12px;
 }
 
 QComboBox[customCombo='true'][comboSize='hero'] {
     min-width: 220px;
     max-width: 340px;
-    max-height: 42px;
-    padding: 5px 52px 5px 18px;
+    min-height: 42px;
+    padding: 5px 60px 5px 22px;
+    border-radius: 22px;
     font-size: 15px;
 }
 """
@@ -452,7 +466,8 @@ SWATCH_LABEL_STYLE = (
     "letter-spacing: 0.4px;"
     "color: #ffffff;"
     f"min-height: {SWATCH_LABEL_HEIGHT}px;"
-    "padding-top: 6px;"
+    "line-height: 34px;"
+    "padding-top: 0px;"
     "padding-bottom: 0px;"
     "margin-top: 0px;"
     "margin-bottom: 0px;"
@@ -534,7 +549,7 @@ SLIDER_STYLE = """
 /* Dark glass indented slider with pill-shaped notch handle */
 QSlider {
     min-height: 34px;
-    margin: 0px;
+    margin: 2px 0px 0px 0px;
 }
 
 QSlider::groove:horizontal {
@@ -588,9 +603,15 @@ QSlider::handle:horizontal:pressed {
 }
 
 QSlider::handle:horizontal:disabled {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 rgba(50, 50, 50, 0.5), stop:1 rgba(35, 35, 35, 0.5));
-    border: 1px solid rgba(40, 40, 40, 0.4);
+    background: #5a5a5a;
+}
+
+QSlider#presetModeSlider {
+    margin: 3px 0 0 0;
+}
+
+QSlider#presetModeSlider::groove:horizontal {
+    margin: 1px 0 0 0;
 }
 
 QSlider::add-page:horizontal {

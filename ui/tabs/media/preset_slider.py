@@ -24,7 +24,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QPainter, QPen, QPalette
-from ui.tabs.shared_styles import NoWheelSlider, add_section_label
+from ui.tabs.shared_styles import (
+    NoWheelSlider,
+    add_section_label,
+    apply_section_heading_style,
+    FORM_LABEL_HEIGHT,
+)
 
 from core.logging.logger import get_logger
 from core.settings.visualizer_presets import (
@@ -112,16 +117,21 @@ class VisualizerPresetSlider(QWidget):
         # Single row: "Preset:" label | preset name | slider | Edit button
         row = QHBoxLayout()
         row.setSpacing(6)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         add_section_label(row, "Preset:", 48)
 
         self._value_label = QLabel(self._preset_names[0])
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._value_label.setMinimumWidth(140)
+        apply_section_heading_style(self._value_label)
+        self._value_label.setMinimumHeight(FORM_LABEL_HEIGHT)
         row.addWidget(self._value_label)
 
         slider_column = QVBoxLayout()
         slider_column.setSpacing(2)
+        slider_column.setContentsMargins(0, 3, 0, 0)
 
         self._slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self._slider.setObjectName("presetModeSlider")
@@ -132,7 +142,7 @@ class VisualizerPresetSlider(QWidget):
         self._slider.setTickInterval(1)
         self._slider.setPageStep(1)
         self._slider.setSingleStep(1)
-        self._slider.setMinimumHeight(28)
+        self._slider.setMinimumHeight(FORM_LABEL_HEIGHT)
         self._slider.setToolTip(
             "Choose a visualizer preset. Custom (rightmost) shows all settings."
         )
