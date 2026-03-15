@@ -111,12 +111,17 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     LABEL_WIDTH = 150
 
-    def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
+    def _aligned_row_widget(
+        parent_layout: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(8)
-        add_section_label(row_layout, label_text, LABEL_WIDTH)
+        add_section_label(row_layout, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(8)
@@ -124,8 +129,8 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         parent_layout.addWidget(row_widget)
         return row_widget, content
 
-    def _aligned_row(parent_layout: QVBoxLayout, label_text: str):
-        _, content = _aligned_row_widget(parent_layout, label_text)
+    def _aligned_row(parent_layout: QVBoxLayout, label_text: str, *, wrap: bool = True):
+        _, content = _aligned_row_widget(parent_layout, label_text, wrap=wrap)
         return content
 
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
@@ -328,7 +333,9 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_swirl_enabled.setProperty("circleIndicator", True)
     tab.bubble_swirl_enabled.setChecked(saved_dd in ('swirl_cw', 'swirl_ccw'))
     swirl_row.addWidget(tab.bubble_swirl_enabled)
+    swirl_row.addStretch()
 
+    _, swirl_combo_row = _aligned_row_widget(_adv_layout, "", wrap=False)
     tab.bubble_swirl_direction = StyledComboBox(size_variant="compact")
     tab.bubble_swirl_direction.addItem("Clockwise", "swirl_cw")
     tab.bubble_swirl_direction.addItem("Counter-Clockwise", "swirl_ccw")
@@ -338,8 +345,8 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab.bubble_swirl_direction.setCurrentIndex(0)
     tab.bubble_swirl_direction.setEnabled(saved_dd in ('swirl_cw', 'swirl_ccw'))
     tab.bubble_swirl_direction.currentIndexChanged.connect(tab._save_settings)
-    swirl_row.addWidget(tab.bubble_swirl_direction)
-    swirl_row.addStretch()
+    swirl_combo_row.addWidget(tab.bubble_swirl_direction)
+    swirl_combo_row.addStretch()
 
     def _on_swirl_toggled(checked: bool) -> None:
         tab.bubble_swirl_direction.setEnabled(checked)

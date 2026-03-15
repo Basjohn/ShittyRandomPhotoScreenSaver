@@ -7,7 +7,7 @@ import weakref
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase
-from PySide6.QtWidgets import QApplication, QLabel, QSlider
+from PySide6.QtWidgets import QApplication, QLabel, QSlider, QSizePolicy
 
 # Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
 # shared_styles is imported before ui/__init__.py. Safe no-op if already loaded.
@@ -62,9 +62,39 @@ FORM_LABEL_STYLE = (
     "qproperty-alignment: AlignVCenter;"
 )
 
+FORM_ROW_LABEL_STYLE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 500;"
+    "font-size: 14px;"
+    "letter-spacing: 0.35px;"
+    "color: #ffffff;"
+    f"min-height: {FORM_LABEL_HEIGHT}px;"
+    "line-height: 34px;"
+    "padding-top: 0px;"
+    "padding-bottom: 1px;"
+    "margin-top: -1px;"
+    "margin-bottom: 0px;"
+    "qproperty-alignment: AlignVCenter;"
+)
+
 FORM_LABEL_STYLE_DISABLED = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
+    "font-size: 14px;"
+    "letter-spacing: 0.35px;"
+    "color: #666666;"
+    f"min-height: {FORM_LABEL_HEIGHT}px;"
+    "line-height: 34px;"
+    "padding-top: 0px;"
+    "padding-bottom: 1px;"
+    "margin-top: -1px;"
+    "margin-bottom: 0px;"
+    "qproperty-alignment: AlignVCenter;"
+)
+
+FORM_ROW_LABEL_STYLE_DISABLED = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 500;"
     "font-size: 14px;"
     "letter-spacing: 0.35px;"
     "color: #666666;"
@@ -84,6 +114,7 @@ def apply_section_heading_style(
     disabled: bool = False,
     style: str | None = None,
     height: int | None = None,
+    lock_height: bool = True,
 ) -> None:
     """Normalize section heading labels so they align with adjacent controls."""
 
@@ -93,7 +124,15 @@ def apply_section_heading_style(
     else:
         style_sheet = style
     label.setStyleSheet(style_sheet)
-    label.setFixedHeight(height if height is not None else FORM_LABEL_HEIGHT)
+    target_height = height if height is not None else FORM_LABEL_HEIGHT
+    if lock_height:
+        label.setFixedHeight(target_height)
+        label.setWordWrap(False)
+        label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+    else:
+        label.setMinimumHeight(target_height)
+        label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        label.setWordWrap(True)
     label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
 
 
@@ -104,11 +143,18 @@ def create_section_label(
     disabled: bool = False,
     style: str | None = None,
     height: int | None = None,
+    lock_height: bool = True,
 ) -> QLabel:
     label = QLabel(text)
     if width is not None:
         label.setFixedWidth(width)
-    apply_section_heading_style(label, disabled=disabled, style=style, height=height)
+    apply_section_heading_style(
+        label,
+        disabled=disabled,
+        style=style,
+        height=height,
+        lock_height=lock_height,
+    )
     return label
 
 
@@ -120,13 +166,17 @@ def add_section_label(
     disabled: bool = False,
     style: str | None = None,
     height: int | None = None,
+    wrap: bool = True,
 ) -> QLabel:
+    if style is None:
+        style = FORM_ROW_LABEL_STYLE_DISABLED if disabled else FORM_ROW_LABEL_STYLE
     label = create_section_label(
         text,
         width,
         disabled=disabled,
         style=style,
         height=height,
+        lock_height=not wrap,
     )
     layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignVCenter)
     return label
@@ -143,6 +193,7 @@ def add_swatch_label(
         width,
         style=SWATCH_LABEL_STYLE,
         height=SWATCH_LABEL_HEIGHT,
+        wrap=False,
     )
 
 
@@ -481,7 +532,7 @@ SECTION_HEADING_STYLE_DISABLED = (
 
 SWATCH_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 600;"
+    "font-weight: 500;"
     "font-size: 13px;"
     "letter-spacing: 0.4px;"
     "color: #ffffff;"
