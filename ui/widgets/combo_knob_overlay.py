@@ -18,7 +18,8 @@ class ComboKnobOverlay(QWidget):
     _DOT_DIAMETER = _SPINBOX_DOT_DIAMETER * _DOT_SCALE
     _RIGHT_PADDING = 14.0
     _VERTICAL_MARGIN = 3.0
-    _VERTICAL_OFFSET = 5.0
+    _VERTICAL_OFFSET = 5.5
+    _MIN_CLEARANCE = 2.0
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
@@ -158,13 +159,18 @@ class ComboKnobController(QObject):
         )
         diameter = max(8.0, diameter)  # guard for very small combos
 
-        x = host_rect.width() - diameter - self._overlay._RIGHT_PADDING
-        y = (host_rect.height() - diameter) / 2 - self._overlay._VERTICAL_OFFSET
+        dynamic_offset = min(
+            self._overlay._VERTICAL_OFFSET,
+            max(3.5, host_rect.height() * 0.145),
+        )
 
-        if y < 0.0:
-            y = 0.0
-        elif y + diameter > host_rect.height():
-            y = host_rect.height() - diameter
+        x = host_rect.width() - diameter - self._overlay._RIGHT_PADDING
+        y = (host_rect.height() - diameter) / 2 - dynamic_offset
+
+        if y < self._overlay._MIN_CLEARANCE:
+            y = self._overlay._MIN_CLEARANCE
+        elif y + diameter > host_rect.height() - self._overlay._MIN_CLEARANCE:
+            y = host_rect.height() - diameter - self._overlay._MIN_CLEARANCE
 
         if host_rect.width() <= diameter:
             x = host_rect.width() - diameter
