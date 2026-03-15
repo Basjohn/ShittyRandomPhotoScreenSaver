@@ -18,9 +18,10 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
-    SECTION_HEADING_STYLE,
     STATUS_LABEL_STYLE,
     INFO_LABEL_STYLE,
+    FORM_ROW_LABEL_STYLE,
+    add_section_label,
     add_swatch_label,
     style_group_box,
 )
@@ -74,32 +75,39 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     LABEL_WIDTH = 140
 
-    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+    def _aligned_row(
+        parent: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
-        label = QLabel(label_text)
-        label.setFixedWidth(LABEL_WIDTH)
-        label.setStyleSheet(SECTION_HEADING_STYLE)
-        row.addWidget(label)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
+        add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
 
     def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
+
+    def _inline_label(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+        return label
 
     clock_group = QGroupBox("Clock Widget")
     style_group_box(clock_group)
@@ -268,7 +276,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     font_family_row.addStretch()
 
     # Font size
-    font_row = _aligned_row(_clock_ctrl_layout, "Font Size:" )
+    font_row = _aligned_row(_clock_ctrl_layout, "Font Size:")
     tab.clock_font_size = QSpinBox()
     tab.clock_font_size.setRange(12, 144)
     tab.clock_font_size.setValue(tab._default_int('clock', 'font_size', 48))
@@ -276,7 +284,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_font_size.valueChanged.connect(tab._save_settings)
     tab.clock_font_size.valueChanged.connect(tab._update_stack_status)
     font_row.addWidget(tab.clock_font_size)
-    font_px = QLabel("px")
+    font_px = _inline_label("px")
     font_px.setMinimumWidth(24)
     font_row.addWidget(font_px)
     font_row.addStretch()
@@ -299,7 +307,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_margin.setAccelerated(True)
     tab.clock_margin.valueChanged.connect(tab._save_settings)
     margin_row.addWidget(tab.clock_margin)
-    margin_px = QLabel("px")
+    margin_px = _inline_label("px")
     margin_px.setMinimumWidth(24)
     margin_row.addWidget(margin_px)
     margin_row.addStretch()
@@ -369,45 +377,43 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     extra_label.setStyleSheet(INFO_LABEL_STYLE)
     _clock_ctrl_layout.addWidget(extra_label)
 
-    clock2_row = QHBoxLayout()
-    tab.clock2_enabled = QCheckBox("Enable Clock 2")
+    clock2_row = _aligned_row(_clock_ctrl_layout, "Clock 2:")
+    tab.clock2_enabled = QCheckBox("Enable")
     tab.clock2_enabled.setProperty("circleIndicator", True)
     tab.clock2_enabled.stateChanged.connect(tab._save_settings)
     tab.clock2_enabled.stateChanged.connect(tab._update_stack_status)
     clock2_row.addWidget(tab.clock2_enabled)
-    clock2_row.addWidget(QLabel("Display:"))
+    clock2_row.addWidget(_inline_label("Display:"))
     tab.clock2_monitor_combo = StyledComboBox(size_variant="compact")
     tab.clock2_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.clock2_monitor_combo.currentTextChanged.connect(tab._save_settings)
     clock2_row.addWidget(tab.clock2_monitor_combo)
-    clock2_row.addWidget(QLabel("Timezone:"))
+    clock2_row.addWidget(_inline_label("Timezone:"))
     tab.clock2_timezone = StyledComboBox(size_variant="hero")
     tab.clock2_timezone.setMinimumWidth(160)
     tab._populate_timezones_for_combo(tab.clock2_timezone)
     tab.clock2_timezone.currentTextChanged.connect(tab._save_settings)
     clock2_row.addWidget(tab.clock2_timezone)
     clock2_row.addStretch()
-    _clock_ctrl_layout.addLayout(clock2_row)
 
-    clock3_row = QHBoxLayout()
-    tab.clock3_enabled = QCheckBox("Enable Clock 3")
+    clock3_row = _aligned_row(_clock_ctrl_layout, "Clock 3:")
+    tab.clock3_enabled = QCheckBox("Enable")
     tab.clock3_enabled.setProperty("circleIndicator", True)
     tab.clock3_enabled.stateChanged.connect(tab._save_settings)
     tab.clock3_enabled.stateChanged.connect(tab._update_stack_status)
     clock3_row.addWidget(tab.clock3_enabled)
-    clock3_row.addWidget(QLabel("Display:"))
+    clock3_row.addWidget(_inline_label("Display:"))
     tab.clock3_monitor_combo = StyledComboBox(size_variant="compact")
     tab.clock3_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.clock3_monitor_combo.currentTextChanged.connect(tab._save_settings)
     clock3_row.addWidget(tab.clock3_monitor_combo)
-    clock3_row.addWidget(QLabel("Timezone:"))
+    clock3_row.addWidget(_inline_label("Timezone:"))
     tab.clock3_timezone = StyledComboBox(size_variant="hero")
     tab.clock3_timezone.setMinimumWidth(160)
     tab._populate_timezones_for_combo(tab.clock3_timezone)
     tab.clock3_timezone.currentTextChanged.connect(tab._save_settings)
     clock3_row.addWidget(tab.clock3_timezone)
     clock3_row.addStretch()
-    _clock_ctrl_layout.addLayout(clock3_row)
 
     clock_layout.addWidget(tab._clock_controls_container)
     tab.clock_enabled.stateChanged.connect(lambda: _update_clock_enabled_visibility(tab))

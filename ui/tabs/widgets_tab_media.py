@@ -21,6 +21,7 @@ from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
+    FORM_ROW_LABEL_STYLE,
     add_section_label,
     add_swatch_label,
     style_group_box,
@@ -135,11 +136,16 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     """
     from ui.tabs.widgets_tab import NoWheelSlider
 
-    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+    def _aligned_row(
+        parent: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
-        add_section_label(row, label_text, LABEL_WIDTH)
+        add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(6)
@@ -159,6 +165,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         parent.addLayout(row)
         return content
 
+    def _inline_label(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+        return label
+
     # --- Media Widget Group ---
     media_group = QGroupBox("Media Widget")
     style_group_box(media_group)
@@ -174,9 +185,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_layout.addWidget(tab.media_enabled)
 
     # Provider toggle row
-    _provider_row = QHBoxLayout()
-    _provider_row.setSpacing(8)
-    add_section_label(_provider_row, "Provider:", LABEL_WIDTH)
+    _provider_row = _aligned_row(media_layout, "Provider:")
     tab.media_provider_combo = StyledComboBox()
     tab.media_provider_combo.addItem("Spotify", "spotify")
     tab.media_provider_combo.addItem("MusicBee", "musicbee")
@@ -208,9 +217,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     tab._musicbee_plugin_btn.setVisible(False)
     _provider_row.addWidget(tab._musicbee_plugin_btn)
-
     _provider_row.addStretch()
-    media_layout.addLayout(_provider_row)
 
     # Container for all media controls gated by enable checkbox
     tab._media_controls_container = QWidget()
@@ -264,7 +271,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_font_size.valueChanged.connect(tab._save_settings)
     tab.media_font_size.valueChanged.connect(tab._update_stack_status)
     media_font_row.addWidget(tab.media_font_size)
-    font_px = QLabel("px")
+    font_px = _inline_label("px")
     font_px.setMinimumWidth(24)
     media_font_row.addWidget(font_px)
     media_font_row.addStretch()
@@ -276,7 +283,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_margin.setAccelerated(True)
     tab.media_margin.valueChanged.connect(tab._save_settings)
     media_margin_row.addWidget(tab.media_margin)
-    margin_px = QLabel("px")
+    margin_px = _inline_label("px")
     margin_px.setMinimumWidth(24)
     media_margin_row.addWidget(margin_px)
     media_margin_row.addStretch()
@@ -384,7 +391,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_artwork_size.valueChanged.connect(tab._save_settings)
     tab.media_artwork_size.valueChanged.connect(tab._update_stack_status)
     media_artwork_row.addWidget(tab.media_artwork_size)
-    art_px = QLabel("px")
+    art_px = _inline_label("px")
     art_px.setMinimumWidth(24)
     media_artwork_row.addWidget(art_px)
     media_artwork_row.addStretch()

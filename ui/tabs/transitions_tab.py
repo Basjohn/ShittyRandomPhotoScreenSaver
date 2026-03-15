@@ -85,27 +85,28 @@ class TransitionsTab(QWidget):
 
         def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
             row = QHBoxLayout()
-            row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(6)
+            row.setContentsMargins(0, 6, 0, 6)
+            row.setSpacing(12)
             label = QLabel(label_text)
             label.setFixedWidth(LABEL_WIDTH)
             label.setStyleSheet(SECTION_HEADING_STYLE)
+            label.setWordWrap(True)
             row.addWidget(label)
             content = QHBoxLayout()
             content.setContentsMargins(0, 0, 0, 0)
-            content.setSpacing(6)
+            content.setSpacing(12)
             row.addLayout(content, 1)
             parent_layout.addLayout(row)
             return content
 
         def _swatch_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
             row = QHBoxLayout()
-            row.setContentsMargins(0, 0, 0, 0)
-            row.setSpacing(6)
+            row.setContentsMargins(0, 6, 0, 6)
+            row.setSpacing(12)
             add_swatch_label(row, label_text, LABEL_WIDTH)
             content = QHBoxLayout()
             content.setContentsMargins(0, 0, 0, 0)
-            content.setSpacing(6)
+            content.setSpacing(12)
             row.addLayout(content, 1)
             parent_layout.addLayout(row)
             return content
@@ -116,8 +117,8 @@ class TransitionsTab(QWidget):
         # Create content widget
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(20)
         
         # Title
         title = QLabel("Transition Settings")
@@ -128,6 +129,7 @@ class TransitionsTab(QWidget):
         type_group = QGroupBox("Transition Type")
         _style_group_box(type_group)
         type_layout = QVBoxLayout(type_group)
+        type_layout.setSpacing(12)
         
         type_row = _aligned_row(type_layout, "Transition:")
         self.transition_combo = StyledComboBox(size_variant="hero")
@@ -166,6 +168,7 @@ class TransitionsTab(QWidget):
         duration_group = QGroupBox("Timing")
         _style_group_box(duration_group)
         duration_layout = QVBoxLayout(duration_group)
+        duration_layout.setSpacing(12)
         duration_row = _aligned_row(duration_layout, "Duration (short → long):")
         self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.duration_slider.setRange(100, 15000)  # store milliseconds directly (15s max)
@@ -184,6 +187,7 @@ class TransitionsTab(QWidget):
         self.direction_group = QGroupBox("Direction")
         _style_group_box(self.direction_group)
         direction_layout = QVBoxLayout(self.direction_group)
+        direction_layout.setSpacing(12)
         
         direction_row = _aligned_row(direction_layout, "Direction:")
         self.direction_combo = StyledComboBox()
@@ -198,6 +202,7 @@ class TransitionsTab(QWidget):
         easing_group = QGroupBox("Easing Curve")
         _style_group_box(easing_group)
         easing_layout = QVBoxLayout(easing_group)
+        easing_layout.setSpacing(12)
         
         easing_row = _aligned_row(easing_layout, "Easing:")
         self.easing_combo = StyledComboBox()

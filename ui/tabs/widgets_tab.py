@@ -32,11 +32,12 @@ from ui.tabs.shared_styles import (
     TOOLTIP_STYLE,
     COMBOBOX_STYLE,
     PAGE_TITLE_STYLE,
-    SECTION_HEADING_STYLE,
     NAV_TAB_FONT_STYLE,
     NAV_TAB_FONT_STYLE_ACTIVE,
     STATUS_LABEL_STYLE,
     SCROLL_AREA_STYLE,
+    FORM_ROW_LABEL_STYLE,
+    add_section_label,
     NoWheelSlider,  # noqa: F401 — re-exported
     style_group_box,
 )
@@ -553,6 +554,8 @@ class WidgetsTab(QWidget):
     def _build_defaults_section(self) -> QWidget:
         """Create the Defaults subtab content styled like other groups."""
 
+        LABEL_WIDTH = 150
+
         group = QGroupBox("Global Widget Defaults")
         style_group_box(group)
         content_layout = QVBoxLayout(group)
@@ -561,7 +564,7 @@ class WidgetsTab(QWidget):
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(12)
+        row.setSpacing(18)
 
         self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
         self.widget_shadows_enabled.setProperty("circleIndicator", True)
@@ -574,10 +577,10 @@ class WidgetsTab(QWidget):
         self.widget_shadows_enabled.stateChanged.connect(self._save_settings)
         row.addWidget(self.widget_shadows_enabled)
 
-        row.addSpacing(12)
-        border_label = QLabel("Card Border Width (px)")
-        border_label.setStyleSheet(SECTION_HEADING_STYLE)
-        row.addWidget(border_label)
+        border_row = QHBoxLayout()
+        border_row.setContentsMargins(0, 0, 0, 0)
+        border_row.setSpacing(8)
+        add_section_label(border_row, "Card Border Width:", LABEL_WIDTH, wrap=False)
 
         self.card_border_width_spin = QSpinBox()
         self.card_border_width_spin.setRange(0, 12)
@@ -585,8 +588,14 @@ class WidgetsTab(QWidget):
         self.card_border_width_spin.valueChanged.connect(
             self._on_global_border_width_changed
         )
-        row.addWidget(self.card_border_width_spin)
+        border_row.addWidget(self.card_border_width_spin)
 
+        px_label = QLabel("px")
+        px_label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+        px_label.setMinimumWidth(24)
+        border_row.addWidget(px_label)
+
+        row.addLayout(border_row)
         row.addStretch()
         content_layout.addLayout(row)
 

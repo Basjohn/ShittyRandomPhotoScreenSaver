@@ -11,7 +11,11 @@ from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_section_label, add_swatch_label
+from ui.tabs.shared_styles import (
+    ADV_HELPER_LABEL_STYLE,
+    add_section_label,
+    add_swatch_label,
+)
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -32,6 +36,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._spectrum_settings_container = QWidget()
     spectrum_layout = QVBoxLayout(tab._spectrum_settings_container)
     spectrum_layout.setContentsMargins(0, 0, 0, 0)
+    spectrum_layout.setSpacing(12)
 
     # --- Preset slider (always visible) ---
     tab._spectrum_preset_slider = VisualizerPresetSlider("spectrum")
@@ -43,19 +48,19 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._spectrum_normal = QWidget()
     _normal_layout = QVBoxLayout(tab._spectrum_normal)
     _normal_layout.setContentsMargins(0, 0, 0, 0)
-    _normal_layout.setSpacing(4)
+    _normal_layout.setSpacing(12)
     spectrum_layout.addWidget(tab._spectrum_normal)
 
     # --- Advanced host (toggle + helper + controls) ---
     tab._spectrum_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._spectrum_advanced_host)
     _adv_host.setContentsMargins(0, 0, 0, 0)
-    _adv_host.setSpacing(4)
+    _adv_host.setSpacing(8)
     spectrum_layout.addWidget(tab._spectrum_advanced_host)
 
     _adv_toggle_row = QHBoxLayout()
     _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
-    _adv_toggle_row.setSpacing(4)
+    _adv_toggle_row.setSpacing(8)
     tab._spectrum_adv_toggle = QToolButton()
     tab._spectrum_adv_toggle.setText("Advanced")
     tab._spectrum_adv_toggle.setCheckable(True)
@@ -82,7 +87,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._spectrum_advanced = QWidget()
     _adv_layout = QVBoxLayout(tab._spectrum_advanced)
     _adv_layout.setContentsMargins(0, 0, 0, 0)
-    _adv_layout.setSpacing(4)
+    _adv_layout.setSpacing(12)
     _adv_host.addWidget(tab._spectrum_advanced)
 
     tab._spectrum_preset_slider.set_advanced_container(tab._spectrum_advanced_host)
@@ -117,12 +122,12 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row_layout.addLayout(content, 1)
         parent_layout.addWidget(row_widget)
         return row_widget, content
@@ -133,12 +138,12 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(8)
+        row.setContentsMargins(0, 6, 0, 6)
+        row.setSpacing(12)
         add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent_layout.addLayout(row)
         return content
@@ -196,7 +201,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._ghost_sub_container = QWidget()
     _ghost_layout = QVBoxLayout(tab._ghost_sub_container)
     _ghost_layout.setContentsMargins(0, 0, 0, 0)
-    _ghost_layout.setSpacing(4)
+    _ghost_layout.setSpacing(12)
 
     spotify_vis_ghost_opacity_row = _aligned_row(_ghost_layout, "Ghost Opacity:")
     tab.vis_ghost_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)

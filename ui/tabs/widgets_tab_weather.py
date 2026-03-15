@@ -19,8 +19,9 @@ from core.logging.logger import get_logger
 from widgets.timezone_utils import get_local_timezone
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
-    SECTION_HEADING_STYLE,
     STATUS_LABEL_STYLE,
+    FORM_ROW_LABEL_STYLE,
+    add_section_label,
     add_swatch_label,
     style_group_box,
 )
@@ -78,36 +79,44 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     LABEL_WIDTH = 140
 
-    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+    def _aligned_row(
+        parent: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
-        label = QLabel(label_text)
-        label.setFixedWidth(LABEL_WIDTH)
-        label.setStyleSheet(SECTION_HEADING_STYLE)
-        row.addWidget(label)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
+        add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
 
     def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
 
+    def _inline_label(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+        return label
+
     weather_group = QGroupBox("Weather Widget")
     style_group_box(weather_group)
     weather_layout = QVBoxLayout(weather_group)
+    weather_layout.setSpacing(16)
 
     # Enable weather
     tab.weather_enabled = QCheckBox("Enable Weather Widget")
@@ -120,8 +129,8 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Container for all weather controls gated by enable checkbox
     tab._weather_controls_container = QWidget()
     _weather_ctrl_layout = QVBoxLayout(tab._weather_controls_container)
-    _weather_ctrl_layout.setContentsMargins(0, 0, 0, 0)
-    _weather_ctrl_layout.setSpacing(4)
+    _weather_ctrl_layout.setContentsMargins(0, 0, 0, 12)
+    _weather_ctrl_layout.setSpacing(12)
 
     # Info label
     info_label = QLabel("\u2713 Uses Open-Meteo API (free, no API key required)")
@@ -194,7 +203,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_font_size.valueChanged.connect(tab._save_settings)
     tab.weather_font_size.valueChanged.connect(tab._update_stack_status)
     weather_font_row.addWidget(tab.weather_font_size)
-    font_px = QLabel("px")
+    font_px = _inline_label("px")
     font_px.setMinimumWidth(24)
     weather_font_row.addWidget(font_px)
     weather_font_row.addStretch()
@@ -237,8 +246,8 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Icon sub-controls container (shown only when show_icon is checked)
     tab._weather_icon_container = QWidget()
     _icon_layout = QVBoxLayout(tab._weather_icon_container)
-    _icon_layout.setContentsMargins(0, 0, 0, 0)
-    _icon_layout.setSpacing(4)
+    _icon_layout.setContentsMargins(0, 0, 0, 12)
+    _icon_layout.setSpacing(12)
 
     icon_align_row = _aligned_row(_icon_layout, "Icon Position:")
     tab.weather_icon_alignment = StyledComboBox(size_variant="compact")
@@ -253,9 +262,9 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_icon_size = QSpinBox()
     tab.weather_icon_size.setRange(32, 192)
     tab.weather_icon_size.setValue(tab._default_int('weather', 'icon_size', 96))
-    tab.weather_icon_size.setSuffix(" px")
     tab.weather_icon_size.valueChanged.connect(tab._save_settings)
     icon_size_row.addWidget(tab.weather_icon_size)
+    icon_size_row.addWidget(_inline_label("px"))
     icon_size_row.addStretch()
 
     _weather_ctrl_layout.addWidget(tab._weather_icon_container)
@@ -282,8 +291,8 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background sub-controls container (shown only when show_background is checked)
     tab._weather_bg_container = QWidget()
     _bg_layout = QVBoxLayout(tab._weather_bg_container)
-    _bg_layout.setContentsMargins(0, 0, 0, 0)
-    _bg_layout.setSpacing(4)
+    _bg_layout.setContentsMargins(0, 0, 0, 12)
+    _bg_layout.setSpacing(12)
 
     weather_opacity_row = _aligned_row(_bg_layout, "Background Opacity:")
     tab.weather_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -344,10 +353,10 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_margin = QSpinBox()
     tab.weather_margin.setRange(0, 200)
     tab.weather_margin.setValue(tab._default_int('weather', 'margin', 30))
-    tab.weather_margin.setSuffix(" px")
     tab.weather_margin.setToolTip("Distance from screen edge in pixels")
     tab.weather_margin.valueChanged.connect(tab._save_settings)
     weather_margin_row.addWidget(tab.weather_margin)
+    weather_margin_row.addWidget(_inline_label("px"))
     weather_margin_row.addStretch()
 
     weather_layout.addWidget(tab._weather_controls_container)

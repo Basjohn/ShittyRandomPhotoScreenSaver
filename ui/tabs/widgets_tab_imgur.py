@@ -19,9 +19,11 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
-    SECTION_HEADING_STYLE,
     STATUS_LABEL_STYLE,
     INFO_LABEL_STYLE,
+    FORM_ROW_LABEL_STYLE,
+    add_section_label,
+    add_swatch_label,
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
@@ -41,20 +43,39 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     LABEL_WIDTH = 140
 
-    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+    def _aligned_row(
+        parent: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
-        label = QLabel(label_text)
-        label.setFixedWidth(LABEL_WIDTH)
-        label.setStyleSheet(SECTION_HEADING_STYLE)
-        row.addWidget(label)
+        add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(6)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
+
+    def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(6)
+        add_swatch_label(row, label_text, LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(6)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content
+
+    def _inline_label(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+        return label
 
     imgur_group = QGroupBox("Imgur Widget")
     style_group_box(imgur_group)
@@ -92,7 +113,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_tag_row.addWidget(tab.imgur_tag)
     tab._set_combo_text(tab.imgur_tag, tab._default_str('imgur', 'tag', 'most_viral'))
 
-    imgur_tag_row.addWidget(QLabel("Custom:"))
+    imgur_tag_row.addWidget(_inline_label("Custom:"))
     tab.imgur_custom_tag = QLineEdit()
     tab.imgur_custom_tag.setPlaceholderText("e.g. nature")
     tab.imgur_custom_tag.setMaximumWidth(120)
@@ -111,7 +132,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_grid_rows.setMinimumWidth(60)
     imgur_grid_row.addWidget(tab.imgur_grid_rows)
 
-    imgur_grid_row.addWidget(QLabel("Columns:"))
+    imgur_grid_row.addWidget(_inline_label("Columns:"))
     tab.imgur_grid_cols = QSpinBox()
     tab.imgur_grid_cols.setRange(1, 8)
     tab.imgur_grid_cols.setValue(tab._default_int('imgur', 'grid_columns', 4))
@@ -193,7 +214,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_font_size.setToolTip("Font size for Imgur widget text (8-48px)")
     tab.imgur_font_size.valueChanged.connect(tab._save_settings)
     imgur_font_row.addWidget(tab.imgur_font_size)
-    imgur_font_px = QLabel("px")
+    imgur_font_px = _inline_label("px")
     imgur_font_px.setMinimumWidth(24)
     imgur_font_row.addWidget(imgur_font_px)
     imgur_font_row.addStretch()
@@ -206,13 +227,13 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_margin.setAccelerated(True)
     tab.imgur_margin.valueChanged.connect(tab._save_settings)
     imgur_margin_row.addWidget(tab.imgur_margin)
-    imgur_margin_px = QLabel("px")
+    imgur_margin_px = _inline_label("px")
     imgur_margin_px.setMinimumWidth(24)
     imgur_margin_row.addWidget(imgur_margin_px)
     imgur_margin_row.addStretch()
 
     # Text color
-    imgur_color_row = _aligned_row(_imgur_ctl, "Text Color:")
+    imgur_color_row = _swatch_row(_imgur_ctl, "Text Color:")
     tab.imgur_color_btn = ColorSwatchButton(title="Choose Imgur Text Color")
     tab.imgur_color_btn.set_color(tab._imgur_color)
     tab.imgur_color_btn.color_changed.connect(
@@ -256,7 +277,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_opacity_row.addWidget(tab.imgur_bg_opacity_label)
 
     # Background color
-    imgur_bg_color_row = _aligned_row(_imgur_ctl, "Background Color:")
+    imgur_bg_color_row = _swatch_row(_imgur_ctl, "Background Color:")
     tab.imgur_bg_color_btn = ColorSwatchButton(title="Choose Imgur Background Color")
     tab.imgur_bg_color_btn.set_color(tab._imgur_bg_color)
     tab.imgur_bg_color_btn.color_changed.connect(
@@ -266,7 +287,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_bg_color_row.addStretch()
 
     # Border color
-    imgur_border_color_row = _aligned_row(_imgur_ctl, "Border Color:")
+    imgur_border_color_row = _swatch_row(_imgur_ctl, "Border Color:")
     tab.imgur_border_color_btn = ColorSwatchButton(title="Choose Imgur Border Color")
     tab.imgur_border_color_btn.set_color(tab._imgur_border_color)
     tab.imgur_border_color_btn.color_changed.connect(

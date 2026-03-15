@@ -35,12 +35,12 @@ def _ensure_per_mode_cache(tab) -> Dict[str, Dict[str, Any]]:
 
 def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
     row = QHBoxLayout()
-    row.setContentsMargins(0, 0, 0, 0)
-    row.setSpacing(6)
+    row.setContentsMargins(0, 6, 0, 6)
+    row.setSpacing(12)
     add_section_label(row, label_text, 150)
     content = QHBoxLayout()
     content.setContentsMargins(0, 0, 0, 0)
-    content.setSpacing(6)
+    content.setSpacing(12)
     row.addLayout(content, 1)
     parent_layout.addLayout(row)
     return content
@@ -48,12 +48,12 @@ def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
 
 def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
     container = QHBoxLayout()
-    container.setContentsMargins(0, 0, 0, 0)
-    container.setSpacing(6)
+    container.setContentsMargins(0, 6, 0, 6)
+    container.setSpacing(12)
     add_section_label(container, label_text, 150)
     placeholder = QHBoxLayout()
     placeholder.setContentsMargins(0, 0, 0, 0)
-    placeholder.setSpacing(6)
+    placeholder.setSpacing(12)
     container.addLayout(placeholder, 1)
     parent_layout.addLayout(container)
     return placeholder
@@ -91,11 +91,11 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     host = QWidget()
     host_layout = QVBoxLayout(host)
     host_layout.setContentsMargins(0, 0, 0, 0)
-    host_layout.setSpacing(4)
+    host_layout.setSpacing(8)
 
     toggle_row = QHBoxLayout()
     toggle_row.setContentsMargins(0, 0, 0, 0)
-    toggle_row.setSpacing(6)
+    toggle_row.setSpacing(8)
     toggle = QToolButton()
     toggle.setText("Technical")
     toggle.setCheckable(True)
@@ -122,7 +122,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     group = QWidget()
     layout = QVBoxLayout(group)
     layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(6)
+    layout.setSpacing(12)
     host_layout.addWidget(group)
 
     def _apply_toggle_state(checked: bool) -> None:

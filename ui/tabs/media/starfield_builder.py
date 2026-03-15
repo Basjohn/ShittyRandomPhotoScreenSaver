@@ -24,6 +24,7 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._starfield_settings_container = QWidget()
     star_layout = QVBoxLayout(tab._starfield_settings_container)
     star_layout.setContentsMargins(0, 0, 0, 0)
+    star_layout.setSpacing(12)
 
     # --- Preset slider ---
     tab._starfield_preset_slider = VisualizerPresetSlider("starfield")
@@ -35,14 +36,14 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._starfield_advanced = QWidget()
     _adv = QVBoxLayout(tab._starfield_advanced)
     _adv.setContentsMargins(0, 0, 0, 0)
-    _adv.setSpacing(4)
+    _adv.setSpacing(12)
     tab._starfield_preset_slider.set_advanced_container(tab._starfield_advanced)
 
     LABEL_WIDTH = 150
 
     star_speed_row = QHBoxLayout()
-    star_speed_row.setContentsMargins(0, 0, 0, 0)
-    star_speed_row.setSpacing(6)
+    star_speed_row.setContentsMargins(0, 6, 0, 6)
+    star_speed_row.setSpacing(12)
     add_section_label(star_speed_row, "Travel Speed:", LABEL_WIDTH)
     tab.star_travel_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.star_travel_speed.setMinimum(0)
@@ -61,8 +62,8 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(star_speed_row)
 
     star_react_row = QHBoxLayout()
-    star_react_row.setContentsMargins(0, 0, 0, 0)
-    star_react_row.setSpacing(6)
+    star_react_row.setContentsMargins(0, 6, 0, 6)
+    star_react_row.setSpacing(12)
     add_section_label(star_react_row, "Bass Reactivity:", LABEL_WIDTH)
     tab.star_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.star_reactivity.setMinimum(0)
@@ -81,8 +82,8 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(star_react_row)
 
     nebula_tint_row = QHBoxLayout()
-    nebula_tint_row.setContentsMargins(0, 0, 0, 0)
-    nebula_tint_row.setSpacing(6)
+    nebula_tint_row.setContentsMargins(0, 6, 0, 6)
+    nebula_tint_row.setSpacing(12)
     add_section_label(nebula_tint_row, "Nebula Tint 1:", LABEL_WIDTH)
     tab.nebula_tint1_btn = ColorSwatchButton(title="Choose Nebula Tint 1")
     tab.nebula_tint1_btn.set_color(getattr(tab, '_nebula_tint1', None))
@@ -101,8 +102,8 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(nebula_tint_row)
 
     nebula_speed_row = QHBoxLayout()
-    nebula_speed_row.setContentsMargins(0, 0, 0, 0)
-    nebula_speed_row.setSpacing(6)
+    nebula_speed_row.setContentsMargins(0, 6, 0, 6)
+    nebula_speed_row.setSpacing(12)
     add_section_label(nebula_speed_row, "Nebula Cycle:", LABEL_WIDTH)
     tab.nebula_cycle_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.nebula_cycle_speed.setMinimum(0)
@@ -131,8 +132,8 @@ def build_starfield_growth(tab: "WidgetsTab") -> None:
 
     star_layout = tab._starfield_advanced.layout()
     star_growth_row = QHBoxLayout()
-    star_growth_row.setContentsMargins(0, 0, 0, 0)
-    star_growth_row.setSpacing(6)
+    star_growth_row.setContentsMargins(0, 6, 0, 6)
+    star_growth_row.setSpacing(12)
     add_section_label(star_growth_row, "Card Height:", 150)
     tab.starfield_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.starfield_growth.setMinimum(100)

@@ -41,6 +41,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._sine_wave_settings_container = QWidget()
     sine_layout = QVBoxLayout(tab._sine_wave_settings_container)
     sine_layout.setContentsMargins(0, 0, 0, 0)
+    sine_layout.setSpacing(12)
 
     # --- Preset slider ---
     tab._sine_preset_slider = VisualizerPresetSlider("sine_wave")
@@ -52,18 +53,18 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._sine_normal = QWidget()
     _normal = QVBoxLayout(tab._sine_normal)
     _normal.setContentsMargins(0, 0, 0, 0)
-    _normal.setSpacing(4)
+    _normal.setSpacing(12)
     sine_layout.addWidget(tab._sine_normal)
 
     tab._sine_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._sine_advanced_host)
     _adv_host.setContentsMargins(0, 0, 0, 0)
-    _adv_host.setSpacing(4)
+    _adv_host.setSpacing(8)
     sine_layout.addWidget(tab._sine_advanced_host)
 
     _adv_toggle_row = QHBoxLayout()
     _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
-    _adv_toggle_row.setSpacing(4)
+    _adv_toggle_row.setSpacing(8)
     tab._sine_adv_toggle = QToolButton()
     tab._sine_adv_toggle.setText("Advanced")
     tab._sine_adv_toggle.setCheckable(True)
@@ -90,7 +91,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._sine_advanced = QWidget()
     _adv = QVBoxLayout(tab._sine_advanced)
     _adv.setContentsMargins(0, 0, 0, 0)
-    _adv.setSpacing(4)
+    _adv.setSpacing(12)
     _adv_host.addWidget(tab._sine_advanced)
 
     tab._sine_preset_slider.set_advanced_container(tab._sine_advanced_host)
@@ -125,12 +126,12 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row_layout.addLayout(content, 1)
         parent_layout.addWidget(row_widget)
         return row_widget, content
@@ -144,12 +145,12 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     ) -> tuple[QWidget, QHBoxLayout, QLabel]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(12)
         label = add_swatch_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row_layout.addLayout(content, 1)
         parent_layout.addWidget(row_widget)
         return row_widget, content, label

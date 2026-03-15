@@ -18,9 +18,10 @@ from PySide6.QtGui import QColor, QFont
 from core.logging.logger import get_logger
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
-    SECTION_HEADING_STYLE,
     STATUS_LABEL_STYLE,
     INFO_LABEL_STYLE,
+    FORM_ROW_LABEL_STYLE,
+    add_section_label,
     add_swatch_label,
     style_group_box,
 )
@@ -49,14 +50,16 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     LABEL_WIDTH = 140
 
-    def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+    def _aligned_row(
+        parent: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ) -> QHBoxLayout:
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
-        label = QLabel(label_text)
-        label.setFixedWidth(LABEL_WIDTH)
-        label.setStyleSheet(SECTION_HEADING_STYLE)
-        row.addWidget(label)
+        add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(6)
@@ -76,9 +79,15 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         parent.addLayout(row)
         return content
 
+    def _inline_label(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+        return label
+
     reddit_group = QGroupBox("Reddit Widget")
     style_group_box(reddit_group)
     reddit_layout = QVBoxLayout(reddit_group)
+    reddit_layout.setSpacing(16)
 
     tab.reddit_enabled = QCheckBox("Enable Reddit Widget")
     tab.reddit_enabled.setProperty("circleIndicator", True)
@@ -94,7 +103,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._reddit_controls_container = QWidget()
     _rc_layout = QVBoxLayout(tab._reddit_controls_container)
     _rc_layout.setContentsMargins(0, 0, 0, 0)
-    _rc_layout.setSpacing(4)
+    _rc_layout.setSpacing(12)
 
     reddit_info = QLabel(
         "Links open in your browser and only respond while Ctrl-held or hard-exit "
@@ -197,7 +206,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_font_size.valueChanged.connect(tab._save_settings)
     tab.reddit_font_size.valueChanged.connect(tab._update_stack_status)
     reddit_font_row.addWidget(tab.reddit_font_size)
-    reddit_font_px = QLabel("px")
+    reddit_font_px = _inline_label("px")
     reddit_font_px.setMinimumWidth(24)
     reddit_font_row.addWidget(reddit_font_px)
     reddit_font_row.addStretch()
@@ -210,7 +219,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_margin.setAccelerated(True)
     tab.reddit_margin.valueChanged.connect(tab._save_settings)
     reddit_margin_row.addWidget(tab.reddit_margin)
-    reddit_margin_px = QLabel("px")
+    reddit_margin_px = _inline_label("px")
     reddit_margin_px.setMinimumWidth(24)
     reddit_margin_row.addWidget(reddit_margin_px)
     reddit_margin_row.addStretch()
@@ -230,7 +239,9 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_show_background.setProperty("circleIndicator", True)
     tab.reddit_show_background.setChecked(tab._default_bool('reddit', 'show_background', True))
     tab.reddit_show_background.stateChanged.connect(tab._save_settings)
+    _rc_layout.addSpacing(12)
     _rc_layout.addWidget(tab.reddit_show_background)
+    _rc_layout.addSpacing(12)
 
     # Intense shadow
     tab.reddit_intense_shadow = QCheckBox("Intense Shadows")

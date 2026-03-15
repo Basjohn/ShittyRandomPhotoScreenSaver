@@ -51,24 +51,24 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _aligned_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(6)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH)
         inner = QHBoxLayout()
         inner.setContentsMargins(0, 0, 0, 0)
-        inner.setSpacing(6)
+        inner.setSpacing(12)
         row_layout.addLayout(inner, 1)
         return row_widget, inner
 
     def _swatch_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(6)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(12)
         add_swatch_label(row_layout, label_text, LABEL_WIDTH)
         inner = QHBoxLayout()
         inner.setContentsMargins(0, 0, 0, 0)
-        inner.setSpacing(6)
+        inner.setSpacing(12)
         row_layout.addLayout(inner, 1)
         return row_widget, inner
 

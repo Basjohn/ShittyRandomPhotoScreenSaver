@@ -19,6 +19,7 @@ from ui.tabs.shared_styles import (
     SECTION_HEADING_STYLE_DISABLED,
     INFO_LABEL_STYLE,
     INFO_LABEL_STYLE_DISABLED,
+    add_section_label,
     style_group_box,
 )
 from PySide6.QtCore import Signal, Qt
@@ -70,8 +71,8 @@ class SourcesTab(QWidget):
         
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(20)
         
         # Title
         title = QLabel("Image Sources")
@@ -82,6 +83,7 @@ class SourcesTab(QWidget):
         folder_group = QGroupBox("Folder Sources")
         style_group_box(folder_group)
         folder_layout = QVBoxLayout(folder_group)
+        folder_layout.setSpacing(12)
         
         # Folder list
         self.folder_list = QListWidget()
@@ -117,9 +119,7 @@ class SourcesTab(QWidget):
         ratio_layout.setContentsMargins(12, 8, 12, 8)
         ratio_layout.setSpacing(10)
         
-        self.ratio_label = QLabel("Usage Ratio:")
-        self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE)
-        ratio_layout.addWidget(self.ratio_label)
+        self.ratio_label = add_section_label(ratio_layout, "Usage Ratio:", 150)
         
         # Local percentage display label (read-only)
         self.local_ratio_label = QLabel("70% Local")
@@ -151,6 +151,7 @@ class SourcesTab(QWidget):
         rss_group = QGroupBox("RSS / JSON Feed Sources")
         style_group_box(rss_group)
         rss_layout = QVBoxLayout(rss_group)
+        rss_layout.setSpacing(12)
         
         # Suggestion label (session-local; updated by "Just Make It Work")
         self.rss_suggestion_label = QLabel(

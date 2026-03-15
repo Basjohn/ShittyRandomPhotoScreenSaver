@@ -40,6 +40,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab._osc_settings_container = QWidget()
     osc_layout = QVBoxLayout(tab._osc_settings_container)
     osc_layout.setContentsMargins(0, 0, 0, 0)
+    osc_layout.setSpacing(12)
 
     # --- Preset slider ---
     tab._osc_preset_slider = VisualizerPresetSlider("oscilloscope")
@@ -51,18 +52,18 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab._osc_normal = QWidget()
     _normal_layout = QVBoxLayout(tab._osc_normal)
     _normal_layout.setContentsMargins(0, 0, 0, 0)
-    _normal_layout.setSpacing(4)
+    _normal_layout.setSpacing(12)
     osc_layout.addWidget(tab._osc_normal)
 
     tab._osc_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._osc_advanced_host)
     _adv_host.setContentsMargins(0, 0, 0, 0)
-    _adv_host.setSpacing(4)
+    _adv_host.setSpacing(8)
     osc_layout.addWidget(tab._osc_advanced_host)
 
     _adv_toggle_row = QHBoxLayout()
     _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
-    _adv_toggle_row.setSpacing(4)
+    _adv_toggle_row.setSpacing(8)
     tab._osc_adv_toggle = QToolButton()
     tab._osc_adv_toggle.setText("Advanced")
     tab._osc_adv_toggle.setCheckable(True)
@@ -89,7 +90,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab._osc_advanced = QWidget()
     _adv_layout = QVBoxLayout(tab._osc_advanced)
     _adv_layout.setContentsMargins(0, 0, 0, 0)
-    _adv_layout.setSpacing(4)
+    _adv_layout.setSpacing(12)
     _adv_host.addWidget(tab._osc_advanced)
 
     tab._osc_preset_slider.set_advanced_container(tab._osc_advanced_host)
@@ -124,12 +125,12 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row_layout.addLayout(content, 1)
         parent_layout.addWidget(row_widget)
         return row_widget, content
@@ -141,12 +142,12 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     def _swatch_row_widget(parent_layout: QVBoxLayout, label_text: str):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setSpacing(12)
         add_swatch_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row_layout.addLayout(content, 1)
         parent_layout.addWidget(row_widget)
         return row_widget, content
@@ -391,6 +392,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab._osc_multi_container = QWidget()
     ml_layout = QVBoxLayout(tab._osc_multi_container)
     ml_layout.setContentsMargins(0, 0, 0, 0)
+    ml_layout.setSpacing(12)
 
     osc_line_count_row = _aligned_row(ml_layout, "Line Count:")
     tab.osc_line_count = NoWheelSlider(Qt.Orientation.Horizontal)

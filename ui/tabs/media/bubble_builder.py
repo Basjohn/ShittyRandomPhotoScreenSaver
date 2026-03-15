@@ -30,6 +30,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._bubble_settings_container = QWidget()
     layout = QVBoxLayout(tab._bubble_settings_container)
     layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(12)
 
     # --- Preset slider ---
     tab._bubble_preset_slider = VisualizerPresetSlider("bubble")
@@ -41,18 +42,18 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._bubble_normal = QWidget()
     _normal_layout = QVBoxLayout(tab._bubble_normal)
     _normal_layout.setContentsMargins(0, 0, 0, 0)
-    _normal_layout.setSpacing(6)
+    _normal_layout.setSpacing(12)
     layout.addWidget(tab._bubble_normal)
 
     tab._bubble_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._bubble_advanced_host)
-    _adv_host.setContentsMargins(0, 0, 0, 0)
-    _adv_host.setSpacing(4)
+    _adv_host.setContentsMargins(0, 0, 0, 12)
+    _adv_host.setSpacing(12)
     layout.addWidget(tab._bubble_advanced_host)
 
     _adv_toggle_row = QHBoxLayout()
     _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
-    _adv_toggle_row.setSpacing(4)
+    _adv_toggle_row.setSpacing(8)
     tab._bubble_adv_toggle = QToolButton()
     tab._bubble_adv_toggle.setText("Advanced")
     tab._bubble_adv_toggle.setCheckable(True)
@@ -79,7 +80,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._bubble_advanced = QWidget()
     _adv_layout = QVBoxLayout(tab._bubble_advanced)
     _adv_layout.setContentsMargins(0, 0, 0, 0)
-    _adv_layout.setSpacing(4)
+    _adv_layout.setSpacing(12)
     _adv_host.addWidget(tab._bubble_advanced)
 
     tab._bubble_preset_slider.set_advanced_container(tab._bubble_advanced_host)
@@ -119,12 +120,12 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     ):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 8, 0, 8)
+        row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row_layout.addLayout(content, 1)
         parent_layout.addWidget(row_widget)
         return row_widget, content
@@ -136,12 +137,12 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(8)
+        row_layout.setContentsMargins(0, 8, 0, 8)
+        row_layout.setSpacing(12)
         add_swatch_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(8)
+        content.setSpacing(12)
         row_layout.addLayout(content, 1)
         parent_layout.addWidget(row_widget)
         return content
