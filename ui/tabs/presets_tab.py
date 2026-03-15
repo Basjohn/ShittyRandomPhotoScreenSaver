@@ -31,6 +31,7 @@ from ui.tabs.shared_styles import (
     SUBSECTION_DIVIDER_STYLE,
     SLIDER_STYLE,
     SCROLL_AREA_STYLE,
+    add_section_label,
 )
 
 if TYPE_CHECKING:
@@ -146,6 +147,20 @@ class PresetsTab(QScrollArea):
         main_layout = QVBoxLayout(content)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(20)
+
+        LABEL_WIDTH = 150
+
+        def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 8, 0, 8)
+            row.setSpacing(12)
+            add_section_label(row, label_text, LABEL_WIDTH, wrap=False)
+            content_row = QHBoxLayout()
+            content_row.setContentsMargins(0, 0, 0, 0)
+            content_row.setSpacing(12)
+            row.addLayout(content_row, 1)
+            parent.addLayout(row)
+            return content_row
         
         # Get font from widget settings
         font_family = self._settings.get("widgets.clock.font_family", "Segoe UI")
@@ -223,8 +238,9 @@ class PresetsTab(QScrollArea):
         self._slider.valueChanged.connect(self._on_slider_changed)
         
         slider_layout.addWidget(self._slider)
-        
-        main_layout.addWidget(slider_section)
+
+        slider_row = _aligned_row(main_layout, "Preset Selection:")
+        slider_row.addWidget(slider_section)
         
         # Spacer
         main_layout.addSpacing(10)

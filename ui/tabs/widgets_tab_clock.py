@@ -112,6 +112,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     clock_group = QGroupBox("Clock Widget")
     style_group_box(clock_group)
     clock_layout = QVBoxLayout(clock_group)
+    clock_layout.setSpacing(16)
 
     # Enable clock
     tab.clock_enabled = QCheckBox("Enable Clock")
@@ -124,8 +125,8 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Container for all clock controls gated by enable checkbox
     tab._clock_controls_container = QWidget()
     _clock_ctrl_layout = QVBoxLayout(tab._clock_controls_container)
-    _clock_ctrl_layout.setContentsMargins(0, 0, 0, 0)
-    _clock_ctrl_layout.setSpacing(4)
+    _clock_ctrl_layout.setContentsMargins(0, 0, 0, 12)
+    _clock_ctrl_layout.setSpacing(12)
 
     # Time format
     format_row = _aligned_row(_clock_ctrl_layout, "Format:")
@@ -185,8 +186,8 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Analogue-only controls container
     tab._clock_analog_container = QWidget()
     _analog_layout = QVBoxLayout(tab._clock_analog_container)
-    _analog_layout.setContentsMargins(0, 0, 0, 0)
-    _analog_layout.setSpacing(4)
+    _analog_layout.setContentsMargins(0, 0, 0, 12)
+    _analog_layout.setSpacing(12)
 
     tab.clock_analog_shadow = QCheckBox("Analogue Face Shadow")
     tab.clock_analog_shadow.setProperty("circleIndicator", True)
@@ -217,8 +218,8 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Digital-only controls container
     tab._clock_digital_container = QWidget()
     _digital_layout = QVBoxLayout(tab._clock_digital_container)
-    _digital_layout.setContentsMargins(0, 0, 0, 0)
-    _digital_layout.setSpacing(4)
+    _digital_layout.setContentsMargins(0, 0, 0, 12)
+    _digital_layout.setSpacing(12)
 
     tab.clock_digital_shadow_intense = QCheckBox("Intense Digital Shadows")
     tab.clock_digital_shadow_intense.setProperty("circleIndicator", True)

@@ -42,7 +42,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     LABEL_WIDTH = 140
 
     helix_turns_row = QHBoxLayout()
-    helix_turns_row.setContentsMargins(0, 6, 0, 6)
+    helix_turns_row.setContentsMargins(0, 8, 0, 8)
     helix_turns_row.setSpacing(12)
     add_section_label(helix_turns_row, "Turns:", LABEL_WIDTH)
     tab.helix_turns = QSpinBox()
@@ -62,7 +62,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addWidget(tab.helix_double)
 
     helix_speed_row = QHBoxLayout()
-    helix_speed_row.setContentsMargins(0, 6, 0, 6)
+    helix_speed_row.setContentsMargins(0, 8, 0, 8)
     helix_speed_row.setSpacing(12)
     add_section_label(helix_speed_row, "Rotation Speed:", LABEL_WIDTH)
     tab.helix_speed = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -90,10 +90,11 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._helix_glow_sub_container = QWidget()
     _helix_glow_layout = QVBoxLayout(tab._helix_glow_sub_container)
-    _helix_glow_layout.setContentsMargins(16, 0, 0, 0)
+    _helix_glow_layout.setContentsMargins(0, 0, 0, 12)
+    _helix_glow_layout.setSpacing(12)
 
     helix_glow_row = QHBoxLayout()
-    helix_glow_row.setContentsMargins(0, 6, 0, 6)
+    helix_glow_row.setContentsMargins(0, 8, 0, 8)
     helix_glow_row.setSpacing(12)
     add_section_label(helix_glow_row, "Glow Intensity:", LABEL_WIDTH)
     tab.helix_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -113,7 +114,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _helix_glow_layout.addLayout(helix_glow_row)
 
     helix_glow_color_row = QHBoxLayout()
-    helix_glow_color_row.setContentsMargins(0, 6, 0, 6)
+    helix_glow_color_row.setContentsMargins(0, 8, 0, 8)
     helix_glow_color_row.setSpacing(12)
     add_section_label(helix_glow_color_row, "Glow Color:", LABEL_WIDTH)
     tab.helix_glow_color_btn = ColorSwatchButton(title="Choose Helix Glow Color")
@@ -140,7 +141,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _update_helix_glow_vis()
 
     helix_growth_row = QHBoxLayout()
-    helix_growth_row.setContentsMargins(0, 6, 0, 6)
+    helix_growth_row.setContentsMargins(0, 8, 0, 8)
     helix_growth_row.setSpacing(12)
     add_section_label(helix_growth_row, "Card Height:", LABEL_WIDTH)
     tab.helix_growth = NoWheelSlider(Qt.Orientation.Horizontal)

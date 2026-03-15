@@ -689,14 +689,26 @@ QSlider::add-page:horizontal {
     background: transparent;
 }
 
+NoWheelSlider#sourcesRatioSlider {
+    min-height: 22px;
+    margin: 0px;
+}
+
+NoWheelSlider#sourcesRatioSlider::handle:horizontal {
+    margin-top: -2px;
+    margin-bottom: -2px;
+}
+
 /* Active indicator on the most-recently-moved slider handle */
 QSlider[lastMoved="true"]::handle:horizontal {
-    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-        stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
+    width: 12px;
+    height: 6px;
     margin: -4px 0;
     border-radius: 5px;
-    border: 2px solid #202020;
+    border: 3px solid #101010;
     border-bottom-color: rgba(0, 0, 0, 0.85);
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
 }
 """
 
@@ -704,6 +716,20 @@ SCROLL_AREA_STYLE = """
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
 """
+
+# Sources-specific field styling
+RSS_INPUT_STYLE = (
+    "QLineEdit#rssFeedInput {"
+    " border: 1px solid rgba(70,70,70,0.6);"
+    " border-radius: 6px;"
+    " padding: 8px 10px;"
+    " background-color: #282828;"
+    " box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.45);"
+    " }"
+    "QLineEdit#rssFeedInput:focus {"
+    " border-color: rgba(200,200,200,0.85);"
+    " }"
+)
 
 # --- Accessibility tab styles ---
 

@@ -54,8 +54,8 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # --- Advanced host (toggle + helper + controls) ---
     tab._spectrum_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._spectrum_advanced_host)
-    _adv_host.setContentsMargins(0, 0, 0, 0)
-    _adv_host.setSpacing(8)
+    _adv_host.setContentsMargins(0, 0, 0, 12)
+    _adv_host.setSpacing(12)
     spectrum_layout.addWidget(tab._spectrum_advanced_host)
 
     _adv_toggle_row = QHBoxLayout()
@@ -122,7 +122,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setContentsMargins(0, 8, 0, 8)
         row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
@@ -137,15 +137,16 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         return content
 
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 6, 0, 6)
-        row.setSpacing(12)
-        add_swatch_label(row, label_text, LABEL_WIDTH)
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 8, 0, 8)
+        row_layout.setSpacing(12)
+        add_swatch_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(12)
-        row.addLayout(content, 1)
-        parent_layout.addLayout(row)
+        row_layout.addLayout(content, 1)
+        parent_layout.addWidget(row_widget)
         return content
 
     spotify_vis_fill_row = _swatch_row(_normal_layout, "Bar Fill Color:")
@@ -200,7 +201,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._ghost_sub_container = QWidget()
     _ghost_layout = QVBoxLayout(tab._ghost_sub_container)
-    _ghost_layout.setContentsMargins(0, 0, 0, 0)
+    _ghost_layout.setContentsMargins(0, 0, 0, 12)
     _ghost_layout.setSpacing(12)
 
     spotify_vis_ghost_opacity_row = _aligned_row(_ghost_layout, "Ghost Opacity:")
@@ -286,12 +287,9 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _br_row.addWidget(tab.spectrum_border_radius_label)
 
     # Mirrored Layout
-    _mirror_row = QHBoxLayout()
-    _mirror_row.setSpacing(6)
-    _mirror_lbl = QLabel("Mirrored Layout:")
-    _mirror_lbl.setFixedWidth(130)
-    _mirror_row.addWidget(_mirror_lbl)
+    _mirror_row = _aligned_row(_adv_layout, "Mirrored Layout:")
     tab.spectrum_mirrored = QCheckBox("Center-out (mirrored shape)")
+    tab.spectrum_mirrored.setProperty("circleIndicator", True)
     _mirror_default = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
     tab.spectrum_mirrored.setChecked(_mirror_default)
     tab.spectrum_mirrored.setToolTip(
@@ -301,7 +299,6 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_mirrored.stateChanged.connect(tab._save_settings)
     _mirror_row.addWidget(tab.spectrum_mirrored)
     _mirror_row.addStretch()
-    _adv_layout.addLayout(_mirror_row)
 
     # --- Spectrum Shaping section ---
     _shape_header = QLabel("Spectrum Shaping")

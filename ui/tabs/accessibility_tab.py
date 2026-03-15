@@ -18,8 +18,8 @@ from ui.tabs.shared_styles import (
     CIRCLE_CHECKBOX_STYLE,
     SLIDER_STYLE,
     NoWheelSlider,
-    SECTION_HEADING_STYLE,
     style_group_box,
+    add_section_label,
 )
 
 logger = get_logger(__name__)
@@ -30,6 +30,8 @@ class AccessibilityTab(QWidget):
     
     # Signals
     accessibility_changed = Signal()
+    
+    _LABEL_WIDTH = 150
     
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
         """
@@ -128,12 +130,8 @@ class AccessibilityTab(QWidget):
         layout.addWidget(self.dimming_enabled)
         
         # Opacity slider row
-        opacity_row = QHBoxLayout()
-        opacity_label = QLabel("Dimming Opacity:")
-        opacity_label.setStyleSheet(SECTION_HEADING_STYLE)
-        opacity_label.setMinimumWidth(120)
-        opacity_row.addWidget(opacity_label)
-        
+        opacity_row = self._build_aligned_row(layout, "Dimming Opacity:")
+
         self.dimming_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.dimming_opacity_slider.setRange(10, 90)  # 10% to 90%
         self.dimming_opacity_slider.setValue(30)  # Default 30%
@@ -141,13 +139,11 @@ class AccessibilityTab(QWidget):
         self.dimming_opacity_slider.setTickInterval(10)
         self.dimming_opacity_slider.valueChanged.connect(self._on_dimming_opacity_changed)
         opacity_row.addWidget(self.dimming_opacity_slider, 1)
-        
+
         self.dimming_opacity_value = QLabel("30%")
         self.dimming_opacity_value.setMinimumWidth(40)
         self.dimming_opacity_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         opacity_row.addWidget(self.dimming_opacity_value)
-        
-        layout.addLayout(opacity_row)
         
         # Description
         dim_desc = QLabel(
@@ -179,12 +175,8 @@ class AccessibilityTab(QWidget):
         layout.addWidget(self.pixel_shift_enabled)
         
         # Shifts per minute slider row
-        shift_row = QHBoxLayout()
-        shift_label = QLabel("Shifts Per Minute:")
-        shift_label.setStyleSheet(SECTION_HEADING_STYLE)
-        shift_label.setMinimumWidth(120)
-        shift_row.addWidget(shift_label)
-        
+        shift_row = self._build_aligned_row(layout, "Shifts Per Minute:")
+
         self.pixel_shift_rate_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.pixel_shift_rate_slider.setRange(1, 5)
         self.pixel_shift_rate_slider.setValue(1)  # Default 1 shift per minute
@@ -192,13 +184,11 @@ class AccessibilityTab(QWidget):
         self.pixel_shift_rate_slider.setTickInterval(1)
         self.pixel_shift_rate_slider.valueChanged.connect(self._on_pixel_shift_rate_changed)
         shift_row.addWidget(self.pixel_shift_rate_slider, 1)
-        
+
         self.pixel_shift_rate_value = QLabel("1")
         self.pixel_shift_rate_value.setMinimumWidth(30)
         self.pixel_shift_rate_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         shift_row.addWidget(self.pixel_shift_rate_value)
-        
-        layout.addLayout(shift_row)
         
         # Description
         shift_desc = QLabel(
@@ -298,3 +288,15 @@ class AccessibilityTab(QWidget):
         """Update enabled state of pixel shift controls based on checkbox."""
         enabled = self.pixel_shift_enabled.isChecked()
         self.pixel_shift_rate_slider.setEnabled(enabled)
+
+    def _build_aligned_row(self, parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
+        add_section_label(row, label_text, self._LABEL_WIDTH)
+        content = QHBoxLayout()
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(12)
+        row.addLayout(content, 1)
+        parent.addLayout(row)
+        return content

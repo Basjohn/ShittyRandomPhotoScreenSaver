@@ -69,6 +69,20 @@ class SourcesTab(QWidget):
         from ui.tabs.shared_styles import SCROLL_AREA_STYLE
         scroll.setStyleSheet(SCROLL_AREA_STYLE)
         
+        LABEL_WIDTH = 150
+
+        def _aligned_row(parent: QVBoxLayout, label_text: str) -> tuple[QHBoxLayout, QLabel]:
+            row = QHBoxLayout()
+            row.setContentsMargins(0, 8, 0, 8)
+            row.setSpacing(12)
+            label = add_section_label(row, label_text, LABEL_WIDTH)
+            content = QHBoxLayout()
+            content.setContentsMargins(0, 0, 0, 0)
+            content.setSpacing(12)
+            row.addLayout(content, 1)
+            parent.addLayout(row)
+            return content, label
+
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -92,9 +106,12 @@ class SourcesTab(QWidget):
         
         # Folder buttons
         folder_buttons = QHBoxLayout()
+        button_style = self._toggle_button_style()
         self.add_folder_btn = QPushButton("Add Folder...")
+        self.add_folder_btn.setStyleSheet(button_style)
         self.add_folder_btn.clicked.connect(self._add_folder)
         self.remove_folder_btn = QPushButton("Remove Selected")
+        self.remove_folder_btn.setStyleSheet(button_style)
         self.remove_folder_btn.clicked.connect(self._remove_folder)
         folder_buttons.addWidget(self.add_folder_btn)
         folder_buttons.addWidget(self.remove_folder_btn)
@@ -116,11 +133,9 @@ class SourcesTab(QWidget):
             }
         """)
         ratio_layout = QHBoxLayout(self.ratio_frame)
-        ratio_layout.setContentsMargins(12, 8, 12, 8)
-        ratio_layout.setSpacing(10)
-        
-        self.ratio_label = add_section_label(ratio_layout, "Usage Ratio:", 150)
-        
+        ratio_layout.setContentsMargins(12, 4, 12, 4)
+        ratio_layout.setSpacing(12)
+
         # Local percentage display label (read-only)
         self.local_ratio_label = QLabel("70% Local")
         self.local_ratio_label.setMinimumWidth(70)
@@ -132,6 +147,11 @@ class SourcesTab(QWidget):
         self.ratio_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.ratio_slider.setRange(0, 100)
         self.ratio_slider.setMinimumWidth(200)
+        self.ratio_slider.setObjectName("sourcesRatioSlider")
+        self.ratio_slider.setStyleSheet(
+            "NoWheelSlider#sourcesRatioSlider { min-height: 22px; margin: 0px; }"
+            "NoWheelSlider#sourcesRatioSlider::handle:horizontal { margin-top: -2px; margin-bottom: -2px; }"
+        )
         self.ratio_slider.setToolTip("Drag to adjust the balance between local and RSS sources")
         self.ratio_slider.valueChanged.connect(self._on_ratio_slider_changed)
         ratio_layout.addWidget(self.ratio_slider)
@@ -144,8 +164,14 @@ class SourcesTab(QWidget):
         ratio_layout.addWidget(self.rss_ratio_label)
         
         ratio_layout.addStretch()
-        
-        layout.addWidget(self.ratio_frame)
+
+        ratio_row, self.ratio_label = _aligned_row(layout, "Usage Ratio:")
+        ratio_row.addWidget(
+            self.ratio_frame,
+            1,
+            alignment=Qt.AlignmentFlag.AlignVCenter,
+        )
+
         
         # RSS sources group
         rss_group = QGroupBox("RSS / JSON Feed Sources")
@@ -168,9 +194,25 @@ class SourcesTab(QWidget):
         
         # RSS input
         rss_input = QHBoxLayout()
+        rss_input.setContentsMargins(0, 8, 0, 0)
         self.rss_input = QLineEdit()
-        self.rss_input.setPlaceholderText("Enter RSS/JSON feed URL (e.g., https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=100)...")
+        self.rss_input.setObjectName("rssFeedInput")
+        self.rss_input.setPlaceholderText(
+            "Enter RSS/JSON feed URL (e.g., https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=100)..."
+        )
+        self.rss_input.setStyleSheet(
+            "QLineEdit#rssFeedInput {"
+            " border: 1px solid rgba(70,70,70,0.6);"
+            " border-radius: 6px;"
+            " padding: 8px 10px;"
+            " background-color: #111111;"
+            " }"
+            "QLineEdit#rssFeedInput:focus {"
+            " border-color: rgba(180,180,180,0.85);"
+            " }"
+        )
         self.add_rss_btn = QPushButton("Add Feed")
+        self.add_rss_btn.setStyleSheet(button_style)
         self.add_rss_btn.clicked.connect(self._add_rss)
         rss_input.addWidget(self.rss_input)
         rss_input.addWidget(self.add_rss_btn)
@@ -179,13 +221,17 @@ class SourcesTab(QWidget):
         # RSS buttons
         rss_buttons = QHBoxLayout()
         self.clear_rss_cache_btn = QPushButton("Clear Cache")
+        self.clear_rss_cache_btn.setStyleSheet(button_style)
         self.clear_rss_cache_btn.clicked.connect(self._on_clear_rss_cache_clicked)
         self.just_make_it_work_btn = QPushButton("Just Make It Work")
+        self.just_make_it_work_btn.setStyleSheet(button_style)
         self.just_make_it_work_btn.setToolTip("Reset to robust default feeds (Flickr, Wikimedia, Bing, NASA)")
         self.just_make_it_work_btn.clicked.connect(self._on_just_make_it_work_clicked)
         self.remove_rss_btn = QPushButton("Remove Selected")
+        self.remove_rss_btn.setStyleSheet(button_style)
         self.remove_rss_btn.clicked.connect(self._remove_rss)
         self.remove_all_rss_btn = QPushButton("Remove All")
+        self.remove_all_rss_btn.setStyleSheet(button_style)
         self.remove_all_rss_btn.clicked.connect(self._remove_all_rss)
         rss_buttons.addWidget(self.clear_rss_cache_btn)
         rss_buttons.addWidget(self.just_make_it_work_btn)
@@ -202,17 +248,14 @@ class SourcesTab(QWidget):
         rss_layout.addWidget(self.rss_save_to_disk)
         
         # RSS save directory (hidden by default)
-        self.rss_save_dir_layout = QHBoxLayout()
-        self.rss_save_dir_label = QLabel("Save Directory:")
+        save_dir_row, self.rss_save_dir_label = _aligned_row(rss_layout, "Save Directory:")
         self.rss_save_dir_input = QLineEdit()
         self.rss_save_dir_input.setReadOnly(True)
         self.rss_save_dir_input.setPlaceholderText("No directory selected...")
         self.rss_save_dir_btn = QPushButton("Browse...")
         self.rss_save_dir_btn.clicked.connect(self._browse_rss_save_dir)
-        self.rss_save_dir_layout.addWidget(self.rss_save_dir_label)
-        self.rss_save_dir_layout.addWidget(self.rss_save_dir_input)
-        self.rss_save_dir_layout.addWidget(self.rss_save_dir_btn)
-        rss_layout.addLayout(self.rss_save_dir_layout)
+        save_dir_row.addWidget(self.rss_save_dir_input)
+        save_dir_row.addWidget(self.rss_save_dir_btn)
         
         # Hide save directory controls initially
         self.rss_save_dir_label.setVisible(False)
@@ -230,6 +273,27 @@ class SourcesTab(QWidget):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(scroll)
+
+    def _toggle_button_style(self) -> str:
+        return (
+            "QPushButton {"
+            " font-family: 'Jost'; font-size: 12px; font-weight: 500;"
+            " background-color: #2a2a2a; color: #ffffff;"
+            " border-radius: 7px; padding: 6px 16px; min-width: 90px;"
+            " border-top: 1px solid rgba(110,110,110,0.8);"
+            " border-left: 1px solid rgba(110,110,110,0.8);"
+            " border-right: 2px solid rgba(0,0,0,0.75);"
+            " border-bottom: 2px solid rgba(0,0,0,0.8);"
+            " }"
+            "QPushButton:hover { background-color: #343434; }"
+            "QPushButton:pressed {"
+            " background-color: #3a3a3a;"
+            " border-top: 2px solid rgba(0,0,0,0.75);"
+            " border-left: 2px solid rgba(0,0,0,0.75);"
+            " border-right: 1px solid rgba(140,140,140,0.85);"
+            " border-bottom: 1px solid rgba(140,140,140,0.85);"
+            " }"
+        )
     
     def _load_sources(self) -> None:
         """Load sources from settings."""

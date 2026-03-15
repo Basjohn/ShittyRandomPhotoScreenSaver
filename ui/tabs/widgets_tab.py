@@ -563,8 +563,8 @@ class WidgetsTab(QWidget):
         content_layout.setSpacing(12)
 
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(18)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
 
         self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
         self.widget_shadows_enabled.setProperty("circleIndicator", True)
@@ -579,7 +579,7 @@ class WidgetsTab(QWidget):
 
         border_row = QHBoxLayout()
         border_row.setContentsMargins(0, 0, 0, 0)
-        border_row.setSpacing(8)
+        border_row.setSpacing(12)
         add_section_label(border_row, "Card Border Width:", LABEL_WIDTH, wrap=False)
 
         self.card_border_width_spin = QSpinBox()

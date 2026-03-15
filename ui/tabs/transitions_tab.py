@@ -25,9 +25,9 @@ from ui.tabs.shared_styles import (
     SLIDER_STYLE,
     SPINBOX_STYLE,
     PAGE_TITLE_STYLE,
-    SECTION_HEADING_STYLE,
     NoWheelSlider,
     add_swatch_label,
+    add_section_label,
     style_group_box,
 )
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
@@ -85,13 +85,9 @@ class TransitionsTab(QWidget):
 
         def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
             row = QHBoxLayout()
-            row.setContentsMargins(0, 6, 0, 6)
+            row.setContentsMargins(0, 8, 0, 8)
             row.setSpacing(12)
-            label = QLabel(label_text)
-            label.setFixedWidth(LABEL_WIDTH)
-            label.setStyleSheet(SECTION_HEADING_STYLE)
-            label.setWordWrap(True)
-            row.addWidget(label)
+            add_section_label(row, label_text, LABEL_WIDTH)
             content = QHBoxLayout()
             content.setContentsMargins(0, 0, 0, 0)
             content.setSpacing(12)
@@ -101,7 +97,7 @@ class TransitionsTab(QWidget):
 
         def _swatch_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
             row = QHBoxLayout()
-            row.setContentsMargins(0, 6, 0, 6)
+            row.setContentsMargins(0, 8, 0, 8)
             row.setSpacing(12)
             add_swatch_label(row, label_text, LABEL_WIDTH)
             content = QHBoxLayout()

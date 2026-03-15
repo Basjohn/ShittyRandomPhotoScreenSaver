@@ -50,24 +50,24 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         wrap: bool = True,
     ) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
 
     def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
@@ -80,6 +80,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     imgur_group = QGroupBox("Imgur Widget")
     style_group_box(imgur_group)
     imgur_layout = QVBoxLayout(imgur_group)
+    imgur_layout.setSpacing(16)
 
     tab.imgur_enabled = QCheckBox("Enable Imgur Widget")
     tab.imgur_enabled.setProperty("circleIndicator", True)
@@ -90,7 +91,8 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     tab._imgur_controls_container = QWidget()
     _imgur_ctl = QVBoxLayout(tab._imgur_controls_container)
-    _imgur_ctl.setContentsMargins(0, 0, 0, 0)
+    _imgur_ctl.setContentsMargins(0, 0, 0, 12)
+    _imgur_ctl.setSpacing(12)
 
     imgur_info = QLabel(
         "Displays curated images from Imgur. Click images to open in browser."

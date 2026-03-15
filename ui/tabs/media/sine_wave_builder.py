@@ -58,8 +58,8 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._sine_advanced_host = QWidget()
     _adv_host = QVBoxLayout(tab._sine_advanced_host)
-    _adv_host.setContentsMargins(0, 0, 0, 0)
-    _adv_host.setSpacing(8)
+    _adv_host.setContentsMargins(0, 0, 0, 12)
+    _adv_host.setSpacing(12)
     sine_layout.addWidget(tab._sine_advanced_host)
 
     _adv_toggle_row = QHBoxLayout()
@@ -126,7 +126,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setContentsMargins(0, 8, 0, 8)
         row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
@@ -145,7 +145,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     ) -> tuple[QWidget, QHBoxLayout, QLabel]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setContentsMargins(0, 8, 0, 8)
         row_layout.setSpacing(12)
         label = add_swatch_label(row_layout, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
@@ -525,7 +525,10 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_travel_line2.addItems(["None", "Left", "Right"])
     tab.sine_travel_line2.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line2', 0))))
     tab.sine_travel_line2.currentIndexChanged.connect(tab._save_settings)
-    sine_l2_travel_col.addWidget(tab.sine_travel_line2)
+    sine_l2_travel_align = QHBoxLayout()
+    sine_l2_travel_align.addStretch()
+    sine_l2_travel_align.addWidget(tab.sine_travel_line2)
+    sine_l2_travel_col.addLayout(sine_l2_travel_align)
     sine_l2_row.addLayout(sine_l2_travel_col)
 
     sine_l2_row.addStretch()
@@ -584,7 +587,10 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_travel_line3.addItems(["None", "Left", "Right"])
     tab.sine_travel_line3.setCurrentIndex(max(0, min(2, tab._default_int('spotify_visualizer', 'sine_travel_line3', 0))))
     tab.sine_travel_line3.currentIndexChanged.connect(tab._save_settings)
-    sine_l3_travel_col.addWidget(tab.sine_travel_line3)
+    sine_l3_travel_align = QHBoxLayout()
+    sine_l3_travel_align.addStretch()
+    sine_l3_travel_align.addWidget(tab.sine_travel_line3)
+    sine_l3_travel_col.addLayout(sine_l3_travel_align)
     sine_l3_content.addLayout(sine_l3_travel_col)
 
     sine_l3_content.addStretch()

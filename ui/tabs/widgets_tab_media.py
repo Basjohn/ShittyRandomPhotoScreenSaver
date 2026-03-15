@@ -143,24 +143,24 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         wrap: bool = True,
     ) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
 
     def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
@@ -174,6 +174,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_group = QGroupBox("Media Widget")
     style_group_box(media_group)
     media_layout = QVBoxLayout(media_group)
+    media_layout.setSpacing(16)
 
     tab.media_enabled = QCheckBox("Enable Media Widget")
     tab.media_enabled.setProperty("circleIndicator", True)
@@ -222,8 +223,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Container for all media controls gated by enable checkbox
     tab._media_controls_container = QWidget()
     _media_ctrl_layout = QVBoxLayout(tab._media_controls_container)
-    _media_ctrl_layout.setContentsMargins(0, 0, 0, 0)
-    _media_ctrl_layout.setSpacing(4)
+    _media_ctrl_layout.setContentsMargins(0, 0, 0, 12)
+    _media_ctrl_layout.setSpacing(12)
 
     media_pos_row = _aligned_row(_media_ctrl_layout, "Position:")
     tab.media_position = StyledComboBox()
@@ -306,8 +307,8 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Background sub-controls container (shown only when show_background is checked)
     tab._media_bg_container = QWidget()
     _mbg_layout = QVBoxLayout(tab._media_bg_container)
-    _mbg_layout.setContentsMargins(0, 0, 0, 0)
-    _mbg_layout.setSpacing(4)
+    _mbg_layout.setContentsMargins(0, 0, 0, 12)
+    _mbg_layout.setSpacing(12)
 
     tab.media_intense_shadow = QCheckBox("Intense Shadows")
     tab.media_intense_shadow.setProperty("circleIndicator", True)

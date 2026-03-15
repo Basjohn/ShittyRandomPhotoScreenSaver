@@ -310,6 +310,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     weather_opacity_row.addWidget(tab.weather_opacity_label)
 
     weather_bg_color_row = _swatch_row(_bg_layout, "Background Color:")
+    weather_bg_color_row.setSpacing(12)
     tab.weather_bg_color_btn = ColorSwatchButton(title="Choose Weather Background Color")
     tab.weather_bg_color_btn.set_color(tab._weather_bg_color)
     tab.weather_bg_color_btn.color_changed.connect(
@@ -319,6 +320,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     weather_bg_color_row.addStretch()
 
     weather_border_color_row = _swatch_row(_bg_layout, "Border Color:")
+    weather_border_color_row.setSpacing(12)
     tab.weather_border_color_btn = ColorSwatchButton(title="Choose Weather Border Color")
     tab.weather_border_color_btn.set_color(tab._weather_border_color)
     tab.weather_border_color_btn.color_changed.connect(

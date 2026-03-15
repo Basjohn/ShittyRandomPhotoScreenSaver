@@ -57,24 +57,24 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         wrap: bool = True,
     ) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
 
     def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
         row = QHBoxLayout()
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
         add_swatch_label(row, label_text, LABEL_WIDTH)
         content = QHBoxLayout()
         content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(6)
+        content.setSpacing(12)
         row.addLayout(content, 1)
         parent.addLayout(row)
         return content
@@ -102,7 +102,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # All controls below are wrapped in a container gated by reddit_enabled
     tab._reddit_controls_container = QWidget()
     _rc_layout = QVBoxLayout(tab._reddit_controls_container)
-    _rc_layout.setContentsMargins(0, 0, 0, 0)
+    _rc_layout.setContentsMargins(0, 0, 0, 12)
     _rc_layout.setSpacing(12)
 
     reddit_info = QLabel(

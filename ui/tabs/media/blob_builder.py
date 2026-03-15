@@ -33,6 +33,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._blob_settings_container = QWidget()
     blob_layout = QVBoxLayout(tab._blob_settings_container)
     blob_layout.setContentsMargins(0, 0, 0, 0)
+    blob_layout.setSpacing(12)
 
     # --- Preset slider ---
     tab._blob_preset_slider = VisualizerPresetSlider("blob")
@@ -45,13 +46,13 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._blob_normal = QWidget()
     normal_layout = QVBoxLayout(tab._blob_normal)
     normal_layout.setContentsMargins(0, 0, 0, 0)
-    normal_layout.setSpacing(6)
+    normal_layout.setSpacing(12)
     blob_layout.addWidget(tab._blob_normal)
 
     def _aligned_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setContentsMargins(0, 8, 0, 8)
         row_layout.setSpacing(12)
         add_section_label(row_layout, label_text, LABEL_WIDTH)
         inner = QHBoxLayout()
@@ -63,7 +64,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _swatch_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget = QWidget()
         row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 6, 0, 6)
+        row_layout.setContentsMargins(0, 8, 0, 8)
         row_layout.setSpacing(12)
         add_swatch_label(row_layout, label_text, LABEL_WIDTH)
         inner = QHBoxLayout()
@@ -153,7 +154,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # Card size grouping (width, blob scale, height via build_blob_growth)
     tab._blob_card_size_layout = QVBoxLayout()
-    tab._blob_card_size_layout.setSpacing(4)
+    tab._blob_card_size_layout.setSpacing(12)
     normal_layout.addLayout(tab._blob_card_size_layout)
 
     width_widget, width_layout = _aligned_row("Card Width:")
@@ -190,12 +191,12 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # --- Advanced host (toggle + helper + controls) ---
     tab._blob_advanced_host = QWidget()
     host_layout = QVBoxLayout(tab._blob_advanced_host)
-    host_layout.setContentsMargins(0, 0, 0, 0)
-    host_layout.setSpacing(4)
+    host_layout.setContentsMargins(0, 0, 0, 12)
+    host_layout.setSpacing(12)
 
     toggle_row = QHBoxLayout()
     toggle_row.setContentsMargins(0, 0, 0, 0)
-    toggle_row.setSpacing(4)
+    toggle_row.setSpacing(8)
     tab._blob_adv_toggle = QToolButton()
     tab._blob_adv_toggle.setText("Advanced")
     tab._blob_adv_toggle.setCheckable(True)
@@ -222,7 +223,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._blob_advanced = QWidget()
     adv_layout = QVBoxLayout(tab._blob_advanced)
     adv_layout.setContentsMargins(0, 0, 0, 0)
-    adv_layout.setSpacing(4)
+    adv_layout.setSpacing(12)
     host_layout.addWidget(tab._blob_advanced)
 
     blob_layout.addWidget(tab._blob_advanced_host)
@@ -318,8 +319,8 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._blob_ghost_sub = QWidget()
     _ghost_layout = QVBoxLayout(tab._blob_ghost_sub)
-    _ghost_layout.setContentsMargins(0, 0, 0, 0)
-    _ghost_layout.setSpacing(4)
+    _ghost_layout.setContentsMargins(0, 0, 0, 12)
+    _ghost_layout.setSpacing(12)
 
     ghost_opa_w, ghost_opa_l = _aligned_row("Ghost Opacity:")
     tab.blob_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
