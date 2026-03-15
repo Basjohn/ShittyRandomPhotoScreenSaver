@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from PySide6.QtCore import QObject, QEvent, QRect, QRectF, Qt
+from PySide6.QtCore import QObject, QEvent, QPoint, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
 
@@ -20,10 +20,12 @@ class ComboKnobOverlay(QWidget):
     _VERTICAL_MARGIN = 3.0
     _VERTICAL_OFFSET = 5.5
     _MIN_CLEARANCE = 2.0
+    _CLIP_GUARD = 1.0  # pixel padding so antialiased edge never hits widget bounds
 
-    def __init__(self, parent: QWidget) -> None:
+    def __init__(self, host: QWidget) -> None:
+        parent = host.window() if host.window() is not None else host
         super().__init__(parent)
-        self._host_ref = parent
+        self._host = host
         self._state: KnobState = "normal"
         self._paint_rect = QRectF()
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
@@ -76,7 +78,7 @@ class ComboKnobOverlay(QWidget):
         painter.drawEllipse(rect)
 
     def _resolve_color(self) -> QColor:
-        host = self._host_ref
+        host = getattr(self, "_host", None)
         if host is None or not host.isEnabled():
             return QColor("#6a6a6a")
         if self._state == "pressed":
@@ -159,30 +161,35 @@ class ComboKnobController(QObject):
         )
         diameter = max(8.0, diameter)  # guard for very small combos
 
-        dynamic_offset = min(
-            self._overlay._VERTICAL_OFFSET,
-            max(3.2, host_rect.height() * 0.13),
-        )
+        is_hero_width = host_rect.width() >= 180
+        if is_hero_width:
+            dynamic_offset = self._overlay._VERTICAL_OFFSET
+        else:
+            dynamic_offset = min(
+                self._overlay._VERTICAL_OFFSET - 3.0,
+                max(1.5, host_rect.height() * 0.075),
+            )
 
-        x = host_rect.width() - diameter - self._overlay._RIGHT_PADDING
-        y = (host_rect.height() - diameter) / 2 - dynamic_offset
+        x_host = host_rect.width() - diameter - self._overlay._RIGHT_PADDING
+        y_host = (host_rect.height() - diameter) / 2 - dynamic_offset
 
-        if y < self._overlay._MIN_CLEARANCE:
-            y = self._overlay._MIN_CLEARANCE
-        elif y + diameter > host_rect.height() - self._overlay._MIN_CLEARANCE:
-            y = host_rect.height() - diameter - self._overlay._MIN_CLEARANCE
+        parent = self._overlay.parentWidget()
+        if parent is None:
+            return
 
-        if host_rect.width() <= diameter:
-            x = host_rect.width() - diameter
+        host_top_left: QPoint = self._host.mapTo(parent, QPoint(0, 0))
+        x = host_top_left.x() + x_host
+        y = host_top_left.y() + y_host
 
         geom = QRectF(x, y, diameter, diameter)
+        guard = self._overlay._CLIP_GUARD
         self._overlay.setGeometry(
-            int(round(geom.x())),
-            int(round(geom.y())),
-            max(1, int(round(geom.width()))),
-            max(1, int(round(geom.height()))),
+            int(round(geom.x() - guard)),
+            int(round(geom.y() - guard)),
+            max(1, int(round(geom.width() + guard * 2))),
+            max(1, int(round(geom.height() + guard * 2))),
         )
-        self._overlay.set_paint_rect(QRectF(0.0, 0.0, geom.width(), geom.height()))
+        self._overlay.set_paint_rect(QRectF(guard, guard, geom.width(), geom.height()))
         self._overlay.raise_()
 
     def _update_state(self) -> None:
