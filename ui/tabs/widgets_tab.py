@@ -18,7 +18,7 @@ from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QComboBox, QCheckBox, QPushButton, QSpinBox,
-    QScrollArea, QButtonGroup, QToolButton,
+    QScrollArea, QButtonGroup, QGroupBox,
 )
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
@@ -38,6 +38,7 @@ from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
     SCROLL_AREA_STYLE,
     NoWheelSlider,  # noqa: F401 — re-exported
+    style_group_box,
 )
 from ui.styled_popup import StyledColorPicker
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
@@ -379,77 +380,7 @@ class WidgetsTab(QWidget):
         title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
 
-        # Global widget options — collapsible with triangle toggle
-        _global_defaults_host = QWidget()
-        _global_host_layout = QVBoxLayout(_global_defaults_host)
-        _global_host_layout.setContentsMargins(0, 0, 0, 0)
-        _global_host_layout.setSpacing(4)
-
-        _global_toggle_row = QHBoxLayout()
-        _global_toggle_row.setContentsMargins(0, 0, 0, 0)
-        _global_toggle_row.setSpacing(6)
-        self._global_defaults_toggle = QToolButton()
-        self._global_defaults_toggle.setText("Global Widget Defaults")
-        self._global_defaults_toggle.setCheckable(True)
-        _gwd_expanded = bool(self._settings.get('ui.global_widget_defaults_expanded', True))
-        self._global_defaults_toggle.setChecked(_gwd_expanded)
-        self._global_defaults_toggle.setArrowType(Qt.DownArrow if _gwd_expanded else Qt.RightArrow)
-        self._global_defaults_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self._global_defaults_toggle.setAutoRaise(True)
-        self._global_defaults_toggle.setStyleSheet(
-            "QToolButton { font-weight: 800; font-size: 15px; letter-spacing: 0.5px; }"
-        )
-        _global_toggle_row.addWidget(self._global_defaults_toggle)
-        _global_toggle_row.addStretch()
-        _global_host_layout.addLayout(_global_toggle_row)
-
-        _global_content = QWidget()
-        _global_content_layout = QVBoxLayout(_global_content)
-        _global_content_layout.setContentsMargins(16, 8, 16, 8)
-        _global_content_layout.setSpacing(10)
-
-        global_row = QHBoxLayout()
-        self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
-        self.widget_shadows_enabled.setProperty("circleIndicator", True)
-        self.widget_shadows_enabled.setChecked(self._default_bool('shadows', 'enabled', True))
-        self.widget_shadows_enabled.setToolTip(
-            "Applies a subtle bottom-right drop shadow to overlay widgets (clocks, "
-            "weather, media) when enabled."
-        )
-        self.widget_shadows_enabled.stateChanged.connect(self._save_settings)
-        global_row.addWidget(self.widget_shadows_enabled)
-
-        global_row.addSpacing(20)
-        border_label = QLabel("Card Border Width (px)")
-        border_label.setStyleSheet(SECTION_HEADING_STYLE)
-        global_row.addWidget(border_label)
-
-        self.card_border_width_spin = QSpinBox()
-        self.card_border_width_spin.setRange(0, 12)
-        self.card_border_width_spin.setValue(self._global_card_border_width)
-        self.card_border_width_spin.setToolTip(
-            "Controls the border thickness for all widget cards (media, clock, Reddit, etc.)."
-        )
-        self.card_border_width_spin.valueChanged.connect(self._on_global_border_width_changed)
-        global_row.addWidget(self.card_border_width_spin)
-
-        global_row.addStretch()
-        _global_content_layout.addLayout(global_row)
-        _global_host_layout.addWidget(_global_content)
-        _global_content.setVisible(_gwd_expanded)
-
-        def _toggle_global_defaults(checked: bool) -> None:
-            self._global_defaults_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-            _global_content.setVisible(checked)
-            try:
-                self._settings.set('ui.global_widget_defaults_expanded', checked)
-            except Exception:
-                pass
-
-        self._global_defaults_toggle.toggled.connect(_toggle_global_defaults)
-        layout.addWidget(_global_defaults_host)
-
-        # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit)
+        # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit / Defaults)
         subtab_row = QHBoxLayout()
         self._subtab_group = QButtonGroup(self)
         self._subtab_group.setExclusive(True)
@@ -459,6 +390,7 @@ class WidgetsTab(QWidget):
         self._btn_media = QPushButton("Media")
         self._btn_visualizers = QPushButton("Visualizers")
         self._btn_reddit = QPushButton("Reddit")
+        self._btn_defaults = QPushButton("Defaults")
         
         # Imgur button - gated by SRPSS_ENABLE_DEV
         if dev_features_enabled:
@@ -497,6 +429,7 @@ class WidgetsTab(QWidget):
             self._btn_media,
             self._btn_visualizers,
             self._btn_reddit,
+            self._btn_defaults,
         ]
         if dev_features_enabled:
             buttons.append(self._btn_imgur)
@@ -544,6 +477,9 @@ class WidgetsTab(QWidget):
         self._perf_log("build_reddit_ui", section_start)
         layout.addWidget(self._reddit_container)
 
+        self._defaults_container = self._build_defaults_section()
+        layout.addWidget(self._defaults_container)
+
         # NOTE: Gmail widget removed - archived in archive/gmail_feature/
 
         # Imgur widget group - gated by SRPSS_ENABLE_DEV
@@ -574,6 +510,17 @@ class WidgetsTab(QWidget):
         )
 
         # Default to "Clocks" subtab
+        self._subtab_containers: list[QWidget | None] = [
+            self._clocks_container,
+            self._weather_container,
+            self._media_container,
+            self._visualizers_container,
+            self._reddit_container,
+            self._defaults_container,
+        ]
+        if dev_features_enabled and hasattr(self, '_imgur_container'):
+            self._subtab_containers.append(self._imgur_container)
+
         self._on_subtab_changed(0)
         self._perf_log("_setup_ui_sections", perf_scope)
 
@@ -589,24 +536,61 @@ class WidgetsTab(QWidget):
                 pass
 
         self._current_subtab = int(subtab_id)
-        try:
-            self._clocks_container.setVisible(subtab_id == 0)
-            self._weather_container.setVisible(subtab_id == 1)
-            self._media_container.setVisible(subtab_id == 2)
-            self._visualizers_container.setVisible(subtab_id == 3)
-            self._reddit_container.setVisible(subtab_id == 4)
-            imgur_container = getattr(self, '_imgur_container', None)
-            if imgur_container is not None:
-                imgur_container.setVisible(subtab_id == 5)
-        except Exception:
-            # If containers are not yet initialized, ignore
-            pass
+        for idx, container in enumerate(self._subtab_containers):
+            if container is None:
+                continue
+            try:
+                container.setVisible(subtab_id == idx)
+            except Exception:
+                pass
 
         # Restore incoming subtab scroll position (deferred so layout settles)
         if sa is not None and subtab_id in self._subtab_scroll_cache:
             saved = self._subtab_scroll_cache[subtab_id]
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: sa.verticalScrollBar().setValue(saved))
+
+    def _build_defaults_section(self) -> QWidget:
+        """Create the Defaults subtab content styled like other groups."""
+
+        group = QGroupBox("Global Widget Defaults")
+        style_group_box(group)
+        content_layout = QVBoxLayout(group)
+        content_layout.setContentsMargins(18, 16, 18, 16)
+        content_layout.setSpacing(12)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(12)
+
+        self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
+        self.widget_shadows_enabled.setProperty("circleIndicator", True)
+        self.widget_shadows_enabled.setToolTip(
+            "Applies a subtle drop shadow to every widget card when enabled."
+        )
+        self.widget_shadows_enabled.setChecked(
+            self._default_bool('shadows', 'enabled', True)
+        )
+        self.widget_shadows_enabled.stateChanged.connect(self._save_settings)
+        row.addWidget(self.widget_shadows_enabled)
+
+        row.addSpacing(12)
+        border_label = QLabel("Card Border Width (px)")
+        border_label.setStyleSheet(SECTION_HEADING_STYLE)
+        row.addWidget(border_label)
+
+        self.card_border_width_spin = QSpinBox()
+        self.card_border_width_spin.setRange(0, 12)
+        self.card_border_width_spin.setValue(self._global_card_border_width)
+        self.card_border_width_spin.valueChanged.connect(
+            self._on_global_border_width_changed
+        )
+        row.addWidget(self.card_border_width_spin)
+
+        row.addStretch()
+        content_layout.addLayout(row)
+
+        return group
 
     def _perf_log(self, label: str, start_time: float) -> None:
         if not is_perf_metrics_enabled():
