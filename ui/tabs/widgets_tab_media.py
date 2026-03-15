@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox,
     QSlider, QWidget, QPushButton,
-    QStackedLayout, QSizePolicy,
+    QGraphicsDropShadowEffect, QSizePolicy,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -24,8 +24,7 @@ from ui.tabs.shared_styles import (
     add_section_label,
     add_swatch_label,
     style_group_box,
-    FORM_LABEL_STYLE,
-    FORM_LABEL_HEIGHT,
+    LABEL_WIDTH,  # Promoted to module-level constant
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.settings_binding import (
@@ -135,8 +134,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     Returns the media container widget.
     """
     from ui.tabs.widgets_tab import NoWheelSlider
-
-    LABEL_WIDTH = 140
 
     def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -454,7 +451,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     """Build the Visualizers widget UI section (separate toggle)."""
 
-    from ui.tabs.widgets_tab import NoWheelSlider, _RainbowGlowLabel
+    from ui.tabs.widgets_tab import NoWheelSlider
 
     visualizers_group = QGroupBox("Visualizers")
     style_group_box(visualizers_group)
@@ -507,63 +504,51 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab._rainbow_per_mode: dict = {}
     rainbow_row = QHBoxLayout()
     rainbow_row.setContentsMargins(0, 0, 0, 0)
-    rainbow_row.setSpacing(12)
+    rainbow_row.setSpacing(6)
     rainbow_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-    rainbow_toggle_container = QWidget()
-    rainbow_toggle_container.setFixedHeight(FORM_LABEL_HEIGHT)
-    rainbow_toggle_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    toggle_layout = QHBoxLayout(rainbow_toggle_container)
-    toggle_layout.setContentsMargins(0, 0, 0, 0)
-    toggle_layout.setSpacing(10)
-
-    tab.rainbow_enabled = QCheckBox()
+    tab.rainbow_enabled = QCheckBox("Taste The Rainbow")
     tab.rainbow_enabled.setProperty("circleIndicator", True)
-    tab.rainbow_enabled.setText("")
     tab.rainbow_enabled.setAccessibleName("Taste The Rainbow")
     tab.rainbow_enabled.setToolTip(
         "Slowly shift the hue of visualiser colours through the spectrum. "
         "Saved independently per visualizer mode."
     )
     tab.rainbow_enabled.setChecked(False)
+    tab.rainbow_enabled.setCursor(Qt.CursorShape.PointingHandCursor)
     tab.rainbow_enabled.stateChanged.connect(tab._save_settings)
     tab.rainbow_enabled.stateChanged.connect(
         lambda _: tab._update_rainbow_visibility()
     )
     tab.rainbow_enabled.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-    toggle_layout.addWidget(tab.rainbow_enabled)
+    rainbow_row.addWidget(tab.rainbow_enabled)
 
-    rainbow_label_wrapper = QWidget()
-    rainbow_label_wrapper.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-    rainbow_label_wrapper.setFixedHeight(FORM_LABEL_HEIGHT)
-    rainbow_stack = QStackedLayout(rainbow_label_wrapper)
-    rainbow_stack.setContentsMargins(0, 0, 0, 0)
-    rainbow_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
-    rainbow_plain_label = QLabel("Taste The Rainbow")
-    rainbow_plain_label.setStyleSheet(FORM_LABEL_STYLE)
-    rainbow_plain_label.setMinimumHeight(FORM_LABEL_HEIGHT)
-    rainbow_plain_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
-    rainbow_plain_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    rainbow_stack.addWidget(rainbow_plain_label)
-    rainbow_glow_label = _RainbowGlowLabel(rainbow_label_wrapper, left_pad=0)
-    rainbow_glow_label.setMinimumHeight(FORM_LABEL_HEIGHT)
-    rainbow_glow_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    rainbow_stack.addWidget(rainbow_glow_label)
-    rainbow_stack.setCurrentWidget(rainbow_plain_label)
-    tab._rainbow_label_stack = rainbow_stack
-    tab._rainbow_plain_label = rainbow_plain_label
-    tab._rainbow_glow_label = rainbow_glow_label
-    toggle_layout.addWidget(rainbow_label_wrapper, 1)
-    rainbow_row.addWidget(rainbow_toggle_container)
+    glow_effect = QGraphicsDropShadowEffect(tab.rainbow_enabled)
+    glow_effect.setColor(QColor(255, 255, 255, 160))
+    glow_effect.setBlurRadius(26.0)
+    glow_effect.setOffset(0, 0)
+    glow_effect.setEnabled(False)
+    tab.rainbow_enabled.setGraphicsEffect(glow_effect)
+
+    tab._rainbow_plain_label = tab.rainbow_enabled
+    tab._rainbow_glow_effect = glow_effect
+    tab._rainbow_label_stack = None
+    tab._rainbow_glow_label = None
+
     rainbow_row.addStretch()
     _svctl.addLayout(rainbow_row)
 
     # Rainbow speed slider (conditional on checkbox)
     tab._rainbow_speed_container = QWidget()
     _rsc_layout = QHBoxLayout(tab._rainbow_speed_container)
-    _rsc_layout.setContentsMargins(20, 0, 0, 0)
-    _rsc_layout.setSpacing(4)
-    add_section_label(_rsc_layout, "Speed:")
+    _rsc_layout.setContentsMargins(0, 0, 0, 0)
+    _rsc_layout.setSpacing(6)
+    add_section_label(_rsc_layout, "Speed:", LABEL_WIDTH)
+
+    speed_content = QHBoxLayout()
+    speed_content.setContentsMargins(0, 0, 0, 0)
+    speed_content.setSpacing(6)
+    _rsc_layout.addLayout(speed_content, 1)
     tab.rainbow_speed_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.rainbow_speed_slider.setRange(1, 100)
     tab.rainbow_speed_slider.setValue(50)
@@ -573,14 +558,20 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.rainbow_speed_slider.valueChanged.connect(
         lambda v: tab.rainbow_speed_label.setText(f"{v / 100.0:.2f}")
     )
-    _rsc_layout.addWidget(tab.rainbow_speed_slider)
-    _rsc_layout.addWidget(tab.rainbow_speed_label)
+    speed_content.addWidget(tab.rainbow_speed_slider, 1)
+    speed_content.addWidget(tab.rainbow_speed_label)
     _svctl.addWidget(tab._rainbow_speed_container)
     tab._rainbow_speed_container.setVisible(False)
 
     # --- Visualizer Type Selector ---
     vis_type_row = QHBoxLayout()
-    add_section_label(vis_type_row, "Visualizer Type:")
+    vis_type_row.setContentsMargins(0, 0, 0, 0)
+    vis_type_row.setSpacing(6)
+    vis_type_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+    add_section_label(vis_type_row, "Visualizer Type:", LABEL_WIDTH)
+    vis_type_content = QHBoxLayout()
+    vis_type_content.setContentsMargins(9, 0, 0, 0)
+    vis_type_content.setSpacing(6)
     tab.vis_mode_combo = StyledComboBox(size_variant="hero")
     tab.vis_mode_combo.setMinimumWidth(160)
     import os as _os
@@ -604,8 +595,9 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.vis_mode_combo.currentIndexChanged.connect(
         lambda _: tab._update_vis_mode_sections()
     )
-    vis_type_row.addWidget(tab.vis_mode_combo)
-    vis_type_row.addStretch()
+    vis_type_content.addWidget(tab.vis_mode_combo)
+    vis_type_content.addStretch()
+    vis_type_row.addLayout(vis_type_content, 1)
     _svctl.addLayout(vis_type_row)
 
     # ==========================================

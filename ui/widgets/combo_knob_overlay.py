@@ -1,41 +1,33 @@
 """Self-contained overlay that paints the StyledComboBox knob crisply at runtime."""
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Literal
 
-from PySide6.QtCore import QObject, QEvent, QRect, QRectF, QSizeF, Qt
-from PySide6.QtGui import QColor, QLinearGradient, QPainter
-from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtCore import QObject, QEvent, QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QWidget
-
-from core.logging.logger import get_logger
 
 KnobState = Literal["normal", "hover", "pressed", "disabled"]
 
-_logger = get_logger(__name__)
-
 
 class ComboKnobOverlay(QWidget):
-    """Renders the reference knob by cropping the original SVG."""
+    """Paints a single circular indicator matching the spinbox dots."""
 
-    _DESIGN_SIZE = QSizeF(355.43, 71.02)
-    _KNOB_SLICE = QRectF(312.0, 14.0, 30.0, 38.0)
-    _SVG_DIR = Path(__file__).resolve().parents[2] / "images" / "svg"
-    _SVG_FILES = {
-        "normal": "ComboboxNOHover.svg",
-        "hover": "ComboboxHOVER.svg",
-    }
-    _renderers: dict[str, QSvgRenderer | None] = {}
+    _SPINBOX_DOT_DIAMETER = 10.0
+    _DOT_SCALE = 1.2  # 20% larger than spinbox dots
+    _DOT_DIAMETER = _SPINBOX_DOT_DIAMETER * _DOT_SCALE
+    _RIGHT_PADDING = 14.0
+    _VERTICAL_MARGIN = 3.0
+    _VERTICAL_OFFSET = 5.0
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
+        self._host_ref = parent
         self._state: KnobState = "normal"
         self._paint_rect = QRectF()
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self._ensure_renderers()
 
     # ------------------------------------------------------------------
     # Public API
@@ -65,53 +57,32 @@ class ComboKnobOverlay(QWidget):
             QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform,
             True,
         )
-
-        renderer_key = "hover" if self._state in {"hover", "pressed"} else "normal"
-        renderer = self._renderers.get(renderer_key)
-
-        if renderer is None:
-            self._paint_fallback(painter)
-            return
-
-        if self._state == "disabled":
-            painter.setOpacity(0.45)
-        renderer.render(painter, self._paint_rect)
+        self._paint_custom_knob(painter, self._paint_rect)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    @classmethod
-    def _ensure_renderers(cls) -> None:
-        if cls._renderers:
-            return
-        for state, filename in cls._SVG_FILES.items():
-            path = cls._SVG_DIR / filename
-            if not path.exists():
-                _logger.error("Knob SVG missing: %s", path)
-                cls._renderers[state] = None
-                continue
-            renderer = QSvgRenderer(str(path))
-            renderer.setViewBox(cls._KNOB_SLICE)
-            cls._renderers[state] = renderer
-
-    def _paint_fallback(self, painter: QPainter) -> None:
-        rect = self._paint_rect
+    def _paint_custom_knob(self, painter: QPainter, rect: QRectF) -> None:
         if rect.isEmpty():
             return
-        radius = rect.height() * 0.5
-        shadow_rect = rect.translated(rect.width() * 0.05, rect.height() * 0.08)
+
+        painter.setRenderHints(
+            QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform,
+            True,
+        )
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 210))
-        painter.drawRoundedRect(shadow_rect, radius, radius)
-        painter.setBrush(QColor("#7c7c7c"))
-        painter.drawRoundedRect(rect, radius, radius)
-        highlight = rect.adjusted(1.0, 1.0, -1.0, -2.0)
-        gradient = QLinearGradient(highlight.topLeft(), highlight.bottomLeft())
-        gradient.setColorAt(0.0, QColor(255, 255, 255, 50))
-        gradient.setColorAt(0.6, QColor(120, 120, 120, 60))
-        gradient.setColorAt(1.0, QColor(0, 0, 0, 110))
-        painter.setBrush(gradient)
-        painter.drawRoundedRect(highlight, radius * 0.85, radius * 0.85)
+        painter.setBrush(self._resolve_color())
+        painter.drawEllipse(rect)
+
+    def _resolve_color(self) -> QColor:
+        host = self._host_ref
+        if host is None or not host.isEnabled():
+            return QColor("#6a6a6a")
+        if self._state == "pressed":
+            return QColor("#2d2d2d")
+        if self._state == "hover":
+            return QColor("#4d4d4d")
+        return QColor("#ffffff")
 
 
 class ComboKnobController(QObject):
@@ -181,24 +152,24 @@ class ComboKnobController(QObject):
         if host_rect.height() <= 0:
             return
 
-        design = ComboKnobOverlay._DESIGN_SIZE
-        slice_rect = ComboKnobOverlay._KNOB_SLICE
-        scale = host_rect.height() / design.height()
+        diameter = min(
+            self._overlay._DOT_DIAMETER,
+            host_rect.height() - (self._overlay._VERTICAL_MARGIN * 2),
+        )
+        diameter = max(8.0, diameter)  # guard for very small combos
 
-        knob_width = slice_rect.width() * scale
-        knob_height = slice_rect.height() * scale
-        right_margin = (design.width() - (slice_rect.left() + slice_rect.width())) * scale
-        top_margin = slice_rect.top() * scale
+        x = host_rect.width() - diameter - self._overlay._RIGHT_PADDING
+        y = (host_rect.height() - diameter) / 2 - self._overlay._VERTICAL_OFFSET
 
-        x = host_rect.width() - knob_width - right_margin - 2
-        y = top_margin - 6
+        if y < 0.0:
+            y = 0.0
+        elif y + diameter > host_rect.height():
+            y = host_rect.height() - diameter
 
-        if host_rect.width() <= knob_width:
-            x = host_rect.width() - knob_width
-        x = max(0.0, x)
-        y = max(0.0, min(y, host_rect.height() - knob_height))
+        if host_rect.width() <= diameter:
+            x = host_rect.width() - diameter
 
-        geom = QRectF(x, y, knob_width, knob_height)
+        geom = QRectF(x, y, diameter, diameter)
         self._overlay.setGeometry(
             int(round(geom.x())),
             int(round(geom.y())),

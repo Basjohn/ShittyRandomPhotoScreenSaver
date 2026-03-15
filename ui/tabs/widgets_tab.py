@@ -1276,17 +1276,19 @@ class WidgetsTab(QWidget):
             container = getattr(self, '_rainbow_speed_container', None)
             if container is not None:
                 container.setVisible(enabled)
-            label_stack = getattr(self, '_rainbow_label_stack', None)
-            glow_label = getattr(self, '_rainbow_glow_label', None)
+
+            glow_effect = getattr(self, '_rainbow_glow_effect', None)
+            if glow_effect is not None:
+                glow_effect.setEnabled(enabled)
+
             plain_label = getattr(self, '_rainbow_plain_label', None)
-            if enabled:
-                if glow_label is not None and plain_label is not None:
-                    glow_label.set_rainbow_text(plain_label.text(), self._RAINBOW_COLORS)
-                if label_stack is not None and glow_label is not None:
-                    label_stack.setCurrentWidget(glow_label)
-            else:
-                if label_stack is not None and plain_label is not None:
-                    label_stack.setCurrentWidget(plain_label)
+            if plain_label is not None:
+                palette = plain_label.palette()
+                color = QColor("#ffffff")
+                if enabled:
+                    color = QColor("#f7f7f7")
+                palette.setColor(plain_label.foregroundRole(), color)
+                plain_label.setPalette(palette)
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 

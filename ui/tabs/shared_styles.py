@@ -42,6 +42,7 @@ def ensure_custom_fonts() -> None:
 
 FORM_LABEL_HEIGHT = 34
 SWATCH_LABEL_HEIGHT = 34
+LABEL_WIDTH = 140
 
 _last_moved_slider: weakref.ref | None = None
 
@@ -50,13 +51,13 @@ FORM_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
     "font-weight: 600;"
     "font-size: 14px;"
-    "letter-spacing: 0.35px;"
+    "letter-spacing: 0.4px;"
     "color: #ffffff;"
     f"min-height: {FORM_LABEL_HEIGHT}px;"
     "line-height: 34px;"
     "padding-top: 0px;"
-    "padding-bottom: 0px;"
-    "margin-top: 0px;"
+    "padding-bottom: 1px;"
+    "margin-top: -1px;"
     "margin-bottom: 0px;"
     "qproperty-alignment: AlignVCenter;"
 )
@@ -70,8 +71,8 @@ FORM_LABEL_STYLE_DISABLED = (
     f"min-height: {FORM_LABEL_HEIGHT}px;"
     "line-height: 34px;"
     "padding-top: 0px;"
-    "padding-bottom: 0px;"
-    "margin-top: 0px;"
+    "padding-bottom: 1px;"
+    "margin-top: -1px;"
     "margin-bottom: 0px;"
     "qproperty-alignment: AlignVCenter;"
 )
@@ -272,6 +273,12 @@ QCheckBox[circleIndicator='true'] {
     min-height: 34px;
 }
 
+QCheckBox[circleIndicator='true'][tightSpacing='true'] {
+    spacing: 6px;
+    padding: 4px 12px 4px 0px;
+    min-height: 34px;
+}
+
 QCheckBox[circleIndicator='true']::indicator {
     width: 22px;
     height: 22px;
@@ -280,6 +287,10 @@ QCheckBox[circleIndicator='true']::indicator {
     border: none;
     background: transparent;
     image: none;
+}
+
+QCheckBox[circleIndicator='true'][tightSpacing='true']::indicator {
+    margin: 5px 9px 5px 0px;
 }
 
 QCheckBox[circleIndicator='true']::indicator:unchecked {
@@ -313,7 +324,8 @@ COMBOBOX_STYLE = """
 QComboBox[customCombo='true'] {
     min-height: 34px;
     padding: 4px 56px 4px 18px;
-    margin-bottom: 0px;
+    margin-top: 1px;
+    margin-bottom: 10px;
     font-family: 'Jost';
     font-weight: 700;
     font-size: 14px;
@@ -356,6 +368,8 @@ QComboBox[customCombo='true'][comboSize='regular'] {
     min-height: 38px;
     padding: 4px 60px 4px 18px;
     border-radius: 20px;
+    margin-top: 1px;
+    margin-bottom: 10px;
 }
 
 QComboBox[customCombo='true'][comboSize='compact'] {
@@ -364,6 +378,8 @@ QComboBox[customCombo='true'][comboSize='compact'] {
     padding: 3px 52px 3px 16px;
     border-radius: 17px;
     font-size: 13px;
+    margin-top: 2px;
+    margin-bottom: 12px;
 }
 
 QComboBox[customCombo='true'][comboSize='mini'] {
@@ -372,15 +388,19 @@ QComboBox[customCombo='true'][comboSize='mini'] {
     padding: 2px 46px 2px 14px;
     border-radius: 16px;
     font-size: 12px;
+    margin-top: 2px;
+    margin-bottom: 12px;
 }
 
 QComboBox[customCombo='true'][comboSize='hero'] {
-    min-width: 220px;
-    max-width: 340px;
-    min-height: 42px;
-    padding: 5px 60px 5px 22px;
-    border-radius: 22px;
-    font-size: 15px;
+    min-width: 198px;
+    max-width: 306px;
+    min-height: 38px;
+    padding: 3px 54px 5px 20px;
+    border-radius: 20px;
+    font-size: 14px;
+    margin-top: 1px;
+    margin-bottom: 10px;
 }
 """
 
