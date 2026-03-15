@@ -56,14 +56,14 @@ class _RainbowGlowLabel(QWidget):
     """
 
     _GLOW_ALPHA = 60
-    _LEFT_PAD = 38  # 6px padding + 22px indicator + 10px spacing
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, left_pad: int = 38) -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setStyleSheet("background: transparent;")
         self._letters: list[tuple[str, QColor]] = []
+        self._left_pad = left_pad
 
     def set_rainbow_text(self, text: str, hex_colors: list[str]) -> None:
         n = len(hex_colors)
@@ -80,7 +80,7 @@ class _RainbowGlowLabel(QWidget):
         font = self.font()
         fm = QFontMetrics(font)
         y_base = (self.height() + fm.ascent() - fm.descent()) // 2
-        x = self._LEFT_PAD
+        x = self._left_pad
 
         _offsets = ((-1, 0), (1, 0), (0, -1), (0, 1))
 
@@ -1276,30 +1276,17 @@ class WidgetsTab(QWidget):
             container = getattr(self, '_rainbow_speed_container', None)
             if container is not None:
                 container.setVisible(enabled)
-            cb = self.rainbow_enabled
-            plain = "Taste The Rainbow"
+            label_stack = getattr(self, '_rainbow_label_stack', None)
+            glow_label = getattr(self, '_rainbow_glow_label', None)
+            plain_label = getattr(self, '_rainbow_plain_label', None)
             if enabled:
-                cb.setText(plain)
-                cb.setStyleSheet(
-                    cb.styleSheet().split("/* rainbow */")[0]
-                    + "/* rainbow */ QCheckBox { color: transparent; }"
-                )
-                lbl = getattr(self, '_rainbow_label', None)
-                if lbl is None:
-                    lbl = _RainbowGlowLabel(cb)
-                    self._rainbow_label = lbl
-                lbl.set_rainbow_text(plain, self._RAINBOW_COLORS)
-                lbl.move(0, 0)
-                lbl.setMinimumWidth(cb.sizeHint().width())
-                lbl.resize(max(cb.width(), cb.sizeHint().width()), cb.height())
-                lbl.show()
+                if glow_label is not None and plain_label is not None:
+                    glow_label.set_rainbow_text(plain_label.text(), self._RAINBOW_COLORS)
+                if label_stack is not None and glow_label is not None:
+                    label_stack.setCurrentWidget(glow_label)
             else:
-                cb.setText(plain)
-                base = cb.styleSheet().split("/* rainbow */")[0]
-                cb.setStyleSheet(base)
-                lbl = getattr(self, '_rainbow_label', None)
-                if lbl is not None:
-                    lbl.hide()
+                if label_stack is not None and plain_label is not None:
+                    label_stack.setCurrentWidget(plain_label)
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 

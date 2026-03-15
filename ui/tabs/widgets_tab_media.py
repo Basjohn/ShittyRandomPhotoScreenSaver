@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox,
     QSlider, QWidget, QPushButton,
+    QStackedLayout,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
@@ -23,6 +24,8 @@ from ui.tabs.shared_styles import (
     add_section_label,
     add_swatch_label,
     style_group_box,
+    FORM_LABEL_STYLE,
+    FORM_LABEL_HEIGHT,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.settings_binding import (
@@ -451,7 +454,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     """Build the Visualizers widget UI section (separate toggle)."""
 
-    from ui.tabs.widgets_tab import NoWheelSlider
+    from ui.tabs.widgets_tab import NoWheelSlider, _RainbowGlowLabel
 
     visualizers_group = QGroupBox("Visualizers")
     style_group_box(visualizers_group)
@@ -503,8 +506,20 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     # Cache dict: stores {mode: (enabled, speed)} so mode switches are instant.
     tab._rainbow_per_mode: dict = {}
     rainbow_row = QHBoxLayout()
-    tab.rainbow_enabled = QCheckBox("Taste The Rainbow")
+    rainbow_row.setContentsMargins(0, 0, 0, 0)
+    rainbow_row.setSpacing(12)
+    rainbow_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+    rainbow_checkbox_wrapper = QWidget()
+    rainbow_checkbox_wrapper.setMinimumHeight(FORM_LABEL_HEIGHT)
+    checkbox_layout = QHBoxLayout(rainbow_checkbox_wrapper)
+    checkbox_layout.setContentsMargins(0, 0, 0, 0)
+    checkbox_layout.setSpacing(0)
+
+    tab.rainbow_enabled = QCheckBox()
     tab.rainbow_enabled.setProperty("circleIndicator", True)
+    tab.rainbow_enabled.setText("")
+    tab.rainbow_enabled.setAccessibleName("Taste The Rainbow")
     tab.rainbow_enabled.setToolTip(
         "Slowly shift the hue of visualiser colours through the spectrum. "
         "Saved independently per visualizer mode."
@@ -514,7 +529,29 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.rainbow_enabled.stateChanged.connect(
         lambda _: tab._update_rainbow_visibility()
     )
-    rainbow_row.addWidget(tab.rainbow_enabled)
+    checkbox_layout.addWidget(tab.rainbow_enabled)
+    checkbox_layout.addStretch()
+    rainbow_row.addWidget(rainbow_checkbox_wrapper)
+    rainbow_label_wrapper = QWidget()
+    rainbow_label_wrapper.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+    rainbow_label_wrapper.setMinimumHeight(FORM_LABEL_HEIGHT)
+    rainbow_label_wrapper.setContentsMargins(0, 0, 0, 0)
+    rainbow_stack = QStackedLayout(rainbow_label_wrapper)
+    rainbow_stack.setContentsMargins(0, 0, 0, 0)
+    rainbow_stack.setStackingMode(QStackedLayout.StackingMode.StackOne)
+    rainbow_plain_label = QLabel("Taste The Rainbow")
+    rainbow_plain_label.setStyleSheet(FORM_LABEL_STYLE)
+    rainbow_plain_label.setMinimumHeight(FORM_LABEL_HEIGHT)
+    rainbow_plain_label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+    rainbow_stack.addWidget(rainbow_plain_label)
+    rainbow_glow_label = _RainbowGlowLabel(rainbow_label_wrapper, left_pad=0)
+    rainbow_glow_label.setMinimumHeight(FORM_LABEL_HEIGHT)
+    rainbow_stack.addWidget(rainbow_glow_label)
+    rainbow_stack.setCurrentWidget(rainbow_plain_label)
+    tab._rainbow_label_stack = rainbow_stack
+    tab._rainbow_plain_label = rainbow_plain_label
+    tab._rainbow_glow_label = rainbow_glow_label
+    rainbow_row.addWidget(rainbow_label_wrapper, stretch=1)
     rainbow_row.addStretch()
     _svctl.addLayout(rainbow_row)
 

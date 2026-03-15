@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.tabs.shared_styles import SECTION_HEADING_STYLE, ADV_HELPER_LABEL_STYLE
+from ui.tabs.shared_styles import add_section_label, ADV_HELPER_LABEL_STYLE
 from ui.widgets import StyledComboBox
 from ui.tabs.widgets_tab import NoWheelSlider
 
@@ -37,10 +37,7 @@ def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
     row = QHBoxLayout()
     row.setContentsMargins(0, 0, 0, 0)
     row.setSpacing(6)
-    label = QLabel(label_text)
-    label.setStyleSheet(SECTION_HEADING_STYLE)
-    label.setFixedWidth(150)
-    row.addWidget(label)
+    add_section_label(row, label_text, 150)
     content = QHBoxLayout()
     content.setContentsMargins(0, 0, 0, 0)
     content.setSpacing(6)
@@ -53,10 +50,7 @@ def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
     container = QHBoxLayout()
     container.setContentsMargins(0, 0, 0, 0)
     container.setSpacing(6)
-    label = QLabel(label_text)
-    label.setStyleSheet(SECTION_HEADING_STYLE)
-    label.setFixedWidth(150)
-    container.addWidget(label)
+    add_section_label(container, label_text, 150)
     placeholder = QHBoxLayout()
     placeholder.setContentsMargins(0, 0, 0, 0)
     placeholder.setSpacing(6)

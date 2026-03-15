@@ -728,6 +728,8 @@ QGroupBox {
     border-radius: 4px;
     margin-top: 1em;
     padding: 0.5em 0.5em 0.5em 0.5em;
+    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+    font-weight: 800;
 }
 
 QGroupBox::title {
@@ -736,6 +738,10 @@ QGroupBox::title {
     padding: 0 5px;
     /* color-picker: color: #FFFFFF; */
     color: rgba(255, 255, 255, 1.0);
+    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
 }
 
 /* Action buttons */

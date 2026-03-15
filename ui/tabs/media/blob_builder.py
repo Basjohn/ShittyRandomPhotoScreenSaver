@@ -12,7 +12,11 @@ from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_swatch_label
+from ui.tabs.shared_styles import (
+    ADV_HELPER_LABEL_STYLE,
+    add_section_label,
+    add_swatch_label,
+)
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -49,9 +53,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         row_layout = QHBoxLayout(row_widget)
         row_layout.setContentsMargins(0, 0, 0, 0)
         row_layout.setSpacing(6)
-        lbl = QLabel(label_text)
-        lbl.setFixedWidth(LABEL_WIDTH)
-        row_layout.addWidget(lbl)
+        add_section_label(row_layout, label_text, LABEL_WIDTH)
         inner = QHBoxLayout()
         inner.setContentsMargins(0, 0, 0, 0)
         inner.setSpacing(6)

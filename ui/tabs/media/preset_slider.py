@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QPainter, QPen, QPalette
-from ui.tabs.shared_styles import NoWheelSlider, SECTION_HEADING_STYLE
+from ui.tabs.shared_styles import NoWheelSlider, add_section_label
 
 from core.logging.logger import get_logger
 from core.settings.visualizer_presets import (
@@ -113,10 +113,7 @@ class VisualizerPresetSlider(QWidget):
         row = QHBoxLayout()
         row.setSpacing(6)
 
-        lbl = QLabel("Preset:")
-        lbl.setStyleSheet(SECTION_HEADING_STYLE)
-        lbl.setFixedWidth(48)
-        row.addWidget(lbl)
+        add_section_label(row, "Preset:", 48)
 
         self._value_label = QLabel(self._preset_names[0])
         self._value_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)

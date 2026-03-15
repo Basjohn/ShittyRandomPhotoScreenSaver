@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.shared_styles import add_section_label
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -37,8 +38,12 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.setSpacing(4)
     tab._starfield_preset_slider.set_advanced_container(tab._starfield_advanced)
 
+    LABEL_WIDTH = 150
+
     star_speed_row = QHBoxLayout()
-    star_speed_row.addWidget(QLabel("Travel Speed:"))
+    star_speed_row.setContentsMargins(0, 0, 0, 0)
+    star_speed_row.setSpacing(6)
+    add_section_label(star_speed_row, "Travel Speed:", LABEL_WIDTH)
     tab.star_travel_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.star_travel_speed.setMinimum(0)
     tab.star_travel_speed.setMaximum(100)
@@ -56,7 +61,9 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(star_speed_row)
 
     star_react_row = QHBoxLayout()
-    star_react_row.addWidget(QLabel("Bass Reactivity:"))
+    star_react_row.setContentsMargins(0, 0, 0, 0)
+    star_react_row.setSpacing(6)
+    add_section_label(star_react_row, "Bass Reactivity:", LABEL_WIDTH)
     tab.star_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.star_reactivity.setMinimum(0)
     tab.star_reactivity.setMaximum(200)
@@ -74,14 +81,16 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(star_react_row)
 
     nebula_tint_row = QHBoxLayout()
-    nebula_tint_row.addWidget(QLabel("Nebula Tint 1:"))
+    nebula_tint_row.setContentsMargins(0, 0, 0, 0)
+    nebula_tint_row.setSpacing(6)
+    add_section_label(nebula_tint_row, "Nebula Tint 1:", LABEL_WIDTH)
     tab.nebula_tint1_btn = ColorSwatchButton(title="Choose Nebula Tint 1")
     tab.nebula_tint1_btn.set_color(getattr(tab, '_nebula_tint1', None))
     tab.nebula_tint1_btn.color_changed.connect(
         lambda c: (setattr(tab, '_nebula_tint1', c), tab._save_settings())
     )
     nebula_tint_row.addWidget(tab.nebula_tint1_btn)
-    nebula_tint_row.addWidget(QLabel("Tint 2:"))
+    add_section_label(nebula_tint_row, "Tint 2:", 60)
     tab.nebula_tint2_btn = ColorSwatchButton(title="Choose Nebula Tint 2")
     tab.nebula_tint2_btn.set_color(getattr(tab, '_nebula_tint2', None))
     tab.nebula_tint2_btn.color_changed.connect(
@@ -92,7 +101,9 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _adv.addLayout(nebula_tint_row)
 
     nebula_speed_row = QHBoxLayout()
-    nebula_speed_row.addWidget(QLabel("Nebula Cycle:"))
+    nebula_speed_row.setContentsMargins(0, 0, 0, 0)
+    nebula_speed_row.setSpacing(6)
+    add_section_label(nebula_speed_row, "Nebula Cycle:", LABEL_WIDTH)
     tab.nebula_cycle_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.nebula_cycle_speed.setMinimum(0)
     tab.nebula_cycle_speed.setMaximum(100)
@@ -120,7 +131,9 @@ def build_starfield_growth(tab: "WidgetsTab") -> None:
 
     star_layout = tab._starfield_advanced.layout()
     star_growth_row = QHBoxLayout()
-    star_growth_row.addWidget(QLabel("Card Height:"))
+    star_growth_row.setContentsMargins(0, 0, 0, 0)
+    star_growth_row.setSpacing(6)
+    add_section_label(star_growth_row, "Card Height:", 150)
     tab.starfield_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.starfield_growth.setMinimum(100)
     tab.starfield_growth.setMaximum(500)

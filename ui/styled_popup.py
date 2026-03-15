@@ -382,7 +382,7 @@ class ColorSwatchButton(QPushButton):
     color_changed = Signal(QColor)
 
     _MIN_WIDTH = 78
-    _MIN_HEIGHT = 28
+    _MIN_HEIGHT = 34
 
     def __init__(
         self,
@@ -404,8 +404,8 @@ class ColorSwatchButton(QPushButton):
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_Hover)
         self.setMinimumSize(self._MIN_WIDTH, self._MIN_HEIGHT)
-        self.setMaximumHeight(self._MIN_HEIGHT + 6)
-        self.setStyleSheet("border: none; background: transparent; margin-bottom: 12px;")
+        self.setMaximumHeight(self._MIN_HEIGHT + 4)
+        self.setStyleSheet("border: none; background: transparent; margin-bottom: 0px;")
 
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(18)

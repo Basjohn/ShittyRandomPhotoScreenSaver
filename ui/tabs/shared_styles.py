@@ -46,6 +46,37 @@ SWATCH_LABEL_HEIGHT = 28
 _last_moved_slider: weakref.ref | None = None
 
 
+FORM_LABEL_STYLE = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 600;"
+    "font-size: 14px;"
+    "letter-spacing: 0.35px;"
+    "color: #ffffff;"
+    f"min-height: {FORM_LABEL_HEIGHT}px;"
+    "line-height: 32px;"
+    "padding-top: 0px;"
+    "padding-bottom: 0px;"
+    "margin-top: 0px;"
+    "margin-bottom: 0px;"
+    "qproperty-alignment: AlignVCenter;"
+)
+
+FORM_LABEL_STYLE_DISABLED = (
+    "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+    "font-weight: 600;"
+    "font-size: 14px;"
+    "letter-spacing: 0.35px;"
+    "color: #666666;"
+    f"min-height: {FORM_LABEL_HEIGHT}px;"
+    "line-height: 32px;"
+    "padding-top: 0px;"
+    "padding-bottom: 0px;"
+    "margin-top: 0px;"
+    "margin-bottom: 0px;"
+    "qproperty-alignment: AlignVCenter;"
+)
+
+
 def apply_section_heading_style(
     label: QLabel,
     *,
@@ -56,9 +87,10 @@ def apply_section_heading_style(
     """Normalize section heading labels so they align with adjacent controls."""
 
     ensure_custom_fonts()
-    style_sheet = style or (
-        SECTION_HEADING_STYLE_DISABLED if disabled else SECTION_HEADING_STYLE
-    )
+    if style is None:
+        style_sheet = FORM_LABEL_STYLE_DISABLED if disabled else FORM_LABEL_STYLE
+    else:
+        style_sheet = style
     label.setStyleSheet(style_sheet)
     label.setFixedHeight(height if height is not None else FORM_LABEL_HEIGHT)
     label.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
@@ -146,9 +178,9 @@ class NoWheelSlider(QSlider):
 SPINBOX_STYLE = """
 /* Rounded inputs with opaque borders + circular stepper controls */
 QSpinBox, QDoubleSpinBox, QLineEdit, QAbstractSpinBox {
-    min-height: 36px;
+    min-height: 34px;
     padding: 4px 48px 4px 16px;
-    margin-bottom: 14px;
+    margin-bottom: 0px;
     color: #ffffff;
     font-family: 'Jost';
     font-weight: 600;
@@ -279,9 +311,9 @@ QCheckBox[circleIndicator='true']::indicator:disabled:checked {
 COMBOBOX_STYLE = """
 /* StyledComboBox base skin */
 QComboBox[customCombo='true'] {
-    min-height: 38px;
+    min-height: 34px;
     padding: 4px 44px 4px 16px;
-    margin-bottom: 14px;
+    margin-bottom: 0px;
     font-family: 'Jost';
     font-weight: 700;
     font-size: 14px;
@@ -311,29 +343,29 @@ QComboBox[customCombo='true']::down-arrow {
 
 QComboBox[customCombo='true'][comboSize='regular'] {
     min-width: 188px;
-    max-height: 44px;
+    max-height: 40px;
     padding: 4px 48px 4px 16px;
 }
 
 QComboBox[customCombo='true'][comboSize='compact'] {
     min-width: 164px;
-    max-height: 40px;
-    padding: 2px 42px 2px 14px;
+    max-height: 36px;
+    padding: 3px 40px 3px 14px;
     font-size: 13px;
 }
 
 QComboBox[customCombo='true'][comboSize='mini'] {
     min-width: 136px;
-    max-height: 36px;
-    padding: 2px 36px 2px 12px;
+    max-height: 34px;
+    padding: 2px 34px 2px 12px;
     font-size: 12px;
 }
 
 QComboBox[customCombo='true'][comboSize='hero'] {
     min-width: 220px;
     max-width: 340px;
-    max-height: 46px;
-    padding: 6px 54px 6px 18px;
+    max-height: 42px;
+    padding: 5px 52px 5px 18px;
     font-size: 15px;
 }
 """
@@ -385,43 +417,45 @@ PAGE_TITLE_STYLE = (
 
 SECTION_HEADING_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 700;"
-    "font-size: 14px;"
-    "letter-spacing: 0.5px;"
+    "font-weight: 800;"
+    "font-size: 15px;"
+    "letter-spacing: 0.6px;"
     "color: #ffffff;"
-    "min-height: 34px;"
+    f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
+    "line-height: 36px;"
     "padding-top: 0px;"
-    "padding-bottom: 0px;"
-    "margin-top: -12px;"
-    "margin-bottom: 10px;"
+    "padding-bottom: 2px;"
+    "margin-top: -6px;"
+    "margin-bottom: 12px;"
     "qproperty-alignment: AlignVCenter;"
 )
 
 SECTION_HEADING_STYLE_DISABLED = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 700;"
-    "font-size: 14px;"
-    "letter-spacing: 0.5px;"
+    "font-weight: 800;"
+    "font-size: 15px;"
+    "letter-spacing: 0.6px;"
     "color: #666666;"
-    "min-height: 34px;"
+    f"min-height: {FORM_LABEL_HEIGHT + 6}px;"
+    "line-height: 36px;"
     "padding-top: 0px;"
-    "padding-bottom: 0px;"
-    "margin-top: -12px;"
-    "margin-bottom: 10px;"
+    "padding-bottom: 2px;"
+    "margin-top: -6px;"
+    "margin-bottom: 12px;"
     "qproperty-alignment: AlignVCenter;"
 )
 
 SWATCH_LABEL_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
-    "font-weight: 700;"
+    "font-weight: 600;"
     "font-size: 13px;"
     "letter-spacing: 0.4px;"
     "color: #ffffff;"
     f"min-height: {SWATCH_LABEL_HEIGHT}px;"
-    "padding-top: 0px;"
+    "padding-top: 6px;"
     "padding-bottom: 0px;"
-    "margin-top: 2px;"
-    "margin-bottom: 4px;"
+    "margin-top: 0px;"
+    "margin-bottom: 0px;"
     "qproperty-alignment: AlignVCenter;"
 )
 
@@ -432,14 +466,24 @@ SUBSECTION_DIVIDER_STYLE = (
 
 
 def style_group_box(box) -> None:
-    """Apply the subsection border style to a QGroupBox.
+    """Apply the subsection border + title style to a QGroupBox."""
 
-    Only sets border + border-radius per-widget.  All other QGroupBox
-    properties (background, padding, margins, ::title font/color) are
-    inherited from the dialog-level stylesheet in settings_theme.py.
-    Keeping the per-widget rule minimal avoids overriding the theme.
-    """
-    box.setStyleSheet(f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}")
+    box.setStyleSheet(
+        (
+            f"QGroupBox {{{SUBSECTION_DIVIDER_STYLE}}}"
+            "QGroupBox::title {"
+            "  subcontrol-origin: margin;"
+            "  subcontrol-position: top left;"
+            "  padding: 2px 10px;"
+            "  margin-top: 5px;"
+            "  color: #ffffff;"
+            "  font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
+            "  font-weight: 800;"
+            "  font-size: 16px;"
+            "  letter-spacing: 0.6px;"
+            "}"
+        )
+    )
 
 NAV_TAB_FONT_STYLE = (
     "font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';"
@@ -488,6 +532,11 @@ INFO_LABEL_STYLE_DISABLED = (
 
 SLIDER_STYLE = """
 /* Dark glass indented slider with pill-shaped notch handle */
+QSlider {
+    min-height: 34px;
+    margin: 0px;
+}
+
 QSlider::groove:horizontal {
     height: 4px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
