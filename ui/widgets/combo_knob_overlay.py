@@ -161,7 +161,7 @@ class ComboKnobController(QObject):
 
         dynamic_offset = min(
             self._overlay._VERTICAL_OFFSET,
-            max(3.5, host_rect.height() * 0.145),
+            max(3.2, host_rect.height() * 0.13),
         )
 
         x = host_rect.width() - diameter - self._overlay._RIGHT_PADDING
