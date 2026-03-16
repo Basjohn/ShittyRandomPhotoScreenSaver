@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.shared_styles import add_section_label
+from ui.tabs.shared_styles import add_aligned_row_widget as shared_add_aligned_row_widget
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -41,10 +41,15 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     LABEL_WIDTH = 140
 
-    helix_turns_row = QHBoxLayout()
-    helix_turns_row.setContentsMargins(0, 8, 0, 8)
-    helix_turns_row.setSpacing(12)
-    add_section_label(helix_turns_row, "Turns:", LABEL_WIDTH)
+    def _aligned_row(target_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
+        _, content, _ = shared_add_aligned_row_widget(
+            target_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+        )
+        return content
+
+    helix_turns_row = _aligned_row(_adv, "Turns:")
     tab.helix_turns = QSpinBox()
     tab.helix_turns.setRange(2, 12)
     tab.helix_turns.setValue(tab._default_int('spotify_visualizer', 'helix_turns', 4))
@@ -52,7 +57,6 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.helix_turns.valueChanged.connect(tab._save_settings)
     helix_turns_row.addWidget(tab.helix_turns)
     helix_turns_row.addStretch()
-    _adv.addLayout(helix_turns_row)
 
     tab.helix_double = QCheckBox("Double Helix (DNA)")
     tab.helix_double.setProperty("circleIndicator", True)
@@ -61,10 +65,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.helix_double.stateChanged.connect(tab._save_settings)
     _adv.addWidget(tab.helix_double)
 
-    helix_speed_row = QHBoxLayout()
-    helix_speed_row.setContentsMargins(0, 8, 0, 8)
-    helix_speed_row.setSpacing(12)
-    add_section_label(helix_speed_row, "Rotation Speed:", LABEL_WIDTH)
+    helix_speed_row = _aligned_row(_adv, "Rotation Speed:")
     tab.helix_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.helix_speed.setMinimum(0)
     tab.helix_speed.setMaximum(200)
@@ -93,10 +94,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _helix_glow_layout.setContentsMargins(0, 0, 0, 12)
     _helix_glow_layout.setSpacing(12)
 
-    helix_glow_row = QHBoxLayout()
-    helix_glow_row.setContentsMargins(0, 8, 0, 8)
-    helix_glow_row.setSpacing(12)
-    add_section_label(helix_glow_row, "Glow Intensity:", LABEL_WIDTH)
+    helix_glow_row = _aligned_row(_helix_glow_layout, "Glow Intensity:")
     tab.helix_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.helix_glow_intensity.setMinimum(0)
     tab.helix_glow_intensity.setMaximum(100)
@@ -113,10 +111,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     helix_glow_row.addWidget(tab.helix_glow_intensity_label)
     _helix_glow_layout.addLayout(helix_glow_row)
 
-    helix_glow_color_row = QHBoxLayout()
-    helix_glow_color_row.setContentsMargins(0, 8, 0, 8)
-    helix_glow_color_row.setSpacing(12)
-    add_section_label(helix_glow_color_row, "Glow Color:", LABEL_WIDTH)
+    helix_glow_color_row = _aligned_row(_helix_glow_layout, "Glow Color:")
     tab.helix_glow_color_btn = ColorSwatchButton(title="Choose Helix Glow Color")
     tab.helix_glow_color_btn.set_color(getattr(tab, '_helix_glow_color', None))
     tab.helix_glow_color_btn.color_changed.connect(
@@ -140,10 +135,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.helix_glow_enabled.stateChanged.connect(_update_helix_glow_vis)
     _update_helix_glow_vis()
 
-    helix_growth_row = QHBoxLayout()
-    helix_growth_row.setContentsMargins(0, 8, 0, 8)
-    helix_growth_row.setSpacing(12)
-    add_section_label(helix_growth_row, "Card Height:", LABEL_WIDTH)
+    helix_growth_row = _aligned_row(_adv, "Card Height:")
     tab.helix_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.helix_growth.setMinimum(100)
     tab.helix_growth.setMaximum(500)

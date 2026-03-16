@@ -19,7 +19,8 @@ from ui.tabs.shared_styles import (
     SLIDER_STYLE,
     NoWheelSlider,
     style_group_box,
-    add_section_label,
+    add_aligned_row_widget as shared_add_aligned_row_widget,
+    add_aligned_row as shared_add_aligned_row,
 )
 
 logger = get_logger(__name__)
@@ -292,16 +293,12 @@ class AccessibilityTab(QWidget):
         *,
         wrap: bool = True,
     ) -> tuple[QWidget, QHBoxLayout]:
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 8, 0, 8)
-        row_layout.setSpacing(12)
-        add_section_label(row_layout, label_text, self._LABEL_WIDTH, wrap=wrap)
-        content_layout = QHBoxLayout()
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(12)
-        row_layout.addLayout(content_layout, 1)
-        parent_layout.addWidget(row_widget)
+        row_widget, content_layout, _ = shared_add_aligned_row_widget(
+            parent_layout,
+            label_text,
+            label_width=self._LABEL_WIDTH,
+            wrap=wrap,
+        )
         return row_widget, content_layout
 
     def _aligned_row(
@@ -311,8 +308,13 @@ class AccessibilityTab(QWidget):
         *,
         wrap: bool = True,
     ) -> QHBoxLayout:
-        _, content = self._aligned_row_widget(parent_layout, label_text, wrap=wrap)
-        return content
+        content_layout, _ = shared_add_aligned_row(
+            parent_layout,
+            label_text,
+            label_width=self._LABEL_WIDTH,
+            wrap=wrap,
+        )
+        return content_layout
 
     def _add_value_label(
         self,

@@ -32,6 +32,7 @@ from ui.tabs.shared_styles import (
     SLIDER_STYLE,
     SCROLL_AREA_STYLE,
     add_aligned_row,
+    NoWheelSlider,
 )
 
 if TYPE_CHECKING:
@@ -40,7 +41,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-class PresetSlider(QSlider):
+class PresetSlider(NoWheelSlider):
     """Custom slider with discrete notches for presets."""
     
     def __init__(self, parent: Optional[QWidget] = None):
@@ -171,15 +172,11 @@ class PresetsTab(QScrollArea):
         # Spacer
         main_layout.addSpacing(10)
         
-        # Slider section
-        slider_section = QWidget()
-        slider_layout = QVBoxLayout(slider_section)
-        slider_layout.setContentsMargins(0, 0, 0, 0)
-        slider_layout.setSpacing(10)
-        
-        # Slider labels row
-        labels_layout = QHBoxLayout()
-        labels_layout.setContentsMargins(0, 0, 0, 0)
+        # Slider labels row (sits above the slider but aligned with the content column)
+        labels_container = QWidget()
+        labels_container_layout = QHBoxLayout(labels_container)
+        labels_container_layout.setContentsMargins(LABEL_WIDTH + 12, 0, 0, 0)
+        labels_container_layout.setSpacing(0)
         
         # Get ordered presets for labels
         ordered = get_ordered_presets()
@@ -207,12 +204,16 @@ class PresetsTab(QScrollArea):
             
             # Add label with stretch before it (except first)
             if i > 0:
-                labels_layout.addStretch(1)
-            labels_layout.addWidget(label)
+                labels_container_layout.addStretch(1)
+            labels_container_layout.addWidget(label)
         
-        # Final stretch after last label is not needed since it's right-aligned
+        main_layout.addWidget(labels_container)
         
-        slider_layout.addLayout(labels_layout)
+        # Slider section (kept independent so the label column aligns mid-slider)
+        slider_section = QWidget()
+        slider_layout = QVBoxLayout(slider_section)
+        slider_layout.setContentsMargins(0, 0, 0, 0)
+        slider_layout.setSpacing(10)
         
         # The slider
         self._slider = PresetSlider()

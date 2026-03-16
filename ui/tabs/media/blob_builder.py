@@ -14,8 +14,8 @@ from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs.shared_styles import (
     ADV_HELPER_LABEL_STYLE,
-    add_section_label,
     add_swatch_label,
+    add_aligned_row_widget as shared_add_aligned_row_widget,
 )
 
 if TYPE_CHECKING:
@@ -50,15 +50,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     blob_layout.addWidget(tab._blob_normal)
 
     def _aligned_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 8, 0, 8)
-        row_layout.setSpacing(12)
-        add_section_label(row_layout, label_text, LABEL_WIDTH)
-        inner = QHBoxLayout()
-        inner.setContentsMargins(0, 0, 0, 0)
-        inner.setSpacing(12)
-        row_layout.addLayout(inner, 1)
+        row_widget, inner, _ = shared_add_aligned_row_widget(
+            normal_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+        )
         return row_widget, inner
 
     def _swatch_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
