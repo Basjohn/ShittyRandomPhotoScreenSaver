@@ -7,7 +7,15 @@ import weakref
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase
-from PySide6.QtWidgets import QApplication, QLabel, QSlider, QSizePolicy
+from PySide6.QtWidgets import (
+    QApplication,
+    QLabel,
+    QSlider,
+    QSizePolicy,
+    QWidget,
+    QHBoxLayout,
+    QVBoxLayout,
+)
 
 # Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
 # shared_styles is imported before ui/__init__.py. Safe no-op if already loaded.
@@ -195,6 +203,73 @@ def add_swatch_label(
         height=SWATCH_LABEL_HEIGHT,
         wrap=False,
     )
+
+
+def add_aligned_row_widget(
+    parent_layout: QVBoxLayout,
+    label_text: str,
+    *,
+    label_width: int | None = LABEL_WIDTH,
+    wrap: bool = True,
+    margins: tuple[int, int, int, int] = (0, 8, 0, 8),
+    spacing: int = 12,
+    content_margins: tuple[int, int, int, int] = (0, 0, 0, 0),
+    content_spacing: int = 12,
+) -> tuple[QWidget, QHBoxLayout, QLabel]:
+    """Add a form row widget with shared spacing + wrap-aware label."""
+
+    row_widget = QWidget()
+    row_layout = QHBoxLayout(row_widget)
+    row_layout.setContentsMargins(*margins)
+    row_layout.setSpacing(spacing)
+    label = add_section_label(row_layout, label_text, label_width, wrap=wrap)
+    content_layout = QHBoxLayout()
+    content_layout.setContentsMargins(*content_margins)
+    content_layout.setSpacing(content_spacing)
+    row_layout.addLayout(content_layout, 1)
+    parent_layout.addWidget(row_widget)
+    return row_widget, content_layout, label
+
+
+def add_aligned_row(
+    parent_layout: QVBoxLayout,
+    label_text: str,
+    *,
+    label_width: int | None = LABEL_WIDTH,
+    wrap: bool = True,
+    margins: tuple[int, int, int, int] = (0, 8, 0, 8),
+    spacing: int = 12,
+    content_margins: tuple[int, int, int, int] = (0, 0, 0, 0),
+    content_spacing: int = 12,
+) -> tuple[QHBoxLayout, QLabel]:
+    """Convenience wrapper returning just the content row + label."""
+
+    _, content_layout, label = add_aligned_row_widget(
+        parent_layout,
+        label_text,
+        label_width=label_width,
+        wrap=wrap,
+        margins=margins,
+        spacing=spacing,
+        content_margins=content_margins,
+        content_spacing=content_spacing,
+    )
+    return content_layout, label
+
+
+def create_inline_label(
+    text: str,
+    *,
+    alignment: Qt.AlignmentFlag = Qt.AlignmentFlag.AlignLeft
+    | Qt.AlignmentFlag.AlignVCenter,
+    minimum_width: int | None = None,
+) -> QLabel:
+    label = QLabel(text)
+    label.setStyleSheet(FORM_ROW_LABEL_STYLE)
+    if minimum_width is not None:
+        label.setMinimumWidth(minimum_width)
+    label.setAlignment(alignment)
+    return label
 
 
 class NoWheelSlider(QSlider):
@@ -656,15 +731,15 @@ QSlider::handle:horizontal {
     border-radius: 5px;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
-    border: 1px solid #444444;
-    border-bottom-color: rgba(0, 0, 0, 0.6);
+    border: 1px solid #676767;
+    
 }
 
 QSlider::handle:horizontal:hover {
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 #3a3a3a, stop:0.85 #242424, stop:1 #181818);
-    border: 1px solid #555555;
-    border-bottom-color: rgba(0, 0, 0, 0.55);
+    border: 1px solid #999999;
+    
 }
 
 QSlider::handle:horizontal:pressed {
@@ -705,8 +780,7 @@ QSlider[lastMoved="true"]::handle:horizontal {
     height: 6px;
     margin: -4px 0;
     border-radius: 5px;
-    border: 3px solid #101010;
-    border-bottom-color: rgba(0, 0, 0, 0.85);
+    border: 1.5px solid #111111;
     background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
         stop:0 #2e2e2e, stop:0.85 #1a1a1a, stop:1 #111111);
 }

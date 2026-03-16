@@ -31,7 +31,8 @@ class AccessibilityTab(QWidget):
     # Signals
     accessibility_changed = Signal()
     
-    _LABEL_WIDTH = 150
+    _LABEL_WIDTH = 160
+    _VALUE_LABEL_WIDTH = 72
     
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
         """
@@ -74,8 +75,8 @@ class AccessibilityTab(QWidget):
         # Create content widget
         content = QWidget()
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(12)
         
         # Title
         title = QLabel("Accessibility")
@@ -116,6 +117,7 @@ class AccessibilityTab(QWidget):
         group = QGroupBox("Background Dimming")
         style_group_box(group)
         layout = QVBoxLayout(group)
+        layout.setContentsMargins(0, 12, 0, 0)
         layout.setSpacing(12)
         
         # Enable checkbox
@@ -130,7 +132,7 @@ class AccessibilityTab(QWidget):
         layout.addWidget(self.dimming_enabled)
         
         # Opacity slider row
-        opacity_row = self._build_aligned_row(layout, "Dimming Opacity:")
+        opacity_row = self._aligned_row(layout, "Dimming Opacity:")
 
         self.dimming_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.dimming_opacity_slider.setRange(10, 90)  # 10% to 90%
@@ -140,10 +142,7 @@ class AccessibilityTab(QWidget):
         self.dimming_opacity_slider.valueChanged.connect(self._on_dimming_opacity_changed)
         opacity_row.addWidget(self.dimming_opacity_slider, 1)
 
-        self.dimming_opacity_value = QLabel("30%")
-        self.dimming_opacity_value.setMinimumWidth(40)
-        self.dimming_opacity_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        opacity_row.addWidget(self.dimming_opacity_value)
+        self.dimming_opacity_value = self._add_value_label(opacity_row, "30%")
         
         # Description
         dim_desc = QLabel(
@@ -175,7 +174,7 @@ class AccessibilityTab(QWidget):
         layout.addWidget(self.pixel_shift_enabled)
         
         # Shifts per minute slider row
-        shift_row = self._build_aligned_row(layout, "Shifts Per Minute:")
+        shift_row = self._aligned_row(layout, "Shifts Per Minute:")
 
         self.pixel_shift_rate_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.pixel_shift_rate_slider.setRange(1, 5)
@@ -185,10 +184,7 @@ class AccessibilityTab(QWidget):
         self.pixel_shift_rate_slider.valueChanged.connect(self._on_pixel_shift_rate_changed)
         shift_row.addWidget(self.pixel_shift_rate_slider, 1)
 
-        self.pixel_shift_rate_value = QLabel("1")
-        self.pixel_shift_rate_value.setMinimumWidth(30)
-        self.pixel_shift_rate_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        shift_row.addWidget(self.pixel_shift_rate_value)
+        self.pixel_shift_rate_value = self._add_value_label(shift_row, "1")
         
         # Description
         shift_desc = QLabel(
@@ -289,14 +285,46 @@ class AccessibilityTab(QWidget):
         enabled = self.pixel_shift_enabled.isChecked()
         self.pixel_shift_rate_slider.setEnabled(enabled)
 
-    def _build_aligned_row(self, parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 8, 0, 8)
-        row.setSpacing(12)
-        add_section_label(row, label_text, self._LABEL_WIDTH)
-        content = QHBoxLayout()
-        content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(12)
-        row.addLayout(content, 1)
-        parent.addLayout(row)
+    def _aligned_row_widget(
+        self,
+        parent_layout: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ) -> tuple[QWidget, QHBoxLayout]:
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 8, 0, 8)
+        row_layout.setSpacing(12)
+        add_section_label(row_layout, label_text, self._LABEL_WIDTH, wrap=wrap)
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(12)
+        row_layout.addLayout(content_layout, 1)
+        parent_layout.addWidget(row_widget)
+        return row_widget, content_layout
+
+    def _aligned_row(
+        self,
+        parent_layout: QVBoxLayout,
+        label_text: str,
+        *,
+        wrap: bool = True,
+    ) -> QHBoxLayout:
+        _, content = self._aligned_row_widget(parent_layout, label_text, wrap=wrap)
         return content
+
+    def _add_value_label(
+        self,
+        row_layout: QHBoxLayout,
+        text: str,
+        *,
+        width: int | None = None,
+    ) -> QLabel:
+        if width is None:
+            width = self._VALUE_LABEL_WIDTH
+        label = QLabel(text)
+        label.setMinimumWidth(width)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        row_layout.addWidget(label)
+        return label

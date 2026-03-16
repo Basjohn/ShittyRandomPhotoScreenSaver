@@ -25,6 +25,8 @@ from ui.tabs.shared_styles import (
     add_section_label,
     add_swatch_label,
     style_group_box,
+    add_aligned_row,
+    create_inline_label,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 
@@ -49,16 +51,13 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         *,
         wrap: bool = True,
     ) -> QHBoxLayout:
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 8, 0, 8)
-        row.setSpacing(12)
-        add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
-        content = QHBoxLayout()
-        content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(12)
-        row.addLayout(content, 1)
-        parent.addLayout(row)
-        return content
+        row, _ = add_aligned_row(
+            parent,
+            label_text,
+            label_width=LABEL_WIDTH,
+            wrap=wrap,
+        )
+        return row
 
     def _swatch_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -73,9 +72,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         return content
 
     def _inline_label(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setStyleSheet(FORM_ROW_LABEL_STYLE)
-        return label
+        return create_inline_label(text)
 
     imgur_group = QGroupBox("Imgur Widget")
     style_group_box(imgur_group)

@@ -10,7 +10,7 @@ Allows users to configure display settings:
 """
 from typing import Optional, List
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QWidget, QVBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QScrollArea, QComboBox
 )
 from PySide6.QtCore import Signal, Qt
@@ -22,8 +22,8 @@ from ui.tabs.shared_styles import (
     CIRCLE_CHECKBOX_STYLE,
     COMBOBOX_STYLE,
     PAGE_TITLE_STYLE,
-    FORM_ROW_LABEL_STYLE,
-    add_section_label,
+    create_inline_label,
+    add_aligned_row,
     style_group_box,
 )
 from ui.widgets import StyledComboBox
@@ -37,6 +37,7 @@ class DisplayTab(QWidget):
     
     # Signals
     display_changed = Signal()
+    _LABEL_WIDTH = 160
     
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
         """
@@ -75,39 +76,12 @@ class DisplayTab(QWidget):
         scroll.setFrameShape(QScrollArea.NoFrame)
         from ui.tabs.shared_styles import SCROLL_AREA_STYLE
         scroll.setStyleSheet(SCROLL_AREA_STYLE)
-        
-        # Shared alignment helper (fixed-width label column)
-        LABEL_WIDTH = 150
-
-        def _inline_label(text: str) -> QLabel:
-            label = QLabel(text)
-            label.setStyleSheet(FORM_ROW_LABEL_STYLE)
-            return label
-
-        def _aligned_row(
-            parent_layout: QVBoxLayout,
-            label_text: str,
-            *,
-            wrap: bool = True,
-        ) -> QHBoxLayout:
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 6, 0, 6)
-            row.setSpacing(8)
-            label = add_section_label(row, label_text, LABEL_WIDTH, wrap=wrap)
-            if not label_text:
-                label.setText(" ")
-            content = QHBoxLayout()
-            content.setContentsMargins(0, 0, 0, 0)
-            content.setSpacing(12)
-            row.addLayout(content, 1)
-            parent_layout.addLayout(row)
-            return content
 
         # Create content widget
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(22)
+        layout.setSpacing(12)
         
         # Title
         title = QLabel("Display Settings")
@@ -118,10 +92,15 @@ class DisplayTab(QWidget):
         monitor_group = QGroupBox("Monitor Configuration")
         style_group_box(monitor_group)
         monitor_layout = QVBoxLayout(monitor_group)
+        monitor_layout.setContentsMargins(0, 12, 0, 0)
         monitor_layout.setSpacing(12)
 
         # Show On section (per-monitor checkboxes)
-        show_row = _aligned_row(monitor_layout, "Show screensaver on:")
+        show_row, _ = add_aligned_row(
+            monitor_layout,
+            "Show screensaver on:",
+            label_width=self._LABEL_WIDTH,
+        )
         self.show_all_check = QCheckBox("All")
         self.show_all_check.setProperty("circleIndicator", True)
         self.monitor_checks: List[QCheckBox] = [
@@ -140,7 +119,12 @@ class DisplayTab(QWidget):
         show_row.addStretch()
 
         # Same image toggle
-        same_image_row = _aligned_row(monitor_layout, "")
+        same_image_row, _ = add_aligned_row(
+            monitor_layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
         self.same_image_check = QCheckBox("Show same image on all monitors")
         self.same_image_check.setProperty("circleIndicator", True)
         self.same_image_check.setChecked(True)
@@ -154,9 +138,14 @@ class DisplayTab(QWidget):
         mode_group = QGroupBox("Display Mode")
         style_group_box(mode_group)
         mode_layout = QVBoxLayout(mode_group)
+        mode_layout.setContentsMargins(0, 12, 0, 0)
         mode_layout.setSpacing(12)
         
-        mode_row = _aligned_row(mode_layout, "Mode:")
+        mode_row, _ = add_aligned_row(
+            mode_layout,
+            "Mode:",
+            label_width=self._LABEL_WIDTH,
+        )
         self.mode_combo = StyledComboBox(size_variant="hero")
         self.mode_combo.addItems([
             "Fill — Crop to fill",
@@ -173,10 +162,15 @@ class DisplayTab(QWidget):
         timing_group = QGroupBox("Image Timing")
         style_group_box(timing_group)
         timing_layout = QVBoxLayout(timing_group)
+        timing_layout.setContentsMargins(0, 12, 0, 0)
         timing_layout.setSpacing(12)
         
         # Rotation interval
-        interval_row = _aligned_row(timing_layout, "Change image every:")
+        interval_row, _ = add_aligned_row(
+            timing_layout,
+            "Change image every:",
+            label_width=self._LABEL_WIDTH,
+        )
         self.interval_spin = QSpinBox()
         self.interval_spin.setRange(1, 3600)
         self.interval_spin.setSingleStep(1)
@@ -186,11 +180,16 @@ class DisplayTab(QWidget):
         self.interval_spin.valueChanged.connect(self._save_settings)
         self.interval_spin.setFixedWidth(140)
         interval_row.addWidget(self.interval_spin)
-        interval_row.addWidget(_inline_label("seconds"))
+        interval_row.addWidget(create_inline_label("seconds"))
         interval_row.addStretch()
         
         # Shuffle toggle
-        shuffle_row = _aligned_row(timing_layout, "")
+        shuffle_row, _ = add_aligned_row(
+            timing_layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
         self.shuffle_check = QCheckBox("Shuffle images (random order)")
         self.shuffle_check.setProperty("circleIndicator", True)
         self.shuffle_check.setChecked(True)
@@ -204,9 +203,15 @@ class DisplayTab(QWidget):
         quality_group = QGroupBox("Image Quality")
         style_group_box(quality_group)
         quality_layout = QVBoxLayout(quality_group)
+        quality_layout.setContentsMargins(0, 12, 0, 0)
         quality_layout.setSpacing(12)
         
-        lanczos_row = _aligned_row(quality_layout, "")
+        lanczos_row, _ = add_aligned_row(
+            quality_layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
         self.lanczos_check = QCheckBox("Use Lanczos scaling (higher quality, more CPU)")
         self.lanczos_check.setProperty("circleIndicator", True)
         self.lanczos_check.setChecked(True)
@@ -218,7 +223,12 @@ class DisplayTab(QWidget):
         lanczos_row.addWidget(self.lanczos_check)
         lanczos_row.addStretch()
         
-        sharpen_row = _aligned_row(quality_layout, "")
+        sharpen_row, _ = add_aligned_row(
+            quality_layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
         self.sharpen_check = QCheckBox("Apply sharpening filter when downscaling")
         self.sharpen_check.setProperty("circleIndicator", True)
         self.sharpen_check.setChecked(False)
@@ -234,8 +244,14 @@ class DisplayTab(QWidget):
         input_group = QGroupBox("Input && Exit")
         style_group_box(input_group)
         input_layout = QVBoxLayout(input_group)
+        input_layout.setContentsMargins(0, 12, 0, 0)
         input_layout.setSpacing(12)
-        hard_exit_row = _aligned_row(input_layout, "")
+        hard_exit_row, _ = add_aligned_row(
+            input_layout,
+            "",
+            label_width=self._LABEL_WIDTH,
+            wrap=False,
+        )
         self.hard_exit_check = QCheckBox("Hard Exit (ESC only)")
         self.hard_exit_check.setProperty("circleIndicator", True)
         self.hard_exit_check.setToolTip(
@@ -247,7 +263,11 @@ class DisplayTab(QWidget):
         hard_exit_row.addStretch()
 
         # Cursor Halo Shape
-        halo_row = _aligned_row(input_layout, "Cursor Halo Shape:")
+        halo_row, _ = add_aligned_row(
+            input_layout,
+            "Cursor Halo Shape:",
+            label_width=self._LABEL_WIDTH,
+        )
         self.halo_shape_combo = StyledComboBox()
         self.halo_shape_combo.setFixedWidth(192)
         self.halo_shape_combo.setFixedHeight(42)

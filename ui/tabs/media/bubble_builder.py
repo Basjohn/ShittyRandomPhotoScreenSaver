@@ -13,8 +13,9 @@ from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.technical_controls import build_per_mode_technical_group
 from ui.tabs.shared_styles import (
     ADV_HELPER_LABEL_STYLE,
-    add_section_label,
     add_swatch_label,
+    add_aligned_row,
+    add_aligned_row_widget,
 )
 from ui.widgets import StyledComboBox
 
@@ -118,20 +119,21 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         *,
         wrap: bool = True,
     ):
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 8, 0, 8)
-        row_layout.setSpacing(12)
-        add_section_label(row_layout, label_text, LABEL_WIDTH, wrap=wrap)
-        content = QHBoxLayout()
-        content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(12)
-        row_layout.addLayout(content, 1)
-        parent_layout.addWidget(row_widget)
+        row_widget, content, _ = add_aligned_row_widget(
+            parent_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+            wrap=wrap,
+        )
         return row_widget, content
 
     def _aligned_row(parent_layout: QVBoxLayout, label_text: str, *, wrap: bool = True):
-        _, content = _aligned_row_widget(parent_layout, label_text, wrap=wrap)
+        content, _ = add_aligned_row(
+            parent_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+            wrap=wrap,
+        )
         return content
 
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str):

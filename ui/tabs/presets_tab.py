@@ -31,7 +31,7 @@ from ui.tabs.shared_styles import (
     SUBSECTION_DIVIDER_STYLE,
     SLIDER_STYLE,
     SCROLL_AREA_STYLE,
-    add_section_label,
+    add_aligned_row,
 )
 
 if TYPE_CHECKING:
@@ -145,22 +145,10 @@ class PresetsTab(QScrollArea):
         content = QWidget()
         content.setObjectName("presetsTabContent")
         main_layout = QVBoxLayout(content)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(24, 24, 24, 24)
         main_layout.setSpacing(20)
 
-        LABEL_WIDTH = 150
-
-        def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 8, 0, 8)
-            row.setSpacing(12)
-            add_section_label(row, label_text, LABEL_WIDTH, wrap=False)
-            content_row = QHBoxLayout()
-            content_row.setContentsMargins(0, 0, 0, 0)
-            content_row.setSpacing(12)
-            row.addLayout(content_row, 1)
-            parent.addLayout(row)
-            return content_row
+        LABEL_WIDTH = 160
         
         # Get font from widget settings
         font_family = self._settings.get("widgets.clock.font_family", "Segoe UI")
@@ -239,8 +227,13 @@ class PresetsTab(QScrollArea):
         
         slider_layout.addWidget(self._slider)
 
-        slider_row = _aligned_row(main_layout, "Preset Selection:")
+        slider_row, _ = add_aligned_row(
+            main_layout,
+            "Preset Selection:",
+            label_width=LABEL_WIDTH,
+        )
         slider_row.addWidget(slider_section)
+
         
         # Spacer
         main_layout.addSpacing(10)
@@ -259,19 +252,21 @@ class PresetsTab(QScrollArea):
         main_layout.addStretch()
         
         # Bottom right button row
-        button_row = QHBoxLayout()
-        button_row.setContentsMargins(0, 10, 0, 0)
+        button_row, _ = add_aligned_row(
+            main_layout,
+            "",
+            label_width=LABEL_WIDTH,
+            wrap=False,
+        )
         button_row.addStretch()
-        
+
         self._reset_presets_btn = QPushButton("Reset Non-Custom Presets")
         self._reset_presets_btn.setFixedHeight(24)
         self._reset_presets_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
         self._reset_presets_btn.setToolTip("Reset all preset definitions to defaults (preserves Custom preset)")
         self._reset_presets_btn.clicked.connect(self._on_reset_presets_clicked)
         button_row.addWidget(self._reset_presets_btn)
-        
-        main_layout.addLayout(button_row)
-        
+
         self.setWidget(content)
     
     def _load_current_preset(self) -> None:

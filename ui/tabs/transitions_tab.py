@@ -25,10 +25,11 @@ from ui.tabs.shared_styles import (
     SLIDER_STYLE,
     SPINBOX_STYLE,
     PAGE_TITLE_STYLE,
-    NoWheelSlider,
     add_swatch_label,
-    add_section_label,
     style_group_box,
+    add_aligned_row_widget as shared_add_aligned_row_widget,
+    add_aligned_row as shared_add_aligned_row,
+    NoWheelSlider,
 )
 from ui.styled_popup import ColorSwatchButton, StyledColorPicker
 from ui.widgets import StyledComboBox
@@ -82,30 +83,60 @@ class TransitionsTab(QWidget):
         scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
         
         LABEL_WIDTH = 160
+        VALUE_LABEL_WIDTH = 72
 
-        def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 8, 0, 8)
-            row.setSpacing(12)
-            add_section_label(row, label_text, LABEL_WIDTH)
-            content = QHBoxLayout()
-            content.setContentsMargins(0, 0, 0, 0)
-            content.setSpacing(12)
-            row.addLayout(content, 1)
-            parent_layout.addLayout(row)
+        def _aligned_row_widget(
+            parent_layout: QVBoxLayout,
+            label_text: str,
+            *,
+            wrap: bool = True,
+        ) -> tuple[QWidget, QHBoxLayout]:
+            row_widget, content, _ = shared_add_aligned_row_widget(
+                parent_layout,
+                label_text,
+                label_width=LABEL_WIDTH,
+                wrap=wrap,
+            )
+            return row_widget, content
+
+        def _aligned_row(
+            parent_layout: QVBoxLayout,
+            label_text: str,
+            *,
+            wrap: bool = True,
+        ) -> QHBoxLayout:
+            content, _ = shared_add_aligned_row(
+                parent_layout,
+                label_text,
+                label_width=LABEL_WIDTH,
+                wrap=wrap,
+            )
             return content
 
         def _swatch_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 8, 0, 8)
-            row.setSpacing(12)
-            add_swatch_label(row, label_text, LABEL_WIDTH)
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 8, 0, 8)
+            row_layout.setSpacing(12)
+            add_swatch_label(row_layout, label_text, LABEL_WIDTH)
             content = QHBoxLayout()
             content.setContentsMargins(0, 0, 0, 0)
             content.setSpacing(12)
-            row.addLayout(content, 1)
-            parent_layout.addLayout(row)
+            row_layout.addLayout(content, 1)
+            parent_layout.addWidget(row_widget)
             return content
+
+        def _add_value_label(
+            row_layout: QHBoxLayout,
+            text: str,
+            *,
+            width: int = VALUE_LABEL_WIDTH,
+        ) -> QLabel:
+            label = QLabel(text)
+            label.setMinimumWidth(width)
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            row_layout.addWidget(label)
+            return label
 
         def _style_group_box(box: QGroupBox) -> None:
             style_group_box(box)
@@ -125,6 +156,7 @@ class TransitionsTab(QWidget):
         type_group = QGroupBox("Transition Type")
         _style_group_box(type_group)
         type_layout = QVBoxLayout(type_group)
+        type_layout.setContentsMargins(0, 12, 0, 0)
         type_layout.setSpacing(12)
         
         type_row = _aligned_row(type_layout, "Transition:")
@@ -151,7 +183,7 @@ class TransitionsTab(QWidget):
         # transition participates in the engine's random rotation and C-key
         # cycling. Explicit selection via the dropdown remains available
         # regardless of this flag.
-        pool_row = _aligned_row(type_layout, "")
+        pool_row = _aligned_row(type_layout, "", wrap=False)
         self.pool_checkbox = QCheckBox("Include in switch/random pool")
         self.pool_checkbox.setProperty("circleIndicator", True)
         self.pool_checkbox.stateChanged.connect(self._save_settings)
@@ -164,6 +196,7 @@ class TransitionsTab(QWidget):
         duration_group = QGroupBox("Timing")
         _style_group_box(duration_group)
         duration_layout = QVBoxLayout(duration_group)
+        duration_layout.setContentsMargins(0, 12, 0, 0)
         duration_layout.setSpacing(12)
         duration_row = _aligned_row(duration_layout, "Duration (short → long):")
         self.duration_slider = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -173,9 +206,7 @@ class TransitionsTab(QWidget):
         self.duration_slider.setValue(1300)  # BUG FIX #5: Increased from 1000ms (30% slower)
         self.duration_slider.valueChanged.connect(self._on_duration_changed)
         duration_row.addWidget(self.duration_slider, 1)
-        self.duration_value_label = QLabel("1300 ms")
-        self.duration_value_label.setMinimumWidth(80)
-        duration_row.addWidget(self.duration_value_label)
+        self.duration_value_label = _add_value_label(duration_row, "1300 ms", width=86)
         duration_row.addStretch()
         layout.addWidget(duration_group)
         
@@ -183,6 +214,7 @@ class TransitionsTab(QWidget):
         self.direction_group = QGroupBox("Direction")
         _style_group_box(self.direction_group)
         direction_layout = QVBoxLayout(self.direction_group)
+        direction_layout.setContentsMargins(0, 12, 0, 0)
         direction_layout.setSpacing(12)
         
         direction_row = _aligned_row(direction_layout, "Direction:")
@@ -198,6 +230,7 @@ class TransitionsTab(QWidget):
         easing_group = QGroupBox("Easing Curve")
         _style_group_box(easing_group)
         easing_layout = QVBoxLayout(easing_group)
+        easing_layout.setContentsMargins(0, 12, 0, 0)
         easing_layout.setSpacing(12)
         
         easing_row = _aligned_row(easing_layout, "Easing:")
@@ -223,6 +256,7 @@ class TransitionsTab(QWidget):
         self.flip_group = QGroupBox("Block Flip Settings")
         _style_group_box(self.flip_group)
         flip_layout = QVBoxLayout(self.flip_group)
+        flip_layout.setContentsMargins(0, 12, 0, 0)
         
         grid_rows_row = _aligned_row(flip_layout, "Grid Rows:")
         self.grid_rows_spin = QSpinBox()
@@ -263,6 +297,7 @@ class TransitionsTab(QWidget):
         self.blockspin_group = QGroupBox("3D Block Spins Settings")
         _style_group_box(self.blockspin_group)
         blockspin_layout = QVBoxLayout(self.blockspin_group)
+        blockspin_layout.setContentsMargins(0, 12, 0, 0)
 
         bs_row = _aligned_row(blockspin_layout, "Direction:")
         self.blockspin_direction_combo = StyledComboBox()
@@ -285,6 +320,7 @@ class TransitionsTab(QWidget):
         self.blinds_group = QGroupBox("Blinds Settings")
         _style_group_box(self.blinds_group)
         blinds_layout = QVBoxLayout(self.blinds_group)
+        blinds_layout.setContentsMargins(0, 12, 0, 0)
 
         blinds_dir_row = _aligned_row(blinds_layout, "Direction:")
         self.blinds_direction_combo = StyledComboBox(size_variant="compact")
@@ -300,9 +336,7 @@ class TransitionsTab(QWidget):
         self.blinds_feather_slider.setValue(2)
         self.blinds_feather_slider.valueChanged.connect(self._save_settings)
         blinds_feather_row.addWidget(self.blinds_feather_slider, 1)
-        self.blinds_feather_label = QLabel("2")
-        self.blinds_feather_label.setMinimumWidth(50)
-        blinds_feather_row.addWidget(self.blinds_feather_label)
+        self.blinds_feather_label = _add_value_label(blinds_feather_row, "2")
         blinds_feather_row.addStretch()
 
         layout.addWidget(self.blinds_group)
@@ -311,6 +345,7 @@ class TransitionsTab(QWidget):
         self.diffuse_group = QGroupBox("Diffuse Settings")
         _style_group_box(self.diffuse_group)
         diffuse_layout = QVBoxLayout(self.diffuse_group)
+        diffuse_layout.setContentsMargins(0, 12, 0, 0)
 
         block_size_row = _aligned_row(diffuse_layout, "Block Size (px):")
         self.block_size_spin = QSpinBox()
@@ -339,6 +374,7 @@ class TransitionsTab(QWidget):
         self.ripple_group = QGroupBox("Ripple Settings")
         _style_group_box(self.ripple_group)
         ripple_layout = QVBoxLayout(self.ripple_group)
+        ripple_layout.setContentsMargins(0, 12, 0, 0)
 
         ripple_count_row = _aligned_row(ripple_layout, "Ripple Count:")
         self.ripple_count_spin = QSpinBox()
@@ -354,6 +390,7 @@ class TransitionsTab(QWidget):
         self.crumble_group = QGroupBox("Crumble Settings")
         _style_group_box(self.crumble_group)
         crumble_layout = QVBoxLayout(self.crumble_group)
+        crumble_layout.setContentsMargins(0, 12, 0, 0)
 
         crumble_piece_row = _aligned_row(crumble_layout, "Piece Count:")
         self.crumble_piece_count_spin = QSpinBox()
@@ -390,6 +427,7 @@ class TransitionsTab(QWidget):
         self.particle_group = QGroupBox("Particle Settings")
         _style_group_box(self.particle_group)
         particle_layout = QVBoxLayout(self.particle_group)
+        particle_layout.setContentsMargins(0, 12, 0, 0)
 
         particle_mode_row = _aligned_row(particle_layout, "Mode:")
         self.particle_mode_combo = StyledComboBox(size_variant="compact")
@@ -420,7 +458,7 @@ class TransitionsTab(QWidget):
         particle_radius_row.addWidget(self.particle_radius_spin)
         particle_radius_row.addStretch()
 
-        particle_trail_row = _aligned_row(particle_layout, "")
+        particle_trail_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_trail_check = QCheckBox("Motion Trail")
         self.particle_trail_check.setProperty("circleIndicator", True)
         self.particle_trail_check.setChecked(True)
@@ -428,7 +466,7 @@ class TransitionsTab(QWidget):
         particle_trail_row.addWidget(self.particle_trail_check)
         particle_trail_row.addStretch()
 
-        particle_3d_row = _aligned_row(particle_layout, "")
+        particle_3d_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_3d_check = QCheckBox("3D Ball Shading")
         self.particle_3d_check.setProperty("circleIndicator", True)
         self.particle_3d_check.setChecked(True)
@@ -436,7 +474,7 @@ class TransitionsTab(QWidget):
         particle_3d_row.addWidget(self.particle_3d_check)
         particle_3d_row.addStretch()
 
-        particle_texture_row = _aligned_row(particle_layout, "")
+        particle_texture_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_texture_check = QCheckBox("Map Image to Particles")
         self.particle_texture_check.setProperty("circleIndicator", True)
         self.particle_texture_check.setChecked(True)
@@ -444,7 +482,7 @@ class TransitionsTab(QWidget):
         particle_texture_row.addWidget(self.particle_texture_check)
         particle_texture_row.addStretch()
 
-        particle_wobble_row = _aligned_row(particle_layout, "")
+        particle_wobble_row = _aligned_row(particle_layout, "", wrap=False)
         self.particle_wobble_check = QCheckBox("Wobble on Arrival")
         self.particle_wobble_check.setProperty("circleIndicator", True)
         self.particle_wobble_check.setChecked(False)
@@ -500,6 +538,7 @@ class TransitionsTab(QWidget):
         self.burn_group = QGroupBox("Burn Settings")
         _style_group_box(self.burn_group)
         burn_layout = QVBoxLayout(self.burn_group)
+        burn_layout.setContentsMargins(0, 12, 0, 0)
 
         burn_dir_row = _aligned_row(burn_layout, "Direction:")
         self.burn_direction_combo = StyledComboBox(size_variant="compact")
@@ -523,9 +562,7 @@ class TransitionsTab(QWidget):
         self.burn_jaggedness_slider.setToolTip("Edge noise amplitude (0 = smooth wipe, 100 = very jagged)")
         self.burn_jaggedness_slider.valueChanged.connect(self._save_settings)
         burn_jag_row.addWidget(self.burn_jaggedness_slider, 1)
-        self.burn_jaggedness_label = QLabel("50%")
-        self.burn_jaggedness_label.setMinimumWidth(50)
-        burn_jag_row.addWidget(self.burn_jaggedness_label)
+        self.burn_jaggedness_label = _add_value_label(burn_jag_row, "50%")
         self.burn_jaggedness_slider.valueChanged.connect(
             lambda v: self.burn_jaggedness_label.setText(f"{v}%")
         )
@@ -537,9 +574,7 @@ class TransitionsTab(QWidget):
         self.burn_glow_intensity_slider.setToolTip("Warm glow brightness on the burning edge")
         self.burn_glow_intensity_slider.valueChanged.connect(self._save_settings)
         burn_glow_row.addWidget(self.burn_glow_intensity_slider, 1)
-        self.burn_glow_intensity_label = QLabel("70%")
-        self.burn_glow_intensity_label.setMinimumWidth(50)
-        burn_glow_row.addWidget(self.burn_glow_intensity_label)
+        self.burn_glow_intensity_label = _add_value_label(burn_glow_row, "70%")
         self.burn_glow_intensity_slider.valueChanged.connect(
             lambda v: self.burn_glow_intensity_label.setText(f"{v}%")
         )
@@ -551,9 +586,7 @@ class TransitionsTab(QWidget):
         self.burn_char_width_slider.setToolTip("Width of the charred/blackened zone behind the burn front")
         self.burn_char_width_slider.valueChanged.connect(self._save_settings)
         burn_char_row.addWidget(self.burn_char_width_slider, 1)
-        self.burn_char_width_label = QLabel("50%")
-        self.burn_char_width_label.setMinimumWidth(50)
-        burn_char_row.addWidget(self.burn_char_width_label)
+        self.burn_char_width_label = _add_value_label(burn_char_row, "50%")
         self.burn_char_width_slider.valueChanged.connect(
             lambda v: self.burn_char_width_label.setText(f"{v}%")
         )
@@ -570,7 +603,7 @@ class TransitionsTab(QWidget):
         burn_color_row.addWidget(self.burn_glow_color_btn)
         burn_color_row.addStretch()
 
-        burn_smoke_row = _aligned_row(burn_layout, "")
+        burn_smoke_row = _aligned_row(burn_layout, "", wrap=False)
         self.burn_smoke_check = QCheckBox("Sparks")
         self.burn_smoke_check.setProperty("circleIndicator", True)
         self.burn_smoke_check.setChecked(True)
@@ -585,13 +618,12 @@ class TransitionsTab(QWidget):
         self.burn_smoke_density_slider.setValue(50)
         self.burn_smoke_density_slider.valueChanged.connect(self._save_settings)
         burn_smoke_density_row.addWidget(self.burn_smoke_density_slider, 1)
-        self.burn_smoke_density_label = QLabel("50%")
-        burn_smoke_density_row.addWidget(self.burn_smoke_density_label)
+        self.burn_smoke_density_label = _add_value_label(burn_smoke_density_row, "50%")
         self.burn_smoke_density_slider.valueChanged.connect(
             lambda v: self.burn_smoke_density_label.setText(f"{v}%")
         )
 
-        burn_ash_row = _aligned_row(burn_layout, "")
+        burn_ash_row = _aligned_row(burn_layout, "", wrap=False)
         self.burn_ash_check = QCheckBox("Ash Particles")
         self.burn_ash_check.setProperty("circleIndicator", True)
         self.burn_ash_check.setChecked(True)
@@ -606,8 +638,7 @@ class TransitionsTab(QWidget):
         self.burn_ash_density_slider.setValue(50)
         self.burn_ash_density_slider.valueChanged.connect(self._save_settings)
         burn_ash_density_row.addWidget(self.burn_ash_density_slider, 1)
-        self.burn_ash_density_label = QLabel("50%")
-        burn_ash_density_row.addWidget(self.burn_ash_density_label)
+        self.burn_ash_density_label = _add_value_label(burn_ash_density_row, "50%")
         self.burn_ash_density_slider.valueChanged.connect(
             lambda v: self.burn_ash_density_label.setText(f"{v}%")
         )

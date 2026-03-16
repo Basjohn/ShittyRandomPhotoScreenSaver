@@ -10,17 +10,19 @@ from urllib.parse import urlparse, urlunparse
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
     QPushButton, QLineEdit, QFileDialog, QGroupBox, QMessageBox, QCheckBox,
-    QScrollArea, QDialog, QFrame,
+    QScrollArea, QDialog, QFrame, QSizePolicy,
 )
+from PySide6.QtGui import QPainter, QPen, QPalette
 from ui.tabs.shared_styles import (
     NoWheelSlider,
     PAGE_TITLE_STYLE,
     SECTION_HEADING_STYLE,
     SECTION_HEADING_STYLE_DISABLED,
     INFO_LABEL_STYLE,
-    INFO_LABEL_STYLE_DISABLED,
-    add_section_label,
+    add_aligned_row,
     style_group_box,
+    SLIDER_STYLE,
+    create_inline_label,  # Added missing import
 )
 from PySide6.QtCore import Signal, Qt
 
@@ -30,11 +32,52 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 
+class _RatioNotchBar(QWidget):
+    _H_MARGIN = 14
+
+    def __init__(self, notch_count: int = 5, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._notch_count = max(0, notch_count)
+        self.setFixedHeight(10)
+        policy = QSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(policy)
+
+    def set_notch_count(self, count: int) -> None:
+        count = max(0, count)
+        if count == self._notch_count:
+            return
+        self._notch_count = count
+        self.update()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        if self._notch_count <= 1:
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        palette = self.palette()
+        color = palette.color(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text)
+        pen = QPen(color)
+        pen.setWidth(2)
+        painter.setPen(pen)
+        total_width = max(1, self.width() - 1)
+        span = self._notch_count - 1
+        usable = max(0, total_width - 2 * self._H_MARGIN)
+        height = self.height()
+        for i in range(self._notch_count):
+            if span <= 0:
+                x = self._H_MARGIN
+            else:
+                x = self._H_MARGIN + round((i / span) * usable)
+            painter.drawLine(x, 0, x, height)
+        painter.end()
+
+
 class SourcesTab(QWidget):
     """Sources configuration tab."""
     
     # Signals
     sources_changed = Signal()
+    _LABEL_WIDTH = 160
     
     def __init__(self, settings: SettingsManager, parent: Optional[QWidget] = None):
         """
@@ -67,26 +110,12 @@ class SourcesTab(QWidget):
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setFrameShape(QScrollArea.NoFrame)
         from ui.tabs.shared_styles import SCROLL_AREA_STYLE
-        scroll.setStyleSheet(SCROLL_AREA_STYLE)
-        
-        LABEL_WIDTH = 150
-
-        def _aligned_row(parent: QVBoxLayout, label_text: str) -> tuple[QHBoxLayout, QLabel]:
-            row = QHBoxLayout()
-            row.setContentsMargins(0, 8, 0, 8)
-            row.setSpacing(12)
-            label = add_section_label(row, label_text, LABEL_WIDTH)
-            content = QHBoxLayout()
-            content.setContentsMargins(0, 0, 0, 0)
-            content.setSpacing(12)
-            row.addLayout(content, 1)
-            parent.addLayout(row)
-            return content, label
+        scroll.setStyleSheet(SCROLL_AREA_STYLE + SLIDER_STYLE)
 
         content = QWidget()
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
+        layout.setSpacing(12)
         
         # Title
         title = QLabel("Image Sources")
@@ -97,6 +126,7 @@ class SourcesTab(QWidget):
         folder_group = QGroupBox("Folder Sources")
         style_group_box(folder_group)
         folder_layout = QVBoxLayout(folder_group)
+        folder_layout.setContentsMargins(0, 12, 0, 0)
         folder_layout.setSpacing(12)
         
         # Folder list
@@ -122,6 +152,13 @@ class SourcesTab(QWidget):
         
         # Usage Ratio control (between folder and RSS groups)
         # Only interactable when both source types are configured
+        ratio_row, self.ratio_label = add_aligned_row(
+            layout,
+            "Usage Ratio:",
+            label_width=self._LABEL_WIDTH,
+        )
+        self.ratio_label.setContentsMargins(0, 16, 0, 0)
+
         self.ratio_frame = QFrame()
         self.ratio_frame.setObjectName("ratioFrame")
         self.ratio_frame.setStyleSheet("""
@@ -129,54 +166,46 @@ class SourcesTab(QWidget):
                 background-color: #2a2a2a;
                 border: 1px solid #3a3a3a;
                 border-radius: 6px;
-                padding: 8px;
+                padding: 6px 10px;
             }
         """)
-        ratio_layout = QHBoxLayout(self.ratio_frame)
-        ratio_layout.setContentsMargins(12, 4, 12, 4)
-        ratio_layout.setSpacing(12)
+        frame_layout = QHBoxLayout(self.ratio_frame)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.setSpacing(12)
 
-        # Local percentage display label (read-only)
-        self.local_ratio_label = QLabel("70% Local")
-        self.local_ratio_label.setMinimumWidth(70)
-        self.local_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
-        self.local_ratio_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        ratio_layout.addWidget(self.local_ratio_label)
-        
-        # Slider is the ONLY control for adjusting ratio
+        self.local_ratio_label = create_inline_label("70% Local")
+        self.local_ratio_label.setMinimumWidth(100)
+        self.local_ratio_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        frame_layout.addWidget(self.local_ratio_label)
+
+        slider_column = QVBoxLayout()
+        slider_column.setContentsMargins(0, 3, 0, 0)
+        slider_column.setSpacing(2)
+
         self.ratio_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         self.ratio_slider.setRange(0, 100)
-        self.ratio_slider.setMinimumWidth(200)
-        self.ratio_slider.setObjectName("sourcesRatioSlider")
-        self.ratio_slider.setStyleSheet(
-            "NoWheelSlider#sourcesRatioSlider { min-height: 22px; margin: 0px; }"
-            "NoWheelSlider#sourcesRatioSlider::handle:horizontal { margin-top: -2px; margin-bottom: -2px; }"
-        )
+        self.ratio_slider.setObjectName("presetModeSlider")
         self.ratio_slider.setToolTip("Drag to adjust the balance between local and RSS sources")
         self.ratio_slider.valueChanged.connect(self._on_ratio_slider_changed)
-        ratio_layout.addWidget(self.ratio_slider)
-        
-        # RSS percentage display label (read-only)
-        self.rss_ratio_label = QLabel("40% RSS")
-        self.rss_ratio_label.setMinimumWidth(70)
-        self.rss_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
-        self.rss_ratio_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        ratio_layout.addWidget(self.rss_ratio_label)
-        
-        ratio_layout.addStretch()
+        slider_column.addWidget(self.ratio_slider)
 
-        ratio_row, self.ratio_label = _aligned_row(layout, "Usage Ratio:")
-        ratio_row.addWidget(
-            self.ratio_frame,
-            1,
-            alignment=Qt.AlignmentFlag.AlignVCenter,
-        )
+        self._ratio_notch_bar = _RatioNotchBar(5)
+        slider_column.addWidget(self._ratio_notch_bar)
+        frame_layout.addLayout(slider_column, 1)
+
+        self.rss_ratio_label = create_inline_label("40% RSS")
+        self.rss_ratio_label.setMinimumWidth(100)
+        self.rss_ratio_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        frame_layout.addWidget(self.rss_ratio_label)
+
+        ratio_row.addWidget(self.ratio_frame, 1)
 
         
         # RSS sources group
         rss_group = QGroupBox("RSS / JSON Feed Sources")
         style_group_box(rss_group)
         rss_layout = QVBoxLayout(rss_group)
+        rss_layout.setContentsMargins(0, 12, 0, 0)
         rss_layout.setSpacing(12)
         
         # Suggestion label (session-local; updated by "Just Make It Work")
@@ -248,7 +277,11 @@ class SourcesTab(QWidget):
         rss_layout.addWidget(self.rss_save_to_disk)
         
         # RSS save directory (hidden by default)
-        save_dir_row, self.rss_save_dir_label = _aligned_row(rss_layout, "Save Directory:")
+        save_dir_row, self.rss_save_dir_label = add_aligned_row(
+            rss_layout,
+            "Save Directory:",
+            label_width=self._LABEL_WIDTH,
+        )
         self.rss_save_dir_input = QLineEdit()
         self.rss_save_dir_input.setReadOnly(True)
         self.rss_save_dir_input.setPlaceholderText("No directory selected...")
@@ -712,8 +745,6 @@ class SourcesTab(QWidget):
                 }
             """)
             self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE)
-            self.local_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
-            self.rss_ratio_label.setStyleSheet(INFO_LABEL_STYLE)
         else:
             self.ratio_frame.setStyleSheet("""
                 #ratioFrame {
@@ -724,8 +755,8 @@ class SourcesTab(QWidget):
                 }
             """)
             self.ratio_label.setStyleSheet(SECTION_HEADING_STYLE_DISABLED)
-            self.local_ratio_label.setStyleSheet(INFO_LABEL_STYLE_DISABLED)
-            self.rss_ratio_label.setStyleSheet(INFO_LABEL_STYLE_DISABLED)
+        self.local_ratio_label.setEnabled(both_available)
+        self.rss_ratio_label.setEnabled(both_available)
     
     def _on_ratio_slider_changed(self, value: int) -> None:
         """Handle ratio slider change - the only control for adjusting ratio."""

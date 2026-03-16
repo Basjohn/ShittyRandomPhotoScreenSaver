@@ -38,6 +38,7 @@ from ui.tabs.shared_styles import (
     SCROLL_AREA_STYLE,
     FORM_ROW_LABEL_STYLE,
     add_section_label,
+    add_aligned_row,
     NoWheelSlider,  # noqa: F401 — re-exported
     style_group_box,
 )
@@ -562,10 +563,10 @@ class WidgetsTab(QWidget):
         content_layout.setContentsMargins(18, 16, 18, 16)
         content_layout.setSpacing(12)
 
+        # Drop shadow toggle row
         row = QHBoxLayout()
         row.setContentsMargins(0, 8, 0, 8)
         row.setSpacing(12)
-
         self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
         self.widget_shadows_enabled.setProperty("circleIndicator", True)
         self.widget_shadows_enabled.setToolTip(
@@ -576,11 +577,16 @@ class WidgetsTab(QWidget):
         )
         self.widget_shadows_enabled.stateChanged.connect(self._save_settings)
         row.addWidget(self.widget_shadows_enabled)
+        row.addStretch()
+        content_layout.addLayout(row)
 
-        border_row = QHBoxLayout()
-        border_row.setContentsMargins(0, 0, 0, 0)
-        border_row.setSpacing(12)
-        add_section_label(border_row, "Card Border Width:", LABEL_WIDTH, wrap=False)
+        # Card border width row (aligned helper to keep wrap + gutter)
+        border_row, _ = add_aligned_row(
+            content_layout,
+            "Card Border Width:",
+            label_width=LABEL_WIDTH,
+            wrap=False,
+        )
 
         self.card_border_width_spin = QSpinBox()
         self.card_border_width_spin.setRange(0, 12)
@@ -594,10 +600,7 @@ class WidgetsTab(QWidget):
         px_label.setStyleSheet(FORM_ROW_LABEL_STYLE)
         px_label.setMinimumWidth(24)
         border_row.addWidget(px_label)
-
-        row.addLayout(border_row)
-        row.addStretch()
-        content_layout.addLayout(row)
+        border_row.addStretch()
 
         return group
 
