@@ -67,7 +67,6 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.star_travel_speed_label.setText(f"{v / 100.0:.2f}")
     )
     star_speed_row.addWidget(tab.star_travel_speed_label)
-    _adv.addLayout(star_speed_row)
 
     star_react_row = _aligned_row(_adv, "Bass Reactivity:")
     tab.star_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -84,7 +83,6 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.star_reactivity_label.setText(f"{v / 100.0:.2f}x")
     )
     star_react_row.addWidget(tab.star_reactivity_label)
-    _adv.addLayout(star_react_row)
 
     nebula_tint_row = _aligned_row(_adv, "Nebula Tint 1:")
     tab.nebula_tint1_btn = ColorSwatchButton(title="Choose Nebula Tint 1")
@@ -105,7 +103,6 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     nebula_tint_row.addWidget(tab.nebula_tint2_btn)
     nebula_tint_row.addStretch()
-    _adv.addLayout(nebula_tint_row)
 
     nebula_speed_row = _aligned_row(_adv, "Nebula Cycle:")
     tab.nebula_cycle_speed = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -123,7 +120,6 @@ def build_starfield_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.nebula_cycle_speed_label.setText(f"{v}%")
     )
     nebula_speed_row.addWidget(tab.nebula_cycle_speed_label)
-    _adv.addLayout(nebula_speed_row)
 
     star_layout.addWidget(tab._starfield_advanced)
     parent_layout.addWidget(tab._starfield_settings_container)
@@ -153,4 +149,3 @@ def build_starfield_growth(tab: "WidgetsTab") -> None:
         lambda v: tab.starfield_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     star_growth_row.addWidget(tab.starfield_growth_label)
-    star_layout.addLayout(star_growth_row)

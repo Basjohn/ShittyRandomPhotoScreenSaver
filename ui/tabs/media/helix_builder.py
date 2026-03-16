@@ -80,7 +80,6 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.helix_speed_label.setText(f"{v / 100.0:.2f}x")
     )
     helix_speed_row.addWidget(tab.helix_speed_label)
-    _adv.addLayout(helix_speed_row)
 
     tab.helix_glow_enabled = QCheckBox("Enable Glow")
     tab.helix_glow_enabled.setProperty("circleIndicator", True)
@@ -109,7 +108,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.helix_glow_intensity_label.setText(f"{v}%")
     )
     helix_glow_row.addWidget(tab.helix_glow_intensity_label)
-    _helix_glow_layout.addLayout(helix_glow_row)
+    # shared aligned rows already attach themselves to _helix_glow_layout
 
     helix_glow_color_row = _aligned_row(_helix_glow_layout, "Glow Color:")
     tab.helix_glow_color_btn = ColorSwatchButton(title="Choose Helix Glow Color")
@@ -119,7 +118,7 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     helix_glow_color_row.addWidget(tab.helix_glow_color_btn)
     helix_glow_color_row.addStretch()
-    _helix_glow_layout.addLayout(helix_glow_color_row)
+    # row already added by helper
 
     tab.helix_reactive_glow = QCheckBox("Reactive Glow")
     tab.helix_reactive_glow.setProperty("circleIndicator", True)
@@ -150,7 +149,6 @@ def build_helix_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.helix_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     helix_growth_row.addWidget(tab.helix_growth_label)
-    _adv.addLayout(helix_growth_row)
 
     helix_layout.addWidget(tab._helix_advanced)
     parent_layout.addWidget(tab._helix_settings_container)

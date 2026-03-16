@@ -1158,12 +1158,9 @@ class TransitionsTab(QWidget):
             'type': cur_type,
             'duration_ms': cur_duration,
             'easing': self.easing_combo.currentText(),
-            'random_always': SettingsManager.to_bool(
-                (self._settings.get('transitions', {}) or {}).get('random_always', False), False
-            ),
             'block_flip': {
                 'rows': self.grid_rows_spin.value(),
-                'cols': self.grid_cols_spin.value(),
+                'columns': self.grid_cols_spin.value(),
                 'direction': self.blockflip_direction_combo.currentText(),
             },
             'blinds': {
@@ -1229,11 +1226,6 @@ class TransitionsTab(QWidget):
         }
         
         self._settings.set('transitions', config)
-
-        if not config['random_always']:
-            # Manual selection requires clearing any cached random choice so DisplayWidget honors explicit type
-            self._settings.remove('transitions.random_choice')
-            self._settings.remove('transitions.last_random_choice')
 
         self._settings.save()
         self.transitions_changed.emit()
