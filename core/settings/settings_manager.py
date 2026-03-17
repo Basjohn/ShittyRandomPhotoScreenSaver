@@ -1,6 +1,7 @@
 """Settings manager implementation for screensaver."""
 from typing import Any, Callable, Dict, List, Mapping, Optional
 from copy import deepcopy
+import math
 import threading
 import sys
 import json
@@ -21,6 +22,8 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
     _MISSING = object()
+    _MANUAL_FLOOR_MIN = 0.12
+    _MANUAL_FLOOR_MAX = 1.0
     
     def __init__(
         self,
@@ -363,7 +366,7 @@ class SettingsManager(QObject):
             Setting value or default
         """
         with self._lock:
-            # Check cache first (P2 optimization from architectural audit)
+            # Check cache first (P2 optimization)
             cache_key = f"{key}:{id(default)}"
             if self._cache_enabled and cache_key in self._cache:
                 return self._cache[cache_key]
@@ -772,7 +775,11 @@ class SettingsManager(QObject):
                     logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
                     self._settings.setValue('widgets', {})
                 repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
-            
+            elif isinstance(widgets, Mapping):
+                clamp_repairs = self._clamp_visualizer_manual_floors(widgets)
+                if clamp_repairs:
+                    repairs.update(clamp_repairs)
+
             # Validate transitions - must be dict
             transitions = self._settings.value('transitions')
             if transitions is not None and not isinstance(transitions, Mapping):
@@ -795,6 +802,45 @@ class SettingsManager(QObject):
             else:
                 logger.debug("Settings validation passed - no repairs needed")
         
+        return repairs
+
+    def _clamp_visualizer_manual_floors(self, widgets_map: Mapping[str, Any]) -> Dict[str, str]:
+        """Clamp spotify visualizer manual floor values within the supported range."""
+
+        vis_section = widgets_map.get('spotify_visualizer')  # type: ignore[index]
+        if not isinstance(vis_section, Mapping):
+            return {}
+
+        vis_config = dict(vis_section)
+        widgets_copy = dict(widgets_map)
+        repairs: Dict[str, str] = {}
+        changed = False
+
+        for key, value in list(vis_config.items()):
+            if not key.endswith('manual_floor'):
+                continue
+
+            needs_cast = not isinstance(value, (int, float))
+            try:
+                numeric_value = float(value)
+            except (TypeError, ValueError):
+                numeric_value = self._MANUAL_FLOOR_MIN
+                needs_cast = True
+
+            clamped = min(max(numeric_value, self._MANUAL_FLOOR_MIN), self._MANUAL_FLOOR_MAX)
+            requires_update = needs_cast or not math.isclose(numeric_value, clamped, rel_tol=1e-9, abs_tol=1e-9)
+
+            if requires_update:
+                vis_config[key] = clamped
+                changed = True
+                repairs[f"widgets.spotify_visualizer.{key}"] = (
+                    f"Manual floor normalized to {clamped:.2f} (range {self._MANUAL_FLOOR_MIN:.2f}-{self._MANUAL_FLOOR_MAX:.2f})"
+                )
+
+        if changed:
+            widgets_copy['spotify_visualizer'] = vis_config
+            self._settings.setValue('widgets', widgets_copy)
+
         return repairs
     
     def backup_settings(self, backup_path: Optional[Path] = None) -> Optional[Path]:

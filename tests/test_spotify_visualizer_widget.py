@@ -109,7 +109,7 @@ def test_floor_config_api_exists(np_module):
     worker = _make_audio_worker(np_module)
     
     # API should exist and not raise
-    worker.set_floor_config(dynamic_enabled=True, manual_floor=2.1)
+    worker.set_floor_config(dynamic_enabled=True, manual_floor=0.12)
     assert worker._use_dynamic_floor is True
     
     worker.set_floor_config(dynamic_enabled=False, manual_floor=0.5)
@@ -130,7 +130,7 @@ class _FakeEngine:
         self._audio_buffer = object()
         self._audio_worker = object()
         self._bars_result_buffer = object()
-        self.last_floor_config = (True, 2.1)
+        self.last_floor_config = (True, 0.12)
         self.last_sensitivity_config = (True, 1.0)
         self.thread_manager = None
         self.acquired = 0
@@ -235,7 +235,7 @@ def test_spotify_visualizer_replays_config_on_start(qt_app, qtbot, monkeypatch):
     widget.set_sensitivity_config(recommended=False, sensitivity=2.4)
 
     # Simulate the engine forgetting the config before start (e.g., after restart).
-    fake_engine.last_floor_config = (True, 2.1)
+    fake_engine.last_floor_config = (True, 0.12)
     fake_engine.last_sensitivity_config = (True, 1.0)
 
     widget.start()

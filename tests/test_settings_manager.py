@@ -7,6 +7,8 @@ import time
 import uuid
 from pathlib import Path
 
+import pytest
+
 from core.settings.settings_manager import SettingsManager
 
 
@@ -204,3 +206,48 @@ class TestSettingsManagerValidation:
         manager.set("timing.interval", "invalid")
         manager.validate_and_repair()
         assert isinstance(manager.get("timing.interval"), int)
+
+
+class TestSettingsManagerManualFloorClamp:
+    def test_validate_and_repair_clamps_global_manual_floor(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "manual_floor": 2.1,
+                    "spectrum_manual_floor": 0.5,
+                }
+            },
+        )
+
+        repairs = manager.validate_and_repair()
+
+        widgets = manager.get("widgets")
+        assert widgets["spotify_visualizer"]["manual_floor"] == pytest.approx(1.0)
+        assert "widgets.spotify_visualizer.manual_floor" in repairs
+
+    def test_validate_and_repair_clamps_per_mode_manual_floors(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "bubble_manual_floor": 3.5,
+                    "spectrum_manual_floor": 0.05,
+                    "helix_manual_floor": "not_a_number",
+                }
+            },
+        )
+
+        repairs = manager.validate_and_repair()
+
+        vis = manager.get("widgets")["spotify_visualizer"]
+        assert vis["bubble_manual_floor"] == pytest.approx(1.0)
+        assert vis["spectrum_manual_floor"] == pytest.approx(0.12)
+        assert vis["helix_manual_floor"] == pytest.approx(0.12)
+        assert {
+            "widgets.spotify_visualizer.bubble_manual_floor",
+            "widgets.spotify_visualizer.spectrum_manual_floor",
+            "widgets.spotify_visualizer.helix_manual_floor",
+        }.issubset(repairs.keys())

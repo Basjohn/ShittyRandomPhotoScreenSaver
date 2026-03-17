@@ -52,17 +52,17 @@ class TestSpotifyVisualizerIntegration:
             worker._user_sensitivity = 1.0
             worker._use_recommended = True
             worker._use_dynamic_floor = True
-            worker._manual_floor = 2.1
+            worker._manual_floor = 0.12
             worker._recommended_sensitivity_multiplier = 0.38
             worker._min_floor = 0.12
-            worker._max_floor = 4.0
+            worker._max_floor = 1.0
             worker._dynamic_floor_ratio = 0.462
             worker._dynamic_floor_alpha = 0.15
             worker._dynamic_floor_decay_alpha = 0.4
             worker._floor_mid_weight = 0.18
             worker._floor_headroom = 0.18
             worker._silence_floor_threshold = 0.05
-            worker._raw_bass_avg = 2.1
+            worker._raw_bass_avg = 0.12
             
             # Create synthetic audio data representing typical music
             sample_rate = 44100
@@ -119,17 +119,17 @@ class TestSpotifyVisualizerIntegration:
             worker._user_sensitivity = 1.0
             worker._use_recommended = True
             worker._use_dynamic_floor = True
-            worker._manual_floor = 2.1
+            worker._manual_floor = 0.12
             worker._recommended_sensitivity_multiplier = 0.38
             worker._min_floor = 0.12
-            worker._max_floor = 4.0
+            worker._max_floor = 1.0
             worker._dynamic_floor_ratio = 0.462
             worker._dynamic_floor_alpha = 0.15
             worker._dynamic_floor_decay_alpha = 0.4
             worker._floor_mid_weight = 0.18
             worker._floor_headroom = 0.18
             worker._silence_floor_threshold = 0.05
-            worker._raw_bass_avg = 2.1
+            worker._raw_bass_avg = 0.12
             
             # Test different signal levels
             test_cases = [

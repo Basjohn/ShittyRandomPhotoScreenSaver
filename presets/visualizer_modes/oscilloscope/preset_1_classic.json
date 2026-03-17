@@ -13,19 +13,19 @@
         255
       ],
       "widgets.spotify_visualizer.bar_border_opacity": 1.0,
-      "widgets.spotify_visualizer.bar_count": 21,
+      "widgets.spotify_visualizer.bar_count": 32,
       "widgets.spotify_visualizer.bar_fill_color": [
         255,
         255,
         255,
         230
       ],
-      "widgets.spotify_visualizer.dynamic_floor": false,
+      "widgets.spotify_visualizer.dynamic_floor": true,
       "widgets.spotify_visualizer.dynamic_range_enabled": false,
       "widgets.spotify_visualizer.ghost_alpha": 0.4,
       "widgets.spotify_visualizer.ghost_decay": 0.35,
       "widgets.spotify_visualizer.ghosting_enabled": true,
-      "widgets.spotify_visualizer.manual_floor": 2.1,
+      "widgets.spotify_visualizer.manual_floor": 0.12,
       "widgets.spotify_visualizer.mode": "oscilloscope",
       "widgets.spotify_visualizer.osc_ghost_intensity": 0.4,
       "widgets.spotify_visualizer.osc_ghosting_enabled": true,
@@ -80,7 +80,9 @@
       "widgets.spotify_visualizer.osc_smoothing": 0.6,
       "widgets.spotify_visualizer.osc_speed": 0.33,
       "widgets.spotify_visualizer.osc_vertical_shift": 25,
-      "widgets.spotify_visualizer.sensitivity": 0.4
+      "widgets.spotify_visualizer.sensitivity": 0.4,
+      "widgets.spotify_visualizer.oscilloscope_bar_count": 32,
+      "widgets.spotify_visualizer.oscilloscope_dynamic_floor": true
     },
     "widgets": {
       "spotify_visualizer": {
@@ -92,19 +94,19 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 21,
+        "bar_count": 32,
         "bar_fill_color": [
           255,
           255,
           255,
           230
         ],
-        "dynamic_floor": false,
+        "dynamic_floor": true,
         "dynamic_range_enabled": false,
         "ghost_alpha": 0.4,
         "ghost_decay": 0.35,
         "ghosting_enabled": true,
-        "manual_floor": 2.1,
+        "manual_floor": 0.12,
         "mode": "oscilloscope",
         "osc_ghost_intensity": 0.4,
         "osc_ghosting_enabled": true,
@@ -159,7 +161,9 @@
         "osc_smoothing": 0.6,
         "osc_speed": 0.33,
         "osc_vertical_shift": 25,
-        "sensitivity": 0.4
+        "sensitivity": 0.4,
+        "oscilloscope_bar_count": 32,
+        "oscilloscope_dynamic_floor": true
       }
     }
   },

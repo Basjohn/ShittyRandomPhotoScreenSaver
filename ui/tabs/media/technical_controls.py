@@ -21,8 +21,8 @@ from ui.tabs.widgets_tab import NoWheelSlider
 
 
 _PER_MODE_TECH_ATTR = "_per_mode_technical_controls"
-MANUAL_FLOOR_MIN = 0.05
-MANUAL_FLOOR_MAX = 4.0
+MANUAL_FLOOR_MIN = 0.12
+MANUAL_FLOOR_MAX = 1.0
 
 
 def _ensure_per_mode_cache(tab) -> Dict[str, Dict[str, Any]]:
@@ -235,7 +235,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     manual_floor.setMaximum(int(MANUAL_FLOOR_MAX * 100))
     manual_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
     manual_floor.setTickInterval(10)
-    default_manual = _per_mode_default_float(tab, mode_key, 'manual_floor', 2.1)
+    default_manual = _per_mode_default_float(tab, mode_key, 'manual_floor', 0.12)
     manual_floor.blockSignals(True)
     clamped_manual = max(MANUAL_FLOOR_MIN, min(MANUAL_FLOOR_MAX, default_manual))
     manual_floor.setValue(int(clamped_manual * 100))
@@ -262,11 +262,11 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     def _update_manual_floor_visibility() -> None:
         if dynamic_floor.isChecked():
             manual_floor.setToolTip(
-                "Baseline floor feeding the dynamic algorithm. Lower = more reactive."
+                "Baseline floor (0.12–1.0) feeding the dynamic algorithm. Lower = more reactive."
             )
         else:
             manual_floor.setToolTip(
-                "Absolute manual floor when Dynamic Noise Floor is disabled."
+                "Absolute manual floor (0.12–1.0) when Dynamic Noise Floor is disabled."
             )
 
     adaptive_checkbox.stateChanged.connect(lambda _: _update_sensitivity_visibility())
@@ -431,7 +431,7 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
 
         manual_slider = controls.get('manual_floor')
         if manual_slider is not None:
-            default_manual = _per_mode_default_float(tab, mode_key, 'manual_floor', 2.1)
+            default_manual = _per_mode_default_float(tab, mode_key, 'manual_floor', MANUAL_FLOOR_MIN)
             manual_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'manual_floor'), default_manual)
             clamped = max(MANUAL_FLOOR_MIN, min(MANUAL_FLOOR_MAX, manual_val))
             manual_slider.blockSignals(True)

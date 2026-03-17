@@ -12,7 +12,7 @@
         255
       ],
       "widgets.spotify_visualizer.bar_border_opacity": 1.0,
-      "widgets.spotify_visualizer.bar_count": 21,
+      "widgets.spotify_visualizer.bar_count": 48,
       "widgets.spotify_visualizer.bar_fill_color": [
         255,
         255,
@@ -45,7 +45,7 @@
         255
       ],
       "widgets.spotify_visualizer.bubble_growth": 5.0,
-      "widgets.spotify_visualizer.bubble_manual_floor": 0.1,
+      "widgets.spotify_visualizer.bubble_manual_floor": 0.12,
       "widgets.spotify_visualizer.bubble_outline_color": [
         255,
         255,
@@ -82,7 +82,7 @@
       "widgets.spotify_visualizer.ghost_alpha": 0.45,
       "widgets.spotify_visualizer.ghost_decay": 0.3,
       "widgets.spotify_visualizer.ghosting_enabled": true,
-      "widgets.spotify_visualizer.manual_floor": 0.1,
+      "widgets.spotify_visualizer.manual_floor": 0.12,
       "widgets.spotify_visualizer.mode": "bubble",
       "widgets.spotify_visualizer.sensitivity": 0.4
     },
@@ -96,7 +96,7 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 21,
+        "bar_count": 48,
         "bar_fill_color": [
           255,
           255,
@@ -129,7 +129,7 @@
           255
         ],
         "bubble_growth": 5.0,
-        "bubble_manual_floor": 0.1,
+        "bubble_manual_floor": 0.12,
         "bubble_outline_color": [
           255,
           255,
@@ -166,7 +166,7 @@
         "ghost_alpha": 0.45,
         "ghost_decay": 0.3,
         "ghosting_enabled": true,
-        "manual_floor": 0.1,
+        "manual_floor": 0.12,
         "mode": "bubble",
         "sensitivity": 0.4
       }

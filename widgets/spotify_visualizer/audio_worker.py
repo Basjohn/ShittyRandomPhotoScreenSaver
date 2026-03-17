@@ -91,16 +91,16 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._energy_boost: float = 0.85
         # Floor control configuration (dynamic/manual)
         self._use_dynamic_floor: bool = True
-        self._manual_floor: float = 2.1
-        self._min_floor: float = 0.05
-        self._max_floor: float = 4.0
-        self._raw_bass_avg: float = 2.1
+        self._manual_floor: float = 0.12
+        self._min_floor: float = 0.12
+        self._max_floor: float = 1.0
+        self._raw_bass_avg: float = 0.12
         # Slightly higher dynamic floor baseline (10% harder to peak).
         self._dynamic_floor_ratio: float = 0.44
         self._dynamic_floor_alpha: float = 0.08
         self._dynamic_floor_decay_alpha: float = 0.12
-        self._applied_noise_floor: float = 2.1
-        self._last_noise_floor: float = 2.1
+        self._applied_noise_floor: float = 0.12
+        self._last_noise_floor: float = 0.12
         self._floor_response: float = 0.08
         self._floor_mid_weight: float = 0.18
         self._floor_headroom: float = 0.18
@@ -172,7 +172,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             floor = float(manual_floor)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            floor = 2.1
+            floor = self._manual_floor
 
         floor = max(self._min_floor, min(self._max_floor, floor))
 

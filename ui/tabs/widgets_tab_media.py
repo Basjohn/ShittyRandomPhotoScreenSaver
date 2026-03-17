@@ -1672,7 +1672,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'dynamic_floor', tab._default_bool('spotify_visualizer', 'dynamic_floor', True)
     )
     spotify_vis_config['manual_floor'] = _per_mode_value(
-        'manual_floor', tab._default_float('spotify_visualizer', 'manual_floor', 2.1)
+        'manual_floor', tab._default_float('spotify_visualizer', 'manual_floor', 0.12)
     )
     spotify_vis_config['dynamic_range_enabled'] = _per_mode_value(
         'dynamic_range_enabled', tab._default_bool('spotify_visualizer', 'dynamic_range_enabled', False)

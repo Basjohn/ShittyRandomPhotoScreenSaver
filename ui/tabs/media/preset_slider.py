@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QSlider,
     QPushButton,
     QSizePolicy,
+    QDialog,
 )
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QPainter, QPen, QPalette
@@ -37,7 +38,9 @@ from core.settings.visualizer_presets import (
     get_preset_count,
     get_preset_names,
     get_preset_file_path,
+    reload_presets,
 )
+from ui.styled_popup import StyledPopup
 
 if TYPE_CHECKING:
     pass
@@ -260,3 +263,40 @@ class VisualizerPresetSlider(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         except Exception:
             logger.debug("[VIS_PRESETS] Failed to open preset file", exc_info=True)
+            return
+
+        popup = StyledPopup(
+            self._find_tab(),
+            "Edit Preset",
+            "Do your weird shit and click OK when done.",
+            button_text="OK",
+        )
+        if popup.exec() == QDialog.DialogCode.Accepted:
+            self._reload_and_reapply_current_preset(idx)
+
+    def _reload_and_reapply_current_preset(self, desired_index: int) -> None:
+        """Reload preset definitions from disk and reapply the current slot."""
+
+        try:
+            reload_presets(self._mode)
+            self._preset_names = get_preset_names(self._mode)
+            self._preset_count = get_preset_count(self._mode)
+            self._custom_index = get_custom_preset_index(self._mode)
+        except Exception:
+            logger.debug(
+                "[VIS_PRESETS] Failed to reload presets for %s", self._mode, exc_info=True
+            )
+            return
+
+        self._slider.blockSignals(True)
+        self._slider.setMaximum(max(0, self._preset_count - 1))
+        target_index = max(0, min(self._preset_count - 1, desired_index))
+        self._slider.setValue(target_index)
+        self._slider.blockSignals(False)
+        self._value_label.setText(self._preset_names[target_index])
+        self._notch_bar.set_notch_count(self._preset_count)
+        self._update_advanced_visibility()
+
+        tab = self._find_tab()
+        if tab is not None and hasattr(tab, "_on_visualizer_preset_changed"):
+            tab._on_visualizer_preset_changed(self._mode, target_index)

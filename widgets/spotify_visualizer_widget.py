@@ -287,7 +287,7 @@ class SpotifyVisualizerWidget(QWidget):
         # existing tests and diagnostics continue to function, but all
         # heavy work is centralised in the engine.
         self._engine: Optional[_SpotifyBeatEngine] = get_shared_spotify_beat_engine(self._bar_count)
-        self._last_floor_config = (True, 2.1)
+        self._last_floor_config = (True, 0.12)
         self._last_sensitivity_config = (True, 1.0)
         self._last_energy_boost: float = 0.85
         self._last_audio_block_size: int = 0
@@ -417,7 +417,7 @@ class SpotifyVisualizerWidget(QWidget):
             floor_dyn, floor_value = self._last_floor_config
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            floor_dyn, floor_value = True, 2.1
+            floor_dyn, floor_value = True, 0.12
         try:
             sens_rec, sens_value = self._last_sensitivity_config
         except Exception as e:
@@ -629,7 +629,7 @@ class SpotifyVisualizerWidget(QWidget):
             self._resize_bar_buffers(target_bars)
 
         dynamic_floor = bool(config.get("dynamic_floor", True))
-        manual_floor = float(config.get("manual_floor", 2.1))
+        manual_floor = float(config.get("manual_floor", 0.12))
         adaptive = bool(config.get("adaptive_sensitivity", True))
         sensitivity = float(config.get("sensitivity", 1.0))
         audio_block_size = int(config.get("audio_block_size", 0) or 0)

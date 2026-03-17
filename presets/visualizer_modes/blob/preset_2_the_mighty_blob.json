@@ -12,7 +12,7 @@
         255
       ],
       "widgets.spotify_visualizer.bar_border_opacity": 1.0,
-      "widgets.spotify_visualizer.bar_count": 21,
+      "widgets.spotify_visualizer.bar_count": 32,
       "widgets.spotify_visualizer.bar_fill_color": [
         255,
         255,
@@ -21,7 +21,7 @@
       ],
       "widgets.spotify_visualizer.blob_adaptive_sensitivity": true,
       "widgets.spotify_visualizer.blob_audio_block_size": 512,
-      "widgets.spotify_visualizer.blob_bar_count": 21,
+      "widgets.spotify_visualizer.blob_bar_count": 32,
       "widgets.spotify_visualizer.blob_color": [
         0,
         105,
@@ -52,7 +52,7 @@
       "widgets.spotify_visualizer.blob_glow_max_size": 1.05,
       "widgets.spotify_visualizer.blob_glow_reactivity": 1.6,
       "widgets.spotify_visualizer.blob_growth": 5.0,
-      "widgets.spotify_visualizer.blob_manual_floor": 2.1,
+      "widgets.spotify_visualizer.blob_manual_floor": 0.12,
       "widgets.spotify_visualizer.blob_outline_color": [
         84,
         150,
@@ -80,7 +80,7 @@
       "widgets.spotify_visualizer.ghost_alpha": 0.4,
       "widgets.spotify_visualizer.ghost_decay": 0.35,
       "widgets.spotify_visualizer.ghosting_enabled": true,
-      "widgets.spotify_visualizer.manual_floor": 2.1,
+      "widgets.spotify_visualizer.manual_floor": 0.12,
       "widgets.spotify_visualizer.mode": "blob",
       "widgets.spotify_visualizer.sensitivity": 1.0
     },
@@ -94,7 +94,7 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 21,
+        "bar_count": 32,
         "bar_fill_color": [
           255,
           255,
@@ -103,7 +103,7 @@
         ],
         "blob_adaptive_sensitivity": true,
         "blob_audio_block_size": 512,
-        "blob_bar_count": 21,
+        "blob_bar_count": 32,
         "blob_color": [
           0,
           105,
@@ -134,7 +134,7 @@
         "blob_glow_max_size": 1.05,
         "blob_glow_reactivity": 1.6,
         "blob_growth": 5.0,
-        "blob_manual_floor": 2.1,
+        "blob_manual_floor": 0.12,
         "blob_outline_color": [
           84,
           150,
@@ -162,7 +162,7 @@
         "ghost_alpha": 0.4,
         "ghost_decay": 0.35,
         "ghosting_enabled": true,
-        "manual_floor": 2.1,
+        "manual_floor": 0.12,
         "mode": "blob",
         "sensitivity": 1.0
       }

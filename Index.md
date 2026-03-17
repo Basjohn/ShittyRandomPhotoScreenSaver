@@ -21,7 +21,8 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
 | Current_Plan.md | Live backlog + checkbox/combobox rollout manifest (auto-generated inventory for styled controls) |
-| Spec.md (Visualizer buckets) | Advanced then Technical collapsible buckets per mode (Spectrum/Bubble/Blob/Sine/Osc); state persisted via `_visualizer_adv_state`/`_visualizer_tech_state` (Starfield/Helix gated) |
+| Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines (bar count, floors, block sizes). **Spectrum “Cake” preset is exempt from bar-count changes** per 2026 audit. |
+| Spec.md (Visualizer buckets) | Advanced then Technical collapsible buckets per mode (Spectrum/Bubble/Blob/Sine/Osc); state persisted via `_visualizer_adv_state`/`_visualizer_tech_state`. **Helix/Starfield are deprecated** (dev-only remnants kept for backwards compatibility). |
 
 ## Tooling
 
@@ -249,11 +250,11 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Module | File | Key Classes/Functions | Purpose |
 |--------|------|-------------|---------|
 | Beat Engine | widgets/beat_engine.py | BeatEngine, BeatEngineConfig, BeatEngineState | FFT processing |
-| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE/BUBBLE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation) |
+| Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE/BUBBLE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation). Helix/Starfield enums remain for backwards compatibility but are **deprecated** and not surfaced in production. |
 | Shared| Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction; `_compute_gate_token` invalidates stale FFT tasks; `generation_id` + `latest_generation_with_frame` let widgets await fresh frames before resuming |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars, _apply_adaptive_normalization | DSP/FFT bar computation pipeline (inline, extracted from audio_worker); includes user-drawn `spectrum_shape_nodes` profile support (mirrored + linear) where node curve is the primary spectrum shape driver while sliders tune audio influence weighting via uniform energy model. Anti-drift (8b): tiered peak decay + asymmetric floor EMA prevent long-term reactivity degradation |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
-| Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); all defaults raised +1.0x |
+| Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); Helix/Starfield values are legacy only and flagged **deprecated**. |
 | Bubble Simulation | widgets/spotify_visualizer/bubble_simulation.py | BubbleSimulation, BubbleState | CPU-side particle simulation for bubble mode; tick()/snapshot() on COMPUTE thread pool, coalesced results posted to UI thread; snapshot() returns (pos_data, extra_data, trail_data); trail records 3 previous positions per bubble (TRAIL_STEPS=3); drift system now includes **Swish (Horizontal/Vertical)** for axis-locked wobble plus **Swirl (Clockwise/Counter-Clockwise)** for tangential orbits around the card centre. Mar 2026 retune replaced the aggressive linear swirl speed multiplier with a curved `swirl_drive` so swirl stays slow at baseline and only reaches fast spiral motion on intense audio. |
 | Config Applier | widgets/spotify_visualizer/config_applier.py | apply_vis_mode_kwargs, build_gpu_push_extra_kwargs, _color_or_none | Per-mode keyword↔attribute mapping; caches the last applied settings snapshot for `_reset_visualizer_state()` and passes rainbow/ghost/bubble uniforms. Oscilloscope visual gain now lives under `osc_line_amplitude` with an automatic legacy fallback to `osc_sensitivity`. Sine wave alone now requests raw energy bands at GPU push time; other modes stay on smoothed/normalized energy for flicker control. Shared glow uniforms are built from mode-specific osc/sine settings at GPU push time. |
 | Preset Workflow | core/settings/visualizer_presets.py | VisualizerPreset dataclass, `_build_presets_for_mode`, `_filter_settings_for_mode` | Drop-in preset loader. Curated folders use mode-specific JSON under `presets/visualizer_modes/*`; snapshot-style overrides are opt-in and explicit (dedicated folder + markers). Filters keys via global allowlist + mode prefixes, auto-expands preset counts, keeps Custom trailing. |
@@ -262,6 +263,8 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Tick Pipeline | widgets/spotify_visualizer/tick_pipeline.py | on_tick, process_heartbeat, dispatch_bubble_simulation, consume_engine_bars, push_gpu_frame, record_tick_perf, log_audio_latency_metrics | Main tick entry point, heartbeat detection, bubble dispatch, engine bar consumption, GPU push (~420 LOC) |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
 | Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | SHARED_VERTEX_SHADER, load_fragment_shader, load_all_fragment_shaders | GLSL shader source loading for multi-shader architecture |
+
+> **Manual floor contract (Mar 2026):** Global and per-mode `manual_floor` keys clamp to `0.12–1.0` everywhere (UI sliders, `SpotifyVisualizerSettings`, audio worker, shared beat engine). Canonical defaults (`core/settings/default_settings.py`, `core/settings/defaults_snapshot.py`) and shipping snapshots (`SRPSS_Settings_Screensaver_*.json`) all seed 0.12 so curated presets, defaults, and migrations can’t resurrect the retired 2.1 baseline. SettingsManager migrations and the audio worker both reseed the dynamic accumulator whenever a clamped value is applied.
 
 ### Visualizer Per-Mode Renderers (`widgets/spotify_visualizer/renderers/`)
 
@@ -274,9 +277,9 @@ Extracted from the monolithic `_render_with_shader` method in `spotify_bars_gl_o
 | Spectrum | renderers/spectrum.py | Bar data, peaks, ghost alpha, fill/border colours, height scale |
 | Oscilloscope | renderers/oscilloscope.py | Waveform, ghost waveform, shared line/glow, smoothed energy bands |
 | Sine Wave | renderers/sine_wave.py | Shared line/glow, heartbeat, density, displacement, crawl, travel |
-| Starfield | renderers/starfield.py | Star density, travel, nebula tints, energy bands |
+| Starfield *(deprecated)* | renderers/starfield.py | Star density, travel, nebula tints, energy bands |
 | Blob | renderers/blob.py | Ghost alpha, blob colours, pulse, glow, smoothed/peak energy, per-band peak (bass/mid/high/overall) for SDF ghost shape, stage, wobble, stretch tendency + split H/V bias |
-| Helix | renderers/helix.py | Turns, speed, glow, fill/border, energy bands |
+| Helix *(deprecated)* | renderers/helix.py | Turns, speed, glow, fill/border, energy bands |
 | Bubble | renderers/bubble.py | Bubble arrays (pos/extra/trail), trail strength/opacity, specular/gradient dirs, colours |
 
 ### Visualizer Shaders

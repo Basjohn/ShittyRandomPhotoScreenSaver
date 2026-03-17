@@ -13,7 +13,7 @@
         255
       ],
       "widgets.spotify_visualizer.bar_border_opacity": 1.0,
-      "widgets.spotify_visualizer.bar_count": 21,
+      "widgets.spotify_visualizer.bar_count": 48,
       "widgets.spotify_visualizer.bar_fill_color": [
         255,
         255,
@@ -22,7 +22,7 @@
       ],
       "widgets.spotify_visualizer.bubble_adaptive_sensitivity": false,
       "widgets.spotify_visualizer.bubble_audio_block_size": 256,
-      "widgets.spotify_visualizer.bubble_bar_count": 42,
+      "widgets.spotify_visualizer.bubble_bar_count": 48,
       "widgets.spotify_visualizer.bubble_big_bass_pulse": 1.8,
       "widgets.spotify_visualizer.bubble_big_count": 8,
       "widgets.spotify_visualizer.bubble_big_size_max": 0.029,
@@ -85,7 +85,7 @@
       "widgets.spotify_visualizer.ghost_alpha": 0.4,
       "widgets.spotify_visualizer.ghost_decay": 0.35,
       "widgets.spotify_visualizer.ghosting_enabled": true,
-      "widgets.spotify_visualizer.manual_floor": 2.1,
+      "widgets.spotify_visualizer.manual_floor": 0.12,
       "widgets.spotify_visualizer.mode": "bubble",
       "widgets.spotify_visualizer.sensitivity": 1.0
     },
@@ -100,7 +100,7 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 21,
+        "bar_count": 48,
         "bar_fill_color": [
           255,
           255,
@@ -109,7 +109,7 @@
         ],
         "bubble_adaptive_sensitivity": false,
         "bubble_audio_block_size": 256,
-        "bubble_bar_count": 42,
+        "bubble_bar_count": 48,
         "bubble_big_bass_pulse": 1.8,
         "bubble_big_count": 8,
         "bubble_big_size_max": 0.029,
@@ -172,7 +172,7 @@
         "ghost_alpha": 0.4,
         "ghost_decay": 0.35,
         "ghosting_enabled": true,
-        "manual_floor": 2.1,
+        "manual_floor": 0.12,
         "mode": "bubble",
         "sensitivity": 1.0
       }

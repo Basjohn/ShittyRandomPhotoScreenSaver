@@ -1,6 +1,13 @@
 # Visualizer Setting Guide
 
-Reference guide covering every Beat Visualizer mode (excluding Spectrum/Starfield/Helix) with the exact GUI controls surfaced in settings, what each slider/checkbox/color swatch changes, and any overlap/conflict concerns to watch for when tuning.
+This document captures mode-specific guidance for the Spotify Beat Visualizer. Each mode includes a description of controls, recommended defaults, and troubleshooting notes so users can understand the impact of each slider/toggle before making adjustments.
+
+## Global Technical Baselines (Mar 2026 refresh)
+
+- **Target bar counts**: Blob 32, Bubble 48, Spectrum 33, Oscilloscope 32, Sine Wave 40. These values are baked into canonical defaults, curated presets, and healing logic. If a preset needs to deviate, document the reason inline and log it in Docs/Visualizer_Presets_Plan.md.
+- **Dynamic floor**: Enabled for every mode/preset by default. Manual floor remains available but should only be raised for stylistic reasons.
+- **Spectrum "Cake" preset**: Explicitly exempt from bar-count swaps; leave its authored value intact unless UX signs off on a redesign.
+- **Deprecated modes**: Helix & Starfield are no longer shipped in production builds. They remain in code/dev builds for archival reasons but should not receive further tuning or preset work. Call out any lingering references when touching tooling/docs.
 
 ---
 
