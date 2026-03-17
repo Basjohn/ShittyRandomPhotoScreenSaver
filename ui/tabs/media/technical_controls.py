@@ -21,7 +21,7 @@ from ui.tabs.widgets_tab import NoWheelSlider
 
 
 _PER_MODE_TECH_ATTR = "_per_mode_technical_controls"
-MANUAL_FLOOR_MIN = 0.12
+MANUAL_FLOOR_MIN = 0.05
 MANUAL_FLOOR_MAX = 1.0
 
 

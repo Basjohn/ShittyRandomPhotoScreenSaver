@@ -269,7 +269,8 @@ class VisualizerPresetSlider(QWidget):
             self._find_tab(),
             "Edit Preset",
             "Do your weird shit and click OK when done.",
-            button_text="OK",
+            icon_type="info",
+            buttons=[("OK", "ok")],
         )
         if popup.exec() == QDialog.DialogCode.Accepted:
             self._reload_and_reapply_current_preset(idx)
@@ -299,4 +300,9 @@ class VisualizerPresetSlider(QWidget):
 
         tab = self._find_tab()
         if tab is not None and hasattr(tab, "_on_visualizer_preset_changed"):
-            tab._on_visualizer_preset_changed(self._mode, target_index)
+            previous_flag = getattr(tab, "_preset_slider_changing", False)
+            try:
+                tab._preset_slider_changing = True
+                tab._on_visualizer_preset_changed(self._mode, target_index)
+            finally:
+                tab._preset_slider_changing = previous_flag

@@ -202,13 +202,11 @@ def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, clea
 
     sv_block = deepcopy(dict(cleaned))
 
-    custom_backup = {
-        f"widgets.spotify_visualizer.{key}": deepcopy(value)
-        for key, value in sv_block.items()
-    }
+    # Do not emit custom_preset_backup anymore. The duplicate snapshot caused
+    # curated presets to drift because later tooling/user edits only touched the
+    # widgets block while this tool kept rewriting the legacy backup payload.
     lean["snapshot"] = {
-        "widgets": {"spotify_visualizer": deepcopy(sv_block)},
-        "custom_preset_backup": custom_backup,
+        "widgets": {"spotify_visualizer": deepcopy(sv_block)}
     }
 
     widgets_section: Dict[str, Any] = {}
@@ -221,7 +219,7 @@ def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, clea
     if widgets_section:
         lean["widgets"] = widgets_section
 
-    updated_paths = ["snapshot.widgets.spotify_visualizer", "snapshot.custom_preset_backup"]
+    updated_paths = ["snapshot.widgets.spotify_visualizer"]
     if widgets_section:
         updated_paths.append("widgets")
 

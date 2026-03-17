@@ -22,7 +22,7 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
     _MISSING = object()
-    _MANUAL_FLOOR_MIN = 0.12
+    _MANUAL_FLOOR_MIN = 0.05
     _MANUAL_FLOOR_MAX = 1.0
     
     def __init__(
