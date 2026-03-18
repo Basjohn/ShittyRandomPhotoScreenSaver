@@ -25,6 +25,9 @@ Single source of truth for architecture and key decisions.
 - Mirrored spectrum editor coordinate contract: node domain remains `x=0 center`, `x=1 edge` in both UI and DSP. The mirrored edit pane (left half) therefore renders edge→center left-to-right, while the ghost pane (right half) renders center→edge. This prevents flat-edge edits from being inverted into forced high-edge output.
 - Migration helpers (`core/settings/visualizer_presets.py::_migrate_preset_settings`) convert legacy fields (e.g., `sine_min_height`, `blob_stretch_x_bias`, global `rainbow_enabled`) into the new per-mode schema. Preset ingestion filters keys via `GLOBAL_ALLOWED_KEYS` + mode prefixes.
 - Manual floor baseline slider now clamps 0.12 – 1.0 and immediately reseeds the dynamic floor accumulator on every change, even when Dynamic Floor stays enabled. Engine activation, mode switches, widget resets, preset reloads, and SettingsManager migrations all pull the fresh per-mode manual floor before audio ticks resume, eliminating stale high floors bleeding between modes. Canonical defaults (`core/settings/default_settings.py`), the generated defaults snapshot, and shipping JSON profiles (`SRPSS_Settings_Screensaver_*.json`) all seed 0.12 so no baseline drifting back to 2.1 can occur.
+- **Input gain contract (Mar 2026)**: Every mode now exposes a per-mode `input_gain` slider (5%–200%, default 100%) that scales PCM samples *before* FFT. The setting is wired through all eight layers (settings model/load/save, creator kwargs, widget cache/apply, beat engine/audio worker) and the audio worker clamps + forwards the gain to `bar_computation.compute_bars_from_samples()`, which multiplies the mono signal prior to peak detection/FFT so the effect matches Windows mixer volume changes without muting actual audio. Docs/TestSuite include regression coverage (`tests/test_input_gain.py`).
+- **Preset repair schema enforcement (Mar 2026)**: `tools/visualizer_preset_repair.py` now promotes any legacy global technical keys (manual_floor, sensitivity, `input_gain`, etc.) into *all* mode-specific namespaces via `_MODE_TECH_PREFIXES` before filtering, then injects missing per-mode defaults from `core/settings/default_settings.py`. Mandatory visual keys (glow + line colours, bubble gradients, blob glow) cover every mode to prevent curator edits from yielding incomplete payloads. Regression tests live in `tests/test_visualizer_settings_plumbing.py::TestVisualizerPresetRepair::test_repair_file_promotes_global_keys_per_mode`.
+- **Audio block size policy refresh**: Technical controls add a 128-sample option alongside Auto/256/512/1024. PyAudioWPatch now respects the preferred block size (tries it first, then 128→256→512→1024 fallbacks) and logs the negotiated block vs preferred, while the sounddevice backend logs its chosen block size as well. This closes the gap where PyAudio ignored user input and makes telemetry actionable for the remaining CPU/latency metrics task.
 - **Anti-drift contract (8b)**: `_apply_adaptive_normalization()` uses tiered decay (0.82/0.90/0.94) and a 1.20 ceiling so `_running_peak` cannot stay elevated for more than ~1–2 seconds without sustained peaks supporting it. Dynamic floor EMA (`_raw_bass_avg`) decay alpha is forced ≥3× rise alpha with a hard ceiling of `base_noise_floor × 2.5`. `reset_floor_state()` also resets `_running_peak` to 0.5 on mode switch / preset reload. These prevent the long-term reactivity degradation that previously flattened energy bands across all visualizer modes during sustained loud passages.
 - 2026‑03‑12 audit: all curated preset JSONs under `presets/visualizer_modes/` validated to include the required `<mode>_{manual_floor,dynamic_floor,adaptive_sensitivity,sensitivity,audio_block_size,dynamic_range_enabled}` keys plus `mode`, stored **only** inside `snapshot.widgets.spotify_visualizer`. Any future curated edits must be run through `tools/visualizer_preset_repair.py` (or the batch helper) to preserve the lean single-block structure.
 - Oscilloscope visual gain is now surfaced as `osc_line_amplitude`. Runtime accepts the legacy `osc_sensitivity` key for backward compatibility, but all new presets/defaults/docs must emit `osc_line_amplitude`, and the GLSL uniform has been renamed to `u_line_amplitude` to match.
@@ -153,54 +156,6 @@ The RSS system is split into focused modules under `sources/rss/`:
 - `ImagePrefetcher`: uses ThreadManager IO pool to decode file paths into `QImage`, tracks inflight under lock, and populates cache.
 - Look-ahead: `ImageQueue.peek_many(n)` used to determine upcoming assets.
 - Skip policy: when a transition is active, prefetch defers to avoid thrash; skipped requests are logged for pacing diagnostics.
-
-## Media (Windows GSMTC)
-
-- Windows media polling uses `core/media/media_controller.py`.
-- GSMTC/WinRT calls are treated as potentially blocking IO and are executed via `ThreadManager` with a hard timeout so they cannot stall the UI thread or test runner.
-- Inflight check prevents query pileup (only one query at a time).
-- Coroutine factory pattern: `_run_coroutine()` accepts a callable that returns a fresh coroutine to avoid "cannot reuse already awaited coroutine" errors.
-- Timeouts return `None` but do not disable future queries - widget handles `None` gracefully.
-- **Artwork stream cap**: `max_bytes = 8 * 1024 * 1024` (8MB) to handle high-res embedded artwork from players like MusicBee. Previously 2MB, which caused truncation and corrupt JPEG errors.
-- **Playback status mapping**: `_map_status()` handles both winrt enum members and raw integer values. Tries `.value` attribute first (winrt enum pattern), then `int()` conversion, with `int()`-based comparison on both sides. This accommodates MusicBee's GSMTC plugin which may report playback status as raw integers instead of proper enum members.
-
-
-## Image Sources
-
-- Folder sources:
-  - `FolderSource` scans configured `sources.folders` paths recursively (extensions filtered by `FolderSource.get_supported_extensions()`).
-  - Behaviour is unchanged by RSS work; caps/TTL never apply to folder images.
-- RSS / JSON sources:
-  - `RSSSource` consumes `sources.rss_feeds` URLs and produces `ImageMetadata` with `source_type=ImageSourceType.RSS`.
-  - Supports standard RSS/Atom feeds (via feedparser) and Reddit JSON listings with a light high‑resolution filter (prefers posts with preview width ≥ 2560px when available).
-  - Uses an on-disk cache under the temp directory and optional save‑to‑disk mirroring when `sources.rss_save_to_disk` and `sources.rss_save_directory` are configured.
-  - **Rotating cache**: Cache cleanup always retains at least 20 images (`min_keep=20`) regardless of size limits, ensuring faster startup for RSS users. Disk cache is also limited by file count (max 2x min_keep or 30, whichever is larger) to prevent unbounded growth.
-  - **Runtime caps**: Initial load limits cached images to `sources.rss_rotating_cache_size` (default 20). Async and background refresh enforce `sources.rss_background_cap` (default 30) as the maximum RSS images in queue at any time.
-  - **Async loading**: `_load_rss_images_async()` processes sources in priority order (Bing=95, Unsplash=90, Wikimedia=85, NASA=75, Reddit=10) with 8 images per source per cycle to prevent any single source from blocking.
-  - **State Management**: Engine uses `EngineState` enum instead of boolean flags for lifecycle management:
-    - States: UNINITIALIZED → INITIALIZING → STOPPED → STARTING → RUNNING → STOPPING/SHUTTING_DOWN
-    - REINITIALIZING state used during settings changes (not STOPPING)
-    - `_shutting_down` property returns False for REINITIALIZING, True for STOPPING/SHUTTING_DOWN
-    - This fixes the RSS reload bug where async loading would abort after settings changes.
-  - **Shutdown callback**: Each RSSSource receives a `set_shutdown_check(callback)` so downloads abort mid-stream when the engine shuts down.
-  - **Cache pre-loading**: Cached RSS images are added to the queue before async download starts, providing immediate variety.
-  - Background: the engine enforces a global RSS background cap (`sources.rss_background_cap`, default 30) and a time‑to‑live (`sources.rss_stale_minutes`, default 30 minutes) so older, unseen RSS images are gradually replaced when new ones arrive, but only when a background refresh successfully adds replacements.
-  - **Reddit Rate Limiting (Centralized)**: All Reddit API calls are coordinated through `RedditRateLimiter` (`core/reddit_rate_limiter.py`) to stay under Reddit's 10 req/min unauthenticated limit:
-    - **Safety target**: 8 req/min max (`MAX_REQUESTS_PER_MINUTE = 8`) with safety threshold at 6 requests (`SAFETY_THRESHOLD = 6`).
-    - **Minimum interval**: 8 seconds between consecutive requests (`MIN_REQUEST_INTERVAL = 8.0`).
-    - **RSS limits**: Maximum 2 Reddit feeds processed at startup (`MAX_REDDIT_FEEDS_GLOBAL = 2`), 1 per background refresh cycle (`MAX_REDDIT_BG_REFRESH = 1`). 8-second delays enforced between RSS fetches.
-    - **Widget refresh**: 5-minute interval (`_refresh_interval = timedelta(minutes=5)`), staggered by 2.5 minutes between widgets (reddit at 0/5/10min, reddit2 at 2.5/7.5/12.5min) with ±2s random jitter.
-    - **Widget growth**: Progressive reveal from cached data—4 posts immediately, 10 posts at +2min, 20 posts at +4min—requires zero additional API calls.
-    - **Quota coordination**: Widgets use HIGH priority (`RateLimitPriority.HIGH`, 5s min interval) and `reserve_quota()`/`record_request()` to prevent RSS from consuming widget quota. RSS uses NORMAL priority (8s min interval) and `should_skip_for_quota()` checks.
-    - **RSSWorker**: Records requests via `record_request(namespace="rss_worker")` for cross-process coordination; checks `should_skip_for_quota()` before Reddit fetches.
-    - **Theoretical max**: ~0.6 req/min with all safeguards active, leaving ~7.4 req/min headroom.
-  - `ImageQueue` maintains separate pools for local (folder) and RSS images.
-  - `sources.local_ratio` (default 60) controls the percentage of images drawn from local sources; the remainder comes from RSS.
-  - Ratio-based selection uses probabilistic sampling: each `next()` call randomly decides which pool to draw from based on the configured ratio.
-  - **Fallback**: If the selected pool is empty, the queue automatically falls back to the other pool, ensuring continuous image availability.
-  - The ratio control is only active when **both** local folders and RSS feeds are configured; otherwise, images come exclusively from the available source type.
-  - **Legacy single-source semantics**: when only one source type exists, `ImageQueue.next()` consumes from the combined queue to preserve deterministic `peek()/size()/wraparound` behavior.
-  - UI: The Sources tab displays a slider and spinboxes ("X% Local / Y% RSS") between the folder and RSS groups. The control is grayed out when only one source type is configured.
 
 ## Transitions
 - GL and CPU variants for Crossfade, Slide, Wipe, Block Puzzle Flip; GL-only variant for Blinds (`GLBlindsTransition`) when hardware acceleration is enabled. Diffuse retains a CPU-based effect (`DiffuseTransition`) as the authoritative fallback, while a compositor-backed GLSL Diffuse shader now exists for the `Rectangle`, `Membrane`, `Lines`, `Diamonds`, and `Amorph` shapes when routed via `GLCompositorDiffuseTransition`.
@@ -466,7 +421,13 @@ The monolithic `SpotifyVisualizerWidget` and `SpotifyBarsGLOverlay` have been de
 - **Per-mode renderers** (`widgets/spotify_visualizer/renderers/`): 7 modules (spectrum, oscilloscope, sine_wave, blob, helix, starfield, bubble) each export `get_uniform_names()` and `upload_uniforms()`. Dispatched via `upload_mode_uniforms(mode, gl, u, state)` — only the active mode's uniforms are pushed, preventing cross-mode bleed.
 - **Tick pipeline** (`widgets/spotify_visualizer/tick_pipeline.py`): Extracted `_on_tick()` (~415 lines) from the widget.
 - **Mode transition** (`widgets/spotify_visualizer/mode_transition.py`): Extracted mode cycling, fade, teardown (~300 lines). `reset_visualizer_state()` is the single reset surface for cold starts, settings applies, and double-click switches.
-- **Bubble simulation** (`widgets/spotify_visualizer/bubble_simulation.py`): CPU-side particle sim with per-bubble state, trail smear, swirl orbits. Mar 2026 retune: swirl motion now derives a curved `swirl_drive` from `base_vel` instead of a large linear multiplier, so quiet passages remain genuinely slow and only intense audio reaches fast spiral motion. **Beat burst detection (Mar 18 2026):** Tracks recent bass transients; when 3+ beats land in 2s, burst mode slows running-avg attack (preserving delta for subsequent beats), boosts delta sensitivity ×1.25 and decay ×1.8, and temporarily promotes up to 5 small bubbles to react to bass. See `Docs/Visualizer_Debug.md` §2.6 for full details.
+- **Bubble simulation** (`widgets/spotify_visualizer/bubble_simulation.py`): CPU-side particle sim with per-bubble state, trail smear, swirl orbits.#### Responsive Bubble Behaviour (Mar 2026)
+
+- Every detected beat now immediately promotes a handful of the largest unpromoted small bubbles (`promote_timer≈0.9s`, max 20% per beat) so bass runs always thicken the scene.
+- Running averages use aggressive attack/decay constants (`dt*3` / `dt*6`) so deltas reset between hits even at 128-sample block sizes.
+- Stream speed smoothing doubled on attack (`dt*28`) and decay (`dt*10`), eliminating the 80–120 ms lag previously associated with the COMPUTE dispatch cadence.
+- Overdrive logging (`[SPOTIFY_VIS][BUBBLE][OVERDRIVE]`) remains for diagnostics; enabling `SRPSS_VIZ_DIAGNOSTICS=1` shows gate/energy factors when tuning.
+- Coverage: `tests/test_bubble_reactivity.py` confirms beat promotion lifetime, decay, and quiet→loud transitions.
 - **Result**: `spotify_visualizer_widget.py` 2407→1482 lines. `spotify_bars_gl_overlay.py` 2049→1518 lines.
 - **Mode isolation**: `_reset_mode_state()` clears per-mode accumulators on switch. Non-active modes get their blob/osc state zeroed. No data bleeds between modes on double-click transitions.
 

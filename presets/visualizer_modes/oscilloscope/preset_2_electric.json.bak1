@@ -1,0 +1,89 @@
+{
+  "mode": "oscilloscope",
+  "name": "Preset 2 (Electric)",
+  "preset_index": 1,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "ghost_alpha": 0.56,
+        "ghost_decay": 0.25,
+        "ghosting_enabled": true,
+        "mode": "oscilloscope",
+        "osc_adaptive_sensitivity": true,
+        "osc_bar_count": 32,
+        "osc_dynamic_floor": true,
+        "osc_dynamic_range_enabled": false,
+        "osc_ghost_intensity": 0.55,
+        "osc_ghosting_enabled": true,
+        "osc_glow_color": [
+          255,
+          244,
+          90,
+          255
+        ],
+        "osc_glow_enabled": true,
+        "osc_glow_intensity": 0.4,
+        "osc_glow_reactivity": 1.25,
+        "osc_glow_size": 1.0,
+        "osc_growth": 3.45,
+        "osc_line2_color": [
+          225,
+          225,
+          225,
+          255
+        ],
+        "osc_line2_glow_color": [
+          241,
+          255,
+          151,
+          230
+        ],
+        "osc_line3_color": [
+          21,
+          21,
+          21,
+          250
+        ],
+        "osc_line3_glow_color": [
+          255,
+          255,
+          255,
+          240
+        ],
+        "osc_line_amplitude": 4.8,
+        "osc_line_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "osc_line_count": 2,
+        "osc_line_dim": false,
+        "osc_line_offset_bias": 0.05,
+        "osc_manual_floor": 0.1,
+        "osc_rainbow_enabled": false,
+        "osc_rainbow_speed": 0.15,
+        "osc_reactive_glow": true,
+        "osc_sensitivity": 0.4,
+        "osc_smoothing": 0.4,
+        "osc_speed": 0.25,
+        "osc_vertical_shift": 20
+      }
+    }
+  },
+  "visualizer_preset_mode": "oscilloscope",
+  "visualizer_preset_override": true
+}

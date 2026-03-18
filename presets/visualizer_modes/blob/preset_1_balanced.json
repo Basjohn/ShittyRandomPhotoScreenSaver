@@ -5,7 +5,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "adaptive_sensitivity": true,
         "bar_border_color": [
           255,
           255,
@@ -13,7 +12,6 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 32,
         "bar_fill_color": [
           255,
           255,
@@ -55,6 +53,7 @@
         "blob_glow_max_size": 1.12,
         "blob_glow_reactivity": 1.6,
         "blob_growth": 5.0,
+        "blob_input_gain": 1.0,
         "blob_manual_floor": 0.05,
         "blob_outline_color": [
           84,
@@ -79,14 +78,10 @@
         "blob_stretch_tendency": 0.17,
         "blob_use_raw_energy": false,
         "blob_width": 1.0,
-        "dynamic_floor": true,
-        "dynamic_range_enabled": true,
         "ghost_alpha": 0.4,
         "ghost_decay": 0.35,
         "ghosting_enabled": true,
-        "manual_floor": 0.12,
-        "mode": "blob",
-        "sensitivity": 1.0
+        "mode": "blob"
       }
     }
   },

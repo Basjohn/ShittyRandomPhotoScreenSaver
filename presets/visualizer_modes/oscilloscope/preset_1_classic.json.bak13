@@ -1,0 +1,90 @@
+{
+  "description": "Curated oscilloscope preset derived from MC snapshot.",
+  "mode": "oscilloscope",
+  "name": "Preset 1 (Classic)",
+  "preset_index": 0,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "ghost_alpha": 0.4,
+        "ghost_decay": 0.35,
+        "ghosting_enabled": true,
+        "mode": "oscilloscope",
+        "osc_adaptive_sensitivity": true,
+        "osc_bar_count": 32,
+        "osc_dynamic_floor": true,
+        "osc_dynamic_range_enabled": false,
+        "osc_ghost_intensity": 0.4,
+        "osc_ghosting_enabled": true,
+        "osc_glow_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "osc_glow_enabled": true,
+        "osc_glow_intensity": 0.6,
+        "osc_glow_reactivity": 1.0,
+        "osc_glow_size": 1.0,
+        "osc_growth": 3.01,
+        "osc_line2_color": [
+          21,
+          21,
+          21,
+          255
+        ],
+        "osc_line2_glow_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "osc_line3_color": [
+          21,
+          21,
+          21,
+          250
+        ],
+        "osc_line3_glow_color": [
+          255,
+          255,
+          255,
+          240
+        ],
+        "osc_line_amplitude": 4.7,
+        "osc_line_color": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "osc_line_count": 1,
+        "osc_line_dim": false,
+        "osc_line_offset_bias": 0.0,
+        "osc_manual_floor": 0.12,
+        "osc_rainbow_enabled": false,
+        "osc_rainbow_speed": 0.3,
+        "osc_reactive_glow": true,
+        "osc_sensitivity": 0.4,
+        "osc_smoothing": 0.6,
+        "osc_speed": 0.33,
+        "osc_vertical_shift": 25
+      }
+    }
+  },
+  "visualizer_preset_mode": "oscilloscope",
+  "visualizer_preset_override": true
+}

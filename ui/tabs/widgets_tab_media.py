@@ -750,6 +750,9 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         logger.debug("[MEDIA_TAB] Failed to set vis border_color=%s", border_color_data, exc_info=True)
         tab._spotify_vis_border_color = QColor(255, 255, 255, 230)
 
+    _apply_color_to_button('vis_fill_color_btn', '_spotify_vis_fill_color')
+    _apply_color_to_button('vis_border_color_btn', '_spotify_vis_border_color')
+
     border_opacity_pct = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bar_border_opacity', 0.85) * 100)
     tab.vis_border_opacity.setValue(border_opacity_pct)
     tab.vis_border_opacity_label.setText(f"{border_opacity_pct}%")

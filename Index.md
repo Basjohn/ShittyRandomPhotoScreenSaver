@@ -107,13 +107,13 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 ## Process Workers
 
-| Worker | File | Purpose | Tests |
-|--------|------|---------|-------|
-| ImageWorker | core/process/workers/image_worker.py | Decode/prescale images in process | 	ests/test_image_worker.py |
-| RSSWorker | core/process/workers/rss_worker.py | Fetch/parse RSS feeds | 	ests/test_rss_worker.py |
-| ~~FFTWorker~~ | ~~removed~~ | Deprecated: inline FFT replaced process worker | - |
-| TransitionWorker | core/process/workers/transition_worker.py | Precompute transition data | 	ests/test_transition_worker.py |
-| BaseWorker | core/process/workers/base.py | Base class for all workers | - |
+| Worker | File | Purpose | Tests | Notes |
+|--------|------|---------|-------|-------|
+| ImageWorker | core/process/workers/image_worker.py | Decode/prescale images in process | 	ests/test_image_worker.py | |
+| RSSWorker | core/process/workers/rss_worker.py | Fetch/parse RSS feeds | 	ests/test_rss_worker.py | |
+| ~~FFTWorker~~ | ~~removed~~ | Deprecated: inline FFT replaced process worker | - | |
+| TransitionWorker | core/process/workers/transition_worker.py | Precompute transition data | 	ests/test_transition_worker.py | |
+| BaseWorker | core/process/workers/base.py | Worker lifecycle loop + logging setup; Mar 2026: `_teardown_logging()` flushes/closes handlers on shutdown so `worker_*.log` files release immediately (fixes worker_image.log deletion failures). | - | |
 
 ## Engine
 
@@ -253,7 +253,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Audio Worker | widgets/spotify_visualizer/audio_worker.py | SpotifyVisualizerAudioWorker, VisualizerMode(SPECTRUM/OSCILLOSCOPE/STARFIELD/BLOB/HELIX/SINE_WAVE/BUBBLE), _AudioFrame | Audio capture coordination (delegates FFT to bar_computation). Helix/Starfield enums remain for backwards compatibility but are **deprecated** and not surfaced in production. |
 | Shared| Beat Engine | widgets/spotify_visualizer/beat_engine.py | _SpotifyBeatEngine, get_shared_spotify_beat_engine | Shared engine with COMPUTE-pool smoothing, waveform + energy band extraction; `_compute_gate_token` invalidates stale FFT tasks; `generation_id` + `latest_generation_with_frame` let widgets await fresh frames before resuming |
 | Bar Computation | widgets/spotify_visualizer/bar_computation.py | fft_to_bars, compute_bars_from_samples, maybe_log_floor_state, get_zero_bars, _apply_adaptive_normalization, _apply_reactive_smoothing | DSP/FFT bar computation pipeline; spectrum_shape_nodes profile (mirrored+linear), uniform energy model. **Dual-window envelope normalizer** (short-term ~300ms limiter + long-term ~3s sustain) replaces single running peak — preserves dynamics during sustained loud passages. **Dynamic band splits** driven by draggable notch positions. `_drop_speed` scales decay constants in reactive smoothing. `_agc_strength` (0.0–1.0) scales envelope tracking rates and normalization strength: 0.0 bypasses normalization entirely, 0.5 default, 1.0 max compression. |
-| Technical Controls | ui/tabs/media/technical_controls.py | create_per_mode_technical_controls, register_per_mode_technical_controls, load_per_mode_technical_controls, collect_per_mode_technical_controls, get_per_mode_controls | Shared per-mode Technical settings group: sensitivity, adaptive sensitivity, dynamic range, dynamic floor, manual floor, audio block size, bar count, **energy_boost** (0.5–1.8x), **agc_strength** (0%–100%), **use_raw_energy** toggle. Load/save wired via per-mode cache. |
+| Technical Controls | ui/tabs/media/technical_controls.py | create_per_mode_technical_controls, register_per_mode_technical_controls, load_per_mode_technical_controls, collect_per_mode_technical_controls, get_per_mode_controls | Shared per-mode Technical settings group: sensitivity, adaptive sensitivity, dynamic range, dynamic floor, manual floor, audio block size (Auto/128/256/512/1024 with negotiated-size logging), bar count, **input_gain** (5%–200% pre-FFT virtual volume), **energy_boost** (0.5–1.8x), **agc_strength** (0%–100%), **use_raw_energy** toggle. Load/save wired via per-mode cache. |
 | Spectrum Shape Editor | ui/tabs/media/spectrum_shape_editor.py | SpectrumShapeEditor, interpolate_nodes, interpolate_nodes_mirrored | Interactive node-based curve editor for bar-height profile; draggable frequency-zone notch labels (boundary anchors locked, interior notches draggable); `notch_positions_changed` signal for persistence; mirrored/linear mode support. |
 | Energy Bands | widgets/spotify_visualizer/energy_bands.py | EnergyBands, extract_energy_bands | Bass/mid/high/overall frequency band extraction from FFT bars |
 | Card Height | widgets/spotify_visualizer/card_height.py | preferred_height, DEFAULT_GROWTH | Reusable card height expansion for all modes (spectrum/osc/starfield/blob/helix/sine/bubble); Helix/Starfield values are legacy only and flagged **deprecated**. |

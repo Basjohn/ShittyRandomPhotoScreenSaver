@@ -13,6 +13,8 @@ import inspect
 import re
 from pathlib import Path
 
+import pytest
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
@@ -497,6 +499,69 @@ class TestPerModeTechnicalRoundTrip:
         self._assert_dict_matches(serialized, per_mode)
 
 
+# ===========================================================================
+# 9a-ii. Per-mode technical UI collection (new controls)
+# ===========================================================================
+
+
+class _StubSlider:
+    def __init__(self, value: int):
+        self._value = value
+
+    def value(self) -> int:
+        return self._value
+
+
+class _StubCombo:
+    def __init__(self, data: int):
+        self._data = data
+
+    def currentData(self) -> int:
+        return self._data
+
+
+class _StubCheck:
+    def __init__(self, checked: bool):
+        self._checked = checked
+
+    def isChecked(self) -> bool:
+        return self._checked
+
+
+class TestPerModeTechnicalControlsCollection:
+    def test_collect_per_mode_controls_includes_input_gain_and_block_size(self):
+        from ui.tabs.media import technical_controls as tc
+
+        class _DummyTab:
+            pass
+
+        tab = _DummyTab()
+        tc.register_per_mode_technical_controls(
+            tab,
+            "sine_wave",
+            controls={
+                "input_gain_slider": _StubSlider(130),
+                "block_size": _StubCombo(128),
+                "adaptive": _StubCheck(True),
+                "sensitivity_slider": _StubSlider(110),
+                "dynamic_floor": _StubCheck(True),
+                "manual_floor": _StubSlider(20),
+                "dynamic_range": _StubCheck(False),
+                "energy_boost_slider": _StubSlider(90),
+                "agc_strength_slider": _StubSlider(55),
+                "raw_energy": _StubCheck(False),
+            },
+            update_sensitivity=lambda: None,
+            update_manual_floor=lambda: None,
+        )
+
+        config: dict[str, float | int | bool] = {}
+        tc.collect_per_mode_technical_controls(tab, config)
+
+        assert config["sine_wave_audio_block_size"] == 128
+        assert config["sine_wave_input_gain"] == pytest.approx(1.30)
+
+
 # ==========================================================================
 # 9b. Bubble swirl plumbing + behaviour
 # ==========================================================================
@@ -714,3 +779,39 @@ class TestVisualizerPresetRepair:
         assert "rainbow_enabled" not in sv  # migrated to per-mode key
         # Derived adaptation clamps min height ratio (0.12 / 0.24 = 0.5)
         assert abs(sv["sine_card_adaptation"] - 0.5) < 1e-6
+
+    @pytest.mark.parametrize(
+        "mode, expected_keys",
+        [
+            ("sine_wave", ["sine_wave_input_gain", "sine_wave_audio_block_size", "sine_glow_color"]),
+            ("bubble", ["bubble_input_gain", "bubble_audio_block_size", "bubble_gradient_light"]),
+            ("blob", ["blob_input_gain", "blob_audio_block_size", "blob_glow_color"]),
+            ("spectrum", ["spectrum_input_gain", "spectrum_audio_block_size", "spectrum_shape_nodes"]),
+            ("oscilloscope", ["oscilloscope_input_gain", "oscilloscope_audio_block_size", "osc_glow_color"]),
+        ],
+    )
+    def test_repair_file_promotes_global_keys_per_mode(self, tmp_path, mode, expected_keys):
+        import json
+        from tools.visualizer_preset_repair import repair_file
+
+        payload = {
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "mode": mode,
+                        "input_gain": 0.8,
+                        "manual_floor": 0.15,
+                    }
+                }
+            }
+        }
+        preset_path = tmp_path / f"{mode}_preset.json"
+        preset_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        _, stats = repair_file(preset_path, mode)
+        assert stats["added"], "Expected defaults to be injected"
+
+        repaired = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
+        for key in expected_keys:
+            assert key in sv, f"Missing {key} for {mode}"

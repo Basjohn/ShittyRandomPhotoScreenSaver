@@ -148,10 +148,6 @@ class BubbleSimulation:
         self._overdrive_consec_frames: int = 0
         self._overdrive_last_log_state: Optional[str] = None
         self._overdrive_last_log_ts: float = 0.0
-        # Beat burst detection: track recent significant delta events
-        self._beat_timestamps: List[float] = []  # recent beat times (monotonic)
-        self._burst_active: bool = False
-        self._burst_cooldown: float = 0.0  # seconds remaining in burst mode after last beat
         self._prev_bass: float = 0.0  # previous frame bass for slope detection
 
     def reset(self) -> None:
@@ -167,9 +163,6 @@ class BubbleSimulation:
         self._overdrive_consec_frames = 0
         self._overdrive_last_log_state = None
         self._overdrive_last_log_ts = 0.0
-        self._beat_timestamps.clear()
-        self._burst_active = False
-        self._burst_cooldown = 0.0
         self._prev_bass = 0.0
 
     @property
@@ -237,46 +230,16 @@ class BubbleSimulation:
                     stream_const, stream_cap, stream_reactivity,
                 )
 
-        # --- Beat burst detection ---
-        # Detect significant bass transients by checking delta above running avg.
-        # A "beat" is registered when bass jumps significantly above the running
-        # average. When 3+ beats land within a 2s window we enter burst mode.
+        # --- Beat detection ---
+        # Single-beat trigger used for direct promotions and fast reactions.
         bass_delta = max(0.0, bass - self._bass_running_avg)
-        beat_threshold = 0.06  # minimum delta to count as a beat event
-        beat_detected = bass_delta > beat_threshold and bass > self._prev_bass + 0.03
-        if beat_detected:
-            self._beat_timestamps.append(self._time)
-            self._burst_cooldown = 0.6  # hold burst mode for 0.6s after last beat
+        beat_threshold = 0.05
+        beat_detected = bass_delta > beat_threshold and bass > self._prev_bass + 0.025
         self._prev_bass = bass
 
-        # Prune old beat timestamps (keep only last 2s)
-        cutoff = self._time - 2.0
-        self._beat_timestamps = [t for t in self._beat_timestamps if t > cutoff]
-
-        recent_beats = len(self._beat_timestamps)
-        was_burst = self._burst_active
-        if recent_beats >= 3:
-            self._burst_active = True
-            self._burst_cooldown = 0.6
-        elif self._burst_cooldown > 0.0:
-            self._burst_cooldown = max(0.0, self._burst_cooldown - dt)
-            self._burst_active = self._burst_cooldown > 0.0
-        else:
-            self._burst_active = False
-
-        if self._burst_active and not was_burst and is_verbose_logging():
-            logger.debug("[BUBBLE_SIM] Burst mode ENTER: %d beats in 2s window", recent_beats)
-        elif not self._burst_active and was_burst and is_verbose_logging():
-            logger.debug("[BUBBLE_SIM] Burst mode EXIT")
-
         # Update running averages for delta-based pulse detection.
-        # During burst mode: slow attack rate so running avg doesn't catch up
-        # to the beat level, preserving delta for subsequent beats.
-        if self._burst_active:
-            avg_attack = min(1.0, dt * 0.25)   # ~4s to rise (was 1.5s)
-        else:
-            avg_attack = min(1.0, dt * 0.7)    # ~1.5s to rise (normal)
-        avg_release = min(1.0, dt * 1.3)  # ~0.8s to fall
+        avg_attack = min(1.0, dt * 3.0)   # quicker rise (~0.33s)
+        avg_release = min(1.0, dt * 6.0)  # moderate fall (~0.16s)
         if bass > self._bass_running_avg:
             self._bass_running_avg += (bass - self._bass_running_avg) * avg_attack
         else:
@@ -287,18 +250,15 @@ class BubbleSimulation:
         else:
             self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_release
 
-        # --- Small→big promotion during bursts ---
-        # On each new beat detected during burst mode, promote a fraction of
-        # small bubbles to react to bass. Only triggers on beat events, not
-        # every tick, so the promotion timer can expire naturally.
-        if self._burst_active and beat_detected:
+        # --- Small→big promotion on every beat ---
+        if beat_detected:
             small_pool = [b for b in self._bubbles if not b.is_big and not b.promoted and not b.popping and not b.exiting]
-            promote_count = min(5, max(0, int(len(small_pool) * 0.30)))
+            promote_count = min(4, max(1, int(len(small_pool) * 0.20)))
             if promote_count > 0:
                 small_pool.sort(key=lambda bb: bb.radius, reverse=True)
                 for bb in small_pool[:promote_count]:
                     bb.promoted = True
-                    bb.promote_timer = 1.2
+                    bb.promote_timer = 0.9
         # Tick down promotion timers
         for b in self._bubbles:
             if b.promoted:
@@ -318,13 +278,11 @@ class BubbleSimulation:
         vocal_raw = smooth_mid * 0.65 + smooth_high * 0.35
         vocal_speed = min(1.0, max(0.0, vocal_raw)) ** 1.4
 
-        # Smoother: fast attack so beats register, moderate decay so speed
-        # drops noticeably between phrases (old decay dt*1.5 was far too
-        # slow — speed never fell during verse→chorus transitions).
+        # Smoother: extremely fast attack/decay so travel speed mirrors music timing.
         if vocal_speed > self._smoothed_speed_energy:
-            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 14.0)
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 28.0)
         else:
-            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 4.5)
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 10.0)
 
         speed_energy = min(1.0, max(0.0, self._smoothed_speed_energy))
         cap = max(0.1, stream_cap)
@@ -505,13 +463,6 @@ class BubbleSimulation:
                 sustained_scale = 0.50 - size_t * 0.10
                 attack_rate = 14.0 - size_t * 3.0
                 decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
-
-            # During burst mode: boost delta sensitivity so subsequent beats
-            # in a cluster still register strongly, and speed up decay so each
-            # beat gets a clean visual reset.
-            if self._burst_active:
-                delta_sens *= 1.25
-                decay_rate *= 1.8  # faster falloff between beats
 
             # Delta component: transient punch
             delta = max(0.0, raw_src - running_avg)

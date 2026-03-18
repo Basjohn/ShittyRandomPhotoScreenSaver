@@ -6,7 +6,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "adaptive_sensitivity": true,
         "bar_border_color": [
           255,
           255,
@@ -14,25 +13,24 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_count": 40,
         "bar_fill_color": [
           255,
           255,
           255,
           230
         ],
-        "dynamic_floor": true,
-        "dynamic_range_enabled": false,
         "ghost_alpha": 0.4,
         "ghost_decay": 0.35,
         "ghosting_enabled": true,
-        "manual_floor": 0.12,
         "mode": "sine_wave",
-        "sensitivity": 0.4,
+        "sine_adaptive_sensitivity": true,
+        "sine_bar_count": 40,
         "sine_card_adaptation": 0.05,
         "sine_crawl_amount": 0.4,
         "sine_density": 1.75,
         "sine_displacement": 0,
+        "sine_dynamic_floor": true,
+        "sine_dynamic_range_enabled": false,
         "sine_glow_color": [
           0,
           107,
@@ -86,6 +84,7 @@
         "sine_line_count": 3,
         "sine_line_dim": false,
         "sine_line_offset_bias": 0.0,
+        "sine_manual_floor": 0.12,
         "sine_micro_wobble": 0.6,
         "sine_rainbow_enabled": false,
         "sine_rainbow_speed": 0.31,
@@ -96,15 +95,19 @@
         "sine_travel_line3": 0,
         "sine_vertical_shift": 35,
         "sine_wave_adaptive_sensitivity": true,
+        "sine_wave_agc_strength": 0.5,
         "sine_wave_audio_block_size": 512,
         "sine_wave_bar_count": 40,
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 0.69,
+        "sine_wave_energy_boost": 0.85,
         "sine_wave_growth": 5.0,
+        "sine_wave_input_gain": 1.0,
         "sine_wave_manual_floor": 0.12,
         "sine_wave_sensitivity": 0.4,
         "sine_wave_travel": 2,
+        "sine_wave_use_raw_energy": false,
         "sine_width_reaction": 0.0
       }
     }

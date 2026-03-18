@@ -64,6 +64,8 @@ _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
         "glow_color",
         "reactive_glow",
         "line_color",
+        "line2_color",
+        "line3_color",
     ),
     "sine_wave": (
         "glow_enabled",
@@ -73,6 +75,65 @@ _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
         "glow_color",
         "reactive_glow",
         "line_color",
+        "line1_color",
+        "line2_color",
+        "line3_color",
+        "line2_glow_color",
+        "line3_glow_color",
+    ),
+    "bubble": (
+        "gradient_light",
+        "gradient_dark",
+        "gradient_direction",
+        "outline_color",
+        "pop_color",
+        "specular_color",
+        "specular_direction",
+        "stream_direction",
+        "stream_constant_speed",
+        "stream_speed_cap",
+        "stream_reactivity",
+        "rotation_amount",
+        "drift_amount",
+        "drift_speed",
+        "drift_frequency",
+        "drift_direction",
+        "big_bass_pulse",
+        "small_freq_pulse",
+        "big_count",
+        "small_count",
+        "ghosting_enabled",
+        "ghost_alpha",
+        "ghost_decay",
+    ),
+    "blob": (
+        "color",
+        "edge_color",
+        "glow_color",
+        "glow_intensity",
+        "glow_reactivity",
+        "glow_max_size",
+        "constant_wobble",
+        "reactive_deformation",
+        "reactive_glow",
+        "reactive_wobble",
+        "stretch_inner",
+        "stretch_outer",
+        "stretch_tendency",
+        "width",
+        "size",
+        "growth",
+        "ghosting_enabled",
+        "ghost_alpha",
+        "ghost_decay",
+    ),
+    "spectrum": (
+        "growth",
+        "border_radius",
+        "rainbow_per_bar",
+        "single_piece",
+        "mirrored",
+        "shape_nodes",
     ),
 }
 
@@ -84,6 +145,14 @@ _MANDATORY_SPECTRUM_SHAPING: Dict[str, Any] = {
     "spectrum_profile_floor": 0.12,
     "spectrum_mirrored": True,
     "spectrum_shape_nodes": [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
+}
+
+_MODE_TECH_PREFIXES: Dict[str, str] = {
+    "spectrum": "spectrum_",
+    "bubble": "bubble_",
+    "blob": "blob_",
+    "sine_wave": "sine_wave_",
+    "oscilloscope": "oscilloscope_",
 }
 
 
@@ -109,16 +178,29 @@ def _ensure_mandatory_per_mode_defaults(
     sanitized: Dict[str, Any],
     defaults: Mapping[str, Any],
 ) -> None:
-    prefix = _canonical_mode_prefix(mode)
+    tech_prefix = _MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))
     for suffix in _MANDATORY_TECH_SUFFIXES:
+        key = f"{tech_prefix}{suffix}"
+        if key not in sanitized and key in defaults:
+            sanitized[key] = defaults[key]
+    prefix = _canonical_mode_prefix(mode)
+    for suffix in _MANDATORY_MODE_VISUAL_SUFFIXES.get(mode, ()):
         key = f"{prefix}{suffix}"
         if key not in sanitized and key in defaults:
             sanitized[key] = defaults[key]
 
-    for suffix in _MANDATORY_MODE_VISUAL_SUFFIXES.get(mode, ()): 
-        key = f"{prefix}{suffix}"
-        if key not in sanitized and key in defaults:
-            sanitized[key] = defaults[key]
+
+def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> None:
+    """Copy legacy global tech settings (e.g. manual_floor) into per-mode keys."""
+
+    prefix = _MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))
+    for suffix in _MANDATORY_TECH_SUFFIXES:
+        global_key = suffix
+        mode_key = f"{prefix}{suffix}"
+        if global_key in sanitized:
+            if mode_key not in sanitized:
+                sanitized[mode_key] = sanitized[global_key]
+            sanitized.pop(global_key, None)
 
 
 def _collect_sections(payload: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
@@ -147,6 +229,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
         base.update(filtered)
 
     sanitized = dict(base)
+    _promote_global_technical_settings(mode, sanitized)
     _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
     if mode == "spectrum":
         for _sk, _sv in _MANDATORY_SPECTRUM_SHAPING.items():

@@ -509,15 +509,16 @@ void main() {
         float ghost_ny1 = ny1 + 0.012;
         vec3 g_line_rgb1, g_glow_rgb1;
         float g_line_a1, g_glow_a1;
-        vec4 ghost_color1 = lineColor1;
-        ghost_color1.a *= u_ghost_alpha * 0.8;
+        vec4 ghost_color1 = vec4(glowColor1.rgb, 1.0);
         eval_line(ghost_ny1, inner_height, ghost_w1_pre, ghost_amp1,
-                  ghost_color1, glowColor1, 0.0, 0.0, 0.0, bass_width + 2.0,
+                  ghost_color1, vec4(0.0), 0.0, 0.0, 0.0, bass_width + 2.0,
                   g_line_rgb1, g_glow_rgb1, g_line_a1, g_glow_a1);
-        float ga1 = g_line_a1 * u_ghost_alpha * 0.75;
+        float ga1 = g_line_a1 * u_ghost_alpha;
         if (ga1 > 0.001) {
-            final_rgb = g_line_rgb1;
-            final_a = ga1;
+            float inv1 = 1.0 - ga1;
+            vec3 ghost_rgb1 = ghost_color1.rgb * ga1;
+            final_rgb = ghost_rgb1 + final_rgb * inv1;
+            final_a = ga1 + final_a * inv1;
         }
     }
 
@@ -625,15 +626,15 @@ void main() {
             float ghost_ny2 = ny2 + 0.012;
             vec3 g_line_rgb2, g_glow_rgb2;
             float g_line_a2, g_glow_a2;
-            vec4 ghost_color2 = lineColor2;
-            ghost_color2.a *= u_ghost_alpha * 0.8;
+            vec4 ghost_color2 = vec4(glowColor2.rgb, 1.0);
             eval_line(ghost_ny2, inner_height, ghost_w2_pre, ghost_amp2,
-                      ghost_color2, glowColor2, 0.0, 0.0, 0.0, bass_width + 2.0,
+                      ghost_color2, vec4(0.0), 0.0, 0.0, 0.0, bass_width + 2.0,
                       g_line_rgb2, g_glow_rgb2, g_line_a2, g_glow_a2);
-            float ga2 = g_line_a2 * u_ghost_alpha * 0.75;
+            float ga2 = g_line_a2 * u_ghost_alpha;
             if (ga2 > 0.001) {
                 float inv2 = 1.0 - ga2;
-                final_rgb = g_line_rgb2 * ga2 + final_rgb * inv2;
+                vec3 ghost_rgb2 = ghost_color2.rgb * ga2;
+                final_rgb = ghost_rgb2 + final_rgb * inv2;
                 final_a = ga2 + final_a * inv2;
             }
         }
@@ -743,15 +744,15 @@ void main() {
             float ghost_ny3 = ny3 + 0.012;
             vec3 g_line_rgb3, g_glow_rgb3;
             float g_line_a3, g_glow_a3;
-            vec4 ghost_color3 = lineColor3;
-            ghost_color3.a *= u_ghost_alpha * 0.8;
+            vec4 ghost_color3 = vec4(glowColor3.rgb, 1.0);
             eval_line(ghost_ny3, inner_height, ghost_w3_pre, ghost_amp3,
-                      ghost_color3, glowColor3, 0.0, 0.0, 0.0, bass_width + 2.0,
+                      ghost_color3, vec4(0.0), 0.0, 0.0, 0.0, bass_width + 2.0,
                       g_line_rgb3, g_glow_rgb3, g_line_a3, g_glow_a3);
-            float ga3 = g_line_a3 * u_ghost_alpha * 0.75;
+            float ga3 = g_line_a3 * u_ghost_alpha;
             if (ga3 > 0.001) {
                 float inv3 = 1.0 - ga3;
-                final_rgb = g_line_rgb3 * ga3 + final_rgb * inv3;
+                vec3 ghost_rgb3 = ghost_color3.rgb * ga3;
+                final_rgb = ghost_rgb3 + final_rgb * inv3;
                 final_a = ga3 + final_a * inv3;
             }
         }

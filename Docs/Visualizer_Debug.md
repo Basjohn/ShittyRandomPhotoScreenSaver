@@ -66,6 +66,7 @@ When debugging, always verify these steps in order:
 - **Uniform gating regression (Feb 2026):** ensure `u_sine_line{1,2,3}_shift` uploads stay inside the `mode == 'sine_wave'` branch. Pushing them globally caused stale uniforms when other modes were active, so any future per-mode uniforms must stay inside their respective branch.
 - **Heartbeat neutralization:** The heartbeat slider row is now labelled “Disabled,” and `heartbeat_amp_params()` always returns `(1.0, 0.48)`. If a preset contains non-zero heartbeat values, they have no effect until the feature is redesigned.
 - **Ghost decoupling (Mar 2026):** Ghost lines now compute their own independent `sin()` wave value instead of reusing the main line's `w_pre`. Each ghost uses 40% of the main travel phase (same direction, trailing behind), 25% crawl, 20% micro wobble, 30% wave effect, and a +0.012 normalised-Y vertical offset. This makes ghosts drift visibly behind the main wave rather than sitting exactly on top of it. The decoupling is pure shader logic — no new uniforms or CPU-side changes needed. Ghost amplitude still uses the peak-tracked `u_ghost_bass/mid/high` envelopes for the trailing energy effect.
+- **Ghost fixes (Mar 2026):** Ghost lines use the peak envelope (`_sine_peak_*`) with per-band splits so they stay visible even as the audio calms down. Ghosts now inherit each line’s glow colour (and thus Taste the Rainbow tint), alpha is uniform across the ghost body (no thick/thin segments), and all enabled lines emit ghosts (line 2/3 no longer skip their trail). Peak decay remains tied to `_sine_ghost_decay` (0.3 default), and fade strength is controlled via `_sine_ghost_alpha`. Diagnostics: enable `SRPSS_VIZ_DIAGNOSTICS=1` to log `SINE_GHOST` entries whenever the peak envelope updates.
 - Debug tip: Glow blowing out? clamp `sine_glow_intensity<=0.6`; reactive glow already adds +10%.
 
 ### 2.4 Blob (default visualizer card)
@@ -126,22 +127,12 @@ This keeps quiet sections floating at the baseline while letting peaks approach 
 - Diagnostics: `BubbleSimulation` logs `[SPOTIFY_VIS][BUBBLE][OVERDRIVE]` whenever reactivity pushes stream speed above 1.0× (cap gate) and `[SPOTIFY_VIS][BUBBLE][SWIRL]` entries when swirl drift is active. Use `SRPSS_VIZ_DIAGNOSTICS=1` to capture stream gate values when tuning.
 - Shader uniforms: `u_bubble_count`, `u_bubbles_pos[110]`, `u_bubbles_extra[110]`, `u_bubbles_trail[330]`, `u_trail_strength`, `u_specular_dir`, `u_outline_color`, `u_specular_color`, `u_gradient_light`, `u_gradient_dark`, `u_pop_color`. Remember to update `tests/test_visualizer_settings_plumbing.py` + overlay kwarg tests when adding new keys to this mode.
 
-#### Beat Burst Detection & Small→Big Promotion (Mar 2026)
+#### Instant Beat Promotions & Faster Reactivity (Mar 2026)
 
-**Problem:** When rapid bass kicks arrive close together (e.g., 4 kicks in 2s), the running average rises toward the beat level after the first kick. Subsequent deltas (`raw_src - running_avg`) shrink progressively, and pulse energy decay is too slow to reset between beats. Result: only the first beat in a cluster produces a visible pulse.
-
-**Solution — two-pronged:**
-
-1. **Burst detector:** Tracks recent significant bass delta events (timestamps). When 3+ beats land within a 2-second window, burst mode activates with a 0.6s cooldown after the last beat.
-   - In burst mode: running average attack rate slows from `dt*0.7` (~1.5s rise) to `dt*0.25` (~4s rise), preserving delta headroom for subsequent beats.
-   - Delta sensitivity boosted ×1.25 and decay rate ×1.8 so each beat in the cluster gets a clean visual pop-and-reset.
-   - Verbose logging: `[BUBBLE_SIM] Burst mode ENTER/EXIT`.
-
-2. **Small→big promotion:** On each new beat detected during burst mode, up to 30% (max 5) of the largest unpromoted small bubbles are temporarily flagged `promoted=True` with a 1.2s timer. Promoted smalls react to bass energy (like big bubbles) with scaled-down sensitivity (`delta_sens=2.8`, `attack=16`, `decay=5`), adding visual density during rapid beat clusters. Promotion expires naturally after the timer; no continuous re-promotion.
-
-**State fields:** `BubbleState.promoted`, `BubbleState.promote_timer`, `BubbleSimulation._beat_timestamps`, `._burst_active`, `._burst_cooldown`, `._prev_bass`.
-
-**Validation:** `tests/test_bubble_reactivity.py` (8 tests) covers rapid beat clusters, sustained loud sections, quiet→loud→quiet transitions, single kicks, and promotion lifecycle.
+- **No more burst gating:** Every detected beat immediately promotes up to 20% of the largest unpromoted small bubbles (`promote_timer≈0.9s`). Promotions now happen on single hits and clusters alike, so bass runs always thicken the scene.
+- **Faster smoothing:** Running averages use `dt*3` attack / `dt*6` release so deltas reset between kicks even at 128-sample block sizes. Stream speed smoothing reacts roughly 2× faster (`dt*28` attack / `dt*10` decay) eliminating the previous ~100 ms lag.
+- **Diagnostics:** `[SPOTIFY_VIS][BUBBLE][OVERDRIVE]` logs remain, and enabling `SRPSS_VIZ_DIAGNOSTICS=1` prints speed gate/energy factors for tuning.
+- **Coverage:** `tests/test_bubble_reactivity.py` verifies beat promotion lifetime, decay, quiet→loud transitions, and ensures quiet passages sit at the baseline while loud sections reach the configured cap.
 
 ### 2.7 Helix [RETIRED FOR BEING SHIT]
 - Shader: `widgets/spotify_visualizer/shaders/helix.frag`

@@ -93,6 +93,15 @@ class AudioCaptureBackend(ABC):
         pass
 
 
+def _build_block_size_candidates(preferred: int) -> list[int]:
+    """Return the prioritized block size list honoring user preference."""
+
+    ordered = [128, 256, 512, 1024]
+    if preferred and preferred in ordered:
+        return [preferred] + [size for size in ordered if size != preferred]
+    return ordered
+
+
 class PyAudioWPatchBackend(AudioCaptureBackend):
     """Audio capture using PyAudioWPatch WASAPI loopback (Windows only)."""
     
@@ -236,14 +245,8 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
             return (None, pyaudio.paContinue)
         
         # Build priority-ordered block size list: user preference first, then fallbacks
-        _all_sizes = [128, 256, 512, 1024]
         preferred = self._config.block_size if self._config.block_size > 0 else 0
-        if preferred > 0:
-            # User explicitly chose a size — try it first, then fallbacks
-            block_candidates = [preferred] + [s for s in _all_sizes if s != preferred]
-        else:
-            # Auto (0) — try from smallest for lowest latency
-            block_candidates = _all_sizes
+        block_candidates = _build_block_size_candidates(preferred)
 
         for block_size in block_candidates:
             try:

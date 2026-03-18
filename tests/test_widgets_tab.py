@@ -5,7 +5,11 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 roundtrips behave as expected.
 """
 import pytest
-import sip
+# Some CI environments install the wheel without sip stubs; guard the import.
+try:  # pragma: no cover - only for environments with sip installed separately
+    import sip  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    sip = None  # WidgetsTab tests do not use sip directly
 import uuid
 
 from PySide6.QtGui import QColor
@@ -131,6 +135,30 @@ class TestWidgetsTab:
             assert _rgba_tuple(reloaded_tab._sine_line_color) == _rgba_tuple(custom_line)
             assert _rgba_tuple(reloaded_tab.sine_glow_color_btn.color()) == _rgba_tuple(custom_glow)
             assert _rgba_tuple(reloaded_tab.sine_line_color_btn.color()) == _rgba_tuple(custom_line)
+        finally:
+            reloaded_tab.deleteLater()
+
+    def test_spectrum_swatch_persistence(self, qt_app, settings_manager):
+        """Spectrum bar fill/border swatches persist and hydrate swatch buttons."""
+
+        def _rgba_tuple(color: QColor) -> tuple[int, int, int, int]:
+            return color.red(), color.green(), color.blue(), color.alpha()
+
+        first_tab = WidgetsTab(settings_manager)
+
+        custom_fill = QColor(90, 200, 145, 210)
+        custom_border = QColor(30, 60, 90, 255)
+        first_tab._spotify_vis_fill_color = custom_fill
+        first_tab._spotify_vis_border_color = custom_border
+        first_tab._save_settings_now()
+        first_tab.deleteLater()
+
+        reloaded_tab = WidgetsTab(settings_manager)
+        try:
+            assert _rgba_tuple(reloaded_tab._spotify_vis_fill_color) == _rgba_tuple(custom_fill)
+            assert _rgba_tuple(reloaded_tab._spotify_vis_border_color) == _rgba_tuple(custom_border)
+            assert _rgba_tuple(reloaded_tab.vis_fill_color_btn.color()) == _rgba_tuple(custom_fill)
+            assert _rgba_tuple(reloaded_tab.vis_border_color_btn.color()) == _rgba_tuple(custom_border)
         finally:
             reloaded_tab.deleteLater()
 
