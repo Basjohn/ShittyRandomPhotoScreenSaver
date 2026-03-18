@@ -3,6 +3,11 @@
 ## Objective
 Rollback to the last stable commit baseline and rebuild only the high-value visualizer settings/features in a controlled sequence that protects mode parity and prevents uniform/kwargs regressions.
 
+## Tracking Rule
+
+- `Current_Plan.md` is the **single exhaustive checklist** for all active tasks.
+- This document is parity-oriented scope only (sequence, guardrails, parity-specific slices).
+
 ## Snapshot: What Was Added in the Regressed Working Tree (Before Rollback)
 
 ### 1) Additional Settings and Their Goal
@@ -77,18 +82,12 @@ Rollback to the last stable commit baseline and rebuild only the high-value visu
 - [ ] Assert mapping continuity across: UI load/save -> `apply_vis_mode_kwargs` -> widget attrs -> `build_gpu_push_extra_kwargs` -> overlay -> renderer/shader uniforms.
 - [ ] Fail slice if any fallback path is triggered unexpectedly.
 
-### Phase 4 - Idea Box Tasks (Integrated)
-- [ ] Spectrum swatch persistence sweep across all swatch-backed controls.
-- [ ] Full per-mode leakage hunt beyond ghosting (all high-impact visual/technical controls).
-- [ ] Add Spectrum-only deep-drop/de-pin tuning control.
-- [ ] Add Spectrum graph editor lower bass/mid/vocal adjustability controls (Spectrum-only + persistence + runtime tests).
-- [ ] Assess and fix QTTool MC key handling (media keys + keyboard input) while preserving no-taskbar/no-Alt-Tab behavior and avoiding AV-suspicious patterns.
-
-### Phase 5 - Finalization
+### Phase 4 - Finalization
 - [ ] Re-run targeted visualizer checks for blob/sine/bubble after all slices.
 - [ ] Update `Index.md` with final routing ownership locations.
 - [ ] Update `Spec.md` with accepted setting contracts/defaults.
 - [ ] Update `Current_Plan.md` with completion state + deferred items.
+- [ ] Confirm parity milestones are reflected in `Current_Plan.md` (single source task tracker).
 
 ---
 
