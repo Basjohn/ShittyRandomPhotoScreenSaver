@@ -160,6 +160,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'mid_high': (eb_snap['mid'] + eb_snap['high']) * 0.5,
         'big_bass_pulse': widget._bubble_big_bass_pulse,
         'small_freq_pulse': widget._bubble_small_freq_pulse,
+        'big_specular_max_size': widget._bubble_big_specular_max_size,
     }
     widget._thread_manager.submit_compute_task(
         widget._bubble_compute_worker,

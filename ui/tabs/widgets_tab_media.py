@@ -582,8 +582,6 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     _dev_features = _os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
     tab.vis_mode_combo.addItem("Spectrum", "spectrum")
     tab.vis_mode_combo.addItem("Oscilloscope", "oscilloscope")
-    if _dev_features:
-        tab.vis_mode_combo.addItem("Starfield", "starfield")
     tab.vis_mode_combo.addItem("Blob", "blob")
     tab.vis_mode_combo.addItem("Sine Waves", "sine_wave")
     tab.vis_mode_combo.addItem("Bubble", "bubble")
@@ -609,22 +607,17 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     # ==========================================
     from ui.tabs.media.spectrum_builder import build_spectrum_ui
     from ui.tabs.media.oscilloscope_builder import build_oscilloscope_ui
-    from ui.tabs.media.starfield_builder import build_starfield_ui, build_starfield_growth
     from ui.tabs.media.blob_builder import build_blob_ui, build_blob_growth
-    from ui.tabs.media.helix_builder import build_helix_ui
     from ui.tabs.media.sine_wave_builder import build_sine_wave_ui
     from ui.tabs.media.bubble_builder import build_bubble_ui
 
     build_spectrum_ui(tab, _svctl)
     build_oscilloscope_ui(tab, _svctl)
-    build_starfield_ui(tab, _svctl)
     build_blob_ui(tab, _svctl)
-    build_helix_ui(tab, _svctl)
     build_sine_wave_ui(tab, _svctl)
     build_bubble_ui(tab, _svctl)
 
     # Append growth sliders that were originally added after sine section
-    build_starfield_growth(tab)
     build_blob_growth(tab)
 
     spotify_vis_layout.addWidget(tab._vis_controls_container)
@@ -858,6 +851,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         _pf = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_profile_floor', 0.12) * 100)
         tab.spectrum_profile_floor.setValue(max(5, min(30, _pf)))
         tab.spectrum_profile_floor_label.setText(f"{_pf / 100.0:.2f}")
+    if hasattr(tab, 'spectrum_drop_speed'):
+        _ds = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_drop_speed', 1.0) * 100)
+        tab.spectrum_drop_speed.setValue(max(50, min(300, _ds)))
+        tab.spectrum_drop_speed_label.setText(f"{_ds / 100.0:.1f}x")
     if hasattr(tab, 'spectrum_border_radius'):
         br_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_border_radius', 0.0))
         tab.spectrum_border_radius.setValue(max(0, min(12, br_val)))
@@ -904,37 +901,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _apply_color_to_button('osc_line3_color_btn', '_osc_line3_color')
     _apply_color_to_button('osc_line3_glow_btn', '_osc_line3_glow_color')
     _update_osc_multi_line_visibility(tab)
-
-    # Per-mode settings: Starfield
-    tab._star_density_value = tab._config_float('spotify_visualizer', spotify_vis_config, 'star_density', 1.0)
-    if hasattr(tab, 'star_travel_speed'):
-        star_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'star_travel_speed', 0.5) * 100)
-        tab.star_travel_speed.setValue(max(0, min(200, star_speed_val)))
-        tab.star_travel_speed_label.setText(f"{star_speed_val / 100.0:.2f}x")
-    if hasattr(tab, 'star_reactivity'):
-        star_react_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'star_reactivity', 1.0) * 100)
-        tab.star_reactivity.setValue(max(0, min(200, star_react_val)))
-        tab.star_reactivity_label.setText(f"{star_react_val / 100.0:.2f}x")
-    if hasattr(tab, 'starfield_growth'):
-        star_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'starfield_growth', 2.0) * 100)
-        tab.starfield_growth.setValue(max(100, min(500, star_growth_val)))
-        tab.starfield_growth_label.setText(f"{star_growth_val / 100.0:.1f}x")
-    # Nebula tint colours
-    for attr, key, fallback in (
-        ('_nebula_tint1', 'nebula_tint1', [20, 40, 120]),
-        ('_nebula_tint2', 'nebula_tint2', [80, 20, 100]),
-    ):
-        c = spotify_vis_config.get(key, fallback) if spotify_vis_config else fallback
-        if isinstance(c, (list, tuple)) and len(c) >= 3:
-            setattr(tab, attr, QColor(*c))
-        else:
-            setattr(tab, attr, QColor(*fallback))
-    _apply_color_to_button('nebula_tint1_btn', '_nebula_tint1')
-    _apply_color_to_button('nebula_tint2_btn', '_nebula_tint2')
-    if hasattr(tab, 'nebula_cycle_speed'):
-        ncs_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'nebula_cycle_speed', 0.3) * 100)
-        tab.nebula_cycle_speed.setValue(max(0, min(100, ncs_val)))
-        tab.nebula_cycle_speed_label.setText(f"{ncs_val}%")
 
     # Per-mode settings: Blob
     if hasattr(tab, 'blob_pulse'):
@@ -1036,43 +1002,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         blob_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_growth', 2.5) * 100)
         tab.blob_growth.setValue(max(100, min(500, blob_growth_val)))
         tab.blob_growth_label.setText(f"{blob_growth_val / 100.0:.1f}x")
-
-    # Per-mode settings: Helix
-    if hasattr(tab, 'helix_turns'):
-        tab.helix_turns.setValue(
-            tab._config_int('spotify_visualizer', spotify_vis_config, 'helix_turns', 4)
-        )
-    if hasattr(tab, 'helix_double'):
-        tab.helix_double.setChecked(
-            tab._config_bool('spotify_visualizer', spotify_vis_config, 'helix_double', True)
-        )
-    if hasattr(tab, 'helix_speed'):
-        helix_speed_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_speed', 1.0) * 100)
-        tab.helix_speed.setValue(max(0, min(200, helix_speed_val)))
-        tab.helix_speed_label.setText(f"{helix_speed_val / 100.0:.2f}x")
-    if hasattr(tab, 'helix_glow_enabled'):
-        tab.helix_glow_enabled.setChecked(
-            tab._config_bool('spotify_visualizer', spotify_vis_config, 'helix_glow_enabled', True)
-        )
-    if hasattr(tab, 'helix_glow_intensity'):
-        helix_glow_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_glow_intensity', 0.5) * 100)
-        tab.helix_glow_intensity.setValue(max(0, min(100, helix_glow_val)))
-        tab.helix_glow_intensity_label.setText(f"{helix_glow_val}%")
-    helix_glow_color_data = spotify_vis_config.get('helix_glow_color', [0, 200, 255, 180])
-    try:
-        tab._helix_glow_color = QColor(*helix_glow_color_data)
-    except Exception:
-        logger.debug("[MEDIA_TAB] Failed to set helix_glow_color=%s", helix_glow_color_data, exc_info=True)
-        tab._helix_glow_color = QColor(0, 200, 255, 180)
-    _apply_color_to_button('helix_glow_color_btn', '_helix_glow_color')
-    if hasattr(tab, 'helix_reactive_glow'):
-        tab.helix_reactive_glow.setChecked(
-            tab._config_bool('spotify_visualizer', spotify_vis_config, 'helix_reactive_glow', True)
-        )
-    if hasattr(tab, 'helix_growth'):
-        helix_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'helix_growth', 2.0) * 100)
-        tab.helix_growth.setValue(max(100, min(500, helix_growth_val)))
-        tab.helix_growth_label.setText(f"{helix_growth_val / 100.0:.1f}x")
 
     # Sine Wave settings
     if hasattr(tab, 'sine_glow_enabled'):
@@ -1209,17 +1138,25 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     # Update per-mode section visibility
     tab._update_vis_mode_sections()
 
-    # Ghosting
-    tab.vis_ghost_enabled.setChecked(
-        tab._config_bool('spotify_visualizer', spotify_vis_config, 'ghosting_enabled', True)
+    # Ghosting (prefer mode-specific spectrum keys, fall back to global)
+    _ghost_en = spotify_vis_config.get(
+        'spectrum_ghosting_enabled',
+        tab._config_bool('spotify_visualizer', spotify_vis_config, 'ghosting_enabled', True),
     )
-    ghost_alpha_pct = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'ghost_alpha', 0.4) * 100)
-    ghost_alpha_pct = max(0, min(100, ghost_alpha_pct))
+    tab.vis_ghost_enabled.setChecked(bool(_ghost_en))
+    _ghost_a = float(spotify_vis_config.get(
+        'spectrum_ghost_alpha',
+        tab._config_float('spotify_visualizer', spotify_vis_config, 'ghost_alpha', 0.4),
+    ))
+    ghost_alpha_pct = max(0, min(100, int(_ghost_a * 100)))
     tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
     tab.vis_ghost_opacity_label.setText(f"{ghost_alpha_pct}%")
 
-    ghost_decay_f = tab._config_float('spotify_visualizer', spotify_vis_config, 'ghost_decay', 0.4)
-    ghost_decay_slider = max(10, min(100, int(ghost_decay_f * 100.0)))
+    _ghost_d = float(spotify_vis_config.get(
+        'spectrum_ghost_decay',
+        tab._config_float('spotify_visualizer', spotify_vis_config, 'ghost_decay', 0.4),
+    ))
+    ghost_decay_slider = max(10, min(100, int(_ghost_d * 100.0)))
     tab.vis_ghost_decay_slider.setValue(ghost_decay_slider)
     tab.vis_ghost_decay_label.setText(f"{ghost_decay_slider / 100.0:.2f}x")
     _update_ghost_visibility(tab)
@@ -1262,9 +1199,37 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.blob_ghost_decay_slider.setValue(max(10, min(100, bgd)))
         tab.blob_ghost_decay_label.setText(f"{bgd / 100.0:.2f}x")
 
+    # Sine wave ghost
+    if hasattr(tab, 'sine_ghost_enabled'):
+        tab.sine_ghost_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'sine_ghosting_enabled', True)
+        )
+    if hasattr(tab, 'sine_ghost_opacity'):
+        sga = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_ghost_alpha', 0.45) * 100)
+        tab.sine_ghost_opacity.setValue(max(0, min(100, sga)))
+        tab.sine_ghost_opacity_label.setText(f"{sga}%")
+    if hasattr(tab, 'sine_ghost_decay_slider'):
+        sgd = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_ghost_decay', 0.3) * 100)
+        tab.sine_ghost_decay_slider.setValue(max(10, min(100, sgd)))
+        tab.sine_ghost_decay_label.setText(f"{sgd / 100.0:.2f}x")
+
+    # Bubble ghost
+    if hasattr(tab, 'bubble_ghost_enabled'):
+        tab.bubble_ghost_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'bubble_ghosting_enabled', False)
+        )
+    if hasattr(tab, 'bubble_ghost_opacity'):
+        buga = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_ghost_alpha', 0.0) * 100)
+        tab.bubble_ghost_opacity.setValue(max(0, min(100, buga)))
+        tab.bubble_ghost_opacity_label.setText(f"{buga}%")
+    if hasattr(tab, 'bubble_ghost_decay_slider'):
+        bugd = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_ghost_decay', 0.4) * 100)
+        tab.bubble_ghost_decay_slider.setValue(max(10, min(100, bugd)))
+        tab.bubble_ghost_decay_label.setText(f"{bugd / 100.0:.2f}x")
+
     # Rainbow (Taste The Rainbow) — per-mode
     # Populate cache from per-mode keys on disk, falling back to global key.
-    _all_modes = ['spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave', 'bubble']
+    _all_modes = ['spectrum', 'oscilloscope', 'blob', 'sine_wave', 'bubble']
     _global_re = tab._config_bool('spotify_visualizer', spotify_vis_config, 'rainbow_enabled', False)
     _global_rs = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'rainbow_speed', 0.5) * 100)
     _rainbow_cache = getattr(tab, '_rainbow_per_mode', {})
@@ -1423,8 +1388,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         'oscilloscope': '_osc_preset_slider',
         'sine_wave': '_sine_preset_slider',
         'blob': '_blob_preset_slider',
-        'helix': '_helix_preset_slider',
-        'starfield': '_starfield_preset_slider',
         'bubble': '_bubble_preset_slider',
     }
     for mode_key, slider_attr in _preset_slider_map.items():
@@ -1495,6 +1458,9 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'ghosting_enabled': tab.vis_ghost_enabled.isChecked(),
         'ghost_alpha': tab.vis_ghost_opacity_slider.value() / 100.0,
         'ghost_decay': max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
+        'spectrum_ghosting_enabled': tab.vis_ghost_enabled.isChecked(),
+        'spectrum_ghost_alpha': tab.vis_ghost_opacity_slider.value() / 100.0,
+        'spectrum_ghost_decay': max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
         'osc_glow_enabled': tab.osc_glow_enabled.isChecked() if hasattr(tab, 'osc_glow_enabled') else True,
         'osc_glow_intensity': (tab.osc_glow_intensity.value() if hasattr(tab, 'osc_glow_intensity') else 50) / 100.0,
         'osc_glow_reactivity': (tab.osc_glow_reactivity.value() if hasattr(tab, 'osc_glow_reactivity') else 100) / 100.0,
@@ -1504,12 +1470,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'osc_line_color': _qcolor_to_list(getattr(tab, '_osc_line_color', None), [255, 255, 255, 255]),
         'osc_glow_color': _qcolor_to_list(getattr(tab, '_osc_glow_color', None), [0, 200, 255, 230]),
         'osc_line_count': (tab.osc_line_count.value() if hasattr(tab, 'osc_line_count') and hasattr(tab, 'osc_multi_line') and tab.osc_multi_line.isChecked() else 1),
-        'star_density': getattr(tab, '_star_density_value', 1.0),
-        'star_travel_speed': (tab.star_travel_speed.value() if hasattr(tab, 'star_travel_speed') else 50) / 100.0,
-        'star_reactivity': (tab.star_reactivity.value() if hasattr(tab, 'star_reactivity') else 100) / 100.0,
-        'nebula_tint1': _qcolor_to_list(getattr(tab, '_nebula_tint1', None), [20, 40, 120]),
-        'nebula_tint2': _qcolor_to_list(getattr(tab, '_nebula_tint2', None), [80, 20, 100]),
-        'nebula_cycle_speed': (tab.nebula_cycle_speed.value() if hasattr(tab, 'nebula_cycle_speed') else 30) / 100.0,
         'blob_pulse': (tab.blob_pulse.value() if hasattr(tab, 'blob_pulse') else 100) / 100.0,
         'blob_color': _qcolor_to_list(getattr(tab, '_blob_color', None), [0, 180, 255, 230]),
         'blob_glow_color': _qcolor_to_list(getattr(tab, '_blob_glow_color', None), [0, 140, 255, 180]),
@@ -1533,13 +1493,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_stretch_tendency': (tab.blob_stretch_tendency.value() if hasattr(tab, 'blob_stretch_tendency') else 35) / 100.0,
         'blob_stretch_inner': (tab.blob_stretch_inner.value() if hasattr(tab, 'blob_stretch_inner') else 50) / 100.0,
         'blob_stretch_outer': (tab.blob_stretch_outer.value() if hasattr(tab, 'blob_stretch_outer') else 50) / 100.0,
-        'helix_turns': tab.helix_turns.value() if hasattr(tab, 'helix_turns') else 4,
-        'helix_double': tab.helix_double.isChecked() if hasattr(tab, 'helix_double') else False,
-        'helix_speed': (tab.helix_speed.value() if hasattr(tab, 'helix_speed') else 100) / 100.0,
-        'helix_glow_enabled': tab.helix_glow_enabled.isChecked() if hasattr(tab, 'helix_glow_enabled') else False,
-        'helix_glow_intensity': (tab.helix_glow_intensity.value() if hasattr(tab, 'helix_glow_intensity') else 50) / 100.0,
-        'helix_glow_color': _qcolor_to_list(getattr(tab, '_helix_glow_color', None), [0, 200, 255, 180]),
-        'helix_reactive_glow': tab.helix_reactive_glow.isChecked() if hasattr(tab, 'helix_reactive_glow') else False,
         'spectrum_growth': (tab.spectrum_growth.value() if hasattr(tab, 'spectrum_growth') else 100) / 100.0,
         'spectrum_single_piece': tab.spectrum_single_piece.isChecked() if hasattr(tab, 'spectrum_single_piece') else False,
         'spectrum_rainbow_per_bar': tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, 'spectrum_rainbow_per_bar') else False,
@@ -1551,9 +1504,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'spectrum_mid_suppression': (tab.spectrum_mid_suppression.value() if hasattr(tab, 'spectrum_mid_suppression') else 50) / 100.0,
         'spectrum_wave_amplitude': (tab.spectrum_wave_amplitude.value() if hasattr(tab, 'spectrum_wave_amplitude') else 50) / 100.0,
         'spectrum_profile_floor': (tab.spectrum_profile_floor.value() if hasattr(tab, 'spectrum_profile_floor') else 12) / 100.0,
-        'starfield_growth': (tab.starfield_growth.value() if hasattr(tab, 'starfield_growth') else 200) / 100.0,
+        'spectrum_drop_speed': (tab.spectrum_drop_speed.value() if hasattr(tab, 'spectrum_drop_speed') else 100) / 100.0,
         'blob_growth': (tab.blob_growth.value() if hasattr(tab, 'blob_growth') else 250) / 100.0,
-        'helix_growth': (tab.helix_growth.value() if hasattr(tab, 'helix_growth') else 200) / 100.0,
         'osc_growth': (tab.osc_growth.value() if hasattr(tab, 'osc_growth') else 100) / 100.0,
         'osc_speed': (tab.osc_speed.value() if hasattr(tab, 'osc_speed') else 100) / 100.0,
         'osc_line_dim': tab.osc_line_dim.isChecked() if hasattr(tab, 'osc_line_dim') else False,
@@ -1613,6 +1565,12 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_ghosting_enabled': tab.blob_ghost_enabled.isChecked() if hasattr(tab, 'blob_ghost_enabled') else False,
         'blob_ghost_alpha': (tab.blob_ghost_opacity.value() if hasattr(tab, 'blob_ghost_opacity') else 40) / 100.0,
         'blob_ghost_decay': max(0.1, (tab.blob_ghost_decay_slider.value() if hasattr(tab, 'blob_ghost_decay_slider') else 30) / 100.0),
+        'sine_ghosting_enabled': tab.sine_ghost_enabled.isChecked() if hasattr(tab, 'sine_ghost_enabled') else True,
+        'sine_ghost_alpha': (tab.sine_ghost_opacity.value() if hasattr(tab, 'sine_ghost_opacity') else 45) / 100.0,
+        'sine_ghost_decay': max(0.1, (tab.sine_ghost_decay_slider.value() if hasattr(tab, 'sine_ghost_decay_slider') else 30) / 100.0),
+        'bubble_ghosting_enabled': tab.bubble_ghost_enabled.isChecked() if hasattr(tab, 'bubble_ghost_enabled') else False,
+        'bubble_ghost_alpha': (tab.bubble_ghost_opacity.value() if hasattr(tab, 'bubble_ghost_opacity') else 0) / 100.0,
+        'bubble_ghost_decay': max(0.1, (tab.bubble_ghost_decay_slider.value() if hasattr(tab, 'bubble_ghost_decay_slider') else 40) / 100.0),
         # Bubble
         'bubble_big_bass_pulse': (tab.bubble_big_bass_pulse.value() if hasattr(tab, 'bubble_big_bass_pulse') else 50) / 100.0,
         'bubble_small_freq_pulse': (tab.bubble_small_freq_pulse.value() if hasattr(tab, 'bubble_small_freq_pulse') else 50) / 100.0,
@@ -1685,8 +1643,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'oscilloscope': '_osc_preset_slider',
         'sine_wave': '_sine_preset_slider',
         'blob': '_blob_preset_slider',
-        'helix': '_helix_preset_slider',
-        'starfield': '_starfield_preset_slider',
         'bubble': '_bubble_preset_slider',
     }
     for mk, sa in _ps_map.items():

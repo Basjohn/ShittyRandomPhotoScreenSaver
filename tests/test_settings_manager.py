@@ -235,7 +235,7 @@ class TestSettingsManagerManualFloorClamp:
                 "spotify_visualizer": {
                     "bubble_manual_floor": 3.5,
                     "spectrum_manual_floor": 0.05,
-                    "helix_manual_floor": "not_a_number",
+                    "oscilloscope_manual_floor": "not_a_number",
                 }
             },
         )
@@ -245,9 +245,9 @@ class TestSettingsManagerManualFloorClamp:
         vis = manager.get("widgets")["spotify_visualizer"]
         assert vis["bubble_manual_floor"] == pytest.approx(1.0)
         assert vis["spectrum_manual_floor"] == pytest.approx(0.12)
-        assert vis["helix_manual_floor"] == pytest.approx(0.12)
+        assert vis["oscilloscope_manual_floor"] == pytest.approx(0.12)
         assert {
             "widgets.spotify_visualizer.bubble_manual_floor",
             "widgets.spotify_visualizer.spectrum_manual_floor",
-            "widgets.spotify_visualizer.helix_manual_floor",
+            "widgets.spotify_visualizer.oscilloscope_manual_floor",
         }.issubset(repairs.keys())

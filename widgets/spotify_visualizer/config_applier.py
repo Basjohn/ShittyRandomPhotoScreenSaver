@@ -85,23 +85,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if c is not None:
             widget._osc_line3_glow_color = c
 
-    # --- Starfield ----------------------------------------------------
-    if 'star_travel_speed' in kwargs:
-        widget._star_travel_speed = max(0.0, float(kwargs['star_travel_speed']))
-    if 'star_reactivity' in kwargs:
-        widget._star_reactivity = max(0.0, float(kwargs['star_reactivity']))
-    if 'star_density' in kwargs:
-        widget._star_density = max(0.1, float(kwargs['star_density']))
-    if 'nebula_tint1' in kwargs:
-        c = kwargs['nebula_tint1']
-        if isinstance(c, (list, tuple)) and len(c) >= 3:
-            widget._nebula_tint1 = QColor(c[0], c[1], c[2])
-    if 'nebula_tint2' in kwargs:
-        c = kwargs['nebula_tint2']
-        if isinstance(c, (list, tuple)) and len(c) >= 3:
-            widget._nebula_tint2 = QColor(c[0], c[1], c[2])
-    if 'nebula_cycle_speed' in kwargs:
-        widget._nebula_cycle_speed = max(0.0, min(1.0, float(kwargs['nebula_cycle_speed'])))
 
     # --- Blob ---------------------------------------------------------
     if 'blob_color' in kwargs:
@@ -159,23 +142,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'blob_stretch_outer' in kwargs:
         widget._blob_stretch_outer = max(0.0, min(1.0, float(kwargs['blob_stretch_outer'])))
 
-    # --- Helix --------------------------------------------------------
-    if 'helix_turns' in kwargs:
-        widget._helix_turns = max(2, int(kwargs['helix_turns']))
-    if 'helix_double' in kwargs:
-        widget._helix_double = bool(kwargs['helix_double'])
-    if 'helix_speed' in kwargs:
-        widget._helix_speed = max(0.0, float(kwargs['helix_speed']))
-    if 'helix_glow_enabled' in kwargs:
-        widget._helix_glow_enabled = bool(kwargs['helix_glow_enabled'])
-    if 'helix_glow_intensity' in kwargs:
-        widget._helix_glow_intensity = max(0.0, float(kwargs['helix_glow_intensity']))
-    if 'helix_glow_color' in kwargs:
-        c = _color_or_none(kwargs['helix_glow_color'])
-        if c is not None:
-            widget._helix_glow_color = c
-    if 'helix_reactive_glow' in kwargs:
-        widget._helix_reactive_glow = bool(kwargs['helix_reactive_glow'])
 
     # --- Spectrum -----------------------------------------------------
     if 'spectrum_single_piece' in kwargs:
@@ -238,17 +204,17 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum shape config", exc_info=True)
 
+    # --- Spectrum drop speed ------------------------------------------
+    if 'spectrum_drop_speed' in kwargs:
+        widget._spectrum_drop_speed = max(0.5, min(3.0, float(kwargs['spectrum_drop_speed'])))
+
     # --- Height growth factors ----------------------------------------
     if 'spectrum_growth' in kwargs:
         widget._spectrum_growth = max(0.5, min(5.0, float(kwargs['spectrum_growth'])))
-    if 'starfield_growth' in kwargs:
-        widget._starfield_growth = max(0.5, min(5.0, float(kwargs['starfield_growth'])))
     if 'blob_growth' in kwargs:
         widget._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
     if 'osc_growth' in kwargs:
         widget._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
-    if 'helix_growth' in kwargs:
-        widget._helix_growth = max(0.5, min(5.0, float(kwargs['helix_growth'])))
     if 'osc_speed' in kwargs:
         widget._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
     if 'osc_line_dim' in kwargs:
@@ -357,6 +323,14 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'osc_ghost_intensity' in kwargs:
         widget._osc_ghost_intensity = max(0.0, min(1.0, float(kwargs['osc_ghost_intensity'])))
 
+    # --- Spectrum ghost ----------------------------------------------------
+    if 'spectrum_ghosting_enabled' in kwargs:
+        widget._spectrum_ghosting_enabled = bool(kwargs['spectrum_ghosting_enabled'])
+    if 'spectrum_ghost_alpha' in kwargs:
+        widget._spectrum_ghost_alpha = max(0.0, min(1.0, float(kwargs['spectrum_ghost_alpha'])))
+    if 'spectrum_ghost_decay' in kwargs:
+        widget._spectrum_ghost_decay = max(0.1, min(1.0, float(kwargs['spectrum_ghost_decay'])))
+
     # --- Blob ghost -------------------------------------------------------
     if 'blob_ghosting_enabled' in kwargs:
         widget._blob_ghosting_enabled = bool(kwargs['blob_ghosting_enabled'])
@@ -364,6 +338,22 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_ghost_alpha = max(0.0, min(1.0, float(kwargs['blob_ghost_alpha'])))
     if 'blob_ghost_decay' in kwargs:
         widget._blob_ghost_decay = max(0.1, min(1.0, float(kwargs['blob_ghost_decay'])))
+
+    # --- Sine ghost -------------------------------------------------------
+    if 'sine_ghosting_enabled' in kwargs:
+        widget._sine_ghosting_enabled = bool(kwargs['sine_ghosting_enabled'])
+    if 'sine_ghost_alpha' in kwargs:
+        widget._sine_ghost_alpha = max(0.0, min(1.0, float(kwargs['sine_ghost_alpha'])))
+    if 'sine_ghost_decay' in kwargs:
+        widget._sine_ghost_decay = max(0.1, min(1.0, float(kwargs['sine_ghost_decay'])))
+
+    # --- Bubble ghost -----------------------------------------------------
+    if 'bubble_ghosting_enabled' in kwargs:
+        widget._bubble_ghosting_enabled = bool(kwargs['bubble_ghosting_enabled'])
+    if 'bubble_ghost_alpha' in kwargs:
+        widget._bubble_ghost_alpha = max(0.0, min(1.0, float(kwargs['bubble_ghost_alpha'])))
+    if 'bubble_ghost_decay' in kwargs:
+        widget._bubble_ghost_decay = max(0.1, min(1.0, float(kwargs['bubble_ghost_decay'])))
 
     # --- Sine Wave Heartbeat -----------------------------------------------
     if 'sine_heartbeat' in kwargs:
@@ -441,6 +431,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
     if 'bubble_small_size_max' in kwargs:
         widget._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
+    if 'bubble_big_specular_max_size' in kwargs:
+        widget._bubble_big_specular_max_size = max(0.5, min(5.0, float(kwargs['bubble_big_specular_max_size'])))
     if 'bubble_growth' in kwargs:
         widget._bubble_growth = max(1.0, min(5.0, float(kwargs['bubble_growth'])))
     if 'bubble_trail_strength' in kwargs:
@@ -460,11 +452,20 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['rainbow_enabled'] = getattr(widget, '_rainbow_enabled', False)
     extra['rainbow_speed'] = getattr(widget, '_rainbow_speed', 0.5)
     extra['rainbow_per_bar'] = getattr(widget, '_rainbow_per_bar', False)
+    extra['spectrum_ghosting_enabled'] = getattr(widget, '_spectrum_ghosting_enabled', True)
+    extra['spectrum_ghost_alpha'] = getattr(widget, '_spectrum_ghost_alpha', 0.4)
+    extra['spectrum_ghost_decay'] = getattr(widget, '_spectrum_ghost_decay', 0.4)
     extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
     extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
     extra['blob_ghosting_enabled'] = getattr(widget, '_blob_ghosting_enabled', False)
     extra['blob_ghost_alpha'] = getattr(widget, '_blob_ghost_alpha', 0.4)
     extra['blob_ghost_decay'] = getattr(widget, '_blob_ghost_decay', 0.3)
+    extra['sine_ghosting_enabled'] = getattr(widget, '_sine_ghosting_enabled', True)
+    extra['sine_ghost_alpha'] = getattr(widget, '_sine_ghost_alpha', 0.45)
+    extra['sine_ghost_decay'] = getattr(widget, '_sine_ghost_decay', 0.3)
+    extra['bubble_ghosting_enabled'] = getattr(widget, '_bubble_ghosting_enabled', False)
+    extra['bubble_ghost_alpha'] = getattr(widget, '_bubble_ghost_alpha', 0.0)
+    extra['bubble_ghost_decay'] = getattr(widget, '_bubble_ghost_decay', 0.4)
     extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
     extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
     extra['sine_density'] = getattr(widget, '_sine_density', 1.0)
@@ -495,12 +496,6 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['reactive_glow'] = widget._sine_reactive_glow if _is_sine else widget._osc_reactive_glow
     extra['osc_line_amplitude'] = widget._sine_sensitivity if _is_sine else widget._osc_line_amplitude
     extra['osc_smoothing'] = widget._osc_smoothing
-    extra['star_density'] = widget._star_density
-    extra['travel_speed'] = widget._star_travel_speed
-    extra['star_reactivity'] = widget._star_reactivity
-    extra['nebula_tint1'] = widget._nebula_tint1
-    extra['nebula_tint2'] = widget._nebula_tint2
-    extra['nebula_cycle_speed'] = widget._nebula_cycle_speed
     extra['blob_color'] = widget._blob_color
     extra['blob_glow_color'] = widget._blob_glow_color
     extra['blob_edge_color'] = widget._blob_edge_color
@@ -540,13 +535,6 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['sine_crawl_amount'] = getattr(widget, '_sine_crawl_amount', 0.0)
     extra['sine_width_reaction'] = widget._sine_width_reaction
     extra['sine_vertical_shift'] = widget._sine_vertical_shift
-    extra['helix_turns'] = widget._helix_turns
-    extra['helix_double'] = widget._helix_double
-    extra['helix_speed'] = widget._helix_speed
-    extra['helix_glow_enabled'] = widget._helix_glow_enabled
-    extra['helix_glow_intensity'] = widget._helix_glow_intensity
-    extra['helix_glow_color'] = widget._helix_glow_color
-    extra['helix_reactive_glow'] = widget._helix_reactive_glow
     extra['line_color'] = widget._sine_line_color if _is_sine else widget._osc_line_color
     extra['osc_line_count'] = widget._sine_line_count if _is_sine else widget._osc_line_count
     extra['osc_line2_color'] = widget._sine_line2_color if _is_sine else widget._osc_line2_color

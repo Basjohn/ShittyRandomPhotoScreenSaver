@@ -26,11 +26,11 @@ def get_uniform_names() -> list[str]:
 def upload_uniforms(gl, u: dict, s) -> bool:
     _set1i(gl, u, "u_playing", 1 if s._playing else 0)
 
-    # Ghost alpha
+    # Ghost alpha (mode-specific: blob)
     loc = u.get("u_ghost_alpha", -1)
     if loc >= 0:
         try:
-            ga = float(s._ghost_alpha if s._ghosting_enabled else 0.0)
+            ga = float(s._blob_ghost_alpha if s._blob_ghosting_enabled else 0.0)
         except Exception:
             ga = 0.0
         gl.glUniform1f(loc, max(0.0, min(1.0, ga)))

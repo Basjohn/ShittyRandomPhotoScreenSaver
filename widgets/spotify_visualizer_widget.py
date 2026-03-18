@@ -90,6 +90,15 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_ghosting_enabled: bool = False
         self._blob_ghost_alpha: float = 0.4
         self._blob_ghost_decay: float = 0.3
+        self._spectrum_ghosting_enabled: bool = True
+        self._spectrum_ghost_alpha: float = 0.4
+        self._spectrum_ghost_decay: float = 0.4
+        self._sine_ghosting_enabled: bool = True
+        self._sine_ghost_alpha: float = 0.45
+        self._sine_ghost_decay: float = 0.3
+        self._bubble_ghosting_enabled: bool = False
+        self._bubble_ghost_alpha: float = 0.0
+        self._bubble_ghost_decay: float = 0.4
         self._spectrum_single_piece: bool = False
         self._spectrum_border_radius: float = 0.0
         self._spectrum_mirrored: bool = True
@@ -100,6 +109,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._spectrum_mid_suppression: float = 0.50
         self._spectrum_wave_amplitude: float = 0.50
         self._spectrum_profile_floor: float = 0.12
+        self._spectrum_drop_speed: float = 1.0
 
         # Visualization mode (Spectrum, Waveform, Abstract)
         self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
@@ -120,13 +130,6 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_line3_color: QColor = QColor(50, 255, 120, 230)
         self._osc_line3_glow_color: QColor = QColor(50, 255, 120, 180)
 
-        # Starfield settings
-        self._star_density: float = 1.0
-        self._star_travel_speed: float = 0.5
-        self._star_reactivity: float = 1.0
-        self._nebula_tint1: QColor = QColor(20, 40, 120)
-        self._nebula_tint2: QColor = QColor(80, 20, 100)
-        self._nebula_cycle_speed: float = 0.3
 
         # Blob settings
         self._blob_color: QColor = QColor(0, 180, 255, 230)
@@ -153,23 +156,11 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_stretch_inner: float = 0.5  # 0..1 how deep inward dents go
         self._blob_stretch_outer: float = 0.5  # 0..1 how far outward protrusions go
 
-        # Helix settings
-        self._helix_turns: int = 4
-        self._helix_double: bool = True
-        self._helix_speed: float = 1.0
-
-        # Helix glow settings
-        self._helix_glow_enabled: bool = True
-        self._helix_glow_intensity: float = 0.5
-        self._helix_glow_color: QColor = QColor(0, 200, 255, 180)
-        self._helix_reactive_glow: bool = True
 
         # Card height expansion (per-mode growth factors, user-customizable)
         self._base_height: int = 80
         self._spectrum_growth: float = 2.0
-        self._starfield_growth: float = 3.0
         self._blob_growth: float = 3.5
-        self._helix_growth: float = 3.0
         self._osc_growth: float = 2.0
         self._bubble_growth: float = 3.0
         self._osc_speed: float = 1.0
@@ -264,6 +255,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_gradient_direction: str = "top"
         self._bubble_big_size_max: float = 0.038
         self._bubble_small_size_max: float = 0.018
+        self._bubble_big_specular_max_size: float = 2.5
         self._bubble_simulation: Optional[object] = None  # lazy init (owned by compute thread)
         self._bubble_pos_data: list = []
         self._bubble_extra_data: list = []
@@ -547,9 +539,7 @@ class SpotifyVisualizerWidget(QWidget):
         mode_map = {
             'spectrum': VisualizerMode.SPECTRUM,
             'oscilloscope': VisualizerMode.OSCILLOSCOPE,
-            'starfield': VisualizerMode.STARFIELD,
             'blob': VisualizerMode.BLOB,
-            'helix': VisualizerMode.HELIX,
             'sine_wave': VisualizerMode.SINE_WAVE,
             'bubble': VisualizerMode.BUBBLE,
         }
@@ -746,9 +736,7 @@ class SpotifyVisualizerWidget(QWidget):
         growth = {
             'spectrum': self._spectrum_growth,
             'oscilloscope': self._osc_growth,
-            'starfield': self._starfield_growth,
             'blob': self._blob_growth,
-            'helix': self._helix_growth,
             'sine_wave': self._sine_wave_growth,
             'bubble': self._bubble_growth,
         }.get(mode)
@@ -780,7 +768,7 @@ class SpotifyVisualizerWidget(QWidget):
 
         For spectrum/oscilloscope (growth=1.0), we explicitly shrink the
         widget back to base_height so the positioning system doesn't keep
-        a stale tall height from an expanded mode (blob/helix/starfield).
+        a stale tall height from an expanded mode (blob/bubble).
         For expanded modes we set a minimum height from the growth factor.
         """
         mode = self._vis_mode_str
@@ -878,6 +866,7 @@ class SpotifyVisualizerWidget(QWidget):
             mid_high=pulse_params['mid_high'],
             big_bass_pulse=pulse_params['big_bass_pulse'],
             small_freq_pulse=pulse_params['small_freq_pulse'],
+            big_specular_max_size=pulse_params.get('big_specular_max_size', 2.5),
         )
         count = self._bubble_simulation.count
         if not getattr(self, '_bubble_worker_logged', False):
@@ -1902,7 +1891,6 @@ class SpotifyVisualizerWidget(QWidget):
         """Cycle to the next visualization mode and return it.
 
         Cycles through Spectrum → Oscilloscope → Sine Wave → Blob → Bubble.
-        Starfield and Helix are excluded from the quick-cycle.
         """
         _CYCLE_MODES = [
             VisualizerMode.SPECTRUM,

@@ -1,7 +1,7 @@
 """Shared OpenGL uniform upload helpers for visualizer renderers.
 
 Extracted from per-renderer duplicated helpers (spectrum, oscilloscope,
-sine_wave, starfield, blob, helix, bubble) to eliminate 7× copy-paste.
+sine_wave, blob, bubble) to eliminate copy-paste.
 """
 from __future__ import annotations
 

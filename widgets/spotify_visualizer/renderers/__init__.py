@@ -20,10 +20,6 @@ from widgets.spotify_visualizer.renderers.oscilloscope import (
     get_uniform_names as oscilloscope_uniform_names,
     upload_uniforms as oscilloscope_upload,
 )
-from widgets.spotify_visualizer.renderers.starfield import (
-    get_uniform_names as starfield_uniform_names,
-    upload_uniforms as starfield_upload,
-)
 from widgets.spotify_visualizer.renderers.blob import (
     get_uniform_names as blob_uniform_names,
     upload_uniforms as blob_upload,
@@ -31,10 +27,6 @@ from widgets.spotify_visualizer.renderers.blob import (
 from widgets.spotify_visualizer.renderers.sine_wave import (
     get_uniform_names as sine_wave_uniform_names,
     upload_uniforms as sine_wave_upload,
-)
-from widgets.spotify_visualizer.renderers.helix import (
-    get_uniform_names as helix_uniform_names,
-    upload_uniforms as helix_upload,
 )
 from widgets.spotify_visualizer.renderers.bubble import (
     get_uniform_names as bubble_uniform_names,
@@ -44,10 +36,8 @@ from widgets.spotify_visualizer.renderers.bubble import (
 RENDERERS = {
     'spectrum': (spectrum_uniform_names, spectrum_upload),
     'oscilloscope': (oscilloscope_uniform_names, oscilloscope_upload),
-    'starfield': (starfield_uniform_names, starfield_upload),
     'blob': (blob_uniform_names, blob_upload),
     'sine_wave': (sine_wave_uniform_names, sine_wave_upload),
-    'helix': (helix_uniform_names, helix_upload),
     'bubble': (bubble_uniform_names, bubble_upload),
 }
 

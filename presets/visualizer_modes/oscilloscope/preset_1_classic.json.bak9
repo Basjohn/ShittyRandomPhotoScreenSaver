@@ -81,7 +81,9 @@
         "osc_smoothing": 0.6,
         "osc_speed": 0.33,
         "osc_vertical_shift": 25,
-        "sensitivity": 0.4
+        "sensitivity": 0.4,
+        "oscilloscope_bar_count": 32,
+        "oscilloscope_dynamic_floor": true
       }
     }
   },

@@ -232,6 +232,64 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_glow_enabled.stateChanged.connect(_update_sine_glow_vis)
     _update_sine_glow_vis()
 
+    # --- Ghosting controls ---
+    sine_ghost_toggle_row = _aligned_row(_normal, "")
+    tab.sine_ghost_enabled = QCheckBox("Enable Ghosting")
+    tab.sine_ghost_enabled.setProperty("circleIndicator", True)
+    tab.sine_ghost_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'sine_ghosting_enabled', True)
+    )
+    tab.sine_ghost_enabled.setToolTip(
+        "When enabled, a faded afterimage of the previous waveform trails behind the current one."
+    )
+    tab.sine_ghost_enabled.stateChanged.connect(tab._save_settings)
+    sine_ghost_toggle_row.addWidget(tab.sine_ghost_enabled)
+    sine_ghost_toggle_row.addStretch()
+
+    tab._sine_ghost_sub = QWidget()
+    _sine_ghost_layout = QVBoxLayout(tab._sine_ghost_sub)
+    _sine_ghost_layout.setContentsMargins(0, 0, 0, 12)
+    _sine_ghost_layout.setSpacing(12)
+
+    sine_ghost_opa_widget, sine_ghost_opa_row = _aligned_row_widget(_sine_ghost_layout, "Ghost Opacity:")
+    tab.sine_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_ghost_opacity.setMinimum(0)
+    tab.sine_ghost_opacity.setMaximum(100)
+    _sg_alpha_pct = int(tab._default_float('spotify_visualizer', 'sine_ghost_alpha', 0.45) * 100)
+    tab.sine_ghost_opacity.setValue(max(0, min(100, _sg_alpha_pct)))
+    tab.sine_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_ghost_opacity.setTickInterval(5)
+    tab.sine_ghost_opacity.valueChanged.connect(tab._save_settings)
+    sine_ghost_opa_row.addWidget(tab.sine_ghost_opacity)
+    tab.sine_ghost_opacity_label = QLabel(f"{_sg_alpha_pct}%")
+    tab.sine_ghost_opacity.valueChanged.connect(
+        lambda v: tab.sine_ghost_opacity_label.setText(f"{v}%")
+    )
+    sine_ghost_opa_row.addWidget(tab.sine_ghost_opacity_label)
+
+    sine_ghost_dec_widget, sine_ghost_dec_row = _aligned_row_widget(_sine_ghost_layout, "Ghost Decay:")
+    tab.sine_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_ghost_decay_slider.setMinimum(10)
+    tab.sine_ghost_decay_slider.setMaximum(100)
+    _sg_decay_pct = int(tab._default_float('spotify_visualizer', 'sine_ghost_decay', 0.3) * 100)
+    tab.sine_ghost_decay_slider.setValue(max(10, min(100, _sg_decay_pct)))
+    tab.sine_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_ghost_decay_slider.setTickInterval(5)
+    tab.sine_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    sine_ghost_dec_row.addWidget(tab.sine_ghost_decay_slider)
+    tab.sine_ghost_decay_label = QLabel(f"{tab.sine_ghost_decay_slider.value() / 100.0:.2f}x")
+    tab.sine_ghost_decay_slider.valueChanged.connect(
+        lambda v: tab.sine_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
+    )
+    sine_ghost_dec_row.addWidget(tab.sine_ghost_decay_label)
+
+    _normal.addWidget(tab._sine_ghost_sub)
+
+    def _update_sine_ghost_vis(_s=None):
+        tab._sine_ghost_sub.setVisible(tab.sine_ghost_enabled.isChecked())
+    tab.sine_ghost_enabled.stateChanged.connect(_update_sine_ghost_vis)
+    _update_sine_ghost_vis()
+
     sine_line_color_row = _swatch_row(_normal, "Line Color:")
     tab.sine_line_color_btn = ColorSwatchButton(title="Choose Sine Wave Line Color")
     tab.sine_line_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line_color', c), tab._save_settings()))

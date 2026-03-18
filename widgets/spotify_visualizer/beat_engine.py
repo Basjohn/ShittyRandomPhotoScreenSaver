@@ -62,7 +62,7 @@ class _SpotifyBeatEngine(QObject):
         self._waveform: List[float] = [0.0] * 256
         self._waveform_count: int = 256
 
-        # Energy bands for starfield / blob / helix
+        # Energy bands for blob
         self._energy_bands: EnergyBands = EnergyBands()
         
         # Smoothing state (moved from widget to reduce UI thread work)

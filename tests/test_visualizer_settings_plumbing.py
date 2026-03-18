@@ -80,7 +80,7 @@ class TestCardHeight:
 
     def test_all_modes_have_default_growth(self):
         from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
-        required_modes = {"spectrum", "oscilloscope", "starfield", "blob", "helix", "sine_wave", "bubble"}
+        required_modes = {"spectrum", "oscilloscope", "blob", "sine_wave", "bubble"}
         missing = required_modes - set(DEFAULT_GROWTH.keys())
         assert not missing, f"Modes missing from DEFAULT_GROWTH: {missing}"
 
@@ -112,7 +112,7 @@ class TestRainbowGreyscaleFix:
 
     SHADER_FILES = [
         "spectrum.frag", "oscilloscope.frag", "sine_wave.frag",
-        "starfield.frag", "blob.frag", "helix.frag", "bubble.frag",
+        "blob.frag", "bubble.frag",
     ]
 
     def test_all_shaders_have_rainbow_uniform(self):
@@ -165,6 +165,7 @@ class TestSettingsModelPlumbing:
         "bubble_outline_color",
         "bubble_specular_direction",
         "bubble_gradient_direction",
+        "spectrum_drop_speed",
     ]
 
     def _read_models_src(self):
@@ -680,13 +681,9 @@ class TestVisualizerPresetRepair:
         assert "blob_stretch_x_bias" not in sv
         assert "blob_stretch_y_bias" not in sv
 
-        backup_section = repaired["snapshot"]["custom_preset_backup"]
-        assert backup_section["widgets.spotify_visualizer.blob_stretch_inner"] == sv["blob_stretch_inner"]
-        assert backup_section["widgets.spotify_visualizer.blob_stretch_outer"] == sv["blob_stretch_outer"]
-        assert all(
-            not key.endswith(("blob_stretch_x_bias", "blob_stretch_y_bias"))
-            for key in backup_section.keys()
-        )
+        # custom_preset_backup was intentionally removed from repair_file output
+        # (see visualizer_preset_repair.py lines 205-210) to prevent preset drift.
+        assert "custom_preset_backup" not in repaired.get("snapshot", {})
 
     def test_repair_file_derives_sine_card_adaptation(self, tmp_path):
         import json

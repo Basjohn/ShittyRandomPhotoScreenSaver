@@ -556,4 +556,64 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     tail_opa_row.addWidget(tab.bubble_tail_opacity_label)
 
+    # ── Ghosting ─────────────────────────────────────────────────
+    _adv_layout.addWidget(QLabel("<b>Ghosting</b>"))
+
+    bubble_ghost_toggle_row = _aligned_row(_adv_layout, "")
+    tab.bubble_ghost_enabled = QCheckBox("Enable Ghosting")
+    tab.bubble_ghost_enabled.setProperty("circleIndicator", True)
+    tab.bubble_ghost_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'bubble_ghosting_enabled', False)
+    )
+    tab.bubble_ghost_enabled.setToolTip(
+        "Show a fading afterimage trail behind moving bubbles."
+    )
+    tab.bubble_ghost_enabled.stateChanged.connect(tab._save_settings)
+    bubble_ghost_toggle_row.addWidget(tab.bubble_ghost_enabled)
+    bubble_ghost_toggle_row.addStretch()
+
+    tab._bubble_ghost_sub = QWidget()
+    _bubble_ghost_layout = QVBoxLayout(tab._bubble_ghost_sub)
+    _bubble_ghost_layout.setContentsMargins(0, 0, 0, 12)
+    _bubble_ghost_layout.setSpacing(12)
+
+    bg_opa_widget, bg_opa_row = _aligned_row_widget(_bubble_ghost_layout, "Ghost Opacity:")
+    tab.bubble_ghost_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_ghost_opacity.setMinimum(0)
+    tab.bubble_ghost_opacity.setMaximum(100)
+    _bg_alpha_pct = int(tab._default_float('spotify_visualizer', 'bubble_ghost_alpha', 0.0) * 100)
+    tab.bubble_ghost_opacity.setValue(max(0, min(100, _bg_alpha_pct)))
+    tab.bubble_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_ghost_opacity.setTickInterval(5)
+    tab.bubble_ghost_opacity.valueChanged.connect(tab._save_settings)
+    bg_opa_row.addWidget(tab.bubble_ghost_opacity)
+    tab.bubble_ghost_opacity_label = QLabel(f"{_bg_alpha_pct}%")
+    tab.bubble_ghost_opacity.valueChanged.connect(
+        lambda v: tab.bubble_ghost_opacity_label.setText(f"{v}%")
+    )
+    bg_opa_row.addWidget(tab.bubble_ghost_opacity_label)
+
+    bg_dec_widget, bg_dec_row = _aligned_row_widget(_bubble_ghost_layout, "Ghost Decay:")
+    tab.bubble_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_ghost_decay_slider.setMinimum(10)
+    tab.bubble_ghost_decay_slider.setMaximum(100)
+    _bg_decay_pct = int(tab._default_float('spotify_visualizer', 'bubble_ghost_decay', 0.4) * 100)
+    tab.bubble_ghost_decay_slider.setValue(max(10, min(100, _bg_decay_pct)))
+    tab.bubble_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_ghost_decay_slider.setTickInterval(5)
+    tab.bubble_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    bg_dec_row.addWidget(tab.bubble_ghost_decay_slider)
+    tab.bubble_ghost_decay_label = QLabel(f"{tab.bubble_ghost_decay_slider.value() / 100.0:.2f}x")
+    tab.bubble_ghost_decay_slider.valueChanged.connect(
+        lambda v: tab.bubble_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
+    )
+    bg_dec_row.addWidget(tab.bubble_ghost_decay_label)
+
+    _adv_layout.addWidget(tab._bubble_ghost_sub)
+
+    def _update_bubble_ghost_vis(_s=None):
+        tab._bubble_ghost_sub.setVisible(tab.bubble_ghost_enabled.isChecked())
+    tab.bubble_ghost_enabled.stateChanged.connect(_update_bubble_ghost_vis)
+    _update_bubble_ghost_vis()
+
     parent_layout.addWidget(tab._bubble_settings_container)

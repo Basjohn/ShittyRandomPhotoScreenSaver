@@ -13,14 +13,14 @@ from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
 class TestSineWaveGLOverlayFix:
     def test_sine_wave_in_allowed_modes(self):
         """sine_wave must be in the GL overlay's allowed mode set."""
-        allowed = ('spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave')
+        allowed = ('spectrum', 'oscilloscope', 'blob', 'sine_wave', 'bubble')
         assert 'sine_wave' in allowed
 
     def test_sine_wave_not_rejected_to_spectrum(self):
         """Simulate the GL overlay's mode validation — sine_wave should NOT fall back."""
         vis_mode = 'sine_wave'
         result = vis_mode if vis_mode in (
-            'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave'
+            'spectrum', 'oscilloscope', 'blob', 'sine_wave', 'bubble'
         ) else 'spectrum'
         assert result == 'sine_wave', f"sine_wave was rejected, got: {result}"
 

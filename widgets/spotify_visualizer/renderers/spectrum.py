@@ -85,7 +85,7 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     loc = u.get("u_ghost_alpha", -1)
     if loc >= 0:
         try:
-            ga = float(s._ghost_alpha if s._ghosting_enabled else 0.0)
+            ga = float(s._spectrum_ghost_alpha if s._spectrum_ghosting_enabled else 0.0)
         except Exception:
             ga = 0.0
         gl.glUniform1f(loc, max(0.0, min(1.0, ga)))

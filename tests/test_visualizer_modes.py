@@ -38,9 +38,9 @@ class TestVisualizerModeEnum:
         """Verify all 7 visualizer modes exist."""
         from widgets.spotify_visualizer_widget import VisualizerMode
         modes = list(VisualizerMode)
-        assert len(modes) == 7
+        assert len(modes) == 5
         assert modes[0] == VisualizerMode.SPECTRUM
-        expected = {"SPECTRUM", "OSCILLOSCOPE", "STARFIELD", "BLOB", "HELIX", "SINE_WAVE", "BUBBLE"}
+        expected = {"SPECTRUM", "OSCILLOSCOPE", "BLOB", "SINE_WAVE", "BUBBLE"}
         assert {m.name for m in modes} == expected
 
 

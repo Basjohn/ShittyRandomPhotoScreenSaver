@@ -64,30 +64,42 @@ Rollback to the last stable commit baseline and rebuild only the high-value visu
 - [x] Remove untracked excess files (`git clean -fd`).
 - [x] Confirm clean git state.
 
-### Phase 1 - Baseline Sanity Validation
-- [ ] Validate blob mode baseline render path (mode switch + ghost default behavior).
-- [ ] Validate sine mode baseline render path (confirm no spectrum fallback).
-- [ ] Validate bubble baseline size behavior (observe large-bubble envelope at defaults).
-- [ ] Log baseline pass/fail notes in `Current_Plan.md`.
+### Phase 1 - Baseline Sanity Validation (Complete)
+- [x] Validate blob mode baseline render path (mode switch + ghost default behavior).
+- [x] Validate sine mode baseline render path (confirm no spectrum fallback).
+- [x] Validate bubble baseline size behavior (observe large-bubble envelope at defaults).
+- [x] Log baseline pass/fail notes in `Current_Plan.md`.
 
-### Phase 2 - Reintroduce Settings in Safe Slices
-- [ ] Slice A: Reintroduce spectrum ghost setting trio end-to-end.
-- [ ] Slice B: Reintroduce sine ghost setting trio end-to-end.
-- [ ] Slice C: Reintroduce bubble size controls (`bubble_big_contraction_bias`, `bubble_big_size_clamp`) end-to-end.
-- [ ] Slice D: Reintroduce bubble ghost setting trio end-to-end.
-- [ ] Slice E: Add `bubble_big_specular_max_size` end-to-end and cap pulse-driven specular growth in bubble rendering.
+### Phase 2 - Reintroduce Settings in Safe Slices (Complete)
+- [x] Slice A: Reintroduce spectrum ghost setting trio end-to-end.
+- [x] Slice B: Reintroduce sine ghost setting trio end-to-end.
+- [x] Slice C: Reintroduce bubble size controls (`bubble_big_contraction_bias`, `bubble_big_size_clamp`) end-to-end.
+- [x] Slice D: Reintroduce bubble ghost setting trio end-to-end.
+- [x] Slice E: Add `bubble_big_specular_max_size` end-to-end and cap pulse-driven specular growth in bubble rendering.
+- [x] Slice F: Strip deprecated Helix & Starfield modes completely (see Phase 2F below).
 
-### Phase 3 - Regression Armor for Each Slice
-- [ ] Add/update tests before advancing to next slice.
-- [ ] Assert mapping continuity across: UI load/save -> `apply_vis_mode_kwargs` -> widget attrs -> `build_gpu_push_extra_kwargs` -> overlay -> renderer/shader uniforms.
-- [ ] Fail slice if any fallback path is triggered unexpectedly.
+### Phase 2F - Strip Helix & Starfield (Complete)
+Removed all traces of deprecated Helix and Starfield visualizer modes:
+- Removed `HELIX`/`STARFIELD` from `VisualizerMode` enum (5 modes remain: Spectrum, Oscilloscope, Blob, Sine Wave, Bubble).
+- Deleted renderer modules (`renderers/helix.py`, `renderers/starfield.py`).
+- Deleted shader files (`shaders/helix.frag`, `shaders/starfield.frag`).
+- Deleted UI builder modules (`ui/tabs/media/helix_builder.py`, `ui/tabs/media/starfield_builder.py`).
+- Removed from: `card_height.py`, `models.py` (dataclass + from_settings + from_mapping + to_dict), `default_settings.py`, `defaults_generated.py`, `defaults_snapshot.py`, `presets.py`, `visualizer_presets.py`, `spotify_widget_creators.py`, `config_applier.py`, `spotify_visualizer_widget.py`, `spotify_bars_gl_overlay.py` (init + set_state params + body + uniform names + travel integration + valid_modes), `widgets_tab_media.py` (build + load + save + preset map + rainbow modes), `widgets_tab.py` (color picker + maps + containers + save config), `beat_engine.py`, `energy_bands.py`, `gl_helpers.py`.
+- Updated 7 test files to remove helix/starfield expectations.
+- Old user settings JSON files may still contain helix/starfield keys — harmless, ignored at load time.
 
-### Phase 4 - Finalization
-- [ ] Re-run targeted visualizer checks for blob/sine/bubble after all slices.
+### Phase 3 - Regression Armor for Each Slice (Complete)
+- [x] Add/update tests before advancing to next slice.
+- [x] Assert mapping continuity across: UI load/save -> `apply_vis_mode_kwargs` -> widget attrs -> `build_gpu_push_extra_kwargs` -> overlay -> renderer/shader uniforms.
+- [x] Fail slice if any fallback path is triggered unexpectedly.
+- [x] Mode isolation audit completed — see `Audits/phase3_mode_isolation_audit.md`.
+
+### Phase 4 - Finalization (In Progress)
+- [ ] Re-run targeted visual checks for blob/sine/bubble after all slices.
+- [ ] Verify no fallback mode activation in normal operation.
+- [x] Update `Current_Plan.md` with completion state.
 - [ ] Update `Index.md` with final routing ownership locations.
 - [ ] Update `Spec.md` with accepted setting contracts/defaults.
-- [ ] Update `Current_Plan.md` with completion state + deferred items.
-- [ ] Confirm parity milestones are reflected in `Current_Plan.md` (single source task tracker).
 
 ---
 

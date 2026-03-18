@@ -3,7 +3,7 @@
 Derives bass, mid, high, and overall energy values from the existing
 per-bar FFT magnitudes produced by ``_fft_to_bars()``.  These are cheap
 to compute — just weighted averages over frequency ranges — and are
-consumed by the starfield, blob, and helix shaders.
+consumed by the blob shader and other visualizer modes.
 """
 from __future__ import annotations
 

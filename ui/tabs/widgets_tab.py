@@ -939,12 +939,6 @@ class WidgetsTab(QWidget):
             self._osc_line3_glow_color = color
             self._save_settings()
 
-    def _choose_helix_glow_color(self) -> None:
-        color = StyledColorPicker.get_color(
-            getattr(self, '_helix_glow_color', QColor(0, 200, 255, 180)),
-            self, "Choose Helix Glow Color")
-        if color is not None:
-            self._helix_glow_color = color
 
     def _choose_reddit_color(self) -> None:
         """Choose Reddit text color."""
@@ -1109,8 +1103,6 @@ class WidgetsTab(QWidget):
             'oscilloscope': '_osc_advanced',
             'sine_wave': '_sine_advanced',
             'blob': '_blob_advanced',
-            'helix': '_helix_advanced',
-            'starfield': '_starfield_advanced',
             'bubble': '_bubble_advanced',
         }
         _slider_map = {
@@ -1118,8 +1110,6 @@ class WidgetsTab(QWidget):
             'oscilloscope': '_osc_preset_slider',
             'sine_wave': '_sine_preset_slider',
             'blob': '_blob_preset_slider',
-            'helix': '_helix_preset_slider',
-            'starfield': '_starfield_preset_slider',
             'bubble': '_bubble_preset_slider',
         }
 
@@ -1224,9 +1214,7 @@ class WidgetsTab(QWidget):
         containers = {
             'spectrum': getattr(self, '_spectrum_settings_container', None),
             'oscilloscope': getattr(self, '_osc_settings_container', None),
-            'starfield': getattr(self, '_starfield_settings_container', None),
             'blob': getattr(self, '_blob_settings_container', None),
-            'helix': getattr(self, '_helix_settings_container', None),
             'sine_wave': getattr(self, '_sine_wave_settings_container', None),
             'bubble': getattr(self, '_bubble_settings_container', None),
         }
@@ -1456,17 +1444,8 @@ class WidgetsTab(QWidget):
             'osc_glow_enabled': getattr(self, 'osc_glow_enabled', None) and self.osc_glow_enabled.isChecked(),
             'osc_glow_intensity': (getattr(self, 'osc_glow_intensity', None) and self.osc_glow_intensity.value() or 50) / 100.0,
             'osc_reactive_glow': getattr(self, 'osc_reactive_glow', None) and self.osc_reactive_glow.isChecked(),
-            'star_travel_speed': (getattr(self, 'star_travel_speed', None) and self.star_travel_speed.value() or 50) / 100.0,
-            'star_reactivity': (getattr(self, 'star_reactivity', None) and self.star_reactivity.value() or 100) / 100.0,
             'blob_pulse': (getattr(self, 'blob_pulse', None) and self.blob_pulse.value() or 100) / 100.0,
-            'helix_turns': getattr(self, 'helix_turns', None) and self.helix_turns.value() or 4,
-            'helix_double': getattr(self, 'helix_double', None) and self.helix_double.isChecked(),
-            'helix_speed': (getattr(self, 'helix_speed', None) and self.helix_speed.value() or 100) / 100.0,
-            'helix_glow_enabled': getattr(self, 'helix_glow_enabled', None) and self.helix_glow_enabled.isChecked(),
-            'helix_glow_intensity': (getattr(self, 'helix_glow_intensity', None) and self.helix_glow_intensity.value() or 50) / 100.0,
-            'starfield_growth': (getattr(self, 'starfield_growth', None) and self.starfield_growth.value() or 200) / 100.0,
             'blob_growth': (getattr(self, 'blob_growth', None) and self.blob_growth.value() or 250) / 100.0,
-            'helix_growth': (getattr(self, 'helix_growth', None) and self.helix_growth.value() or 200) / 100.0,
         }
         
         return config

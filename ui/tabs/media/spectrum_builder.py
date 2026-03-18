@@ -190,7 +190,8 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.vis_ghost_enabled.setProperty("circleIndicator", True)
     tab.vis_ghost_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'ghosting_enabled', True)
+        tab._default_bool('spotify_visualizer', 'spectrum_ghosting_enabled',
+                          tab._default_bool('spotify_visualizer', 'ghosting_enabled', True))
     )
     tab.vis_ghost_enabled.setToolTip(
         "When enabled, the visualizer draws trailing ghost bars above the current height."
@@ -208,7 +209,8 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.vis_ghost_opacity_slider.setMinimum(0)
     tab.vis_ghost_opacity_slider.setMaximum(100)
-    ghost_alpha_pct = int(tab._default_float('spotify_visualizer', 'ghost_alpha', 0.4) * 100)
+    ghost_alpha_pct = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_alpha',
+                           tab._default_float('spotify_visualizer', 'ghost_alpha', 0.4)) * 100)
     tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
     tab.vis_ghost_opacity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_opacity_slider.setTickInterval(5)
@@ -224,7 +226,8 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.vis_ghost_decay_slider.setMinimum(10)
     tab.vis_ghost_decay_slider.setMaximum(100)
-    ghost_decay_slider = int(tab._default_float('spotify_visualizer', 'ghost_decay', 0.4) * 100)
+    ghost_decay_slider = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_decay',
+                              tab._default_float('spotify_visualizer', 'ghost_decay', 0.4)) * 100)
     tab.vis_ghost_decay_slider.setValue(max(10, min(100, ghost_decay_slider)))
     tab.vis_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_decay_slider.setTickInterval(5)
@@ -415,6 +418,26 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.spectrum_profile_floor_label.setText(f"{v / 100.0:.2f}")
     )
     _floor_row.addWidget(tab.spectrum_profile_floor_label)
+
+    # Drop Speed (50–300 → 0.5–3.0)
+    _drop_row = _aligned_row(_adv_layout, "Drop Speed:")
+    tab.spectrum_drop_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_drop_speed.setMinimum(50)
+    tab.spectrum_drop_speed.setMaximum(300)
+    _drop_default = int(tab._default_float('spotify_visualizer', 'spectrum_drop_speed', 1.0) * 100)
+    tab.spectrum_drop_speed.setValue(max(50, min(300, _drop_default)))
+    tab.spectrum_drop_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_drop_speed.setTickInterval(25)
+    tab.spectrum_drop_speed.setToolTip(
+        "How fast bars fall after a peak. 1.0x = default, higher = snappier drops, lower = sticky bars."
+    )
+    tab.spectrum_drop_speed.valueChanged.connect(tab._save_settings)
+    _drop_row.addWidget(tab.spectrum_drop_speed)
+    tab.spectrum_drop_speed_label = QLabel(f"{_drop_default / 100.0:.1f}x")
+    tab.spectrum_drop_speed.valueChanged.connect(
+        lambda v: tab.spectrum_drop_speed_label.setText(f"{v / 100.0:.1f}x")
+    )
+    _drop_row.addWidget(tab.spectrum_drop_speed_label)
 
     # Spectrum card height growth slider (1.0 .. 3.0)
     spectrum_growth_row = _aligned_row(_adv_layout, "Card Height:")

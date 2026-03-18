@@ -325,7 +325,10 @@ void main() {
 
     // Sine frequency: user slider remapped to a wider visual range (≈0.65–8.5 cycles)
     float density_cycles = compute_density_cycles();
-    float sine_freq = TWO_PI * density_cycles;
+    float sine_freq_base = TWO_PI * density_cycles;
+
+    // Apply width reaction stretch after density computation (declared later)
+    // Placeholder — actual sine_freq set after wr_stretch_factor is computed.
 
     // Speed slider: controls travel rate. Gated on playback.
     float speed = clamp(u_sine_speed, 0.0, 3.0);
@@ -367,19 +370,27 @@ void main() {
 
     // Crawl amount (new slider) — kept separate from micro wobble.
     float crawl_amt = clamp(u_crawl_amount, 0.0, 1.0);
-    // Remap so lower slider values still yield noticeable motion and react to density.
-    float crawl_slider = smoothstep(0.02, 0.35, crawl_amt);
-    float crawl_boost = mix(0.35, 1.65, crawl_slider);
+    // Remap so full slider range is useful — old (0.02,0.35) wasted upper 65%.
+    float crawl_slider = smoothstep(0.02, 0.85, crawl_amt);
+    float crawl_boost = mix(0.45, 2.20, crawl_slider);
     float crawl_spacing_bias = clamp(u_sine_density * 0.35, 0.0, 1.0);
-    float crawl_spacing = mix(0.34, 1.25, crawl_spacing_bias) * crawl_boost;
+    float crawl_spacing = mix(0.40, 1.50, crawl_spacing_bias) * crawl_boost;
     float crawl_gate = (crawl_amt > 0.001 && play_gate > 0.15) ? 1.0 : 0.0;
 
-    // Width Reaction: bass-driven line width boost (0 = off, 1 = max)
+    // Width Reaction: bass-driven horizontal stretch + line width boost (0 = off, 1 = max)
     float wr = clamp(u_width_reaction, 0.0, 1.0);
     float bass_width = 0.0;
+    float wr_stretch_factor = 1.0;  // 1.0 = no stretch, <1.0 = fewer cycles = wider wave
     if (wr > 0.001) {
-        bass_width = clamp(u_bass_energy * 1.5, 0.0, 1.0) * wr;
+        float wr_bass = clamp(u_bass_energy * 1.5, 0.0, 1.0) * wr;
+        bass_width = wr_bass;  // line thickness boost (secondary)
+        // Primary: horizontal stretch — reduce sine frequency on bass hits
+        // Up to 30% cycle reduction at max bass + max slider = visually wider wave
+        wr_stretch_factor = 1.0 - wr_bass * 0.30;
     }
+
+    // Apply width reaction horizontal stretch to sine frequency
+    float sine_freq = sine_freq_base * wr_stretch_factor;
 
     // Vertical shift: purely Y-positioning of lines (does NOT affect amplitude/shape)
     // 0 = no spread, 100 = default spread, 200 = 2x spread, negative = inverted
@@ -421,17 +432,17 @@ void main() {
     float crawl_offset1 = 0.0;
     if (crawl_gate > 0.5) {
         float crawl_energy_mix = clamp(u_mid_energy * 0.75 + u_high_energy * 0.55 + u_bass_energy * 0.25, 0.0, 1.8);
-        float crawl_energy_drive = pow(max(crawl_energy_mix, 0.0001), 0.56);
-        float crawl_floor = mix(0.08, 0.32, crawl_slider);
-        float crawl_drive = (crawl_floor + crawl_energy_drive * 1.75) * crawl_slider * crawl_boost;
+        float crawl_energy_drive = pow(max(crawl_energy_mix, 0.0001), 0.50);
+        float crawl_floor = mix(0.12, 0.45, crawl_slider);
+        float crawl_drive = (crawl_floor + crawl_energy_drive * 2.20) * crawl_slider * crawl_boost;
         if (crawl_drive > 0.0004) {
-            float nx_scale = mix(0.8, 1.9, crawl_slider) * (0.7 + crawl_spacing);
+            float nx_scale = mix(0.9, 2.2, crawl_slider) * (0.7 + crawl_spacing);
             float slow_band = sin(nx * (0.9 + nx_scale * 0.30) + u_time * 0.28);
             float mid_band = sin(nx * (2.4 + nx_scale * 0.50) - u_time * 0.78) * 0.75;
             float fast_band = sin(nx * (4.6 + nx_scale * 0.70) + u_time * 1.15) * 0.35;
             float crawl_raw = slow_band * 0.55 + mid_band * 0.30 + fast_band * 0.15;
-            float energy_push = mix(0.55, 1.45, clamp(crawl_energy_mix, 0.0, 1.2));
-            crawl_offset1 = clamp(crawl_raw * crawl_drive * energy_push * 0.45, -0.45, 0.45);
+            float energy_push = mix(0.65, 1.65, clamp(crawl_energy_mix, 0.0, 1.2));
+            crawl_offset1 = clamp(crawl_raw * crawl_drive * energy_push * 0.70, -0.55, 0.55);
         }
     }
     float w1 = sin(nx * sine_freq + phase1 + u_sine_line1_shift * TWO_PI + disp_phase_offset);
@@ -502,8 +513,8 @@ void main() {
         float crawl_offset2 = crawl_offset1 * mix(0.35, 0.80, lob);
         if (crawl_gate > 0.5) {
             float crawl_energy2 = clamp(u_mid_energy * 0.70 + u_high_energy * 0.40 + u_bass_energy * 0.20, 0.0, 1.8);
-            float crawl_floor2 = mix(0.06, 0.28, crawl_slider);
-            float crawl_drive2 = (crawl_floor2 + pow(max(crawl_energy2, 0.0001), 0.60) * 1.55) * crawl_slider * crawl_boost;
+            float crawl_floor2 = mix(0.10, 0.38, crawl_slider);
+            float crawl_drive2 = (crawl_floor2 + pow(max(crawl_energy2, 0.0001), 0.54) * 2.00) * crawl_slider * crawl_boost;
             if (crawl_drive2 > 0.00025) {
                 float spacing2 = mix(crawl_spacing * 0.85, crawl_spacing * 1.25, lob * 0.9);
                 float drift_slow2 = sin(nx * (1.1 + spacing2 * 0.45) + u_time * 0.34);
@@ -512,7 +523,7 @@ void main() {
                 float drift_mix2 = drift_slow2 * 0.50 + drift_mid2 * 0.35 + drift_fast2 * 0.20;
                 float lob_influence2 = clamp(lob * 1.15, 0.2, 1.0);
                 float blended = mix(crawl_offset1, drift_mix2 * spacing2 * 0.8, lob_influence2);
-                crawl_offset2 = clamp(blended * crawl_drive2 * 0.55, -0.50, 0.50);
+                crawl_offset2 = clamp(blended * crawl_drive2 * 0.65, -0.55, 0.55);
             }
         }
         float w2 = sin(nx * sine_freq + lob_phase2 + phase2 + add_shift2 + disp_phase_offset * 0.85);
@@ -588,8 +599,8 @@ void main() {
         float crawl_offset3 = crawl_offset1 * mix(0.55, 1.15, lob);
         if (crawl_gate > 0.5) {
             float crawl_energy3 = clamp(u_high_energy * 0.75 + u_mid_energy * 0.35 + u_bass_energy * 0.25, 0.0, 1.8);
-            float crawl_floor3 = mix(0.08, 0.34, crawl_slider);
-            float crawl_drive3 = (crawl_floor3 + pow(max(crawl_energy3, 0.0001), 0.62) * 1.70) * crawl_slider * crawl_boost;
+            float crawl_floor3 = mix(0.12, 0.42, crawl_slider);
+            float crawl_drive3 = (crawl_floor3 + pow(max(crawl_energy3, 0.0001), 0.56) * 2.10) * crawl_slider * crawl_boost;
             if (crawl_drive3 > 0.00025) {
                 float spacing3 = mix(crawl_spacing * 0.90, crawl_spacing * 1.35, lob);
                 float drift_slow3 = sin(nx * (0.85 + spacing3 * 0.40) - u_time * 0.52);
@@ -598,7 +609,7 @@ void main() {
                 float drift_mix3 = drift_slow3 * 0.45 + drift_mid3 * 0.35 + drift_fast3 * 0.20;
                 float lob_influence3 = clamp(lob * 1.25, 0.25, 1.0);
                 float blended3 = mix(crawl_offset1, drift_mix3 * spacing3 * 0.95, lob_influence3);
-                crawl_offset3 = clamp(blended3 * crawl_drive3 * 0.60, -0.55, 0.55);
+                crawl_offset3 = clamp(blended3 * crawl_drive3 * 0.70, -0.60, 0.60);
             }
         }
         float w3 = sin(nx * sine_freq + lob_phase3 + phase3 + add_shift3 + disp_phase_offset * 1.15);

@@ -89,7 +89,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._waveform_count: int = 0
         self._osc_ghost_alpha: float = 0.0  # 0 = disabled
 
-        # Energy bands for starfield / blob / helix
+        # Energy bands for blob
         self._energy_bands: EnergyBands = EnergyBands()
 
         # Oscilloscope glow settings
@@ -110,14 +110,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_line3_color: QColor = QColor(50, 255, 120, 230)
         self._osc_line3_glow_color: QColor = QColor(50, 255, 120, 180)
 
-        # Starfield settings
-        self._star_density: float = 1.0
-        self._travel_speed: float = 0.5
-        self._star_reactivity: float = 1.0
-        self._starfield_travel_time: float = 0.0  # CPU-accumulated travel (monotonic, never reverses)
-        self._nebula_tint1: QColor = QColor(20, 40, 120)   # first nebula colour
-        self._nebula_tint2: QColor = QColor(80, 20, 100)    # second nebula colour
-        self._nebula_cycle_speed: float = 0.3               # colour cycle speed (0..1)
 
         # Blob settings
         self._blob_color: QColor = QColor(0, 180, 255, 230)
@@ -193,14 +185,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_tail_opacity: float = 0.0
         self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
 
-        # Helix settings
-        self._helix_turns: int = 4
-        self._helix_double: bool = True
-        self._helix_speed: float = 1.0
-        self._helix_glow_enabled: bool = True
-        self._helix_glow_intensity: float = 0.5
-        self._helix_glow_color: QColor = QColor(0, 200, 255, 180)
-        self._helix_reactive_glow: bool = True
 
         # Spectrum: single piece mode (solid bars, no segment gaps)
         self._single_piece: bool = False
@@ -210,6 +194,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # decay rate is controlled separately via _peak_decay_per_sec.
         self._ghosting_enabled: bool = True
         self._ghost_alpha: float = 0.4
+        # Per-mode ghost fields (strict isolation, no cross-mode bleed)
+        self._spectrum_ghosting_enabled: bool = True
+        self._spectrum_ghost_alpha: float = 0.4
+        self._spectrum_ghost_decay: float = 0.4
+        self._blob_ghosting_enabled: bool = False
+        self._blob_ghost_alpha: float = 0.4
+        self._blob_ghost_decay: float = 0.3
+        self._sine_ghosting_enabled: bool = True
+        self._sine_ghost_alpha: float = 0.45
+        self._sine_ghost_decay: float = 0.3
+        self._bubble_ghosting_enabled: bool = False
+        self._bubble_ghost_alpha: float = 0.0
+        self._bubble_ghost_decay: float = 0.4
 
         # Per-bar peak values used to draw trailing "ghost" segments above
         # the current bar height. Peaks are updated whenever new bar data
@@ -257,9 +254,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         valid_modes = {
             'spectrum',
             'oscilloscope',
-            'starfield',
             'blob',
-            'helix',
             'sine_wave',
             'bubble',
         }
@@ -289,9 +284,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._osc_smoothed_bass = 0.0
             self._osc_smoothed_mid = 0.0
             self._osc_smoothed_high = 0.0
-
-        if mode_key == 'starfield':
-            self._starfield_travel_time = 0.0
 
         if mode_key == 'bubble':
             self._bubble_pos_data = []
@@ -357,12 +349,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         osc_line_amplitude: float = 3.0,
         osc_sensitivity: float | None = None,
         osc_smoothing: float = 0.7,
-        star_density: float = 1.0,
-        travel_speed: float = 0.5,
-        star_reactivity: float = 1.0,
-        nebula_tint1: QColor | None = None,
-        nebula_tint2: QColor | None = None,
-        nebula_cycle_speed: float = 0.3,
         blob_color: QColor | None = None,
         blob_glow_color: QColor | None = None,
         blob_edge_color: QColor | None = None,
@@ -402,13 +388,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         sine_width_reaction: float = 0.0,
         sine_density: float = 1.0,
         sine_displacement: float = 0.0,
-        helix_turns: int = 4,
-        helix_double: bool = True,
-        helix_speed: float = 1.0,
-        helix_glow_enabled: bool = True,
-        helix_glow_intensity: float = 0.5,
-        helix_glow_color: QColor | None = None,
-        helix_reactive_glow: bool = True,
         line_color: QColor | None = None,
         osc_line_count: int = 1,
         osc_line2_color: QColor | None = None,
@@ -423,9 +402,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         rainbow_per_bar: bool = False,
         osc_ghosting_enabled: bool = False,
         osc_ghost_intensity: float = 0.4,
+        spectrum_ghosting_enabled: bool = True,
+        spectrum_ghost_alpha: float = 0.4,
+        spectrum_ghost_decay: float = 0.4,
         blob_ghosting_enabled: bool = False,
         blob_ghost_alpha: float = 0.4,
         blob_ghost_decay: float = 0.3,
+        sine_ghosting_enabled: bool = True,
+        sine_ghost_alpha: float = 0.45,
+        sine_ghost_decay: float = 0.3,
+        bubble_ghosting_enabled: bool = False,
+        bubble_ghost_alpha: float = 0.0,
+        bubble_ghost_decay: float = 0.4,
         blob_glow_reactivity: float = 1.0,
         blob_glow_max_size: float = 1.0,
         sine_heartbeat: float = 0.0,
@@ -460,7 +448,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Set active visualizer mode
         prev_mode = self._vis_mode
         requested_mode = vis_mode if vis_mode in (
-            'spectrum', 'oscilloscope', 'starfield', 'blob', 'helix', 'sine_wave', 'bubble'
+            'spectrum', 'oscilloscope', 'blob', 'sine_wave', 'bubble'
         ) else 'spectrum'
         self._vis_mode = requested_mode
         manual_reset = False
@@ -495,16 +483,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 # Gate rainbow hue rotation on playing state (issue 1.5)
                 if playing:
                     self._accumulated_time += dt
-                # Starfield: integrate speed*dt so travel is monotonic (never reverses)
-                # Gate on overall energy so travel stops when music is paused
-                if self._vis_mode == 'starfield' and energy_bands is not None:
-                    overall = getattr(energy_bands, 'overall', 0.0)
-                    bass = getattr(energy_bands, 'bass', 0.0)
-                    # Fade base speed to 0 when silent (overall < 0.02)
-                    activity = min(1.0, overall * 10.0)  # 0→1 over energy 0→0.1
-                    base_spd = self._travel_speed * activity
-                    spd = base_spd + bass * self._star_reactivity * 0.4
-                    self._starfield_travel_time += dt * spd
                 # Blob: smooth overall energy to reduce glow flickering
                 if self._vis_mode == 'blob' and energy_bands is not None:
                     raw_e = getattr(energy_bands, 'overall', 0.0)
@@ -536,7 +514,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     if raw_e > self._blob_peak_overall:
                         self._blob_peak_overall = raw_e
                         any_peak_hit = True
-                    if self._ghosting_enabled:
+                    if self._blob_ghosting_enabled:
                         # Reset hold timer on any new peak hit
                         if any_peak_hit:
                             self._blob_peak_hold_remaining = 0.15  # hold 150ms before decay
@@ -607,30 +585,32 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 self._waveform = new_wf
             self._waveform_count = len(self._waveform)
 
-        # Store energy bands (starfield / blob / helix)
+        # Store energy bands (all modes that need them)
         if energy_bands is not None:
             self._energy_bands = energy_bands
-            bass_val = float(getattr(energy_bands, 'bass', 0.0) or 0.0)
-            mid_val = float(getattr(energy_bands, 'mid', 0.0) or 0.0)
-            high_val = float(getattr(energy_bands, 'high', 0.0) or 0.0)
-            overall_val = float(getattr(energy_bands, 'overall', 0.0) or 0.0)
-            if self._blob_seed_pending:
-                seed_value = overall_val or bass_val or mid_val or high_val
-                if seed_value > 0.0:
-                    self._blob_smoothed_energy = seed_value
-                    self._blob_seed_pending = False
-            stage_progress_raw = compute_stage_progress(
-                bass_energy=bass_val,
-                mid_energy=mid_val,
-                high_energy=high_val,
-                overall_energy=overall_val,
-                smoothed_energy=self._blob_smoothed_energy,
-                stage_bias=self._blob_stage_bias,
-            )
-            self._blob_stage_progress_raw = stage_progress_raw
-            filtered = self._filter_stage_progress(stage_progress_raw, dt_seconds)
-            self._blob_stage_progress_filtered = filtered
-            self._blob_stage_progress_ready = True
+            # Blob stage progress is expensive — only compute when in blob mode
+            if self._vis_mode == 'blob':
+                bass_val = float(getattr(energy_bands, 'bass', 0.0) or 0.0)
+                mid_val = float(getattr(energy_bands, 'mid', 0.0) or 0.0)
+                high_val = float(getattr(energy_bands, 'high', 0.0) or 0.0)
+                overall_val = float(getattr(energy_bands, 'overall', 0.0) or 0.0)
+                if self._blob_seed_pending:
+                    seed_value = overall_val or bass_val or mid_val or high_val
+                    if seed_value > 0.0:
+                        self._blob_smoothed_energy = seed_value
+                        self._blob_seed_pending = False
+                stage_progress_raw = compute_stage_progress(
+                    bass_energy=bass_val,
+                    mid_energy=mid_val,
+                    high_energy=high_val,
+                    overall_energy=overall_val,
+                    smoothed_energy=self._blob_smoothed_energy,
+                    stage_bias=self._blob_stage_bias,
+                )
+                self._blob_stage_progress_raw = stage_progress_raw
+                filtered = self._filter_stage_progress(stage_progress_raw, dt_seconds)
+                self._blob_stage_progress_filtered = filtered
+                self._blob_stage_progress_ready = True
 
         # Oscilloscope glow settings
         self._glow_enabled = bool(glow_enabled)
@@ -688,15 +668,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if osc_line3_glow_color is not None:
             self._osc_line3_glow_color = QColor(osc_line3_glow_color)
 
-        # Starfield settings
-        self._star_density = max(0.1, float(star_density))
-        self._travel_speed = max(0.0, float(travel_speed))
-        self._star_reactivity = max(0.0, float(star_reactivity))
-        if nebula_tint1 is not None:
-            self._nebula_tint1 = QColor(nebula_tint1) if not isinstance(nebula_tint1, QColor) else nebula_tint1
-        if nebula_tint2 is not None:
-            self._nebula_tint2 = QColor(nebula_tint2) if not isinstance(nebula_tint2, QColor) else nebula_tint2
-        self._nebula_cycle_speed = max(0.0, min(1.0, float(nebula_cycle_speed)))
 
         # Blob settings
         if blob_color is not None:
@@ -743,15 +714,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_line3_shift = max(-1.0, min(1.0, float(sine_line3_shift)))
         self._sine_width_reaction = max(0.0, min(1.0, float(sine_width_reaction)))
 
-        # Helix settings
-        self._helix_turns = max(2, int(helix_turns))
-        self._helix_double = bool(helix_double)
-        self._helix_speed = max(0.0, float(helix_speed))
-        self._helix_glow_enabled = bool(helix_glow_enabled)
-        self._helix_glow_intensity = max(0.0, float(helix_glow_intensity))
-        if helix_glow_color is not None:
-            self._helix_glow_color = QColor(helix_glow_color)
-        self._helix_reactive_glow = bool(helix_reactive_glow)
 
         # Spectrum: single piece (solid bars, no segments)
         self._single_piece = bool(single_piece)
@@ -791,10 +753,28 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_specular_direction = str(bubble_specular_direction)
         self._bubble_gradient_direction = str(bubble_gradient_direction)
 
-        # Apply ghost configuration up-front so it is visible to both the
-        # peak-envelope update and the shader path. When ghosting is
-        # disabled, we keep bar rendering active but collapse ghost alpha to
-        # zero so only the solid bars remain.
+        # --- Per-mode ghost configuration -----------------------------------
+        # Each mode stores its own ghosting_enabled / ghost_alpha / ghost_decay
+        # so no mode can contaminate another.  The old global ghost params
+        # (ghosting_enabled, ghost_alpha, ghost_decay named args) are kept for
+        # backward compat and used to seed the legacy _ghosting_enabled /
+        # _ghost_alpha fields, but mode-specific fields always take priority
+        # for rendering decisions.
+        self._spectrum_ghosting_enabled = bool(spectrum_ghosting_enabled)
+        self._spectrum_ghost_alpha = max(0.0, min(1.0, float(spectrum_ghost_alpha)))
+        self._spectrum_ghost_decay = max(0.1, min(1.0, float(spectrum_ghost_decay)))
+        self._blob_ghosting_enabled = bool(blob_ghosting_enabled)
+        self._blob_ghost_alpha = max(0.0, min(1.0, float(blob_ghost_alpha)))
+        self._blob_ghost_decay = max(0.1, min(1.0, float(blob_ghost_decay)))
+        self._sine_ghosting_enabled = bool(sine_ghosting_enabled)
+        self._sine_ghost_alpha = max(0.0, min(1.0, float(sine_ghost_alpha)))
+        self._sine_ghost_decay = max(0.1, min(1.0, float(sine_ghost_decay)))
+        self._bubble_ghosting_enabled = bool(bubble_ghosting_enabled)
+        self._bubble_ghost_alpha = max(0.0, min(1.0, float(bubble_ghost_alpha)))
+        self._bubble_ghost_decay = max(0.1, min(1.0, float(bubble_ghost_decay)))
+
+        # Legacy global ghost fields — still written for backward compat but
+        # renderers MUST read mode-specific fields above.
         try:
             self._ghosting_enabled = bool(ghosting_enabled)
         except Exception as e:
@@ -820,13 +800,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if gd >= 0.0:
             self._peak_decay_per_sec = max(0.0, gd)
 
-        # Blob ghost: override shared ghost settings AFTER the shared assignment
-        # so blob-specific values are not overwritten.
-        if self._vis_mode == 'blob':
-            self._ghosting_enabled = bool(blob_ghosting_enabled)
-            self._ghost_alpha = max(0.0, min(1.0, float(blob_ghost_alpha)))
-            _decay = max(0.1, min(1.0, float(blob_ghost_decay)))
-            self._peak_decay_per_sec = _decay * 2.0
+        # Route peak_decay_per_sec from current mode's decay setting so
+        # spectrum peak trails and blob peak energy use mode-local rates.
+        if self._vis_mode == 'spectrum':
+            self._peak_decay_per_sec = self._spectrum_ghost_decay * 2.0
+        elif self._vis_mode == 'blob':
+            self._peak_decay_per_sec = self._blob_ghost_decay * 2.0
 
         try:
             count = int(bar_count)
@@ -1213,8 +1192,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity",
                     "u_glow_color", "u_reactive_glow",
                     "u_sensitivity", "u_smoothing",
-                    "u_star_density", "u_travel_speed", "u_star_reactivity",
-                    "u_travel_time", "u_nebula_tint1", "u_nebula_tint2", "u_nebula_cycle_speed",
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
                     "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_peak_energy",
@@ -1234,9 +1211,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_sine_travel_line2", "u_sine_travel_line3",
                     "u_wave_effect", "u_micro_wobble", "u_crawl_amount", "u_width_reaction",
                     "u_sine_density", "u_sine_displacement",
-                    "u_helix_turns", "u_helix_double", "u_helix_speed",
-                    "u_helix_glow_enabled", "u_helix_glow_intensity",
-                    "u_helix_glow_color", "u_helix_reactive_glow",
                     "u_line_color", "u_line_count",
                     "u_line2_color", "u_line2_glow_color",
                     "u_line3_color", "u_line3_glow_color",

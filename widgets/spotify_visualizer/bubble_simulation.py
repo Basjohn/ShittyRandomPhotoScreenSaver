@@ -728,7 +728,8 @@ class BubbleSimulation:
 
     def snapshot(self, bass: float = 0.0, mid_high: float = 0.0,
                  big_bass_pulse: float = 0.5,
-                 small_freq_pulse: float = 0.5) -> Tuple[List[float], List[float], List[float]]:
+                 small_freq_pulse: float = 0.5,
+                 big_specular_max_size: float = 2.5) -> Tuple[List[float], List[float], List[float]]:
         """Return flat lists for uniform upload.
 
         Returns:
@@ -762,6 +763,8 @@ class BubbleSimulation:
             # pulse-driven delta is scaled (0.475 = half rate minus 5%).
             spec_pulse = (pulse_factor - 1.0) * 0.475
             spec_factor = b.spec_size_mut * (1.0 + spec_pulse)
+            if b.is_big:
+                spec_factor = min(spec_factor, big_specular_max_size)
 
             pos_data.extend([b.x, b.y, r, b.alpha])
             extra_data.extend([spec_factor, b.rotation, b.spec_ox, b.spec_oy])

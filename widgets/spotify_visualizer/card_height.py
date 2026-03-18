@@ -1,6 +1,6 @@
 """Reusable card height expansion for Spotify visualizer modes.
 
-Some visualizer modes (blob, starfield, helix) benefit from a taller card
+Some visualizer modes (blob, bubble) benefit from a taller card
 than the default spectrum strip (~80 px).  This module provides a
 centralised way to compute the preferred height for any mode and a
 user-configurable growth factor so the expansion scales well on
@@ -31,9 +31,7 @@ MAX_HEIGHT: int = 600
 DEFAULT_GROWTH: dict[str, float] = {
     "spectrum": 2.0,
     "oscilloscope": 2.0,
-    "starfield": 3.0,
     "blob": 3.5,
-    "helix": 3.0,
     "sine_wave": 2.0,
     "bubble": 3.0,
 }
@@ -50,8 +48,8 @@ def preferred_height(
     Parameters
     ----------
     vis_mode:
-        One of ``spectrum``, ``oscilloscope``, ``starfield``, ``blob``,
-        ``helix``.
+        One of ``spectrum``, ``oscilloscope``, ``blob``, ``sine_wave``,
+        ``bubble``.
     base_height:
         The widget's default (spectrum) height in logical pixels.
     growth_factor:

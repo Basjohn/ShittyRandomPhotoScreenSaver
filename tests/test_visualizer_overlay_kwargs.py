@@ -18,6 +18,9 @@ class _StubEngine:
     def get_energy_bands(self):
         return EnergyBands()
 
+    def get_raw_energy_bands(self):
+        return EnergyBands()
+
 
 @pytest.mark.qt
 def test_overlay_accepts_all_gpu_kwargs(qt_app):
@@ -53,9 +56,7 @@ def test_overlay_accepts_all_gpu_kwargs(qt_app):
         ("spectrum", VisualizerMode.SPECTRUM),
         ("oscilloscope", VisualizerMode.OSCILLOSCOPE),
         ("sine_wave", VisualizerMode.SINE_WAVE),
-        ("starfield", VisualizerMode.STARFIELD),
         ("blob", VisualizerMode.BLOB),
-        ("helix", VisualizerMode.HELIX),
         ("bubble", VisualizerMode.BUBBLE),
     ]
 
