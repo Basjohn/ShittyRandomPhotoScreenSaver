@@ -59,13 +59,13 @@ When debugging, always verify these steps in order:
 - Defaults: `sine_wave_growth=3.99`, `sine_wave_travel=2`, `sine_wave_effect=0.7`, `sine_micro_wobble=0.0`, `sine_vertical_shift=35`, `sine_card_adaptation=0.2`, `sine_glow_enabled=True`, `sine_glow_intensity=0.6`, `sine_glow_color=[5,155,255,255]`, `sine_line_color=[255,255,255,255]`, `sine_reactive_glow=True`, `sine_sensitivity=0.1`, `sine_speed=1.0`, `sine_line_count=3`, `sine_line_offset_bias=0.7`, `sine_line_dim=False`, `sine_line{1,2,3}_shift=0.0`
 - Uniforms reuse oscilloscope names for compatibility (`u_osc_speed`, `u_osc_sine_travel`, etc.) but values come from `_sine_*` attrs.
 - **Density (Feb 2026):** `sine_density` is remapped onto a perceptual curve spanning ≈0.65–8.5 full cycles. Low settings keep broad arcs; high settings reach tighter combs without collapsing into a single hump.
-- **Displacement (retired Feb 28 2026):** Slider/UI are locked at 0% and only exist to show the feature is disabled. The shader still exposes `u_sine_displacement` for backward compatibility but clamps all values to zero so random jitter can’t reappear from old presets.
 - **UI alignment:** Density, displacement, and horizontal shift sliders live in the Sine Advanced bucket and must be created with `_aligned_row()` so the 120 px label gutter stays consistent with the rest of the visualizer builders.
 - **Line Offset Bias behaviour:** slider is dual-purpose. At 0%, all three lines share the same vertical center and energy mix (pure bass). As bias rises toward 100%, the shader (a) increases their vertical separation (Line 2 gains +70% of the requested spacing, Line 3 gains +100%, Line 1 stays anchored) and (b) tints their energy weighting toward mid/high bands. This keeps low biases visually aligned while high biases emphasise vocals/treble on lines 2/3. Documented here because users kept expecting it to be "horizontal offset only".
 - **Per-line horizontal shifts (Feb 2026):** new sliders (`sine_line{1,2,3}_shift`, exposed as "Horizontal Shift") phase each line independently in full cycles (-1.0..1.0). Defaults are zero so all lines align when Line Offset Bias = 0. This replaces the ad-hoc practice of nudging `sine_line_offset_bias` just to desync lines.
 - **Normalization TODO:** after documenting the controls we will evaluate whether lines 2/3 should auto-normalize back toward line 1 when both Line Offset Bias and Horizontal Shifts are zero. Track that work under Current Plan §4.
 - **Uniform gating regression (Feb 2026):** ensure `u_sine_line{1,2,3}_shift` uploads stay inside the `mode == 'sine_wave'` branch. Pushing them globally caused stale uniforms when other modes were active, so any future per-mode uniforms must stay inside their respective branch.
 - **Heartbeat neutralization:** The heartbeat slider row is now labelled “Disabled,” and `heartbeat_amp_params()` always returns `(1.0, 0.48)`. If a preset contains non-zero heartbeat values, they have no effect until the feature is redesigned.
+- **Ghost decoupling (Mar 2026):** Ghost lines now compute their own independent `sin()` wave value instead of reusing the main line's `w_pre`. Each ghost uses 40% of the main travel phase (same direction, trailing behind), 25% crawl, 20% micro wobble, 30% wave effect, and a +0.012 normalised-Y vertical offset. This makes ghosts drift visibly behind the main wave rather than sitting exactly on top of it. The decoupling is pure shader logic — no new uniforms or CPU-side changes needed. Ghost amplitude still uses the peak-tracked `u_ghost_bass/mid/high` envelopes for the trailing energy effect.
 - Debug tip: Glow blowing out? clamp `sine_glow_intensity<=0.6`; reactive glow already adds +10%.
 
 ### 2.4 Blob (default visualizer card)
@@ -125,6 +125,23 @@ This keeps quiet sections floating at the baseline while letting peaks approach 
 - Preset slider behavior: curated bubble presets store the new gradient key, and switching presets toggles the Advanced container off/on (via `VisualizerPresetSlider`). Editing Advanced controls while on a curated slot auto-switches to Custom, guaranteeing curated payloads remain immutable.
 - Diagnostics: `BubbleSimulation` logs `[SPOTIFY_VIS][BUBBLE][OVERDRIVE]` whenever reactivity pushes stream speed above 1.0× (cap gate) and `[SPOTIFY_VIS][BUBBLE][SWIRL]` entries when swirl drift is active. Use `SRPSS_VIZ_DIAGNOSTICS=1` to capture stream gate values when tuning.
 - Shader uniforms: `u_bubble_count`, `u_bubbles_pos[110]`, `u_bubbles_extra[110]`, `u_bubbles_trail[330]`, `u_trail_strength`, `u_specular_dir`, `u_outline_color`, `u_specular_color`, `u_gradient_light`, `u_gradient_dark`, `u_pop_color`. Remember to update `tests/test_visualizer_settings_plumbing.py` + overlay kwarg tests when adding new keys to this mode.
+
+#### Beat Burst Detection & Small→Big Promotion (Mar 2026)
+
+**Problem:** When rapid bass kicks arrive close together (e.g., 4 kicks in 2s), the running average rises toward the beat level after the first kick. Subsequent deltas (`raw_src - running_avg`) shrink progressively, and pulse energy decay is too slow to reset between beats. Result: only the first beat in a cluster produces a visible pulse.
+
+**Solution — two-pronged:**
+
+1. **Burst detector:** Tracks recent significant bass delta events (timestamps). When 3+ beats land within a 2-second window, burst mode activates with a 0.6s cooldown after the last beat.
+   - In burst mode: running average attack rate slows from `dt*0.7` (~1.5s rise) to `dt*0.25` (~4s rise), preserving delta headroom for subsequent beats.
+   - Delta sensitivity boosted ×1.25 and decay rate ×1.8 so each beat in the cluster gets a clean visual pop-and-reset.
+   - Verbose logging: `[BUBBLE_SIM] Burst mode ENTER/EXIT`.
+
+2. **Small→big promotion:** On each new beat detected during burst mode, up to 30% (max 5) of the largest unpromoted small bubbles are temporarily flagged `promoted=True` with a 1.2s timer. Promoted smalls react to bass energy (like big bubbles) with scaled-down sensitivity (`delta_sens=2.8`, `attack=16`, `decay=5`), adding visual density during rapid beat clusters. Promotion expires naturally after the timer; no continuous re-promotion.
+
+**State fields:** `BubbleState.promoted`, `BubbleState.promote_timer`, `BubbleSimulation._beat_timestamps`, `._burst_active`, `._burst_cooldown`, `._prev_bass`.
+
+**Validation:** `tests/test_bubble_reactivity.py` (8 tests) covers rapid beat clusters, sustained loud sections, quiet→loud→quiet transitions, single kicks, and promotion lifecycle.
 
 ### 2.7 Helix [RETIRED FOR BEING SHIT]
 - Shader: `widgets/spotify_visualizer/shaders/helix.frag`

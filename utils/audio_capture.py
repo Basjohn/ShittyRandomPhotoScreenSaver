@@ -235,8 +235,17 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 logger.debug("[AUDIO] Exception suppressed: %s", e)
             return (None, pyaudio.paContinue)
         
-        # Try different block sizes (smaller = lower latency, higher CPU)
-        for block_size in [256, 512, 1024]:
+        # Build priority-ordered block size list: user preference first, then fallbacks
+        _all_sizes = [128, 256, 512, 1024]
+        preferred = self._config.block_size if self._config.block_size > 0 else 0
+        if preferred > 0:
+            # User explicitly chose a size — try it first, then fallbacks
+            block_candidates = [preferred] + [s for s in _all_sizes if s != preferred]
+        else:
+            # Auto (0) — try from smallest for lowest latency
+            block_candidates = _all_sizes
+
+        for block_size in block_candidates:
             try:
                 self._stream = self._pa.open(
                     format=pyaudio.paFloat32,
@@ -249,20 +258,20 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 )
                 self._stream.start_stream()
                 self._running = True
-                if is_verbose_logging():
-                    logger.debug(
-                        "[AUDIO] PyAudioWPatch stream running (device=%s, block=%d)",
-                        device.get("name", "<unknown>"),
-                        block_size,
-                    )
+                logger.info(
+                    "[AUDIO] PyAudioWPatch stream running (device=%s, negotiated_block=%d, preferred=%d)",
+                    device.get("name", "<unknown>"),
+                    block_size,
+                    preferred,
+                )
                 return True
             except Exception as e:
                 if self._stream:
                     try:
                         self._stream.stop_stream()
                         self._stream.close()
-                    except Exception as e:
-                        logger.debug("[AUDIO] Exception suppressed: %s", e)
+                    except Exception as e2:
+                        logger.debug("[AUDIO] Exception suppressed: %s", e2)
                     self._stream = None
                 if is_verbose_logging():
                     logger.debug("[AUDIO] Block size %d failed: %s", block_size, e)
@@ -462,9 +471,13 @@ class SounddeviceBackend(AudioCaptureBackend):
             )
             self._stream.start()
             self._running = True
-            logger.debug(
-                "[AUDIO] sounddevice started: %dHz, %d channels",
-                self._sample_rate, self._channels
+            logger.info(
+                "[AUDIO] sounddevice started (device=%s, negotiated_block=%d, preferred=%d, rate=%dHz, channels=%d)",
+                device.get("name", "<unknown>") if isinstance(device, dict) else "<default>",
+                self._config.block_size,
+                self._config.block_size,
+                self._sample_rate,
+                self._channels,
             )
             return True
         except Exception as e:

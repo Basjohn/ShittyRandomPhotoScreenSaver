@@ -38,6 +38,9 @@ uniform vec4 u_gradient_dark;      // gradient dark end
 uniform vec4 u_pop_color;          // pop flash colour
 uniform float u_rainbow_hue_offset;
 
+// Ghost: trailing afterimage ring around each bubble at slightly expanded radius
+uniform float u_ghost_alpha;
+
 // =====================================================================
 // Helpers
 // =====================================================================
@@ -230,6 +233,33 @@ void main() {
                 float blend = clamp(ripple_alpha * u_fade * 0.55, 0.0, opacity_cap * 0.5);
                 result.rgb = mix(result.rgb, ripple_rgb, blend);
                 result.a = max(result.a, blend * 0.4);
+            }
+        }
+    }
+
+    // --- Ghost pass: expanded faded outline rings behind each bubble ---
+    if (u_ghost_alpha > 0.001) {
+        float ga = clamp(u_ghost_alpha, 0.0, 1.0);
+        for (int i = 0; i < count; i++) {
+            vec4 bpos = u_bubbles_pos[i];
+            vec2 bxy = bpos.xy;
+            float brad = bpos.z;
+            float balpha = bpos.w;
+            if (balpha < 0.01 || brad < 2.0 * px) continue;
+
+            float ghost_r = brad * 1.18;
+            vec2 gdelta = uv - bxy;
+            gdelta.x *= aspect;
+            float gdist = length(gdelta);
+
+            float ghost_stroke = clamp(1.0 * (ghost_r / 0.04), 0.4, 1.5) * px;
+            float ghost_ring = smoothstep(ghost_stroke + px, ghost_stroke - px * 0.5, abs(gdist - ghost_r));
+            ghost_ring *= balpha * ga * 0.45;
+
+            if (ghost_ring > 0.001) {
+                vec3 ghost_rgb = mix(outline_col.rgb, vec3(1.0), 0.15);
+                result.rgb = mix(result.rgb, ghost_rgb, ghost_ring * u_fade);
+                result.a = max(result.a, ghost_ring * u_fade * 0.3);
             }
         }
     }

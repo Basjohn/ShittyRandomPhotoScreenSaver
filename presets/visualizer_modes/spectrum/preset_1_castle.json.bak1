@@ -30,14 +30,12 @@
         "monitor": "ALL",
         "sensitivity": 0.25,
         "spectrum_adaptive_sensitivity": false,
-        "spectrum_agc_strength": 0.5,
         "spectrum_audio_block_size": 256,
         "spectrum_bar_count": 33,
         "spectrum_bass_emphasis": 0.02,
         "spectrum_border_radius": 2.0,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": false,
-        "spectrum_energy_boost": 0.85,
         "spectrum_growth": 5.0,
         "spectrum_manual_floor": 0.05,
         "spectrum_mid_suppression": 0.9,
@@ -70,7 +68,6 @@
           ]
         ],
         "spectrum_single_piece": true,
-        "spectrum_use_raw_energy": false,
         "spectrum_vocal_position": 0.4,
         "spectrum_wave_amplitude": 0.1
       }

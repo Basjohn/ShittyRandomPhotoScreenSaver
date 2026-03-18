@@ -80,13 +80,16 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Per-bar history for attack/decay dynamics
         self._bar_history = None
         self._bar_hold_timers = None
-        # Running peak tracker for normalization
-        self._running_peak = 1.0
+        # Dual-window envelope normalizer (replaces single _running_peak)
+        self._running_peak = 1.0          # kept for compat reads
+        self._env_short = 0.5             # short-term RMS envelope (~300ms)
+        self._env_long = 0.5              # long-term average envelope (~3s)
         # Timestamp of last FFT processing - used to detect pause/resume gaps
         self._last_fft_ts: float = 0.0
         # Output scaling to keep FFT peaks controlled while allowing safe boosts
         self._base_output_scale: float = 0.5
         self._energy_boost: float = 0.85
+        self._input_gain: float = 1.0
         # Floor control configuration (dynamic/manual)
         self._use_dynamic_floor: bool = True
         self._manual_floor: float = 0.12
@@ -111,6 +114,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._drop_threshold: float = 0.16
         self._drop_decay_fast: float = 0.72
         self._drop_snap_fraction: float = 0.58
+        self._drop_speed: float = 1.0
+        self._agc_strength: float = 0.5
+        self._spectrum_notch_positions: Optional[list] = None
         self._preferred_block_size: int = 0
 
         # Sensitivity configuration (driven from Settings UI).
@@ -197,6 +203,23 @@ class SpotifyVisualizerAudioWorker(QObject):
         """Deprecated — curved profile is now always active. Kept as no-op for compat."""
         pass
 
+    def set_drop_speed(self, speed: float) -> None:
+        """Set the spectrum drop speed multiplier (0.5–3.0).
+
+        Thread-safe: single float assignment is atomic on CPython.
+        Read by _apply_reactive_smoothing in bar_computation.py.
+        """
+        self._drop_speed = max(0.5, min(3.0, float(speed)))
+
+    def set_notch_positions(self, positions: list) -> None:
+        """Set frequency-zone notch positions for dynamic band boundaries.
+
+        Thread-safe: list reference assignment is atomic on CPython.
+        Read by fft_to_bars in bar_computation.py.
+        """
+        if isinstance(positions, list) and len(positions) >= 2:
+            self._spectrum_notch_positions = positions
+
     def set_spectrum_shape_config(self, config) -> None:
         """Push a SpectrumShapeConfig to the DSP pipeline.
 
@@ -213,6 +236,31 @@ class SpotifyVisualizerAudioWorker(QObject):
         """Push shape editor nodes to the DSP pipeline (read by fft_to_bars)."""
         if isinstance(nodes, list) and len(nodes) >= 1:
             self._spectrum_shape_nodes = nodes
+
+    def set_agc_strength(self, strength: float) -> None:
+        """Set AGC normalization strength (0.0=off, 0.5=default, 1.0=aggressive)."""
+        try:
+            val = float(strength)
+        except Exception:
+            val = 0.5
+        if val < 0.0:
+            val = 0.0
+        if val > 1.0:
+            val = 1.0
+        self._agc_strength = val
+
+    def set_input_gain(self, gain: float) -> None:
+        """Adjust pre-FFT input gain (virtual volume). Scales PCM before FFT."""
+        try:
+            val = float(gain)
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            val = 1.0
+        if val < 0.05:
+            val = 0.05
+        if val > 2.0:
+            val = 2.0
+        self._input_gain = val
 
     def set_energy_boost(self, boost: float) -> None:
         """Adjust post-FFT energy boost factor."""

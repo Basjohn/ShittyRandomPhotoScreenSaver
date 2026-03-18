@@ -418,6 +418,46 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     specular_max_row.addWidget(tab.bubble_big_specular_max_size_label)
 
+    clamp_row = _aligned_row(_adv_layout, "Max Pulse Clamp:")
+    tab.bubble_big_size_clamp = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_big_size_clamp.setMinimum(150)
+    tab.bubble_big_size_clamp.setMaximum(800)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_size_clamp', 4.0) * 100)
+    tab.bubble_big_size_clamp.setValue(max(150, min(800, val)))
+    tab.bubble_big_size_clamp.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_big_size_clamp.setTickInterval(50)
+    tab.bubble_big_size_clamp.setToolTip(
+        "Maximum pulse multiplier for big bubbles. Caps how large a bubble can grow "
+        "during bass hits (e.g. 4.0x = bubble can grow up to 4× its base radius)."
+    )
+    tab.bubble_big_size_clamp.valueChanged.connect(tab._save_settings)
+    clamp_row.addWidget(tab.bubble_big_size_clamp)
+    tab.bubble_big_size_clamp_label = QLabel(f"{val / 100.0:.1f}x")
+    tab.bubble_big_size_clamp.valueChanged.connect(
+        lambda v: tab.bubble_big_size_clamp_label.setText(f"{v / 100.0:.1f}x")
+    )
+    clamp_row.addWidget(tab.bubble_big_size_clamp_label)
+
+    contraction_row = _aligned_row(_adv_layout, "Contraction Bias:")
+    tab.bubble_big_contraction_bias = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_big_contraction_bias.setMinimum(0)
+    tab.bubble_big_contraction_bias.setMaximum(100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_contraction_bias', 1.0) * 100)
+    tab.bubble_big_contraction_bias.setValue(max(0, min(100, val)))
+    tab.bubble_big_contraction_bias.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_big_contraction_bias.setTickInterval(10)
+    tab.bubble_big_contraction_bias.setToolTip(
+        "How much big bubbles shrink during quiet passages. "
+        "100% = no contraction (default). Lower values make bubbles visibly breathe."
+    )
+    tab.bubble_big_contraction_bias.valueChanged.connect(tab._save_settings)
+    contraction_row.addWidget(tab.bubble_big_contraction_bias)
+    tab.bubble_big_contraction_bias_label = QLabel(f"{val}%")
+    tab.bubble_big_contraction_bias.valueChanged.connect(
+        lambda v: tab.bubble_big_contraction_bias_label.setText(f"{v}%")
+    )
+    contraction_row.addWidget(tab.bubble_big_contraction_bias_label)
+
     big_count_row = _aligned_row(_adv_layout, "Big Bubbles:")
     tab.bubble_big_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_count.setMinimum(1)

@@ -33,13 +33,13 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}
 
-    assert slide_cfg.get('direction', 'Left to Right') == 'Left to Right'
-    assert wipe_cfg.get('direction', 'Diagonal TR-BL') == 'Diagonal TR-BL'
+    assert slide_cfg.get('direction', 'Random') == 'Random'
+    assert wipe_cfg.get('direction', 'Diagonal TL-BR') == 'Diagonal TL-BR'
 
-    # Set Slide to Random, keep Wipe at its default
+    # Set Slide to Left to Right, keep Wipe at its default
     tab.transition_combo.setCurrentText("Slide")
     tab._update_specific_settings()
-    idx = tab.direction_combo.findText("Random")
+    idx = tab.direction_combo.findText("Left to Right")
     assert idx >= 0
     tab.direction_combo.setCurrentIndex(idx)
     tab._save_settings()
@@ -48,9 +48,9 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}
 
-    assert slide_cfg.get('direction') == 'Random'
+    assert slide_cfg.get('direction') == 'Left to Right'
     # Wipe direction should remain unchanged
-    assert wipe_cfg.get('direction', 'Diagonal TR-BL') == 'Diagonal TR-BL'
+    assert wipe_cfg.get('direction', 'Diagonal TL-BR') == 'Diagonal TL-BR'
 
     # Now set Wipe to Top to Bottom, ensuring Slide stays as previously chosen
     tab.transition_combo.setCurrentText("Wipe")
@@ -64,7 +64,7 @@ def test_slide_and_wipe_directions_are_independent(qapp, settings_manager, qtbot
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}
 
-    assert slide_cfg.get('direction') == 'Random'
+    assert slide_cfg.get('direction') == 'Left to Right'
     assert wipe_cfg.get('direction') == 'Top to Bottom'
 
 
@@ -74,11 +74,11 @@ def test_default_transition_type_and_direction(qapp, settings_manager, qtbot):
     qtbot.addWidget(tab)
 
     transitions_cfg = settings_manager.get('transitions', {}) or {}
-    assert transitions_cfg.get('type') == 'Random'
-    assert transitions_cfg.get('duration_ms') == 4000
+    assert transitions_cfg.get('type') == 'Particle'
+    assert transitions_cfg.get('duration_ms') == 10524
 
     slide_cfg = transitions_cfg.get('slide', {}) if isinstance(transitions_cfg.get('slide', {}), dict) else {}
     wipe_cfg = transitions_cfg.get('wipe', {}) if isinstance(transitions_cfg.get('wipe', {}), dict) else {}
 
-    assert slide_cfg.get('direction', 'Left to Right') == 'Left to Right'
-    assert wipe_cfg.get('direction', 'Diagonal TR-BL') == 'Diagonal TR-BL'
+    assert slide_cfg.get('direction') == 'Random'
+    assert wipe_cfg.get('direction') == 'Diagonal TL-BR'

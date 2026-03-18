@@ -304,6 +304,12 @@ class NoSourcesPopup(QDialog):
         self.setFixedWidth(420)
         self.adjustSize()
     
+    def _apply_application_font(self) -> None:
+        font = QFont("Jost", 11)
+        font.setFamilies(["Jost", "Segoe UI", "Arial", "Sans Serif"])
+        font.setWeight(QFont.Weight.Normal)
+        QGuiApplication.setFont(font)
+
     def _on_make_it_work(self) -> None:
         """User chose to add default sources."""
         self.add_defaults_requested.emit()

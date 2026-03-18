@@ -159,6 +159,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     block_size.setMinimumWidth(140)
     for label, value in (
         ("Auto (Driver)", 0),
+        ("128 samples", 128),
         ("256 samples", 256),
         ("512 samples", 512),
         ("1024 samples", 1024),
@@ -215,6 +216,89 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     _connect_setting(dynamic_range.stateChanged, tab)
     dyn_range_row.addWidget(dynamic_range)
     dyn_range_row.addStretch()
+
+    # Energy Boost slider (continuous replacement for binary Dynamic Range Boost)
+    energy_boost_row = _aligned_row(layout, "Energy Boost:")
+    energy_boost_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    energy_boost_slider.setMinimum(50)
+    energy_boost_slider.setMaximum(180)
+    energy_boost_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    energy_boost_slider.setTickInterval(20)
+    default_eb = _per_mode_default_float(tab, mode_key, 'energy_boost', 0.85)
+    clamped_eb = max(0.5, min(1.8, default_eb))
+    energy_boost_slider.blockSignals(True)
+    energy_boost_slider.setValue(int(clamped_eb * 100))
+    energy_boost_slider.blockSignals(False)
+    energy_boost_slider.setToolTip(
+        "Post-normalization gain multiplier (0.50x–1.80x). Higher = louder output."
+    )
+    _connect_setting(energy_boost_slider.valueChanged, tab)
+    energy_boost_row.addWidget(energy_boost_slider)
+    energy_boost_label = QLabel(f"{clamped_eb:.2f}x")
+    energy_boost_slider.valueChanged.connect(lambda v: energy_boost_label.setText(f"{v / 100.0:.2f}x"))
+    energy_boost_row.addWidget(energy_boost_label)
+
+    # AGC Strength slider
+    agc_row = _aligned_row(layout, "AGC Strength:")
+    agc_strength_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    agc_strength_slider.setMinimum(0)
+    agc_strength_slider.setMaximum(100)
+    agc_strength_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    agc_strength_slider.setTickInterval(10)
+    default_agc = _per_mode_default_float(tab, mode_key, 'agc_strength', 0.5)
+    clamped_agc = max(0.0, min(1.0, default_agc))
+    agc_strength_slider.blockSignals(True)
+    agc_strength_slider.setValue(int(clamped_agc * 100))
+    agc_strength_slider.blockSignals(False)
+    agc_strength_slider.setToolTip(
+        "AGC normalization aggressiveness (0%=off, 50%=default, 100%=max compression).\n"
+        "Lower values preserve more dynamic range. 0% disables normalization entirely."
+    )
+    _connect_setting(agc_strength_slider.valueChanged, tab)
+    agc_row.addWidget(agc_strength_slider)
+    agc_strength_label = QLabel(f"{int(clamped_agc * 100)}%")
+    agc_strength_slider.valueChanged.connect(lambda v: agc_strength_label.setText(f"{v}%"))
+    agc_row.addWidget(agc_strength_label)
+
+    # Input Gain (Virtual Volume) slider
+    input_gain_row = _aligned_row(layout, "Input Gain:")
+    input_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    input_gain_slider.setMinimum(5)
+    input_gain_slider.setMaximum(200)
+    input_gain_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    input_gain_slider.setTickInterval(25)
+    default_ig = _per_mode_default_float(tab, mode_key, 'input_gain', 1.0)
+    clamped_ig = max(0.05, min(2.0, default_ig))
+    input_gain_slider.blockSignals(True)
+    input_gain_slider.setValue(int(clamped_ig * 100))
+    input_gain_slider.blockSignals(False)
+    input_gain_slider.setToolTip(
+        "Pre-FFT signal gain (5%\u2013200%). Simulates changing the mixer volume\n"
+        "without actually affecting audio output. Lower = calmer visualizer,\n"
+        "higher = more reactive. 100% = no change (default)."
+    )
+    _connect_setting(input_gain_slider.valueChanged, tab)
+    input_gain_row.addWidget(input_gain_slider)
+    input_gain_label = QLabel(f"{int(clamped_ig * 100)}%")
+    input_gain_slider.valueChanged.connect(lambda v: input_gain_label.setText(f"{v}%"))
+    input_gain_row.addWidget(input_gain_label)
+
+    # Use Raw Energy toggle
+    raw_energy_row = _aligned_row(layout, "")
+    raw_energy_checkbox = QCheckBox("Use Raw (Pre-AGC) Energy")
+    raw_energy_checkbox.setProperty("circleIndicator", True)
+    raw_energy_default = _per_mode_default_bool(tab, mode_key, 'use_raw_energy', False)
+    raw_energy_checkbox.blockSignals(True)
+    raw_energy_checkbox.setChecked(raw_energy_default)
+    raw_energy_checkbox.blockSignals(False)
+    raw_energy_checkbox.setToolTip(
+        "When enabled, this mode uses pre-AGC energy bands for amplitude/pulse.\n"
+        "Preserves true dynamic range but may have wrong scaling for some modes.\n"
+        "When disabled (default), uses normalized energy from the AGC pipeline."
+    )
+    _connect_setting(raw_energy_checkbox.stateChanged, tab)
+    raw_energy_row.addWidget(raw_energy_checkbox)
+    raw_energy_row.addStretch()
 
     # Dynamic floor toggle
     dyn_floor_row = _aligned_row(layout, "")
@@ -286,6 +370,13 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         'manual_floor': manual_floor,
         'manual_label': manual_label,
         'dynamic_range': dynamic_range,
+        'energy_boost_slider': energy_boost_slider,
+        'energy_boost_label': energy_boost_label,
+        'agc_strength_slider': agc_strength_slider,
+        'agc_strength_label': agc_strength_label,
+        'input_gain_slider': input_gain_slider,
+        'input_gain_label': input_gain_label,
+        'raw_energy': raw_energy_checkbox,
         'update_sensitivity': _update_sensitivity_visibility,
         'update_manual_floor': _update_manual_floor_visibility,
         'mode_key': mode_key,
@@ -420,6 +511,54 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
             dyn_range.blockSignals(False)
             mode_cache['dynamic_range_enabled'] = dyn_range_val
 
+        eb_slider = controls.get('energy_boost_slider')
+        if eb_slider is not None:
+            default_eb = _per_mode_default_float(tab, mode_key, 'energy_boost', 0.85)
+            eb_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'energy_boost'), default_eb)
+            clamped_eb = max(0.5, min(1.8, eb_val))
+            eb_slider.blockSignals(True)
+            eb_slider.setValue(int(clamped_eb * 100))
+            eb_slider.blockSignals(False)
+            eb_label = controls.get('energy_boost_label')
+            if eb_label is not None:
+                eb_label.setText(f"{clamped_eb:.2f}x")
+            mode_cache['energy_boost'] = clamped_eb
+
+        agc_slider = controls.get('agc_strength_slider')
+        if agc_slider is not None:
+            default_agc = _per_mode_default_float(tab, mode_key, 'agc_strength', 0.5)
+            agc_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'agc_strength'), default_agc)
+            clamped_agc = max(0.0, min(1.0, agc_val))
+            agc_slider.blockSignals(True)
+            agc_slider.setValue(int(clamped_agc * 100))
+            agc_slider.blockSignals(False)
+            agc_label = controls.get('agc_strength_label')
+            if agc_label is not None:
+                agc_label.setText(f"{int(clamped_agc * 100)}%")
+            mode_cache['agc_strength'] = clamped_agc
+
+        ig_slider = controls.get('input_gain_slider')
+        if ig_slider is not None:
+            default_ig = _per_mode_default_float(tab, mode_key, 'input_gain', 1.0)
+            ig_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'input_gain'), default_ig)
+            clamped_ig = max(0.05, min(2.0, ig_val))
+            ig_slider.blockSignals(True)
+            ig_slider.setValue(int(clamped_ig * 100))
+            ig_slider.blockSignals(False)
+            ig_label = controls.get('input_gain_label')
+            if ig_label is not None:
+                ig_label.setText(f"{int(clamped_ig * 100)}%")
+            mode_cache['input_gain'] = clamped_ig
+
+        raw_energy = controls.get('raw_energy')
+        if raw_energy is not None:
+            default_raw = _per_mode_default_bool(tab, mode_key, 'use_raw_energy', False)
+            raw_val = _coerce_bool(_resolve_config_entry(spotify_vis_config, mode_key, 'use_raw_energy'), default_raw)
+            raw_energy.blockSignals(True)
+            raw_energy.setChecked(raw_val)
+            raw_energy.blockSignals(False)
+            mode_cache['use_raw_energy'] = raw_val
+
         dyn_floor = controls.get('dynamic_floor')
         if dyn_floor is not None:
             default_dyn_floor = _per_mode_default_bool(tab, mode_key, 'dynamic_floor', True)
@@ -482,6 +621,18 @@ def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any])
         dyn_range = controls.get('dynamic_range')
         if dyn_range is not None:
             _set('dynamic_range_enabled', dyn_range.isChecked())
+        eb_slider = controls.get('energy_boost_slider')
+        if eb_slider is not None:
+            _set('energy_boost', max(0.5, min(1.8, eb_slider.value() / 100.0)))
+        agc_slider = controls.get('agc_strength_slider')
+        if agc_slider is not None:
+            _set('agc_strength', max(0.0, min(1.0, agc_slider.value() / 100.0)))
+        ig_slider = controls.get('input_gain_slider')
+        if ig_slider is not None:
+            _set('input_gain', max(0.05, min(2.0, ig_slider.value() / 100.0)))
+        raw_energy = controls.get('raw_energy')
+        if raw_energy is not None:
+            _set('use_raw_energy', raw_energy.isChecked())
 
     # Ensure cached values for all modes (including dev-gated ones without UI)
     # are flushed back into the config so custom presets can persist them.

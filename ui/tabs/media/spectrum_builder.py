@@ -322,6 +322,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         parent=None, mirrored=_mirror_default_for_editor,
     )
     tab.spectrum_shape_editor.nodes_changed.connect(tab._save_settings)
+    tab.spectrum_shape_editor.notch_positions_changed.connect(tab._save_settings)
     _adv_layout.addWidget(tab.spectrum_shape_editor)
     # Connect mirrored checkbox to update editor display
     tab.spectrum_mirrored.stateChanged.connect(

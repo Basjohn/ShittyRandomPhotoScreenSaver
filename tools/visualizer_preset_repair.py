@@ -49,6 +49,10 @@ _MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
     "audio_block_size",
     "dynamic_range_enabled",
     "bar_count",
+    "energy_boost",
+    "agc_strength",
+    "use_raw_energy",
+    "input_gain",
 )
 
 _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {

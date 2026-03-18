@@ -871,6 +871,12 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.spectrum_shape_editor.set_mirrored(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_mirrored', True)
         )
+        _notch_mir = spotify_vis_config.get('spectrum_notch_positions_mirrored', None)
+        if isinstance(_notch_mir, list) and len(_notch_mir) >= 2:
+            tab.spectrum_shape_editor.set_notch_positions(_notch_mir, mirrored=True)
+        _notch_lin = spotify_vis_config.get('spectrum_notch_positions_linear', None)
+        if isinstance(_notch_lin, list) and len(_notch_lin) >= 2:
+            tab.spectrum_shape_editor.set_notch_positions(_notch_lin, mirrored=False)
 
     # Oscilloscope colours
     osc_line_color_data = spotify_vis_config.get('osc_line_color', [255, 255, 255, 255])
@@ -1354,6 +1360,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_specular_max_size', 2.5) * 100)
         tab.bubble_big_specular_max_size.setValue(max(50, min(500, v)))
         tab.bubble_big_specular_max_size_label.setText(f"{v / 100.0:.1f}x")
+    if hasattr(tab, 'bubble_big_size_clamp'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_size_clamp', 4.0) * 100)
+        tab.bubble_big_size_clamp.setValue(max(150, min(800, v)))
+        tab.bubble_big_size_clamp_label.setText(f"{v / 100.0:.1f}x")
+    if hasattr(tab, 'bubble_big_contraction_bias'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_contraction_bias', 1.0) * 100)
+        tab.bubble_big_contraction_bias.setValue(max(0, min(100, v)))
+        tab.bubble_big_contraction_bias_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_growth'):
         bubble_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_growth', 3.0) * 100)
         tab.bubble_growth.setValue(max(100, min(500, bubble_growth_val)))
@@ -1503,6 +1517,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'spectrum_border_radius': float(tab.spectrum_border_radius.value()) if hasattr(tab, 'spectrum_border_radius') else 0.0,
         'spectrum_mirrored': tab.spectrum_mirrored.isChecked() if hasattr(tab, 'spectrum_mirrored') else True,
         'spectrum_shape_nodes': tab.spectrum_shape_editor.get_nodes() if hasattr(tab, 'spectrum_shape_editor') else [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
+        'spectrum_notch_positions_mirrored': tab.spectrum_shape_editor._notches_mirrored if hasattr(tab, 'spectrum_shape_editor') else [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]],
+        'spectrum_notch_positions_linear': tab.spectrum_shape_editor._notches_linear if hasattr(tab, 'spectrum_shape_editor') else [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]],
         'spectrum_bass_emphasis': (tab.spectrum_bass_emphasis.value() if hasattr(tab, 'spectrum_bass_emphasis') else 50) / 100.0,
         'spectrum_vocal_position': (tab.spectrum_vocal_position.value() if hasattr(tab, 'spectrum_vocal_position') else 40) / 100.0,
         'spectrum_mid_suppression': (tab.spectrum_mid_suppression.value() if hasattr(tab, 'spectrum_mid_suppression') else 50) / 100.0,
@@ -1613,6 +1629,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'bubble_big_size_max': (tab.bubble_big_size_max.value() if hasattr(tab, 'bubble_big_size_max') else 38) / 1000.0,
         'bubble_small_size_max': (tab.bubble_small_size_max.value() if hasattr(tab, 'bubble_small_size_max') else 18) / 1000.0,
         'bubble_big_specular_max_size': (tab.bubble_big_specular_max_size.value() if hasattr(tab, 'bubble_big_specular_max_size') else 250) / 100.0,
+        'bubble_big_size_clamp': (tab.bubble_big_size_clamp.value() if hasattr(tab, 'bubble_big_size_clamp') else 400) / 100.0,
+        'bubble_big_contraction_bias': (tab.bubble_big_contraction_bias.value() if hasattr(tab, 'bubble_big_contraction_bias') else 100) / 100.0,
         'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
         'bubble_trail_strength': (tab.bubble_trail_strength.value() if hasattr(tab, 'bubble_trail_strength') else 0) / 100.0,
         'bubble_tail_opacity': (tab.bubble_tail_opacity.value() if hasattr(tab, 'bubble_tail_opacity') else 0) / 100.0,

@@ -150,10 +150,19 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
                 if band_slice.size > 0:
                     freq_values[b] = np.sqrt(np.mean(band_slice ** 2))
 
-        # Get raw energy values
-        raw_bass = float(np.mean(freq_values[:4])) if bands >= 4 else float(freq_values[0])
-        raw_mid = float(np.mean(freq_values[4:10])) if bands >= 10 else raw_bass * 0.5
-        raw_treble = float(np.mean(freq_values[10:])) if bands > 10 else raw_bass * 0.2
+        # Get raw energy values — band splits driven by notch positions
+        _notch_pos = getattr(worker, '_spectrum_notch_positions', None)
+        if _notch_pos and len(_notch_pos) >= 3:
+            _fracs = sorted(float(n[0]) for n in _notch_pos)
+            # Use interior notch boundaries to define bass/mid/treble zones
+            _split1 = max(1, min(bands - 2, int(_fracs[1] * bands)))
+            _split2 = max(_split1 + 1, min(bands - 1, int(_fracs[-2] * bands)))
+        else:
+            _split1 = min(4, bands - 1)
+            _split2 = min(10, bands - 1)
+        raw_bass = float(np.mean(freq_values[:_split1])) if _split1 > 0 else float(freq_values[0])
+        raw_mid = float(np.mean(freq_values[_split1:_split2])) if _split2 > _split1 else raw_bass * 0.5
+        raw_treble = float(np.mean(freq_values[_split2:])) if _split2 < bands else raw_bass * 0.2
         worker._last_raw_bass = raw_bass
         worker._last_raw_mid = raw_mid
         worker._last_raw_treble = raw_treble
@@ -170,6 +179,13 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         bass_energy = max(0.0, (raw_bass - noise_floor) * expansion)
         mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
         treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
+
+        # Pre-AGC energy: post-noise-floor but pre-normalization.
+        # Modes that need true dynamic range (bubbles, blob) read these
+        # instead of post-AGC bar-derived energy which is near-constant.
+        worker._pre_agc_bass = min(1.0, bass_energy)
+        worker._pre_agc_mid = min(1.0, mid_energy)
+        worker._pre_agc_treble = min(1.0, treble_energy)
 
         # ── Shape-node driven profile ────────────────────────────────
         # The shape editor nodes are the SOLE driver of the bar height
@@ -527,10 +543,15 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
 
     drop_threshold = max(0.08, float(getattr(worker, "_drop_threshold", 0.16) or 0.16))
     hold_frames = max(1, int(getattr(worker, "_drop_hold_frames", 2) or 2))
+    drop_speed = max(0.5, min(3.0, float(getattr(worker, "_drop_speed", 1.0) or 1.0)))
     attack_speed = 0.72
-    decay_snap = max(0.45, float(getattr(worker, "_drop_snap_fraction", 0.58) or 0.58))
-    decay_hold = 0.28
-    decay_glide = 0.12
+    decay_snap_base = max(0.45, float(getattr(worker, "_drop_snap_fraction", 0.58) or 0.58))
+    decay_hold_base = 0.28
+    decay_glide_base = 0.12
+    # drop_speed scales decay rates: >1.0 = snappier drops, <1.0 = stickier bars
+    decay_snap = min(0.92, decay_snap_base * drop_speed)
+    decay_hold = min(0.65, decay_hold_base * drop_speed)
+    decay_glide = min(0.45, decay_glide_base * drop_speed)
     micro_drop_threshold = min(0.045, drop_threshold * 0.28)
     large_drop_threshold = max(drop_threshold, 0.18)
 
@@ -568,48 +589,87 @@ def _apply_adaptive_normalization(
     worker: "SpotifyVisualizerAudioWorker", arr, drop_signal: float,
     low_resolution: bool, np,
 ) -> None:
-    """Adaptive normalization to keep peaks near 1.0.
+    """Dual-window envelope normalizer.
 
-    Decay is aggressive enough to prevent long-term ratchet-up during
-    sustained loud passages (the root cause of reactivity degradation
-    across all visualizer modes).
+    Two envelopes track signal level at different timescales:
+      - **short-term** (~300ms): fast-tracking RMS of current bar output.
+        Used as a limiter — if bars exceed 1.0, scale down immediately.
+      - **long-term** (~3s): slow-tracking average level.
+        Represents the sustained loudness.  When short ≈ long the signal
+        is in a sustained section and normalization backs off, preserving
+        dynamics.  When short << long (quiet after loud), recovery boost
+        is applied gradually.
+
+    This fixes the old problem where a single running peak would stay
+    elevated during loud passages, compressing all dynamic range.
     """
+    agc_str = getattr(worker, "_agc_strength", 0.5)
+    if agc_str < 0.01:
+        return  # AGC disabled — raw output only
+
     try:
         peak_val = float(arr.max())
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         peak_val = 0.0
-    max_tracked_peak = 1.20
-    if peak_val > max_tracked_peak:
-        peak_val = max_tracked_peak
-    running_peak = getattr(worker, "_running_peak", 0.5)
 
-    if peak_val > running_peak:
-        running_peak += (peak_val - running_peak) * 0.28
+    rms_val = 0.0
+    try:
+        rms_val = float(np.sqrt(np.mean(arr[:] ** 2)))
+    except Exception:
+        rms_val = peak_val * 0.7
+
+    max_tracked = 1.30
+    peak_val = min(peak_val, max_tracked)
+    rms_val = min(rms_val, max_tracked)
+
+    env_short = getattr(worker, "_env_short", 0.5)
+    env_long = getattr(worker, "_env_long", 0.5)
+
+    # Scale envelope tracking rates by agc_strength:
+    #   0.0 = off (early return above), 0.5 = default, 1.0 = aggressive
+    rate_scale = 0.5 + agc_str  # 0.5→1.0 at default, 0.5→1.5 at max
+
+    # --- Short-term envelope (fast attack, moderate release) ---
+    if rms_val > env_short:
+        env_short += (rms_val - env_short) * 0.30 * rate_scale
     else:
-        # Tiered decay: large drops decay fast, small drops decay moderately.
-        # Old values (0.965 / 0.9) were far too slow — running_peak would
-        # stay elevated for 10+ seconds, compressing all dynamic range.
-        if peak_val < running_peak * 0.4:
-            decay = 0.82          # heavy drop → fast reset
-        elif peak_val < running_peak * 0.7:
-            decay = 0.90          # moderate drop
-        else:
-            decay = 0.94          # gentle drop — still much faster than old 0.965
-        running_peak = running_peak * decay + peak_val * (1.0 - decay)
+        env_short += (rms_val - env_short) * 0.15 * rate_scale
 
+    # --- Long-term envelope (slow attack, very slow release) ---
+    if rms_val > env_long:
+        env_long += (rms_val - env_long) * 0.05 * rate_scale
+    else:
+        env_long += (rms_val - env_long) * 0.02 * rate_scale
+
+    # --- Drop relief: on bass drops, nudge envelopes down faster ---
     drop_relief = max(0.0, float(drop_signal or 0.0))
     if drop_relief > 0.15:
-        running_peak *= max(0.75, 1.0 - drop_relief * 0.28)
-    elif low_resolution and drop_relief > 0.25:
-        running_peak *= max(0.90, 1.0 - drop_relief * 0.12)
+        nudge = max(0.80, 1.0 - drop_relief * 0.22)
+        env_short *= nudge
+        env_long *= max(0.90, nudge)
 
-    running_peak = max(0.18, min(1.20, running_peak))
-    worker._running_peak = running_peak
-    target_peak = 1.0
-    if running_peak > target_peak * 1.1 and peak_val > 0.0:
-        normalization = target_peak / max(running_peak, 1e-3)
-        arr *= normalization
+    # Clamp envelopes
+    env_short = max(0.08, min(max_tracked, env_short))
+    env_long = max(0.08, min(max_tracked, env_long))
+
+    worker._env_short = env_short
+    worker._env_long = env_long
+    worker._running_peak = env_short  # compat alias
+
+    # --- Normalization decision (scaled by agc_strength) ---
+    # Limiter threshold: lower at higher strength for more compression
+    limiter_thresh = 1.2 - agc_str * 0.4  # 1.0 at default, 0.8 at max
+    # 1) Limiter: if short-term envelope exceeds threshold, scale down
+    if env_short > limiter_thresh and peak_val > 0.0:
+        gain = limiter_thresh / env_short
+        arr *= (1.0 + (gain - 1.0) * agc_str * 2.0)
+    # 2) Sustained loud: short ≈ long → do nothing (preserve dynamics)
+    # 3) Recovery: short << long (quiet after loud) → gentle boost
+    elif env_long > 0.15 and env_short < env_long * 0.45:
+        boost = min(1.35, env_long / max(env_short, 0.08))
+        blend = min(0.3, (env_long - env_short) / max(env_long, 0.1))
+        arr *= (1.0 + (boost - 1.0) * blend * agc_str * 2.0)
 
 
 def maybe_log_floor_state(
@@ -698,6 +758,12 @@ def compute_bars_from_samples(
             mono = mono.astype("float32", copy=False)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+
+        # Pre-FFT input gain (virtual volume): scale PCM exactly like the
+        # mixer volume slider would, before peak detection and FFT.
+        _input_gain = getattr(worker, "_input_gain", 1.0)
+        if abs(_input_gain - 1.0) > 1e-4:
+            mono = mono * _input_gain
 
         try:
             peak_raw = float(np_mod.abs(mono).max()) if getattr(mono, "size", 0) > 0 else 0.0

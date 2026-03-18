@@ -145,7 +145,7 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 |-----|---------|-------|
 | `widgets.spotify_visualizer.visualizers_enabled` | `True` | Master toggle exposed on the Visualizers subtab. Gates all Beat Visualizer controls; runtime still requires Media widget enabled to spawn the overlay. |
 | `widgets.spotify_visualizer.enabled` | `True` | Per-mode Beat Visualizer enable (within the subtab). |
-| `widgets.spotify_visualizer.mode` | `"blob"` | bars/blob/helix/nebula/oscilloscope/sine_wave/spectrum/starfield |
+| `widgets.spotify_visualizer.mode` | `"blob"` | spectrum/oscilloscope/sine_wave/blob/bubble (helix/starfield deprecated) |
 | `widgets.spotify_visualizer.monitor` | `"ALL"` | |
 | `widgets.spotify_visualizer.bar_count` | `21` | Legacy placeholder; runtime bar counts now resolved per-mode via `SpotifyVisualizerSettings`. |
 | `widgets.spotify_visualizer.sine_line_offset_bias` | `0.7` | Controls both vertical line spread and per-line energy tint (0 = all lines share bass mix, 1 = spreads lines apart and leans lines 2/3 toward mid/high energy). |
@@ -160,8 +160,13 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 | `widgets.spotify_visualizer.dynamic_floor` | `True` | Global legacy fallback. Actual floor/toggle defaults live per-mode (see below). |
 | `widgets.spotify_visualizer.manual_floor` | `0.12` | Global fallback; UI + runtime clamp to **0.12–1.0** and immediately reseed the dynamic accumulator. |
 | `widgets.spotify_visualizer.ghosting_enabled` | `True` | |
+| `widgets.spotify_visualizer.energy_boost` | `0.85` | Per-mode post-normalization gain (0.5–1.8×). Higher values amplify energy bands after AGC. |
+| `widgets.spotify_visualizer.agc_strength` | `0.5` | Per-mode AGC compression (0.0–1.0). 0.0 bypasses normalization entirely, 0.5 moderate, 1.0 maximum compression. |
+| `widgets.spotify_visualizer.use_raw_energy` | `False` | Per-mode toggle: when True, uses pre-AGC energy bands (full dynamic range) instead of post-AGC normalized energy. |
 
-**Per-mode technical schema (Mar 2026):** Every mode owns an explicit set of technical keys (`<mode>_bar_count`, `<mode>_dynamic_floor`, `<mode>_manual_floor`, `<mode>_adaptive_sensitivity`, `<mode>_sensitivity`, `<mode>_audio_block_size`, `<mode>_dynamic_range_enabled`). Defaults for Spectrum/Bubble/Blob/Sine/Osc/Starfield/Helix are defined in `defaults.py` under `widgets.spotify_visualizer` and now seed `<mode>_manual_floor = 0.12`. UI helpers (`build_per_mode_technical_group`) and the widget cache read/write ONLY per-mode keys; the global `bar_count`/`dynamic_floor` fallbacks remain for legacy SST snapshots but should not be edited going forward.
+**Per-mode technical schema (Mar 2026):** Every mode owns an explicit set of technical keys (`<mode>_bar_count`, `<mode>_dynamic_floor`, `<mode>_manual_floor`, `<mode>_adaptive_sensitivity`, `<mode>_sensitivity`, `<mode>_audio_block_size`, `<mode>_dynamic_range_enabled`, `<mode>_energy_boost`, `<mode>_agc_strength`, `<mode>_use_raw_energy`). Defaults for Spectrum/Bubble/Blob/Sine/Osc are defined in `defaults.py` under `widgets.spotify_visualizer` and seed `<mode>_manual_floor = 0.12`. UI helpers (`create_per_mode_technical_controls` in `technical_controls.py`) and the widget cache read/write ONLY per-mode keys; the global `bar_count`/`dynamic_floor` fallbacks remain for legacy SST snapshots but should not be edited going forward.
+
+**AGC per-mode controls (Mar 2026):** `energy_boost`, `agc_strength`, and `use_raw_energy` are stored per-mode (e.g. `spectrum_energy_boost`, `bubble_agc_strength`). The model resolves these through `SpotifyVisualizerSettings.resolve_*()` methods with fallback to global keys. All three are included in `GLOBAL_ALLOWED_KEYS` for preset persistence.
 
 > **Manual floor contract (Mar 2026):** Any stored value below `0.12` or above `1.0` is clamped by UI sliders, SettingsManager migrations, preset loaders, `defaults_snapshot.py`, and shipping snapshots (`SRPSS_Settings_Screensaver_*.json`). When changing defaults or presets, verify both the curated JSON and release snapshots stay within this range to avoid silently resurrecting the retired `2.1` baseline.
 

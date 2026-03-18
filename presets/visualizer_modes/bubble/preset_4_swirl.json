@@ -22,6 +22,7 @@
           230
         ],
         "bubble_adaptive_sensitivity": false,
+        "bubble_agc_strength": 0.5,
         "bubble_audio_block_size": 256,
         "bubble_bar_count": 48,
         "bubble_big_bass_pulse": 1.8,
@@ -33,6 +34,7 @@
         "bubble_drift_speed": 0.3,
         "bubble_dynamic_floor": true,
         "bubble_dynamic_range_enabled": false,
+        "bubble_energy_boost": 0.85,
         "bubble_gradient_dark": [
           7,
           42,
@@ -81,6 +83,7 @@
         "bubble_surface_reach": 0.9,
         "bubble_tail_opacity": 0.65,
         "bubble_trail_strength": 0.85,
+        "bubble_use_raw_energy": false,
         "dynamic_floor": true,
         "dynamic_range_enabled": true,
         "ghost_alpha": 0.4,

@@ -42,6 +42,9 @@ _BORDER_COLOR = QColor(255, 255, 255, 60)
 _LABEL_COLOR = QColor(255, 255, 255, 100)
 _NOTCH_COLOR = QColor(255, 255, 255, 55)
 _ZONE_LABEL_COLOR = QColor(255, 255, 255, 70)
+_NOTCH_DRAG_COLOR = QColor(180, 200, 255, 180)
+_NOTCH_HIT_WIDTH = 28
+_NOTCH_MIN_SPACING = 0.06
 
 _NODE_RADIUS = 7
 _HIT_RADIUS = 14
@@ -157,6 +160,7 @@ class SpectrumShapeEditor(QWidget):
     """
 
     nodes_changed = Signal(list)
+    notch_positions_changed = Signal(list)
 
     def __init__(self, parent: Optional[QWidget] = None, mirrored: bool = True) -> None:
         super().__init__(parent)
@@ -164,6 +168,10 @@ class SpectrumShapeEditor(QWidget):
         self._mirrored: bool = mirrored
         self._drag_index: int = -1
         self._hover_index: int = -1
+        self._notch_drag_index: int = -1
+        self._notch_hover_index: int = -1
+        self._notches_mirrored: List[List] = [[x, lbl] for x, lbl in _NOTCHES_MIRRORED]
+        self._notches_linear: List[List] = [[x, lbl] for x, lbl in _NOTCHES_LINEAR]
         self.setMinimumHeight(150)
         self.setMaximumHeight(190)
         self.setMouseTracking(True)
@@ -171,7 +179,8 @@ class SpectrumShapeEditor(QWidget):
         self.setToolTip(
             "Left-click: add node (max 5)\n"
             "Right-click node: remove\n"
-            "Drag node: reshape bar heights"
+            "Drag node: reshape bar heights\n"
+            "Drag bottom labels: move frequency zone boundaries"
         )
 
     # ── Public API ───────────────────────────────────────────────────
@@ -189,6 +198,24 @@ class SpectrumShapeEditor(QWidget):
     def set_mirrored(self, mirrored: bool) -> None:
         if self._mirrored != mirrored:
             self._mirrored = mirrored
+            self.update()
+
+    def get_notch_positions(self) -> List[List]:
+        """Return current notch positions as [[x_frac, label], ...]."""
+        src = self._notches_mirrored if self._mirrored else self._notches_linear
+        return [list(n) for n in src]
+
+    def set_notch_positions(self, positions: List[List], mirrored: Optional[bool] = None) -> None:
+        """Restore notch positions from settings."""
+        if mirrored is None:
+            mirrored = self._mirrored
+        if not positions or len(positions) < 2:
+            return
+        target = self._notches_mirrored if mirrored else self._notches_linear
+        if len(positions) == len(target):
+            for i, (x, lbl) in enumerate(positions):
+                target[i] = [float(x), str(lbl)]
+            target.sort(key=lambda n: n[0])
             self.update()
 
     # ── Coordinate mapping ───────────────────────────────────────────
@@ -250,8 +277,49 @@ class SpectrumShapeEditor(QWidget):
 
     # ── Mouse handling ───────────────────────────────────────────────
 
+    def _notch_hit_test(self, px: float, py: float) -> int:
+        """Hit-test notch labels in the bottom zone. Returns notch index or -1."""
+        r = self._plot_rect()
+        notch_y_top = r.bottom()
+        notch_y_bot = r.bottom() + 20
+        if py < notch_y_top - 4 or py > notch_y_bot:
+            return -1
+        notches = self._notches_mirrored if self._mirrored else self._notches_linear
+        for i, (frac, _lbl) in enumerate(notches):
+            if self._mirrored:
+                center_x = r.left() + r.width() * 0.5
+                half_w = r.width() * 0.5
+                x = center_x - frac * half_w
+            else:
+                x = r.left() + frac * r.width()
+            if abs(px - x) <= _NOTCH_HIT_WIDTH:
+                return i
+        return -1
+
+    def _enforce_notch_spacing(self, notches: List[List], drag_idx: int) -> None:
+        """Enforce minimum spacing between adjacent notches after a drag."""
+        for i in range(len(notches) - 1):
+            gap = notches[i + 1][0] - notches[i][0]
+            if gap < _NOTCH_MIN_SPACING:
+                if i + 1 == drag_idx:
+                    notches[i][0] = notches[i + 1][0] - _NOTCH_MIN_SPACING
+                else:
+                    notches[i + 1][0] = notches[i][0] + _NOTCH_MIN_SPACING
+        for n in notches:
+            n[0] = max(0.0, min(1.0, n[0]))
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         px, py = event.position().x(), event.position().y()
+
+        # Check notch drag first (bottom zone)
+        if event.button() == Qt.MouseButton.LeftButton:
+            notch_idx = self._notch_hit_test(px, py)
+            if notch_idx >= 0:
+                self._notch_drag_index = notch_idx
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
+                event.accept()
+                return
+
         idx = self._hit_test(px, py)
 
         if event.button() == Qt.MouseButton.LeftButton:
@@ -286,6 +354,29 @@ class SpectrumShapeEditor(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         px, py = event.position().x(), event.position().y()
 
+        # Notch dragging
+        if self._notch_drag_index >= 0:
+            r = self._plot_rect()
+            notches = self._notches_mirrored if self._mirrored else self._notches_linear
+            if self._mirrored:
+                center_x = r.left() + r.width() * 0.5
+                half_w = r.width() * 0.5
+                new_frac = (center_x - px) / max(1.0, half_w)
+            else:
+                new_frac = (px - r.left()) / max(1.0, r.width())
+            new_frac = max(0.0, min(1.0, new_frac))
+            notches[self._notch_drag_index][0] = new_frac
+            notches.sort(key=lambda n: n[0])
+            # Re-find drag index after sort
+            for i, n in enumerate(notches):
+                if abs(n[0] - new_frac) < 1e-6:
+                    self._notch_drag_index = i
+                    break
+            self._enforce_notch_spacing(notches, self._notch_drag_index)
+            self.update()
+            event.accept()
+            return
+
         if self._drag_index >= 0:
             nx, ny = self._pixel_to_node(px, py)
             self._nodes[self._drag_index] = [nx, ny]
@@ -298,15 +389,26 @@ class SpectrumShapeEditor(QWidget):
         else:
             old_hover = self._hover_index
             self._hover_index = self._hit_test(px, py)
+            old_notch_hover = self._notch_hover_index
+            self._notch_hover_index = self._notch_hit_test(px, py)
             if self._hover_index >= 0:
                 self.setCursor(Qt.CursorShape.PointingHandCursor)
+            elif self._notch_hover_index >= 0:
+                self.setCursor(Qt.CursorShape.SizeHorCursor)
             else:
                 self.setCursor(Qt.CursorShape.CrossCursor)
-            if old_hover != self._hover_index:
+            if old_hover != self._hover_index or old_notch_hover != self._notch_hover_index:
                 self.update()
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._notch_drag_index >= 0:
+            self._notch_drag_index = -1
+            self.setCursor(Qt.CursorShape.CrossCursor)
+            self.notch_positions_changed.emit(self.get_notch_positions())
+            self.update()
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self._drag_index >= 0:
             self._drag_index = -1
             px, py = event.position().x(), event.position().y()
@@ -461,30 +563,32 @@ class SpectrumShapeEditor(QWidget):
 
     def _draw_notches(self, p: QPainter, r: QRectF) -> None:
         """Draw small bottom alignment notches with frequency-zone labels."""
-        notches = _NOTCHES_MIRRORED if self._mirrored else _NOTCHES_LINEAR
+        notches = self._notches_mirrored if self._mirrored else self._notches_linear
         font = p.font()
         font.setPixelSize(8)
         p.setFont(font)
 
-        for frac, label in notches:
+        for idx, (frac, label) in enumerate(notches):
+            is_dragging = (idx == self._notch_drag_index)
             if self._mirrored:
                 center_x = r.left() + r.width() * 0.5
                 half_w = r.width() * 0.5
-                # Left half notch
                 x_left = center_x - frac * half_w
-                self._draw_single_notch(p, r, x_left, label)
-                # Right half mirrored notch
+                self._draw_single_notch(p, r, x_left, label, highlight=is_dragging)
                 x_right = center_x + frac * half_w
                 if abs(x_left - x_right) > 4:
-                    self._draw_single_notch(p, r, x_right, label)
+                    self._draw_single_notch(p, r, x_right, label, highlight=is_dragging)
             else:
                 x = r.left() + frac * r.width()
-                self._draw_single_notch(p, r, x, label)
+                self._draw_single_notch(p, r, x, label, highlight=is_dragging)
 
-    def _draw_single_notch(self, p: QPainter, r: QRectF, x: float, label: str) -> None:
-        p.setPen(QPen(_NOTCH_COLOR, 1.0))
+    def _draw_single_notch(self, p: QPainter, r: QRectF, x: float, label: str,
+                            *, highlight: bool = False) -> None:
+        notch_color = _NOTCH_DRAG_COLOR if highlight else _NOTCH_COLOR
+        label_color = _NOTCH_DRAG_COLOR if highlight else _ZONE_LABEL_COLOR
+        p.setPen(QPen(notch_color, 1.5 if highlight else 1.0))
         p.drawLine(QPointF(x, r.bottom()), QPointF(x, r.bottom() + 5))
-        p.setPen(_ZONE_LABEL_COLOR)
+        p.setPen(label_color)
         p.drawText(
             QRectF(x - 22, r.bottom() + 5, 44, 14),
             Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop,

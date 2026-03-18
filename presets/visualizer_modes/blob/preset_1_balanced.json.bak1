@@ -21,7 +21,6 @@
           230
         ],
         "blob_adaptive_sensitivity": true,
-        "blob_agc_strength": 0.5,
         "blob_audio_block_size": 256,
         "blob_bar_count": 32,
         "blob_color": [
@@ -41,7 +40,6 @@
           255,
           215
         ],
-        "blob_energy_boost": 0.85,
         "blob_ghost_alpha": 0.2,
         "blob_ghost_decay": 0.65,
         "blob_ghosting_enabled": true,
@@ -77,7 +75,6 @@
         "blob_stretch_inner": 0.05,
         "blob_stretch_outer": 0.33,
         "blob_stretch_tendency": 0.17,
-        "blob_use_raw_energy": false,
         "blob_width": 1.0,
         "dynamic_floor": true,
         "dynamic_range_enabled": true,

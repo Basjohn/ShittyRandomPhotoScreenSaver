@@ -15,6 +15,8 @@ def get_uniform_names() -> list[str]:
         "u_heartbeat", "u_heartbeat_intensity", "u_width_reaction",
         "u_sine_density", "u_sine_displacement",
         "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
+        # Ghost (peak-tracked energy envelope)
+        "u_ghost_alpha", "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
         # Shared line/glow
         "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity", "u_glow_color",
         "u_reactive_glow", "u_sensitivity", "u_smoothing",
@@ -28,6 +30,18 @@ def get_uniform_names() -> list[str]:
 
 def upload_uniforms(gl, u: dict, s) -> bool:
     _set1i(gl, u, "u_playing", 1 if s._playing else 0)
+
+    # Ghost alpha (mode-specific: sine wave)
+    loc = u.get("u_ghost_alpha", -1)
+    if loc >= 0:
+        try:
+            ga = float(s._sine_ghost_alpha if s._sine_ghosting_enabled else 0.0)
+        except Exception:
+            ga = 0.0
+        gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
+    _set1f(gl, u, "u_ghost_bass", getattr(s, '_sine_peak_bass', 0.0))
+    _set1f(gl, u, "u_ghost_mid", getattr(s, '_sine_peak_mid', 0.0))
+    _set1f(gl, u, "u_ghost_high", getattr(s, '_sine_peak_high', 0.0))
     _set1f(gl, u, "u_sine_speed", s._osc_speed)
     _set1i(gl, u, "u_sine_line_dim", 1 if s._osc_line_dim else 0)
     _set1f(gl, u, "u_sine_line_offset_bias", s._osc_line_offset_bias)

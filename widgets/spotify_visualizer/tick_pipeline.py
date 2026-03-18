@@ -121,9 +121,14 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         return
 
     widget._bubble_compute_pending = True
-    # Use raw (unsmoothed) energy for pulse so kicks/drums produce
-    # sharp transients. Travel speed uses smoothed bands (smooth feel).
-    eb_raw = widget._engine.get_raw_energy_bands() if widget._engine else None
+    # Energy source for bubble pulse: per-mode toggle controls raw vs normalized.
+    use_raw = getattr(widget, '_use_raw_energy', False)
+    if use_raw and widget._engine:
+        eb_pulse = widget._engine.get_pre_agc_energy_bands()
+    elif widget._engine:
+        eb_pulse = widget._engine.get_energy_bands()
+    else:
+        eb_pulse = None
     eb_smooth = widget._engine.get_energy_bands() if widget._engine else None
     prev_ts = widget._bubble_last_tick_ts
     widget._bubble_last_tick_ts = now_ts
@@ -131,9 +136,9 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     if not widget._spotify_playing:
         dt_bubble = 0.0
     eb_snap = {
-        'bass': getattr(eb_raw, 'bass', 0.0) if eb_raw else 0.0,
-        'mid': getattr(eb_raw, 'mid', 0.0) if eb_raw else 0.0,
-        'high': getattr(eb_raw, 'high', 0.0) if eb_raw else 0.0,
+        'bass': getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0,
+        'mid': getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0,
+        'high': getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0,
         'overall': getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,
         'smooth_mid': getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
         'smooth_high': getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0,
@@ -161,6 +166,8 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'big_bass_pulse': widget._bubble_big_bass_pulse,
         'small_freq_pulse': widget._bubble_small_freq_pulse,
         'big_specular_max_size': widget._bubble_big_specular_max_size,
+        'big_contraction_bias': widget._bubble_big_contraction_bias,
+        'big_size_clamp': widget._bubble_big_size_clamp,
     }
     widget._thread_manager.submit_compute_task(
         widget._bubble_compute_worker,

@@ -1,7 +1,7 @@
 {
   "mode": "spectrum",
-  "name": "Preset 1 (Castle)",
-  "preset_index": 0,
+  "name": "Preset 2 (Cake)",
+  "preset_index": 1,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -27,42 +27,35 @@
         "ghosting_enabled": true,
         "manual_floor": 0.05,
         "mode": "spectrum",
-        "monitor": "ALL",
-        "sensitivity": 0.25,
+        "sensitivity": 0.2,
         "spectrum_adaptive_sensitivity": false,
-        "spectrum_agc_strength": 0.5,
         "spectrum_audio_block_size": 256,
         "spectrum_bar_count": 33,
-        "spectrum_bass_emphasis": 0.02,
+        "spectrum_bass_emphasis": 0.1,
         "spectrum_border_radius": 2.0,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": false,
-        "spectrum_energy_boost": 0.85,
         "spectrum_growth": 5.0,
-        "spectrum_manual_floor": 0.05,
-        "spectrum_mid_suppression": 0.9,
+        "spectrum_manual_floor": 0.12,
+        "spectrum_mid_suppression": 0.75,
         "spectrum_mirrored": true,
         "spectrum_profile_floor": 0.05,
-        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_enabled": true,
         "spectrum_rainbow_per_bar": true,
         "spectrum_rainbow_speed": 0.3,
-        "spectrum_sensitivity": 0.25,
+        "spectrum_sensitivity": 0.21,
         "spectrum_shape_nodes": [
           [
-            0.0010559662090813093,
-            0.4722222222222222
+            0.0,
+            1.0
           ],
           [
-            0.1981696585709258,
-            0.4012345679012349
+            0.3555979643765904,
+            0.31172839506172856
           ],
           [
-            0.43611404435058077,
-            0.2654320987654323
-          ],
-          [
-            0.7317845828933475,
-            0.9506172839506175
+            0.65,
+            0.55
           ],
           [
             0.9930025445292622,
@@ -70,9 +63,8 @@
           ]
         ],
         "spectrum_single_piece": true,
-        "spectrum_use_raw_energy": false,
         "spectrum_vocal_position": 0.4,
-        "spectrum_wave_amplitude": 0.1
+        "spectrum_wave_amplitude": 0.12
       }
     }
   },

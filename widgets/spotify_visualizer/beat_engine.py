@@ -148,6 +148,20 @@ class _SpotifyBeatEngine(QObject):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply curved profile config", exc_info=True)
 
+    def set_drop_speed(self, speed: float) -> None:
+        """Forward drop speed multiplier to the audio worker DSP pipeline."""
+        try:
+            self._audio_worker.set_drop_speed(speed)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply drop speed config", exc_info=True)
+
+    def set_notch_positions(self, positions: list) -> None:
+        """Forward frequency-zone notch positions to the audio worker."""
+        try:
+            self._audio_worker.set_notch_positions(positions)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply notch positions config", exc_info=True)
+
     def set_spectrum_shape_config(self, config) -> None:
         """Forward SpectrumShapeConfig to the audio worker DSP pipeline."""
         try:
@@ -175,6 +189,20 @@ class _SpotifyBeatEngine(QObject):
             self._audio_worker.set_energy_boost(boost)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply energy boost config", exc_info=True)
+
+    def set_input_gain(self, gain: float) -> None:
+        """Forward pre-FFT input gain (virtual volume) to the audio worker."""
+        try:
+            self._audio_worker.set_input_gain(gain)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply input gain config", exc_info=True)
+
+    def set_agc_strength(self, strength: float) -> None:
+        """Forward AGC strength to the audio worker."""
+        try:
+            self._audio_worker.set_agc_strength(strength)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply agc strength config", exc_info=True)
 
     def set_playback_state(self, is_playing: bool) -> None:
         """Set Spotify playback state for FFT processing gating."""
@@ -477,6 +505,20 @@ class _SpotifyBeatEngine(QObject):
         if raw:
             return extract_energy_bands(raw)
         return self._energy_bands
+
+    def get_pre_agc_energy_bands(self) -> EnergyBands:
+        """Get energy bands computed BEFORE AGC normalization.
+
+        Post-noise-floor, pre-normalization values that preserve full dynamic
+        range.  Modes that need true loudness variance (bubbles, blob) should
+        use these instead of post-AGC bar-derived energy.
+        """
+        w = self._audio_worker
+        bass = getattr(w, '_pre_agc_bass', 0.0)
+        mid = getattr(w, '_pre_agc_mid', 0.0)
+        high = getattr(w, '_pre_agc_treble', 0.0)
+        overall = max(0.0, min(1.0, (bass * 0.5 + mid * 0.3 + high * 0.2)))
+        return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
     def wake(self) -> None:
         """Force wake after pause detection - restart audio capture if unhealthy."""

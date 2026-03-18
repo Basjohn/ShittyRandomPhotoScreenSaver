@@ -328,6 +328,8 @@
 | `test_micro_wobble_math.py` | Micro wobble amplitude/frequency math | Wobble parameter changes |
 | `test_sine_wave_gl_fix.py` | Sine wave GL uniform gating regression | Sine mode uniform issues |
 | `test_action_plan_3_0.py` | Action Plan 3.0: heartbeat settings/math, artwork double-click fix, halo forwarding guard, halo shapes, sine line positioning, rainbow/ghosting roundtrip, shader source validation (37 tests) | Tasks 5/6.1/6.2/7/8 |
+| `test_bubble_reactivity.py` | Bubble pulse reactivity with simulated audio: rapid beat clusters (burst detection), sustained loud sections, quiet→loud→quiet transitions, single kicks, small→big promotion lifecycle (8 tests) | Bubble sim pulse/reactivity changes |
+| `test_input_gain.py` | Input gain (virtual volume): PCM scaling identity check, very-low-gain silence, FFT magnitude linearity, model round-trip (default/to_dict/from_mapping/resolve), audio worker clamping (9 tests) | Input gain pipeline changes |
 
 ---
 
@@ -391,11 +393,11 @@ for tf in sorted(pathlib.Path(cwd,'tests').glob('test_*.py')):
 
 ### Pre-existing Failures (not caused by recent changes)
 These tests have known failures unrelated to the burn/styling/test-fixture work:
-- `test_display_tab.py` — 1 failure
+- ~~`test_display_tab.py` — 1 failure~~ **Fixed Mar 2026** (timing.interval default 140)
 - `test_settings_dialog.py` — 1 failure
-- `test_settings_no_sources_popup.py` — 4 failures
+- ~~`test_settings_no_sources_popup.py` — 4 failures~~ **Fixed Mar 2026** (added `_apply_application_font` to `NoSourcesPopup`)
 - `test_spotify_visualizer_widget.py` — 4 failures
-- `test_transitions_tab.py` — 2 failures
+- ~~`test_transitions_tab.py` — 2 failures~~ **Fixed Mar 2026** (type/direction defaults aligned)
 - `test_visualizer_presets.py` — 1 failure
 - `test_widget_manager_refresh.py` — 1 failure
 - `test_widgets_tab.py` — 2 failures
@@ -450,4 +452,4 @@ When writing tests that create `DisplayWidget` or start transitions:
 
 ---
 
-**Last Updated**: Mar 5, 2026 (added 15+ missing test files, chunked runner, architecture split tests, visualizer plumbing/preset/overlay kwarg tests, Imgur tests, settings binding tests)
+**Last Updated**: Mar 18, 2026 (added test_bubble_reactivity.py, fixed pre-existing failures in display_tab/transitions_tab/no_sources_popup, updated regression table)

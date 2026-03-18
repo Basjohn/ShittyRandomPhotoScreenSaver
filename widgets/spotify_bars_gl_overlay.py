@@ -163,6 +163,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
+        # Sine wave ghost: peak-tracked energy per band (decays slowly)
+        self._sine_peak_bass: float = 0.0
+        self._sine_peak_mid: float = 0.0
+        self._sine_peak_high: float = 0.0
+        self._sine_peak_hold_remaining: float = 0.0
         self._glow_diag_last_ts: float = 0.0
         self._glow_diag_last_sig: tuple | None = None
 
@@ -284,6 +289,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._osc_smoothed_bass = 0.0
             self._osc_smoothed_mid = 0.0
             self._osc_smoothed_high = 0.0
+            # Sine ghost peak state: clear to prevent stale peaks on mode re-entry
+            self._sine_peak_bass = 0.0
+            self._sine_peak_mid = 0.0
+            self._sine_peak_high = 0.0
+            self._sine_peak_hold_remaining = 0.0
 
         if mode_key == 'bubble':
             self._bubble_pos_data = []
@@ -555,6 +565,36 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         prev = getattr(self, attr)
                         a = min(1.0, dt / 0.06) if raw_e > prev else min(1.0, dt / 0.12)
                         setattr(self, attr, prev + (raw_e - prev) * a)
+                # Sine Wave ghost: peak-tracked per-band energy envelope
+                if self._vis_mode == 'sine_wave' and energy_bands is not None and self._sine_ghosting_enabled:
+                    raw_bass = getattr(energy_bands, 'bass', 0.0)
+                    raw_mid = getattr(energy_bands, 'mid', 0.0)
+                    raw_high = getattr(energy_bands, 'high', 0.0)
+                    any_sine_peak = False
+                    if raw_bass > self._sine_peak_bass:
+                        self._sine_peak_bass = raw_bass
+                        any_sine_peak = True
+                    if raw_mid > self._sine_peak_mid:
+                        self._sine_peak_mid = raw_mid
+                        any_sine_peak = True
+                    if raw_high > self._sine_peak_high:
+                        self._sine_peak_high = raw_high
+                        any_sine_peak = True
+                    if any_sine_peak:
+                        self._sine_peak_hold_remaining = 0.12
+                    hold = self._sine_peak_hold_remaining
+                    if hold > 0.0:
+                        self._sine_peak_hold_remaining = max(0.0, hold - dt)
+                    else:
+                        decay_tau = max(0.3, 3.0 - max(0.1, min(1.0, self._sine_ghost_decay)) * 2.5)
+                        da = min(1.0, dt / decay_tau)
+                        self._sine_peak_bass += (raw_bass - self._sine_peak_bass) * da
+                        self._sine_peak_mid += (raw_mid - self._sine_peak_mid) * da
+                        self._sine_peak_high += (raw_high - self._sine_peak_high) * da
+                    min_off = max(0.40, self._osc_smoothed_bass * 0.50)
+                    self._sine_peak_bass = max(self._sine_peak_bass, raw_bass + min_off)
+                    self._sine_peak_mid = max(self._sine_peak_mid, raw_mid + min_off * 0.90)
+                    self._sine_peak_high = max(self._sine_peak_high, raw_high + min_off * 0.80)
         self._last_time_ts = now_ts
 
         # Store waveform data (oscilloscope) with temporal smoothing via osc_speed
@@ -1224,6 +1264,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_specular_color",
                     "u_gradient_light", "u_gradient_dark", "u_pop_color",
                     "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
+                    "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
 

@@ -103,6 +103,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._spectrum_border_radius: float = 0.0
         self._spectrum_mirrored: bool = True
         self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
+        self._spectrum_notch_positions_mirrored: list = [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
+        self._spectrum_notch_positions_linear: list = [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]]
         # Spectrum shaping config (pushed to audio worker DSP pipeline)
         self._spectrum_bass_emphasis: float = 0.50
         self._spectrum_vocal_position: float = 0.40
@@ -255,6 +257,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_gradient_direction: str = "top"
         self._bubble_big_size_max: float = 0.038
         self._bubble_small_size_max: float = 0.018
+        self._use_raw_energy: bool = False
+        self._bubble_big_contraction_bias: float = 1.0
+        self._bubble_big_size_clamp: float = 4.0
         self._bubble_big_specular_max_size: float = 2.5
         self._bubble_simulation: Optional[object] = None  # lazy init (owned by compute thread)
         self._bubble_pos_data: list = []
@@ -282,6 +287,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._last_floor_config = (True, 0.12)
         self._last_sensitivity_config = (True, 1.0)
         self._last_energy_boost: float = 0.85
+        self._last_input_gain: float = 1.0
         self._last_audio_block_size: int = 0
         self._settings_model: Optional[SpotifyVisualizerSettings] = None
         self._technical_config_cache: Dict[str, Dict[str, Any]] = {}
@@ -439,6 +445,21 @@ class SpotifyVisualizerWidget(QWidget):
             engine.set_energy_boost(self._last_energy_boost)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay energy boost config", exc_info=True)
+        try:
+            engine.set_input_gain(self._last_input_gain)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay input gain config", exc_info=True)
+        try:
+            engine.set_drop_speed(self._spectrum_drop_speed)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay drop speed config", exc_info=True)
+        try:
+            _active_notches = (self._spectrum_notch_positions_mirrored
+                               if self._spectrum_mirrored
+                               else self._spectrum_notch_positions_linear)
+            engine.set_notch_positions(_active_notches)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay notch positions config", exc_info=True)
 
     # ------------------------------------------------------------------
     # Public configuration
@@ -521,6 +542,42 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to push energy boost config", exc_info=True)
 
+    def _apply_input_gain(self, gain: float) -> None:
+        """Forward pre-FFT input gain (virtual volume) to the audio worker."""
+        try:
+            value = float(gain)
+        except Exception as exc:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
+            value = 1.0
+        if abs(value - self._last_input_gain) <= 1e-4:
+            return
+        self._last_input_gain = value
+        try:
+            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
+        except Exception as exc:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
+            engine = None
+        if engine is None:
+            return
+        try:
+            engine.set_input_gain(value)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to push input gain config", exc_info=True)
+
+    def _apply_agc_strength(self, value: float) -> None:
+        """Forward AGC strength to the audio worker."""
+        try:
+            engine = self._engine
+        except Exception as exc:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
+            engine = None
+        if engine is None:
+            return
+        try:
+            engine.set_agc_strength(value)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to push agc strength config", exc_info=True)
+
     @staticmethod
     def _compute_energy_boost(enabled: bool) -> float:
         """Map dynamic range flag to a safe energy boost multiplier."""
@@ -589,6 +646,10 @@ class SpotifyVisualizerWidget(QWidget):
                     "sensitivity": model.resolve_sensitivity(mode_key),
                     "audio_block_size": model.resolve_audio_block_size(mode_key),
                     "dynamic_range_enabled": model.resolve_dynamic_range_enabled(mode_key),
+                    "energy_boost": model.resolve_energy_boost(mode_key),
+                    "agc_strength": model.resolve_agc_strength(mode_key),
+                    "use_raw_energy": model.resolve_use_raw_energy(mode_key),
+                    "input_gain": model.resolve_input_gain(mode_key),
                 }
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to cache technical config for mode=%s", mode_key, exc_info=True)
@@ -624,12 +685,22 @@ class SpotifyVisualizerWidget(QWidget):
         sensitivity = float(config.get("sensitivity", 1.0))
         audio_block_size = int(config.get("audio_block_size", 0) or 0)
         dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
-        energy_boost = self._compute_energy_boost(dynamic_range_enabled)
+        energy_boost_raw = config.get("energy_boost", None)
+        if energy_boost_raw is not None:
+            energy_boost = max(0.5, min(1.8, float(energy_boost_raw)))
+        else:
+            energy_boost = self._compute_energy_boost(dynamic_range_enabled)
+        agc_strength = max(0.0, min(1.0, float(config.get("agc_strength", 0.5))))
+        use_raw_energy = bool(config.get("use_raw_energy", False))
+        input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
 
+        self._use_raw_energy = use_raw_energy
         self.apply_floor_config(dynamic_floor, manual_floor)
         self.apply_sensitivity_config(adaptive, sensitivity)
         self._apply_audio_block_size(audio_block_size)
         self._apply_energy_boost(energy_boost)
+        self._apply_agc_strength(agc_strength)
+        self._apply_input_gain(input_gain)
 
         try:
             from os import getenv
@@ -867,6 +938,8 @@ class SpotifyVisualizerWidget(QWidget):
             big_bass_pulse=pulse_params['big_bass_pulse'],
             small_freq_pulse=pulse_params['small_freq_pulse'],
             big_specular_max_size=pulse_params.get('big_specular_max_size', 2.5),
+            big_contraction_bias=pulse_params.get('big_contraction_bias', 1.0),
+            big_size_clamp=pulse_params.get('big_size_clamp', 4.0),
         )
         count = self._bubble_simulation.count
         if not getattr(self, '_bubble_worker_logged', False):

@@ -92,6 +92,12 @@ uniform float u_sine_density;
 // Displacement: transient XY offsets for multi-line mode when multi-line is active
 uniform float u_sine_displacement;
 
+// Ghost: peak-tracked energy envelope for trailing ghost lines
+uniform float u_ghost_alpha;
+uniform float u_ghost_bass;
+uniform float u_ghost_mid;
+uniform float u_ghost_high;
+
 float compute_density_cycles() {
     // Two-piece linear: 0.25→1 cycle, 1.0→3 cycles (default), 3.0→8 cycles.
     // Below default: gentle wide waves.  Above default: tightly packed.
@@ -479,6 +485,42 @@ void main() {
 
     float ny1 = ny + disp_y_offset;
     float w1_pre = w1 + mw1 + crawl_offset1 + wfx1 / amp1_safe;
+
+    // Ghost LINE 1: decoupled trailing ghost — same direction, slower travel.
+    // Ghost computes its own wave with 40% of the travel phase so it drifts
+    // behind the main line, making it visually distinct as a "ghost".
+    if (u_ghost_alpha > 0.001) {
+        float ghost_e1 = u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10;
+        float ghost_amp1_raw = base_amplitude * (1.0 + ghost_e1 * 0.35);
+        float ghost_amp1 = min(ghost_amp1_raw * hb_mult, hb_cap);
+        float ghost_amp1_safe = max(ghost_amp1_raw, 0.01);
+        // Ghost travels at 40% speed in the same direction as main line
+        float ghost_phase1 = phase1 * 0.4;
+        float ghost_disp_phase = disp_phase_offset * 0.3;
+        float ghost_w1 = sin(nx * sine_freq + ghost_phase1 + u_sine_line1_shift * TWO_PI + ghost_disp_phase);
+        // Reduced crawl (25% of main) for smoother ghost appearance
+        float ghost_crawl1 = crawl_offset1 * 0.25;
+        // Reduced micro wobble (20% of main)
+        float ghost_mw1 = mw1 * 0.20;
+        // Reduced wave effect (30% of main)
+        float ghost_wfx1 = wfx1 * 0.30;
+        float ghost_w1_pre = ghost_w1 + ghost_mw1 + ghost_crawl1 + ghost_wfx1 / ghost_amp1_safe;
+        // Small vertical offset so ghost separates even when travel is zero
+        float ghost_ny1 = ny1 + 0.012;
+        vec3 g_line_rgb1, g_glow_rgb1;
+        float g_line_a1, g_glow_a1;
+        vec4 ghost_color1 = lineColor1;
+        ghost_color1.a *= u_ghost_alpha * 0.8;
+        eval_line(ghost_ny1, inner_height, ghost_w1_pre, ghost_amp1,
+                  ghost_color1, glowColor1, 0.0, 0.0, 0.0, bass_width + 2.0,
+                  g_line_rgb1, g_glow_rgb1, g_line_a1, g_glow_a1);
+        float ga1 = g_line_a1 * u_ghost_alpha * 0.75;
+        if (ga1 > 0.001) {
+            final_rgb = g_line_rgb1;
+            final_a = ga1;
+        }
+    }
+
     vec3 line_rgb1;
     vec3 glow_rgb1;
     float line_alpha1;
@@ -495,8 +537,9 @@ void main() {
     float combined_alpha1 = line_alpha1 + adj_glow_alpha1;
     vec3 combined_premult1 = line_rgb1 + adj_glow_rgb1;
     if (combined_alpha1 > 0.0) {
-        final_rgb = combined_premult1;
-        final_a = combined_alpha1;
+        float inv_src1 = 1.0 - combined_alpha1;
+        final_rgb = combined_premult1 + final_rgb * inv_src1;
+        final_a = combined_alpha1 + final_a * inv_src1;
         final_glow_alpha = adj_glow_alpha1;
     }
 
@@ -563,6 +606,38 @@ void main() {
 
         float sigma2 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base;
         float w2_pre = w2 + mw2 + crawl_offset2 + wfx2 / amp2_safe;
+
+        // Ghost LINE 2: decoupled trailing ghost — slower travel, reduced effects
+        if (u_ghost_alpha > 0.001) {
+            float ghost_e2 = mix(u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10,
+                                 u_ghost_mid * 0.45 + u_ghost_bass * 0.20, lob * 0.4);
+            float ghost_amp2_raw = base_amplitude * (1.0 + ghost_e2 * 0.30);
+            float ghost_amp2 = min(ghost_amp2_raw * hb_mult, hb_cap);
+            float ghost_amp2_safe = max(ghost_amp2_raw, 0.01);
+            float ghost_phase2 = phase2 * 0.4;
+            float ghost_lob_phase2 = lob_phase2;
+            float ghost_disp2 = disp_phase_offset * 0.3 * 0.85;
+            float ghost_w2 = sin(nx * sine_freq + ghost_lob_phase2 + ghost_phase2 + add_shift2 + ghost_disp2);
+            float ghost_crawl2 = crawl_offset2 * 0.25;
+            float ghost_mw2 = mw2 * 0.20;
+            float ghost_wfx2 = wfx2 * 0.30;
+            float ghost_w2_pre = ghost_w2 + ghost_mw2 + ghost_crawl2 + ghost_wfx2 / ghost_amp2_safe;
+            float ghost_ny2 = ny2 + 0.012;
+            vec3 g_line_rgb2, g_glow_rgb2;
+            float g_line_a2, g_glow_a2;
+            vec4 ghost_color2 = lineColor2;
+            ghost_color2.a *= u_ghost_alpha * 0.8;
+            eval_line(ghost_ny2, inner_height, ghost_w2_pre, ghost_amp2,
+                      ghost_color2, glowColor2, 0.0, 0.0, 0.0, bass_width + 2.0,
+                      g_line_rgb2, g_glow_rgb2, g_line_a2, g_glow_a2);
+            float ga2 = g_line_a2 * u_ghost_alpha * 0.75;
+            if (ga2 > 0.001) {
+                float inv2 = 1.0 - ga2;
+                final_rgb = g_line_rgb2 * ga2 + final_rgb * inv2;
+                final_a = ga2 + final_a * inv2;
+            }
+        }
+
         vec3 line_rgb2;
         vec3 glow_rgb2;
         float line_alpha2;
@@ -649,6 +724,38 @@ void main() {
 
         float sigma3 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base;
         float w3_pre = w3 + mw3 + crawl_offset3 + wfx3 / amp3_safe;
+
+        // Ghost LINE 3: decoupled trailing ghost — slower travel, reduced effects
+        if (u_ghost_alpha > 0.001) {
+            float ghost_e3 = mix(u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10,
+                                 u_ghost_high * 0.35 + u_ghost_bass * 0.25, lob * 0.4);
+            float ghost_amp3_raw = base_amplitude * (1.0 + ghost_e3 * 0.30);
+            float ghost_amp3 = min(ghost_amp3_raw * hb_mult, hb_cap);
+            float ghost_amp3_safe = max(ghost_amp3_raw, 0.01);
+            float ghost_phase3 = phase3 * 0.4;
+            float ghost_lob_phase3 = lob_phase3;
+            float ghost_disp3 = disp_phase_offset * 0.3 * 1.15;
+            float ghost_w3 = sin(nx * sine_freq + ghost_lob_phase3 + ghost_phase3 + add_shift3 + ghost_disp3);
+            float ghost_crawl3 = crawl_offset3 * 0.25;
+            float ghost_mw3 = mw3 * 0.20;
+            float ghost_wfx3 = wfx3 * 0.30;
+            float ghost_w3_pre = ghost_w3 + ghost_mw3 + ghost_crawl3 + ghost_wfx3 / ghost_amp3_safe;
+            float ghost_ny3 = ny3 + 0.012;
+            vec3 g_line_rgb3, g_glow_rgb3;
+            float g_line_a3, g_glow_a3;
+            vec4 ghost_color3 = lineColor3;
+            ghost_color3.a *= u_ghost_alpha * 0.8;
+            eval_line(ghost_ny3, inner_height, ghost_w3_pre, ghost_amp3,
+                      ghost_color3, glowColor3, 0.0, 0.0, 0.0, bass_width + 2.0,
+                      g_line_rgb3, g_glow_rgb3, g_line_a3, g_glow_a3);
+            float ga3 = g_line_a3 * u_ghost_alpha * 0.75;
+            if (ga3 > 0.001) {
+                float inv3 = 1.0 - ga3;
+                final_rgb = g_line_rgb3 * ga3 + final_rgb * inv3;
+                final_a = ga3 + final_a * inv3;
+            }
+        }
+
         vec3 line_rgb3;
         vec3 glow_rgb3;
         float line_alpha3;

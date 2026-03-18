@@ -174,6 +174,30 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to propagate spectrum shape nodes", exc_info=True)
 
+    # --- Spectrum notch positions -------------------------------------
+    _notch_dirty = False
+    if 'spectrum_notch_positions_mirrored' in kwargs:
+        _npos = kwargs['spectrum_notch_positions_mirrored']
+        if isinstance(_npos, list) and len(_npos) >= 2:
+            widget._spectrum_notch_positions_mirrored = _npos
+            _notch_dirty = True
+    if 'spectrum_notch_positions_linear' in kwargs:
+        _npos = kwargs['spectrum_notch_positions_linear']
+        if isinstance(_npos, list) and len(_npos) >= 2:
+            widget._spectrum_notch_positions_linear = _npos
+            _notch_dirty = True
+    if _notch_dirty:
+        _active = (widget._spectrum_notch_positions_mirrored
+                   if getattr(widget, '_spectrum_mirrored', True)
+                   else widget._spectrum_notch_positions_linear)
+        try:
+            from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+            engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
+            if engine is not None:
+                engine.set_notch_positions(_active)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to propagate notch positions to engine", exc_info=True)
+
     # --- Spectrum shaping parameters ----------------------------------
     _shape_dirty = False
     for _shape_key, _shape_attr, _shape_lo, _shape_hi in (
@@ -207,6 +231,13 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     # --- Spectrum drop speed ------------------------------------------
     if 'spectrum_drop_speed' in kwargs:
         widget._spectrum_drop_speed = max(0.5, min(3.0, float(kwargs['spectrum_drop_speed'])))
+        try:
+            from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+            engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
+            if engine is not None:
+                engine.set_drop_speed(widget._spectrum_drop_speed)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to propagate drop speed to engine", exc_info=True)
 
     # --- Height growth factors ----------------------------------------
     if 'spectrum_growth' in kwargs:
@@ -431,6 +462,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
     if 'bubble_small_size_max' in kwargs:
         widget._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
+    if 'bubble_big_contraction_bias' in kwargs:
+        widget._bubble_big_contraction_bias = max(0.0, min(2.0, float(kwargs['bubble_big_contraction_bias'])))
+    if 'bubble_big_size_clamp' in kwargs:
+        widget._bubble_big_size_clamp = max(1.5, min(8.0, float(kwargs['bubble_big_size_clamp'])))
     if 'bubble_big_specular_max_size' in kwargs:
         widget._bubble_big_specular_max_size = max(0.5, min(5.0, float(kwargs['bubble_big_specular_max_size'])))
     if 'bubble_growth' in kwargs:
@@ -475,11 +510,11 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
 
     if engine is not None:
         extra['waveform'] = engine.get_waveform()
-        # Sine wave needs RAW (pre-normalization) energy so amplitude reacts
-        # to actual audio intensity.  Normalized energy is near-constant
-        # whenever any audio plays, killing all reactivity.
-        if mode_str == 'sine_wave':
-            extra['energy_bands'] = engine.get_raw_energy_bands()
+        # Per-mode energy source: normalized (default) or raw pre-AGC.
+        # Raw preserves dynamic range but has wrong scaling for some modes.
+        use_raw = getattr(widget, '_use_raw_energy', False)
+        if use_raw:
+            extra['energy_bands'] = engine.get_pre_agc_energy_bands()
         else:
             extra['energy_bands'] = engine.get_energy_bands()
 

@@ -229,6 +229,60 @@ class TestRendererGhostIsolation:
             "Oscilloscope renderer must read _osc_ghost_alpha"
         )
 
+    def test_sine_renderer_reads_sine_ghost(self):
+        src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "sine_wave.py").read_text(encoding="utf-8")
+        assert "_sine_ghosting_enabled" in src, (
+            "Sine wave renderer must read _sine_ghosting_enabled, not global"
+        )
+        assert "_sine_ghost_alpha" in src, (
+            "Sine wave renderer must read _sine_ghost_alpha, not global"
+        )
+
+    def test_sine_renderer_does_not_read_global_ghost(self):
+        import re
+        src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "sine_wave.py").read_text(encoding="utf-8")
+        global_ghost_refs = re.findall(r's\._ghosting_enabled(?!_)', src)
+        assert not global_ghost_refs, (
+            f"Sine wave renderer still reads global s._ghosting_enabled: {global_ghost_refs}"
+        )
+        global_alpha_refs = re.findall(r's\._ghost_alpha(?!_)', src)
+        assert not global_alpha_refs, (
+            f"Sine wave renderer still reads global s._ghost_alpha: {global_alpha_refs}"
+        )
+
+    def test_bubble_renderer_reads_bubble_ghost(self):
+        src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "bubble.py").read_text(encoding="utf-8")
+        assert "_bubble_ghosting_enabled" in src, (
+            "Bubble renderer must read _bubble_ghosting_enabled, not global"
+        )
+        assert "_bubble_ghost_alpha" in src, (
+            "Bubble renderer must read _bubble_ghost_alpha, not global"
+        )
+
+    def test_bubble_renderer_does_not_read_global_ghost(self):
+        import re
+        src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "bubble.py").read_text(encoding="utf-8")
+        global_ghost_refs = re.findall(r's\._ghosting_enabled(?!_)', src)
+        assert not global_ghost_refs, (
+            f"Bubble renderer still reads global s._ghosting_enabled: {global_ghost_refs}"
+        )
+        global_alpha_refs = re.findall(r's\._ghost_alpha(?!_)', src)
+        assert not global_alpha_refs, (
+            f"Bubble renderer still reads global s._ghost_alpha: {global_alpha_refs}"
+        )
+
+    def test_sine_shader_has_ghost_uniform(self):
+        src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "sine_wave.frag").read_text(encoding="utf-8")
+        assert "uniform float u_ghost_alpha" in src, (
+            "sine_wave.frag must declare uniform float u_ghost_alpha"
+        )
+
+    def test_bubble_shader_has_ghost_uniform(self):
+        src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "bubble.frag").read_text(encoding="utf-8")
+        assert "uniform float u_ghost_alpha" in src, (
+            "bubble.frag must declare uniform float u_ghost_alpha"
+        )
+
 
 # ===========================================================================
 # 5. Overlay blob peak gate uses blob-specific, not global
@@ -576,6 +630,129 @@ class TestNoCrossModeGhostBleed:
             assert actual == expected, (
                 f"Color field '{key}' roundtrip failed: expected {expected}, got {actual}"
             )
+
+    def test_spectrum_drop_speed_affects_dsp_decay(self):
+        """Higher drop_speed on audio worker → faster decay in bar_computation reactive smoothing."""
+        import time
+        import numpy as np
+        from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
+        from widgets.spotify_visualizer.bar_computation import _apply_reactive_smoothing
+
+        recent_ts = time.time() - 0.016  # 16ms ago — normal frame interval
+
+        def _make_worker(drop_speed: float):
+            w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
+            w._bar_count = 4
+            w._bar_history = np.array([0.8, 0.8, 0.8, 0.8], dtype="float32")
+            w._bar_hold_timers = np.zeros(4, dtype="int32")
+            w._last_fft_ts = recent_ts
+            w._drop_threshold = 0.16
+            w._drop_hold_frames = 2
+            w._drop_snap_fraction = 0.58
+            w._drop_speed = drop_speed
+            return w
+
+        # Bars dropping from 0.8 → 0.2 (a large drop)
+        target = np.array([0.2, 0.2, 0.2, 0.2], dtype="float32")
+
+        w_default = _make_worker(1.0)
+        arr_default = target.copy()
+        _apply_reactive_smoothing(w_default, arr_default, 4, np)
+
+        w_fast = _make_worker(2.5)
+        arr_fast = target.copy()
+        _apply_reactive_smoothing(w_fast, arr_fast, 4, np)
+
+        # Faster drop speed → bars decay more toward target (lower values)
+        for i in range(4):
+            assert arr_fast[i] < arr_default[i], (
+                f"Bar {i}: fast_dsp={arr_fast[i]:.4f} should be < default_dsp={arr_default[i]:.4f}"
+            )
+
+    def test_audio_worker_set_drop_speed(self):
+        """Audio worker set_drop_speed stores clamped value."""
+        from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
+        w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
+        w._drop_speed = 1.0
+        w.set_drop_speed(2.5)
+        assert abs(w._drop_speed - 2.5) < 1e-6
+        w.set_drop_speed(0.1)
+        assert abs(w._drop_speed - 0.5) < 1e-6  # clamped to 0.5
+        w.set_drop_speed(5.0)
+        assert abs(w._drop_speed - 3.0) < 1e-6  # clamped to 3.0
+
+    def test_agc_limiter_scales_down_hot_signal(self):
+        """When short-term envelope > 1.0, normalizer should scale bars down."""
+        import numpy as np
+        from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
+        from widgets.spotify_visualizer.bar_computation import _apply_adaptive_normalization
+
+        w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
+        w._env_short = 1.3   # already hot
+        w._env_long = 1.2
+        w._running_peak = 1.3
+
+        arr = np.array([1.4, 1.2, 0.9, 0.6], dtype="float32")
+        original_max = float(arr.max())
+        _apply_adaptive_normalization(w, arr, 0.0, False, np)
+        # Should have been scaled down
+        assert float(arr.max()) < original_max, "Limiter did not scale down hot signal"
+
+    def test_agc_sustained_loud_preserves_dynamics(self):
+        """When short ≈ long (sustained loud), normalizer should NOT compress."""
+        import numpy as np
+        from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
+        from widgets.spotify_visualizer.bar_computation import _apply_adaptive_normalization
+
+        w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
+        w._env_short = 0.7   # both envelopes roughly equal = sustained level
+        w._env_long = 0.7
+        w._running_peak = 0.7
+
+        arr = np.array([0.7, 0.5, 0.3, 0.2], dtype="float32")
+        before = arr.copy()
+        _apply_adaptive_normalization(w, arr, 0.0, False, np)
+        # Should be mostly unchanged (no limiter, no recovery)
+        diff = float(np.max(np.abs(arr - before)))
+        assert diff < 0.05, f"Sustained-loud section was altered by {diff:.3f}"
+
+    def test_agc_recovery_after_loud(self):
+        """When short << long (quiet after loud), normalizer should gently boost."""
+        import numpy as np
+        from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
+        from widgets.spotify_visualizer.bar_computation import _apply_adaptive_normalization
+
+        w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
+        w._env_short = 0.1    # sudden quiet
+        w._env_long = 0.7     # still remembers loud section
+        w._running_peak = 0.1
+
+        arr = np.array([0.15, 0.10, 0.08, 0.05], dtype="float32")
+        before_sum = float(arr.sum())
+        _apply_adaptive_normalization(w, arr, 0.0, False, np)
+        after_sum = float(arr.sum())
+        # Should have been gently boosted
+        assert after_sum > before_sum, "Recovery did not boost quiet-after-loud signal"
+
+    def test_notch_positions_round_trip(self):
+        """spectrum_notch_positions_mirrored/linear must survive from_mapping → to_dict."""
+        from core.settings.models import SpotifyVisualizerSettings
+
+        custom_mir = [[0.0, "Mid"], [0.40, "Vocal"], [0.70, "Low-Mid"], [1.0, "Bass"]]
+        custom_lin = [[0.0, "Bass"], [0.20, "Low"], [0.55, "Mid"], [0.80, "Hi-Mid"], [1.0, "Treble"]]
+        save_dict = {
+            "mode": "spectrum",
+            "spectrum_notch_positions_mirrored": custom_mir,
+            "spectrum_notch_positions_linear": custom_lin,
+        }
+        model = SpotifyVisualizerSettings.from_mapping(save_dict)
+        assert model.spectrum_notch_positions_mirrored == custom_mir
+        assert model.spectrum_notch_positions_linear == custom_lin
+
+        d = model.to_dict()
+        P = "widgets.spotify_visualizer"
+        assert d[f"{P}.spectrum_notch_positions_mirrored"] == custom_mir
+        assert d[f"{P}.spectrum_notch_positions_linear"] == custom_lin
 
     def test_blob_ghost_does_not_affect_sine(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs

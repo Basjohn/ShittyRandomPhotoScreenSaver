@@ -145,8 +145,8 @@ class TestAudioWorkerShapeConfig:
 # ---------------------------------------------------------------------------
 
 class TestPresetShapingKeys:
-    def test_shaping_keys_in_global_allowed(self):
-        from core.settings.visualizer_presets import GLOBAL_ALLOWED_KEYS
+    def test_shaping_keys_pass_mode_prefix_filter(self):
+        from core.settings.visualizer_presets import MODE_KEY_PREFIXES
         expected = {
             "spectrum_bass_emphasis",
             "spectrum_vocal_position",
@@ -156,9 +156,11 @@ class TestPresetShapingKeys:
             "spectrum_border_radius",
             "spectrum_single_piece",
         }
-        assert expected.issubset(GLOBAL_ALLOWED_KEYS), (
-            f"Missing keys: {expected - GLOBAL_ALLOWED_KEYS}"
-        )
+        prefixes = MODE_KEY_PREFIXES.get("spectrum", [])
+        for key in expected:
+            assert any(key.startswith(p) for p in prefixes), (
+                f"{key} does not match any spectrum MODE_KEY_PREFIXES: {prefixes}"
+            )
 
     def test_spectrum_bar_profile_not_in_allowed(self):
         from core.settings.visualizer_presets import GLOBAL_ALLOWED_KEYS

@@ -64,6 +64,8 @@ class BubbleState:
     trail_tail_y: float = 0.5
     trail_strength: float = 0.0
     trail_ready: bool = False
+    promoted: bool = False      # temporarily promoted small→big during beat bursts
+    promote_timer: float = 0.0   # remaining promotion duration (seconds)
     exiting: bool = False       # bubble head left the card; trail draining out
     exit_timer: float = 0.0     # time since exit began (safety destroy after grace)
 
@@ -139,11 +141,36 @@ class BubbleSimulation:
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
         self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
+        self._bass_running_avg: float = 0.0   # slow-tracking bass average for delta pulse
+        self._midhi_running_avg: float = 0.0  # slow-tracking mid+high average for delta pulse
         self._overdrive_active: bool = False
         self._overdrive_hold_timer: float = 0.0
         self._overdrive_consec_frames: int = 0
         self._overdrive_last_log_state: Optional[str] = None
         self._overdrive_last_log_ts: float = 0.0
+        # Beat burst detection: track recent significant delta events
+        self._beat_timestamps: List[float] = []  # recent beat times (monotonic)
+        self._burst_active: bool = False
+        self._burst_cooldown: float = 0.0  # seconds remaining in burst mode after last beat
+        self._prev_bass: float = 0.0  # previous frame bass for slope detection
+
+    def reset(self) -> None:
+        """Clear all accumulated state for a clean cold-start on mode re-entry."""
+        self._bubbles.clear()
+        self._time = 0.0
+        self._diag_tick_count = 0
+        self._smoothed_speed_energy = 0.0
+        self._bass_running_avg = 0.0
+        self._midhi_running_avg = 0.0
+        self._overdrive_active = False
+        self._overdrive_hold_timer = 0.0
+        self._overdrive_consec_frames = 0
+        self._overdrive_last_log_state = None
+        self._overdrive_last_log_ts = 0.0
+        self._beat_timestamps.clear()
+        self._burst_active = False
+        self._burst_cooldown = 0.0
+        self._prev_bass = 0.0
 
     @property
     def count(self) -> int:
@@ -209,6 +236,75 @@ class BubbleSimulation:
                     len(self._bubbles), max_pe, self._smoothed_speed_energy,
                     stream_const, stream_cap, stream_reactivity,
                 )
+
+        # --- Beat burst detection ---
+        # Detect significant bass transients by checking delta above running avg.
+        # A "beat" is registered when bass jumps significantly above the running
+        # average. When 3+ beats land within a 2s window we enter burst mode.
+        bass_delta = max(0.0, bass - self._bass_running_avg)
+        beat_threshold = 0.06  # minimum delta to count as a beat event
+        beat_detected = bass_delta > beat_threshold and bass > self._prev_bass + 0.03
+        if beat_detected:
+            self._beat_timestamps.append(self._time)
+            self._burst_cooldown = 0.6  # hold burst mode for 0.6s after last beat
+        self._prev_bass = bass
+
+        # Prune old beat timestamps (keep only last 2s)
+        cutoff = self._time - 2.0
+        self._beat_timestamps = [t for t in self._beat_timestamps if t > cutoff]
+
+        recent_beats = len(self._beat_timestamps)
+        was_burst = self._burst_active
+        if recent_beats >= 3:
+            self._burst_active = True
+            self._burst_cooldown = 0.6
+        elif self._burst_cooldown > 0.0:
+            self._burst_cooldown = max(0.0, self._burst_cooldown - dt)
+            self._burst_active = self._burst_cooldown > 0.0
+        else:
+            self._burst_active = False
+
+        if self._burst_active and not was_burst and is_verbose_logging():
+            logger.debug("[BUBBLE_SIM] Burst mode ENTER: %d beats in 2s window", recent_beats)
+        elif not self._burst_active and was_burst and is_verbose_logging():
+            logger.debug("[BUBBLE_SIM] Burst mode EXIT")
+
+        # Update running averages for delta-based pulse detection.
+        # During burst mode: slow attack rate so running avg doesn't catch up
+        # to the beat level, preserving delta for subsequent beats.
+        if self._burst_active:
+            avg_attack = min(1.0, dt * 0.25)   # ~4s to rise (was 1.5s)
+        else:
+            avg_attack = min(1.0, dt * 0.7)    # ~1.5s to rise (normal)
+        avg_release = min(1.0, dt * 1.3)  # ~0.8s to fall
+        if bass > self._bass_running_avg:
+            self._bass_running_avg += (bass - self._bass_running_avg) * avg_attack
+        else:
+            self._bass_running_avg += (bass - self._bass_running_avg) * avg_release
+        midhi = mid * 0.6 + high * 0.4
+        if midhi > self._midhi_running_avg:
+            self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_attack
+        else:
+            self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_release
+
+        # --- Small→big promotion during bursts ---
+        # On each new beat detected during burst mode, promote a fraction of
+        # small bubbles to react to bass. Only triggers on beat events, not
+        # every tick, so the promotion timer can expire naturally.
+        if self._burst_active and beat_detected:
+            small_pool = [b for b in self._bubbles if not b.is_big and not b.promoted and not b.popping and not b.exiting]
+            promote_count = min(5, max(0, int(len(small_pool) * 0.30)))
+            if promote_count > 0:
+                small_pool.sort(key=lambda bb: bb.radius, reverse=True)
+                for bb in small_pool[:promote_count]:
+                    bb.promoted = True
+                    bb.promote_timer = 1.2
+        # Tick down promotion timers
+        for b in self._bubbles:
+            if b.promoted:
+                b.promote_timer = max(0.0, b.promote_timer - dt)
+                if b.promote_timer <= 0.0:
+                    b.promoted = False
 
         # Travel speed uses SMOOTHED mid/high so it flows with the melody.
         # Raw mid/high would jerk on every transient.
@@ -371,33 +467,65 @@ class BubbleSimulation:
             else:
                 self._bleed_trail_smear(b, dt)
 
-            # Pulse energy: smooth per-bubble energy for visible beat-sync thump.
-            # Size-dependent threshold: bigger bubbles need more energy to
-            # pulse (more visual "mass"), while small bubbles respond to
-            # lighter sounds.  This prevents hi-hats from shaking big
-            # bubbles and makes bass drops really punch them.
-            if b.is_big:
+            # Pulse energy: HYBRID detection — delta transient + sustained floor.
+            # Two components, take the max:
+            #   delta_component: deviation above running avg × sensitivity
+            #   sustained_component: absolute energy through perceptual curve
+            # max(delta, sustained) ensures both kick reactions AND chorus hold.
+            #
+            # Promoted small bubbles temporarily react to bass (like big bubbles)
+            # with scaled-down sensitivity, adding visual density during bursts.
+            use_bass = b.is_big or b.promoted
+            if use_bass:
                 raw_src = bass
-                size_range = max(0.001, self._big_size_max - 0.015)
-                size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
-                threshold = 0.08 + size_t * 0.22  # 0.08 at smallest big → 0.30 at largest
-                attack_rate = 10.0 - size_t * 3.0  # 10 at smallest → 7 at largest (slower)
-                decay_rate = 4.5 + size_t * 1.5    # 4.5 → 6.0 (settle faster)
+                running_avg = self._bass_running_avg
+                if b.is_big:
+                    size_range = max(0.001, self._big_size_max - 0.015)
+                    size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
+                    delta_sens = 4.0 - size_t * 1.5  # 4.0x small big → 2.5x largest
+                    sustained_knee = 0.35 + size_t * 0.20
+                    sustained_scale = 0.55 - size_t * 0.15
+                    attack_rate = 14.0 - size_t * 4.0
+                    decay_rate = 3.0 + size_t * 1.0
+                else:
+                    # Promoted small: react to bass with reduced sensitivity
+                    size_t = 0.5
+                    delta_sens = 2.8   # moderate — enough to visibly pulse
+                    sustained_knee = 0.40
+                    sustained_scale = 0.35
+                    attack_rate = 16.0  # snappy attack for promoted
+                    decay_rate = 5.0    # fast decay so each beat pops cleanly
             else:
                 raw_src = mid * 0.6 + high * 0.4
+                running_avg = self._midhi_running_avg
                 size_range = max(0.001, self._small_size_max - 0.004)
                 size_t = min(1.0, max(0.0, (b.radius - 0.004) / size_range))
-                threshold = size_t * 0.12  # 0 at tiniest → 0.12 at largest small
-                attack_rate = 14.0 - size_t * 3.0  # 14 at tiniest → 11 at largest
+                delta_sens = 3.5 - size_t * 1.0  # 3.5x tiniest → 2.5x largest
+                sustained_knee = 0.25 + size_t * 0.15
+                sustained_scale = 0.50 - size_t * 0.10
+                attack_rate = 14.0 - size_t * 3.0
                 decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
 
-            raw_energy = min(1.0, max(0.0, raw_src))
-            # Gate: energy below threshold produces no pulse; above it, rescale
-            # into 0..1 so the full slider range is usable.
-            if raw_energy <= threshold:
-                gated_energy = 0.0
+            # During burst mode: boost delta sensitivity so subsequent beats
+            # in a cluster still register strongly, and speed up decay so each
+            # beat gets a clean visual reset.
+            if self._burst_active:
+                delta_sens *= 1.25
+                decay_rate *= 1.8  # faster falloff between beats
+
+            # Delta component: transient punch
+            delta = max(0.0, raw_src - running_avg)
+            delta_component = min(1.0, delta * delta_sens)
+
+            # Sustained component: absolute energy through perceptual curve
+            # Below knee → near-zero; above knee → gentle ramp to sustained_scale
+            if raw_src <= sustained_knee:
+                sustained_component = 0.0
             else:
-                gated_energy = min(1.0, (raw_energy - threshold) / max(0.01, 1.0 - threshold))
+                t = (raw_src - sustained_knee) / max(0.01, 1.0 - sustained_knee)
+                sustained_component = min(sustained_scale, t * sustained_scale)
+
+            gated_energy = min(1.0, max(delta_component, sustained_component))
 
             if gated_energy > b.pulse_energy:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * attack_rate)
@@ -731,7 +859,9 @@ class BubbleSimulation:
     def snapshot(self, bass: float = 0.0, mid_high: float = 0.0,
                  big_bass_pulse: float = 0.5,
                  small_freq_pulse: float = 0.5,
-                 big_specular_max_size: float = 2.5) -> Tuple[List[float], List[float], List[float]]:
+                 big_specular_max_size: float = 2.5,
+                 big_contraction_bias: float = 1.0,
+                 big_size_clamp: float = 4.0) -> Tuple[List[float], List[float], List[float]]:
         """Return flat lists for uniform upload.
 
         Returns:
@@ -751,7 +881,7 @@ class BubbleSimulation:
             # flicker between dot and outline rendering.
             is_tiny = (not b.is_big) and b.radius < 0.008
             if b.is_big:
-                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.0
+                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 5.5
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.5
@@ -759,6 +889,18 @@ class BubbleSimulation:
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 3.0
 
             r = b.radius * pulse_factor
+
+            # Contraction bias: during quiet passages (low pulse_energy),
+            # big bubbles shrink slightly below base radius.  bias=1.0 means
+            # no contraction; bias<1.0 contracts proportionally.
+            if b.is_big and big_contraction_bias < 1.0:
+                quiet = 1.0 - min(1.0, b.pulse_energy)
+                shrink = 1.0 - (1.0 - big_contraction_bias) * quiet * 0.25
+                r *= max(0.6, shrink)
+
+            # Max size clamp: cap the pulsed radius to base_radius * clamp
+            if b.is_big and big_size_clamp > 0.0:
+                r = min(r, b.radius * max(1.5, big_size_clamp))
 
             # Specular pulses at slightly less than half the bubble outline rate.
             # Base specular size (spec_size_mut) is unchanged; only the
@@ -791,7 +933,7 @@ class BubbleSimulation:
         # Diagnostic: log first big bubble's pulse details
         if _snap_diag and self._bubbles and is_verbose_logging():
             fb = next((b for b in self._bubbles if b.is_big), self._bubbles[0])
-            pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * (4.0 if fb.is_big else 3.0)
+            pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * (5.5 if fb.is_big else 3.0)
             logger.debug(
                 "[BUBBLE_SIM] snapshot: big_bass_pulse=%.2f small_freq_pulse=%.2f "
                 "first_big: pe=%.3f pf=%.3f base_r=%.4f final_r=%.4f",

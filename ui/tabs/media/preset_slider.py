@@ -193,7 +193,7 @@ class VisualizerPresetSlider(QWidget):
     def set_technical_container(self, container: QWidget) -> None:
         """Register the Technical group widget for auto-hide on non-Custom presets."""
         self._technical_container = container
-        self._update_advanced_visibility()
+        container.setVisible(self._slider.value() == self._custom_index)
 
     def set_preset_index(self, index: int) -> None:
         """Programmatically set the slider without triggering save."""

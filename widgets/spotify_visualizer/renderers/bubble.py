@@ -22,7 +22,7 @@ _DIRECTION_VECS = {
 def get_uniform_names() -> list[str]:
     return [
         "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
-        "u_playing", "u_bubble_count",
+        "u_playing", "u_ghost_alpha", "u_bubble_count",
         "u_bubbles_pos", "u_bubbles_extra", "u_bubbles_trail",
         "u_trail_strength", "u_tail_opacity",
         "u_specular_dir", "u_gradient_dir",
@@ -39,6 +39,15 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_mid_energy", eb.mid)
     _set1f(gl, u, "u_high_energy", eb.high)
     _set1i(gl, u, "u_playing", 1 if s._playing else 0)
+
+    # Ghost alpha (mode-specific: bubble)
+    loc = u.get("u_ghost_alpha", -1)
+    if loc >= 0:
+        try:
+            ga = float(s._bubble_ghost_alpha if s._bubble_ghosting_enabled else 0.0)
+        except Exception:
+            ga = 0.0
+        gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
 
     # Bubble count
     bcount = min(s._bubble_count, 110)
