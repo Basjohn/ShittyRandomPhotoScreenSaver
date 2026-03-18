@@ -203,6 +203,7 @@ class BaseWorker:
                 self._messages_processed,
                 time.time() - self._start_time,
             )
+            self._teardown_logging()
     
     def _handle_heartbeat(self, msg: WorkerMessage) -> None:
         """Handle heartbeat message."""
@@ -253,6 +254,23 @@ class BaseWorker:
         Override in subclass for worker-specific cleanup.
         """
         pass
+
+    def _teardown_logging(self) -> None:
+        """Flush and detach worker-specific log handlers to release file handles."""
+        logger = self._logger
+        if not logger:
+            return
+        for handler in list(logger.handlers):
+            try:
+                handler.flush()
+            except Exception:
+                pass
+            try:
+                handler.close()
+            except Exception:
+                pass
+            logger.removeHandler(handler)
+        self._logger = None
     
     def _next_seq(self) -> int:
         """Get next sequence number."""
