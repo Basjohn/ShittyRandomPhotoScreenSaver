@@ -167,6 +167,18 @@ class VisualizerPresetSlider(QWidget):
         self._edit_btn.setVisible(True)
         row.addWidget(self._edit_btn)
 
+        self._move_custom_btn = QPushButton("Move To Custom")
+        self._move_custom_btn.setToolTip(
+            "Copy this preset's current settings into Custom mode and switch to it."
+        )
+        self._move_custom_btn.setFixedHeight(22)
+        self._move_custom_btn.setFixedWidth(110)
+        self._move_custom_btn.setStyleSheet(
+            "QPushButton { font-size: 9pt; padding: 2px 8px; }"
+        )
+        self._move_custom_btn.clicked.connect(self._move_to_custom)
+        row.addWidget(self._move_custom_btn)
+
         layout.addLayout(row)
 
     # ------------------------------------------------------------------
@@ -251,6 +263,36 @@ class VisualizerPresetSlider(QWidget):
             self._edit_btn.setToolTip("Switch to a curated preset to edit its JSON.")
         else:
             self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
+        # Move To Custom: only enabled when on a non-custom preset
+        self._move_custom_btn.setEnabled(not is_custom)
+        if is_custom:
+            self._move_custom_btn.setToolTip("Already on Custom.")
+        else:
+            self._move_custom_btn.setToolTip(
+                "Copy this preset's current settings into Custom mode and switch to it."
+            )
+
+    def _move_to_custom(self) -> None:
+        """Switch to Custom preset, keeping the current UI values as custom settings.
+
+        The UI widgets already hold the current preset's values (loaded when the
+        preset was selected). Switching the slider to Custom and triggering a save
+        will persist those values as the user's custom configuration.
+        """
+        idx = self._slider.value()
+        if idx == self._custom_index:
+            return
+
+        logger.debug(
+            "[VIS_PRESETS] Move To Custom: %s preset %d → Custom (%d)",
+            self._mode, idx, self._custom_index,
+        )
+
+        # Switch slider to Custom — this triggers _on_slider_changed which
+        # emits preset_changed and advanced_toggled, shows Advanced container,
+        # and saves settings. The UI widgets retain the preset values so the
+        # save captures them as custom.
+        self._slider.setValue(self._custom_index)
 
     def _open_preset_json(self) -> None:
         """Open the current preset's JSON file in the OS default editor."""

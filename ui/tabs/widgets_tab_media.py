@@ -1350,6 +1350,10 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_small_size_max', 0.018) * 1000)
         tab.bubble_small_size_max.setValue(max(4, min(30, v)))
         tab.bubble_small_size_max_label.setText(str(v))
+    if hasattr(tab, 'bubble_big_specular_max_size'):
+        v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_big_specular_max_size', 2.5) * 100)
+        tab.bubble_big_specular_max_size.setValue(max(50, min(500, v)))
+        tab.bubble_big_specular_max_size_label.setText(f"{v / 100.0:.1f}x")
     if hasattr(tab, 'bubble_growth'):
         bubble_growth_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_growth', 3.0) * 100)
         tab.bubble_growth.setValue(max(100, min(500, bubble_growth_val)))
@@ -1608,6 +1612,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         ),
         'bubble_big_size_max': (tab.bubble_big_size_max.value() if hasattr(tab, 'bubble_big_size_max') else 38) / 1000.0,
         'bubble_small_size_max': (tab.bubble_small_size_max.value() if hasattr(tab, 'bubble_small_size_max') else 18) / 1000.0,
+        'bubble_big_specular_max_size': (tab.bubble_big_specular_max_size.value() if hasattr(tab, 'bubble_big_specular_max_size') else 250) / 100.0,
         'bubble_growth': (tab.bubble_growth.value() if hasattr(tab, 'bubble_growth') else 300) / 100.0,
         'bubble_trail_strength': (tab.bubble_trail_strength.value() if hasattr(tab, 'bubble_trail_strength') else 0) / 100.0,
         'bubble_tail_opacity': (tab.bubble_tail_opacity.value() if hasattr(tab, 'bubble_tail_opacity') else 0) / 100.0,

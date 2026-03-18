@@ -398,6 +398,26 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     small_size_row.addWidget(tab.bubble_small_size_max_label)
 
+    specular_max_row = _aligned_row(_adv_layout, "Specular Max Size:")
+    tab.bubble_big_specular_max_size = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_big_specular_max_size.setMinimum(50)
+    tab.bubble_big_specular_max_size.setMaximum(500)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_specular_max_size', 2.5) * 100)
+    tab.bubble_big_specular_max_size.setValue(max(50, min(500, val)))
+    tab.bubble_big_specular_max_size.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_big_specular_max_size.setTickInterval(50)
+    tab.bubble_big_specular_max_size.setToolTip(
+        "Maximum specular highlight scale for big bubbles. "
+        "Caps pulse-driven specular growth so highlights stay visually sane at large radii."
+    )
+    tab.bubble_big_specular_max_size.valueChanged.connect(tab._save_settings)
+    specular_max_row.addWidget(tab.bubble_big_specular_max_size)
+    tab.bubble_big_specular_max_size_label = QLabel(f"{val / 100.0:.1f}x")
+    tab.bubble_big_specular_max_size.valueChanged.connect(
+        lambda v: tab.bubble_big_specular_max_size_label.setText(f"{v / 100.0:.1f}x")
+    )
+    specular_max_row.addWidget(tab.bubble_big_specular_max_size_label)
+
     big_count_row = _aligned_row(_adv_layout, "Big Bubbles:")
     tab.bubble_big_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_count.setMinimum(1)

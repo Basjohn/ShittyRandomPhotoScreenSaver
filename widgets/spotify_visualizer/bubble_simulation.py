@@ -310,12 +310,12 @@ class BubbleSimulation:
             # Pop animation
             if b.popping:
                 b.pop_timer += dt
-                if b.pop_timer < 0.1:
+                if b.pop_timer < 0.12:
                     # Expand phase
-                    b.radius += b.radius * 0.2 * (dt / 0.1)
-                elif b.pop_timer < 0.25:
-                    # Fade phase
-                    b.alpha = max(0.0, b.alpha - dt / 0.15)
+                    b.radius += b.radius * 0.18 * (dt / 0.12)
+                elif b.pop_timer < 0.45:
+                    # Fade phase (gentler, ~0.33s)
+                    b.alpha = max(0.0, b.alpha - dt / 0.33)
                 else:
                     b.alpha = 0.0
 
@@ -558,12 +558,14 @@ class BubbleSimulation:
             dv = random.choice(_DIAGONAL_VECTORS)
             vx, vy = dv
 
-        # Initial fill: pre-age and start transparent for fade-in
+        # Initial fill or swirl: start transparent for fade-in
         age = 0.0
         alpha = 1.0
         if initial_fill:
             age = random.uniform(0.0, max_age * 0.3) if max_age < 900.0 else random.uniform(0.0, 3.0)
             alpha = 0.0  # will fade in via age-based ramp
+        elif drift_dir in _SWIRL_DIRECTIONS:
+            alpha = 0.0  # swirl bubbles fade in from center spawn
 
         # Per-bubble specular mutation: slight random variation so bubbles look distinct
         spec_size_mut = random.uniform(0.85, 1.2)
