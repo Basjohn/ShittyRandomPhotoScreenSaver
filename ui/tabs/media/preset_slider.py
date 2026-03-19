@@ -215,6 +215,14 @@ class VisualizerPresetSlider(QWidget):
     def custom_index(self) -> int:
         return self._custom_index
 
+    def cycle_next(self) -> None:
+        """Advance to the next preset slot (wraps at Custom)."""
+        self._cycle_by(1)
+
+    def cycle_previous(self) -> None:
+        """Move to the previous preset slot (wraps to last slot)."""
+        self._cycle_by(-1)
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -232,6 +240,13 @@ class VisualizerPresetSlider(QWidget):
         self.advanced_toggled.emit(idx == self._custom_index)
         if tab is not None:
             tab._preset_slider_changing = False
+
+    def _cycle_by(self, delta: int) -> None:
+        if self._preset_count <= 0 or not delta:
+            return
+        current = self._slider.value()
+        next_idx = (current + delta) % self._preset_count
+        self._slider.setValue(next_idx)
 
     def _find_tab(self):
         """Walk up the parent chain to find the WidgetsTab instance."""

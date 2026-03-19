@@ -187,6 +187,14 @@ This keeps quiet sections floating at the baseline while letting peaks approach 
 ## 5. Settings, Styling, and UI
 - All keys live under `widgets.spotify_visualizer.*` (see `Docs/Defaults_Guide.md`).
 - **Visualizers Subtab + Toggle (Mar 2026):** Widgets tab now exposes a dedicated *Visualizers* subtab next to Media. The master toggle writes `widgets.spotify_visualizer.visualizers_enabled` and gates every Beat Visualizer control. Runtime still requires the Media widget to be enabled/visible, so the visualizer inherits the Media monitor/position after the toggle is on. `visualizers_enabled` + `enabled` persist independently, and both flags (plus Media enabled) must be true for the overlay to spawn.
+- **Runtime preset-cycle mouse shortcuts (Mar 2026):**
+
+| Interaction | Scope | Path | Result |
+|-------------|-------|------|--------|
+| Middle-click on visualizer | Visualizer widget geometry only (Ctrl/hard-exit interaction mode) | `display_input.handle_mousePressEvent` → `InputHandler.route_widget_click(..., spotify_visualizer_widget=...)` → `SpotifyVisualizerWidget.handle_mouse_button()` → `WidgetManager.cycle_visualizer_preset(mode,+1)` | Advances preset index for active mode, writes settings, applies preset payload, then calls `_reset_visualizer_state(clear_overlay=False, replay_cached=False)` for a fresh restart. |
+| Mouse4 / XButton1 / BackButton on visualizer | Visualizer widget geometry only (Ctrl/hard-exit interaction mode) | Same as above with `direction=-1` | Moves to previous preset with wrap-around and performs the same fresh-reset path. |
+
+- Shortcut routing is intentionally geometry-gated to avoid stealing middle/XButton interactions from other widgets and to match existing visualizer double-click hit-testing expectations.
 - Widget styling follows `Docs/10_WIDGET_GUIDELINES.md` (shadow fade, overlay stacking, fade sync).
 - Settings UI only surfaces controls for the active mode; use `rendering/widget_manager.py` for hydration (`set_bar_style`, `set_bar_colors`, `set_ghost_config`).
 - Visualizer diagnostics obey environment gates: `SRPSS_PERF_METRICS=1` enables `[SPOTIFY_VIS][FLOOR]/[LATENCY]`, while `SRPSS_VIZ_DIAGNOSTICS=true` additionally enables `[SPOTIFY_VIS][TECHNICAL]` (mode, bar count, floors, sensitivity, block size, dynamic range, energy boost) whenever `_apply_technical_config_for_mode()` runs.

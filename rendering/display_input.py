@@ -230,6 +230,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                     getattr(widget, "reddit2_widget", None),
                     getattr(widget, "gmail_widget", None),
                     getattr(widget, "imgur_widget", None),
+                    getattr(widget, "spotify_visualizer_widget", None),
                 )
                 logger.info("[REDDIT] route_widget_click returned: handled=%s reddit_handled=%s screen=%s",
                            handled, reddit_handled, widget.screen_index)

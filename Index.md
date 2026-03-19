@@ -153,7 +153,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| WidgetManager | rendering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fade coordination via FadeCoordinator |
+| WidgetManager | rendering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fade coordination via FadeCoordinator. Owns runtime-safe visualizer preset cycling via `cycle_visualizer_preset(mode, direction)` (settings-backed, non-UI). |
 | FadeCoordinator | rendering/fade_coordinator.py | FadeCoordinator | Centralized lock-free fade synchronization |
 | WidgetPositioner | rendering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
 | WidgetFactories | rendering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |
@@ -164,7 +164,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| InputHandler | rendering/input_handler.py | InputHandler | Mouse/keyboard/media keys |
+| InputHandler | rendering/input_handler.py | InputHandler | Mouse/keyboard/media keys. `route_widget_click(...)` now hit-tests the Spotify visualizer and forwards middle/XButton preset-cycle clicks to `SpotifyVisualizerWidget.handle_mouse_button()`. |
 | TransitionController | rendering/transition_controller.py | TransitionController | Transition lifecycle |
 | ImagePresenter | rendering/image_presenter.py | ImagePresenter | Pixmap management |
 | MultiMonitorCoordinator | rendering/multi_monitor_coordinator.py | MultiMonitorCoordinator | Cross-display coordination |

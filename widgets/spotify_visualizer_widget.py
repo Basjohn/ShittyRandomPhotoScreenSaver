@@ -1598,6 +1598,32 @@ class SpotifyVisualizerWidget(QWidget):
         """Called by WidgetManager dispatch. Cycles visualizer mode."""
         return self._cycle_mode()
 
+    def handle_mouse_button(self, button: Qt.MouseButton) -> bool:
+        """Handle runtime preset cycling shortcuts from routed mouse clicks."""
+        if button == Qt.MouseButton.MiddleButton:
+            direction = 1
+        elif button in (Qt.MouseButton.XButton1, Qt.MouseButton.BackButton):
+            direction = -1
+        else:
+            return False
+
+        wm = getattr(self, '_widget_manager', None)
+        if wm is None or not hasattr(wm, 'cycle_visualizer_preset'):
+            return False
+
+        mode_key = str(getattr(self, '_vis_mode_str', 'spectrum') or 'spectrum')
+        try:
+            cycled = bool(wm.cycle_visualizer_preset(mode_key, direction))
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to cycle preset via WidgetManager", exc_info=True)
+            return False
+        if not cycled:
+            return False
+
+        self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
+        self._request_latency_probe("preset_cycle")
+        return True
+
     def mouseDoubleClickEvent(self, event) -> None:
         """Double-click cycles visualizer mode with a crossfade."""
         if self._cycle_mode():
@@ -1606,7 +1632,10 @@ class SpotifyVisualizerWidget(QWidget):
             event.ignore()
 
     def mousePressEvent(self, event) -> None:
-        """Forward single clicks to parent (compositor/reddit)."""
+        """Handle preset-cycle shortcuts, otherwise forward to parent routing."""
+        if self.handle_mouse_button(event.button()):
+            event.accept()
+            return
         event.ignore()
 
     def mouseReleaseEvent(self, event) -> None:

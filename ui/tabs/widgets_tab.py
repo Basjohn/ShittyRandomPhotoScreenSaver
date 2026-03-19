@@ -37,7 +37,6 @@ from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
     SCROLL_AREA_STYLE,
     FORM_ROW_LABEL_STYLE,
-    add_section_label,
     add_aligned_row,
     NoWheelSlider,  # noqa: F401 — re-exported
     style_group_box,
@@ -771,6 +770,19 @@ class WidgetsTab(QWidget):
         if color is not None:
             self._clock_color = color
             self._save_settings()
+
+    def cycle_visualizer_preset(self, mode_key: str, direction: int) -> None:
+        """Cycle the preset slider for *mode_key* by *direction* (+1/-1)."""
+        if not direction:
+            return
+        slider_attr = f"_{mode_key}_preset_slider"
+        slider = getattr(self, slider_attr, None)
+        if slider is None:
+            return
+        if direction > 0:
+            slider.cycle_next()
+        else:
+            slider.cycle_previous()
 
     def _on_global_border_width_changed(self, value: int) -> None:
         self._global_card_border_width = int(value)

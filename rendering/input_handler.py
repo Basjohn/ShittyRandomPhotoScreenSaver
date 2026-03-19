@@ -663,6 +663,7 @@ class InputHandler(QObject):
         reddit2_widget,
         gmail_widget=None,
         imgur_widget=None,
+        spotify_visualizer_widget=None,
     ) -> tuple:
         """
         Route clicks to interactive widgets in interaction mode.
@@ -721,6 +722,22 @@ class InputHandler(QObject):
                         )
             except Exception as e:
                 logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+
+        # Spotify visualizer preset shortcuts (middle=next, XButton1/back=previous)
+        if not handled and spotify_visualizer_widget is not None:
+            try:
+                vis = spotify_visualizer_widget
+                if vis.isVisible() and vis.geometry().contains(pos):
+                    if button in (
+                        Qt.MouseButton.MiddleButton,
+                        Qt.MouseButton.XButton1,
+                        Qt.MouseButton.BackButton,
+                    ):
+                        handler = getattr(vis, 'handle_mouse_button', None)
+                        if callable(handler):
+                            handled = bool(handler(button))
+            except Exception:
+                logger.debug("[INPUT] Visualizer click routing failed", exc_info=True)
         
         # Reddit widgets
         for rw in [reddit_widget, reddit2_widget]:

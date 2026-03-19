@@ -22,6 +22,10 @@ from widgets.media_widget import MediaWidget
 # from widgets.gmail_widget import GmailWidget, GmailPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
+from core.settings.visualizer_presets import (
+    apply_preset_to_config,
+    get_preset_count,
+)
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_factories import WidgetFactoryRegistry
@@ -309,6 +313,68 @@ class WidgetManager:
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Double-click dispatch error for %s", name, exc_info=True)
         return False
+
+    def cycle_visualizer_preset(self, mode_key: str, direction: int) -> bool:
+        """Cycle a visualizer preset at runtime via SettingsManager.
+
+        This is the non-UI entry point used by overlay widgets/input routing.
+        Returns True when a new preset index is committed.
+        """
+        if not direction:
+            return False
+        settings = self._settings_manager
+        if settings is None:
+            return False
+
+        mode = str(mode_key or "").strip()
+        if not mode:
+            return False
+
+        try:
+            preset_count = int(get_preset_count(mode))
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to read preset count for %s", mode, exc_info=True)
+            return False
+        if preset_count <= 0:
+            return False
+
+        widgets_cfg = settings.get('widgets', {}) or {}
+        if not isinstance(widgets_cfg, Mapping):
+            widgets_cfg = {}
+        spotify_vis_config = widgets_cfg.get('spotify_visualizer', {})
+        if not isinstance(spotify_vis_config, Mapping):
+            spotify_vis_config = {}
+
+        vis_config = dict(spotify_vis_config)
+        preset_key = f"preset_{mode}"
+        try:
+            current_idx = int(vis_config.get(preset_key, 0) or 0)
+        except Exception:
+            current_idx = 0
+        current_idx = max(0, min(preset_count - 1, current_idx))
+
+        step = 1 if direction > 0 else -1
+        next_idx = (current_idx + step) % preset_count
+        if next_idx == current_idx:
+            return False
+
+        working_config = dict(vis_config)
+        working_config['mode'] = mode
+        applied = apply_preset_to_config(mode, next_idx, working_config)
+        vis_config.update(applied)
+        vis_config[preset_key] = next_idx
+
+        full_widgets = dict(widgets_cfg)
+        full_widgets['spotify_visualizer'] = vis_config
+        settings.set('widgets', full_widgets)
+        settings.save()
+        logger.debug(
+            "[WIDGET_MANAGER] Cycled visualizer preset mode=%s %s->%s",
+            mode,
+            current_idx,
+            next_idx,
+        )
+        return True
 
     def raise_all(self, force: bool = False) -> None:
         """
