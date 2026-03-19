@@ -81,7 +81,7 @@
           ]
         ],
         "spectrum_profile_floor": 0.2,
-        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_enabled": true,
         "spectrum_rainbow_per_bar": true,
         "spectrum_rainbow_speed": 0.3,
         "spectrum_sensitivity": 0.5,
