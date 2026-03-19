@@ -296,6 +296,49 @@ class TestConfigApplier:
         assert extra["bubble_gradient_direction"] == "bottom"
         assert extra["bubble_specular_direction"] == "bottom_right"
 
+    def test_apply_vis_mode_kwargs_sets_bar_colors(self):
+        from PySide6.QtGui import QColor
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bar_fill_color = QColor(0, 0, 0, 0)
+            _bar_border_color = QColor(0, 0, 0, 0)
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {
+            "bar_fill_color": [5, 10, 15, 200],
+            "bar_border_color": [20, 25, 30, 255],
+            "bar_border_opacity": 0.4,
+        })
+
+        assert widget._bar_fill_color == QColor(5, 10, 15, 200)
+        assert widget._bar_border_color.red() == 20
+        assert widget._bar_border_color.green() == 25
+        assert widget._bar_border_color.blue() == 30
+        assert abs(widget._bar_border_color.alphaF() - 0.4) < 1e-6
+
+    def test_gpu_push_extra_kwargs_carries_bar_colors(self):
+        from PySide6.QtGui import QColor
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            def __init__(self):
+                self._bar_fill_color = QColor(100, 110, 120, 230)
+                self._bar_border_color = QColor(200, 210, 220, 128)
+
+            def __getattr__(self, name):
+                if name.startswith('_') and 'color' in name:
+                    return QColor(255, 255, 255, 255)
+                if name.startswith('_') and name.endswith('enabled'):
+                    return False
+                if name.startswith('_'):
+                    return 0
+                raise AttributeError(name)
+
+        extra = build_gpu_push_extra_kwargs(DummyWidget(), "spectrum", None)
+        assert extra['bar_fill_color'] == QColor(100, 110, 120, 230)
+        assert extra['bar_border_color'] == QColor(200, 210, 220, 128)
+
 
 # ===========================================================================
 # 7. GL overlay: uniform query list and set_state params

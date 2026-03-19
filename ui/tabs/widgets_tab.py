@@ -14,6 +14,7 @@ Per-widget UI, load, and save logic is delegated to extraction modules:
 """
 import os
 import time
+from copy import deepcopy
 from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -26,7 +27,12 @@ from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.defaults import get_default_settings
-from core.settings.visualizer_presets import apply_preset_to_config, get_custom_preset_index
+from core.settings.visualizer_presets import (
+    GLOBAL_ALLOWED_KEYS,
+    MODE_KEY_PREFIXES,
+    apply_preset_to_config,
+    get_custom_preset_index,
+)
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
     TOOLTIP_STYLE,
@@ -99,6 +105,9 @@ class _RainbowGlowLabel(QWidget):
             x += adv
 
         p.end()
+
+
+_VISUALIZER_CUSTOM_STORAGE_KEY = "visualizer_custom_presets"
 
 
 class WidgetsTab(QWidget):
@@ -771,6 +780,106 @@ class WidgetsTab(QWidget):
             self._clock_color = color
             self._save_settings()
 
+    def _snapshot_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> None:
+        snapshot = self._extract_visualizer_snapshot(mode_key, spotify_vis_config)
+        cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        if not isinstance(cache, dict):
+            cache = {}
+        cache[mode_key] = snapshot
+        self._settings.set(_VISUALIZER_CUSTOM_STORAGE_KEY, cache)
+
+    def _restore_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> bool:
+        cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        if not isinstance(cache, dict):
+            return False
+        payload = cache.get(mode_key)
+        if not isinstance(payload, dict):
+            return False
+        changed = False
+        for key, value in payload.items():
+            stored = spotify_vis_config.get(key)
+            if stored != value:
+                spotify_vis_config[key] = deepcopy(value)
+                changed = True
+        return changed
+
+    def _extract_visualizer_snapshot(self, mode_key: str, spotify_vis_config: dict) -> dict:
+        prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
+        snapshot: dict[str, Any] = {}
+        for key, value in spotify_vis_config.items():
+            if key == _VISUALIZER_CUSTOM_STORAGE_KEY:
+                continue
+            if key.startswith('preset_') and key != f"preset_{mode_key}":
+                continue
+            if self._is_key_for_mode(key, prefixes) or self._is_global_visualizer_key(key):
+                snapshot[key] = deepcopy(value)
+        return snapshot
+
+    def build_visualizer_preset_payload(self, mode_key: str) -> dict[str, Any]:
+        """Construct a curated-preset style payload from current Custom settings."""
+        widgets_cfg = self._settings.get('widgets', {})
+        if not isinstance(widgets_cfg, dict):
+            return {}
+        spotify_vis_config = widgets_cfg.get('spotify_visualizer', {})
+        if not isinstance(spotify_vis_config, dict):
+            return {}
+
+        snapshot = self._extract_visualizer_snapshot(mode_key, spotify_vis_config)
+        if not snapshot:
+            return {}
+
+        preset_index = int(spotify_vis_config.get(
+            f"preset_{mode_key}",
+            get_custom_preset_index(mode_key),
+        ))
+        snapshot_copy = deepcopy(snapshot)
+        backup = {
+            f"widgets.spotify_visualizer.{key}": deepcopy(value)
+            for key, value in snapshot.items()
+        }
+
+        payload: dict[str, Any] = {
+            "mode": mode_key,
+            "name": f"Custom {mode_key.title()} Preset",
+            "preset_index": preset_index,
+            "visualizer_preset_override": True,
+            "visualizer_preset_mode": mode_key,
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": snapshot_copy,
+                },
+            },
+            "settings": {
+                "spotify_visualizer": deepcopy(snapshot_copy),
+            },
+        }
+        if backup:
+            payload["snapshot"]["custom_preset_backup"] = backup
+        return payload
+
+    @staticmethod
+    def _is_key_for_mode(key: str, prefixes: list[str]) -> bool:
+        if not prefixes:
+            return False
+        return any(key.startswith(prefix) for prefix in prefixes)
+
+    @staticmethod
+    def _is_global_visualizer_key(key: str) -> bool:
+        if key in GLOBAL_ALLOWED_KEYS:
+            return True
+        return key in {
+            'mode',
+            'enabled',
+            'visualizers_enabled',
+            'monitor',
+            'bar_count',
+            'ghosting_enabled',
+            'ghost_alpha',
+            'ghost_decay',
+            'rainbow_enabled',
+            'rainbow_speed',
+        }
+
     def cycle_visualizer_preset(self, mode_key: str, direction: int) -> None:
         """Cycle the preset slider for *mode_key* by *direction* (+1/-1)."""
         if not direction:
@@ -1175,14 +1284,33 @@ class WidgetsTab(QWidget):
             return
 
         custom_index = slider.custom_index() if hasattr(slider, 'custom_index') else get_custom_preset_index(mode_key)
-        if preset_index == custom_index:
-            self._save_settings()
-            return
 
         widgets_cfg = self._settings.get('widgets', {}) or {}
         spotify_vis_config = widgets_cfg.get('spotify_visualizer', {})
         if not isinstance(spotify_vis_config, dict):
             spotify_vis_config = {}
+
+        prev_index = int(spotify_vis_config.get(f"preset_{mode_key}", custom_index))
+
+        if preset_index == custom_index:
+            restored = self._restore_custom_visualizer_mode(mode_key, spotify_vis_config)
+            spotify_vis_config[f"preset_{mode_key}"] = custom_index
+            if restored:
+                self._loading = True
+                try:
+                    from ui.tabs.widgets_tab_media import load_media_settings
+
+                    full_widgets = dict(widgets_cfg)
+                    full_widgets['spotify_visualizer'] = dict(spotify_vis_config)
+                    load_media_settings(self, full_widgets)
+                    load_per_mode_technical_controls(self, spotify_vis_config)
+                finally:
+                    self._loading = False
+            self._save_settings()
+            return
+
+        if prev_index == custom_index:
+            self._snapshot_custom_visualizer_mode(mode_key, spotify_vis_config)
 
         working_config = dict(spotify_vis_config)
         working_config['mode'] = mode_key

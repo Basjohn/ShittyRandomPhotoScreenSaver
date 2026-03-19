@@ -11,6 +11,9 @@ Usage:
 """
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import (
@@ -22,6 +25,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QDialog,
+    QFileDialog,
 )
 from PySide6.QtCore import Qt, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QPainter, QPen, QPalette
@@ -38,6 +42,7 @@ from core.settings.visualizer_presets import (
     get_preset_count,
     get_preset_names,
     get_preset_file_path,
+    get_visualizer_presets_dir,
     reload_presets,
 )
 from ui.styled_popup import StyledPopup
@@ -167,17 +172,14 @@ class VisualizerPresetSlider(QWidget):
         self._edit_btn.setVisible(True)
         row.addWidget(self._edit_btn)
 
-        self._move_custom_btn = QPushButton("Move To Custom")
-        self._move_custom_btn.setToolTip(
-            "Copy this preset's current settings into Custom mode and switch to it."
-        )
-        self._move_custom_btn.setFixedHeight(22)
-        self._move_custom_btn.setFixedWidth(110)
-        self._move_custom_btn.setStyleSheet(
+        self._custom_action_btn = QPushButton("Move To Custom")
+        self._custom_action_btn.setFixedHeight(22)
+        self._custom_action_btn.setFixedWidth(130)
+        self._custom_action_btn.setStyleSheet(
             "QPushButton { font-size: 9pt; padding: 2px 8px; }"
         )
-        self._move_custom_btn.clicked.connect(self._move_to_custom)
-        row.addWidget(self._move_custom_btn)
+        self._custom_action_btn.clicked.connect(self._on_custom_action_clicked)
+        row.addWidget(self._custom_action_btn)
 
         layout.addLayout(row)
 
@@ -279,13 +281,24 @@ class VisualizerPresetSlider(QWidget):
         else:
             self._edit_btn.setToolTip("Open this preset's JSON file in your default editor.")
         # Move To Custom: only enabled when on a non-custom preset
-        self._move_custom_btn.setEnabled(not is_custom)
-        if is_custom:
-            self._move_custom_btn.setToolTip("Already on Custom.")
+        if self._custom_action_btn is not None:
+            if is_custom:
+                self._custom_action_btn.setText("Save Preset As…")
+                self._custom_action_btn.setToolTip(
+                    "Save the current Custom settings as a curated preset JSON file."
+                )
+            else:
+                self._custom_action_btn.setText("Move To Custom")
+                self._custom_action_btn.setToolTip(
+                    "Copy this preset's current settings into Custom mode and switch to it."
+                )
+            self._custom_action_btn.setEnabled(True)
+
+    def _on_custom_action_clicked(self) -> None:
+        if self._slider.value() == self._custom_index:
+            self._save_custom_preset_as()
         else:
-            self._move_custom_btn.setToolTip(
-                "Copy this preset's current settings into Custom mode and switch to it."
-            )
+            self._move_to_custom()
 
     def _move_to_custom(self) -> None:
         """Switch to Custom preset, keeping the current UI values as custom settings.
@@ -308,6 +321,101 @@ class VisualizerPresetSlider(QWidget):
         # and saves settings. The UI widgets retain the preset values so the
         # save captures them as custom.
         self._slider.setValue(self._custom_index)
+
+    def _save_custom_preset_as(self) -> None:
+        tab = self._find_tab()
+        if tab is None or not hasattr(tab, "build_visualizer_preset_payload"):
+            return
+
+        payload = tab.build_visualizer_preset_payload(self._mode)
+        if not payload:
+            StyledPopup(
+                tab,
+                "Unable To Save",
+                "No Custom settings detected for this mode.",
+                icon_type="error",
+                buttons=[("OK", "ok")],
+            ).exec()
+            return
+
+        presets_dir = get_visualizer_presets_dir(self._mode)
+        try:
+            presets_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            logger.debug("[VIS_PRESETS] Failed to create presets dir %s", presets_dir, exc_info=True)
+
+        default_path = self._default_save_path(presets_dir)
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Visualizer Preset",
+            str(default_path),
+            "Visualizer Preset (*.json)",
+        )
+        if not file_path:
+            return
+
+        path = Path(file_path)
+        if path.suffix.lower() != ".json":
+            path = path.with_suffix(".json")
+
+        self._apply_filename_metadata(path, payload)
+        payload.setdefault("description", "Saved from Custom preset in Settings.")
+
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=2)
+        except Exception:
+            logger.debug("[VIS_PRESETS] Failed to save preset %s", path, exc_info=True)
+            StyledPopup(
+                tab,
+                "Save Failed",
+                f"Could not write {path}.",
+                icon_type="error",
+                buttons=[("OK", "ok")],
+            ).exec()
+            return
+
+        StyledPopup(
+            tab,
+            "Preset Saved",
+            f"Curated preset saved to\n{path}",
+            icon_type="success",
+            buttons=[("OK", "ok")],
+        ).exec()
+        self._reload_and_reapply_current_preset(self._slider.value(), force_custom=True)
+
+    def _default_save_path(self, presets_dir: Path) -> Path:
+        base_stem = f"preset_{self._custom_index}_custom"
+        candidate = presets_dir / f"{base_stem}.json"
+        counter = 1
+        while candidate.exists():
+            candidate = presets_dir / f"{base_stem}_{counter}.json"
+            counter += 1
+        return candidate
+
+    _FILENAME_RE = re.compile(r"preset[_-]*(\d+)(?:[_-]*(.+))?", re.IGNORECASE)
+
+    def _apply_filename_metadata(self, path: Path, payload: dict) -> None:
+        match = self._FILENAME_RE.match(path.stem)
+        if match:
+            try:
+                ordinal = int(match.group(1))
+                payload["preset_index"] = max(0, ordinal - 1)
+            except (TypeError, ValueError):
+                pass
+            suffix = match.group(2)
+            if suffix:
+                friendly_suffix = re.sub(r"[_-]+", " ", suffix).strip()
+            else:
+                friendly_suffix = ""
+            base = f"Preset {match.group(1)}"
+            if friendly_suffix:
+                payload["name"] = f"{base} ({friendly_suffix.title()})"
+            else:
+                payload["name"] = base
+        if not payload.get("name"):
+            payload["name"] = path.stem.replace("_", " ").title()
 
     def _open_preset_json(self) -> None:
         """Open the current preset's JSON file in the OS default editor."""
@@ -332,7 +440,7 @@ class VisualizerPresetSlider(QWidget):
         if popup.exec() == QDialog.DialogCode.Accepted:
             self._reload_and_reapply_current_preset(idx)
 
-    def _reload_and_reapply_current_preset(self, desired_index: int) -> None:
+    def _reload_and_reapply_current_preset(self, desired_index: int, *, force_custom: bool = False) -> None:
         """Reload preset definitions from disk and reapply the current slot."""
 
         try:
@@ -348,7 +456,10 @@ class VisualizerPresetSlider(QWidget):
 
         self._slider.blockSignals(True)
         self._slider.setMaximum(max(0, self._preset_count - 1))
-        target_index = max(0, min(self._preset_count - 1, desired_index))
+        if force_custom:
+            target_index = self._custom_index
+        else:
+            target_index = max(0, min(self._preset_count - 1, desired_index))
         self._slider.setValue(target_index)
         self._slider.blockSignals(False)
         self._value_label.setText(self._preset_names[target_index])

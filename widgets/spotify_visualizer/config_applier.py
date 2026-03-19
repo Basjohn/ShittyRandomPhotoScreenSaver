@@ -143,6 +143,25 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_stretch_outer = max(0.0, min(1.0, float(kwargs['blob_stretch_outer'])))
 
 
+    # --- Card + bar styling (global across modes) ---------------------
+    if 'bar_fill_color' in kwargs:
+        c = _color_or_none(kwargs['bar_fill_color'])
+        if c is not None:
+            widget._bar_fill_color = c
+    if 'bar_border_color' in kwargs:
+        c = _color_or_none(kwargs['bar_border_color'])
+        if c is not None:
+            widget._bar_border_color = c
+    if 'bar_border_opacity' in kwargs:
+        try:
+            opacity = max(0.0, min(1.0, float(kwargs['bar_border_opacity'])))
+        except Exception:
+            opacity = getattr(widget._bar_border_color, 'alphaF', lambda: 1.0)()
+        # Preserve RGB, adjust alpha channel
+        color = QColor(widget._bar_border_color)
+        color.setAlphaF(opacity)
+        widget._bar_border_color = color
+
     # --- Spectrum -----------------------------------------------------
     if 'spectrum_single_piece' in kwargs:
         widget._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])

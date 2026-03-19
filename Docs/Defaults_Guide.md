@@ -8,6 +8,8 @@
 
 All canonical defaults live in **`core/settings/defaults.py`** → `get_default_settings()`.
 
+> **User-specific data stays empty on every build.** `sources.folders`, `sources.rss_feeds`, and weather geo keys (`widgets.weather.location/latitude/longitude`) are intentionally seeded as empty so a fresh install never inherits personal data. The UI populates them only after the user explicitly selects locations or sources.
+
 ### Display
 | Key | Default | Notes |
 |-----|---------|-------|
@@ -226,14 +228,16 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 ### Standard Screensaver (.scr)
 - Profile name: `Screensaver`
 - JSON path: `%APPDATA%/SRPSS/settings_v2.json`
-- `input.hard_exit` defaults to `True` (any key exits)
+- `display.show_on_monitors` defaults to `"ALL"` (cover every display)
+- `input.hard_exit` defaults to `False` (mouse/keys exit as soon as the saver detects input)
 - Runs on Winlogon desktop when installed as .scr
 
 ### MC (Media Center) Build
 - Profile name: `Screensaver_MC`
 - JSON path: `%APPDATA%/SRPSS_MC/settings_v2.json`
 - Detected by exe name containing `srpss_mc`, `srpss media center`, or `main_mc.py`
-- Forces `input.hard_exit = True` at runtime
+- Defaults to single-display coverage (`display.show_on_monitors = [1]`, i.e., Display 1 only)
+- `input.hard_exit` default is `True` so mouse movement/clicks never exit unless ESC/right-click/explicit widget action occurs
 - Separate settings file — MC and standard builds do NOT share settings
 
 ### Script / Debug Build

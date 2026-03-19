@@ -177,8 +177,11 @@ def test_settings_dialog_toggle_maximize(qapp, settings_manager, animation_manag
 def test_settings_dialog_has_drop_shadow(qapp, settings_manager, animation_manager):
     """Test dialog has drop shadow effect."""
     dialog = SettingsDialog(settings_manager, animation_manager)
-    
-    effect = dialog.graphicsEffect()
+
+    container = getattr(dialog, "_dialog_container", None)
+    assert container is not None
+
+    effect = container.graphicsEffect()
     assert effect is not None
 
 

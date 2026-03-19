@@ -34,6 +34,9 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         return
     vis.apply_vis_mode_config(
         mode=str(model.mode),
+        bar_fill_color=model.bar_fill_color,
+        bar_border_color=model.bar_border_color,
+        bar_border_opacity=model.bar_border_opacity,
         osc_glow_enabled=model.osc_glow_enabled,
         osc_glow_intensity=model.osc_glow_intensity,
         osc_glow_color=model.osc_glow_color,

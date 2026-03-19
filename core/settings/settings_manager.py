@@ -22,7 +22,7 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
     _MISSING = object()
-    _MANUAL_FLOOR_MIN = 0.05
+    _MANUAL_FLOOR_MIN = 0.12
     _MANUAL_FLOOR_MAX = 1.0
     
     def __init__(
@@ -205,29 +205,10 @@ class SettingsManager(QObject):
         Returns user's Pictures folder if available, otherwise empty list.
         This replaces the previous hardcoded path.
         """
-        folders = []
-        try:
-            # Try to get user's Pictures folder
-            from PySide6.QtCore import QStandardPaths
-            pictures = QStandardPaths.writableLocation(QStandardPaths.PicturesLocation)
-            if pictures and Path(pictures).exists():
-                folders.append(pictures)
-        except Exception as exc:
-            logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
-
-        # Fallback: try common Windows paths
-        if not folders:
-            try:
-                import os
-                user_profile = os.environ.get('USERPROFILE', '')
-                if user_profile:
-                    pictures_path = Path(user_profile) / 'Pictures'
-                    if pictures_path.exists():
-                        folders.append(str(pictures_path))
-            except Exception as exc:
-                logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
-        
-        return folders
+        # User-specific sources must remain empty by default so new installs
+        # never inherit local paths. Detection of Pictures folders now happens
+        # only when the user explicitly selects sources.
+        return []
     
     def _set_defaults(self) -> None:
         """Set default values if not already present."""
@@ -239,6 +220,8 @@ class SettingsManager(QObject):
             'sources.folders': self._get_default_image_folders(),
             'sources.rss_feeds': [],
         }
+
+        self._apply_profile_overrides(defaults)
 
         for section in ('display', 'input', 'queue', 'sources', 'timing'):
             section_value = canonical.get(section)
@@ -271,6 +254,13 @@ class SettingsManager(QObject):
             else:
                 if not self._settings.contains(key):
                     self._settings.setValue(key, value)
+
+    def _apply_profile_overrides(self, defaults: Dict[str, Any]) -> None:
+        """Apply per-profile default overrides before merging canonical values."""
+        app_name = getattr(self, "_application", "")
+        if app_name == "Screensaver_MC":
+            defaults['display.show_on_monitors'] = [1]
+            defaults['input.hard_exit'] = True
 
     def _ensure_transitions_defaults(self, default_transitions: Dict[str, Any]) -> None:
         with self._lock:

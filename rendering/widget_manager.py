@@ -368,6 +368,16 @@ class WidgetManager:
         full_widgets['spotify_visualizer'] = vis_config
         settings.set('widgets', full_widgets)
         settings.save()
+        # Immediately push the refreshed config to the live widget so mode-specific
+        # colors (fill/border) and other visual properties take effect without
+        # waiting for the async settings-changed bridge.
+        try:
+            self._refresh_spotify_visualizer_config(full_widgets)
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Failed to refresh Spotify visualizer after preset cycle",
+                exc_info=True,
+            )
         logger.debug(
             "[WIDGET_MANAGER] Cycled visualizer preset mode=%s %s->%s",
             mode,

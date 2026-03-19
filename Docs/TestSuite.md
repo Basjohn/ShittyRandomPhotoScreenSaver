@@ -323,6 +323,7 @@
 | `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity | New uniform/kwarg additions |
 | `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering | Preset file changes |
 | `test_visualizer_settings_plumbing.py` | End-to-end settings plumbing (model → widget → overlay → shader) | New visualizer settings |
+| `test_visualizer_preset_cycling_runtime.py` | Runtime preset cycling API (`WidgetManager`), SpotifyVisualizerWidget middle/XButton shortcuts, InputHandler routing hit-tests, preset wrap-around | Runtime preset shortcut regressions |
 | `test_visualizer_alignment.py` | Visualizer positioning relative to other widgets | Positioning changes |
 | `test_blob_intensity_reserve.py` | Blob intensity reserve and core floor clamp math | Blob stage tuning |
 | `test_micro_wobble_math.py` | Micro wobble amplitude/frequency math | Wobble parameter changes |

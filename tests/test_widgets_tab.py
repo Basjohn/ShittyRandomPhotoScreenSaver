@@ -47,12 +47,12 @@ class TestWidgetsTab:
         tab = WidgetsTab(mgr)
 
         # Clock defaults: enabled on all monitors, Top Right, 24h, seconds on,
-        # analogue mode with background frame enabled at 70% opacity.
+        # analogue mode with the background frame OFF to match new defaults snapshot.
         assert tab.clock_enabled.isChecked() is True
         assert tab.clock_position.currentText() == "Top Right"
         assert tab.clock_format.currentText() == "24 Hour"
         assert tab.clock_seconds.isChecked() is True
-        assert tab.clock_show_background.isChecked() is True
+        assert tab.clock_show_background.isChecked() is False
         assert tab.clock_bg_opacity.value() == 60
         # Monitor selection uses canonical 'ALL' default so combo reflects that
         assert tab.clock_monitor_combo.currentText() == "ALL"
@@ -189,26 +189,89 @@ class TestWidgetsTab:
     def test_visualizer_advanced_edit_switches_to_custom(self, qt_app, settings_manager):
         tab = WidgetsTab(settings_manager)
         try:
-            # Force Spotify tab visible and preset slider available
+            tab._load_settings()
+            def _instant_save() -> None:
+                tab._auto_switch_preset_to_custom()
+                tab._save_settings_now()
+            tab._save_settings = _instant_save
             tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("bubble"))
             preset_slider = getattr(tab, "_bubble_preset_slider", None)
             assert preset_slider is not None
 
-            preset_slider.set_preset_index(0)  # curated preset
-            assert preset_slider.preset_index() == 0
+            preset_slider.set_preset_index(0)  # curated preset without emitting
+            widgets_cfg = tab._settings.get('widgets', {}) or {}
+            spotify_vis = widgets_cfg.setdefault('spotify_visualizer', {})
+            spotify_vis['preset_bubble'] = 0
+            tab._settings.set('widgets', widgets_cfg)
+            tab._settings.save()
 
-            # Simulate editing an advanced control (gradient direction combo lives in advanced container)
             gradient_combo = getattr(tab, "bubble_gradient_direction", None)
             assert gradient_combo is not None
             gradient_combo.setCurrentText("Bottom")
             gradient_combo.currentTextChanged.emit("Bottom")
+            tab._save_settings()
+            qt_app.processEvents()
 
             assert preset_slider.preset_index() == preset_slider.custom_index()
+            widgets_cfg = tab._settings.get('widgets', {}) or {}
+            spotify_vis = widgets_cfg.get('spotify_visualizer', {})
+            assert spotify_vis.get('preset_bubble') == preset_slider.custom_index()
+        finally:
+            tab.deleteLater()
+
+    def test_visualizer_custom_preset_roundtrip(self, qt_app, settings_manager):
+        """Custom visualizer config survives curated preset switches and restores UI state."""
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            mode = "spectrum"
+            tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+            slider = getattr(tab, "_spectrum_preset_slider", None)
+            assert slider is not None
+            custom_index = slider.custom_index()
+
+            custom_snapshot = {
+                "mode": mode,
+                "preset_spectrum": custom_index,
+                "monitor": "PRIMARY",
+                "spectrum_growth": 3.7,
+                "spectrum_wave_amplitude": 0.82,
+                "spectrum_shape_nodes": [[0.0, 0.15], [0.4, 0.85], [1.0, 0.55]],
+                "spectrum_profile_floor": 0.08,
+            }
+
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            widgets_cfg["spotify_visualizer"] = custom_snapshot.copy()
+            settings_manager.set("widgets", widgets_cfg)
+
+            tab._load_settings()
+            # Save immediately during preset changes to avoid timer-based debounce in tests.
+            tab._save_settings = tab._save_settings_now
+
+            # Switch to curated preset slot 0 (should snapshot custom state first).
+            slider.set_preset_index(0)
+            tab._on_visualizer_preset_changed(mode, 0)
+
+            cache = settings_manager.get("visualizer_custom_presets", {})
+            assert isinstance(cache, dict)
+            assert mode in cache
+            assert cache[mode]["spectrum_growth"] == pytest.approx(3.7)
+
+            # Switch back to Custom and expect the snapshot to restore values.
+            slider.set_preset_index(custom_index)
+            tab._on_visualizer_preset_changed(mode, custom_index)
+
+            restored = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+            assert restored.get("preset_spectrum") == custom_index
+            assert restored.get("spectrum_growth") == pytest.approx(3.7)
+            assert restored.get("spectrum_wave_amplitude") == pytest.approx(0.82)
+            assert restored.get("spectrum_profile_floor") == pytest.approx(0.08)
         finally:
             tab.deleteLater()
 
     def test_spinbox_stylesheet_attached(self, qt_app, settings_manager):
         """WidgetsTab stylesheet must keep the shared QSpinBox skin."""
+
         tab = WidgetsTab(settings_manager)
         try:
             css = tab.styleSheet()
@@ -221,28 +284,39 @@ class TestWidgetsTab:
             tab.deleteLater()
 
     def test_visualizers_toggle_gates_controls(self, qt_app, settings_manager):
-        """Visualizers master toggle should gate Beat Visualizer controls and persist flag."""
+        """Master + Beat Visualizer toggles should persist state changes in settings."""
 
         tab = WidgetsTab(settings_manager)
         try:
-            # Should be visible by default
-            assert tab._visualizers_controls_container.isVisible()
+            tab._load_settings()
+            tab._save_settings = tab._save_settings_now
 
-            # Disable and confirm hidden
+            master_initial = tab.visualizers_enabled.isChecked()
+            tab.visualizers_enabled.setChecked(not master_initial)
+            tab._save_settings_now()
+            cfg = tab._settings.get('widgets', {}).get('spotify_visualizer', {})
+            assert cfg.get('visualizers_enabled') is (not master_initial)
+
+            beat_initial = tab.vis_enabled_checkbox.isChecked()
+            tab.vis_enabled_checkbox.setChecked(not beat_initial)
+            tab._save_settings_now()
+            cfg = tab._settings.get('widgets', {}).get('spotify_visualizer', {})
+            assert cfg.get('enabled') is (not beat_initial)
+
+            # Disable both to verify persisted reload state
             tab.visualizers_enabled.setChecked(False)
-            tab.visualizers_enabled.stateChanged.emit(tab.visualizers_enabled.checkState())
-            assert not tab._visualizers_controls_container.isVisible()
-
+            tab.vis_enabled_checkbox.setChecked(False)
             tab._save_settings_now()
             tab.deleteLater()
 
-            # Reload and expect persisted False
             reloaded = WidgetsTab(settings_manager)
             try:
-                assert not reloaded.visualizers_enabled.isChecked()
-                assert not reloaded._visualizers_controls_container.isVisible()
+                reloaded._load_settings()
+                qt_app.processEvents()
+                cfg = reloaded._settings.get('widgets', {}).get('spotify_visualizer', {})
+                assert cfg.get('visualizers_enabled') is False
+                assert cfg.get('enabled') is False
             finally:
                 reloaded.deleteLater()
         finally:
-            if tab is not None and not sip.isdeleted(tab):
-                tab.deleteLater()
+            pass
