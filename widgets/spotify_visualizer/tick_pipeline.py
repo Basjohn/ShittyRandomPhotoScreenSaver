@@ -63,6 +63,19 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
     trigger_gate = 1.0 + (0.60 - 0.45 * slider)
     cooldown_elapsed = now_ts - widget._heartbeat_last_trigger_ts
     energy_mix = _clamp(bass_now * 0.7 + mid_now * 0.2 + high_now * 0.1, 0.0, 1.0)
+
+    # Transient bus boost (Approach A §8): if transient bus detected a kick
+    # onset this frame, lower the trigger gate for immediate response.
+    _tb_onset = getattr(widget._engine, '_audio_worker', None)
+    _tb_kick = False
+    if _tb_onset is not None:
+        _tb_kick = (
+            getattr(_tb_onset, '_onset_detected', False)
+            and getattr(_tb_onset, '_onset_type', '') == 'kick'
+        )
+    if _tb_kick:
+        trigger_gate *= 0.6  # much easier to trigger on confirmed kick
+
     triggered = False
 
     if (
@@ -121,7 +134,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         return
 
     widget._bubble_compute_pending = True
-    # Energy source for bubble pulse: per-mode toggle controls raw vs normalized.
+    # Energy sources: transient bus for pulse, smoothed for drift/stream.
     use_raw = getattr(widget, '_use_raw_energy', False)
     if use_raw and widget._engine:
         eb_pulse = widget._engine.get_pre_agc_energy_bands()
@@ -130,13 +143,21 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     else:
         eb_pulse = None
     eb_smooth = widget._engine.get_energy_bands() if widget._engine else None
+    # Transient bus snapshot for immediate beat response (Approach A §6)
+    tb = widget._engine.get_transient_energy_bands() if widget._engine else None
     prev_ts = widget._bubble_last_tick_ts
     widget._bubble_last_tick_ts = now_ts
     dt_bubble = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
     if not widget._spotify_playing:
         dt_bubble = 0.0
+    # Mix transient bass into pulse bass for immediate kick response
+    _pulse_bass = getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0
+    _t_bass = getattr(tb, 'bass_transient', 0.0) if tb else 0.0
+    _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
+    _t_clamp = getattr(widget, '_transient_clamp', 1.5)
+    _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain)
     eb_snap = {
-        'bass': getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0,
+        'bass': _mixed_bass,
         'mid': getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0,
         'high': getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0,
         'overall': getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,

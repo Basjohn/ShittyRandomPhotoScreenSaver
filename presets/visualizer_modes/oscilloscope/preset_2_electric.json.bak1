@@ -84,13 +84,10 @@
         "oscilloscope_dynamic_range_enabled": false,
         "oscilloscope_energy_boost": 0.85,
         "oscilloscope_input_gain": 0.7,
-        "oscilloscope_kick_lane_gain": 1.0,
         "oscilloscope_manual_floor": 0.1,
         "oscilloscope_rainbow_enabled": false,
         "oscilloscope_rainbow_speed": 0.15,
         "oscilloscope_sensitivity": 0.4,
-        "oscilloscope_transient_clamp": 1.5,
-        "oscilloscope_transient_pulse_gain": 1.0,
         "oscilloscope_use_raw_energy": false
       }
     }

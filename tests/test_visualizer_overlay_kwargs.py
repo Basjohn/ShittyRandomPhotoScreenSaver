@@ -7,6 +7,7 @@ import pytest
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
 from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
 from widgets.spotify_visualizer.energy_bands import EnergyBands
+from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 
@@ -20,6 +21,12 @@ class _StubEngine:
 
     def get_raw_energy_bands(self):
         return EnergyBands()
+
+    def get_pre_agc_energy_bands(self):
+        return EnergyBands()
+
+    def get_transient_energy_bands(self):
+        return TransientEnergyBands()
 
 
 @pytest.mark.qt

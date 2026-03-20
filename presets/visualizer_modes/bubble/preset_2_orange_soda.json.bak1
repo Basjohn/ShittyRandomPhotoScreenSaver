@@ -53,7 +53,6 @@
         ],
         "bubble_growth": 4.52,
         "bubble_input_gain": 0.3,
-        "bubble_kick_lane_gain": 1.0,
         "bubble_manual_floor": 0.05,
         "bubble_outline_color": [
           255,
@@ -88,8 +87,6 @@
         "bubble_surface_reach": 0.7,
         "bubble_tail_opacity": 0.6,
         "bubble_trail_strength": 0.55,
-        "bubble_transient_clamp": 1.5,
-        "bubble_transient_pulse_gain": 1.0,
         "bubble_use_raw_energy": false,
         "ghost_alpha": 0.45,
         "ghost_decay": 0.3,

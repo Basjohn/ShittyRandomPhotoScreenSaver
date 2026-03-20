@@ -20,6 +20,8 @@ def get_uniform_names() -> list[str]:
         "u_blob_stretch_inner", "u_blob_stretch_outer",
         # Energy bands (shared)
         "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
+        # Transient bus (Approach A dual-path)
+        "u_transient_bass", "u_transient_mid", "u_transient_high",
     ]
 
 
@@ -79,6 +81,12 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_bass_energy", eb.bass)
     _set1f(gl, u, "u_mid_energy", eb.mid)
     _set1f(gl, u, "u_high_energy", eb.high)
+
+    # Transient bus (Approach A dual-path)
+    tb = getattr(s, '_transient_energy', None)
+    _set1f(gl, u, "u_transient_bass", getattr(tb, 'bass_transient', 0.0) if tb else 0.0)
+    _set1f(gl, u, "u_transient_mid", getattr(tb, 'mid_transient', 0.0) if tb else 0.0)
+    _set1f(gl, u, "u_transient_high", getattr(tb, 'high_transient', 0.0) if tb else 0.0)
 
     return True
 

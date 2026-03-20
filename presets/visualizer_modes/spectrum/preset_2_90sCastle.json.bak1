@@ -37,7 +37,6 @@
         "spectrum_ghosting_enabled": true,
         "spectrum_growth": 5.0,
         "spectrum_input_gain": 0.8,
-        "spectrum_kick_lane_gain": 1.0,
         "spectrum_manual_floor": 0.3,
         "spectrum_mid_suppression": 0.9,
         "spectrum_mirrored": true,
@@ -105,8 +104,6 @@
           ]
         ],
         "spectrum_single_piece": false,
-        "spectrum_transient_clamp": 1.5,
-        "spectrum_transient_pulse_gain": 1.0,
         "spectrum_use_raw_energy": false,
         "spectrum_vocal_position": 0.4,
         "spectrum_wave_amplitude": 0.15

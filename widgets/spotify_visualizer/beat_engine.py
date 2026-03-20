@@ -31,6 +31,7 @@ from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
 from widgets.spotify_visualizer.energy_bands import EnergyBands, extract_energy_bands
+from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 
 
 logger = get_logger(__name__)
@@ -102,6 +103,10 @@ class _SpotifyBeatEngine(QObject):
         self._waveform = [0.0] * self._waveform_count
         self._latest_bars = [0.0] * self._bar_count
         self._last_audio_ts = 0.0
+        # Reset transient bus state for clean mode switch
+        _tb = getattr(self._audio_worker, '_transient_bus', None)
+        if _tb is not None:
+            _tb.reset()
         self._generation_id += 1
         # Force consumers to wait for the next FFT result produced after
         # this reset instead of reusing the pre-reset generation id.
@@ -519,6 +524,23 @@ class _SpotifyBeatEngine(QObject):
         high = getattr(w, '_pre_agc_treble', 0.0)
         overall = max(0.0, min(1.0, (bass * 0.5 + mid * 0.3 + high * 0.2)))
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
+
+    def get_transient_energy_bands(self) -> TransientEnergyBands:
+        """Get the latest transient bus snapshot (fast-path, 1-frame latency).
+
+        Returns per-band transient energy and onset detection state.
+        Used by modes that need immediate beat response (Spectrum kick lane,
+        Bubble pulse, Blob deform) without waiting for smoothing/AGC.
+        """
+        w = self._audio_worker
+        return TransientEnergyBands(
+            bass_transient=getattr(w, '_transient_bass', 0.0),
+            mid_transient=getattr(w, '_transient_mid', 0.0),
+            high_transient=getattr(w, '_transient_high', 0.0),
+            onset_detected=getattr(w, '_onset_detected', False),
+            onset_type=getattr(w, '_onset_type', ''),
+            onset_strength=getattr(w, '_onset_strength', 0.0),
+        )
 
     def wake(self) -> None:
         """Force wake after pause detection - restart audio capture if unhealthy."""

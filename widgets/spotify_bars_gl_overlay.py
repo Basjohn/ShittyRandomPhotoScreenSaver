@@ -17,6 +17,7 @@ from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
 from widgets.spotify_visualizer.energy_bands import EnergyBands
+from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 from widgets.spotify_visualizer.blob_math import (
     compute_stage_progress,
 )
@@ -91,6 +92,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Energy bands for blob
         self._energy_bands: EnergyBands = EnergyBands()
+        # Transient energy (Approach A dual-path)
+        self._transient_energy: TransientEnergyBands = TransientEnergyBands()
 
         # Oscilloscope glow settings
         self._glow_enabled: bool = True
@@ -443,6 +446,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_specular_direction: str = "top_left",
         bubble_gradient_direction: str = "top",
         border_width_px: float = 0.0,
+        transient_energy: TransientEnergyBands | None = None,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -624,6 +628,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             else:
                 self._waveform = new_wf
             self._waveform_count = len(self._waveform)
+
+        # Store transient energy (Approach A dual-path)
+        if transient_energy is not None:
+            self._transient_energy = transient_energy
 
         # Store energy bands (all modes that need them)
         if energy_bands is not None:

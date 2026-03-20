@@ -54,7 +54,6 @@
         "blob_glow_reactivity": 1.6,
         "blob_growth": 5.0,
         "blob_input_gain": 1.0,
-        "blob_kick_lane_gain": 1.0,
         "blob_manual_floor": 0.1,
         "blob_outline_color": [
           84,
@@ -77,8 +76,6 @@
         "blob_stretch_inner": 0.0,
         "blob_stretch_outer": 0.8,
         "blob_stretch_tendency": 0.22,
-        "blob_transient_clamp": 1.5,
-        "blob_transient_pulse_gain": 1.0,
         "blob_use_raw_energy": false,
         "blob_width": 1.0,
         "ghost_alpha": 0.56,

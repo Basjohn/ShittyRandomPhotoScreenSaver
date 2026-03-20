@@ -24,6 +24,50 @@ _PER_MODE_TECH_ATTR = "_per_mode_technical_controls"
 MANUAL_FLOOR_MIN = 0.05
 MANUAL_FLOOR_MAX = 1.0
 
+# Transient slider gating: which modes each slider is active for.
+_KICK_GAIN_MODES = frozenset({"spectrum"})
+_PULSE_GAIN_MODES = frozenset({"bubble"})
+# transient_clamp is global — no mode restriction.
+
+
+_KICK_GAIN_TIP = (
+    "Spectrum kick express-lane gain (0%\u2013200%). Controls how strongly\n"
+    "transient bass energy bypasses smoothing for immediate kick response.\n"
+    "0% = disabled, 100% = default, 200% = double."
+)
+_PULSE_GAIN_TIP = (
+    "Transient pulse gain (0%\u2013300%). Controls how strongly transient\n"
+    "bass energy mixes into bubble/blob pulse amplitude.\n"
+    "0% = disabled, 100% = default, 300% = triple."
+)
+_KICK_GAIN_DISABLED_TIP = "Kick lane gain is active in Spectrum mode only."
+_PULSE_GAIN_DISABLED_TIP = "Transient pulse gain is active in Bubble mode only."
+
+
+def _apply_transient_gating(mode_key: str, controls: Dict[str, object]) -> None:
+    """Enable/disable transient sliders based on the active mode.
+
+    - kick_lane_gain: Spectrum only
+    - transient_pulse_gain: Bubble only
+    - transient_clamp: all modes (global)
+    """
+    kick_en = mode_key in _KICK_GAIN_MODES
+    pulse_en = mode_key in _PULSE_GAIN_MODES
+
+    for key in ('kick_gain_slider', 'kick_gain_label'):
+        w = controls.get(key)
+        if w is not None:
+            w.setEnabled(kick_en)
+            if hasattr(w, 'setToolTip'):
+                w.setToolTip(_KICK_GAIN_TIP if kick_en else _KICK_GAIN_DISABLED_TIP)
+
+    for key in ('pulse_gain_slider', 'pulse_gain_label'):
+        w = controls.get(key)
+        if w is not None:
+            w.setEnabled(pulse_en)
+            if hasattr(w, 'setToolTip'):
+                w.setToolTip(_PULSE_GAIN_TIP if pulse_en else _PULSE_GAIN_DISABLED_TIP)
+
 
 def _ensure_per_mode_cache(tab) -> Dict[str, Dict[str, Any]]:
     cache = getattr(tab, "_per_mode_technical_config", None)
@@ -217,26 +261,19 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     dyn_range_row.addWidget(dynamic_range)
     dyn_range_row.addStretch()
 
-    # Energy Boost slider (continuous replacement for binary Dynamic Range Boost)
-    energy_boost_row = _aligned_row(layout, "Energy Boost:")
+    # Energy Boost slider — DEPRECATED (kept for preset compat, hidden from UI)
     energy_boost_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     energy_boost_slider.setMinimum(50)
     energy_boost_slider.setMaximum(180)
-    energy_boost_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-    energy_boost_slider.setTickInterval(20)
     default_eb = _per_mode_default_float(tab, mode_key, 'energy_boost', 0.85)
     clamped_eb = max(0.5, min(1.8, default_eb))
     energy_boost_slider.blockSignals(True)
     energy_boost_slider.setValue(int(clamped_eb * 100))
     energy_boost_slider.blockSignals(False)
-    energy_boost_slider.setToolTip(
-        "Post-normalization gain multiplier (0.50x–1.80x). Higher = louder output."
-    )
     _connect_setting(energy_boost_slider.valueChanged, tab)
-    energy_boost_row.addWidget(energy_boost_slider)
+    energy_boost_slider.setVisible(False)
     energy_boost_label = QLabel(f"{clamped_eb:.2f}x")
-    energy_boost_slider.valueChanged.connect(lambda v: energy_boost_label.setText(f"{v / 100.0:.2f}x"))
-    energy_boost_row.addWidget(energy_boost_label)
+    energy_boost_label.setVisible(False)
 
     # AGC Strength slider
     agc_row = _aligned_row(layout, "AGC Strength:")
@@ -283,22 +320,81 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     input_gain_slider.valueChanged.connect(lambda v: input_gain_label.setText(f"{v}%"))
     input_gain_row.addWidget(input_gain_label)
 
-    # Use Raw Energy toggle
-    raw_energy_row = _aligned_row(layout, "")
+    # Use Raw Energy toggle — DEPRECATED (replaced by transient bus, hidden from UI)
     raw_energy_checkbox = QCheckBox("Use Raw (Pre-AGC) Energy")
     raw_energy_checkbox.setProperty("circleIndicator", True)
     raw_energy_default = _per_mode_default_bool(tab, mode_key, 'use_raw_energy', False)
     raw_energy_checkbox.blockSignals(True)
     raw_energy_checkbox.setChecked(raw_energy_default)
     raw_energy_checkbox.blockSignals(False)
-    raw_energy_checkbox.setToolTip(
-        "When enabled, this mode uses pre-AGC energy bands for amplitude/pulse.\n"
-        "Preserves true dynamic range but may have wrong scaling for some modes.\n"
-        "When disabled (default), uses normalized energy from the AGC pipeline."
-    )
     _connect_setting(raw_energy_checkbox.stateChanged, tab)
-    raw_energy_row.addWidget(raw_energy_checkbox)
-    raw_energy_row.addStretch()
+    raw_energy_checkbox.setVisible(False)
+
+    # ── Transient Bus Controls (Approach A dual-path) ──────────────────
+    kick_gain_row = _aligned_row(layout, "Kick Lane Gain:")
+    kick_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    kick_gain_slider.setMinimum(0)
+    kick_gain_slider.setMaximum(200)
+    kick_gain_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    kick_gain_slider.setTickInterval(25)
+    default_kg = _per_mode_default_float(tab, mode_key, 'kick_lane_gain', 1.0)
+    clamped_kg = max(0.0, min(2.0, default_kg))
+    kick_gain_slider.blockSignals(True)
+    kick_gain_slider.setValue(int(clamped_kg * 100))
+    kick_gain_slider.blockSignals(False)
+    kick_gain_slider.setToolTip(
+        "Spectrum kick express-lane gain (0%\u2013200%). Controls how strongly\n"
+        "transient bass energy bypasses smoothing for immediate kick response.\n"
+        "0% = disabled, 100% = default, 200% = double."
+    )
+    _connect_setting(kick_gain_slider.valueChanged, tab)
+    kick_gain_row.addWidget(kick_gain_slider)
+    kick_gain_label = QLabel(f"{int(clamped_kg * 100)}%")
+    kick_gain_slider.valueChanged.connect(lambda v: kick_gain_label.setText(f"{v}%"))
+    kick_gain_row.addWidget(kick_gain_label)
+
+    pulse_gain_row = _aligned_row(layout, "Transient Pulse:")
+    pulse_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    pulse_gain_slider.setMinimum(0)
+    pulse_gain_slider.setMaximum(300)
+    pulse_gain_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    pulse_gain_slider.setTickInterval(50)
+    default_pg = _per_mode_default_float(tab, mode_key, 'transient_pulse_gain', 1.0)
+    clamped_pg = max(0.0, min(3.0, default_pg))
+    pulse_gain_slider.blockSignals(True)
+    pulse_gain_slider.setValue(int(clamped_pg * 100))
+    pulse_gain_slider.blockSignals(False)
+    pulse_gain_slider.setToolTip(
+        "Transient pulse gain (0%\u2013300%). Controls how strongly transient\n"
+        "bass energy mixes into bubble/blob pulse amplitude.\n"
+        "0% = disabled, 100% = default, 300% = triple."
+    )
+    _connect_setting(pulse_gain_slider.valueChanged, tab)
+    pulse_gain_row.addWidget(pulse_gain_slider)
+    pulse_gain_label = QLabel(f"{int(clamped_pg * 100)}%")
+    pulse_gain_slider.valueChanged.connect(lambda v: pulse_gain_label.setText(f"{v}%"))
+    pulse_gain_row.addWidget(pulse_gain_label)
+
+    clamp_row = _aligned_row(layout, "Transient Clamp:")
+    clamp_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+    clamp_slider.setMinimum(0)
+    clamp_slider.setMaximum(300)
+    clamp_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+    clamp_slider.setTickInterval(50)
+    default_tc = _per_mode_default_float(tab, mode_key, 'transient_clamp', 1.5)
+    clamped_tc = max(0.0, min(3.0, default_tc))
+    clamp_slider.blockSignals(True)
+    clamp_slider.setValue(int(clamped_tc * 100))
+    clamp_slider.blockSignals(False)
+    clamp_slider.setToolTip(
+        "Maximum transient-boosted bass energy (0%\u2013300%). Prevents\n"
+        "transient spikes from blowing out the visualizer. 150% = default."
+    )
+    _connect_setting(clamp_slider.valueChanged, tab)
+    clamp_row.addWidget(clamp_slider)
+    clamp_label = QLabel(f"{int(clamped_tc * 100)}%")
+    clamp_slider.valueChanged.connect(lambda v: clamp_label.setText(f"{v}%"))
+    clamp_row.addWidget(clamp_label)
 
     # Dynamic floor toggle
     dyn_floor_row = _aligned_row(layout, "")
@@ -359,7 +455,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     _update_manual_floor_visibility()
 
     per_mode_controls.setdefault('modes', {})
-    per_mode_controls['modes'][mode_key] = {
+    _controls_dict = {
         'group': group,
         'bar_count': bar_count,
         'block_size': block_size,
@@ -377,11 +473,20 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         'input_gain_slider': input_gain_slider,
         'input_gain_label': input_gain_label,
         'raw_energy': raw_energy_checkbox,
+        'kick_gain_slider': kick_gain_slider,
+        'kick_gain_label': kick_gain_label,
+        'pulse_gain_slider': pulse_gain_slider,
+        'pulse_gain_label': pulse_gain_label,
+        'clamp_slider': clamp_slider,
+        'clamp_label': clamp_label,
         'update_sensitivity': _update_sensitivity_visibility,
         'update_manual_floor': _update_manual_floor_visibility,
         'mode_key': mode_key,
     }
+    per_mode_controls['modes'][mode_key] = _controls_dict
     setattr(tab, _PER_MODE_TECH_ATTR, per_mode_controls)
+
+    _apply_transient_gating(mode_key, _controls_dict)
 
     return host
 
@@ -559,6 +664,46 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
             raw_energy.blockSignals(False)
             mode_cache['use_raw_energy'] = raw_val
 
+        # Transient bus controls (Approach A)
+        kg_slider = controls.get('kick_gain_slider')
+        if kg_slider is not None:
+            default_kg = _per_mode_default_float(tab, mode_key, 'kick_lane_gain', 1.0)
+            kg_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'kick_lane_gain'), default_kg)
+            clamped_kg = max(0.0, min(2.0, kg_val))
+            kg_slider.blockSignals(True)
+            kg_slider.setValue(int(clamped_kg * 100))
+            kg_slider.blockSignals(False)
+            kg_label = controls.get('kick_gain_label')
+            if kg_label is not None:
+                kg_label.setText(f"{int(clamped_kg * 100)}%")
+            mode_cache['kick_lane_gain'] = clamped_kg
+
+        pg_slider = controls.get('pulse_gain_slider')
+        if pg_slider is not None:
+            default_pg = _per_mode_default_float(tab, mode_key, 'transient_pulse_gain', 1.0)
+            pg_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'transient_pulse_gain'), default_pg)
+            clamped_pg = max(0.0, min(3.0, pg_val))
+            pg_slider.blockSignals(True)
+            pg_slider.setValue(int(clamped_pg * 100))
+            pg_slider.blockSignals(False)
+            pg_label = controls.get('pulse_gain_label')
+            if pg_label is not None:
+                pg_label.setText(f"{int(clamped_pg * 100)}%")
+            mode_cache['transient_pulse_gain'] = clamped_pg
+
+        tc_slider = controls.get('clamp_slider')
+        if tc_slider is not None:
+            default_tc = _per_mode_default_float(tab, mode_key, 'transient_clamp', 1.5)
+            tc_val = _coerce_float(_resolve_config_entry(spotify_vis_config, mode_key, 'transient_clamp'), default_tc)
+            clamped_tc = max(0.0, min(3.0, tc_val))
+            tc_slider.blockSignals(True)
+            tc_slider.setValue(int(clamped_tc * 100))
+            tc_slider.blockSignals(False)
+            tc_label = controls.get('clamp_label')
+            if tc_label is not None:
+                tc_label.setText(f"{int(clamped_tc * 100)}%")
+            mode_cache['transient_clamp'] = clamped_tc
+
         dyn_floor = controls.get('dynamic_floor')
         if dyn_floor is not None:
             default_dyn_floor = _per_mode_default_bool(tab, mode_key, 'dynamic_floor', True)
@@ -587,6 +732,8 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
         update_manual_floor = controls.get('update_manual_floor')
         if callable(update_manual_floor):
             update_manual_floor()
+
+        _apply_transient_gating(mode_key, controls)
 
 
 def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any]) -> None:
@@ -633,6 +780,16 @@ def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any])
         raw_energy = controls.get('raw_energy')
         if raw_energy is not None:
             _set('use_raw_energy', raw_energy.isChecked())
+        # Transient bus controls (Approach A)
+        kg_slider = controls.get('kick_gain_slider')
+        if kg_slider is not None:
+            _set('kick_lane_gain', max(0.0, min(2.0, kg_slider.value() / 100.0)))
+        pg_slider = controls.get('pulse_gain_slider')
+        if pg_slider is not None:
+            _set('transient_pulse_gain', max(0.0, min(3.0, pg_slider.value() / 100.0)))
+        tc_slider = controls.get('clamp_slider')
+        if tc_slider is not None:
+            _set('transient_clamp', max(0.0, min(3.0, tc_slider.value() / 100.0)))
 
     # Ensure cached values for all modes (including dev-gated ones without UI)
     # are flushed back into the config so custom presets can persist them.

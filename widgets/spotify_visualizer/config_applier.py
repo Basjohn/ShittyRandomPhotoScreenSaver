@@ -536,6 +536,8 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
             extra['energy_bands'] = engine.get_pre_agc_energy_bands()
         else:
             extra['energy_bands'] = engine.get_energy_bands()
+        # Transient bus snapshot (Approach A dual-path) — available to all modes
+        extra['transient_energy'] = engine.get_transient_energy_bands()
 
     _is_sine = (mode_str == 'sine_wave')
     extra['glow_enabled'] = widget._sine_glow_enabled if _is_sine else widget._osc_glow_enabled

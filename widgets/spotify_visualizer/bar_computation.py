@@ -163,6 +163,9 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         raw_bass = float(np.mean(freq_values[:_split1])) if _split1 > 0 else float(freq_values[0])
         raw_mid = float(np.mean(freq_values[_split1:_split2])) if _split2 > _split1 else raw_bass * 0.5
         raw_treble = float(np.mean(freq_values[_split2:])) if _split2 < bands else raw_bass * 0.2
+        # Store split indices for dual-stage AGC zone-aware normalization
+        worker._agc_bass_split = _split1
+        worker._agc_mid_split = _split2
         worker._last_raw_bass = raw_bass
         worker._last_raw_mid = raw_mid
         worker._last_raw_treble = raw_treble
@@ -186,6 +189,23 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         worker._pre_agc_bass = min(1.0, bass_energy)
         worker._pre_agc_mid = min(1.0, mid_energy)
         worker._pre_agc_treble = min(1.0, treble_energy)
+
+        # ── Transient bus (dual-path Approach A) ──────────────────────
+        # Feed post-noise-floor, pre-AGC band energies into the fast path.
+        _tb = getattr(worker, '_transient_bus', None)
+        if _tb is not None:
+            _t_snap = _tb.update(
+                min(1.0, bass_energy),
+                min(1.0, mid_energy),
+                min(1.0, treble_energy),
+            )
+            _g_clamp = getattr(worker, '_transient_clamp', 1.5)
+            worker._transient_bass = min(_g_clamp, _t_snap.bass_transient)
+            worker._transient_mid = min(_g_clamp, _t_snap.mid_transient)
+            worker._transient_high = min(_g_clamp, _t_snap.high_transient)
+            worker._onset_detected = _t_snap.onset_detected
+            worker._onset_type = _t_snap.onset_type
+            worker._onset_strength = _t_snap.onset_strength
 
         # ── Shape-node driven profile ────────────────────────────────
         # The shape editor nodes are the SOLE driver of the bar height
@@ -245,6 +265,18 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
     # BAR GATING (median + hysteresis) then REACTIVE SMOOTHING
     _apply_bar_gate(worker, arr, np)
     _apply_reactive_smoothing(worker, arr, bands, np)
+
+    # ── Kick express lane (Approach A §5) ─────────────────────────────
+    # When transient bass exceeds threshold, boost bass-zone bars directly
+    # so kicks register within 1 frame instead of waiting for smoothing.
+    _t_bass = getattr(worker, '_transient_bass', 0.0)
+    if _t_bass > 0.05:
+        _kick_gain = getattr(worker, '_kick_lane_gain', 1.0)
+        _bass_end = max(1, getattr(worker, '_agc_bass_split', 4))
+        _kick_boost = min(2.0, 1.0 + _t_bass * _kick_gain)
+        for _ki in range(_bass_end):
+            if _ki < bands:
+                arr[_ki] = min(1.0, arr[_ki] * _kick_boost)
 
     # Scale
     scale = (worker._base_output_scale or 0.8) * (worker._energy_boost or 1.0)
@@ -589,87 +621,127 @@ def _apply_adaptive_normalization(
     worker: "SpotifyVisualizerAudioWorker", arr, drop_signal: float,
     low_resolution: bool, np,
 ) -> None:
-    """Dual-window envelope normalizer.
+    """Dual-stage AGC with bass/mix envelope split (Approach A §4.5.4).
 
-    Two envelopes track signal level at different timescales:
-      - **short-term** (~300ms): fast-tracking RMS of current bar output.
-        Used as a limiter — if bars exceed 1.0, scale down immediately.
-      - **long-term** (~3s): slow-tracking average level.
-        Represents the sustained loudness.  When short ≈ long the signal
-        is in a sustained section and normalization backs off, preserving
-        dynamics.  When short << long (quiet after loud), recovery boost
-        is applied gradually.
+    Maintains TWO independent envelope stacks:
+      - **Bass envelopes** (env_bass_short/long): fed only by bass energy.
+      - **Mix envelopes** (env_mix_short/long): fed by mid+high energy.
 
-    This fixes the old problem where a single running peak would stay
-    elevated during loud passages, compressing all dynamic range.
+    Each stack has short-term (~300ms, limiter) and long-term (~3s, leveling)
+    envelopes.  Normalization decisions (limiter/recovery) are computed
+    per-stack so that vocals inflating the mix envelope cannot choke bass
+    recovery, and vice-versa.
+
+    Bars in the bass zone get the bass gain, bars in the mid/high zone get
+    the mix gain, with a smooth crossfade in the transition region.
+
+    Legacy combined envelopes (_env_short/_env_long) are still updated for
+    backward compatibility with any code reading them.
     """
     agc_str = getattr(worker, "_agc_strength", 0.5)
     if agc_str < 0.01:
         return  # AGC disabled — raw output only
 
-    try:
-        peak_val = float(arr.max())
-    except Exception as e:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        peak_val = 0.0
+    bands = arr.shape[0] if hasattr(arr, 'shape') else len(arr)
+    if bands == 0:
+        return
 
-    rms_val = 0.0
-    try:
-        rms_val = float(np.sqrt(np.mean(arr[:] ** 2)))
-    except Exception:
-        rms_val = peak_val * 0.7
+    # --- Source energies for split envelopes ---
+    bass_e = min(1.3, max(0.0, getattr(worker, "_pre_agc_bass", 0.0)))
+    mid_e = min(1.3, max(0.0, getattr(worker, "_pre_agc_mid", 0.0)))
+    high_e = min(1.3, max(0.0, getattr(worker, "_pre_agc_treble", 0.0)))
+    mix_e = (mid_e * 0.6 + high_e * 0.4)  # weighted mid+high
 
     max_tracked = 1.30
-    peak_val = min(peak_val, max_tracked)
-    rms_val = min(rms_val, max_tracked)
-
-    env_short = getattr(worker, "_env_short", 0.5)
-    env_long = getattr(worker, "_env_long", 0.5)
-
-    # Scale envelope tracking rates by agc_strength:
-    #   0.0 = off (early return above), 0.5 = default, 1.0 = aggressive
     rate_scale = 0.5 + agc_str  # 0.5→1.0 at default, 0.5→1.5 at max
 
-    # --- Short-term envelope (fast attack, moderate release) ---
-    if rms_val > env_short:
-        env_short += (rms_val - env_short) * 0.30 * rate_scale
+    # --- Bass envelopes ---
+    eb_s = getattr(worker, "_env_bass_short", 0.5)
+    eb_l = getattr(worker, "_env_bass_long", 0.5)
+    if bass_e > eb_s:
+        eb_s += (bass_e - eb_s) * 0.35 * rate_scale
     else:
-        env_short += (rms_val - env_short) * 0.15 * rate_scale
-
-    # --- Long-term envelope (slow attack, very slow release) ---
-    if rms_val > env_long:
-        env_long += (rms_val - env_long) * 0.05 * rate_scale
+        eb_s += (bass_e - eb_s) * 0.20 * rate_scale
+    if bass_e > eb_l:
+        eb_l += (bass_e - eb_l) * 0.06 * rate_scale
     else:
-        env_long += (rms_val - env_long) * 0.02 * rate_scale
+        eb_l += (bass_e - eb_l) * 0.025 * rate_scale
 
-    # --- Drop relief: on bass drops, nudge envelopes down faster ---
+    # --- Mix envelopes ---
+    em_s = getattr(worker, "_env_mix_short", 0.5)
+    em_l = getattr(worker, "_env_mix_long", 0.5)
+    if mix_e > em_s:
+        em_s += (mix_e - em_s) * 0.30 * rate_scale
+    else:
+        em_s += (mix_e - em_s) * 0.15 * rate_scale
+    if mix_e > em_l:
+        em_l += (mix_e - em_l) * 0.05 * rate_scale
+    else:
+        em_l += (mix_e - em_l) * 0.02 * rate_scale
+
+    # --- Drop relief: on bass drops, nudge bass envelopes down faster ---
     drop_relief = max(0.0, float(drop_signal or 0.0))
     if drop_relief > 0.15:
         nudge = max(0.80, 1.0 - drop_relief * 0.22)
-        env_short *= nudge
-        env_long *= max(0.90, nudge)
+        eb_s *= nudge
+        eb_l *= max(0.90, nudge)
 
-    # Clamp envelopes
-    env_short = max(0.08, min(max_tracked, env_short))
-    env_long = max(0.08, min(max_tracked, env_long))
+    # Clamp all envelopes
+    eb_s = max(0.08, min(max_tracked, eb_s))
+    eb_l = max(0.08, min(max_tracked, eb_l))
+    em_s = max(0.08, min(max_tracked, em_s))
+    em_l = max(0.08, min(max_tracked, em_l))
 
-    worker._env_short = env_short
-    worker._env_long = env_long
-    worker._running_peak = env_short  # compat alias
+    worker._env_bass_short = eb_s
+    worker._env_bass_long = eb_l
+    worker._env_mix_short = em_s
+    worker._env_mix_long = em_l
 
-    # --- Normalization decision (scaled by agc_strength) ---
-    # Limiter threshold: lower at higher strength for more compression
+    # Legacy combined envelopes for backward compat
+    combined_short = eb_s * 0.5 + em_s * 0.5
+    combined_long = eb_l * 0.5 + em_l * 0.5
+    worker._env_short = combined_short
+    worker._env_long = combined_long
+    worker._running_peak = combined_short
+
+    # --- Per-stack gain computation ---
     limiter_thresh = 1.2 - agc_str * 0.4  # 1.0 at default, 0.8 at max
-    # 1) Limiter: if short-term envelope exceeds threshold, scale down
-    if env_short > limiter_thresh and peak_val > 0.0:
-        gain = limiter_thresh / env_short
-        arr *= (1.0 + (gain - 1.0) * agc_str * 2.0)
-    # 2) Sustained loud: short ≈ long → do nothing (preserve dynamics)
-    # 3) Recovery: short << long (quiet after loud) → gentle boost
-    elif env_long > 0.15 and env_short < env_long * 0.45:
-        boost = min(1.35, env_long / max(env_short, 0.08))
-        blend = min(0.3, (env_long - env_short) / max(env_long, 0.1))
-        arr *= (1.0 + (boost - 1.0) * blend * agc_str * 2.0)
+
+    def _compute_stack_gain(env_s: float, env_l: float) -> float:
+        """Compute gain factor for one envelope stack."""
+        # 1) Limiter: short-term exceeds threshold → compress
+        if env_s > limiter_thresh:
+            raw_gain = limiter_thresh / env_s
+            return 1.0 + (raw_gain - 1.0) * agc_str * 2.0
+        # 2) Recovery: short << long (quiet after loud) → gentle boost
+        if env_l > 0.15 and env_s < env_l * 0.45:
+            boost = min(1.35, env_l / max(env_s, 0.08))
+            blend = min(0.3, (env_l - env_s) / max(env_l, 0.1))
+            return 1.0 + (boost - 1.0) * blend * agc_str * 2.0
+        # 3) Sustained: short ≈ long → unity gain (preserve dynamics)
+        return 1.0
+
+    bass_gain = _compute_stack_gain(eb_s, eb_l)
+    mix_gain = _compute_stack_gain(em_s, em_l)
+
+    # --- Apply zone-aware gain to bars ---
+    bass_split = max(1, getattr(worker, "_agc_bass_split", 4))
+    mid_split = max(bass_split + 1, getattr(worker, "_agc_mid_split", 10))
+    # Transition zone width for smooth crossfade between bass and mix gain
+    trans_width = max(1, (mid_split - bass_split))
+
+    if abs(bass_gain - 1.0) < 0.001 and abs(mix_gain - 1.0) < 0.001:
+        return  # Both stacks at unity — skip array manipulation
+
+    for i in range(bands):
+        if i < bass_split:
+            arr[i] *= bass_gain
+        elif i < mid_split:
+            # Crossfade zone: blend bass_gain → mix_gain
+            t = (i - bass_split) / trans_width
+            arr[i] *= bass_gain * (1.0 - t) + mix_gain * t
+        else:
+            arr[i] *= mix_gain
 
 
 def maybe_log_floor_state(

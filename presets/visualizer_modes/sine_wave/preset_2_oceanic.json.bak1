@@ -1,7 +1,7 @@
 {
   "mode": "sine_wave",
-  "name": "Preset 1 (Wave)",
-  "preset_index": 0,
+  "name": "Preset 2 (Oceanic)",
+  "preset_index": 1,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -36,8 +36,8 @@
           240
         ],
         "sine_glow_enabled": true,
-        "sine_glow_intensity": 0.4,
-        "sine_glow_reactivity": 1.6,
+        "sine_glow_intensity": 0.5,
+        "sine_glow_reactivity": 1.8,
         "sine_glow_size": 1.0,
         "sine_heartbeat": 0.0,
         "sine_line1_color": [
@@ -59,7 +59,7 @@
           255,
           180
         ],
-        "sine_line2_shift": 0.35,
+        "sine_line2_shift": 0.45,
         "sine_line3_color": [
           255,
           255,
@@ -72,7 +72,7 @@
           227,
           180
         ],
-        "sine_line3_shift": -0.35,
+        "sine_line3_shift": -0.45,
         "sine_line_color": [
           255,
           255,
@@ -81,15 +81,15 @@
         ],
         "sine_line_count": 3,
         "sine_line_dim": false,
-        "sine_line_offset_bias": 0.0,
+        "sine_line_offset_bias": 0.15,
         "sine_micro_wobble": 0.72,
-        "sine_rainbow_enabled": true,
+        "sine_rainbow_enabled": false,
         "sine_rainbow_speed": 0.25,
         "sine_reactive_glow": true,
         "sine_sensitivity": 0.45,
-        "sine_speed": 0.15,
-        "sine_travel_line2": 0,
-        "sine_travel_line3": 0,
+        "sine_speed": 0.3,
+        "sine_travel_line2": 2,
+        "sine_travel_line3": 1,
         "sine_vertical_shift": 35,
         "sine_wave_adaptive_sensitivity": false,
         "sine_wave_agc_strength": 0.6,
@@ -101,13 +101,10 @@
         "sine_wave_energy_boost": 0.85,
         "sine_wave_growth": 5.0,
         "sine_wave_input_gain": 0.9,
-        "sine_wave_kick_lane_gain": 1.0,
         "sine_wave_manual_floor": 0.1,
-        "sine_wave_rainbow_enabled": true,
+        "sine_wave_rainbow_enabled": false,
         "sine_wave_rainbow_speed": 0.25,
         "sine_wave_sensitivity": 0.32,
-        "sine_wave_transient_clamp": 1.5,
-        "sine_wave_transient_pulse_gain": 1.0,
         "sine_wave_travel": 0,
         "sine_wave_use_raw_energy": false,
         "sine_width_reaction": 0.0

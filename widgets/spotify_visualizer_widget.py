@@ -258,6 +258,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_big_size_max: float = 0.038
         self._bubble_small_size_max: float = 0.018
         self._use_raw_energy: bool = False
+        # Transient bus controls (Approach A dual-path)
+        self._transient_pulse_gain: float = 1.0   # Bubble: transient bass pulse gain (0-3)
+        self._transient_clamp: float = 1.5         # Global: max transient energy per channel (0-3)
+        self._kick_lane_gain: float = 1.0          # Spectrum: kick express lane gain (0-2)
         self._bubble_big_contraction_bias: float = 1.0
         self._bubble_big_size_clamp: float = 4.0
         self._bubble_big_specular_max_size: float = 2.5
@@ -650,6 +654,9 @@ class SpotifyVisualizerWidget(QWidget):
                     "agc_strength": model.resolve_agc_strength(mode_key),
                     "use_raw_energy": model.resolve_use_raw_energy(mode_key),
                     "input_gain": model.resolve_input_gain(mode_key),
+                    "kick_lane_gain": model.resolve_kick_lane_gain(mode_key),
+                    "transient_pulse_gain": model.resolve_transient_pulse_gain(mode_key),
+                    "transient_clamp": model.resolve_transient_clamp(mode_key),
                 }
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to cache technical config for mode=%s", mode_key, exc_info=True)
@@ -695,12 +702,21 @@ class SpotifyVisualizerWidget(QWidget):
         input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
 
         self._use_raw_energy = use_raw_energy
+        # Transient bus controls from config
+        self._kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
+        self._transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.0))))
+        self._transient_clamp = max(0.0, min(3.0, float(config.get("transient_clamp", 1.5))))
         self.apply_floor_config(dynamic_floor, manual_floor)
         self.apply_sensitivity_config(adaptive, sensitivity)
         self._apply_audio_block_size(audio_block_size)
         self._apply_energy_boost(energy_boost)
         self._apply_agc_strength(agc_strength)
         self._apply_input_gain(input_gain)
+        # Propagate kick lane gain to audio worker
+        if self._engine is not None:
+            aw = getattr(self._engine, '_audio_worker', None)
+            if aw is not None:
+                aw._kick_lane_gain = self._kick_lane_gain
 
         try:
             from os import getenv

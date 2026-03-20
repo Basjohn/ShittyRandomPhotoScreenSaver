@@ -101,13 +101,10 @@
         "sine_wave_energy_boost": 0.85,
         "sine_wave_growth": 5.0,
         "sine_wave_input_gain": 0.9,
-        "sine_wave_kick_lane_gain": 1.0,
         "sine_wave_manual_floor": 0.1,
         "sine_wave_rainbow_enabled": true,
         "sine_wave_rainbow_speed": 0.25,
         "sine_wave_sensitivity": 0.32,
-        "sine_wave_transient_clamp": 1.5,
-        "sine_wave_transient_pulse_gain": 1.0,
         "sine_wave_travel": 0,
         "sine_wave_use_raw_energy": false,
         "sine_width_reaction": 0.0

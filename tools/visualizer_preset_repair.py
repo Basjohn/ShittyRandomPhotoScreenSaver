@@ -53,6 +53,9 @@ _MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
     "agc_strength",
     "use_raw_energy",
     "input_gain",
+    "kick_lane_gain",
+    "transient_pulse_gain",
+    "transient_clamp",
 )
 
 _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {

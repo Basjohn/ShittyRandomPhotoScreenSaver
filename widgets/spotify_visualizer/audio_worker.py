@@ -84,6 +84,14 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._running_peak = 1.0          # kept for compat reads
         self._env_short = 0.5             # short-term RMS envelope (~300ms)
         self._env_long = 0.5              # long-term average envelope (~3s)
+        # Split envelopes for bass vs mix (Approach A dual-stage AGC)
+        self._env_bass_short: float = 0.5
+        self._env_bass_long: float = 0.5
+        self._env_mix_short: float = 0.5
+        self._env_mix_long: float = 0.5
+        # Bar zone split indices (set by fft_to_bars, read by AGC)
+        self._agc_bass_split: int = 4
+        self._agc_mid_split: int = 10
         # Timestamp of last FFT processing - used to detect pause/resume gaps
         self._last_fft_ts: float = 0.0
         # Output scaling to keep FFT peaks controlled while allowing safe boosts
@@ -118,6 +126,18 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._agc_strength: float = 0.5
         self._spectrum_notch_positions: Optional[list] = None
         self._preferred_block_size: int = 0
+
+        # Transient bus (dual-path Approach A)
+        from widgets.spotify_visualizer.transient_bus import TransientBus
+        self._transient_bus: TransientBus = TransientBus()
+        self._kick_lane_gain: float = 1.0  # Spectrum kick express lane gain (0-2)
+        # Latest transient snapshot fields (written by bar_computation, read by beat_engine)
+        self._transient_bass: float = 0.0
+        self._transient_mid: float = 0.0
+        self._transient_high: float = 0.0
+        self._onset_detected: bool = False
+        self._onset_type: str = ""
+        self._onset_strength: float = 0.0
 
         # Sensitivity configuration (driven from Settings UI).
         self._cfg_lock = threading.Lock()
