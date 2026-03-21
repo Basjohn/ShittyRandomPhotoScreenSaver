@@ -82,7 +82,7 @@
         "oscilloscope_dynamic_floor": true,
         "oscilloscope_dynamic_range_enabled": false,
         "oscilloscope_energy_boost": 1.2,
-        "oscilloscope_input_gain": 1.2,
+        "oscilloscope_input_gain": 0.6,
         "oscilloscope_kick_lane_gain": 1.3,
         "oscilloscope_manual_floor": 0.08,
         "oscilloscope_sensitivity": 0.6,

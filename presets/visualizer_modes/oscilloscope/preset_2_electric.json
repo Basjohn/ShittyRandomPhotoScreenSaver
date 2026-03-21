@@ -77,7 +77,7 @@
         "osc_speed": 0.25,
         "osc_vertical_shift": 20,
         "oscilloscope_adaptive_sensitivity": true,
-        "oscilloscope_agc_strength": 0.5,
+        "oscilloscope_agc_strength": 0.4,
         "oscilloscope_audio_block_size": 256,
         "oscilloscope_bar_count": 32,
         "oscilloscope_dynamic_floor": true,

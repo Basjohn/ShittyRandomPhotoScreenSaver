@@ -12,10 +12,10 @@
   "settings_version": 2,
   "snapshot": {
     "accessibility": {
-      "dimming.enabled": false,
-      "dimming.opacity": 30,
+      "dimming.enabled": true,
+      "dimming.opacity": 25,
       "pixel_shift.enabled": true,
-      "pixel_shift.rate": 1
+      "pixel_shift.rate": 4
     },
     "custom_preset_backup": {
       "transitions.block_flip.cols": 24,
@@ -222,7 +222,7 @@
       "widgets.spotify_visualizer.ghost_alpha": 0.4,
       "widgets.spotify_visualizer.ghost_decay": 0.35,
       "widgets.spotify_visualizer.ghosting_enabled": true,
-      "widgets.spotify_visualizer.manual_floor": 1.0,
+      "widgets.spotify_visualizer.manual_floor": 0.12,
       "widgets.spotify_visualizer.mode": "bubble",
       "widgets.spotify_visualizer.sensitivity": 1.0,
       "widgets.weather.bg_color": [
@@ -281,22 +281,10 @@
       "folders": [
         "C:/Users/Basjohn/Documents/[4] WALLPAPERS/PERSONALSET"
       ],
-      "local_ratio": 75,
+      "local_ratio": 95,
       "mode": "folders",
       "rss_background_cap": 30,
-      "rss_feeds": [
-        "https://www.nasa.gov/feeds/iotd-feed",
-        "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=rss&language=en",
-        "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=motd&feedformat=rss&language=en",
-        "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
-        "https://www.flickr.com/services/feeds/photos_public.gne?format=json&nojsoncallback=1",
-        "https://www.flickr.com/services/feeds/photos_public.gne?tags=landscape,nature&format=json&nojsoncallback=1",
-        "https://www.flickr.com/services/feeds/photos_public.gne?tags=mountains,peaks&format=json&nojsoncallback=1",
-        "https://www.flickr.com/services/feeds/photos_public.gne?tags=ocean,sea&format=json&nojsoncallback=1",
-        "https://www.flickr.com/services/feeds/photos_public.gne?tags=space,astronomy,nebula&format=json&nojsoncallback=1",
-        "https://www.flickr.com/services/feeds/photos_public.gne?tags=cityscape,urban,skyline&format=json&nojsoncallback=1",
-        "https://www.flickr.com/services/feeds/photos_public.gne?tags=night,nightscape,longexposure&format=json&nojsoncallback=1"
-      ],
+      "rss_feeds": [],
       "rss_refresh_minutes": 10,
       "rss_rotating_cache_size": 20,
       "rss_save_directory": "",
@@ -304,7 +292,7 @@
       "rss_stale_minutes": 30
     },
     "timing": {
-      "interval": 45
+      "interval": 125
     },
     "transitions": {
       "blinds": {
@@ -313,6 +301,7 @@
       },
       "block_flip": {
         "cols": 24,
+        "columns": 24,
         "direction": "Random",
         "rows": 24
       },
@@ -322,7 +311,7 @@
       "burn": {
         "ash_density": 0.8,
         "ash_enabled": true,
-        "char_width": 0.15,
+        "char_width": 0.1,
         "direction": "Random",
         "glow_color": [
           255,
@@ -331,7 +320,7 @@
           255
         ],
         "glow_intensity": 1.0,
-        "jaggedness": 0.95,
+        "jaggedness": 1.0,
         "smoke_density": 0.8,
         "smoke_enabled": true
       },
@@ -345,12 +334,12 @@
         "shape": "Membrane"
       },
       "direction": "Random",
-      "duration_ms": 8573,
+      "duration_ms": 10227,
       "durations": {
         "3D Block Spins": 9000,
         "Blinds": 4000,
         "Block Puzzle Flip": 5000,
-        "Burn": 8573,
+        "Burn": 10227,
         "Crossfade": 5000,
         "Crumble": 12000,
         "Diffuse": 5500,
@@ -366,7 +355,7 @@
         "direction": "Random",
         "gloss_size": 72.0,
         "light_direction": 3,
-        "mode": "Random",
+        "mode": "Converge",
         "overlap": 4.0,
         "particle_radius": 9.0,
         "swirl_order": 2,
@@ -392,7 +381,7 @@
         "Warp Dissolve": true,
         "Wipe": true
       },
-      "random_always": true,
+      "random_always": false,
       "random_choice": "Block Puzzle Flip",
       "ripple": {
         "ripple_count": 3
@@ -400,50 +389,60 @@
       "slide": {
         "direction": "Random"
       },
-      "type": "Ripple",
+      "type": "Burn",
       "wipe": {
-        "direction": "Diagonal TR-BL",
-        "last_direction": "Diagonal TR-BL"
+        "direction": "Diagonal TL-BR",
+        "last_direction": "Diagonal TL-BR"
       }
     },
     "ui": {
       "dialog_geometry": {
-        "height": 862,
-        "width": 1483,
-        "x": 201,
-        "y": 4
+        "height": 803,
+        "width": 1326,
+        "x": 42,
+        "y": 46
       },
-      "global_widget_defaults_expanded": false,
+      "dialog_geometry.height": 900,
+      "dialog_geometry.width": 1389,
+      "dialog_geometry.x": 113,
+      "dialog_geometry.y": 0,
       "last_tab_index": 6,
       "last_tab_scroll": {
         "accessibility": 0,
-        "display": 0,
+        "display": 487,
         "presets": 0,
         "sources": 0,
         "transitions": 0,
-        "widgets": 368
+        "widgets": 0
       },
-      "spectrum_editor_expanded": true,
+      "last_tab_scroll.accessibility": 0,
+      "last_tab_scroll.display": 0,
+      "last_tab_scroll.presets": 0,
+      "last_tab_scroll.sources": 85,
+      "last_tab_scroll.transitions": 0,
+      "last_tab_scroll.widgets": 230,
       "tab_state": {
         "widgets": {
           "view_state": {
-            "subtab": 3,
+            "subtab": 0,
             "subtab_scrolls": {
               "0": 0,
               "1": 0,
               "2": 0,
-              "3": 368,
+              "3": 0,
               "4": 0,
               "5": 0
             }
           }
         }
       },
+      "tab_state.widgets.view_state.scroll": 230,
+      "tab_state.widgets.view_state.subtab": 2,
       "visualizer_adv_states": {
         "blob": true,
         "bubble": true,
-        "oscilloscope": true,
-        "sine_wave": true,
+        "oscilloscope": false,
+        "sine_wave": false,
         "spectrum": true
       },
       "visualizer_scroll_positions": {
@@ -451,7 +450,7 @@
         "bubble": 0,
         "oscilloscope": 0,
         "sine_wave": 0,
-        "spectrum": 117
+        "spectrum": 0
       },
       "visualizer_tech_states": {
         "blob": true,
@@ -459,6 +458,114 @@
         "oscilloscope": true,
         "sine_wave": true,
         "spectrum": true
+      }
+    },
+    "visualizer_custom_presets": {
+      "bubble": {
+        "adaptive_sensitivity": true,
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_count": 48,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "bubble_adaptive_sensitivity": true,
+        "bubble_agc_strength": 0.35,
+        "bubble_audio_block_size": 128,
+        "bubble_bar_count": 48,
+        "bubble_big_bass_pulse": 0.7,
+        "bubble_big_contraction_bias": 0.8,
+        "bubble_big_count": 2,
+        "bubble_big_size_clamp": 2.2,
+        "bubble_big_size_max": 0.02,
+        "bubble_big_specular_max_size": 2.5,
+        "bubble_bubble_transient_mix_bass": 0.7,
+        "bubble_bubble_transient_mix_vocal": 0.35,
+        "bubble_drift_amount": 1.0,
+        "bubble_drift_direction": "swirl_cw",
+        "bubble_drift_frequency": 0.9,
+        "bubble_drift_speed": 0.7,
+        "bubble_dynamic_floor": true,
+        "bubble_dynamic_range_enabled": false,
+        "bubble_energy_boost": 0.85,
+        "bubble_ghost_alpha": 0.08,
+        "bubble_ghost_decay": 0.35,
+        "bubble_ghosting_enabled": false,
+        "bubble_gradient_dark": [
+          20,
+          30,
+          10,
+          255
+        ],
+        "bubble_gradient_direction": "top",
+        "bubble_gradient_light": [
+          180,
+          220,
+          60,
+          255
+        ],
+        "bubble_growth": 4.0,
+        "bubble_input_gain": 0.3,
+        "bubble_kick_lane_gain": 0.9,
+        "bubble_manual_floor": 0.07,
+        "bubble_outline_color": [
+          200,
+          240,
+          100,
+          210
+        ],
+        "bubble_pop_color": [
+          255,
+          255,
+          120,
+          255
+        ],
+        "bubble_rainbow_enabled": false,
+        "bubble_rainbow_speed": 0.12,
+        "bubble_rotation_amount": 0.5,
+        "bubble_sensitivity": 0.42,
+        "bubble_small_count": 60,
+        "bubble_small_freq_pulse": 0.7,
+        "bubble_small_size_max": 0.009,
+        "bubble_specular_color": [
+          255,
+          255,
+          200,
+          255
+        ],
+        "bubble_specular_direction": "top_left",
+        "bubble_stream_constant_speed": 0.08,
+        "bubble_stream_direction": "up",
+        "bubble_stream_reactivity": 1.0,
+        "bubble_stream_speed_cap": 1.6,
+        "bubble_surface_reach": 0.85,
+        "bubble_tail_opacity": 0.6,
+        "bubble_trail_strength": 0.5,
+        "bubble_transient_clamp": 1.4,
+        "bubble_transient_mix_bass": 0.7,
+        "bubble_transient_mix_vocal": 0.35,
+        "bubble_transient_pulse_gain": 1.1,
+        "bubble_use_raw_energy": false,
+        "dynamic_floor": true,
+        "dynamic_range_enabled": false,
+        "enabled": true,
+        "ghost_alpha": 0.25,
+        "ghost_decay": 0.15,
+        "ghosting_enabled": true,
+        "manual_floor": 0.07,
+        "mode": "bubble",
+        "rainbow_enabled": false,
+        "rainbow_speed": 0.12,
+        "sensitivity": 0.42,
+        "visualizers_enabled": true
       }
     },
     "widgets": {
@@ -498,7 +605,7 @@
         "show_numerals": true,
         "show_seconds": true,
         "show_timezone": true,
-        "timezone": "local"
+        "timezone": "UTC+2"
       },
       "clock2": {
         "enabled": false,
@@ -678,143 +785,157 @@
           255,
           230
         ],
-        "blob_adaptive_sensitivity": true,
+        "blob_adaptive_sensitivity": false,
         "blob_agc_strength": 0.5,
-        "blob_audio_block_size": 512,
+        "blob_audio_block_size": 128,
         "blob_bar_count": 32,
+        "blob_blob_transient_mix_bass": 0.3,
+        "blob_blob_transient_mix_vocal": 0.2,
         "blob_color": [
-          0,
-          105,
-          243,
+          140,
+          200,
+          255,
           230
         ],
-        "blob_constant_wobble": 0.25,
+        "blob_constant_wobble": 0.15,
         "blob_core_floor_bias": 0.6,
-        "blob_core_scale": 1.1,
+        "blob_core_scale": 1.2,
         "blob_dynamic_floor": true,
         "blob_dynamic_range_enabled": false,
         "blob_edge_color": [
-          208,
-          223,
+          200,
+          230,
           255,
-          215
+          220
         ],
         "blob_energy_boost": 0.85,
-        "blob_ghost_alpha": 0.2,
-        "blob_ghost_decay": 0.65,
+        "blob_ghost_alpha": 0.5,
+        "blob_ghost_decay": 0.7,
         "blob_ghosting_enabled": true,
         "blob_glow_color": [
-          3,
-          104,
-          255,
-          180
-        ],
-        "blob_glow_intensity": 0.45,
-        "blob_glow_max_size": 1.05,
-        "blob_glow_reactivity": 1.6,
-        "blob_growth": 5.0,
-        "blob_input_gain": 1.0,
-        "blob_manual_floor": 0.1,
-        "blob_outline_color": [
-          84,
-          150,
-          255,
-          225
-        ],
-        "blob_pulse": 1.88,
-        "blob_rainbow_enabled": true,
-        "blob_rainbow_speed": 0.34,
-        "blob_reactive_deformation": 1.25,
-        "blob_reactive_glow": true,
-        "blob_reactive_wobble": 1.03,
-        "blob_sensitivity": 0.4,
-        "blob_size": 0.5,
-        "blob_stage2_release_ms": 603,
-        "blob_stage3_release_ms": 503,
-        "blob_stage_bias": 0.25,
-        "blob_stage_gain": 0.25,
-        "blob_stretch_inner": 0.0,
-        "blob_stretch_outer": 1.0,
-        "blob_stretch_tendency": 0.2,
-        "blob_use_raw_energy": false,
-        "blob_width": 1.0,
-        "bubble_adaptive_sensitivity": true,
-        "bubble_agc_strength": 0.25,
-        "bubble_audio_block_size": 128,
-        "bubble_bar_count": 48,
-        "bubble_big_bass_pulse": 1.54,
-        "bubble_big_contraction_bias": 0.6,
-        "bubble_big_count": 10,
-        "bubble_big_size_clamp": 2.82,
-        "bubble_big_size_max": 0.032,
-        "bubble_big_specular_max_size": 1.5,
-        "bubble_drift_amount": 0.6,
-        "bubble_drift_direction": "swirl_ccw",
-        "bubble_drift_frequency": 0.7,
-        "bubble_drift_speed": 0.55,
-        "bubble_dynamic_floor": true,
-        "bubble_dynamic_range_enabled": false,
-        "bubble_energy_boost": 1.05,
-        "bubble_ghost_alpha": 0.2,
-        "bubble_ghost_decay": 0.45,
-        "bubble_ghosting_enabled": true,
-        "bubble_gradient_dark": [
-          7,
-          42,
-          53,
-          255
-        ],
-        "bubble_gradient_direction": "center_out",
-        "bubble_gradient_light": [
-          0,
-          179,
-          255,
-          255
-        ],
-        "bubble_growth": 5.0,
-        "bubble_input_gain": 0.8,
-        "bubble_manual_floor": 0.06,
-        "bubble_outline_color": [
-          255,
-          255,
-          255,
-          230
-        ],
-        "bubble_pop_color": [
-          255,
-          255,
+          160,
+          210,
           255,
           200
         ],
-        "bubble_rainbow_enabled": true,
-        "bubble_rainbow_speed": 0.17,
-        "bubble_rotation_amount": 0.3,
-        "bubble_sensitivity": 0.44,
-        "bubble_small_count": 40,
-        "bubble_small_freq_pulse": 0.7,
-        "bubble_small_size_max": 0.011,
+        "blob_glow_intensity": 0.55,
+        "blob_glow_max_size": 0.9,
+        "blob_glow_reactivity": 1.0,
+        "blob_growth": 5.0,
+        "blob_input_gain": 0.9,
+        "blob_kick_lane_gain": 0.8,
+        "blob_manual_floor": 0.15,
+        "blob_outline_color": [
+          180,
+          220,
+          255,
+          230
+        ],
+        "blob_pulse": 1.4,
+        "blob_rainbow_enabled": false,
+        "blob_rainbow_speed": 0.1,
+        "blob_reactive_deformation": 0.8,
+        "blob_reactive_glow": true,
+        "blob_reactive_wobble": 0.6,
+        "blob_sensitivity": 0.5,
+        "blob_size": 0.6,
+        "blob_stage2_release_ms": 800,
+        "blob_stage3_release_ms": 700,
+        "blob_stage_bias": 0.1,
+        "blob_stage_gain": 0.2,
+        "blob_stretch_inner": 0.1,
+        "blob_stretch_outer": 0.4,
+        "blob_stretch_tendency": 0.15,
+        "blob_transient_clamp": 1.2,
+        "blob_transient_mix_bass": 0.3,
+        "blob_transient_mix_vocal": 0.2,
+        "blob_transient_pulse_gain": 0.7,
+        "blob_use_raw_energy": false,
+        "blob_width": 1.0,
+        "bubble_adaptive_sensitivity": true,
+        "bubble_agc_strength": 0.4,
+        "bubble_audio_block_size": 128,
+        "bubble_bar_count": 48,
+        "bubble_big_bass_pulse": 0.6,
+        "bubble_big_contraction_bias": 0.7,
+        "bubble_big_count": 3,
+        "bubble_big_size_clamp": 2.5,
+        "bubble_big_size_max": 0.025,
+        "bubble_big_specular_max_size": 2.0,
+        "bubble_bubble_transient_mix_bass": 0.85,
+        "bubble_bubble_transient_mix_vocal": 0.3,
+        "bubble_drift_amount": 0.9,
+        "bubble_drift_direction": "random",
+        "bubble_drift_frequency": 0.8,
+        "bubble_drift_speed": 0.6,
+        "bubble_dynamic_floor": true,
+        "bubble_dynamic_range_enabled": false,
+        "bubble_energy_boost": 0.85,
+        "bubble_ghost_alpha": 0.05,
+        "bubble_ghost_decay": 0.4,
+        "bubble_ghosting_enabled": false,
+        "bubble_gradient_dark": [
+          180,
+          160,
+          80,
+          255
+        ],
+        "bubble_gradient_direction": "bottom",
+        "bubble_gradient_light": [
+          255,
+          240,
+          180,
+          255
+        ],
+        "bubble_growth": 4.5,
+        "bubble_input_gain": 0.25,
+        "bubble_kick_lane_gain": 1.0,
+        "bubble_manual_floor": 0.08,
+        "bubble_outline_color": [
+          255,
+          240,
+          200,
+          200
+        ],
+        "bubble_pop_color": [
+          255,
+          220,
+          140,
+          255
+        ],
+        "bubble_rainbow_enabled": false,
+        "bubble_rainbow_speed": 0.1,
+        "bubble_rotation_amount": 0.4,
+        "bubble_sensitivity": 0.45,
+        "bubble_small_count": 55,
+        "bubble_small_freq_pulse": 0.5,
+        "bubble_small_size_max": 0.01,
         "bubble_specular_color": [
           255,
           255,
-          255,
+          230,
           255
         ],
-        "bubble_specular_direction": "top_left",
-        "bubble_stream_constant_speed": 0.6,
+        "bubble_specular_direction": "top_right",
+        "bubble_stream_constant_speed": 0.25,
         "bubble_stream_direction": "up",
         "bubble_stream_reactivity": 1.25,
-        "bubble_stream_speed_cap": 3.0,
-        "bubble_surface_reach": 0.8,
+        "bubble_stream_speed_cap": 2.5,
+        "bubble_surface_reach": 0.9,
         "bubble_tail_opacity": 0.5,
-        "bubble_trail_strength": 0.73,
+        "bubble_trail_strength": 0.4,
+        "bubble_transient_clamp": 1.5,
+        "bubble_transient_mix_bass": 0.85,
+        "bubble_transient_mix_vocal": 0.3,
+        "bubble_transient_pulse_gain": 1.2,
         "bubble_use_raw_energy": false,
         "dynamic_floor": true,
         "dynamic_range_enabled": false,
         "enabled": true,
-        "ghost_alpha": 0.56,
-        "ghost_decay": 0.22,
+        "ghost_alpha": 0.25,
+        "ghost_decay": 0.15,
         "ghosting_enabled": true,
-        "manual_floor": 0.06,
+        "manual_floor": 0.08,
         "mode": "bubble",
         "osc_ghost_intensity": 0.55,
         "osc_ghosting_enabled": true,
@@ -867,26 +988,31 @@
         "osc_speed": 0.25,
         "osc_vertical_shift": 20,
         "oscilloscope_adaptive_sensitivity": true,
-        "oscilloscope_agc_strength": 0.5,
-        "oscilloscope_audio_block_size": 256,
+        "oscilloscope_agc_strength": 0.4,
+        "oscilloscope_audio_block_size": 512,
         "oscilloscope_bar_count": 32,
         "oscilloscope_dynamic_floor": true,
         "oscilloscope_dynamic_range_enabled": false,
         "oscilloscope_energy_boost": 0.85,
         "oscilloscope_input_gain": 0.7,
-        "oscilloscope_manual_floor": 0.1,
+        "oscilloscope_kick_lane_gain": 1.0,
+        "oscilloscope_manual_floor": 0.12,
+        "oscilloscope_oscilloscope_transient_width_mix": 0.35,
         "oscilloscope_rainbow_enabled": false,
         "oscilloscope_rainbow_speed": 0.15,
         "oscilloscope_sensitivity": 0.4,
+        "oscilloscope_transient_clamp": 1.5,
+        "oscilloscope_transient_pulse_gain": 1.0,
+        "oscilloscope_transient_width_mix": 0.35,
         "oscilloscope_use_raw_energy": false,
-        "preset_blob": 1,
-        "preset_bubble": 4,
+        "preset_blob": 5,
+        "preset_bubble": 5,
         "preset_oscilloscope": 1,
-        "preset_sine_wave": 1,
-        "preset_spectrum": 1,
-        "rainbow_enabled": true,
-        "rainbow_speed": 0.17,
-        "sensitivity": 0.44,
+        "preset_sine_wave": 9,
+        "preset_spectrum": 7,
+        "rainbow_enabled": false,
+        "rainbow_speed": 0.1,
+        "sensitivity": 0.45,
         "sine_card_adaptation": 0.28,
         "sine_crawl_amount": 0.0,
         "sine_density": 1.78,
@@ -901,8 +1027,8 @@
           240
         ],
         "sine_glow_enabled": true,
-        "sine_glow_intensity": 0.5,
-        "sine_glow_reactivity": 1.8,
+        "sine_glow_intensity": 0.4,
+        "sine_glow_reactivity": 1.6,
         "sine_heartbeat": 0.0,
         "sine_line1_shift": 0.0,
         "sine_line2_color": [
@@ -917,7 +1043,7 @@
           255,
           180
         ],
-        "sine_line2_shift": 0.45,
+        "sine_line2_shift": 0.35,
         "sine_line3_color": [
           255,
           255,
@@ -930,7 +1056,7 @@
           227,
           180
         ],
-        "sine_line3_shift": -0.45,
+        "sine_line3_shift": -0.35,
         "sine_line_color": [
           255,
           255,
@@ -939,13 +1065,13 @@
         ],
         "sine_line_count": 3,
         "sine_line_dim": false,
-        "sine_line_offset_bias": 0.15,
+        "sine_line_offset_bias": 0.0,
         "sine_micro_wobble": 0.72,
         "sine_reactive_glow": true,
         "sine_sensitivity": 0.45,
-        "sine_speed": 0.3,
-        "sine_travel_line2": 2,
-        "sine_travel_line3": 1,
+        "sine_speed": 0.15,
+        "sine_travel_line2": 0,
+        "sine_travel_line3": 0,
         "sine_vertical_shift": 35,
         "sine_wave_adaptive_sensitivity": false,
         "sine_wave_agc_strength": 0.6,
@@ -957,31 +1083,38 @@
         "sine_wave_energy_boost": 0.85,
         "sine_wave_growth": 5.0,
         "sine_wave_input_gain": 0.9,
-        "sine_wave_manual_floor": 0.1,
-        "sine_wave_rainbow_enabled": false,
+        "sine_wave_kick_lane_gain": 1.0,
+        "sine_wave_manual_floor": 0.12,
+        "sine_wave_rainbow_enabled": true,
         "sine_wave_rainbow_speed": 0.25,
         "sine_wave_sensitivity": 0.32,
+        "sine_wave_sine_wave_transient_width_mix": 0.4,
+        "sine_wave_transient_clamp": 1.5,
+        "sine_wave_transient_pulse_gain": 1.0,
+        "sine_wave_transient_width_mix": 0.4,
         "sine_wave_travel": 0,
         "sine_wave_use_raw_energy": false,
         "sine_width_reaction": 0.0,
         "software_visualizer_enabled": false,
-        "spectrum_adaptive_sensitivity": false,
-        "spectrum_agc_strength": 0.3,
+        "spectrum_adaptive_sensitivity": true,
+        "spectrum_agc_strength": 0.35,
         "spectrum_audio_block_size": 128,
-        "spectrum_bar_count": 33,
-        "spectrum_bass_emphasis": 0.05,
-        "spectrum_border_radius": 2.0,
-        "spectrum_drop_speed": 2.8,
+        "spectrum_bar_count": 20,
+        "spectrum_bass_emphasis": 0.9,
+        "spectrum_border_radius": 0.0,
+        "spectrum_drop_speed": 3.0,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": false,
-        "spectrum_energy_boost": 1.8,
-        "spectrum_ghost_alpha": 0.56,
-        "spectrum_ghost_decay": 0.22,
+        "spectrum_energy_boost": 1.6,
+        "spectrum_ghost_alpha": 0.25,
+        "spectrum_ghost_decay": 0.15,
         "spectrum_ghosting_enabled": true,
         "spectrum_growth": 5.0,
-        "spectrum_input_gain": 0.8,
-        "spectrum_manual_floor": 0.3,
-        "spectrum_mid_suppression": 0.9,
+        "spectrum_input_gain": 1.3,
+        "spectrum_kick_lane_gain": 2.0,
+        "spectrum_lane_transient_mix": 1.0,
+        "spectrum_manual_floor": 0.08,
+        "spectrum_mid_suppression": 0.8,
         "spectrum_mirrored": true,
         "spectrum_notch_positions_linear": [
           [
@@ -1007,49 +1140,52 @@
         ],
         "spectrum_notch_positions_mirrored": [
           [
-            0.07340373108060558,
+            0.040478704681450595,
             "Vocal"
           ],
           [
-            0.2840549102428722,
+            0.12582189369940178,
             "Mid"
           ],
           [
-            0.5797254487856388,
+            0.6143822597676873,
             "Low-Mid"
           ],
           [
-            0.8204857444561774,
+            1.0,
             "Bass"
           ]
         ],
-        "spectrum_profile_floor": 0.2,
-        "spectrum_rainbow_enabled": true,
-        "spectrum_rainbow_per_bar": true,
-        "spectrum_rainbow_speed": 0.6,
-        "spectrum_sensitivity": 0.5,
+        "spectrum_profile_floor": 0.08,
+        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_per_bar": false,
+        "spectrum_rainbow_speed": 0.3,
+        "spectrum_sensitivity": 0.7,
         "spectrum_shape_nodes": [
           [
-            0.0024639211545234552,
-            0.5524691358024698
+            0.0,
+            0.95
           ],
           [
-            0.43611404435058077,
-            0.2654320987654323
+            0.3,
+            0.4
           ],
           [
-            0.7317845828933475,
-            0.9506172839506175
+            0.7,
+            0.3
           ],
           [
-            0.9930025445292622,
-            0.1882716049382717
+            1.0,
+            0.2
           ]
         ],
-        "spectrum_single_piece": false,
+        "spectrum_single_piece": true,
+        "spectrum_spectrum_lane_transient_mix": 1.0,
+        "spectrum_transient_clamp": 2.5,
+        "spectrum_transient_pulse_gain": 2.0,
         "spectrum_use_raw_energy": false,
-        "spectrum_vocal_position": 0.4,
-        "spectrum_wave_amplitude": 0.15,
+        "spectrum_vocal_position": 0.3,
+        "spectrum_wave_amplitude": 0.45,
         "visualizers_enabled": true
       },
       "weather": {

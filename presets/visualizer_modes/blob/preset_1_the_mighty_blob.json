@@ -53,7 +53,7 @@
         "blob_glow_max_size": 0.85,
         "blob_glow_reactivity": 1.6,
         "blob_growth": 5.0,
-        "blob_input_gain": 1.0,
+        "blob_input_gain": 0.7,
         "blob_kick_lane_gain": 1.0,
         "blob_manual_floor": 0.1,
         "blob_outline_color": [

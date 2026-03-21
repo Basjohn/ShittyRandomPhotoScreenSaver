@@ -36,7 +36,7 @@
         "spectrum_ghost_decay": 0.3,
         "spectrum_ghosting_enabled": true,
         "spectrum_growth": 5.5,
-        "spectrum_input_gain": 1.0,
+        "spectrum_input_gain": 0.6,
         "spectrum_kick_lane_gain": 1.2,
         "spectrum_lane_transient_mix": 0.7,
         "spectrum_manual_floor": 0.1,

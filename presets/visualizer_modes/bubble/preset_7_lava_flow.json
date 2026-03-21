@@ -85,7 +85,7 @@
         "bubble_stream_direction": "down",
         "bubble_stream_reactivity": 1.5,
         "bubble_stream_speed_cap": 1.5,
-        "bubble_surface_reach": 0.7,
+        "bubble_surface_reach": 0.9,
         "bubble_tail_opacity": 0.9,
         "bubble_trail_strength": 0.9,
         "bubble_transient_clamp": 2.0,
