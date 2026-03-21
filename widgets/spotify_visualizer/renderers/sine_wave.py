@@ -55,7 +55,10 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1i(gl, u, "u_sine_vertical_shift", int(s._sine_vertical_shift))
     _set1f(gl, u, "u_heartbeat", s._sine_heartbeat)
     _set1f(gl, u, "u_heartbeat_intensity", s._heartbeat_intensity)
-    _set1f(gl, u, "u_width_reaction", s._sine_width_reaction)
+    _base_wr = s._sine_width_reaction
+    _tw_mix = getattr(s, '_sine_wave_transient_width_mix', 0.4)
+    _wr_mod = min(1.0, _base_wr * (1.0 + getattr(s, '_osc_smoothed_bass', 0.0) * _tw_mix))
+    _set1f(gl, u, "u_width_reaction", _wr_mod)
     _set1f(gl, u, "u_sine_density", s._sine_density)
     _set1f(gl, u, "u_sine_displacement", s._sine_displacement)
     _set1f(gl, u, "u_sine_line1_shift", s._sine_line1_shift)

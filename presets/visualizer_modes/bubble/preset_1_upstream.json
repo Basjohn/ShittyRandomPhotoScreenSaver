@@ -89,6 +89,8 @@
         "bubble_tail_opacity": 0.7,
         "bubble_trail_strength": 0.7,
         "bubble_transient_clamp": 1.5,
+        "bubble_transient_mix_bass": 0.75,
+        "bubble_transient_mix_vocal": 0.25,
         "bubble_transient_pulse_gain": 1.0,
         "bubble_use_raw_energy": false,
         "ghost_alpha": 0.45,

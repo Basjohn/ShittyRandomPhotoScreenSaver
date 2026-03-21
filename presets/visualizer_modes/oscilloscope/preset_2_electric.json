@@ -91,6 +91,7 @@
         "oscilloscope_sensitivity": 0.4,
         "oscilloscope_transient_clamp": 1.5,
         "oscilloscope_transient_pulse_gain": 1.0,
+        "oscilloscope_transient_width_mix": 0.35,
         "oscilloscope_use_raw_energy": false
       }
     }

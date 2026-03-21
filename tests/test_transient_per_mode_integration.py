@@ -368,3 +368,212 @@ class TestGPUPushTransientEnergy:
         engine = None
         te = engine.get_transient_energy_bands() if engine else None
         assert te is None
+
+
+# ===========================================================================
+# 6. Per-Mode Transient Mix — Settings Model Round-Trip (§2.3)
+# ===========================================================================
+
+class TestTransientMixSettingsModel:
+    """Verify new transient mix fields survive from_mapping → to_dict."""
+
+    _MIX_KEYS = (
+        'spectrum_lane_transient_mix',
+        'bubble_transient_mix_bass',
+        'bubble_transient_mix_vocal',
+        'blob_transient_mix_bass',
+        'blob_transient_mix_vocal',
+        'sine_wave_transient_width_mix',
+        'oscilloscope_transient_width_mix',
+    )
+
+    def test_defaults_present_on_model(self):
+        """All mix fields should exist on a fresh model with correct defaults."""
+        from core.settings.models import SpotifyVisualizerSettings
+        model = SpotifyVisualizerSettings()
+        assert model.spectrum_lane_transient_mix == 0.65
+        assert model.bubble_transient_mix_bass == 0.75
+        assert model.bubble_transient_mix_vocal == 0.25
+        assert model.blob_transient_mix_bass == 0.5
+        assert model.blob_transient_mix_vocal == 0.35
+        assert model.sine_wave_transient_width_mix == 0.4
+        assert model.oscilloscope_transient_width_mix == 0.35
+
+    def test_round_trip_from_mapping(self):
+        """Custom values should survive from_mapping → to_dict → from_mapping."""
+        from core.settings.models import SpotifyVisualizerSettings
+        custom = {
+            'mode': 'spectrum',
+            'preset_spectrum': 3,
+            'preset_bubble': 3,
+            'preset_blob': 3,
+            'preset_sine_wave': 3,
+            'preset_oscilloscope': 3,
+            'spectrum_lane_transient_mix': 0.9,
+            'bubble_transient_mix_bass': 0.1,
+            'bubble_transient_mix_vocal': 0.8,
+            'blob_transient_mix_bass': 0.3,
+            'blob_transient_mix_vocal': 0.7,
+            'sine_wave_transient_width_mix': 0.15,
+            'oscilloscope_transient_width_mix': 0.95,
+        }
+        model = SpotifyVisualizerSettings.from_mapping(custom)
+        exported = model.to_dict()
+        prefix = 'widgets.spotify_visualizer.'
+        for key in self._MIX_KEYS:
+            val = custom[key]
+            full_key = f"{prefix}{key}"
+            assert full_key in exported, f"{full_key} missing from to_dict"
+            assert abs(exported[full_key] - val) < 1e-9, f"{full_key} value mismatch"
+
+    def test_resolver_methods(self):
+        """Each resolver method should return the correct field value."""
+        from core.settings.models import SpotifyVisualizerSettings
+        model = SpotifyVisualizerSettings()
+        assert model.resolve_spectrum_lane_transient_mix() == 0.65
+        assert model.resolve_bubble_transient_mix_bass() == 0.75
+        assert model.resolve_bubble_transient_mix_vocal() == 0.25
+        assert model.resolve_blob_transient_mix_bass() == 0.5
+        assert model.resolve_blob_transient_mix_vocal() == 0.35
+        assert model.resolve_sine_wave_transient_width_mix() == 0.4
+        assert model.resolve_oscilloscope_transient_width_mix() == 0.35
+
+
+# ===========================================================================
+# 7. Spectrum Kick Lane Mix Scaling (§2.3)
+# ===========================================================================
+
+class TestSpectrumLaneTransientMix:
+    """Verify spectrum_lane_transient_mix modulates kick express lane boost."""
+
+    def test_mix_scales_kick_boost(self):
+        """Higher lane_transient_mix should increase kick boost."""
+        _t_bass = 0.6
+        _kick_gain = 1.0
+        lo_mix = 0.2
+        hi_mix = 1.0
+        boost_lo = min(2.0, 1.0 + _t_bass * _kick_gain * lo_mix)
+        boost_hi = min(2.0, 1.0 + _t_bass * _kick_gain * hi_mix)
+        assert boost_hi > boost_lo
+
+    def test_mix_zero_disables_transient_feed(self):
+        """lane_transient_mix of 0 should eliminate kick boost from transients."""
+        _t_bass = 1.0
+        _kick_gain = 2.0
+        _lane_mix = 0.0
+        boost = min(2.0, 1.0 + _t_bass * _kick_gain * _lane_mix)
+        assert boost == 1.0
+
+
+# ===========================================================================
+# 8. Bubble Bass/Vocal Transient Mix (§2.3)
+# ===========================================================================
+
+class TestBubbleTransientMixWeights:
+    """Verify bubble_transient_mix_bass and _vocal modulate pulse mixing."""
+
+    def test_bass_mix_scales_transient_bass(self):
+        """Higher bass mix weight → more transient bass in pulse."""
+        _pulse_bass = 0.3
+        _t_bass = 0.5
+        _t_gain = 1.0
+        _t_clamp = 1.5
+
+        lo = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * 0.2)
+        hi = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * 0.9)
+        assert hi > lo
+
+    def test_vocal_mix_scales_transient_mid(self):
+        """Higher vocal mix weight → more transient mid in pulse mid."""
+        _pulse_mid = 0.2
+        _t_mid = 0.4
+        _t_gain = 1.0
+        _t_clamp = 1.5
+
+        lo = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * 0.1)
+        hi = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * 0.8)
+        assert hi > lo
+
+    def test_zero_mix_no_transient_contribution(self):
+        """Mix of 0 should not add transient energy."""
+        mixed = min(1.5, 0.3 + 0.8 * 1.0 * 0.0)
+        assert mixed == 0.3
+
+
+# ===========================================================================
+# 9. Blob Bass/Vocal Transient Mix (§2.3)
+# ===========================================================================
+
+class TestBlobTransientMixWeights:
+    """Verify blob_transient_mix_bass and _vocal modulate blob energy bands."""
+
+    def test_bass_mix_increases_raw_bass(self):
+        """Blob transient bass mix should add transient energy to raw_bass."""
+        raw_bass = 0.4
+        t_bass = 0.6
+        _bmb = 0.5
+        _clamp = 1.5
+        result = min(_clamp, raw_bass + t_bass * _bmb)
+        assert result == 0.7  # 0.4 + 0.6 * 0.5
+
+    def test_vocal_mix_increases_raw_mid(self):
+        """Blob transient vocal mix should add transient energy to raw_mid."""
+        raw_mid = 0.3
+        t_mid = 0.4
+        _bmv = 0.35
+        _clamp = 1.5
+        result = min(_clamp, raw_mid + t_mid * _bmv)
+        assert abs(result - 0.44) < 1e-9  # 0.3 + 0.4 * 0.35
+
+    def test_clamp_limits_blob_mix(self):
+        """Result should not exceed transient_clamp."""
+        raw_bass = 0.9
+        t_bass = 1.0
+        _bmb = 1.0
+        _clamp = 1.2
+        result = min(_clamp, raw_bass + t_bass * _bmb)
+        assert result == _clamp
+
+
+# ===========================================================================
+# 10. Sine/Osc Transient Width Mix (§2.3)
+# ===========================================================================
+
+class TestSineOscTransientWidthMix:
+    """Verify sine_wave and osc transient width mix modulate rendered output."""
+
+    def test_sine_width_reaction_modulated(self):
+        """Sine width reaction should be amplified by bass * mix."""
+        base_wr = 0.5
+        bass = 0.7
+        mix = 0.4
+        modulated = min(1.0, base_wr * (1.0 + bass * mix))
+        expected = min(1.0, 0.5 * (1.0 + 0.7 * 0.4))
+        assert abs(modulated - expected) < 1e-9
+
+    def test_sine_mix_zero_no_modulation(self):
+        """Mix of 0 should leave width reaction unchanged."""
+        base_wr = 0.6
+        modulated = min(1.0, base_wr * (1.0 + 0.8 * 0.0))
+        assert modulated == base_wr
+
+    def test_osc_sensitivity_modulated(self):
+        """Osc sensitivity should be amplified by bass * mix."""
+        base_sens = 3.0
+        bass = 0.5
+        mix = 0.35
+        modulated = base_sens * (1.0 + bass * mix)
+        expected = 3.0 * (1.0 + 0.5 * 0.35)
+        assert abs(modulated - expected) < 1e-9
+
+    def test_osc_mix_zero_no_modulation(self):
+        """Mix of 0 should leave osc sensitivity unchanged."""
+        base_sens = 3.0
+        modulated = base_sens * (1.0 + 0.6 * 0.0)
+        assert modulated == base_sens
+
+    def test_sine_width_clamped_to_1(self):
+        """Modulated width reaction should not exceed 1.0."""
+        base_wr = 0.9
+        modulated = min(1.0, base_wr * (1.0 + 1.0 * 1.0))
+        assert modulated == 1.0

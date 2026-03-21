@@ -110,6 +110,7 @@
         "sine_wave_sensitivity": 0.4,
         "sine_wave_transient_clamp": 1.5,
         "sine_wave_transient_pulse_gain": 1.0,
+        "sine_wave_transient_width_mix": 0.4,
         "sine_wave_travel": 2,
         "sine_wave_use_raw_energy": false,
         "sine_width_reaction": 0.33

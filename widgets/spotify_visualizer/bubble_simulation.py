@@ -230,11 +230,25 @@ class BubbleSimulation:
                     stream_const, stream_cap, stream_reactivity,
                 )
 
-        # --- Beat detection ---
-        # Single-beat trigger used for direct promotions and fast reactions.
-        bass_delta = max(0.0, bass - self._bass_running_avg)
-        beat_threshold = 0.05
-        beat_detected = bass_delta > beat_threshold and bass > self._prev_bass + 0.025
+        # --- Beat detection (§2.4 scheduler-first, delta fallback) ---
+        # Event micro-scheduler provides consume-once kick events so each
+        # detected beat drives exactly one promotion batch.  Falls back to
+        # the legacy delta heuristic only when no scheduler is available
+        # (engine not yet started / startup race).
+        _scheduler = settings.get("_event_scheduler")
+        beat_detected = False
+        beat_strength = 0.0
+        if _scheduler is not None:
+            _kick_evt = _scheduler.consume_next("kick", max_age_s=0.3)
+            if _kick_evt is not None:
+                beat_detected = True
+                beat_strength = _kick_evt.strength
+        else:
+            # Legacy fallback: simple delta threshold
+            bass_delta = max(0.0, bass - self._bass_running_avg)
+            beat_threshold = 0.05
+            beat_detected = bass_delta > beat_threshold and bass > self._prev_bass + 0.025
+            beat_strength = min(1.0, bass_delta * 5.0) if beat_detected else 0.0
         self._prev_bass = bass
 
         # Update running averages for delta-based pulse detection.
@@ -253,7 +267,14 @@ class BubbleSimulation:
         # --- Small→big promotion on every beat ---
         if beat_detected:
             small_pool = [b for b in self._bubbles if not b.is_big and not b.promoted and not b.popping and not b.exiting]
-            promote_count = min(4, max(1, int(len(small_pool) * 0.20)))
+            # Scale promotion count by onset strength (scheduler) or fixed 20%
+            if beat_strength > 0.6:
+                promote_frac = 0.30  # strong kick → promote more
+            elif beat_strength > 0.3:
+                promote_frac = 0.20
+            else:
+                promote_frac = 0.15
+            promote_count = min(4, max(1, int(len(small_pool) * promote_frac)))
             if promote_count > 0:
                 small_pool.sort(key=lambda bb: bb.radius, reverse=True)
                 for bb in small_pool[:promote_count]:

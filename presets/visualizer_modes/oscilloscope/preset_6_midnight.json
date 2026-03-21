@@ -1,8 +1,7 @@
 {
-  "description": "Curated oscilloscope preset derived from MC snapshot.",
   "mode": "oscilloscope",
-  "name": "Preset 1 (Classic)",
-  "preset_index": 0,
+  "name": "Preset 6 (Midnight)",
+  "preset_index": 5,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -19,69 +18,63 @@
           255,
           230
         ],
-        "ghost_alpha": 0.4,
-        "ghost_decay": 0.35,
+        "ghost_alpha": 0.6,
+        "ghost_decay": 0.4,
         "ghosting_enabled": true,
         "mode": "oscilloscope",
-        "osc_adaptive_sensitivity": true,
-        "osc_bar_count": 32,
-        "osc_dynamic_floor": true,
-        "osc_dynamic_range_enabled": false,
-        "osc_ghost_intensity": 0.4,
+        "osc_ghost_intensity": 0.45,
         "osc_ghosting_enabled": true,
         "osc_glow_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "osc_glow_enabled": true,
-        "osc_glow_intensity": 0.6,
-        "osc_glow_reactivity": 1.0,
-        "osc_glow_size": 1.0,
-        "osc_growth": 3.01,
-        "osc_line2_color": [
-          21,
-          21,
-          21,
-          255
-        ],
-        "osc_line2_glow_color": [
-          255,
-          255,
-          255,
-          230
-        ],
-        "osc_line3_color": [
-          21,
-          21,
-          21,
-          250
-        ],
-        "osc_line3_glow_color": [
-          255,
-          255,
-          255,
+          100,
+          80,
+          200,
           240
         ],
-        "osc_line_amplitude": 4.7,
-        "osc_line_color": [
-          0,
-          0,
-          0,
-          255
+        "osc_glow_enabled": true,
+        "osc_glow_intensity": 0.65,
+        "osc_glow_reactivity": 1.2,
+        "osc_glow_size": 1.1,
+        "osc_growth": 3.0,
+        "osc_line2_color": [
+          80,
+          60,
+          180,
+          160
         ],
-        "osc_line_count": 1,
+        "osc_line2_glow_color": [
+          120,
+          100,
+          220,
+          180
+        ],
+        "osc_line3_color": [
+          60,
+          40,
+          150,
+          130
+        ],
+        "osc_line3_glow_color": [
+          100,
+          80,
+          200,
+          160
+        ],
+        "osc_line_amplitude": 4.0,
+        "osc_line_color": [
+          130,
+          100,
+          230,
+          245
+        ],
+        "osc_line_count": 2,
         "osc_line_dim": false,
-        "osc_line_offset_bias": 0.0,
-        "osc_manual_floor": 0.12,
-        "osc_rainbow_enabled": false,
-        "osc_rainbow_speed": 0.3,
+        "osc_line_offset_bias": 0.1,
+        "osc_rainbow_enabled": true,
+        "osc_rainbow_speed": 0.08,
         "osc_reactive_glow": true,
-        "osc_sensitivity": 0.4,
-        "osc_smoothing": 0.6,
-        "osc_speed": 0.33,
-        "osc_vertical_shift": 25,
+        "osc_smoothing": 0.65,
+        "osc_speed": 0.2,
+        "osc_vertical_shift": 35,
         "oscilloscope_adaptive_sensitivity": true,
         "oscilloscope_agc_strength": 0.5,
         "oscilloscope_audio_block_size": 512,
@@ -89,9 +82,13 @@
         "oscilloscope_dynamic_floor": true,
         "oscilloscope_dynamic_range_enabled": false,
         "oscilloscope_energy_boost": 0.85,
-        "oscilloscope_input_gain": 1.0,
+        "oscilloscope_input_gain": 0.9,
+        "oscilloscope_kick_lane_gain": 1.0,
         "oscilloscope_manual_floor": 0.12,
         "oscilloscope_sensitivity": 0.4,
+        "oscilloscope_transient_clamp": 1.5,
+        "oscilloscope_transient_pulse_gain": 1.0,
+        "oscilloscope_transient_width_mix": 0.4,
         "oscilloscope_use_raw_energy": false
       }
     }

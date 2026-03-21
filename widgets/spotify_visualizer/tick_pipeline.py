@@ -145,6 +145,8 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     eb_smooth = widget._engine.get_energy_bands() if widget._engine else None
     # Transient bus snapshot for immediate beat response (Approach A §6)
     tb = widget._engine.get_transient_energy_bands() if widget._engine else None
+    # Event micro-scheduler (§2.4) — passed to bubble sim for consume-once kicks
+    _event_scheduler = widget._engine.get_event_scheduler() if widget._engine else None
     prev_ts = widget._bubble_last_tick_ts
     widget._bubble_last_tick_ts = now_ts
     dt_bubble = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
@@ -153,12 +155,17 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     # Mix transient bass into pulse bass for immediate kick response
     _pulse_bass = getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0
     _t_bass = getattr(tb, 'bass_transient', 0.0) if tb else 0.0
+    _t_mid = getattr(tb, 'mid_transient', 0.0) if tb else 0.0
     _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
     _t_clamp = getattr(widget, '_transient_clamp', 1.5)
-    _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain)
+    _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
+    _bmix_vocal = getattr(widget, '_bubble_transient_mix_vocal', 0.25)
+    _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
+    _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
+    _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
     eb_snap = {
         'bass': _mixed_bass,
-        'mid': getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0,
+        'mid': _mixed_mid,
         'high': getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0,
         'overall': getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,
         'smooth_mid': getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
@@ -180,6 +187,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         "bubble_big_size_max": widget._bubble_big_size_max,
         "bubble_small_size_max": widget._bubble_small_size_max,
         "bubble_trail_strength": widget._bubble_trail_strength,
+        "_event_scheduler": _event_scheduler,
     }
     pulse_params = {
         'bass': eb_snap['bass'],

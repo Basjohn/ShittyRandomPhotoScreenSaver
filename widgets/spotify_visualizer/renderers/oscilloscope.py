@@ -48,6 +48,12 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     # Shared line/glow uniforms
     _upload_shared_line_glow(gl, u, s)
 
+    # Oscilloscope transient width mix: modulate sensitivity by bass transient
+    _otw_mix = getattr(s, '_osc_transient_width_mix', 0.35)
+    if _otw_mix > 0.001:
+        _osc_sens_mod = s._osc_line_amplitude * (1.0 + getattr(s, '_osc_smoothed_bass', 0.0) * _otw_mix)
+        _set1f(gl, u, "u_sensitivity", _osc_sens_mod)
+
     # Energy bands (CPU-smoothed for anti-flicker)
     eb = s._energy_bands
     _set1f(gl, u, "u_overall_energy", eb.overall)

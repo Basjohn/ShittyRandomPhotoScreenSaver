@@ -78,6 +78,8 @@
         "blob_stretch_outer": 0.8,
         "blob_stretch_tendency": 0.22,
         "blob_transient_clamp": 1.5,
+        "blob_transient_mix_bass": 0.5,
+        "blob_transient_mix_vocal": 0.35,
         "blob_transient_pulse_gain": 1.0,
         "blob_use_raw_energy": false,
         "blob_width": 1.0,

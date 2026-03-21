@@ -58,6 +58,14 @@ _MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
     "transient_clamp",
 )
 
+_MANDATORY_MODE_TRANSIENT_MIX: Dict[str, Tuple[str, ...]] = {
+    "spectrum": ("spectrum_lane_transient_mix",),
+    "bubble": ("bubble_transient_mix_bass", "bubble_transient_mix_vocal"),
+    "blob": ("blob_transient_mix_bass", "blob_transient_mix_vocal"),
+    "sine_wave": ("sine_wave_transient_width_mix",),
+    "oscilloscope": ("oscilloscope_transient_width_mix",),
+}
+
 _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
     "oscilloscope": (
         "glow_enabled",
@@ -191,6 +199,9 @@ def _ensure_mandatory_per_mode_defaults(
         key = f"{prefix}{suffix}"
         if key not in sanitized and key in defaults:
             sanitized[key] = defaults[key]
+    for full_key in _MANDATORY_MODE_TRANSIENT_MIX.get(mode, ()):
+        if full_key not in sanitized and full_key in defaults:
+            sanitized[full_key] = defaults[full_key]
 
 
 def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> None:

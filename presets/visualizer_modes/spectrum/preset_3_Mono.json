@@ -38,6 +38,7 @@
         "spectrum_growth": 5.0,
         "spectrum_input_gain": 0.75,
         "spectrum_kick_lane_gain": 1.0,
+        "spectrum_lane_transient_mix": 0.65,
         "spectrum_manual_floor": 0.3,
         "spectrum_mid_suppression": 0.85,
         "spectrum_mirrored": true,

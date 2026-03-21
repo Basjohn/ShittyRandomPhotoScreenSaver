@@ -31,7 +31,7 @@ from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
 from widgets.spotify_visualizer.energy_bands import EnergyBands, extract_energy_bands
-from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+from widgets.spotify_visualizer.transient_bus import TransientEnergyBands, TransientEventScheduler
 
 
 logger = get_logger(__name__)
@@ -541,6 +541,18 @@ class _SpotifyBeatEngine(QObject):
             onset_type=getattr(w, '_onset_type', ''),
             onset_strength=getattr(w, '_onset_strength', 0.0),
         )
+
+    def get_event_scheduler(self) -> "TransientEventScheduler | None":
+        """Return the event micro-scheduler (§2.4) if the transient bus exists.
+
+        The scheduler is lazily created on the transient bus; calling this
+        ensures it is initialized.  Returns None only if the audio worker
+        has no transient bus (shouldn't happen in normal operation).
+        """
+        _tb = getattr(self._audio_worker, '_transient_bus', None)
+        if _tb is not None:
+            return _tb.get_scheduler()
+        return None
 
     def wake(self) -> None:
         """Force wake after pause detection - restart audio capture if unhealthy."""

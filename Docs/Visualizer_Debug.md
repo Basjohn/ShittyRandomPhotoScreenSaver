@@ -140,7 +140,28 @@ This keeps quiet sections floating at the baseline while letting peaks approach 
 - Uniforms: `u_helix_turns`, `u_helix_double`, `u_helix_speed`, `u_helix_glow*`, `u_helix_reactive_glow`, `u_fill_color`, `u_border_color`, `u_bass/mid/high/overall_energy`
 - Audio reactivity: bass drives rotation (`speed*1.2 + bass*1.5`), mid widens tube radius, high widens rung width.
 
-### 2.8 Preset repair workflow (updated Mar 12 2026)
+### 2.8 Per-mode Transient Mix Controls (Mar 2026)
+
+Each mode has contextual transient mix sliders controlling how much transient energy feeds its primary reaction channel. All sliders range 0–100% and are mode-gated (only visible in their mode's Technical group).
+
+| Mode | Slider | Default | Consumer | What it does |
+| --- | --- | --- | --- | --- |
+| Spectrum | `spectrum_lane_transient_mix` | 65% | `bar_computation.py` kick lane | Scales transient bass contribution to kick express lane boost |
+| Bubble | `bubble_transient_mix_bass` | 75% | `tick_pipeline.py` pulse dispatch | Weights transient bass into pulse energy |
+| Bubble | `bubble_transient_mix_vocal` | 25% | `tick_pipeline.py` pulse dispatch | Weights transient mid/vocal into pulse energy |
+| Blob | `blob_transient_mix_bass` | 50% | `spotify_bars_gl_overlay.py` blob loop | Blends transient bass into raw energy bands for deformation |
+| Blob | `blob_transient_mix_vocal` | 35% | `spotify_bars_gl_overlay.py` blob loop | Blends transient mid into raw energy bands for wobble |
+| Sine | `sine_wave_transient_width_mix` | 40% | `renderers/sine_wave.py` | Modulates `u_width_reaction` by `(1 + smoothed_bass × mix)` |
+| Osc | `oscilloscope_transient_width_mix` | 35% | `renderers/oscilloscope.py` | Modulates `u_sensitivity` by `(1 + smoothed_bass × mix)` |
+
+**Disabled slider behaviour:** `kick_lane_gain` (Spectrum only) and `transient_pulse_gain` (Bubble only) show their stored value with "(read-only)" suffix when disabled outside their target mode. Label annotations: "(Spectrum only)", "(Bubble only)", "(all modes)" for clamp.
+
+**Debug tips:**
+- If a mode feels unresponsive to beats, check its transient mix slider isn't at 0%.
+- Blob deformation debugging: log `raw_bass`/`raw_mid` after the mix blend in `spotify_bars_gl_overlay.py` `set_state()`.
+- Sine/Osc width not reacting: verify `_sine_wave_transient_width_mix` / `_osc_transient_width_mix` attrs are propagated from the widget to the overlay.
+
+### 2.9 Preset repair workflow (updated Mar 12 2026)
 - Tool: `tools/visualizer_preset_repair.py`
 - Purpose: sanitize curated preset JSON/SST payloads by dropping foreign keys, enforcing per-mode defaults, and rewriting the payload in the new lean format (only `snapshot.widgets.spotify_visualizer` plus non-visualizer widgets when present).
 - Key behaviour changes:

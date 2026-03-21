@@ -262,6 +262,13 @@ class SpotifyVisualizerWidget(QWidget):
         self._transient_pulse_gain: float = 1.0   # Bubble: transient bass pulse gain (0-3)
         self._transient_clamp: float = 1.5         # Global: max transient energy per channel (0-3)
         self._kick_lane_gain: float = 1.0          # Spectrum: kick express lane gain (0-2)
+        self._spectrum_lane_transient_mix: float = 0.65   # Spectrum: transient bleed into kick lane
+        self._bubble_transient_mix_bass: float = 0.75     # Bubble: bass transient mix weight
+        self._bubble_transient_mix_vocal: float = 0.25    # Bubble: vocal/mid transient mix weight
+        self._blob_transient_mix_bass: float = 0.5        # Blob: bass transient mix weight
+        self._blob_transient_mix_vocal: float = 0.35      # Blob: vocal/mid transient mix weight
+        self._sine_wave_transient_width_mix: float = 0.4  # Sine: transient→width reaction mix
+        self._osc_transient_width_mix: float = 0.35       # Osc: transient→width reaction mix
         self._bubble_big_contraction_bias: float = 1.0
         self._bubble_big_size_clamp: float = 4.0
         self._bubble_big_specular_max_size: float = 2.5
@@ -658,6 +665,18 @@ class SpotifyVisualizerWidget(QWidget):
                     "transient_pulse_gain": model.resolve_transient_pulse_gain(mode_key),
                     "transient_clamp": model.resolve_transient_clamp(mode_key),
                 }
+                if mode_key == "spectrum":
+                    cache[mode_key]["spectrum_lane_transient_mix"] = model.resolve_spectrum_lane_transient_mix()
+                elif mode_key == "bubble":
+                    cache[mode_key]["bubble_transient_mix_bass"] = model.resolve_bubble_transient_mix_bass()
+                    cache[mode_key]["bubble_transient_mix_vocal"] = model.resolve_bubble_transient_mix_vocal()
+                elif mode_key == "blob":
+                    cache[mode_key]["blob_transient_mix_bass"] = model.resolve_blob_transient_mix_bass()
+                    cache[mode_key]["blob_transient_mix_vocal"] = model.resolve_blob_transient_mix_vocal()
+                elif mode_key == "sine_wave":
+                    cache[mode_key]["sine_wave_transient_width_mix"] = model.resolve_sine_wave_transient_width_mix()
+                elif mode_key == "oscilloscope":
+                    cache[mode_key]["oscilloscope_transient_width_mix"] = model.resolve_oscilloscope_transient_width_mix()
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to cache technical config for mode=%s", mode_key, exc_info=True)
         return cache
@@ -706,6 +725,13 @@ class SpotifyVisualizerWidget(QWidget):
         self._kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
         self._transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.0))))
         self._transient_clamp = max(0.0, min(3.0, float(config.get("transient_clamp", 1.5))))
+        self._spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
+        self._bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
+        self._bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
+        self._blob_transient_mix_bass = max(0.0, min(1.0, float(config.get("blob_transient_mix_bass", 0.5))))
+        self._blob_transient_mix_vocal = max(0.0, min(1.0, float(config.get("blob_transient_mix_vocal", 0.35))))
+        self._sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
+        self._osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
         self.apply_floor_config(dynamic_floor, manual_floor)
         self.apply_sensitivity_config(adaptive, sensitivity)
         self._apply_audio_block_size(audio_block_size)
@@ -717,6 +743,16 @@ class SpotifyVisualizerWidget(QWidget):
             aw = getattr(self._engine, '_audio_worker', None)
             if aw is not None:
                 aw._kick_lane_gain = self._kick_lane_gain
+                aw._spectrum_lane_transient_mix = self._spectrum_lane_transient_mix
+        # Propagate transient mix attrs to GL overlay
+        parent = self.parent()
+        overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
+        if overlay is not None:
+            overlay._blob_transient_mix_bass = self._blob_transient_mix_bass
+            overlay._blob_transient_mix_vocal = self._blob_transient_mix_vocal
+            overlay._transient_clamp = self._transient_clamp
+            overlay._sine_wave_transient_width_mix = self._sine_wave_transient_width_mix
+            overlay._osc_transient_width_mix = self._osc_transient_width_mix
 
         try:
             from os import getenv

@@ -29,6 +29,45 @@ _KICK_GAIN_MODES = frozenset({"spectrum"})
 _PULSE_GAIN_MODES = frozenset({"bubble"})
 # transient_clamp is global — no mode restriction.
 
+# Per-mode transient mix slider metadata: (config_key, label, tooltip, default, lo, hi)
+_TRANSIENT_MIX_META: Dict[str, tuple] = {
+    "spectrum": (
+        "spectrum_lane_transient_mix",
+        "Kick Lane Mix:",
+        "How much transient energy feeds the kick express lane (0%\u2013100%).\n"
+        "Higher = snappier kick response. 65% = default.",
+        0.65, 0.0, 1.0,
+    ),
+    "bubble": (
+        "bubble_transient_mix_bass",
+        "Transient Bass Mix:",
+        "Transient bass energy weight for bubble pulse (0%\u2013100%).\n"
+        "Higher = stronger kick punch. 75% = default.",
+        0.75, 0.0, 1.0,
+    ),
+    "blob": (
+        "blob_transient_mix_bass",
+        "Transient Bass Mix:",
+        "Transient bass energy weight for blob deformation (0%\u2013100%).\n"
+        "Higher = stronger kick response. 50% = default.",
+        0.5, 0.0, 1.0,
+    ),
+    "sine_wave": (
+        "sine_wave_transient_width_mix",
+        "Transient Width Mix:",
+        "How much transient energy widens the sine wave (0%\u2013100%).\n"
+        "Higher = more width reaction on kicks. 40% = default.",
+        0.4, 0.0, 1.0,
+    ),
+    "oscilloscope": (
+        "oscilloscope_transient_width_mix",
+        "Transient Width Mix:",
+        "How much transient energy widens the oscilloscope line (0%\u2013100%).\n"
+        "Higher = more width reaction on kicks. 35% = default.",
+        0.35, 0.0, 1.0,
+    ),
+}
+
 
 _KICK_GAIN_TIP = (
     "Spectrum kick express-lane gain (0%\u2013200%). Controls how strongly\n"
@@ -50,6 +89,10 @@ def _apply_transient_gating(mode_key: str, controls: Dict[str, object]) -> None:
     - kick_lane_gain: Spectrum only
     - transient_pulse_gain: Bubble only
     - transient_clamp: all modes (global)
+
+    When a slider is disabled, its value label shows the stored value
+    as read-only text (greyed out) so preset authors can still see
+    the persisted value without switching modes.
     """
     kick_en = mode_key in _KICK_GAIN_MODES
     pulse_en = mode_key in _PULSE_GAIN_MODES
@@ -60,6 +103,12 @@ def _apply_transient_gating(mode_key: str, controls: Dict[str, object]) -> None:
             w.setEnabled(kick_en)
             if hasattr(w, 'setToolTip'):
                 w.setToolTip(_KICK_GAIN_TIP if kick_en else _KICK_GAIN_DISABLED_TIP)
+    # Show stored value as read-only when kick gain is disabled
+    if not kick_en:
+        kg_slider = controls.get('kick_gain_slider')
+        kg_label = controls.get('kick_gain_label')
+        if kg_slider is not None and kg_label is not None:
+            kg_label.setText(f"{kg_slider.value()}% (read-only)")
 
     for key in ('pulse_gain_slider', 'pulse_gain_label'):
         w = controls.get(key)
@@ -67,6 +116,12 @@ def _apply_transient_gating(mode_key: str, controls: Dict[str, object]) -> None:
             w.setEnabled(pulse_en)
             if hasattr(w, 'setToolTip'):
                 w.setToolTip(_PULSE_GAIN_TIP if pulse_en else _PULSE_GAIN_DISABLED_TIP)
+    # Show stored value as read-only when pulse gain is disabled
+    if not pulse_en:
+        pg_slider = controls.get('pulse_gain_slider')
+        pg_label = controls.get('pulse_gain_label')
+        if pg_slider is not None and pg_label is not None:
+            pg_label.setText(f"{pg_slider.value()}% (read-only)")
 
 
 def _ensure_per_mode_cache(tab) -> Dict[str, Dict[str, Any]]:
@@ -331,7 +386,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     raw_energy_checkbox.setVisible(False)
 
     # ── Transient Bus Controls (Approach A dual-path) ──────────────────
-    kick_gain_row = _aligned_row(layout, "Kick Lane Gain:")
+    kick_gain_row = _aligned_row(layout, "Kick Lane Gain:\n(Spectrum only)")
     kick_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     kick_gain_slider.setMinimum(0)
     kick_gain_slider.setMaximum(200)
@@ -353,7 +408,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     kick_gain_slider.valueChanged.connect(lambda v: kick_gain_label.setText(f"{v}%"))
     kick_gain_row.addWidget(kick_gain_label)
 
-    pulse_gain_row = _aligned_row(layout, "Transient Pulse:")
+    pulse_gain_row = _aligned_row(layout, "Transient Pulse:\n(Bubble only)")
     pulse_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     pulse_gain_slider.setMinimum(0)
     pulse_gain_slider.setMaximum(300)
@@ -375,7 +430,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     pulse_gain_slider.valueChanged.connect(lambda v: pulse_gain_label.setText(f"{v}%"))
     pulse_gain_row.addWidget(pulse_gain_label)
 
-    clamp_row = _aligned_row(layout, "Transient Clamp:")
+    clamp_row = _aligned_row(layout, "Transient Clamp:\n(all modes)")
     clamp_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     clamp_slider.setMinimum(0)
     clamp_slider.setMaximum(300)
@@ -395,6 +450,81 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     clamp_label = QLabel(f"{int(clamped_tc * 100)}%")
     clamp_slider.valueChanged.connect(lambda v: clamp_label.setText(f"{v}%"))
     clamp_row.addWidget(clamp_label)
+
+    # Per-mode transient mix slider (contextual per mode)
+    _mix_meta = _TRANSIENT_MIX_META.get(mode_key)
+    mix_slider = None
+    mix_label_widget = None
+    _mix_config_key = None
+    if _mix_meta is not None:
+        _mix_config_key, _mix_lbl, _mix_tip, _mix_def, _mix_lo, _mix_hi = _mix_meta
+        mix_row = _aligned_row(layout, _mix_lbl)
+        mix_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        mix_slider.setMinimum(int(_mix_lo * 100))
+        mix_slider.setMaximum(int(_mix_hi * 100))
+        mix_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        mix_slider.setTickInterval(10)
+        default_mix = _per_mode_default_float(tab, mode_key, _mix_config_key.split('_', 1)[-1] if '_' in _mix_config_key else _mix_config_key, _mix_def)
+        clamped_mix = max(_mix_lo, min(_mix_hi, default_mix))
+        mix_slider.blockSignals(True)
+        mix_slider.setValue(int(clamped_mix * 100))
+        mix_slider.blockSignals(False)
+        mix_slider.setToolTip(_mix_tip)
+        _connect_setting(mix_slider.valueChanged, tab)
+        mix_row.addWidget(mix_slider)
+        mix_label_widget = QLabel(f"{int(clamped_mix * 100)}%")
+        mix_slider.valueChanged.connect(lambda v: mix_label_widget.setText(f"{v}%"))
+        mix_row.addWidget(mix_label_widget)
+
+    # Bubble vocal mix (secondary slider, bubble-only)
+    mix_vocal_slider = None
+    mix_vocal_label = None
+    if mode_key == 'bubble':
+        voc_row = _aligned_row(layout, "Transient Vocal Mix:")
+        mix_vocal_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        mix_vocal_slider.setMinimum(0)
+        mix_vocal_slider.setMaximum(100)
+        mix_vocal_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        mix_vocal_slider.setTickInterval(10)
+        default_voc = _per_mode_default_float(tab, mode_key, 'bubble_transient_mix_vocal', 0.25)
+        clamped_voc = max(0.0, min(1.0, default_voc))
+        mix_vocal_slider.blockSignals(True)
+        mix_vocal_slider.setValue(int(clamped_voc * 100))
+        mix_vocal_slider.blockSignals(False)
+        mix_vocal_slider.setToolTip(
+            "Transient vocal/mid energy weight for bubble pulse (0%\u2013100%).\n"
+            "Higher = more mid-range response. 25% = default."
+        )
+        _connect_setting(mix_vocal_slider.valueChanged, tab)
+        voc_row.addWidget(mix_vocal_slider)
+        mix_vocal_label = QLabel(f"{int(clamped_voc * 100)}%")
+        mix_vocal_slider.valueChanged.connect(lambda v: mix_vocal_label.setText(f"{v}%"))
+        voc_row.addWidget(mix_vocal_label)
+
+    # Blob vocal mix (secondary slider, blob-only)
+    blob_vocal_slider = None
+    blob_vocal_label = None
+    if mode_key == 'blob':
+        bvoc_row = _aligned_row(layout, "Transient Vocal Mix:")
+        blob_vocal_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        blob_vocal_slider.setMinimum(0)
+        blob_vocal_slider.setMaximum(100)
+        blob_vocal_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        blob_vocal_slider.setTickInterval(10)
+        default_bvoc = _per_mode_default_float(tab, mode_key, 'blob_transient_mix_vocal', 0.35)
+        clamped_bvoc = max(0.0, min(1.0, default_bvoc))
+        blob_vocal_slider.blockSignals(True)
+        blob_vocal_slider.setValue(int(clamped_bvoc * 100))
+        blob_vocal_slider.blockSignals(False)
+        blob_vocal_slider.setToolTip(
+            "Transient vocal/mid energy weight for blob deformation (0%\u2013100%).\n"
+            "Higher = more mid-range response. 35% = default."
+        )
+        _connect_setting(blob_vocal_slider.valueChanged, tab)
+        bvoc_row.addWidget(blob_vocal_slider)
+        blob_vocal_label = QLabel(f"{int(clamped_bvoc * 100)}%")
+        blob_vocal_slider.valueChanged.connect(lambda v: blob_vocal_label.setText(f"{v}%"))
+        bvoc_row.addWidget(blob_vocal_label)
 
     # Dynamic floor toggle
     dyn_floor_row = _aligned_row(layout, "")
@@ -479,6 +609,13 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         'pulse_gain_label': pulse_gain_label,
         'clamp_slider': clamp_slider,
         'clamp_label': clamp_label,
+        'mix_slider': mix_slider,
+        'mix_label': mix_label_widget,
+        'mix_config_key': _mix_config_key,
+        'mix_vocal_slider': mix_vocal_slider,
+        'mix_vocal_label': mix_vocal_label,
+        'blob_vocal_slider': blob_vocal_slider,
+        'blob_vocal_label': blob_vocal_label,
         'update_sensitivity': _update_sensitivity_visibility,
         'update_manual_floor': _update_manual_floor_visibility,
         'mode_key': mode_key,
@@ -704,6 +841,52 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
                 tc_label.setText(f"{int(clamped_tc * 100)}%")
             mode_cache['transient_clamp'] = clamped_tc
 
+        # Per-mode transient mix slider
+        mix_s = controls.get('mix_slider')
+        mix_key = controls.get('mix_config_key')
+        if mix_s is not None and mix_key is not None:
+            _mix_meta_entry = _TRANSIENT_MIX_META.get(mode_key)
+            _mix_def_val = _mix_meta_entry[3] if _mix_meta_entry else 0.5
+            mix_val = _coerce_float(spotify_vis_config.get(mix_key) if isinstance(spotify_vis_config, Mapping) else None, _mix_def_val)
+            clamped_mix_v = max(0.0, min(1.0, mix_val))
+            mix_s.blockSignals(True)
+            mix_s.setValue(int(clamped_mix_v * 100))
+            mix_s.blockSignals(False)
+            mix_lbl = controls.get('mix_label')
+            if mix_lbl is not None:
+                mix_lbl.setText(f"{int(clamped_mix_v * 100)}%")
+            mode_cache[mix_key] = clamped_mix_v
+
+        # Bubble vocal mix
+        mvoc_s = controls.get('mix_vocal_slider')
+        if mvoc_s is not None:
+            voc_val = _coerce_float(
+                spotify_vis_config.get('bubble_transient_mix_vocal') if isinstance(spotify_vis_config, Mapping) else None, 0.25
+            )
+            clamped_voc_v = max(0.0, min(1.0, voc_val))
+            mvoc_s.blockSignals(True)
+            mvoc_s.setValue(int(clamped_voc_v * 100))
+            mvoc_s.blockSignals(False)
+            mvoc_lbl = controls.get('mix_vocal_label')
+            if mvoc_lbl is not None:
+                mvoc_lbl.setText(f"{int(clamped_voc_v * 100)}%")
+            mode_cache['bubble_transient_mix_vocal'] = clamped_voc_v
+
+        # Blob vocal mix
+        bvoc_s = controls.get('blob_vocal_slider')
+        if bvoc_s is not None:
+            bvoc_val = _coerce_float(
+                spotify_vis_config.get('blob_transient_mix_vocal') if isinstance(spotify_vis_config, Mapping) else None, 0.35
+            )
+            clamped_bvoc_v = max(0.0, min(1.0, bvoc_val))
+            bvoc_s.blockSignals(True)
+            bvoc_s.setValue(int(clamped_bvoc_v * 100))
+            bvoc_s.blockSignals(False)
+            bvoc_lbl = controls.get('blob_vocal_label')
+            if bvoc_lbl is not None:
+                bvoc_lbl.setText(f"{int(clamped_bvoc_v * 100)}%")
+            mode_cache['blob_transient_mix_vocal'] = clamped_bvoc_v
+
         dyn_floor = controls.get('dynamic_floor')
         if dyn_floor is not None:
             default_dyn_floor = _per_mode_default_bool(tab, mode_key, 'dynamic_floor', True)
@@ -790,6 +973,22 @@ def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any])
         tc_slider = controls.get('clamp_slider')
         if tc_slider is not None:
             _set('transient_clamp', max(0.0, min(3.0, tc_slider.value() / 100.0)))
+        # Per-mode transient mix slider
+        mix_s = controls.get('mix_slider')
+        mix_key = controls.get('mix_config_key')
+        if mix_s is not None and mix_key is not None:
+            spotify_vis_config[mix_key] = max(0.0, min(1.0, mix_s.value() / 100.0))
+            mode_cache[mix_key] = spotify_vis_config[mix_key]
+        # Bubble vocal mix
+        mvoc_s = controls.get('mix_vocal_slider')
+        if mvoc_s is not None:
+            spotify_vis_config['bubble_transient_mix_vocal'] = max(0.0, min(1.0, mvoc_s.value() / 100.0))
+            mode_cache['bubble_transient_mix_vocal'] = spotify_vis_config['bubble_transient_mix_vocal']
+        # Blob vocal mix
+        bvoc_s = controls.get('blob_vocal_slider')
+        if bvoc_s is not None:
+            spotify_vis_config['blob_transient_mix_vocal'] = max(0.0, min(1.0, bvoc_s.value() / 100.0))
+            mode_cache['blob_transient_mix_vocal'] = spotify_vis_config['blob_transient_mix_vocal']
 
     # Ensure cached values for all modes (including dev-gated ones without UI)
     # are flushed back into the config so custom presets can persist them.

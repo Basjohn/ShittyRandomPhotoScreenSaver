@@ -272,8 +272,9 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
     _t_bass = getattr(worker, '_transient_bass', 0.0)
     if _t_bass > 0.05:
         _kick_gain = getattr(worker, '_kick_lane_gain', 1.0)
+        _lane_mix = getattr(worker, '_spectrum_lane_transient_mix', 0.65)
         _bass_end = max(1, getattr(worker, '_agc_bass_split', 4))
-        _kick_boost = min(2.0, 1.0 + _t_bass * _kick_gain)
+        _kick_boost = min(2.0, 1.0 + _t_bass * _kick_gain * _lane_mix)
         for _ki in range(_bass_end):
             if _ki < bands:
                 arr[_ki] = min(1.0, arr[_ki] * _kick_boost)

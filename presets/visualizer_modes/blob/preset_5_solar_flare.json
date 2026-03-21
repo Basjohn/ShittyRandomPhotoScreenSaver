@@ -1,0 +1,95 @@
+{
+  "mode": "blob",
+  "name": "Preset 5 (Solar Flare)",
+  "preset_index": 4,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "blob_adaptive_sensitivity": true,
+        "blob_agc_strength": 0.3,
+        "blob_audio_block_size": 256,
+        "blob_bar_count": 32,
+        "blob_color": [
+          255,
+          180,
+          0,
+          235
+        ],
+        "blob_constant_wobble": 0.3,
+        "blob_core_floor_bias": 0.55,
+        "blob_core_scale": 1.05,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
+        "blob_edge_color": [
+          255,
+          220,
+          80,
+          210
+        ],
+        "blob_energy_boost": 0.9,
+        "blob_ghost_alpha": 0.25,
+        "blob_ghost_decay": 0.55,
+        "blob_ghosting_enabled": true,
+        "blob_glow_color": [
+          255,
+          150,
+          20,
+          185
+        ],
+        "blob_glow_intensity": 0.75,
+        "blob_glow_max_size": 1.2,
+        "blob_glow_reactivity": 1.7,
+        "blob_growth": 5.5,
+        "blob_input_gain": 1.05,
+        "blob_kick_lane_gain": 1.1,
+        "blob_manual_floor": 0.1,
+        "blob_outline_color": [
+          255,
+          200,
+          50,
+          225
+        ],
+        "blob_pulse": 2.0,
+        "blob_rainbow_enabled": false,
+        "blob_rainbow_speed": 0.15,
+        "blob_reactive_deformation": 1.5,
+        "blob_reactive_glow": true,
+        "blob_reactive_wobble": 1.6,
+        "blob_sensitivity": 0.65,
+        "blob_size": 0.5,
+        "blob_stage2_release_ms": 650,
+        "blob_stage3_release_ms": 550,
+        "blob_stage_bias": -0.1,
+        "blob_stage_gain": 0.28,
+        "blob_stretch_inner": 0.15,
+        "blob_stretch_outer": 0.7,
+        "blob_stretch_tendency": 0.28,
+        "blob_transient_clamp": 1.6,
+        "blob_transient_mix_bass": 0.6,
+        "blob_transient_mix_vocal": 0.4,
+        "blob_transient_pulse_gain": 1.4,
+        "blob_use_raw_energy": false,
+        "blob_width": 1.05,
+        "ghost_alpha": 0.35,
+        "ghost_decay": 0.25,
+        "ghosting_enabled": true,
+        "mode": "blob"
+      }
+    }
+  },
+  "visualizer_preset_mode": "blob",
+  "visualizer_preset_override": true
+}

@@ -116,6 +116,9 @@ class TransientBus:
         self._last_update_ts: float = 0.0
         self._frame_count: int = 0
 
+        # Event micro-scheduler (§2.4) — created lazily on first access
+        self._scheduler: "TransientEventScheduler | None" = None
+
     # ------------------------------------------------------------------
     # Public API — called from COMPUTE pool (single writer)
     # ------------------------------------------------------------------
@@ -237,6 +240,14 @@ class TransientBus:
                         self._onset_ring_head + 1
                     ) % self._RING_CAPACITY
 
+                    # Feed event micro-scheduler (§2.4)
+                    if self._scheduler is not None:
+                        self._scheduler.feed(OnsetEvent(
+                            timestamp=now,
+                            event_type=self._onset_type,
+                            strength=self._onset_strength,
+                        ))
+
         result = self.snapshot()
 
         if is_viz_diagnostics_enabled() and self._frame_count % 120 == 1:
@@ -265,6 +276,12 @@ class TransientBus:
             onset_type=self._onset_type,
             onset_strength=self._onset_strength,
         )
+
+    def get_scheduler(self) -> "TransientEventScheduler":
+        """Return the event micro-scheduler, creating it on first access."""
+        if self._scheduler is None:
+            self._scheduler = TransientEventScheduler()
+        return self._scheduler
 
     def get_recent_onsets(self, max_age_s: float = 0.5) -> List[OnsetEvent]:
         """Return onset events from the ring buffer within max_age_s."""
@@ -320,6 +337,8 @@ class TransientBus:
             evt.event_type = ""
             evt.strength = 0.0
         self._onset_ring_head = 0
+        if self._scheduler is not None:
+            self._scheduler.reset()
 
     # ------------------------------------------------------------------
     # Configuration
@@ -332,3 +351,170 @@ class TransientBus:
     def set_transient_decay(self, decay: float) -> None:
         """Adjust transient decay rate (0=instant, 1=hold forever)."""
         self._transient_decay = max(0.1, min(0.95, float(decay)))
+
+
+# ---------------------------------------------------------------------------
+# Event Micro-Scheduler (§2.4)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class _ScheduledEvent:
+    """Internal bookkeeping wrapper around an onset event."""
+    event: OnsetEvent
+    consumed: bool = False
+
+
+class TransientEventScheduler:
+    """Consumer-side debounce + consume-once layer for onset events.
+
+    Sits between the ``TransientBus`` onset ring buffer and renderers.
+    The bus calls ``feed()`` whenever a new onset is detected; the scheduler
+    stores it with per-type debounce and exposes two consumption patterns:
+
+    - ``consume_next(type)`` — returns the oldest unconsumed event of the
+      given type and marks it consumed.  Used by Bubble (each kick drives
+      exactly one promotion batch).
+    - ``peek_latest(type, max_age_s)`` — returns the most recent event of
+      the given type within *max_age_s* without consuming it.  Used by Blob
+      (wobble + outline both respond to the same snare).
+
+    Threading model:
+      Single writer (COMPUTE pool via ``TransientBus.update`` → ``feed``),
+      single reader (UI tick).  CPython GIL guarantees atomic reference
+      assignment so no locks are needed.
+    """
+
+    _CAPACITY: int = 16
+
+    # Per-type minimum spacing (seconds).  Events arriving faster than
+    # the debounce window are silently dropped.
+    _DEFAULT_DEBOUNCE: dict = {
+        "kick": 0.090,
+        "snare": 0.120,
+        "vocal_swell": 0.200,
+    }
+    _FALLBACK_DEBOUNCE: float = 0.100
+
+    def __init__(self) -> None:
+        self._ring: List[_ScheduledEvent] = []
+        self._head: int = 0
+        # Last accepted timestamp per event type (for debounce)
+        self._last_accepted_ts: dict = {}
+
+    # ------------------------------------------------------------------
+    # Writer API — called from COMPUTE pool (single writer)
+    # ------------------------------------------------------------------
+
+    def feed(self, event: OnsetEvent) -> bool:
+        """Attempt to schedule *event*.  Returns True if accepted.
+
+        Rejected if the per-type debounce window has not elapsed since
+        the last accepted event of the same type.
+        """
+        if not event.event_type:
+            return False
+
+        debounce = self._DEFAULT_DEBOUNCE.get(
+            event.event_type, self._FALLBACK_DEBOUNCE
+        )
+        last_ts = self._last_accepted_ts.get(event.event_type, 0.0)
+        if event.timestamp - last_ts < debounce:
+            return False
+
+        self._last_accepted_ts[event.event_type] = event.timestamp
+
+        entry = _ScheduledEvent(
+            event=OnsetEvent(
+                timestamp=event.timestamp,
+                event_type=event.event_type,
+                strength=event.strength,
+            )
+        )
+
+        if len(self._ring) < self._CAPACITY:
+            self._ring.append(entry)
+        else:
+            # Overwrite oldest slot
+            self._ring[self._head] = entry
+            self._head = (self._head + 1) % self._CAPACITY
+
+        return True
+
+    # ------------------------------------------------------------------
+    # Reader API — called from UI thread (single reader)
+    # ------------------------------------------------------------------
+
+    def consume_next(self, event_type: str, max_age_s: float = 0.5) -> "OnsetEvent | None":
+        """Return the oldest unconsumed event of *event_type* and mark it consumed.
+
+        Only events younger than *max_age_s* are considered.  Returns None
+        if no qualifying event exists.
+        """
+        now = time.time()
+        cutoff = now - max_age_s
+        best: "_ScheduledEvent | None" = None
+
+        for entry in self._ring:
+            if (
+                not entry.consumed
+                and entry.event.event_type == event_type
+                and entry.event.timestamp > cutoff
+            ):
+                if best is None or entry.event.timestamp < best.event.timestamp:
+                    best = entry
+
+        if best is not None:
+            best.consumed = True
+            return OnsetEvent(
+                timestamp=best.event.timestamp,
+                event_type=best.event.event_type,
+                strength=best.event.strength,
+            )
+        return None
+
+    def peek_latest(self, event_type: str, max_age_s: float = 0.3) -> "OnsetEvent | None":
+        """Return the most recent event of *event_type* without consuming it.
+
+        Only events younger than *max_age_s* are considered.
+        """
+        now = time.time()
+        cutoff = now - max_age_s
+        best: "_ScheduledEvent | None" = None
+
+        for entry in self._ring:
+            if (
+                entry.event.event_type == event_type
+                and entry.event.timestamp > cutoff
+            ):
+                if best is None or entry.event.timestamp > best.event.timestamp:
+                    best = entry
+
+        if best is not None:
+            return OnsetEvent(
+                timestamp=best.event.timestamp,
+                event_type=best.event.event_type,
+                strength=best.event.strength,
+            )
+        return None
+
+    def has_recent(self, event_type: str, max_age_s: float = 0.2) -> bool:
+        """Return True if any event of *event_type* exists within *max_age_s*."""
+        now = time.time()
+        cutoff = now - max_age_s
+        for entry in self._ring:
+            if (
+                entry.event.event_type == event_type
+                and entry.event.timestamp > cutoff
+            ):
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+
+    def reset(self) -> None:
+        """Clear all scheduled events (e.g. on mode switch)."""
+        self._ring.clear()
+        self._head = 0
+        self._last_accepted_ts.clear()

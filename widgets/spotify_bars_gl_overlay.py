@@ -166,6 +166,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
         self._osc_smoothed_mid: float = 0.0
         self._osc_smoothed_high: float = 0.0
+        self._sine_wave_transient_width_mix: float = 0.4
+        self._osc_transient_width_mix: float = 0.35
+        self._blob_transient_mix_bass: float = 0.5
+        self._blob_transient_mix_vocal: float = 0.35
+        self._transient_clamp: float = 1.5
         # Sine wave ghost: peak-tracked energy per band (decays slowly)
         self._sine_peak_bass: float = 0.0
         self._sine_peak_mid: float = 0.0
@@ -510,6 +515,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     raw_bass = getattr(energy_bands, 'bass', 0.0)
                     raw_mid = getattr(energy_bands, 'mid', 0.0)
                     raw_high = getattr(energy_bands, 'high', 0.0)
+                    # Blob transient mix: blend transient energy into raw bands
+                    _te = getattr(self, '_transient_energy', None)
+                    if _te is not None:
+                        _bmb = getattr(self, '_blob_transient_mix_bass', 0.5)
+                        _bmv = getattr(self, '_blob_transient_mix_vocal', 0.35)
+                        _b_clamp = getattr(self, '_transient_clamp', 1.5)
+                        raw_bass = min(_b_clamp, raw_bass + getattr(_te, 'bass_transient', 0.0) * _bmb)
+                        raw_mid = min(_b_clamp, raw_mid + getattr(_te, 'mid_transient', 0.0) * _bmv)
                     smoothed_e = self._blob_smoothed_energy
                     # Update peaks when new raw exceeds current peak
                     any_peak_hit = False
