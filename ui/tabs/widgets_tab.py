@@ -824,6 +824,13 @@ class WidgetsTab(QWidget):
         if not isinstance(payload, dict):
             return False
         changed = False
+        prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
+        for key in list(spotify_vis_config.keys()):
+            if key in payload:
+                continue
+            if self._is_key_for_mode(key, prefixes):
+                spotify_vis_config.pop(key, None)
+                changed = True
         for key, value in payload.items():
             stored = spotify_vis_config.get(key)
             if stored != value:
@@ -1232,6 +1239,21 @@ class WidgetsTab(QWidget):
         existing_widgets['spotify_visualizer'] = spotify_vis_config
         existing_widgets['reddit'] = reddit_config
         existing_widgets['reddit2'] = reddit2_config
+
+        current_vis_mode = str(spotify_vis_config.get('mode', 'spectrum') or 'spectrum')
+        current_preset_key = f"preset_{current_vis_mode}"
+        current_custom_index = get_custom_preset_index(current_vis_mode)
+        try:
+            current_preset_index = int(spotify_vis_config.get(current_preset_key, current_custom_index))
+        except (TypeError, ValueError):
+            current_preset_index = current_custom_index
+        if current_preset_index == current_custom_index:
+            snapshot = self._extract_visualizer_snapshot(current_vis_mode, spotify_vis_config)
+            cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
+            if not isinstance(cache, dict):
+                cache = {}
+            cache[current_vis_mode] = snapshot
+            self._settings.set(_VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
         # Imgur config - only save if dev features enabled
         imgur_config = save_imgur_settings(self)

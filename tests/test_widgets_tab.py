@@ -309,6 +309,109 @@ def test_sine_curated_preset_survives_save_and_reload(qt_app, settings_manager):
         finally:
             tab.deleteLater()
 
+    def test_spectrum_custom_roundtrip_preserves_broad_state(self, qt_app, settings_manager):
+        """Spectrum Custom should restore broad advanced + technical state without curated bleed."""
+        from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._load_settings()
+            tab._save_settings = tab._save_settings_now
+
+            mode = "spectrum"
+            tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+            slider = tab._spectrum_preset_slider
+            custom_index = slider.custom_index()
+
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+            spotify_vis.update({
+                "mode": mode,
+                "preset_spectrum": custom_index,
+                "spectrum_growth": 3.1,
+                "spectrum_single_piece": False,
+                "spectrum_border_radius": 1.0,
+                "spectrum_mirrored": True,
+                "spectrum_bar_count": 33,
+                "spectrum_sensitivity": 0.50,
+                "spectrum_manual_floor": 0.12,
+                "spectrum_agc_strength": 0.50,
+                "spectrum_kick_lane_gain": 1.0,
+                "spectrum_lane_transient_mix": 0.65,
+            })
+            settings_manager.set("widgets", widgets_cfg)
+
+            tab._load_settings()
+
+            tab._spotify_vis_fill_color = QColor(12, 122, 210, 211)
+            tab._spotify_vis_border_color = QColor(220, 180, 80, 255)
+            tab.vis_border_opacity.setValue(73)
+            tab.vis_ghost_enabled.setChecked(False)
+            tab.vis_ghost_opacity_slider.setValue(33)
+            tab.vis_ghost_decay_slider.setValue(71)
+            tab.spectrum_growth.setValue(370)
+            tab.spectrum_single_piece.setChecked(True)
+            tab.spectrum_rainbow_per_bar.setChecked(True)
+            tab.spectrum_border_radius.setValue(7)
+            tab.spectrum_mirrored.setChecked(False)
+            tab.spectrum_bass_emphasis.setValue(81)
+            tab.spectrum_vocal_position.setValue(57)
+            tab.spectrum_mid_suppression.setValue(22)
+            tab.spectrum_wave_amplitude.setValue(93)
+            tab.spectrum_profile_floor.setValue(17)
+            tab.spectrum_drop_speed.setValue(241)
+            if hasattr(tab, "spectrum_shape_editor"):
+                tab.spectrum_shape_editor.set_nodes([[0.0, 0.10], [0.4, 0.85], [1.0, 0.65]])
+
+            controls = get_per_mode_controls_for_mode(tab, mode)
+            assert controls is not None
+            controls["bar_count"].setValue(44)
+            controls["sensitivity_slider"].setValue(77)
+            controls["manual_floor"].setValue(26)
+            controls["agc_strength_slider"].setValue(61)
+            controls["kick_gain_slider"].setValue(155)
+            controls["mix_slider"].setValue(88)
+
+            slider.set_preset_index(0)
+            tab._on_visualizer_preset_changed(mode, 0)
+
+            cache = settings_manager.get("visualizer_custom_presets", {})
+            assert isinstance(cache, dict)
+            snapshot = cache[mode]
+            assert snapshot["bar_fill_color"] == [12, 122, 210, 211]
+            assert snapshot["bar_border_color"] == [220, 180, 80, 255]
+            assert snapshot["spectrum_growth"] == pytest.approx(3.7)
+            assert snapshot["spectrum_single_piece"] is True
+            assert snapshot["spectrum_border_radius"] == pytest.approx(7.0)
+            assert snapshot["spectrum_mirrored"] is False
+            assert snapshot["spectrum_shape_nodes"] == [[0.0, 0.10], [0.4, 0.85], [1.0, 0.65]]
+            assert snapshot["spectrum_bar_count"] == 44
+            assert snapshot["spectrum_sensitivity"] == pytest.approx(0.77)
+            assert snapshot["spectrum_manual_floor"] == pytest.approx(0.26)
+            assert snapshot["spectrum_agc_strength"] == pytest.approx(0.61)
+            assert snapshot["spectrum_kick_lane_gain"] == pytest.approx(1.55)
+            assert snapshot["spectrum_lane_transient_mix"] == pytest.approx(0.88)
+
+            slider.set_preset_index(custom_index)
+            tab._on_visualizer_preset_changed(mode, custom_index)
+
+            restored = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+            assert restored.get("bar_fill_color") == [12, 122, 210, 211]
+            assert restored.get("bar_border_color") == [220, 180, 80, 255]
+            assert restored.get("spectrum_growth") == pytest.approx(3.7)
+            assert restored.get("spectrum_single_piece") is True
+            assert restored.get("spectrum_border_radius") == pytest.approx(7.0)
+            assert restored.get("spectrum_mirrored") is False
+            assert restored.get("spectrum_shape_nodes") == [[0.0, 0.10], [0.4, 0.85], [1.0, 0.65]]
+            assert restored.get("spectrum_bar_count") == 44
+            assert restored.get("spectrum_sensitivity") == pytest.approx(0.77)
+            assert restored.get("spectrum_manual_floor") == pytest.approx(0.26)
+            assert restored.get("spectrum_agc_strength") == pytest.approx(0.61)
+            assert restored.get("spectrum_kick_lane_gain") == pytest.approx(1.55)
+            assert restored.get("spectrum_lane_transient_mix") == pytest.approx(0.88)
+        finally:
+            tab.deleteLater()
+
     def test_bubble_custom_snapshot_uses_live_ui_state_for_colors(self, qt_app, settings_manager):
         """Leaving Bubble custom snapshots current swatches even before an explicit save."""
 

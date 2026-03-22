@@ -1,0 +1,831 @@
+{
+  "metadata": {
+    "last_migration_completed": "2026-03-22T17:24:50.312392Z"
+  },
+  "profile": "Probe_af2a984abf2f475095c1111db3f60b68",
+  "snapshot": {
+    "display": {
+      "gl_depth_bits": 24,
+      "gl_stencil_bits": 8,
+      "hw_accel": true,
+      "mode": "fill",
+      "prefer_triple_buffer": true,
+      "render_backend_mode": "opengl",
+      "same_image_all_monitors": false,
+      "sharpen_downscale": false,
+      "show_on_monitors": "ALL",
+      "use_lanczos": false
+    },
+    "input": {
+      "halo_shape": "cursor_light",
+      "hard_exit": false
+    },
+    "queue": {
+      "shuffle": true
+    },
+    "sources": {
+      "folders": [],
+      "local_ratio": 95,
+      "mode": "folders",
+      "rss_background_cap": 30,
+      "rss_feeds": [],
+      "rss_refresh_minutes": 10,
+      "rss_rotating_cache_size": 20,
+      "rss_save_directory": "",
+      "rss_save_to_disk": false,
+      "rss_stale_minutes": 30
+    },
+    "timing": {
+      "interval": 140
+    },
+    "transitions": {
+      "blinds": {
+        "direction": "Random",
+        "feather": 2
+      },
+      "block_flip": {
+        "cols": 24,
+        "direction": "Random",
+        "rows": 24
+      },
+      "blockspin": {
+        "direction": "Random"
+      },
+      "burn": {
+        "ash_density": 0.8,
+        "ash_enabled": true,
+        "char_width": 0.1,
+        "direction": "Random",
+        "glow_color": [
+          255,
+          162,
+          0,
+          255
+        ],
+        "glow_intensity": 1.0,
+        "jaggedness": 1.0,
+        "smoke_density": 0.8,
+        "smoke_enabled": true
+      },
+      "crumble": {
+        "crack_complexity": 1.0,
+        "piece_count": 16,
+        "weighting": "Random Choice"
+      },
+      "diffuse": {
+        "block_size": 15,
+        "shape": "Membrane"
+      },
+      "direction": "Random",
+      "duration_ms": 10524,
+      "durations": {
+        "3D Block Spins": 9000,
+        "Blinds": 4000,
+        "Block Puzzle Flip": 5000,
+        "Burn": 8535,
+        "Crossfade": 5000,
+        "Crumble": 12000,
+        "Diffuse": 5500,
+        "Particle": 10524,
+        "Ripple": 7200,
+        "Slide": 5000,
+        "Warp Dissolve": 6000,
+        "Wipe": 4000
+      },
+      "easing": "Auto",
+      "last_random_choice": "Block Puzzle Flip",
+      "particle": {
+        "direction": "Random",
+        "gloss_size": 72.0,
+        "light_direction": 3,
+        "mode": "Converge",
+        "overlap": 4.0,
+        "particle_radius": 9.0,
+        "swirl_order": 2,
+        "swirl_strength": 1.0,
+        "swirl_turns": 3.5000000000000004,
+        "texture_mapping": true,
+        "trail_length": 0.15,
+        "trail_strength": 0.6,
+        "use_3d_shading": true,
+        "wobble": true
+      },
+      "pool": {
+        "3D Block Spins": true,
+        "Blinds": false,
+        "Block Puzzle Flip": true,
+        "Burn": false,
+        "Crossfade": false,
+        "Crumble": true,
+        "Diffuse": true,
+        "Particle": true,
+        "Ripple": true,
+        "Slide": false,
+        "Warp Dissolve": true,
+        "Wipe": true
+      },
+      "random_always": true,
+      "random_choice": "Block Puzzle Flip",
+      "ripple": {
+        "ripple_count": 3
+      },
+      "slide": {
+        "direction": "Random"
+      },
+      "type": "Particle",
+      "wipe": {
+        "direction": "Diagonal TL-BR",
+        "last_direction": "Diagonal TL-BR"
+      }
+    },
+    "ui": {
+      "visualizer_adv_states": {
+        "blob": false,
+        "bubble": false,
+        "oscilloscope": false,
+        "sine_wave": false,
+        "spectrum": false
+      },
+      "visualizer_tech_bucket_states": {
+        "blob:agc": false,
+        "blob:transient": true,
+        "bubble:agc": false,
+        "bubble:transient": true,
+        "oscilloscope:agc": false,
+        "oscilloscope:transient": true,
+        "sine_wave:agc": false,
+        "sine_wave:transient": true,
+        "spectrum:agc": false,
+        "spectrum:transient": true
+      },
+      "visualizer_tech_states": {
+        "blob": true,
+        "bubble": true,
+        "oscilloscope": true,
+        "sine_wave": true,
+        "spectrum": true
+      }
+    },
+    "widgets": {
+      "clock": {
+        "analog_face_shadow": true,
+        "analog_shadow_intense": true,
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "digital_shadow_intense": false,
+        "display_mode": "analog",
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 78,
+        "format": "24h",
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Top Right",
+        "shared_tick": true,
+        "show_background": false,
+        "show_numerals": true,
+        "show_seconds": true,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "clock2": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 30,
+        "monitor": 2,
+        "position": "Bottom Right",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "clock3": {
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "display_mode": "digital",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 32,
+        "format": "24h",
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Bottom Left",
+        "show_numerals": true,
+        "show_seconds": false,
+        "show_timezone": true,
+        "timezone": "local"
+      },
+      "global": {
+        "card_border_width_px": 4
+      },
+      "imgur": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "click_opens_browser": true,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "custom_tag": "",
+        "enabled": false,
+        "font_family": "Segoe UI",
+        "font_size": 11,
+        "grid_columns": 4,
+        "grid_rows": 2,
+        "header_font_size": 14,
+        "image_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "image_border_enabled": true,
+        "image_border_radius": 4,
+        "image_border_width": 2,
+        "image_spacing": 4,
+        "intense_shadow": true,
+        "layout_mode": "hybrid",
+        "margin": 30,
+        "monitor": 2,
+        "position": "Top Right",
+        "show_background": true,
+        "show_header": true,
+        "tag": "most_viral",
+        "update_interval": 600
+      },
+      "media": {
+        "artwork_size": 250,
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 20,
+        "intense_shadow": true,
+        "margin": 30,
+        "monitor": 2,
+        "mute_button_enabled": true,
+        "position": "Bottom Left",
+        "provider": "spotify",
+        "rounded_artwork_border": true,
+        "show_background": true,
+        "show_controls": true,
+        "show_header_frame": true,
+        "spotify_volume_enabled": true,
+        "spotify_volume_fill_color": [
+          79,
+          79,
+          79,
+          150
+        ]
+      },
+      "reddit": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "exit_on_click": true,
+        "font_family": "Segoe UI",
+        "font_size": 14,
+        "intense_shadow": true,
+        "limit": 20,
+        "margin": 30,
+        "monitor": 2,
+        "position": "Bottom Center",
+        "show_background": true,
+        "show_separators": true,
+        "subreddit": "All"
+      },
+      "reddit2": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": true,
+        "intense_shadow": true,
+        "limit": 20,
+        "monitor": 2,
+        "position": "Bottom Right",
+        "show_background": true,
+        "subreddit": "Games"
+      },
+      "shadows": {
+        "blur_radius": 18,
+        "color": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "enabled": true,
+        "frame_opacity": 0.77,
+        "offset": [
+          4,
+          4
+        ],
+        "text_opacity": 0.33
+      },
+      "spotify_visualizer": {
+        "adaptive_sensitivity": true,
+        "agc_strength": 0.5,
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_count": 21,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "blob_adaptive_sensitivity": true,
+        "blob_agc_strength": 0.5,
+        "blob_audio_block_size": 512,
+        "blob_bar_count": 32,
+        "blob_color": [
+          0,
+          105,
+          243,
+          230
+        ],
+        "blob_constant_wobble": 0.4,
+        "blob_core_floor_bias": 0.4,
+        "blob_core_scale": 1.0,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
+        "blob_edge_color": [
+          208,
+          223,
+          255,
+          215
+        ],
+        "blob_energy_boost": 0.85,
+        "blob_ghost_alpha": 0.4,
+        "blob_ghost_decay": 0.3,
+        "blob_ghosting_enabled": false,
+        "blob_glow_color": [
+          3,
+          104,
+          255,
+          180
+        ],
+        "blob_glow_intensity": 0.5,
+        "blob_glow_max_size": 1.0,
+        "blob_glow_reactivity": 1.0,
+        "blob_growth": 5.0,
+        "blob_input_gain": 1.0,
+        "blob_kick_lane_gain": 1.0,
+        "blob_manual_floor": 0.12,
+        "blob_outline_color": [
+          84,
+          150,
+          255,
+          225
+        ],
+        "blob_pulse": 1.88,
+        "blob_reactive_deformation": 0.6,
+        "blob_reactive_glow": true,
+        "blob_reactive_wobble": 1.55,
+        "blob_sensitivity": 0.4,
+        "blob_size": 0.45,
+        "blob_stage2_release_ms": 900,
+        "blob_stage3_release_ms": 1200,
+        "blob_stage_bias": 0.0,
+        "blob_stage_gain": 1.0,
+        "blob_stretch_inner": 0.5,
+        "blob_stretch_outer": 0.5,
+        "blob_stretch_tendency": 0.18,
+        "blob_transient_clamp": 1.5,
+        "blob_transient_mix_bass": 0.5,
+        "blob_transient_mix_vocal": 0.35,
+        "blob_transient_pulse_gain": 1.0,
+        "blob_use_raw_energy": false,
+        "blob_width": 1.0,
+        "bubble_adaptive_sensitivity": true,
+        "bubble_agc_strength": 0.5,
+        "bubble_audio_block_size": 512,
+        "bubble_bar_count": 48,
+        "bubble_big_bass_pulse": 0.8,
+        "bubble_big_contraction_bias": 1.0,
+        "bubble_big_count": 11,
+        "bubble_big_size_clamp": 4.0,
+        "bubble_big_size_max": 0.03,
+        "bubble_drift_amount": 0.6,
+        "bubble_drift_direction": "random",
+        "bubble_drift_frequency": 0.7,
+        "bubble_drift_speed": 0.5,
+        "bubble_dynamic_floor": true,
+        "bubble_dynamic_range_enabled": false,
+        "bubble_energy_boost": 0.85,
+        "bubble_gradient_dark": [
+          7,
+          42,
+          53,
+          255
+        ],
+        "bubble_gradient_direction": "top",
+        "bubble_gradient_light": [
+          0,
+          179,
+          255,
+          255
+        ],
+        "bubble_growth": 5.0,
+        "bubble_input_gain": 1.0,
+        "bubble_kick_lane_gain": 1.0,
+        "bubble_manual_floor": 0.12,
+        "bubble_outline_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "bubble_pop_color": [
+          68,
+          68,
+          68,
+          255
+        ],
+        "bubble_rotation_amount": 0.3,
+        "bubble_sensitivity": 0.4,
+        "bubble_small_count": 34,
+        "bubble_small_freq_pulse": 0.56,
+        "bubble_small_size_max": 0.015,
+        "bubble_specular_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bubble_specular_direction": "top_left",
+        "bubble_stream_constant_speed": 0.14,
+        "bubble_stream_direction": "up",
+        "bubble_stream_reactivity": 1.2,
+        "bubble_stream_speed_cap": 3.0,
+        "bubble_surface_reach": 0.81,
+        "bubble_tail_opacity": 0.0,
+        "bubble_trail_strength": 0.0,
+        "bubble_transient_clamp": 1.5,
+        "bubble_transient_mix_bass": 0.75,
+        "bubble_transient_mix_vocal": 0.25,
+        "bubble_transient_pulse_gain": 1.0,
+        "bubble_use_raw_energy": false,
+        "dynamic_floor": true,
+        "dynamic_range_enabled": false,
+        "enabled": true,
+        "energy_boost": 0.85,
+        "ghost_alpha": 0.45,
+        "ghost_decay": 0.3,
+        "ghosting_enabled": true,
+        "input_gain": 1.0,
+        "kick_lane_gain": 1.0,
+        "manual_floor": 0.12,
+        "mode": "bubble",
+        "monitor": "ALL",
+        "osc_ghost_intensity": 0.4,
+        "osc_ghosting_enabled": true,
+        "osc_glow_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "osc_glow_enabled": true,
+        "osc_glow_intensity": 0.6,
+        "osc_glow_reactivity": 1.0,
+        "osc_glow_size": 1.0,
+        "osc_growth": 3.01,
+        "osc_line2_color": [
+          21,
+          21,
+          21,
+          255
+        ],
+        "osc_line2_glow_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "osc_line3_color": [
+          21,
+          21,
+          21,
+          250
+        ],
+        "osc_line3_glow_color": [
+          255,
+          255,
+          255,
+          240
+        ],
+        "osc_line_amplitude": 4.7,
+        "osc_line_color": [
+          0,
+          0,
+          0,
+          255
+        ],
+        "osc_line_count": 1,
+        "osc_line_dim": false,
+        "osc_line_offset_bias": 0.0,
+        "osc_reactive_glow": true,
+        "osc_smoothing": 0.6,
+        "osc_speed": 0.33,
+        "osc_vertical_shift": 25,
+        "oscilloscope_adaptive_sensitivity": true,
+        "oscilloscope_agc_strength": 0.5,
+        "oscilloscope_audio_block_size": 512,
+        "oscilloscope_bar_count": 32,
+        "oscilloscope_dynamic_floor": true,
+        "oscilloscope_dynamic_range_enabled": false,
+        "oscilloscope_energy_boost": 0.85,
+        "oscilloscope_input_gain": 1.0,
+        "oscilloscope_kick_lane_gain": 1.0,
+        "oscilloscope_manual_floor": 0.12,
+        "oscilloscope_sensitivity": 0.4,
+        "oscilloscope_transient_clamp": 1.5,
+        "oscilloscope_transient_pulse_gain": 1.0,
+        "oscilloscope_transient_width_mix": 0.35,
+        "oscilloscope_use_raw_energy": false,
+        "preset_blob": 1,
+        "preset_bubble": 0,
+        "preset_oscilloscope": 0,
+        "preset_sine_wave": 2,
+        "preset_spectrum": 0,
+        "rainbow_enabled": true,
+        "rainbow_speed": 0.3,
+        "sensitivity": 0.4,
+        "sine_card_adaptation": 0.3,
+        "sine_crawl_amount": 0.4,
+        "sine_density": 1.0,
+        "sine_displacement": 0.0,
+        "sine_ghost_alpha": 0.45,
+        "sine_ghost_decay": 0.3,
+        "sine_ghosting_enabled": true,
+        "sine_glow_color": [
+          0,
+          107,
+          230,
+          240
+        ],
+        "sine_glow_enabled": true,
+        "sine_glow_intensity": 0.6,
+        "sine_glow_reactivity": 1.0,
+        "sine_glow_size": 1.0,
+        "sine_heartbeat": 0.0,
+        "sine_line1_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "sine_line1_shift": 0.0,
+        "sine_line2_color": [
+          255,
+          255,
+          255,
+          200
+        ],
+        "sine_line2_glow_color": [
+          47,
+          165,
+          255,
+          180
+        ],
+        "sine_line2_shift": 0.35,
+        "sine_line3_color": [
+          255,
+          255,
+          255,
+          200
+        ],
+        "sine_line3_glow_color": [
+          47,
+          116,
+          227,
+          180
+        ],
+        "sine_line3_shift": -0.35,
+        "sine_line_color": [
+          255,
+          255,
+          255,
+          240
+        ],
+        "sine_line_count": 3,
+        "sine_line_dim": false,
+        "sine_line_offset_bias": 0.0,
+        "sine_micro_wobble": 0.2,
+        "sine_reactive_glow": true,
+        "sine_sensitivity": 2.75,
+        "sine_speed": 0.7,
+        "sine_travel_line2": 0,
+        "sine_travel_line3": 0,
+        "sine_vertical_shift": 40,
+        "sine_wave_adaptive_sensitivity": true,
+        "sine_wave_agc_strength": 0.5,
+        "sine_wave_audio_block_size": 512,
+        "sine_wave_bar_count": 40,
+        "sine_wave_dynamic_floor": true,
+        "sine_wave_dynamic_range_enabled": false,
+        "sine_wave_effect": 0.8,
+        "sine_wave_energy_boost": 0.85,
+        "sine_wave_growth": 5.0,
+        "sine_wave_input_gain": 1.0,
+        "sine_wave_kick_lane_gain": 1.0,
+        "sine_wave_manual_floor": 0.12,
+        "sine_wave_sensitivity": 0.4,
+        "sine_wave_transient_clamp": 1.5,
+        "sine_wave_transient_pulse_gain": 1.0,
+        "sine_wave_transient_width_mix": 0.4,
+        "sine_wave_travel": 2,
+        "sine_wave_use_raw_energy": false,
+        "sine_width_reaction": 0.0,
+        "spectrum_adaptive_sensitivity": true,
+        "spectrum_agc_strength": 0.5,
+        "spectrum_audio_block_size": 512,
+        "spectrum_bar_count": 33,
+        "spectrum_bass_emphasis": 0.5,
+        "spectrum_border_radius": 2.0,
+        "spectrum_dynamic_floor": true,
+        "spectrum_dynamic_range_enabled": false,
+        "spectrum_energy_boost": 0.85,
+        "spectrum_growth": 3.96,
+        "spectrum_input_gain": 1.0,
+        "spectrum_kick_lane_gain": 1.0,
+        "spectrum_lane_transient_mix": 0.65,
+        "spectrum_manual_floor": 0.12,
+        "spectrum_mid_suppression": 0.5,
+        "spectrum_mirrored": true,
+        "spectrum_profile_floor": 0.12,
+        "spectrum_rainbow_per_bar": true,
+        "spectrum_sensitivity": 0.4,
+        "spectrum_shape_nodes": [
+          [
+            0.0,
+            0.4
+          ],
+          [
+            0.35,
+            0.75
+          ],
+          [
+            0.65,
+            0.55
+          ],
+          [
+            1.0,
+            0.8
+          ]
+        ],
+        "spectrum_single_piece": true,
+        "spectrum_transient_clamp": 1.5,
+        "spectrum_transient_pulse_gain": 1.0,
+        "spectrum_use_raw_energy": false,
+        "spectrum_vocal_position": 0.4,
+        "spectrum_wave_amplitude": 0.5,
+        "transient_clamp": 1.5,
+        "transient_pulse_gain": 1.0,
+        "use_raw_energy": false
+      },
+      "weather": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.6,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "detail_icon_size": 16,
+        "enabled": true,
+        "font_family": "Segoe UI",
+        "font_size": 28,
+        "icon_alignment": "RIGHT",
+        "icon_size": 96,
+        "intense_shadow": true,
+        "location": "Blantyre",
+        "margin": 30,
+        "monitor": 2,
+        "position": "Top Left",
+        "show_background": true,
+        "show_condition_icon": true,
+        "show_details_row": true,
+        "show_forecast": true
+      }
+    }
+  },
+  "version": 2
+}
