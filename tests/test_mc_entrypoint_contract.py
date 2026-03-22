@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from pathlib import Path
 
+def test_main_mc_forces_hard_exit_default(monkeypatch) -> None:
+    import main_mc
 
-ROOT = Path(__file__).resolve().parent.parent
+    calls: list[tuple[str, object]] = []
 
+    class DummySettingsManager:
+        def set(self, key, value):
+            calls.append((key, value))
 
-def test_main_mc_forces_hard_exit_default() -> None:
-    src = (ROOT / "main_mc.py").read_text(encoding="utf-8")
-    assert 'mgr.set("input.hard_exit", True)' in src
+    monkeypatch.setattr(main_mc, "SettingsManager", DummySettingsManager)
+    monkeypatch.setattr(main_mc, "parse_screensaver_args", lambda: calls.append(("parse", True)))
+    monkeypatch.setattr(main_mc, "core_main", lambda: 123)
+
+    result = main_mc.main()
+
+    assert ("input.hard_exit", True) in calls
+    assert result == 123

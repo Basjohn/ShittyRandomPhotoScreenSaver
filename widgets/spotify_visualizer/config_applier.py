@@ -495,95 +495,118 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
 
-def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
-    """Build the extra kwargs dict for non-spectrum GPU push.
+def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
+    """Return cross-mode visual extras that all GPU paths understand."""
+    return {
+        'rainbow_enabled': getattr(widget, '_rainbow_enabled', False),
+        'rainbow_speed': getattr(widget, '_rainbow_speed', 0.5),
+        'rainbow_per_bar': getattr(widget, '_rainbow_per_bar', False),
+        'spectrum_ghosting_enabled': getattr(widget, '_spectrum_ghosting_enabled', True),
+        'spectrum_ghost_alpha': getattr(widget, '_spectrum_ghost_alpha', 0.4),
+        'spectrum_ghost_decay': getattr(widget, '_spectrum_ghost_decay', 0.4),
+        'osc_ghosting_enabled': getattr(widget, '_osc_ghosting_enabled', False),
+        'osc_ghost_intensity': getattr(widget, '_osc_ghost_intensity', 0.4),
+        'blob_ghosting_enabled': getattr(widget, '_blob_ghosting_enabled', False),
+        'blob_ghost_alpha': getattr(widget, '_blob_ghost_alpha', 0.4),
+        'blob_ghost_decay': getattr(widget, '_blob_ghost_decay', 0.3),
+        'sine_ghosting_enabled': getattr(widget, '_sine_ghosting_enabled', True),
+        'sine_ghost_alpha': getattr(widget, '_sine_ghost_alpha', 0.45),
+        'sine_ghost_decay': getattr(widget, '_sine_ghost_decay', 0.3),
+        'bubble_ghosting_enabled': getattr(widget, '_bubble_ghosting_enabled', False),
+        'bubble_ghost_alpha': getattr(widget, '_bubble_ghost_alpha', 0.0),
+        'bubble_ghost_decay': getattr(widget, '_bubble_ghost_decay', 0.4),
+        'sine_heartbeat': getattr(widget, '_sine_heartbeat', 0.0),
+        'heartbeat_intensity': getattr(widget, '_heartbeat_intensity', 0.0),
+        'sine_density': getattr(widget, '_sine_density', 1.0),
+        'sine_displacement': getattr(widget, '_sine_displacement', 0.0),
+    }
 
-    Reads per-mode attributes from *widget* and returns a dict suitable for
-    ``push_spotify_visualizer_frame(**extra)``.
-    """
-    extra: Dict[str, Any] = {}
-    # Rainbow applies to ALL modes (including spectrum)
-    extra['rainbow_enabled'] = getattr(widget, '_rainbow_enabled', False)
-    extra['rainbow_speed'] = getattr(widget, '_rainbow_speed', 0.5)
-    extra['rainbow_per_bar'] = getattr(widget, '_rainbow_per_bar', False)
-    extra['spectrum_ghosting_enabled'] = getattr(widget, '_spectrum_ghosting_enabled', True)
-    extra['spectrum_ghost_alpha'] = getattr(widget, '_spectrum_ghost_alpha', 0.4)
-    extra['spectrum_ghost_decay'] = getattr(widget, '_spectrum_ghost_decay', 0.4)
-    extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
-    extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
-    extra['blob_ghosting_enabled'] = getattr(widget, '_blob_ghosting_enabled', False)
-    extra['blob_ghost_alpha'] = getattr(widget, '_blob_ghost_alpha', 0.4)
-    extra['blob_ghost_decay'] = getattr(widget, '_blob_ghost_decay', 0.3)
-    extra['sine_ghosting_enabled'] = getattr(widget, '_sine_ghosting_enabled', True)
-    extra['sine_ghost_alpha'] = getattr(widget, '_sine_ghost_alpha', 0.45)
-    extra['sine_ghost_decay'] = getattr(widget, '_sine_ghost_decay', 0.3)
-    extra['bubble_ghosting_enabled'] = getattr(widget, '_bubble_ghosting_enabled', False)
-    extra['bubble_ghost_alpha'] = getattr(widget, '_bubble_ghost_alpha', 0.0)
-    extra['bubble_ghost_decay'] = getattr(widget, '_bubble_ghost_decay', 0.4)
-    extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
-    extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
-    extra['sine_density'] = getattr(widget, '_sine_density', 1.0)
-    extra['sine_displacement'] = getattr(widget, '_sine_displacement', 0.0)
-    if mode_str == 'spectrum':
-        return extra
 
-    if engine is not None:
-        extra['waveform'] = engine.get_waveform()
-        try:
-            extra['waveform_count'] = engine.get_waveform_count()
-        except Exception:
-            extra['waveform_count'] = len(extra['waveform'])
-        # Per-mode energy source: normalized (default) or raw pre-AGC.
-        # Raw preserves dynamic range but has wrong scaling for some modes.
-        use_raw = getattr(widget, '_use_raw_energy', False)
-        if use_raw:
-            extra['energy_bands'] = engine.get_pre_agc_energy_bands()
-        else:
-            extra['energy_bands'] = engine.get_energy_bands()
-        # Transient bus snapshot (Approach A dual-path) — available to all modes
-        extra['transient_energy'] = engine.get_transient_energy_bands()
-        if mode_str == 'blob':
-            try:
-                scheduler = engine.get_event_scheduler()
-            except Exception:
-                scheduler = None
-            if scheduler is not None:
-                kick_evt = scheduler.peek_latest('kick', max_age_s=0.18)
-                snare_evt = scheduler.peek_latest('snare', max_age_s=0.22)
-                extra['blob_kick_event_strength'] = (
-                    float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
-                )
-                extra['blob_snare_event_strength'] = (
-                    float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
-                )
-        elif mode_str in {'sine_wave', 'oscilloscope'}:
-            try:
-                scheduler = engine.get_event_scheduler()
-            except Exception:
-                scheduler = None
-            if scheduler is not None:
-                kick_evt = scheduler.peek_latest('kick', max_age_s=0.16)
-                snare_evt = scheduler.peek_latest('snare', max_age_s=0.20)
-                extra['line_kick_event_strength'] = (
-                    float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
-                )
-                extra['line_snare_event_strength'] = (
-                    float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
-                )
+def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_str: str, engine: Any) -> None:
+    """Attach waveform, continuous energy, transient bus, and scheduler peeks."""
+    if engine is None:
+        return
 
-    _is_sine = (mode_str == 'sine_wave')
-    extra['glow_enabled'] = widget._sine_glow_enabled if _is_sine else widget._osc_glow_enabled
-    extra['glow_intensity'] = widget._sine_glow_intensity if _is_sine else widget._osc_glow_intensity
-    extra['glow_size'] = widget._sine_glow_size if _is_sine else widget._osc_glow_size
+    extra['waveform'] = engine.get_waveform()
+    try:
+        extra['waveform_count'] = engine.get_waveform_count()
+    except Exception:
+        extra['waveform_count'] = len(extra['waveform'])
+
+    use_raw = getattr(widget, '_use_raw_energy', False)
+    if use_raw:
+        extra['energy_bands'] = engine.get_pre_agc_energy_bands()
+    else:
+        extra['energy_bands'] = engine.get_energy_bands()
+    extra['transient_energy'] = engine.get_transient_energy_bands()
+
+    try:
+        scheduler = engine.get_event_scheduler()
+    except Exception:
+        scheduler = None
+    if scheduler is None:
+        return
+
+    if mode_str == 'blob':
+        kick_evt = scheduler.peek_latest('kick', max_age_s=0.18)
+        snare_evt = scheduler.peek_latest('snare', max_age_s=0.22)
+        extra['blob_kick_event_strength'] = (
+            float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
+        )
+        extra['blob_snare_event_strength'] = (
+            float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
+        )
+    elif mode_str in {'sine_wave', 'oscilloscope'}:
+        kick_evt = scheduler.peek_latest('kick', max_age_s=0.16)
+        snare_evt = scheduler.peek_latest('snare', max_age_s=0.20)
+        extra['line_kick_event_strength'] = (
+            float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
+        )
+        extra['line_snare_event_strength'] = (
+            float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
+        )
+
+
+def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_sine: bool) -> None:
+    """Attach the shared Sine/Osc visual parameters."""
+    extra['glow_enabled'] = widget._sine_glow_enabled if is_sine else widget._osc_glow_enabled
+    extra['glow_intensity'] = widget._sine_glow_intensity if is_sine else widget._osc_glow_intensity
+    extra['glow_size'] = widget._sine_glow_size if is_sine else widget._osc_glow_size
     extra['glow_reactivity'] = (
         getattr(widget, '_sine_glow_reactivity', 1.0)
-        if _is_sine
+        if is_sine
         else getattr(widget, '_osc_glow_reactivity', 1.0)
     )
-    extra['glow_color'] = widget._sine_glow_color if _is_sine else widget._osc_glow_color
-    extra['reactive_glow'] = widget._sine_reactive_glow if _is_sine else widget._osc_reactive_glow
-    extra['osc_line_amplitude'] = widget._sine_sensitivity if _is_sine else widget._osc_line_amplitude
+    extra['glow_color'] = widget._sine_glow_color if is_sine else widget._osc_glow_color
+    extra['reactive_glow'] = widget._sine_reactive_glow if is_sine else widget._osc_reactive_glow
+    extra['osc_line_amplitude'] = widget._sine_sensitivity if is_sine else widget._osc_line_amplitude
     extra['osc_smoothing'] = widget._osc_smoothing
+    extra['osc_speed'] = widget._sine_speed if is_sine else widget._osc_speed
+    extra['osc_line_dim'] = widget._sine_line_dim if is_sine else widget._osc_line_dim
+    extra['osc_line_offset_bias'] = widget._sine_line_offset_bias if is_sine else widget._osc_line_offset_bias
+    extra['osc_vertical_shift'] = widget._osc_vertical_shift
+    extra['osc_sine_travel'] = widget._sine_wave_travel
+    extra['sine_card_adaptation'] = widget._sine_card_adaptation
+    extra['sine_travel_line2'] = widget._sine_travel_line2
+    extra['sine_travel_line3'] = widget._sine_travel_line3
+    extra['sine_line1_shift'] = getattr(widget, '_sine_line1_shift', 0.0)
+    extra['sine_line2_shift'] = getattr(widget, '_sine_line2_shift', 0.0)
+    extra['sine_line3_shift'] = getattr(widget, '_sine_line3_shift', 0.0)
+    extra['sine_wave_effect'] = widget._sine_wave_effect
+    extra['sine_micro_wobble'] = widget._sine_micro_wobble
+    extra['sine_crawl_amount'] = getattr(widget, '_sine_crawl_amount', 0.0)
+    extra['sine_width_reaction'] = widget._sine_width_reaction
+    extra['sine_vertical_shift'] = widget._sine_vertical_shift
+    extra['line_color'] = widget._sine_line_color if is_sine else widget._osc_line_color
+    extra['osc_line_count'] = widget._sine_line_count if is_sine else widget._osc_line_count
+    extra['osc_line2_color'] = widget._sine_line2_color if is_sine else widget._osc_line2_color
+    extra['osc_line2_glow_color'] = widget._sine_line2_glow_color if is_sine else widget._osc_line2_glow_color
+    extra['osc_line3_color'] = widget._sine_line3_color if is_sine else widget._osc_line3_color
+    extra['osc_line3_glow_color'] = widget._sine_line3_glow_color if is_sine else widget._osc_line3_glow_color
+
+
+def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach Blob-only live-core and retained-ghost parameters."""
     extra['blob_color'] = widget._blob_color
     extra['blob_glow_color'] = widget._blob_glow_color
     extra['blob_edge_color'] = widget._blob_edge_color
@@ -607,47 +630,34 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     extra['blob_stretch_tendency'] = widget._blob_stretch_tendency
     extra['blob_stretch_inner'] = getattr(widget, '_blob_stretch_inner', 0.5)
     extra['blob_stretch_outer'] = getattr(widget, '_blob_stretch_outer', 0.5)
-    extra['osc_speed'] = widget._sine_speed if _is_sine else widget._osc_speed
-    extra['osc_line_dim'] = widget._sine_line_dim if _is_sine else widget._osc_line_dim
-    extra['osc_line_offset_bias'] = widget._sine_line_offset_bias if _is_sine else widget._osc_line_offset_bias
-    extra['osc_vertical_shift'] = widget._osc_vertical_shift
-    extra['osc_sine_travel'] = widget._sine_wave_travel
-    extra['sine_card_adaptation'] = widget._sine_card_adaptation
-    extra['sine_travel_line2'] = widget._sine_travel_line2
-    extra['sine_travel_line3'] = widget._sine_travel_line3
-    extra['sine_line1_shift'] = getattr(widget, '_sine_line1_shift', 0.0)
-    extra['sine_line2_shift'] = getattr(widget, '_sine_line2_shift', 0.0)
-    extra['sine_line3_shift'] = getattr(widget, '_sine_line3_shift', 0.0)
-    extra['sine_wave_effect'] = widget._sine_wave_effect
-    extra['sine_micro_wobble'] = widget._sine_micro_wobble
-    extra['sine_crawl_amount'] = getattr(widget, '_sine_crawl_amount', 0.0)
-    extra['sine_width_reaction'] = widget._sine_width_reaction
-    extra['sine_vertical_shift'] = widget._sine_vertical_shift
-    extra['line_color'] = widget._sine_line_color if _is_sine else widget._osc_line_color
-    extra['osc_line_count'] = widget._sine_line_count if _is_sine else widget._osc_line_count
-    extra['osc_line2_color'] = widget._sine_line2_color if _is_sine else widget._osc_line2_color
-    extra['osc_line2_glow_color'] = widget._sine_line2_glow_color if _is_sine else widget._osc_line2_glow_color
-    extra['osc_line3_color'] = widget._sine_line3_color if _is_sine else widget._osc_line3_color
-    extra['osc_line3_glow_color'] = widget._sine_line3_glow_color if _is_sine else widget._osc_line3_glow_color
 
-    # --- Bubble -----------------------------------------------------------
-    # Only pass GL-relevant keys to set_state (colours, simulation snapshot).
-    # Simulation settings (counts, speeds, directions) stay on the widget for
-    # the COMPUTE-thread simulation and must NOT be forwarded to set_state
-    # which would reject them as unexpected kwargs.
+
+def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach only GL-safe Bubble extras; sim controls stay on the widget."""
+    extra['bubble_outline_color'] = getattr(widget, '_bubble_outline_color', None)
+    extra['bubble_specular_color'] = getattr(widget, '_bubble_specular_color', None)
+    extra['bubble_gradient_light'] = getattr(widget, '_bubble_gradient_light', None)
+    extra['bubble_gradient_dark'] = getattr(widget, '_bubble_gradient_dark', None)
+    extra['bubble_pop_color'] = getattr(widget, '_bubble_pop_color', None)
+    extra['bubble_specular_direction'] = getattr(widget, '_bubble_specular_direction', 'top_left')
+    extra['bubble_gradient_direction'] = getattr(widget, '_bubble_gradient_direction', 'top')
+    extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
+    extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
+    extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
+    extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
+    extra['bubble_tail_opacity'] = getattr(widget, '_bubble_tail_opacity', 0.0)
+    extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
+
+
+def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
+    """Build the mode-local GPU extras payload for the compositor overlay."""
+    extra = _build_shared_visualizer_extras(widget)
+    if mode_str == 'spectrum':
+        return extra
+
+    _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
+    _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
+    _append_blob_visual_extras(extra, widget)
     if mode_str == 'bubble':
-        extra['bubble_outline_color'] = getattr(widget, '_bubble_outline_color', None)
-        extra['bubble_specular_color'] = getattr(widget, '_bubble_specular_color', None)
-        extra['bubble_gradient_light'] = getattr(widget, '_bubble_gradient_light', None)
-        extra['bubble_gradient_dark'] = getattr(widget, '_bubble_gradient_dark', None)
-        extra['bubble_pop_color'] = getattr(widget, '_bubble_pop_color', None)
-        extra['bubble_specular_direction'] = getattr(widget, '_bubble_specular_direction', 'top_left')
-        extra['bubble_gradient_direction'] = getattr(widget, '_bubble_gradient_direction', 'top')
-        extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
-        extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
-        extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
-        extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
-        extra['bubble_tail_opacity'] = getattr(widget, '_bubble_tail_opacity', 0.0)
-        extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
-
+        _append_bubble_visual_extras(extra, widget)
     return extra

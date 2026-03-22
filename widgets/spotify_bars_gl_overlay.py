@@ -139,6 +139,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_inner: float = 0.5
         self._blob_stretch_outer: float = 0.5
         self._blob_smoothed_energy: float = 0.0
+        self._blob_raw_bass_energy: float = 0.0
+        self._blob_raw_mid_energy: float = 0.0
+        self._blob_raw_high_energy: float = 0.0
+        self._blob_raw_overall_energy: float = 0.0
         self._blob_live_bass_energy: float = 0.0
         self._blob_live_mid_energy: float = 0.0
         self._blob_live_high_energy: float = 0.0
@@ -190,6 +194,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_snare_event_strength: float = 0.0
         self._blob_kick_event_envelope: float = 0.0
         self._blob_snare_event_envelope: float = 0.0
+        self._blob_diag_last_ts: float = 0.0
+        self._blob_diag_last_sig: tuple | None = None
         self._line_kick_event_strength: float = 0.0
         self._line_snare_event_strength: float = 0.0
         self._line_kick_event_envelope: float = 0.0
@@ -338,6 +344,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_smoothed_energy = 0.0
         else:
             self._blob_smoothed_energy = 0.0
+        self._blob_raw_bass_energy = 0.0
+        self._blob_raw_mid_energy = 0.0
+        self._blob_raw_high_energy = 0.0
+        self._blob_raw_overall_energy = 0.0
         self._blob_live_bass_energy = 0.0
         self._blob_live_mid_energy = 0.0
         self._blob_live_high_energy = 0.0
@@ -356,6 +366,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_snare_event_strength = 0.0
         self._blob_kick_event_envelope = 0.0
         self._blob_snare_event_envelope = 0.0
+        self._blob_diag_last_ts = 0.0
+        self._blob_diag_last_sig = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -524,6 +536,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_kick_raw = max(0.0, min(1.0, float(blob_kick_event_strength)))
         blob_snare_raw = max(0.0, min(1.0, float(blob_snare_event_strength)))
         blob_live_bands: tuple[float, float, float, float] | None = None
+        blob_live_bands_filtered: tuple[float, float, float, float] | None = None
+        blob_prev_smoothed = self._blob_smoothed_energy
+        blob_prev_stage_filtered = self._blob_stage_progress_filtered
+        blob_dt_seconds = 0.0
 
         # Update accumulated time for animated modes
         dt_seconds = 0.0
@@ -532,10 +548,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             dt = now_ts - self._last_time_ts
             if 0.0 < dt < 1.0:  # sanity clamp
                 dt_seconds = dt
+                blob_dt = self._compute_blob_smoothing_dt(dt_seconds)
+                blob_dt_seconds = blob_dt
                 kick_tau = 0.22 if blob_kick_raw < self._blob_kick_event_envelope else 0.05
                 snare_tau = 0.18 if blob_snare_raw < self._blob_snare_event_envelope else 0.05
-                kick_alpha = min(1.0, dt_seconds / max(kick_tau, 0.01))
-                snare_alpha = min(1.0, dt_seconds / max(snare_tau, 0.01))
+                kick_alpha = min(1.0, blob_dt / max(kick_tau, 0.01))
+                snare_alpha = min(1.0, blob_dt / max(snare_tau, 0.01))
                 self._blob_kick_event_envelope += (
                     blob_kick_raw - self._blob_kick_event_envelope
                 ) * kick_alpha
@@ -551,21 +569,41 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     self._accumulated_time += dt
                 # Blob: smooth overall energy to reduce glow flickering
                 if self._vis_mode == 'blob' and blob_live_bands is not None:
-                    live_bass, live_mid, live_high, raw_e = blob_live_bands
+                    self._blob_raw_bass_energy = blob_live_bands[0]
+                    self._blob_raw_mid_energy = blob_live_bands[1]
+                    self._blob_raw_high_energy = blob_live_bands[2]
+                    self._blob_raw_overall_energy = blob_live_bands[3]
+                    live_bass, live_mid, live_high, live_overall = self._filter_blob_live_bands(
+                        blob_live_bands,
+                        blob_dt,
+                    )
                     prev = self._blob_smoothed_energy
-                    # Fast rise (~50ms tau), slow decay (~300ms tau)
-                    alpha = min(1.0, dt / 0.05) if raw_e > prev else min(1.0, dt / 0.30)
-                    self._blob_smoothed_energy = prev + (raw_e - prev) * alpha
+                    # Use a bass-weighted signal so vocal energy doesn't
+                    # drive pulse/size.  Raw bands → single fast EMA.
+                    raw_bass = self._blob_raw_bass_energy
+                    raw_overall = self._blob_raw_overall_energy
+                    se_input = raw_bass * 0.70 + raw_overall * 0.30
+                    if se_input > prev:
+                        # Magnitude-scaled rise: big jumps (kicks) snap fast,
+                        # small wobbles (vocal flutter) get heavily damped.
+                        _delta = se_input - prev
+                        _mag = min(1.0, _delta / 0.12)
+                        _rise_tau = 0.022 + (1.0 - _mag) * 0.10  # 22ms..122ms
+                        alpha = min(1.0, blob_dt / _rise_tau)
+                    else:
+                        alpha = min(1.0, blob_dt / 0.35)
+                    self._blob_smoothed_energy = prev + (se_input - prev) * alpha
                     self._blob_live_bass_energy = live_bass
                     self._blob_live_mid_energy = live_mid
                     self._blob_live_high_energy = live_high
-                    self._blob_live_overall_energy = raw_e
+                    self._blob_live_overall_energy = live_overall
+                    blob_live_bands_filtered = (live_bass, live_mid, live_high, live_overall)
                     smoothed_e = self._blob_smoothed_energy
                     # Ghost peak: retain the same processed blob silhouette
                     # the live core is using, then hold/decay it separately.
                     any_peak_hit = False
-                    if raw_e > self._blob_peak_energy:
-                        self._blob_peak_energy = raw_e
+                    if live_overall > self._blob_peak_energy:
+                        self._blob_peak_energy = live_overall
                         any_peak_hit = True
                     if live_bass > self._blob_peak_bass:
                         self._blob_peak_bass = live_bass
@@ -576,28 +614,28 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     if live_high > self._blob_peak_high:
                         self._blob_peak_high = live_high
                         any_peak_hit = True
-                    if raw_e > self._blob_peak_overall:
-                        self._blob_peak_overall = raw_e
+                    if live_overall > self._blob_peak_overall:
+                        self._blob_peak_overall = live_overall
                         any_peak_hit = True
                     if self._blob_ghosting_enabled:
                         if any_peak_hit:
                             self._blob_peak_hold_remaining = 0.15
                         hold = getattr(self, '_blob_peak_hold_remaining', 0.0)
                         if hold > 0.0:
-                            self._blob_peak_hold_remaining = max(0.0, hold - dt)
+                            self._blob_peak_hold_remaining = max(0.0, hold - blob_dt)
                         else:
                             decay_slider = max(0.1, min(1.0, self._peak_decay_per_sec / 2.0))
                             tau = 3.0 - decay_slider * 2.5
-                            da = min(1.0, dt / max(tau, 0.1))
+                            da = min(1.0, blob_dt / max(tau, 0.1))
                             self._blob_peak_energy += (smoothed_e - self._blob_peak_energy) * da
                             self._blob_peak_bass += (
-                                smoothed_e * (live_bass / max(raw_e, 0.001)) - self._blob_peak_bass
+                                smoothed_e * (live_bass / max(live_overall, 0.001)) - self._blob_peak_bass
                             ) * da
                             self._blob_peak_mid += (
-                                smoothed_e * (live_mid / max(raw_e, 0.001)) - self._blob_peak_mid
+                                smoothed_e * (live_mid / max(live_overall, 0.001)) - self._blob_peak_mid
                             ) * da
                             self._blob_peak_high += (
-                                smoothed_e * (live_high / max(raw_e, 0.001)) - self._blob_peak_high
+                                smoothed_e * (live_high / max(live_overall, 0.001)) - self._blob_peak_high
                             ) * da
                             self._blob_peak_overall += (smoothed_e - self._blob_peak_overall) * da
                         min_offset = max(0.06, smoothed_e * 0.12)
@@ -605,7 +643,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         self._blob_peak_bass = max(self._blob_peak_bass, live_bass + min_offset * 0.8)
                         self._blob_peak_mid = max(self._blob_peak_mid, live_mid + min_offset * 0.8)
                         self._blob_peak_high = max(self._blob_peak_high, live_high + min_offset * 0.8)
-                        self._blob_peak_overall = max(self._blob_peak_overall, raw_e + min_offset)
+                        self._blob_peak_overall = max(self._blob_peak_overall, live_overall + min_offset)
                 # Oscilloscope / Sine Wave: smooth per-band energy for glow anti-flicker
                 if self._vis_mode in ('oscilloscope', 'sine_wave') and energy_bands is not None:
                     for attr, band in (
@@ -654,6 +692,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_snare_event_strength = self._blob_snare_event_envelope
             if self._vis_mode == 'blob' and energy_bands is not None:
                 blob_live_bands = self._compute_blob_live_bands(energy_bands)
+                self._blob_raw_bass_energy = blob_live_bands[0]
+                self._blob_raw_mid_energy = blob_live_bands[1]
+                self._blob_raw_high_energy = blob_live_bands[2]
+                self._blob_raw_overall_energy = blob_live_bands[3]
         self._last_time_ts = now_ts
 
         # Store waveform data (oscilloscope) with temporal smoothing via osc_speed
@@ -713,7 +755,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             # Blob stage progress is expensive — only compute when in blob mode
             if self._vis_mode == 'blob':
                 bass_val, mid_val, high_val, overall_val = (
-                    blob_live_bands if blob_live_bands is not None
+                    blob_live_bands_filtered
+                    if blob_live_bands_filtered is not None
+                    else blob_live_bands
+                    if blob_live_bands is not None
                     else self._compute_blob_live_bands(energy_bands)
                 )
                 self._blob_live_bass_energy = bass_val
@@ -725,18 +770,49 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     if seed_value > 0.0:
                         self._blob_smoothed_energy = seed_value
                         self._blob_seed_pending = False
+                stage_progress_bass = float(getattr(self, '_blob_stage_input_bass', bass_val) or bass_val)
+                stage_progress_mid = float(getattr(self, '_blob_stage_input_mid', mid_val) or mid_val)
+                stage_progress_high = float(getattr(self, '_blob_stage_input_high', high_val) or high_val)
+                stage_progress_overall = float(getattr(self, '_blob_stage_input_overall', overall_val) or overall_val)
                 stage_progress_raw = compute_stage_progress(
-                    bass_energy=bass_val,
-                    mid_energy=mid_val,
-                    high_energy=high_val,
-                    overall_energy=overall_val,
+                    bass_energy=stage_progress_bass,
+                    mid_energy=stage_progress_mid,
+                    high_energy=stage_progress_high,
+                    overall_energy=stage_progress_overall,
                     smoothed_energy=self._blob_smoothed_energy,
                     stage_bias=self._blob_stage_bias,
                 )
                 self._blob_stage_progress_raw = stage_progress_raw
-                filtered = self._filter_stage_progress(stage_progress_raw, dt_seconds)
+                filtered = self._filter_stage_progress(
+                    stage_progress_raw,
+                    self._compute_blob_smoothing_dt(dt_seconds),
+                )
                 self._blob_stage_progress_filtered = filtered
                 self._blob_stage_progress_ready = True
+                self._maybe_log_blob_diagnostics(
+                    dt_seconds=dt_seconds,
+                    blob_dt=blob_dt_seconds,
+                    kick_raw=blob_kick_raw,
+                    snare_raw=blob_snare_raw,
+                    raw_live=(
+                        self._blob_raw_bass_energy,
+                        self._blob_raw_mid_energy,
+                        self._blob_raw_high_energy,
+                        self._blob_raw_overall_energy,
+                    ),
+                    filtered_live=(
+                        bass_val,
+                        mid_val,
+                        high_val,
+                        overall_val,
+                    ),
+                    prev_smoothed=blob_prev_smoothed,
+                    raw_e=overall_val,
+                    smoothed_e=self._blob_smoothed_energy,
+                    stage_raw=stage_progress_raw,
+                    stage_filtered=filtered,
+                    prev_stage_filtered=blob_prev_stage_filtered,
+                )
                 if not self._blob_ghosting_enabled:
                     self._blob_peak_energy = self._blob_smoothed_energy
                     self._blob_peak_bass = bass_val
@@ -1246,7 +1322,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         stage2_tau = max(0.05, self._blob_stage2_release_ms / 1000.0)
         stage3_tau = max(0.05, self._blob_stage3_release_ms / 1000.0)
         decay_taus = (0.40, stage2_tau, stage3_tau)
-        rise_tau = 0.045
+        rise_tau = 0.020
         for idx, (prev_val, new_val) in enumerate(zip(prev, new_clamped)):
             if new_val >= prev_val:
                 alpha = min(1.0, dt / rise_tau)
@@ -1256,31 +1332,234 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             filtered.append(prev_val + (new_val - prev_val) * alpha)
         return (filtered[0], filtered[1], filtered[2])
 
+    def _compute_blob_smoothing_dt(self, dt_seconds: float) -> float:
+        """Clamp Blob-local smoothing so frame hitches do not become visual punches."""
+        if dt_seconds <= 0.0:
+            return 0.0
+        return min(dt_seconds, 1.0 / 20.0)
+
+    def _filter_blob_live_bands(
+        self,
+        live_bands: tuple[float, float, float, float],
+        dt: float,
+    ) -> tuple[float, float, float, float]:
+        """Smooth Blob's live deformation bands so the silhouette cannot snap back in one frame."""
+        clamped = tuple(max(0.0, min(1.5, float(v))) for v in live_bands)
+        if dt <= 0.0:
+            return clamped
+
+        prev = (
+            float(getattr(self, '_blob_live_bass_energy', 0.0) or 0.0),
+            float(getattr(self, '_blob_live_mid_energy', 0.0) or 0.0),
+            float(getattr(self, '_blob_live_high_energy', 0.0) or 0.0),
+            float(getattr(self, '_blob_live_overall_energy', 0.0) or 0.0),
+        )
+        if bool(getattr(self, '_blob_seed_pending', False)) or max(prev) <= 0.0001:
+            return clamped
+        taus = (
+            (0.018, 0.180),  # bass: fast rise, slower decay
+            (0.028, 0.220),  # mid: most visually obvious deformation path
+            (0.025, 0.180),  # high: sparkle without chatter
+            (0.028, 0.260),  # overall: stage/size support
+        )
+        filtered: List[float] = []
+        for idx, (prev_val, cur_val, (rise_tau, decay_tau)) in enumerate(
+            zip(prev, clamped, taus)
+        ):
+            if cur_val >= prev_val:
+                # For bass(0) and overall(3): magnitude-scale the rise so
+                # small wobbles get damped while kicks still snap fast.
+                if idx == 0 or idx == 3:
+                    _d = cur_val - prev_val
+                    _m = min(1.0, _d / 0.10)
+                    tau = rise_tau + (1.0 - _m) * rise_tau * 3.0
+                else:
+                    tau = rise_tau
+            else:
+                tau = decay_tau
+            alpha = min(1.0, dt / max(tau, 0.01))
+            filtered.append(prev_val + (cur_val - prev_val) * alpha)
+        return (filtered[0], filtered[1], filtered[2], filtered[3])
+
+    def _maybe_log_blob_diagnostics(
+        self,
+        *,
+        dt_seconds: float,
+        blob_dt: float,
+        kick_raw: float,
+        snare_raw: float,
+        raw_live: tuple[float, float, float, float],
+        filtered_live: tuple[float, float, float, float],
+        prev_smoothed: float,
+        raw_e: float,
+        smoothed_e: float,
+        stage_raw: tuple[float, float, float],
+        stage_filtered: tuple[float, float, float],
+        prev_stage_filtered: tuple[float, float, float],
+    ) -> None:
+        if not is_viz_diagnostics_enabled() or self._vis_mode != 'blob':
+            return
+        now_ts = time.time()
+        hitch_clamped = dt_seconds > (blob_dt + 0.020)
+        energy_jump = abs(raw_e - prev_smoothed) > 0.18 or abs(smoothed_e - prev_smoothed) > 0.14
+        stage_jump = max(
+            abs(cur - prev) for cur, prev in zip(stage_filtered, prev_stage_filtered)
+        ) > 0.20
+        hot_event = kick_raw > 0.55 or snare_raw > 0.55
+        sig = (
+            round(raw_e, 2),
+            round(smoothed_e, 2),
+            round(self._blob_kick_event_strength, 2),
+            round(self._blob_snare_event_strength, 2),
+            tuple(round(v, 2) for v in stage_filtered),
+        )
+        should_log = hitch_clamped or energy_jump or stage_jump or hot_event
+        if not should_log and (now_ts - self._blob_diag_last_ts) < 0.75:
+            return
+        if not should_log and sig == self._blob_diag_last_sig:
+            return
+        logger.debug(
+            (
+                "[SPOTIFY_VIS][BLOB] dt=%.3f blob_dt=%.3f kick=%.2f/%.2f "
+                "snare=%.2f/%.2f base=(%.3f,%.3f,%.3f,%.3f) "
+                "trans=(%.3f,%.3f,%.3f) raw_live=(%.3f,%.3f,%.3f,%.3f) "
+                "live=(%.3f,%.3f,%.3f,%.3f) smooth=%.3f->%.3f "
+                "stage_raw=(%.2f,%.2f,%.2f) stage_filt=(%.2f,%.2f,%.2f) "
+                "stage_prev=(%.2f,%.2f,%.2f) flags[hitch=%s energy=%s stage=%s hot=%s]"
+            ),
+            dt_seconds,
+            blob_dt,
+            kick_raw,
+            self._blob_kick_event_strength,
+            snare_raw,
+            self._blob_snare_event_strength,
+            float(getattr(self, '_blob_diag_base_bass', 0.0) or 0.0),
+            float(getattr(self, '_blob_diag_base_mid', 0.0) or 0.0),
+            float(getattr(self, '_blob_diag_base_high', 0.0) or 0.0),
+            float(getattr(self, '_blob_diag_base_overall', 0.0) or 0.0),
+            float(getattr(self, '_blob_diag_transient_bass', 0.0) or 0.0),
+            float(getattr(self, '_blob_diag_transient_mid', 0.0) or 0.0),
+            float(getattr(self, '_blob_diag_transient_high', 0.0) or 0.0),
+            raw_live[0],
+            raw_live[1],
+            raw_live[2],
+            raw_live[3],
+            filtered_live[0],
+            filtered_live[1],
+            filtered_live[2],
+            filtered_live[3],
+            prev_smoothed,
+            smoothed_e,
+            stage_raw[0],
+            stage_raw[1],
+            stage_raw[2],
+            stage_filtered[0],
+            stage_filtered[1],
+            stage_filtered[2],
+            prev_stage_filtered[0],
+            prev_stage_filtered[1],
+            prev_stage_filtered[2],
+            hitch_clamped,
+            energy_jump,
+            stage_jump,
+            hot_event,
+        )
+        self._blob_diag_last_ts = now_ts
+        self._blob_diag_last_sig = sig
+
     def _compute_blob_live_bands(self, energy_bands) -> tuple[float, float, float, float]:
         """Return Blob's live deformation bands after transient and scheduler help."""
-        bass = float(getattr(energy_bands, 'bass', 0.0) or 0.0)
-        mid = float(getattr(energy_bands, 'mid', 0.0) or 0.0)
-        high = float(getattr(energy_bands, 'high', 0.0) or 0.0)
-        overall = float(getattr(energy_bands, 'overall', 0.0) or 0.0)
+        base_bass = float(getattr(energy_bands, 'bass', 0.0) or 0.0)
+        base_mid = float(getattr(energy_bands, 'mid', 0.0) or 0.0)
+        base_high = float(getattr(energy_bands, 'high', 0.0) or 0.0)
+        base_overall = float(getattr(energy_bands, 'overall', 0.0) or 0.0)
+        bass = base_bass
+        mid = base_mid
+        high = base_high
+
+        def _clamp01(value: float) -> float:
+            return max(0.0, min(1.0, float(value)))
 
         clamp_max = float(getattr(self, '_transient_clamp', 1.5) or 1.5)
+        transient_bass = 0.0
+        transient_mid = 0.0
+        transient_high = 0.0
         transient = getattr(self, '_transient_energy', None)
         if transient is not None:
             bass_mix = float(getattr(self, '_blob_transient_mix_bass', 0.5) or 0.5)
             vocal_mix = float(getattr(self, '_blob_transient_mix_vocal', 0.35) or 0.35)
-            bass = min(clamp_max, bass + float(getattr(transient, 'bass_transient', 0.0) or 0.0) * bass_mix)
-            mid = min(clamp_max, mid + float(getattr(transient, 'mid_transient', 0.0) or 0.0) * vocal_mix)
+            transient_bass = float(getattr(transient, 'bass_transient', 0.0) or 0.0) * bass_mix
+            transient_mid = float(getattr(transient, 'mid_transient', 0.0) or 0.0) * vocal_mix
+            transient_high = float(getattr(transient, 'high_transient', 0.0) or 0.0) * max(0.10, vocal_mix * 0.30)
+            bass = min(clamp_max, bass + transient_bass)
+            mid = min(clamp_max, mid + transient_mid)
+            high = min(clamp_max, high + transient_high)
 
         kick_evt = max(0.0, float(getattr(self, '_blob_kick_event_strength', 0.0) or 0.0))
         snare_evt = max(0.0, float(getattr(self, '_blob_snare_event_strength', 0.0) or 0.0))
         if kick_evt > 0.0 or snare_evt > 0.0:
-            bass = min(clamp_max, bass + kick_evt * 0.65)
-            mid = min(clamp_max, mid + snare_evt * 0.45)
-            high = min(clamp_max, high + snare_evt * 0.20)
+            # Event assist should be earned by the underlying music, not by the
+            # already-boosted live bands re-justifying themselves.
+            kick_support_cont = _clamp01(
+                base_bass * 1.35
+                + base_overall * 0.45
+                - base_mid * 0.45
+                - base_high * 0.20
+            )
+            kick_support_trans = _clamp01(
+                transient_bass * 1.15
+                - transient_mid * 0.35
+            )
+            kick_support = max(kick_support_cont, kick_support_trans)
+            kick_guard = _clamp01((kick_support - 0.08) / 0.42)
 
-        band_mix = bass * 0.45 + mid * 0.35 + high * 0.20
-        overall = min(clamp_max, max(overall, band_mix))
-        return bass, mid, high, overall
+            snare_support_cont = _clamp01(
+                base_mid * 0.95
+                + base_high * 0.55
+                + base_overall * 0.20
+                - base_bass * 0.15
+            )
+            snare_support_trans = _clamp01(
+                transient_mid * 1.00
+                + transient_high * 0.55
+                - transient_bass * 0.20
+            )
+            snare_support = max(snare_support_cont, snare_support_trans)
+            snare_guard = _clamp01((snare_support - 0.06) / 0.40)
+
+            kick_drive = kick_evt * kick_guard * (0.06 + kick_support * 0.28)
+            snare_drive = snare_evt * snare_guard * (0.04 + snare_support * 0.18)
+            bass = min(clamp_max, bass + kick_drive)
+            mid = min(clamp_max, mid + snare_drive)
+            high = min(clamp_max, high + snare_drive * 0.35)
+        else:
+            kick_support = 0.0
+            kick_guard = 0.0
+
+        # Blob's main size/stage path should follow real overall loudness plus
+        # beat/bass support, not let vocal/snare reinforcement inflate the whole blob.
+        self._blob_diag_base_bass = base_bass
+        self._blob_diag_base_mid = base_mid
+        self._blob_diag_base_high = base_high
+        self._blob_diag_base_overall = base_overall
+        self._blob_diag_transient_bass = transient_bass
+        self._blob_diag_transient_mid = transient_mid
+        self._blob_diag_transient_high = transient_high
+        stage_bass_support = min(clamp_max, base_bass + transient_bass * 0.35)
+        stage_kick_boost = kick_evt * kick_guard * (0.03 + kick_support * 0.16)
+        stage_overall = max(
+            base_bass * 0.55 + base_overall * 0.45,
+            stage_bass_support * 0.75 + base_overall * 0.25 + stage_kick_boost,
+        )
+        stage_overall = min(clamp_max, stage_overall)
+        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 0.85)
+        stage_mid = min(stage_overall, base_mid * 0.20 + transient_mid * 0.08)
+        stage_high = min(stage_overall * 0.60, base_high * 0.15 + transient_high * 0.05)
+        self._blob_stage_input_bass = stage_bass
+        self._blob_stage_input_mid = stage_mid
+        self._blob_stage_input_high = stage_high
+        self._blob_stage_input_overall = stage_overall
+        return bass, mid, high, stage_overall
 
     # ------------------------------------------------------------------
     # Internal rendering helpers

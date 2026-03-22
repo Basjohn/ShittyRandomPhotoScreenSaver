@@ -39,7 +39,6 @@
           80,
           210
         ],
-        "blob_energy_boost": 0.9,
         "blob_ghost_alpha": 0.25,
         "blob_ghost_decay": 0.55,
         "blob_ghosting_enabled": true,
@@ -81,7 +80,6 @@
         "blob_transient_mix_bass": 0.7,
         "blob_transient_mix_vocal": 0.4,
         "blob_transient_pulse_gain": 1.1,
-        "blob_use_raw_energy": false,
         "blob_width": 1.05,
         "ghost_alpha": 0.35,
         "ghost_decay": 0.25,

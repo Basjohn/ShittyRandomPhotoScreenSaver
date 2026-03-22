@@ -98,7 +98,6 @@
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 0.66,
-        "sine_wave_energy_boost": 0.85,
         "sine_wave_growth": 5.0,
         "sine_wave_input_gain": 0.9,
         "sine_wave_kick_lane_gain": 1.0,
@@ -110,8 +109,7 @@
         "sine_wave_transient_pulse_gain": 1.0,
         "sine_wave_transient_width_mix": 0.62,
         "sine_wave_travel": 0,
-        "sine_wave_use_raw_energy": false,
-        "sine_width_reaction": 0.30
+        "sine_width_reaction": 0.3
       }
     }
   },

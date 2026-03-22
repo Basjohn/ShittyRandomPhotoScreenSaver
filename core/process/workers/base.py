@@ -31,6 +31,8 @@ def setup_worker_logging(worker_type: WorkerType) -> logging.Logger:
     Workers can't use the main process logger, so we set up
     a basic file logger for debugging.
     """
+    import atexit
+
     logger = logging.getLogger(f"worker.{worker_type.value}")
     logger.setLevel(logging.DEBUG)
 
@@ -57,6 +59,24 @@ def setup_worker_logging(worker_type: WorkerType) -> logging.Logger:
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.propagate = False
+
+    # Safety net: register atexit handler so the file handle is released
+    # during normal interpreter shutdown even if _teardown_logging is skipped.
+    def _atexit_close_handler():
+        try:
+            handler.flush()
+        except Exception:
+            pass
+        try:
+            if hasattr(handler, 'stream') and handler.stream:
+                handler.stream.close()
+        except Exception:
+            pass
+        try:
+            handler.close()
+        except Exception:
+            pass
+    atexit.register(_atexit_close_handler)
 
     return logger
 
@@ -263,6 +283,13 @@ class BaseWorker:
         for handler in list(logger.handlers):
             try:
                 handler.flush()
+            except Exception:
+                pass
+            # Explicitly close the underlying file stream first (Windows
+            # can keep the handle open if only handler.close() is called).
+            try:
+                if hasattr(handler, 'stream') and handler.stream:
+                    handler.stream.close()
             except Exception:
                 pass
             try:

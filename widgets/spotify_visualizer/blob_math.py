@@ -46,12 +46,12 @@ def compute_stage_progress(
     overall = _clamp(overall_energy, 0.0, 1.0)
     se = _clamp(smoothed_energy, 0.0, 1.0)
 
-    weighted = _clamp(overall * 0.50 + high * 0.35 + bass * 0.15, 0.0, 1.0)
+    weighted = _clamp(bass * 0.55 + overall * 0.30 + high * 0.15, 0.0, 1.0)
     weighted_stage1 = _clamp(weighted * 0.85 + se * 0.15, 0.0, 1.0)
-    base_stage2_drive = _clamp(weighted * 0.75 + high * 0.25, 0.0, 1.0)
-    stage2_drive = _clamp(base_stage2_drive * 0.60 + se * 0.40, 0.0, 1.0)
-    chorus_drive = _clamp(max(stage2_drive, high * 0.85 + mid * 0.15), 0.0, 1.0)
-    chorus_drive = _clamp(max(chorus_drive, se * 0.82 + overall * 0.18), 0.0, 1.0)
+    base_stage2_drive = _clamp(weighted * 0.80 + high * 0.20, 0.0, 1.0)
+    stage2_drive = _clamp(base_stage2_drive * 0.75 + se * 0.25, 0.0, 1.0)
+    chorus_drive = _clamp(max(stage2_drive, high * 0.65 + mid * 0.10 + bass * 0.25), 0.0, 1.0)
+    chorus_drive = _clamp(max(chorus_drive, se * 0.55 + overall * 0.45), 0.0, 1.0)
 
     stage1_t = _smoothstep(0.10, 0.32, weighted_stage1)
     stage2_t = _smoothstep(0.58, 0.86, stage2_drive)
@@ -142,7 +142,7 @@ def compute_blob_radius_preview(
     r += bass * bass * 0.066
     r += bass * 0.077 * blob_pulse
     se = _clamp(smoothed_energy, 0.0, 1.0)
-    r -= (1.0 - se) * 0.053 * blob_pulse
+    r -= (1.0 - se) * 0.028 * blob_pulse
     r += compute_stage_offset(
         blob_size=blob_size,
         bass_energy=bass,

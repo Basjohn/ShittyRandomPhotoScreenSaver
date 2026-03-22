@@ -512,13 +512,14 @@ class TestTransientMixSettingsModel:
     def test_round_trip_from_mapping(self):
         """Custom values should survive from_mapping → to_dict → from_mapping."""
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings import visualizer_presets as vp
         custom = {
             'mode': 'spectrum',
-            'preset_spectrum': 3,
-            'preset_bubble': 3,
-            'preset_blob': 3,
-            'preset_sine_wave': 3,
-            'preset_oscilloscope': 3,
+            'preset_spectrum': vp.get_custom_preset_index('spectrum'),
+            'preset_bubble': vp.get_custom_preset_index('bubble'),
+            'preset_blob': vp.get_custom_preset_index('blob'),
+            'preset_sine_wave': vp.get_custom_preset_index('sine_wave'),
+            'preset_oscilloscope': vp.get_custom_preset_index('oscilloscope'),
             'spectrum_lane_transient_mix': 0.9,
             'bubble_transient_mix_bass': 0.1,
             'bubble_transient_mix_vocal': 0.8,

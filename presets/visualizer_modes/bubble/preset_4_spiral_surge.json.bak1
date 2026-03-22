@@ -1,0 +1,105 @@
+{
+  "mode": "bubble",
+  "name": "Preset 4 (Spiral Surge)",
+  "preset_index": 3,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "bubble_adaptive_sensitivity": true,
+        "bubble_agc_strength": 0.25,
+        "bubble_audio_block_size": 128,
+        "bubble_bar_count": 48,
+        "bubble_big_bass_pulse": 0.7,
+        "bubble_big_contraction_bias": 0.78,
+        "bubble_big_count": 11,
+        "bubble_big_size_clamp": 2.2,
+        "bubble_big_size_max": 0.03,
+        "bubble_big_specular_max_size": 1.55,
+        "bubble_drift_amount": 0.7,
+        "bubble_drift_direction": "swirl_ccw",
+        "bubble_drift_frequency": 0.7,
+        "bubble_drift_speed": 0.6,
+        "bubble_dynamic_floor": true,
+        "bubble_dynamic_range_enabled": false,
+        "bubble_energy_boost": 1.0,
+        "bubble_ghost_alpha": 0.22,
+        "bubble_ghost_decay": 0.4,
+        "bubble_ghosting_enabled": true,
+        "bubble_gradient_dark": [
+          7,
+          42,
+          53,
+          255
+        ],
+        "bubble_gradient_direction": "center_out",
+        "bubble_gradient_light": [
+          0,
+          179,
+          255,
+          255
+        ],
+        "bubble_growth": 5.0,
+        "bubble_input_gain": 0.75,
+        "bubble_kick_lane_gain": 1.0,
+        "bubble_manual_floor": 0.12,
+        "bubble_outline_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "bubble_pop_color": [
+          255,
+          255,
+          255,
+          200
+        ],
+        "bubble_rainbow_enabled": true,
+        "bubble_rainbow_speed": 0.17,
+        "bubble_rotation_amount": 0.4,
+        "bubble_sensitivity": 0.46,
+        "bubble_small_count": 38,
+        "bubble_small_freq_pulse": 0.82,
+        "bubble_small_size_max": 0.011,
+        "bubble_specular_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bubble_specular_direction": "top_left",
+        "bubble_stream_constant_speed": 0.6,
+        "bubble_stream_direction": "up",
+        "bubble_stream_reactivity": 1.25,
+        "bubble_stream_speed_cap": 2.5,
+        "bubble_surface_reach": 0.8,
+        "bubble_tail_opacity": 0.55,
+        "bubble_trail_strength": 0.72,
+        "bubble_transient_clamp": 2.0,
+        "bubble_transient_mix_bass": 0.75,
+        "bubble_transient_mix_vocal": 0.25,
+        "bubble_transient_pulse_gain": 1.35,
+        "bubble_use_raw_energy": false,
+        "ghost_alpha": 0.56,
+        "ghost_decay": 0.22,
+        "ghosting_enabled": true,
+        "mode": "bubble"
+      }
+    }
+  },
+  "visualizer_preset_mode": "bubble",
+  "visualizer_preset_override": true
+}

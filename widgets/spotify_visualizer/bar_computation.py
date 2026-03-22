@@ -267,6 +267,18 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             + treble_energy * treble_weight_map
         ) * react_scale
 
+        # In mirrored mode the left half already has correct bass→treble
+        # routing (low bar index = low freq).  Mirror the right half so
+        # both edges get bass energy instead of the right side getting
+        # treble energy due to its high linear position.
+        if mirrored:
+            for _mi in range(center + 1, bands):
+                per_bar_energy[_mi] = per_bar_energy[2 * center - _mi]
+            # Prevent center bar energy dip: it represents the same
+            # high-frequency zone as its immediate neighbors.
+            if 0 < center < bands:
+                per_bar_energy[center] = per_bar_energy[center - 1]
+
         arr[:bands] = profile_shape[:bands] * per_bar_energy[:bands]
 
         if low_resolution:
@@ -301,6 +313,12 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         for _ki in range(_bass_end):
             if _ki < bands:
                 arr[_ki] = min(1.0, arr[_ki] * _kick_boost)
+        # Mirror kick boost to right-side bass bars in mirrored mode
+        if mirrored:
+            for _ki in range(_bass_end):
+                _ri = 2 * center - _ki
+                if 0 <= _ri < bands:
+                    arr[_ri] = min(1.0, arr[_ri] * _kick_boost)
 
     # Scale
     scale = (worker._base_output_scale or 0.8) * (worker._energy_boost or 1.0)
@@ -757,12 +775,17 @@ def _apply_adaptive_normalization(
     if abs(bass_gain - 1.0) < 0.001 and abs(mix_gain - 1.0) < 0.001:
         return  # Both stacks at unity — skip array manipulation
 
+    _agc_mirrored = getattr(worker, '_spectrum_mirrored', False)
+    _agc_center = bands // 2
     for i in range(bands):
-        if i < bass_split:
+        # In mirrored mode, map display index to frequency index so
+        # right-side bass bars (high index) get bass_gain, not mix_gain.
+        ei = (_agc_center - abs(i - _agc_center)) if _agc_mirrored else i
+        if ei < bass_split:
             arr[i] *= bass_gain
-        elif i < mid_split:
+        elif ei < mid_split:
             # Crossfade zone: blend bass_gain → mix_gain
-            t = (i - bass_split) / trans_width
+            t = (ei - bass_split) / trans_width
             arr[i] *= bass_gain * (1.0 - t) + mix_gain * t
         else:
             arr[i] *= mix_gain

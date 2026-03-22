@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import time
 from typing import Callable
 
@@ -245,7 +244,7 @@ class _FakeDisplayParent(QWidget):
 
 
 @pytest.mark.qt
-def test_mode_switch_requests_overlay_reset_for_new_mode(qt_app, qtbot, monkeypatch):
+def test_mode_switch_does_not_request_overlay_reset_before_transition_reset(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
@@ -262,7 +261,7 @@ def test_mode_switch_requests_overlay_reset_for_new_mode(qt_app, qtbot, monkeypa
     parent._spotify_bars_overlay.reset_requests.clear()
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
-    assert "oscilloscope" in parent._spotify_bars_overlay.reset_requests
+    assert parent._spotify_bars_overlay.reset_requests == []
 
 
 @pytest.mark.qt
@@ -335,6 +334,51 @@ def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monk
 
     assert widget._waiting_for_fresh_engine_frame is False
     assert parent.frames
+
+
+@pytest.mark.qt
+def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget._engine = fake_engine
+    widget.start()
+    qt_app.processEvents()
+
+    modes = [
+        VisualizerMode.OSCILLOSCOPE,
+        VisualizerMode.SPECTRUM,
+        VisualizerMode.BLOB,
+        VisualizerMode.SINE_WAVE,
+        VisualizerMode.OSCILLOSCOPE,
+    ]
+
+    for idx, mode in enumerate(modes):
+        parent.reset_pushes()
+        widget.set_visualization_mode(mode)
+
+        assert widget._waiting_for_fresh_engine_frame is True
+        widget._on_tick()
+        assert parent.frames == []
+
+        fake_engine.publish_frame([0.2 + idx * 0.1] * widget._bar_count)
+        widget._on_tick()
+
+        assert widget._waiting_for_fresh_engine_frame is False
+        assert parent.frames
+
+    assert fake_engine.reset_calls >= len(modes)
 
 
 @pytest.mark.qt
@@ -425,9 +469,24 @@ def test_mode_cycle_resets_engine_smoothing(qt_app, qtbot, monkeypatch):
     assert fake_engine.reset_calls >= 1
 
 
-def test_mode_cycle_clears_overlay_during_crossfade():
-    src = inspect.getsource(mode_transition.mode_transition_fade_factor)
-    assert "clear_overlay=True" in src
+@pytest.mark.qt
+def test_mode_cycle_does_not_destroy_overlay_during_crossfade(qt_app, qtbot, monkeypatch):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    qtbot.addWidget(widget)
+
+    cleared = {"count": 0}
+
+    def _patched_clear_overlay() -> None:
+        cleared["count"] += 1
+
+    monkeypatch.setattr(widget, "_clear_gl_overlay", _patched_clear_overlay)
+
+    assert mode_transition.cycle_mode(widget) is True
+
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(widget, now)
+
+    assert cleared["count"] == 0
 
 
 @pytest.mark.qt
@@ -742,7 +801,7 @@ def test_shadow_cache_invalidated_once_per_cycle(qt_app, qtbot, monkeypatch):
         called["count"] += 1
         assert target_widget is widget
 
-    monkeypatch.setattr(vis_mod, "clear_cached_shadow_for_widget", _fake_clear_cache)
+    monkeypatch.setattr("widgets.shadow_utils.clear_cached_shadow_for_widget", _fake_clear_cache)
 
     widget._invalidate_shadow_cache_if_needed()
 

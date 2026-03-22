@@ -317,7 +317,7 @@ class TestConfigApplier:
         assert widget._bar_border_color.blue() == 30
         assert abs(widget._bar_border_color.alphaF() - 0.4) < 1e-6
 
-    def test_gpu_push_extra_kwargs_carries_bar_colors(self):
+    def test_gpu_push_extra_kwargs_leaves_spectrum_bar_colors_on_top_level_push(self):
         from PySide6.QtGui import QColor
         from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
 
@@ -336,8 +336,8 @@ class TestConfigApplier:
                 raise AttributeError(name)
 
         extra = build_gpu_push_extra_kwargs(DummyWidget(), "spectrum", None)
-        assert extra['bar_fill_color'] == QColor(100, 110, 120, 230)
-        assert extra['bar_border_color'] == QColor(200, 210, 220, 128)
+        assert 'bar_fill_color' not in extra
+        assert 'bar_border_color' not in extra
 
 
 # ===========================================================================

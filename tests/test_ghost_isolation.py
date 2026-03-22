@@ -95,9 +95,19 @@ class TestConfigApplierGhost:
             )
 
     def test_build_gpu_push_extra_kwargs_includes_all_ghost_keys(self):
-        src = (ROOT / "widgets" / "spotify_visualizer" / "config_applier.py").read_text(encoding="utf-8")
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            def __getattr__(self, name):
+                if name.endswith("enabled"):
+                    return False
+                if "alpha" in name or "decay" in name or "intensity" in name:
+                    return 0.0
+                return 0
+
+        extra = build_gpu_push_extra_kwargs(DummyWidget(), "spectrum", None)
         for key in self.PER_MODE_GHOST_KEYS:
-            assert f"extra['{key}']" in src, (
+            assert key in extra, (
                 f"build_gpu_push_extra_kwargs missing '{key}' in extra dict"
             )
 
@@ -443,6 +453,161 @@ class TestRendererGhostIsolation:
         assert overlay._blob_live_bass_energy < first_bass
         assert overlay._blob_live_mid_energy < first_mid
 
+    @pytest.mark.qt
+    def test_blob_live_band_filter_prevents_one_frame_snap_back(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = 'blob'
+        calm = SimpleNamespace(bass=0.10, mid=0.12, high=0.05, overall=0.10)
+        hot_mid = SimpleNamespace(bass=0.12, mid=0.55, high=0.08, overall=0.20)
+
+        overlay._last_time_ts = time.time() - 0.016
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=calm,
+            blob_kick_event_strength=0.0,
+            blob_snare_event_strength=0.0,
+        )
+        calm_live_mid = overlay._blob_live_mid_energy
+
+        overlay._last_time_ts = time.time() - 0.016
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=hot_mid,
+            blob_kick_event_strength=0.0,
+            blob_snare_event_strength=1.0,
+        )
+        hot_live_mid = overlay._blob_live_mid_energy
+        raw_hot_mid = overlay._blob_raw_mid_energy
+
+        assert raw_hot_mid > hot_live_mid
+        assert hot_live_mid > calm_live_mid
+
+        overlay._last_time_ts = time.time() - 0.016
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=calm,
+            blob_kick_event_strength=0.0,
+            blob_snare_event_strength=0.0,
+        )
+
+        assert overlay._blob_live_mid_energy > calm.mid
+        assert overlay._blob_live_mid_energy < hot_live_mid
+        assert overlay._blob_live_overall_energy > calm.overall
+
+    @pytest.mark.qt
+    def test_blob_scheduler_boost_stays_bounded_on_calm_passages(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._blob_kick_event_strength = 1.0
+        overlay._blob_snare_event_strength = 1.0
+
+        bass, mid, high, overall = overlay._compute_blob_live_bands(
+            SimpleNamespace(bass=0.05, mid=0.05, high=0.03, overall=0.04)
+        )
+
+        assert bass < 0.30
+        assert mid < 0.22
+        assert high < 0.13
+        assert overall < 0.22
+
+    @pytest.mark.qt
+    def test_blob_scheduler_boost_tracks_underlying_music_support(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._blob_kick_event_strength = 1.0
+        overlay._blob_snare_event_strength = 1.0
+
+        calm = overlay._compute_blob_live_bands(
+            SimpleNamespace(bass=0.05, mid=0.05, high=0.03, overall=0.04)
+        )
+        loud = overlay._compute_blob_live_bands(
+            SimpleNamespace(bass=0.45, mid=0.35, high=0.20, overall=0.38)
+        )
+
+        assert loud[0] - 0.45 > calm[0] - 0.05
+        assert loud[1] - 0.35 > calm[1] - 0.05
+
+    @pytest.mark.qt
+    def test_blob_snare_help_does_not_inflate_stage_overall_like_kick(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+        from widgets.spotify_visualizer.blob_math import compute_stage_progress
+
+        overlay = SpotifyBarsGLOverlay(None)
+        base = SimpleNamespace(bass=0.10, mid=0.26, high=0.10, overall=0.12)
+
+        overlay._blob_kick_event_strength = 0.0
+        overlay._blob_snare_event_strength = 1.0
+        snare_bands = overlay._compute_blob_live_bands(base)
+        snare_stage_inputs = (
+            overlay._blob_stage_input_bass,
+            overlay._blob_stage_input_mid,
+            overlay._blob_stage_input_high,
+            overlay._blob_stage_input_overall,
+        )
+
+        overlay._blob_kick_event_strength = 1.0
+        overlay._blob_snare_event_strength = 0.0
+        kick_bands = overlay._compute_blob_live_bands(base)
+        kick_stage_inputs = (
+            overlay._blob_stage_input_bass,
+            overlay._blob_stage_input_mid,
+            overlay._blob_stage_input_high,
+            overlay._blob_stage_input_overall,
+        )
+
+        assert snare_bands[1] > kick_bands[1]
+        assert snare_bands[3] <= kick_bands[3]
+        assert snare_stage_inputs[3] <= kick_stage_inputs[3]
+        assert snare_stage_inputs[0] <= kick_stage_inputs[0]
+
+        snare_stage = compute_stage_progress(
+            bass_energy=snare_stage_inputs[0],
+            mid_energy=snare_stage_inputs[1],
+            high_energy=snare_stage_inputs[2],
+            overall_energy=snare_stage_inputs[3],
+            smoothed_energy=snare_bands[3],
+        )
+        kick_stage = compute_stage_progress(
+            bass_energy=kick_stage_inputs[0],
+            mid_energy=kick_stage_inputs[1],
+            high_energy=kick_stage_inputs[2],
+            overall_energy=kick_stage_inputs[3],
+            smoothed_energy=kick_bands[3],
+        )
+
+        assert snare_stage[0] <= kick_stage[0]
+
     def test_osc_renderer_reads_osc_ghost(self):
         src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "oscilloscope.py").read_text(encoding="utf-8")
         assert "_osc_ghost_alpha" in src, (
@@ -750,10 +915,33 @@ class TestOverlayBlobPeakGate:
         assert "_blob_ghost_history" not in src
 
     def test_blob_overlay_tracks_live_blob_source_for_peak_memory(self):
-        src = (ROOT / "widgets" / "spotify_bars_gl_overlay.py").read_text(encoding="utf-8")
-        assert "live_bass, live_mid, live_high, raw_e = self._compute_blob_live_bands(energy_bands)" in src
-        assert "self._blob_live_bass_energy = live_bass" in src
-        assert "self._blob_peak_bass = max(self._blob_peak_bass, live_bass + min_offset * 0.8)" in src
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = 'blob'
+        overlay._blob_ghosting_enabled = True
+        overlay._last_time_ts = time.time() - 0.016
+
+        energy = SimpleNamespace(bass=0.22, mid=0.18, high=0.09, overall=0.20)
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=energy,
+            blob_kick_event_strength=1.0,
+            blob_snare_event_strength=0.4,
+        )
+
+        assert overlay._blob_live_bass_energy > float(energy.bass)
+        assert overlay._blob_peak_bass >= overlay._blob_live_bass_energy
+        assert overlay._blob_peak_energy >= overlay._blob_smoothed_energy
 
     def test_blob_shader_tracks_peak_phase_uniforms(self):
         src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "blob.frag").read_text(encoding="utf-8")
@@ -766,6 +954,35 @@ class TestOverlayBlobPeakGate:
         src = (ROOT / "widgets" / "spotify_bars_gl_overlay.py").read_text(encoding="utf-8")
         assert "_blob_peak_snapshot_pending" not in src
         assert "_blob_peak_stage_progress_filtered" not in src
+
+    @pytest.mark.qt
+    def test_blob_hitch_dt_does_not_force_full_one_frame_event_snap(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = 'blob'
+        overlay._blob_ghosting_enabled = True
+        overlay._last_time_ts = time.time() - 0.18
+
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=SimpleNamespace(bass=0.16, mid=0.12, high=0.08, overall=0.14),
+            blob_kick_event_strength=1.0,
+            blob_snare_event_strength=0.9,
+        )
+
+        assert overlay._blob_kick_event_strength < 0.80
+        assert overlay._blob_snare_event_strength < 0.75
+        assert overlay._blob_smoothed_energy < 0.45
 
 
 # ===========================================================================
@@ -937,11 +1154,12 @@ class TestNoCrossModeGhostBleed:
         """The UI save dict must include spectrum_ghosting_enabled/alpha/decay
         alongside legacy global keys so from_mapping picks them up."""
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings import visualizer_presets as vp
 
         # Simulate what the save path produces
         save_dict = {
             "mode": "spectrum",
-            "preset_spectrum": 3,
+            "preset_spectrum": vp.get_custom_preset_index("spectrum"),
             "ghosting_enabled": False,
             "ghost_alpha": 0.75,
             "ghost_decay": 0.55,
@@ -965,9 +1183,11 @@ class TestNoCrossModeGhostBleed:
         """The UI save dict must include sine_ghosting_enabled/alpha/decay
         so from_mapping picks them up correctly."""
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings import visualizer_presets as vp
 
         save_dict = {
             "mode": "sine_wave",
+            "preset_sine_wave": vp.get_custom_preset_index("sine_wave"),
             "sine_ghosting_enabled": False,
             "sine_ghost_alpha": 0.65,
             "sine_ghost_decay": 0.50,
@@ -987,9 +1207,11 @@ class TestNoCrossModeGhostBleed:
         """The UI save dict must include bubble_ghosting_enabled/alpha/decay
         so from_mapping picks them up correctly."""
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings import visualizer_presets as vp
 
         save_dict = {
             "mode": "bubble",
+            "preset_bubble": vp.get_custom_preset_index("bubble"),
             "bubble_ghosting_enabled": True,
             "bubble_ghost_alpha": 0.30,
             "bubble_ghost_decay": 0.60,
@@ -1008,9 +1230,11 @@ class TestNoCrossModeGhostBleed:
     def test_spectrum_drop_speed_round_trip(self):
         """spectrum_drop_speed must survive from_mapping → to_dict round-trip."""
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings import visualizer_presets as vp
 
         save_dict = {
             "mode": "spectrum",
+            "preset_spectrum": vp.get_custom_preset_index("spectrum"),
             "spectrum_drop_speed": 2.5,
         }
         model = SpotifyVisualizerSettings.from_mapping(save_dict)
@@ -1148,9 +1372,14 @@ class TestNoCrossModeGhostBleed:
         from widgets.spotify_visualizer.bar_computation import _apply_adaptive_normalization
 
         w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
-        w._env_short = 1.3   # already hot
-        w._env_long = 1.2
-        w._running_peak = 1.3
+        w._agc_strength = 0.5
+        w._env_bass_short = 1.3
+        w._env_bass_long = 1.2
+        w._env_mix_short = 1.2
+        w._env_mix_long = 1.1
+        w._pre_agc_bass = 1.3
+        w._pre_agc_mid = 1.1
+        w._pre_agc_treble = 1.0
 
         arr = np.array([1.4, 1.2, 0.9, 0.6], dtype="float32")
         original_max = float(arr.max())
@@ -1165,9 +1394,14 @@ class TestNoCrossModeGhostBleed:
         from widgets.spotify_visualizer.bar_computation import _apply_adaptive_normalization
 
         w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
-        w._env_short = 0.7   # both envelopes roughly equal = sustained level
-        w._env_long = 0.7
-        w._running_peak = 0.7
+        w._agc_strength = 0.5
+        w._env_bass_short = 0.7
+        w._env_bass_long = 0.7
+        w._env_mix_short = 0.7
+        w._env_mix_long = 0.7
+        w._pre_agc_bass = 0.7
+        w._pre_agc_mid = 0.7
+        w._pre_agc_treble = 0.7
 
         arr = np.array([0.7, 0.5, 0.3, 0.2], dtype="float32")
         before = arr.copy()
@@ -1183,9 +1417,14 @@ class TestNoCrossModeGhostBleed:
         from widgets.spotify_visualizer.bar_computation import _apply_adaptive_normalization
 
         w = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
-        w._env_short = 0.1    # sudden quiet
-        w._env_long = 0.7     # still remembers loud section
-        w._running_peak = 0.1
+        w._agc_strength = 0.5
+        w._env_bass_short = 0.1
+        w._env_bass_long = 0.7
+        w._env_mix_short = 0.1
+        w._env_mix_long = 0.7
+        w._pre_agc_bass = 0.05
+        w._pre_agc_mid = 0.04
+        w._pre_agc_treble = 0.03
 
         arr = np.array([0.15, 0.10, 0.08, 0.05], dtype="float32")
         before_sum = float(arr.sum())
@@ -1197,11 +1436,13 @@ class TestNoCrossModeGhostBleed:
     def test_notch_positions_round_trip(self):
         """spectrum_notch_positions_mirrored/linear must survive from_mapping → to_dict."""
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings import visualizer_presets as vp
 
         custom_mir = [[0.0, "Mid"], [0.40, "Vocal"], [0.70, "Low-Mid"], [1.0, "Bass"]]
         custom_lin = [[0.0, "Bass"], [0.20, "Low"], [0.55, "Mid"], [0.80, "Hi-Mid"], [1.0, "Treble"]]
         save_dict = {
             "mode": "spectrum",
+            "preset_spectrum": vp.get_custom_preset_index("spectrum"),
             "spectrum_notch_positions_mirrored": custom_mir,
             "spectrum_notch_positions_linear": custom_lin,
         }

@@ -255,8 +255,8 @@ class BubbleSimulation:
         self._prev_bass = bass
 
         # Update running averages for delta-based pulse detection.
-        avg_attack = min(1.0, dt * 3.0)   # quicker rise (~0.33s)
-        avg_release = min(1.0, dt * 6.0)  # moderate fall (~0.16s)
+        avg_attack = min(1.0, dt * 1.8)   # slower rise (~0.55s) so real beats create bigger deltas
+        avg_release = min(1.0, dt * 4.0)  # moderate fall (~0.25s)
         if bass > self._bass_running_avg:
             self._bass_running_avg += (bass - self._bass_running_avg) * avg_attack
         else:
@@ -496,10 +496,10 @@ class BubbleSimulation:
                 if b.is_big:
                     size_range = max(0.001, self._big_size_max - 0.015)
                     size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
-                    delta_sens = 4.0 - size_t * 1.5  # 4.0x small big → 2.5x largest
-                    sustained_knee = 0.35 + size_t * 0.20
-                    sustained_scale = 0.55 - size_t * 0.15
-                    attack_rate = 14.0 - size_t * 4.0
+                    delta_sens = 3.2 - size_t * 1.0  # 3.2x small big → 2.2x largest
+                    sustained_knee = 0.50 + size_t * 0.20
+                    sustained_scale = 0.35 - size_t * 0.15
+                    attack_rate = 11.0 - size_t * 3.0
                     decay_rate = 3.0 + size_t * 1.0
                 else:
                     # Promoted small: react to bass with reduced sensitivity
@@ -520,8 +520,9 @@ class BubbleSimulation:
                 attack_rate = 14.0 - size_t * 3.0
                 decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
 
-            # Delta component: transient punch
+            # Delta component: transient punch (noise gate: ignore sub-perceptual deltas)
             delta = max(0.0, raw_src - running_avg)
+            delta = max(0.0, delta - 0.015)  # suppress jitter below threshold
             delta_component = min(1.0, delta * delta_sens)
 
             # Sustained component: absolute energy through perceptual curve

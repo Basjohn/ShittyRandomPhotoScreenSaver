@@ -213,14 +213,14 @@ vec4 eval_line(
         float sigma = glowSigmaBase;
         if (u_reactive_glow == 1) {
             float react = clamp(u_glow_reactivity, 0.0, 2.0);
-            sigma *= (0.85 + band_energy * (1.80 * react));
+            sigma *= (0.50 + band_energy * (2.80 * react));
         }
         if (sigma > 0.0) {
             glow_alpha = exp(-(dist_px * dist_px) / (2.0 * sigma * sigma));
             glow_alpha *= clamp(u_glow_intensity, 0.0, 2.0);
             if (u_reactive_glow == 1) {
                 float react = clamp(u_glow_reactivity, 0.0, 2.0);
-                glow_alpha *= (0.80 + band_energy * (0.95 * react));
+                glow_alpha *= (0.45 + band_energy * (1.80 * react));
             }
         }
     }

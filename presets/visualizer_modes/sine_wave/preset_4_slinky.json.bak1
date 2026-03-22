@@ -1,0 +1,120 @@
+{
+  "mode": "sine_wave",
+  "name": "Preset 4 (Slinky)",
+  "preset_index": 3,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          27,
+          27,
+          27,
+          30
+        ],
+        "ghost_alpha": 0.56,
+        "ghost_decay": 0.22,
+        "ghosting_enabled": true,
+        "mode": "sine_wave",
+        "sine_card_adaptation": 0.35,
+        "sine_crawl_amount": 0.24,
+        "sine_density": 2.5,
+        "sine_displacement": 0.35,
+        "sine_ghost_alpha": 0.2,
+        "sine_ghost_decay": 0.64,
+        "sine_ghosting_enabled": true,
+        "sine_glow_color": [
+          0,
+          107,
+          230,
+          240
+        ],
+        "sine_glow_enabled": true,
+        "sine_glow_intensity": 0.55,
+        "sine_glow_reactivity": 1.9,
+        "sine_glow_size": 1.0,
+        "sine_heartbeat": 0.22,
+        "sine_line1_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "sine_line1_shift": 0.0,
+        "sine_line2_color": [
+          255,
+          255,
+          255,
+          200
+        ],
+        "sine_line2_glow_color": [
+          47,
+          165,
+          255,
+          180
+        ],
+        "sine_line2_shift": 0.75,
+        "sine_line3_color": [
+          255,
+          255,
+          255,
+          200
+        ],
+        "sine_line3_glow_color": [
+          47,
+          116,
+          227,
+          180
+        ],
+        "sine_line3_shift": -0.75,
+        "sine_line_color": [
+          255,
+          255,
+          255,
+          240
+        ],
+        "sine_line_count": 3,
+        "sine_line_dim": false,
+        "sine_line_offset_bias": 0.3,
+        "sine_micro_wobble": 0.55,
+        "sine_rainbow_enabled": true,
+        "sine_rainbow_speed": 0.25,
+        "sine_reactive_glow": true,
+        "sine_sensitivity": 0.7,
+        "sine_speed": 0.45,
+        "sine_travel_line2": 2,
+        "sine_travel_line3": 2,
+        "sine_vertical_shift": -10,
+        "sine_wave_adaptive_sensitivity": false,
+        "sine_wave_agc_strength": 0.4,
+        "sine_wave_audio_block_size": 256,
+        "sine_wave_bar_count": 40,
+        "sine_wave_dynamic_floor": true,
+        "sine_wave_dynamic_range_enabled": true,
+        "sine_wave_effect": 0.78,
+        "sine_wave_energy_boost": 0.85,
+        "sine_wave_growth": 3.46,
+        "sine_wave_input_gain": 0.9,
+        "sine_wave_kick_lane_gain": 1.0,
+        "sine_wave_manual_floor": 0.1,
+        "sine_wave_rainbow_enabled": true,
+        "sine_wave_rainbow_speed": 0.25,
+        "sine_wave_sensitivity": 0.32,
+        "sine_wave_transient_clamp": 1.5,
+        "sine_wave_transient_pulse_gain": 1.0,
+        "sine_wave_transient_width_mix": 0.74,
+        "sine_wave_travel": 2,
+        "sine_wave_use_raw_energy": false,
+        "sine_width_reaction": 0.42
+      }
+    }
+  },
+  "visualizer_preset_mode": "sine_wave",
+  "visualizer_preset_override": true
+}

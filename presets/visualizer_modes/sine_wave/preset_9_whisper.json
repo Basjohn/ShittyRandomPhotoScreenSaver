@@ -82,7 +82,7 @@
         "sine_line_count": 2,
         "sine_line_dim": false,
         "sine_line_offset_bias": 0.0,
-        "sine_micro_wobble": 0.10,
+        "sine_micro_wobble": 0.1,
         "sine_rainbow_enabled": false,
         "sine_rainbow_speed": 0.1,
         "sine_reactive_glow": true,
@@ -98,7 +98,6 @@
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 0.36,
-        "sine_wave_energy_boost": 0.75,
         "sine_wave_growth": 3.5,
         "sine_wave_input_gain": 0.65,
         "sine_wave_kick_lane_gain": 0.4,
@@ -108,7 +107,6 @@
         "sine_wave_transient_pulse_gain": 0.5,
         "sine_wave_transient_width_mix": 0.22,
         "sine_wave_travel": 0,
-        "sine_wave_use_raw_energy": false,
         "sine_width_reaction": 0.08
       }
     }

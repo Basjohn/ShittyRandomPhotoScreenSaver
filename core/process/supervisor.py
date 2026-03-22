@@ -104,6 +104,21 @@ class ProcessSupervisor:
             )
         
         self._initialized = True
+
+        # Safety net: ensure shutdown() runs at interpreter exit so workers
+        # receive a graceful SHUTDOWN and release log file handles.
+        import atexit
+        import weakref
+        _self_ref = weakref.ref(self)
+        def _atexit_shutdown():
+            obj = _self_ref()
+            if obj is not None:
+                try:
+                    obj.shutdown(timeout=5.0)
+                except Exception:
+                    pass
+        atexit.register(_atexit_shutdown)
+
         logger.info("ProcessSupervisor initialized")
     
     def register_worker_factory(

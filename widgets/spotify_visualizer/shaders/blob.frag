@@ -95,12 +95,12 @@ vec3 compute_stage_progress_values(
     float overall = clamp(overall_energy, 0.0, 1.0);
     float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
 
-    float weighted = clamp(overall * 0.50 + high * 0.35 + bass * 0.15, 0.0, 1.0);
+    float weighted = clamp(bass * 0.55 + overall * 0.30 + high * 0.15, 0.0, 1.0);
     float weighted_stage1 = clamp(weighted * 0.85 + se * 0.15, 0.0, 1.0);
-    float base_stage2_drive = clamp(weighted * 0.75 + high * 0.25, 0.0, 1.0);
-    float stage2_drive = clamp(base_stage2_drive * 0.60 + se * 0.40, 0.0, 1.0);
-    float chorus_drive = clamp(max(stage2_drive, high * 0.85 + mid * 0.15), 0.0, 1.0);
-    chorus_drive = clamp(max(chorus_drive, se * 0.82 + overall * 0.18), 0.0, 1.0);
+    float base_stage2_drive = clamp(weighted * 0.80 + high * 0.20, 0.0, 1.0);
+    float stage2_drive = clamp(base_stage2_drive * 0.75 + se * 0.25, 0.0, 1.0);
+    float chorus_drive = clamp(max(stage2_drive, high * 0.65 + mid * 0.10 + bass * 0.25), 0.0, 1.0);
+    chorus_drive = clamp(max(chorus_drive, se * 0.55 + overall * 0.45), 0.0, 1.0);
 
     float stage1_t = smoothstep(0.10, 0.32, weighted_stage1);
     float stage2_t = smoothstep(0.58, 0.86, stage2_drive);
@@ -176,7 +176,7 @@ float blob_sdf_ex(vec2 p, float time,
     r += e_bass * e_bass * 0.066;
     r += e_bass * 0.077 * u_blob_pulse;
     float se = clamp(smoothed_e, 0.0, 1.0);
-    r -= (1.0 - se) * 0.053 * u_blob_pulse;
+    r -= (1.0 - se) * 0.028 * u_blob_pulse;
 
     vec3 stage_progress = vec3(0.0);
     r += compute_stage_offset(
@@ -225,16 +225,19 @@ float blob_sdf_ex(vec2 p, float time,
 
     float stretch_component = 0.0;
     if (st > 0.01) {
-        float peak = max(e_bass, max(e_mid, e_high));
-        float peak2 = peak * peak;
-        float peak3 = peak2 * peak;
+        // Keep dramatic stretch focused on beat/impact energy. Mid/high still
+        // contribute, but vocals/snare should mostly wobble rather than yank the
+        // whole silhouette into giant protrusions.
+        float impact = max(e_bass, max(e_overall * 0.35, max(e_mid * 0.18, e_high * 0.10)));
+        float impact2 = impact * impact;
+        float impact3 = impact2 * impact;
         float stretch = 0.0;
-        stretch += sin(angle * 2.0 + time * 0.7)  * peak3 * 1.8;
-        stretch += sin(angle * 1.0 + time * 0.15) * peak2 * 1.2;
+        stretch += sin(angle * 2.0 + time * 0.7)  * impact3 * 1.8;
+        stretch += sin(angle * 1.0 + time * 0.15) * impact2 * 1.2;
         stretch += sin(angle * 3.0 - time * 1.3)  * e_bass * e_bass * 1.4;
-        stretch += sin(angle * 5.0 + time * 2.1)  * e_mid * e_mid * 0.9;
-        stretch += sin(angle * 7.0 - time * 0.5)  * e_mid * e_mid * 0.7;
-        stretch += sin(angle * 9.0 + time * 3.3)  * e_high * 0.5;
+        stretch += sin(angle * 5.0 + time * 2.1)  * e_mid * e_mid * 0.12;
+        stretch += sin(angle * 7.0 - time * 0.5)  * e_mid * e_mid * 0.08;
+        stretch += sin(angle * 9.0 + time * 3.3)  * e_high * 0.06;
         stretch_component += stretch * st;
     }
 

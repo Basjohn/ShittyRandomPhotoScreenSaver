@@ -39,7 +39,7 @@
         "sine_glow_intensity": 0.45,
         "sine_glow_reactivity": 1.0,
         "sine_glow_size": 0.9,
-        "sine_heartbeat": 0.10,
+        "sine_heartbeat": 0.1,
         "sine_line1_color": [
           200,
           160,
@@ -98,7 +98,6 @@
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 0.48,
-        "sine_wave_energy_boost": 0.8,
         "sine_wave_growth": 4.0,
         "sine_wave_input_gain": 0.75,
         "sine_wave_kick_lane_gain": 0.6,
@@ -108,7 +107,6 @@
         "sine_wave_transient_pulse_gain": 0.7,
         "sine_wave_transient_width_mix": 0.34,
         "sine_wave_travel": 0,
-        "sine_wave_use_raw_energy": false,
         "sine_width_reaction": 0.12
       }
     }

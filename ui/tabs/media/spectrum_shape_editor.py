@@ -142,6 +142,10 @@ def interpolate_nodes_mirrored(nodes: List[List[float]], num_bars: int) -> List[
         dist = abs(i - center)
         idx = min(dist, len(half_samples) - 1)
         result.append(half_samples[idx])
+    # Smooth the center bar so it doesn't dip below its mirrored
+    # neighbors when the node curve starts at a local minimum.
+    if num_bars >= 3 and center > 0:
+        result[center] = max(result[center], (result[center - 1] + result[center + 1]) * 0.5)
     return result
 
 

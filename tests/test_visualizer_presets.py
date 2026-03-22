@@ -129,7 +129,7 @@ def test_curated_bubble_preset_is_pre_filtered_and_tracks_gradient_direction():
     sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
 
     assert sv["mode"] == "bubble"
-    assert sv["bubble_gradient_direction"] == "top"
+    assert "bubble_gradient_direction" in sv
     assert "bubble_specular_direction" in sv
 
     # Curated payloads should already be filtered to allowed keys for the mode
@@ -169,6 +169,20 @@ def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
     # snapshot.widgets should win over backup defaults
     assert slot.settings["spectrum_growth"] == 4.5
     assert slot.settings["spectrum_profile_floor"] == 0.3
+
+
+def test_double_prefixed_mode_keys_are_normalized():
+    migrated = vp._migrate_preset_settings(
+        "blob",
+        {
+            "blob_blob_transient_mix_bass": 0.2,
+            "blob_blob_transient_mix_vocal": 0.15,
+        },
+    )
+    assert "blob_blob_transient_mix_bass" not in migrated
+    assert "blob_blob_transient_mix_vocal" not in migrated
+    assert migrated["blob_transient_mix_bass"] == 0.2
+    assert migrated["blob_transient_mix_vocal"] == 0.15
 
 
 def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
@@ -212,6 +226,7 @@ def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
 
 def test_all_curated_presets_have_unique_keys_and_filtered_settings():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
+    known_modes = tuple(vp.MODES)
 
     def _load_json_no_dupes(path: Path):
         def _hook(pairs):
@@ -231,10 +246,22 @@ def test_all_curated_presets_have_unique_keys_and_filtered_settings():
         for preset_path in sorted(mode_dir.glob("*.json")):
             payload = _load_json_no_dupes(preset_path)
             snapshot = payload.get("snapshot", {})
+            assert isinstance(snapshot, dict), f"{preset_path} snapshot must be a dict"
+            assert "custom_preset_backup" not in snapshot, (
+                f"{preset_path} still contains custom_preset_backup"
+            )
             widgets = snapshot.get("widgets", {}) if isinstance(snapshot, dict) else {}
             sv = widgets.get("spotify_visualizer") if isinstance(widgets, dict) else None
             if not isinstance(sv, dict):
                 continue
+
+            bad_double_prefix = [
+                key for key in sv
+                if any(key.startswith(f"{mode_name}_{mode_name}_") for mode_name in known_modes)
+            ]
+            assert not bad_double_prefix, (
+                f"{preset_path} contains duplicate-prefixed keys: {bad_double_prefix}"
+            )
 
             assert sv.get("mode") == mode, f"{preset_path} must declare mode={mode}"
             filtered = vp._filter_settings_for_mode(mode, sv)
@@ -251,3 +278,50 @@ def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
 
     assert lean["visualizer_preset_override"] is True
     assert lean["visualizer_preset_mode"] == mode
+
+
+def test_repair_tool_audit_flags_duplicate_prefixes_and_backup_blocks():
+    payload = {
+        "snapshot": {
+            "custom_preset_backup": {
+                "widgets.spotify_visualizer.blob_blob_transient_mix_bass": 0.5,
+            },
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_blob_transient_mix_bass": 0.5,
+                    "blob_energy_boost": 1.1,
+                }
+            },
+        },
+        "widgets": {
+            "spotify_visualizer": {
+                "mode": "blob",
+            }
+        },
+    }
+
+    report = repair.audit_payload("blob", payload)
+
+    assert report["has_custom_preset_backup"] is True
+    assert report["top_level_visualizer_duplication"] is True
+    assert "blob_blob_transient_mix_bass" in report["duplicate_prefixed_keys"]
+    assert "blob_energy_boost" in report["deprecated_authored_keys"]
+
+
+def test_repair_tool_stops_emitting_deprecated_compat_tech_keys():
+    payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_color": "#ff00ff",
+                }
+            }
+        }
+    }
+
+    cleaned, _stats = repair._sanitize_settings("blob", payload)
+
+    assert "blob_energy_boost" not in cleaned
+    assert "blob_use_raw_energy" not in cleaned

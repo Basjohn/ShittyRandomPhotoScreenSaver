@@ -9,16 +9,16 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Spec.md | Canonical architecture specification and single source of truth |
 | Docs/00_PROJECT_OVERVIEW.md | High-level introduction, pillars, documentation map |
 | Docs/10_WIDGET_GUIDELINES.md | Widget implementation standards + compositor/fade policies |
-| Docs/Advanced_Migration.md | Normal vs Advanced bucket playbook, Always-Apply rule |
 | Docs/Defaults_Guide.md | Canonical defaults, storage locations, change workflow |
 | Docs/QTIMER_POLICY.md | QTimer vs ThreadManager policy and allowed UI-thread timers |
 | Docs/TestSuite.md | Test matrix, fixtures, execution order |
 | Docs/Historical_Bugs.md | Chronological archive of resolved bugs + regression coverage |
 | Docs/Visualizer_Debug.md | Spotify visualizer architecture, diagnostics, per-mode notes |
-| Docs/Visualizer_Reset_Matrix.md | Reset sequencing matrix for visualizer subsystems |
-| Docs/Visualizer_Presets_Plan.md | Per-visualizer preset workflow, curated rebuild tooling |
+| Docs/Visualizer_System_Audit/00_Audit_Index.md | Master visualizer audit set: runtime, modes, presets/UI, tests/docs, live checklists |
+| Docs/Visualizer_Signal_Contract.md | Canonical contract for continuous energy, transient bus, micro-scheduler events, and per-mode smoothing ownership |
+| Docs/Visualizer_Reset_Matrix.md | Canonical reset/freshness matrix for cold start, mode switches, same-mode apply, preset cycling, and waveform gates |
+| Docs/Visualizer_Baseline_Tuning_Matrix.md | Cross-mode baseline tuning sheet: floor/AGC strategy, transient vs scheduler roles, compat-key policy, and validation guardrails |
 | Current_Plan.md (Visualizers) | Tracks Visualizers subtab master toggle (`spotify_visualizer.visualizers_enabled`), Media linkage, pending diagnostics/presets/tests |
-| Docs/Bubble_Motion_Plan.md | Bubble trails & motion plan (active) |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
 | Current_Plan.md | Live backlog + checkbox/combobox rollout manifest (auto-generated inventory for styled controls) |
 | Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines (bar count, floors, block sizes). **Spectrum “Cake” preset is exempt from bar-count changes** per 2026 audit. |
@@ -29,7 +29,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Tool | Purpose |
 |------|---------|
 | tools/regen_qrc.py | Regenerates `ui/resources/icons_rc.py` from `icons.qrc`, wraps `pyside6-rcc`, shows success popup |
-| tools/visualizer_preset_repair.py | DPI-aware GUI + CLI batch runner. Repairs curated preset JSON/SST files (prunes junk keys, rewrites lean payloads with `snapshot.widgets.spotify_visualizer` + `snapshot.custom_preset_backup`, preserves/infers `preset_index`, and backfills mandatory per-mode technical + critical visual keys such as osc/sine glow + line colors/reactivity), writes `.bak*` backups, supports undo, and offers a "Repair All Presets Found" button or `--repair-all` flag to sanitize every file under `presets/visualizer_modes/`. |
+| tools/visualizer_preset_repair.py | DPI-aware GUI + CLI batch runner. Repairs curated preset JSON/SST files (prunes junk keys, rewrites lean payloads with a single `snapshot.widgets.spotify_visualizer` block, preserves/infers `preset_index`, backfills mandatory per-mode technical + critical visual keys, stops re-authoring deprecated compat keys like `energy_boost`/`use_raw_energy` into clean curated payloads), writes `.bak*` backups, supports undo, and offers `--repair-all` plus `--audit-curated` for repo-wide preset hygiene. |
 | tests/run_chunked.py | Chunked test runner — splits full suite into N subprocess chunks (default 4) for memory/timeout isolation |
 
 ## Entry Points

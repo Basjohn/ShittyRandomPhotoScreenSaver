@@ -49,13 +49,16 @@ _MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
     "audio_block_size",
     "dynamic_range_enabled",
     "bar_count",
-    "energy_boost",
     "agc_strength",
-    "use_raw_energy",
     "input_gain",
     "kick_lane_gain",
     "transient_pulse_gain",
     "transient_clamp",
+)
+
+_DEPRECATED_COMPAT_TECH_SUFFIXES: Tuple[str, ...] = (
+    "energy_boost",
+    "use_raw_energy",
 )
 
 _MANDATORY_MODE_TRANSIENT_MIX: Dict[str, Tuple[str, ...]] = {
@@ -217,6 +220,13 @@ def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> 
             sanitized.pop(global_key, None)
 
 
+def _strip_deprecated_curated_keys(mode: str, sanitized: Dict[str, Any]) -> None:
+    """Curated authored payloads should not keep deprecated compat keys alive."""
+    prefix = _MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))
+    for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES:
+        sanitized.pop(f"{prefix}{suffix}", None)
+
+
 def _collect_sections(payload: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
     sections = list(vp._collect_visualizer_sections(payload))  # type: ignore[attr-defined]
     if not sections and isinstance(payload.get("spotify_visualizer"), Mapping):
@@ -245,6 +255,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     sanitized = dict(base)
     _promote_global_technical_settings(mode, sanitized)
     _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
+    _strip_deprecated_curated_keys(mode, sanitized)
     if mode == "spectrum":
         for _sk, _sv in _MANDATORY_SPECTRUM_SHAPING.items():
             if _sk not in sanitized:
@@ -261,6 +272,49 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
 
     stats = {"added": added, "removed": removed, "changed": changed}
     return sanitized, stats
+
+
+def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Return preset-shape issues that should be repaired or blocked from shipping."""
+    sections = list(_collect_sections(payload))
+    issues: Dict[str, Any] = {
+        "mode": mode,
+        "duplicate_prefixed_keys": [],
+        "has_custom_preset_backup": False,
+        "deprecated_authored_keys": [],
+        "top_level_visualizer_duplication": False,
+    }
+    prefix = _canonical_mode_prefix(mode)
+    double_prefix = f"{prefix}{prefix}" if prefix else ""
+
+    snapshot = payload.get("snapshot")
+    if isinstance(snapshot, Mapping) and isinstance(snapshot.get("custom_preset_backup"), Mapping):
+        issues["has_custom_preset_backup"] = True
+
+    widgets_root = payload.get("widgets")
+    snapshot_widgets = snapshot.get("widgets") if isinstance(snapshot, Mapping) else None
+    if isinstance(widgets_root, Mapping) and isinstance(snapshot_widgets, Mapping):
+        if "spotify_visualizer" in widgets_root and "spotify_visualizer" in snapshot_widgets:
+            issues["top_level_visualizer_duplication"] = True
+
+    for section in sections:
+        for key in section.keys():
+            if not isinstance(key, str):
+                continue
+            if double_prefix and key.startswith(double_prefix):
+                issues["duplicate_prefixed_keys"].append(key)
+            if any(key.endswith(suffix) for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES):
+                issues["deprecated_authored_keys"].append(key)
+
+    issues["duplicate_prefixed_keys"] = sorted(set(issues["duplicate_prefixed_keys"]))
+    issues["deprecated_authored_keys"] = sorted(set(issues["deprecated_authored_keys"]))
+    issues["problem_count"] = (
+        len(issues["duplicate_prefixed_keys"])
+        + len(issues["deprecated_authored_keys"])
+        + int(bool(issues["has_custom_preset_backup"]))
+        + int(bool(issues["top_level_visualizer_duplication"]))
+    )
+    return issues
 
 
 def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, cleaned: Mapping[str, Any]) -> Tuple[Dict[str, Any], list[str]]:
@@ -396,6 +450,44 @@ def repair_all_presets(
         if on_result:
             on_result(*entry)
     return processed
+
+
+def audit_all_presets() -> List[Tuple[str, Path, Dict[str, Any]]]:
+    """Audit every curated preset JSON under presets/visualizer_modes."""
+    findings: List[Tuple[str, Path, Dict[str, Any]]] = []
+    for mode, path in _discover_preset_files():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            findings.append(
+                (
+                    mode,
+                    path,
+                    {
+                        "mode": mode,
+                        "problem_count": 1,
+                        "read_error": str(exc),
+                    },
+                )
+            )
+            continue
+        if not isinstance(payload, Mapping):
+            findings.append(
+                (
+                    mode,
+                    path,
+                    {
+                        "mode": mode,
+                        "problem_count": 1,
+                        "read_error": "Payload root must be a JSON object",
+                    },
+                )
+            )
+            continue
+        report = audit_payload(mode, payload)
+        if report.get("problem_count", 0):
+            findings.append((mode, path, report))
+    return findings
 
 
 class VisualizerPresetRepairApp(QWidget):
@@ -556,6 +648,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="store_true",
         help="Repair every preset JSON under presets/visualizer_modes and exit.",
     )
+    parser.add_argument(
+        "--audit-curated",
+        action="store_true",
+        help="Audit curated preset JSON files for duplicate prefixes, backup blocks, and stale authored payloads.",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.repair_all:
@@ -576,6 +673,28 @@ def main(argv: Sequence[str] | None = None) -> None:
         results = repair_all_presets(on_result=_cli_result, on_error=_cli_error)
         print(f"Completed batch repair for {len(results)} preset(s).", flush=True)
         return
+
+    if args.audit_curated:
+        findings = audit_all_presets()
+        if not findings:
+            print("Curated preset audit passed with no issues.", flush=True)
+            return
+        for mode, path, report in findings:
+            rel = path.relative_to(ROOT)
+            summary: list[str] = []
+            if report.get("read_error"):
+                summary.append(f"read_error={report['read_error']}")
+            if report.get("duplicate_prefixed_keys"):
+                summary.append(f"duplicate_prefixed_keys={report['duplicate_prefixed_keys']}")
+            if report.get("has_custom_preset_backup"):
+                summary.append("has_custom_preset_backup=True")
+            if report.get("deprecated_authored_keys"):
+                summary.append(f"deprecated_authored_keys={report['deprecated_authored_keys']}")
+            if report.get("top_level_visualizer_duplication"):
+                summary.append("top_level_visualizer_duplication=True")
+            print(f"{rel} ({mode}): {'; '.join(summary)}", flush=True)
+        print(f"Curated preset audit found issues in {len(findings)} preset(s).", flush=True)
+        raise SystemExit(1)
 
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
     app = QApplication.instance() or QApplication(sys.argv)
