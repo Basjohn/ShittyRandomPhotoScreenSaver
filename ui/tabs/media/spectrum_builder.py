@@ -10,7 +10,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
+from ui.tabs.media.builder_scaffold import (
+    add_builder_swatch_row,
+    bind_color_button,
+    bind_setting_signal,
+    build_mode_scaffold,
+)
 from ui.tabs.shared_styles import (
     ADV_HELPER_LABEL_STYLE,
     add_aligned_row_widget as shared_add_aligned_row_widget,
@@ -76,18 +81,22 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     spotify_vis_fill_row = _swatch_row(_normal_layout, "Bar Fill Color:")
     tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
-    tab.vis_fill_color_btn.set_color(tab._spotify_vis_fill_color)
-    tab.vis_fill_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_spotify_vis_fill_color', c), tab._save_settings())
+    bind_color_button(
+        tab,
+        tab.vis_fill_color_btn,
+        '_spotify_vis_fill_color',
+        initial_color=tab._spotify_vis_fill_color,
     )
     spotify_vis_fill_row.addWidget(tab.vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
 
     spotify_vis_border_color_row = _swatch_row(_normal_layout, "Bar Border Color:")
     tab.vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
-    tab.vis_border_color_btn.set_color(tab._spotify_vis_border_color)
-    tab.vis_border_color_btn.color_changed.connect(
-        lambda c: (setattr(tab, '_spotify_vis_border_color', c), tab._save_settings())
+    bind_color_button(
+        tab,
+        tab.vis_border_color_btn,
+        '_spotify_vis_border_color',
+        initial_color=tab._spotify_vis_border_color,
     )
     spotify_vis_border_color_row.addWidget(tab.vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
@@ -102,12 +111,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_border_opacity.setValue(spotify_vis_border_opacity_pct)
     tab.vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_border_opacity.setTickInterval(5)
-    tab.vis_border_opacity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.vis_border_opacity.valueChanged,
+        updater=lambda v: tab.vis_border_opacity_label.setText(f"{v}%"),
+    )
     spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity)
     tab.vis_border_opacity_label = QLabel(f"{spotify_vis_border_opacity_pct}%")
-    tab.vis_border_opacity.valueChanged.connect(
-        lambda v: tab.vis_border_opacity_label.setText(f"{v}%")
-    )
     spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity_label)
 
     # Ghosting controls
@@ -121,7 +131,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_enabled.setToolTip(
         "When enabled, the visualizer draws trailing ghost bars above the current height."
     )
-    tab.vis_ghost_enabled.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.vis_ghost_enabled.stateChanged)
     ghost_toggle_row.addWidget(tab.vis_ghost_enabled)
     ghost_toggle_row.addStretch()
 
@@ -139,12 +149,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
     tab.vis_ghost_opacity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_opacity_slider.setTickInterval(5)
-    tab.vis_ghost_opacity_slider.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.vis_ghost_opacity_slider.valueChanged,
+        updater=lambda v: tab.vis_ghost_opacity_label.setText(f"{v}%"),
+    )
     spotify_vis_ghost_opacity_row.addWidget(tab.vis_ghost_opacity_slider)
     tab.vis_ghost_opacity_label = QLabel(f"{ghost_alpha_pct}%")
-    tab.vis_ghost_opacity_slider.valueChanged.connect(
-        lambda v: tab.vis_ghost_opacity_label.setText(f"{v}%")
-    )
     spotify_vis_ghost_opacity_row.addWidget(tab.vis_ghost_opacity_label)
 
     spotify_vis_ghost_decay_row = _aligned_row(_ghost_layout, "Ghost Decay Speed:")
@@ -156,12 +167,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_decay_slider.setValue(max(10, min(100, ghost_decay_slider)))
     tab.vis_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_decay_slider.setTickInterval(5)
-    tab.vis_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.vis_ghost_decay_slider.valueChanged,
+        updater=lambda v: tab.vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x"),
+    )
     spotify_vis_ghost_decay_row.addWidget(tab.vis_ghost_decay_slider)
     tab.vis_ghost_decay_label = QLabel(f"{tab.vis_ghost_decay_slider.value() / 100.0:.2f}x")
-    tab.vis_ghost_decay_slider.valueChanged.connect(
-        lambda v: tab.vis_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
-    )
     spotify_vis_ghost_decay_row.addWidget(tab.vis_ghost_decay_label)
 
     _adv_layout.addWidget(tab._ghost_sub_container)
@@ -179,7 +191,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Render solid continuous bars instead of segmented blocks. "
         "Produces a clean pillar look while keeping all other bar behaviour."
     )
-    tab.spectrum_single_piece.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.spectrum_single_piece.stateChanged)
     single_piece_row.addWidget(tab.spectrum_single_piece)
     single_piece_row.addStretch()
 
@@ -194,7 +206,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "When 'Taste The Rainbow' is enabled: each bar gets its own unique colour "
         "spread across the rainbow. Off = all bars share one shifting colour."
     )
-    tab.spectrum_rainbow_per_bar.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.spectrum_rainbow_per_bar.stateChanged)
     rainbow_row.addWidget(tab.spectrum_rainbow_per_bar)
     rainbow_row.addStretch()
 
@@ -206,12 +218,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _br_default = int(tab._default_float('spotify_visualizer', 'spectrum_border_radius', 0.0))
     tab.spectrum_border_radius.setValue(max(0, min(12, _br_default)))
     tab.spectrum_border_radius.setToolTip("Round bar corners (0 = square, 6 = nicely rounded).")
-    tab.spectrum_border_radius.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.spectrum_border_radius.valueChanged,
+        updater=lambda v: tab.spectrum_border_radius_label.setText(f"{v}px"),
+    )
     _br_row.addWidget(tab.spectrum_border_radius)
     tab.spectrum_border_radius_label = QLabel(f"{_br_default}px")
-    tab.spectrum_border_radius.valueChanged.connect(
-        lambda v: tab.spectrum_border_radius_label.setText(f"{v}px")
-    )
     _br_row.addWidget(tab.spectrum_border_radius_label)
 
     # Mirrored Layout
@@ -224,7 +237,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "On: mirrored shape profile around the center divider (center ↔ edge symmetry).\n"
         "Off: bars use left-to-right linear profile mapping."
     )
-    tab.spectrum_mirrored.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.spectrum_mirrored.stateChanged)
     _mirror_row.addWidget(tab.spectrum_mirrored)
     _mirror_row.addStretch()
 
@@ -272,12 +285,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_bass_emphasis.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_bass_emphasis.setTickInterval(25)
     tab.spectrum_bass_emphasis.setToolTip("How strongly bass energy drives edge bars. 0 = subtle, 100 = dominant.")
-    tab.spectrum_bass_emphasis.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.spectrum_bass_emphasis.valueChanged,
+        updater=lambda v: tab.spectrum_bass_emphasis_label.setText(f"{v}%"),
+    )
     _bass_row.addWidget(tab.spectrum_bass_emphasis)
     tab.spectrum_bass_emphasis_label = QLabel(f"{_bass_default}%")
-    tab.spectrum_bass_emphasis.valueChanged.connect(
-        lambda v: tab.spectrum_bass_emphasis_label.setText(f"{v}%")
-    )
     _bass_row.addWidget(tab.spectrum_bass_emphasis_label)
 
     # Vocal Position (kept for preset compat, hidden — still saved)
@@ -298,12 +312,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_mid_suppression.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_mid_suppression.setTickInterval(25)
     tab.spectrum_mid_suppression.setToolTip("Reduce mid-frequency energy contribution. 0 = full mid, 100 = heavily dampened.")
-    tab.spectrum_mid_suppression.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.spectrum_mid_suppression.valueChanged,
+        updater=lambda v: tab.spectrum_mid_suppression_label.setText(f"{v}%"),
+    )
     _mid_row.addWidget(tab.spectrum_mid_suppression)
     tab.spectrum_mid_suppression_label = QLabel(f"{_mid_default}%")
-    tab.spectrum_mid_suppression.valueChanged.connect(
-        lambda v: tab.spectrum_mid_suppression_label.setText(f"{v}%")
-    )
     _mid_row.addWidget(tab.spectrum_mid_suppression_label)
 
     # Reactivity (0–100 → 0.0–1.0)
@@ -316,12 +331,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_wave_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_wave_amplitude.setTickInterval(25)
     tab.spectrum_wave_amplitude.setToolTip("Overall audio reactivity scaling. 0 = calm, 100 = intense.")
-    tab.spectrum_wave_amplitude.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.spectrum_wave_amplitude.valueChanged,
+        updater=lambda v: tab.spectrum_wave_amplitude_label.setText(f"{v}%"),
+    )
     _wave_row.addWidget(tab.spectrum_wave_amplitude)
     tab.spectrum_wave_amplitude_label = QLabel(f"{_wave_default}%")
-    tab.spectrum_wave_amplitude.valueChanged.connect(
-        lambda v: tab.spectrum_wave_amplitude_label.setText(f"{v}%")
-    )
     _wave_row.addWidget(tab.spectrum_wave_amplitude_label)
 
     # Profile Floor (5–30 → 0.05–0.30)
@@ -337,12 +353,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Minimum profile-shape floor (visual floor, not technical Manual Floor/noise floor). "
         "Lower = bars can shrink more according to the shape profile."
     )
-    tab.spectrum_profile_floor.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.spectrum_profile_floor.valueChanged,
+        updater=lambda v: tab.spectrum_profile_floor_label.setText(f"{v / 100.0:.2f}"),
+    )
     _floor_row.addWidget(tab.spectrum_profile_floor)
     tab.spectrum_profile_floor_label = QLabel(f"{_floor_default / 100.0:.2f}")
-    tab.spectrum_profile_floor.valueChanged.connect(
-        lambda v: tab.spectrum_profile_floor_label.setText(f"{v / 100.0:.2f}")
-    )
     _floor_row.addWidget(tab.spectrum_profile_floor_label)
 
     # Drop Speed (50–300 → 0.5–3.0)
@@ -357,12 +374,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_drop_speed.setToolTip(
         "How fast bars fall after a peak. 1.0x = default, higher = snappier drops, lower = sticky bars."
     )
-    tab.spectrum_drop_speed.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.spectrum_drop_speed.valueChanged,
+        updater=lambda v: tab.spectrum_drop_speed_label.setText(f"{v / 100.0:.1f}x"),
+    )
     _drop_row.addWidget(tab.spectrum_drop_speed)
     tab.spectrum_drop_speed_label = QLabel(f"{_drop_default / 100.0:.1f}x")
-    tab.spectrum_drop_speed.valueChanged.connect(
-        lambda v: tab.spectrum_drop_speed_label.setText(f"{v / 100.0:.1f}x")
-    )
     _drop_row.addWidget(tab.spectrum_drop_speed_label)
 
     # Spectrum card height growth slider (1.0 .. 3.0)
@@ -375,10 +393,11 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_growth.setTickInterval(50)
     tab.spectrum_growth.setToolTip("Height multiplier for the spectrum card. 100% = current default height.")
-    tab.spectrum_growth.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.spectrum_growth.valueChanged,
+        updater=lambda v: tab.spectrum_growth_label.setText(f"{v / 100.0:.1f}x"),
+    )
     spectrum_growth_row.addWidget(tab.spectrum_growth)
     tab.spectrum_growth_label = QLabel(f"{spectrum_growth_val / 100.0:.1f}x")
-    tab.spectrum_growth.valueChanged.connect(
-        lambda v: tab.spectrum_growth_label.setText(f"{v / 100.0:.1f}x")
-    )
     spectrum_growth_row.addWidget(tab.spectrum_growth_label)

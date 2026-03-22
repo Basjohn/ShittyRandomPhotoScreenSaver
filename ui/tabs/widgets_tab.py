@@ -1357,6 +1357,39 @@ class WidgetsTab(QWidget):
 
         slider.set_preset_index(custom_index)
 
+    def _force_visualizer_preset_to_custom(self, mode: str | None = None) -> None:
+        """Switch the active visualizer preset to Custom without relying on sender ancestry."""
+        if getattr(self, '_preset_slider_changing', False):
+            return
+        if getattr(self, '_loading', False):
+            return
+
+        _slider_map = {
+            'spectrum': '_spectrum_preset_slider',
+            'oscilloscope': '_osc_preset_slider',
+            'sine_wave': '_sine_preset_slider',
+            'blob': '_blob_preset_slider',
+            'bubble': '_bubble_preset_slider',
+        }
+
+        if mode is None:
+            try:
+                mode = self.vis_mode_combo.currentData() or 'spectrum'
+            except Exception:
+                return
+
+        slider_attr = _slider_map.get(mode)
+        if not slider_attr:
+            return
+        slider = getattr(self, slider_attr, None)
+        if slider is None:
+            return
+
+        custom_index = slider.custom_index() if hasattr(slider, 'custom_index') else slider.preset_index()
+        if slider.preset_index() == custom_index:
+            return
+        slider.set_preset_index(custom_index)
+
     def _on_visualizer_preset_changed(self, mode_key: str, preset_index: int) -> None:
         """Handle preset slider changes by applying curated settings before save."""
         if getattr(self, '_loading', False):

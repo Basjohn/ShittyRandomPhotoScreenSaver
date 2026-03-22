@@ -8,7 +8,12 @@ from PySide6.QtWidgets import (
     QCheckBox, QSlider, QWidget,
 )
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
+from ui.tabs.media.builder_scaffold import (
+    add_builder_swatch_row,
+    bind_color_button,
+    bind_setting_signal,
+    build_mode_scaffold,
+)
 from ui.tabs.shared_styles import (
     add_aligned_row_widget as shared_add_aligned_row_widget,
     add_aligned_row as shared_add_aligned_row,
@@ -86,7 +91,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_glow_enabled = QCheckBox("Enable Glow")
     tab.sine_glow_enabled.setProperty("circleIndicator", True)
     tab.sine_glow_enabled.setChecked(tab._default_bool('spotify_visualizer', 'sine_glow_enabled', True))
-    tab.sine_glow_enabled.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.sine_glow_enabled.stateChanged)
     _normal.addWidget(tab.sine_glow_enabled)
 
     tab._sine_glow_widgets: list[QWidget] = []
@@ -100,12 +105,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_glow_intensity.setValue(sine_glow_val)
     tab.sine_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_glow_intensity.setTickInterval(10)
-    tab.sine_glow_intensity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_glow_intensity.valueChanged,
+        updater=lambda v: tab.sine_glow_intensity_label.setText(f"{v}%"),
+    )
     sine_glow_row.addWidget(tab.sine_glow_intensity)
     tab.sine_glow_intensity_label = QLabel(f"{sine_glow_val}%")
-    tab.sine_glow_intensity.valueChanged.connect(
-        lambda v: tab.sine_glow_intensity_label.setText(f"{v}%")
-    )
     sine_glow_row.addWidget(tab.sine_glow_intensity_label)
 
     glow_reactivity_widget, sine_glow_reactivity_row = _aligned_row_widget(_normal, "Glow Reactivity:")
@@ -123,12 +129,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_glow_reactivity.setValue(max(0, min(200, sine_glow_reactivity_val)))
     tab.sine_glow_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_glow_reactivity.setTickInterval(20)
-    tab.sine_glow_reactivity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_glow_reactivity.valueChanged,
+        updater=lambda v: tab.sine_glow_reactivity_label.setText(f"{v}%"),
+    )
     sine_glow_reactivity_row.addWidget(tab.sine_glow_reactivity)
     tab.sine_glow_reactivity_label = QLabel(f"{sine_glow_reactivity_val}%")
-    tab.sine_glow_reactivity.valueChanged.connect(
-        lambda v: tab.sine_glow_reactivity_label.setText(f"{v}%")
-    )
     sine_glow_reactivity_row.addWidget(tab.sine_glow_reactivity_label)
     # Backward-compat alias: legacy code paths may still reference sine_glow_size.
     tab.sine_glow_size = tab.sine_glow_reactivity
@@ -137,14 +144,14 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     glow_color_widget, sine_glow_color_row, _ = _swatch_row_widget(_normal, "Glow Color:")
     tab._sine_glow_widgets.append(glow_color_widget)
     tab.sine_glow_color_btn = ColorSwatchButton(title="Choose Sine Wave Glow Color")
-    tab.sine_glow_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_glow_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_glow_color_btn, '_sine_glow_color')
     sine_glow_color_row.addWidget(tab.sine_glow_color_btn)
     sine_glow_color_row.addStretch()
 
     tab.sine_reactive_glow = QCheckBox("Reactive Glow (energy-driven)")
     tab.sine_reactive_glow.setProperty("circleIndicator", True)
     tab.sine_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'sine_reactive_glow', True))
-    tab.sine_reactive_glow.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.sine_reactive_glow.stateChanged)
     _normal.addWidget(tab.sine_reactive_glow)
     tab._sine_glow_widgets.append(tab.sine_reactive_glow)
 
@@ -165,7 +172,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_ghost_enabled.setToolTip(
         "When enabled, a faded afterimage of the previous waveform trails behind the current one."
     )
-    tab.sine_ghost_enabled.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.sine_ghost_enabled.stateChanged)
     sine_ghost_toggle_row.addWidget(tab.sine_ghost_enabled)
     sine_ghost_toggle_row.addStretch()
 
@@ -182,12 +189,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_ghost_opacity.setValue(max(0, min(100, _sg_alpha_pct)))
     tab.sine_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_ghost_opacity.setTickInterval(5)
-    tab.sine_ghost_opacity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_ghost_opacity.valueChanged,
+        updater=lambda v: tab.sine_ghost_opacity_label.setText(f"{v}%"),
+    )
     sine_ghost_opa_row.addWidget(tab.sine_ghost_opacity)
     tab.sine_ghost_opacity_label = QLabel(f"{_sg_alpha_pct}%")
-    tab.sine_ghost_opacity.valueChanged.connect(
-        lambda v: tab.sine_ghost_opacity_label.setText(f"{v}%")
-    )
     sine_ghost_opa_row.addWidget(tab.sine_ghost_opacity_label)
 
     sine_ghost_dec_widget, sine_ghost_dec_row = _aligned_row_widget(_sine_ghost_layout, "Ghost Decay:")
@@ -198,12 +206,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_ghost_decay_slider.setValue(max(10, min(100, _sg_decay_pct)))
     tab.sine_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_ghost_decay_slider.setTickInterval(5)
-    tab.sine_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_ghost_decay_slider.valueChanged,
+        updater=lambda v: tab.sine_ghost_decay_label.setText(f"{v / 100.0:.2f}x"),
+    )
     sine_ghost_dec_row.addWidget(tab.sine_ghost_decay_slider)
     tab.sine_ghost_decay_label = QLabel(f"{tab.sine_ghost_decay_slider.value() / 100.0:.2f}x")
-    tab.sine_ghost_decay_slider.valueChanged.connect(
-        lambda v: tab.sine_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
-    )
     sine_ghost_dec_row.addWidget(tab.sine_ghost_decay_label)
 
     _normal.addWidget(tab._sine_ghost_sub)
@@ -215,7 +224,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     sine_line_color_row = _swatch_row(_normal, "Line Color:")
     tab.sine_line_color_btn = ColorSwatchButton(title="Choose Sine Wave Line Color")
-    tab.sine_line_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line_color_btn, '_sine_line_color')
     sine_line_color_row.addWidget(tab.sine_line_color_btn)
     sine_line_color_row.addStretch()
 
@@ -228,12 +237,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_sensitivity.setTickInterval(50)
     tab.sine_sensitivity.setToolTip("How much audio energy affects sine wave amplitude.")
-    tab.sine_sensitivity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_sensitivity.valueChanged,
+        updater=lambda v: tab.sine_sensitivity_label.setText(f"{v / 100.0:.2f}x"),
+    )
     sine_sens_row.addWidget(tab.sine_sensitivity)
     tab.sine_sensitivity_label = QLabel(f"{sine_sens_val / 100.0:.2f}x")
-    tab.sine_sensitivity.valueChanged.connect(
-        lambda v: tab.sine_sensitivity_label.setText(f"{v / 100.0:.2f}x")
-    )
     sine_sens_row.addWidget(tab.sine_sensitivity_label)
 
     sine_speed_row = _aligned_row(_normal, "Speed:")
@@ -245,12 +255,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_speed.setTickInterval(10)
     tab.sine_speed.setToolTip("Wave animation speed multiplier.")
-    tab.sine_speed.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_speed.valueChanged,
+        updater=lambda v: tab.sine_speed_label.setText(f"{v / 100.0:.2f}x"),
+    )
     sine_speed_row.addWidget(tab.sine_speed)
     tab.sine_speed_label = QLabel(f"{sine_speed_val / 100.0:.2f}x")
-    tab.sine_speed.valueChanged.connect(
-        lambda v: tab.sine_speed_label.setText(f"{v / 100.0:.2f}x")
-    )
     sine_speed_row.addWidget(tab.sine_speed_label)
 
     sine_travel_row = _aligned_row(_normal, "Travel:")
@@ -259,7 +270,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     default_sine_travel = tab._default_int('spotify_visualizer', 'sine_wave_travel', 0)
     tab.sine_travel.setCurrentIndex(max(0, min(2, default_sine_travel)))
     tab.sine_travel.setToolTip("Direction the sine wave scrolls.")
-    tab.sine_travel.currentIndexChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.sine_travel.currentIndexChanged)
     sine_travel_row.addWidget(tab.sine_travel)
     sine_travel_row.addStretch()
 
@@ -274,12 +285,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_wave_effect.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_wave_effect.setTickInterval(10)
     tab.sine_wave_effect.setToolTip("Adds a wave-like positional undulation along the sine lines. Higher = more movement.")
-    tab.sine_wave_effect.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_wave_effect.valueChanged,
+        updater=lambda v: tab.sine_wave_effect_label.setText(f"{v}%"),
+    )
     sine_wave_fx_row.addWidget(tab.sine_wave_effect)
     tab.sine_wave_effect_label = QLabel(f"{sine_wave_fx_val}%")
-    tab.sine_wave_effect.valueChanged.connect(
-        lambda v: tab.sine_wave_effect_label.setText(f"{v}%")
-    )
     sine_wave_fx_row.addWidget(tab.sine_wave_effect_label)
 
     # Micro Wobble (legacy)
@@ -294,12 +306,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_micro_wobble.setToolTip(
         "Legacy jagged wobble effect (energy-reactive dents). Leave at 0% if using Crawl."
     )
-    tab.sine_micro_wobble.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_micro_wobble.valueChanged,
+        updater=lambda v: tab.sine_micro_wobble_label.setText(f"{v}%"),
+    )
     sine_mw_row.addWidget(tab.sine_micro_wobble)
     tab.sine_micro_wobble_label = QLabel(f"{sine_mw_val}%")
-    tab.sine_micro_wobble.valueChanged.connect(
-        lambda v: tab.sine_micro_wobble_label.setText(f"{v}%")
-    )
     sine_mw_row.addWidget(tab.sine_micro_wobble_label)
 
     # Crawl (new sine slider)
@@ -314,12 +327,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_crawl_slider.setToolTip(
         "Gentle horizontal dents that crawl across the lines in response to vocals. Higher = more visible crawl."
     )
-    tab.sine_crawl_slider.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_crawl_slider.valueChanged,
+        updater=lambda v: tab.sine_crawl_label.setText(f"{v}%"),
+    )
     sine_crawl_row.addWidget(tab.sine_crawl_slider)
     tab.sine_crawl_label = QLabel(f"{sine_crawl_val}%")
-    tab.sine_crawl_slider.valueChanged.connect(
-        lambda v: tab.sine_crawl_label.setText(f"{v}%")
-    )
     sine_crawl_row.addWidget(tab.sine_crawl_label)
 
     # Width Reaction
@@ -336,12 +350,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "0 = off (2px lines), higher = thicker lines on bass hits (up to ~8px). "
         "Lines still resemble a sine wave at maximum."
     )
-    tab.sine_width_reaction.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_width_reaction.valueChanged,
+        updater=lambda v: tab.sine_width_reaction_label.setText(f"{v}%"),
+    )
     sine_wr_row.addWidget(tab.sine_width_reaction)
     tab.sine_width_reaction_label = QLabel(f"{sine_wr_val}%")
-    tab.sine_width_reaction.valueChanged.connect(
-        lambda v: tab.sine_width_reaction_label.setText(f"{v}%")
-    )
     sine_wr_row.addWidget(tab.sine_width_reaction_label)
 
     # Density (cycles across card)
@@ -357,12 +372,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Number of sine cycles across the card. Low = wide gentle waves, "
         "high = tightly packed oscillation. Default 1.0× ≈ 3 cycles."
     )
-    tab.sine_density.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_density.valueChanged,
+        updater=lambda v: tab.sine_density_label.setText(f"{v / 100.0:.2f}×"),
+    )
     sine_density_row.addWidget(tab.sine_density)
     tab.sine_density_label = QLabel(f"{sine_density_val / 100.0:.2f}×")
-    tab.sine_density.valueChanged.connect(
-        lambda v: tab.sine_density_label.setText(f"{v / 100.0:.2f}×")
-    )
     sine_density_row.addWidget(tab.sine_density_label)
 
     # Heartbeat
@@ -379,12 +395,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "bigger swells. CPU detects bass transients and the shader briefly "
         "amplifies all sine lines."
     )
-    tab.sine_heartbeat.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_heartbeat.valueChanged,
+        updater=lambda v: tab.sine_heartbeat_label.setText(f"{v}%"),
+    )
     sine_hb_row.addWidget(tab.sine_heartbeat)
     tab.sine_heartbeat_label = QLabel(f"{sine_hb_val}%")
-    tab.sine_heartbeat.valueChanged.connect(
-        lambda v: tab.sine_heartbeat_label.setText(f"{v}%")
-    )
     sine_hb_row.addWidget(tab.sine_heartbeat_label)
 
     # Multi-line displacement (reactive offset)
@@ -401,12 +418,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Higher = larger transient shoves when bass hits. "
         "Most visible with 2-3 lines enabled."
     )
-    tab.sine_displacement.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_displacement.valueChanged,
+        updater=lambda v: tab.sine_displacement_label.setText(f"{v}%"),
+    )
     sine_disp_row.addWidget(tab.sine_displacement)
     tab.sine_displacement_label = QLabel(f"{sine_disp_val}%")
-    tab.sine_displacement.valueChanged.connect(
-        lambda v: tab.sine_displacement_label.setText(f"{v}%")
-    )
     sine_disp_row.addWidget(tab.sine_displacement_label)
 
     # Vertical Shift
@@ -627,12 +645,13 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_card_adaptation.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_card_adaptation.setTickInterval(10)
     tab.sine_card_adaptation.setToolTip("How much of the card height the wave uses. Higher = taller waves.")
-    tab.sine_card_adaptation.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_card_adaptation.valueChanged,
+        updater=lambda v: tab.sine_card_adaptation_label.setText(f"{v}%"),
+    )
     sine_adapt_row.addWidget(tab.sine_card_adaptation)
     tab.sine_card_adaptation_label = QLabel(f"{sine_adapt_val}%")
-    tab.sine_card_adaptation.valueChanged.connect(
-        lambda v: tab.sine_card_adaptation_label.setText(f"{v}%")
-    )
     sine_adapt_row.addWidget(tab.sine_card_adaptation_label)
 
     # Card Height
@@ -646,10 +665,11 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_wave_growth.setValue(max(100, min(500, sine_growth_val)))
     tab.sine_wave_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_wave_growth.setToolTip("Height multiplier for the sine wave card.")
-    tab.sine_wave_growth.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_wave_growth.valueChanged,
+        updater=lambda v: tab.sine_wave_growth_label.setText(f"{v / 100.0:.1f}x"),
+    )
     sine_growth_row.addWidget(tab.sine_wave_growth)
     tab.sine_wave_growth_label = QLabel(f"{sine_growth_val / 100.0:.1f}x")
-    tab.sine_wave_growth.valueChanged.connect(
-        lambda v: tab.sine_wave_growth_label.setText(f"{v / 100.0:.1f}x")
-    )
     sine_growth_row.addWidget(tab.sine_wave_growth_label)

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget
@@ -24,6 +24,42 @@ class ModeScaffold:
     advanced_host: QWidget
     advanced_layout: QVBoxLayout
     technical_host: QWidget
+
+
+def bind_setting_signal(
+    tab: "WidgetsTab",
+    signal: Any,
+    *,
+    updater: Callable[..., None] | None = None,
+    auto_switch: bool = False,
+) -> None:
+    """Wire a control signal into the shared visualizer save flow."""
+    if updater is not None:
+        signal.connect(updater)
+    if auto_switch:
+        signal.connect(lambda *_args: tab._force_visualizer_preset_to_custom())
+    signal.connect(tab._save_settings)
+
+
+def bind_color_button(
+    tab: "WidgetsTab",
+    button: Any,
+    attr_name: str,
+    *,
+    auto_switch: bool = False,
+    initial_color: Any = None,
+) -> None:
+    """Bind a color swatch button to a tab attribute and save flow."""
+    if initial_color is not None:
+        button.set_color(initial_color)
+
+    def _on_color(color: Any) -> None:
+        setattr(tab, attr_name, color)
+        if auto_switch:
+            tab._force_visualizer_preset_to_custom()
+        tab._save_settings()
+
+    button.color_changed.connect(_on_color)
 
 
 def add_builder_swatch_row(

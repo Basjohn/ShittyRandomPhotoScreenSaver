@@ -10,7 +10,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
+from ui.tabs.media.builder_scaffold import (
+    add_builder_swatch_row,
+    bind_color_button,
+    bind_setting_signal,
+    build_mode_scaffold,
+)
 from ui.tabs.shared_styles import (
     add_aligned_row,
     add_aligned_row_widget,
@@ -84,12 +89,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_bass_pulse.setValue(val)
     tab.bubble_big_bass_pulse.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_bass_pulse.setTickInterval(50)
-    tab.bubble_big_bass_pulse.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_big_bass_pulse.valueChanged,
+        updater=lambda v: tab.bubble_big_bass_pulse_label.setText(f"{v}%"),
+    )
     bubble_bass_row.addWidget(tab.bubble_big_bass_pulse)
     tab.bubble_big_bass_pulse_label = QLabel(f"{val}%")
-    tab.bubble_big_bass_pulse.valueChanged.connect(
-        lambda v: tab.bubble_big_bass_pulse_label.setText(f"{v}%")
-    )
     bubble_bass_row.addWidget(tab.bubble_big_bass_pulse_label)
 
     bubble_freq_row = _aligned_row(_adv_layout, "Small Bubble Freq Pulse:")
@@ -100,12 +106,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_freq_pulse.setValue(val)
     tab.bubble_small_freq_pulse.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_small_freq_pulse.setTickInterval(50)
-    tab.bubble_small_freq_pulse.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_small_freq_pulse.valueChanged,
+        updater=lambda v: tab.bubble_small_freq_pulse_label.setText(f"{v}%"),
+    )
     bubble_freq_row.addWidget(tab.bubble_small_freq_pulse)
     tab.bubble_small_freq_pulse_label = QLabel(f"{val}%")
-    tab.bubble_small_freq_pulse.valueChanged.connect(
-        lambda v: tab.bubble_small_freq_pulse_label.setText(f"{v}%")
-    )
     bubble_freq_row.addWidget(tab.bubble_small_freq_pulse_label)
 
     # ── Stream Controls ───────────────────────────────────────────
@@ -117,7 +124,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     saved_dir = tab._default_str('spotify_visualizer', 'bubble_stream_direction', 'up').lower()
     dir_map = {"none": 0, "up": 1, "down": 2, "left": 3, "right": 4, "diagonal": 5, "random": 6}
     tab.bubble_stream_direction.setCurrentIndex(dir_map.get(saved_dir, 1))
-    tab.bubble_stream_direction.currentIndexChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.bubble_stream_direction.currentIndexChanged)
     stream_dir_row.addWidget(tab.bubble_stream_direction)
     stream_dir_row.addStretch()
 
@@ -129,12 +136,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_stream_constant_speed.setValue(val)
     tab.bubble_stream_constant_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_stream_constant_speed.setTickInterval(25)
-    tab.bubble_stream_constant_speed.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_stream_constant_speed.valueChanged,
+        updater=lambda v: tab.bubble_stream_constant_speed_label.setText(f"{v}%"),
+    )
     stream_constant_row.addWidget(tab.bubble_stream_constant_speed)
     tab.bubble_stream_constant_speed_label = QLabel(f"{val}%")
-    tab.bubble_stream_constant_speed.valueChanged.connect(
-        lambda v: tab.bubble_stream_constant_speed_label.setText(f"{v}%")
-    )
     stream_constant_row.addWidget(tab.bubble_stream_constant_speed_label)
 
     stream_cap_row = _aligned_row(_adv_layout, "Stream Speed Cap:")
@@ -145,12 +153,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_stream_speed_cap.setValue(val)
     tab.bubble_stream_speed_cap.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_stream_speed_cap.setTickInterval(25)
-    tab.bubble_stream_speed_cap.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_stream_speed_cap.valueChanged,
+        updater=lambda v: tab.bubble_stream_speed_cap_label.setText(f"{v}%"),
+    )
     stream_cap_row.addWidget(tab.bubble_stream_speed_cap)
     tab.bubble_stream_speed_cap_label = QLabel(f"{val}%")
-    tab.bubble_stream_speed_cap.valueChanged.connect(
-        lambda v: tab.bubble_stream_speed_cap_label.setText(f"{v}%")
-    )
     stream_cap_row.addWidget(tab.bubble_stream_speed_cap_label)
 
     stream_react_row = _aligned_row(_adv_layout, "Speed Reactivity:")
@@ -161,12 +170,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_stream_reactivity.setValue(val)
     tab.bubble_stream_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_stream_reactivity.setTickInterval(50)
-    tab.bubble_stream_reactivity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_stream_reactivity.valueChanged,
+        updater=lambda v: tab.bubble_stream_reactivity_label.setText(f"{v}%"),
+    )
     stream_react_row.addWidget(tab.bubble_stream_reactivity)
     tab.bubble_stream_reactivity_label = QLabel(f"{val}%")
-    tab.bubble_stream_reactivity.valueChanged.connect(
-        lambda v: tab.bubble_stream_reactivity_label.setText(f"{v}%")
-    )
     stream_react_row.addWidget(tab.bubble_stream_reactivity_label)
 
     # ── Drift & Rotation ──────────────────────────────────────────
@@ -178,12 +188,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_rotation_amount.setMaximum(100)
     val = int(tab._default_float('spotify_visualizer', 'bubble_rotation_amount', 0.5) * 100)
     tab.bubble_rotation_amount.setValue(val)
-    tab.bubble_rotation_amount.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_rotation_amount.valueChanged,
+        updater=lambda v: tab.bubble_rotation_amount_label.setText(f"{v}%"),
+    )
     rotation_row.addWidget(tab.bubble_rotation_amount)
     tab.bubble_rotation_amount_label = QLabel(f"{val}%")
-    tab.bubble_rotation_amount.valueChanged.connect(
-        lambda v: tab.bubble_rotation_amount_label.setText(f"{v}%")
-    )
     rotation_row.addWidget(tab.bubble_rotation_amount_label)
 
     drift_amount_row = _aligned_row(_adv_layout, "Drift Amount:")
@@ -192,12 +203,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_amount.setMaximum(100)
     val = int(tab._default_float('spotify_visualizer', 'bubble_drift_amount', 0.5) * 100)
     tab.bubble_drift_amount.setValue(val)
-    tab.bubble_drift_amount.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_drift_amount.valueChanged,
+        updater=lambda v: tab.bubble_drift_amount_label.setText(f"{v}%"),
+    )
     drift_amount_row.addWidget(tab.bubble_drift_amount)
     tab.bubble_drift_amount_label = QLabel(f"{val}%")
-    tab.bubble_drift_amount.valueChanged.connect(
-        lambda v: tab.bubble_drift_amount_label.setText(f"{v}%")
-    )
     drift_amount_row.addWidget(tab.bubble_drift_amount_label)
 
     drift_speed_row = _aligned_row(_adv_layout, "Drift Speed:")
@@ -206,12 +218,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_speed.setMaximum(100)
     val = int(tab._default_float('spotify_visualizer', 'bubble_drift_speed', 0.5) * 100)
     tab.bubble_drift_speed.setValue(val)
-    tab.bubble_drift_speed.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_drift_speed.valueChanged,
+        updater=lambda v: tab.bubble_drift_speed_label.setText(f"{v}%"),
+    )
     drift_speed_row.addWidget(tab.bubble_drift_speed)
     tab.bubble_drift_speed_label = QLabel(f"{val}%")
-    tab.bubble_drift_speed.valueChanged.connect(
-        lambda v: tab.bubble_drift_speed_label.setText(f"{v}%")
-    )
     drift_speed_row.addWidget(tab.bubble_drift_speed_label)
 
     drift_frequency_row = _aligned_row(_adv_layout, "Drift Frequency:")
@@ -220,12 +233,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_frequency.setMaximum(100)
     val = int(tab._default_float('spotify_visualizer', 'bubble_drift_frequency', 0.5) * 100)
     tab.bubble_drift_frequency.setValue(val)
-    tab.bubble_drift_frequency.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_drift_frequency.valueChanged,
+        updater=lambda v: tab.bubble_drift_frequency_label.setText(f"{v}%"),
+    )
     drift_frequency_row.addWidget(tab.bubble_drift_frequency)
     tab.bubble_drift_frequency_label = QLabel(f"{val}%")
-    tab.bubble_drift_frequency.valueChanged.connect(
-        lambda v: tab.bubble_drift_frequency_label.setText(f"{v}%")
-    )
     drift_frequency_row.addWidget(tab.bubble_drift_frequency_label)
 
     drift_direction_row = _aligned_row(_adv_layout, "Drift Direction:")
@@ -250,7 +264,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     if dd_index < 0:
         dd_index = tab.bubble_drift_direction.findData('random')
     tab.bubble_drift_direction.setCurrentIndex(max(0, dd_index))
-    tab.bubble_drift_direction.currentIndexChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.bubble_drift_direction.currentIndexChanged)
     drift_direction_row.addWidget(tab.bubble_drift_direction)
     drift_direction_row.addStretch()
 
@@ -271,7 +285,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     else:
         tab.bubble_swirl_direction.setCurrentIndex(0)
     tab.bubble_swirl_direction.setEnabled(saved_dd in ('swirl_cw', 'swirl_ccw'))
-    tab.bubble_swirl_direction.currentIndexChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.bubble_swirl_direction.currentIndexChanged)
     swirl_combo_row.addWidget(tab.bubble_swirl_direction)
     swirl_combo_row.addStretch()
 
@@ -297,12 +311,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_size_max.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_big_size_max.setTickInterval(10)
     tab.bubble_big_size_max.setToolTip("Base starting radius for big bubbles. Actual size varies ±40% around this value.")
-    tab.bubble_big_size_max.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_big_size_max.valueChanged,
+        updater=lambda v: tab.bubble_big_size_max_label.setText(str(v)),
+    )
     big_size_row.addWidget(tab.bubble_big_size_max)
     tab.bubble_big_size_max_label = QLabel(f"{val}")
-    tab.bubble_big_size_max.valueChanged.connect(
-        lambda v: tab.bubble_big_size_max_label.setText(str(v))
-    )
     big_size_row.addWidget(tab.bubble_big_size_max_label)
 
     small_size_row = _aligned_row(_adv_layout, "Small Bubble Size:")
@@ -314,12 +329,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_size_max.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_small_size_max.setTickInterval(5)
     tab.bubble_small_size_max.setToolTip("Base starting radius for small bubbles. Actual size varies ±45% around this value.")
-    tab.bubble_small_size_max.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_small_size_max.valueChanged,
+        updater=lambda v: tab.bubble_small_size_max_label.setText(str(v)),
+    )
     small_size_row.addWidget(tab.bubble_small_size_max)
     tab.bubble_small_size_max_label = QLabel(f"{val}")
-    tab.bubble_small_size_max.valueChanged.connect(
-        lambda v: tab.bubble_small_size_max_label.setText(str(v))
-    )
     small_size_row.addWidget(tab.bubble_small_size_max_label)
 
     specular_max_row = _aligned_row(_adv_layout, "Specular Max Size:")
@@ -334,12 +350,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Maximum specular highlight scale for big bubbles. "
         "Caps pulse-driven specular growth so highlights stay visually sane at large radii."
     )
-    tab.bubble_big_specular_max_size.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_big_specular_max_size.valueChanged,
+        updater=lambda v: tab.bubble_big_specular_max_size_label.setText(f"{v / 100.0:.1f}x"),
+    )
     specular_max_row.addWidget(tab.bubble_big_specular_max_size)
     tab.bubble_big_specular_max_size_label = QLabel(f"{val / 100.0:.1f}x")
-    tab.bubble_big_specular_max_size.valueChanged.connect(
-        lambda v: tab.bubble_big_specular_max_size_label.setText(f"{v / 100.0:.1f}x")
-    )
     specular_max_row.addWidget(tab.bubble_big_specular_max_size_label)
 
     clamp_row = _aligned_row(_adv_layout, "Max Pulse Clamp:")
@@ -354,12 +371,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "Maximum pulse multiplier for big bubbles. Caps how large a bubble can grow "
         "during bass hits (e.g. 4.0x = bubble can grow up to 4× its base radius)."
     )
-    tab.bubble_big_size_clamp.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_big_size_clamp.valueChanged,
+        updater=lambda v: tab.bubble_big_size_clamp_label.setText(f"{v / 100.0:.1f}x"),
+    )
     clamp_row.addWidget(tab.bubble_big_size_clamp)
     tab.bubble_big_size_clamp_label = QLabel(f"{val / 100.0:.1f}x")
-    tab.bubble_big_size_clamp.valueChanged.connect(
-        lambda v: tab.bubble_big_size_clamp_label.setText(f"{v / 100.0:.1f}x")
-    )
     clamp_row.addWidget(tab.bubble_big_size_clamp_label)
 
     contraction_row = _aligned_row(_adv_layout, "Contraction Bias:")
@@ -374,12 +392,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         "How much big bubbles shrink during quiet passages. "
         "100% = no contraction (default). Lower values make bubbles visibly breathe."
     )
-    tab.bubble_big_contraction_bias.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_big_contraction_bias.valueChanged,
+        updater=lambda v: tab.bubble_big_contraction_bias_label.setText(f"{v}%"),
+    )
     contraction_row.addWidget(tab.bubble_big_contraction_bias)
     tab.bubble_big_contraction_bias_label = QLabel(f"{val}%")
-    tab.bubble_big_contraction_bias.valueChanged.connect(
-        lambda v: tab.bubble_big_contraction_bias_label.setText(f"{v}%")
-    )
     contraction_row.addWidget(tab.bubble_big_contraction_bias_label)
 
     big_count_row = _aligned_row(_adv_layout, "Big Bubbles:")
@@ -388,12 +407,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_count.setMaximum(30)
     val = int(tab._default_float('spotify_visualizer', 'bubble_big_count', 8))
     tab.bubble_big_count.setValue(val)
-    tab.bubble_big_count.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_big_count.valueChanged,
+        updater=lambda v: tab.bubble_big_count_label.setText(str(v)),
+    )
     big_count_row.addWidget(tab.bubble_big_count)
     tab.bubble_big_count_label = QLabel(str(val))
-    tab.bubble_big_count.valueChanged.connect(
-        lambda v: tab.bubble_big_count_label.setText(str(v))
-    )
     big_count_row.addWidget(tab.bubble_big_count_label)
 
     small_count_row = _aligned_row(_adv_layout, "Small Bubbles:")
@@ -402,12 +422,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_count.setMaximum(80)
     val = int(tab._default_float('spotify_visualizer', 'bubble_small_count', 25))
     tab.bubble_small_count.setValue(val)
-    tab.bubble_small_count.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_small_count.valueChanged,
+        updater=lambda v: tab.bubble_small_count_label.setText(str(v)),
+    )
     small_count_row.addWidget(tab.bubble_small_count)
     tab.bubble_small_count_label = QLabel(str(val))
-    tab.bubble_small_count.valueChanged.connect(
-        lambda v: tab.bubble_small_count_label.setText(str(v))
-    )
     small_count_row.addWidget(tab.bubble_small_count_label)
 
     surface_reach_row = _aligned_row(_adv_layout, "Surface Reach:")
@@ -416,12 +437,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_surface_reach.setMaximum(100)
     val = int(tab._default_float('spotify_visualizer', 'bubble_surface_reach', 0.6) * 100)
     tab.bubble_surface_reach.setValue(val)
-    tab.bubble_surface_reach.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_surface_reach.valueChanged,
+        updater=lambda v: tab.bubble_surface_reach_label.setText(f"{v}%"),
+    )
     surface_reach_row.addWidget(tab.bubble_surface_reach)
     tab.bubble_surface_reach_label = QLabel(f"{val}%")
-    tab.bubble_surface_reach.valueChanged.connect(
-        lambda v: tab.bubble_surface_reach_label.setText(f"{v}%")
-    )
     surface_reach_row.addWidget(tab.bubble_surface_reach_label)
 
     # ── Styling ───────────────────────────────────────────────────
@@ -477,9 +499,11 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     ):
         color_row = _swatch_row(_normal_layout, f"{label_text}:")
         btn = ColorSwatchButton(title=title)
-        btn.set_color(getattr(tab, color_attr, None))
-        btn.color_changed.connect(
-            lambda c, attr=color_attr: (setattr(tab, attr, c), tab._save_settings())
+        bind_color_button(
+            tab,
+            btn,
+            color_attr,
+            initial_color=getattr(tab, color_attr, None),
         )
         setattr(tab, attr_name, btn)
         color_row.addWidget(btn)
@@ -495,12 +519,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_growth.setTickInterval(50)
     tab.bubble_growth.setToolTip("Height multiplier for the bubble card.")
-    tab.bubble_growth.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_growth.valueChanged,
+        updater=lambda v: tab.bubble_growth_label.setText(f"{v / 100.0:.1f}x"),
+    )
     bubble_growth_row.addWidget(tab.bubble_growth)
     tab.bubble_growth_label = QLabel(f"{bubble_growth_val / 100.0:.1f}x")
-    tab.bubble_growth.valueChanged.connect(
-        lambda v: tab.bubble_growth_label.setText(f"{v / 100.0:.1f}x")
-    )
     bubble_growth_row.addWidget(tab.bubble_growth_label)
 
     # ── Motion Tails ─────────────────────────────────────────────────
@@ -514,12 +539,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_trail_strength.setToolTip(
         "How long the motion tail stretches behind each bubble (0 = off)."
     )
-    tab.bubble_trail_strength.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_trail_strength.valueChanged,
+        updater=lambda v: tab.bubble_trail_strength_label.setText(f"{v}%"),
+    )
     tail_len_row.addWidget(tab.bubble_trail_strength)
     tab.bubble_trail_strength_label = QLabel("0%")
-    tab.bubble_trail_strength.valueChanged.connect(
-        lambda v: tab.bubble_trail_strength_label.setText(f"{v}%")
-    )
     tail_len_row.addWidget(tab.bubble_trail_strength_label)
 
     tail_opa_row = _aligned_row(_adv_layout, "Tail Opacity:")
@@ -532,12 +558,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_tail_opacity.setToolTip(
         "Maximum opacity of the tail gradient (0 = off). Always somewhat translucent."
     )
-    tab.bubble_tail_opacity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_tail_opacity.valueChanged,
+        updater=lambda v: tab.bubble_tail_opacity_label.setText(f"{v}%"),
+    )
     tail_opa_row.addWidget(tab.bubble_tail_opacity)
     tab.bubble_tail_opacity_label = QLabel("0%")
-    tab.bubble_tail_opacity.valueChanged.connect(
-        lambda v: tab.bubble_tail_opacity_label.setText(f"{v}%")
-    )
     tail_opa_row.addWidget(tab.bubble_tail_opacity_label)
 
     # ── Ghosting ─────────────────────────────────────────────────
@@ -552,7 +579,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_ghost_enabled.setToolTip(
         "Show a fading afterimage trail behind moving bubbles."
     )
-    tab.bubble_ghost_enabled.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.bubble_ghost_enabled.stateChanged)
     bubble_ghost_toggle_row.addWidget(tab.bubble_ghost_enabled)
     bubble_ghost_toggle_row.addStretch()
 
@@ -569,12 +596,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_ghost_opacity.setValue(max(0, min(100, _bg_alpha_pct)))
     tab.bubble_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_ghost_opacity.setTickInterval(5)
-    tab.bubble_ghost_opacity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_ghost_opacity.valueChanged,
+        updater=lambda v: tab.bubble_ghost_opacity_label.setText(f"{v}%"),
+    )
     bg_opa_row.addWidget(tab.bubble_ghost_opacity)
     tab.bubble_ghost_opacity_label = QLabel(f"{_bg_alpha_pct}%")
-    tab.bubble_ghost_opacity.valueChanged.connect(
-        lambda v: tab.bubble_ghost_opacity_label.setText(f"{v}%")
-    )
     bg_opa_row.addWidget(tab.bubble_ghost_opacity_label)
 
     bg_dec_widget, bg_dec_row = _aligned_row_widget(_bubble_ghost_layout, "Ghost Decay:")
@@ -585,12 +613,13 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_ghost_decay_slider.setValue(max(10, min(100, _bg_decay_pct)))
     tab.bubble_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.bubble_ghost_decay_slider.setTickInterval(5)
-    tab.bubble_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.bubble_ghost_decay_slider.valueChanged,
+        updater=lambda v: tab.bubble_ghost_decay_label.setText(f"{v / 100.0:.2f}x"),
+    )
     bg_dec_row.addWidget(tab.bubble_ghost_decay_slider)
     tab.bubble_ghost_decay_label = QLabel(f"{tab.bubble_ghost_decay_slider.value() / 100.0:.2f}x")
-    tab.bubble_ghost_decay_slider.valueChanged.connect(
-        lambda v: tab.bubble_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
-    )
     bg_dec_row.addWidget(tab.bubble_ghost_decay_label)
 
     _adv_layout.addWidget(tab._bubble_ghost_sub)

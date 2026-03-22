@@ -11,7 +11,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
+from ui.tabs.media.builder_scaffold import (
+    add_builder_swatch_row,
+    bind_color_button,
+    bind_setting_signal,
+    build_mode_scaffold,
+)
 from ui.tabs.shared_styles import (
     add_aligned_row_widget as shared_add_aligned_row_widget,
 )
@@ -59,20 +64,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return row_widget, inner
 
-    def _bind_slider(slider: QSlider, updater=None) -> None:
-        slider.valueChanged.connect(tab._save_settings)
-        slider.valueChanged.connect(tab._auto_switch_preset_to_custom)
-        if updater is not None:
-            slider.valueChanged.connect(updater)
-
-    def _bind_color(button: ColorSwatchButton, attr_name: str) -> None:
-        def _on_color(color):
-            setattr(tab, attr_name, color)
-            tab._auto_switch_preset_to_custom()
-            tab._save_settings()
-
-        button.color_changed.connect(_on_color)
-
     # Pulse intensity (top of stack)
     pulse_widget, pulse_layout = _aligned_row("Pulse Intensity:")
     tab.blob_pulse = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -83,7 +74,12 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_pulse.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_pulse.setTickInterval(25)
     tab.blob_pulse_label = QLabel(f"{pulse_val / 100.0:.2f}x")
-    _bind_slider(tab.blob_pulse, lambda v: tab.blob_pulse_label.setText(f"{v / 100.0:.2f}x"))
+    bind_setting_signal(
+        tab,
+        tab.blob_pulse.valueChanged,
+        updater=lambda v: tab.blob_pulse_label.setText(f"{v / 100.0:.2f}x"),
+        auto_switch=True,
+    )
     pulse_layout.addWidget(tab.blob_pulse)
     pulse_layout.addWidget(tab.blob_pulse_label)
     normal_layout.addWidget(pulse_widget)
@@ -92,15 +88,19 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_reactive_glow.setProperty("circleIndicator", True)
     tab.blob_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'blob_reactive_glow', True))
     tab.blob_reactive_glow.setToolTip("Outer glow pulses with audio energy.")
-    tab.blob_reactive_glow.stateChanged.connect(tab._save_settings)
-    tab.blob_reactive_glow.stateChanged.connect(tab._auto_switch_preset_to_custom)
+    bind_setting_signal(tab, tab.blob_reactive_glow.stateChanged, auto_switch=True)
     normal_layout.addWidget(tab.blob_reactive_glow)
 
     # Glow color (visible only when Reactive Glow is on)
     glow_widget, glow_layout = _swatch_row("Glow Color:")
     tab.blob_glow_color_btn = ColorSwatchButton(title="Choose Blob Glow Color")
-    tab.blob_glow_color_btn.set_color(getattr(tab, '_blob_glow_color', None))
-    _bind_color(tab.blob_glow_color_btn, '_blob_glow_color')
+    bind_color_button(
+        tab,
+        tab.blob_glow_color_btn,
+        '_blob_glow_color',
+        auto_switch=True,
+        initial_color=getattr(tab, '_blob_glow_color', None),
+    )
     glow_layout.addWidget(tab.blob_glow_color_btn)
     glow_layout.addStretch()
 
@@ -113,22 +113,37 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # Fill / Edge / Outline colors (always visible, aligned)
     fill_widget, fill_layout = _swatch_row("Fill Color:")
     tab.blob_fill_color_btn = ColorSwatchButton(title="Choose Blob Fill Color")
-    tab.blob_fill_color_btn.set_color(getattr(tab, '_blob_color', None))
-    _bind_color(tab.blob_fill_color_btn, '_blob_color')
+    bind_color_button(
+        tab,
+        tab.blob_fill_color_btn,
+        '_blob_color',
+        auto_switch=True,
+        initial_color=getattr(tab, '_blob_color', None),
+    )
     fill_layout.addWidget(tab.blob_fill_color_btn)
     fill_layout.addStretch()
 
     edge_widget, edge_layout = _swatch_row("Edge Color:")
     tab.blob_edge_color_btn = ColorSwatchButton(title="Choose Blob Edge Color")
-    tab.blob_edge_color_btn.set_color(getattr(tab, '_blob_edge_color', None))
-    _bind_color(tab.blob_edge_color_btn, '_blob_edge_color')
+    bind_color_button(
+        tab,
+        tab.blob_edge_color_btn,
+        '_blob_edge_color',
+        auto_switch=True,
+        initial_color=getattr(tab, '_blob_edge_color', None),
+    )
     edge_layout.addWidget(tab.blob_edge_color_btn)
     edge_layout.addStretch()
 
     outline_widget, outline_layout = _swatch_row("Outline Color:")
     tab.blob_outline_color_btn = ColorSwatchButton(title="Choose Blob Outline Color")
-    tab.blob_outline_color_btn.set_color(getattr(tab, '_blob_outline_color', None))
-    _bind_color(tab.blob_outline_color_btn, '_blob_outline_color')
+    bind_color_button(
+        tab,
+        tab.blob_outline_color_btn,
+        '_blob_outline_color',
+        auto_switch=True,
+        initial_color=getattr(tab, '_blob_outline_color', None),
+    )
     outline_layout.addWidget(tab.blob_outline_color_btn)
     outline_layout.addStretch()
 
@@ -148,7 +163,12 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_width.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_width.setTickInterval(10)
     tab.blob_width_label = QLabel(f"{tab.blob_width.value()}%")
-    _bind_slider(tab.blob_width, lambda v: tab.blob_width_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_width.valueChanged,
+        updater=lambda v: tab.blob_width_label.setText(f"{v}%"),
+        auto_switch=True,
+    )
     width_layout.addWidget(tab.blob_width)
     width_layout.addWidget(tab.blob_width_label)
     tab._blob_card_size_layout.addWidget(width_widget)
@@ -163,7 +183,12 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_size.setTickInterval(20)
     tab.blob_size.setToolTip("Base SDF size (pre-staging). 100% = default card fit.")
     tab.blob_size_label = QLabel(f"{tab.blob_size.value()}%")
-    _bind_slider(tab.blob_size, lambda v: tab.blob_size_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_size.valueChanged,
+        updater=lambda v: tab.blob_size_label.setText(f"{v}%"),
+        auto_switch=True,
+    )
     size_layout.addWidget(tab.blob_size)
     size_layout.addWidget(tab.blob_size_label)
     tab._blob_card_size_layout.addWidget(size_widget)
@@ -181,7 +206,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_glow_intensity.setTickInterval(10)
     tab.blob_glow_intensity.setToolTip("Controls the size and brightness of the glow around the blob.")
     tab.blob_glow_intensity_label = QLabel(f"{tab.blob_glow_intensity.value()}%")
-    _bind_slider(tab.blob_glow_intensity, lambda v: tab.blob_glow_intensity_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_glow_intensity.valueChanged,
+        updater=lambda v: tab.blob_glow_intensity_label.setText(f"{v}%"),
+    )
     glow_layout.addWidget(tab.blob_glow_intensity)
     glow_layout.addWidget(tab.blob_glow_intensity_label)
     adv_layout.addWidget(glow_row)
@@ -197,7 +226,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_glow_reactivity.setTickInterval(25)
     tab.blob_glow_reactivity.setToolTip("How strongly the glow responds to audio energy. 0% = static glow, 200% = very reactive.")
     tab.blob_glow_reactivity_label = QLabel(f"{tab.blob_glow_reactivity.value()}%")
-    _bind_slider(tab.blob_glow_reactivity, lambda v: tab.blob_glow_reactivity_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_glow_reactivity.valueChanged,
+        updater=lambda v: tab.blob_glow_reactivity_label.setText(f"{v}%"),
+    )
     glow_react_layout.addWidget(tab.blob_glow_reactivity)
     glow_react_layout.addWidget(tab.blob_glow_reactivity_label)
     adv_layout.addWidget(glow_react_row)
@@ -213,7 +246,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_glow_max_size.setTickInterval(25)
     tab.blob_glow_max_size.setToolTip("Maximum radius the glow can spread to. Higher = larger glow halo.")
     tab.blob_glow_max_size_label = QLabel(f"{tab.blob_glow_max_size.value()}%")
-    _bind_slider(tab.blob_glow_max_size, lambda v: tab.blob_glow_max_size_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_glow_max_size.valueChanged,
+        updater=lambda v: tab.blob_glow_max_size_label.setText(f"{v}%"),
+    )
     glow_max_layout.addWidget(tab.blob_glow_max_size)
     glow_max_layout.addWidget(tab.blob_glow_max_size_label)
     adv_layout.addWidget(glow_max_row)
@@ -228,7 +265,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_ghost_enabled.setToolTip(
         "Show a faded outline ring at the blob's recent peak size."
     )
-    tab.blob_ghost_enabled.stateChanged.connect(tab._save_settings)
+    bind_setting_signal(tab, tab.blob_ghost_enabled.stateChanged)
     ghost_toggle_row.addWidget(tab.blob_ghost_enabled)
     ghost_toggle_row.addStretch()
     adv_layout.addWidget(ghost_toggle_row_w)
@@ -246,12 +283,13 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_ghost_opacity.setValue(max(0, min(100, _bg_alpha_pct)))
     tab.blob_ghost_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_ghost_opacity.setTickInterval(5)
-    tab.blob_ghost_opacity.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.blob_ghost_opacity.valueChanged,
+        updater=lambda v: tab.blob_ghost_opacity_label.setText(f"{v}%"),
+    )
     ghost_opa_l.addWidget(tab.blob_ghost_opacity)
     tab.blob_ghost_opacity_label = QLabel(f"{_bg_alpha_pct}%")
-    tab.blob_ghost_opacity.valueChanged.connect(
-        lambda v: tab.blob_ghost_opacity_label.setText(f"{v}%")
-    )
     ghost_opa_l.addWidget(tab.blob_ghost_opacity_label)
     _ghost_layout.addWidget(ghost_opa_w)
 
@@ -263,12 +301,13 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_ghost_decay_slider.setValue(max(10, min(100, _bg_decay_pct)))
     tab.blob_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_ghost_decay_slider.setTickInterval(5)
-    tab.blob_ghost_decay_slider.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.blob_ghost_decay_slider.valueChanged,
+        updater=lambda v: tab.blob_ghost_decay_label.setText(f"{v / 100.0:.2f}x"),
+    )
     ghost_dec_l.addWidget(tab.blob_ghost_decay_slider)
     tab.blob_ghost_decay_label = QLabel(f"{tab.blob_ghost_decay_slider.value() / 100.0:.2f}x")
-    tab.blob_ghost_decay_slider.valueChanged.connect(
-        lambda v: tab.blob_ghost_decay_label.setText(f"{v / 100.0:.2f}x")
-    )
     ghost_dec_l.addWidget(tab.blob_ghost_decay_label)
     _ghost_layout.addWidget(ghost_dec_w)
 
@@ -292,7 +331,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stage_bias.setTickInterval(5)
     tab.blob_stage_bias.setToolTip("Biases stage drive upward (+) or downward (-) before release smoothing.")
     tab.blob_stage_bias_label = QLabel(f"{tab.blob_stage_bias.value() / 100:+.2f}")
-    _bind_slider(tab.blob_stage_bias, lambda v: tab.blob_stage_bias_label.setText(f"{v / 100:+.2f}"))
+    bind_setting_signal(
+        tab,
+        tab.blob_stage_bias.valueChanged,
+        updater=lambda v: tab.blob_stage_bias_label.setText(f"{v / 100:+.2f}"),
+    )
     bias_layout.addWidget(tab.blob_stage_bias)
     bias_layout.addWidget(tab.blob_stage_bias_label)
     adv_layout.addWidget(bias_row)
@@ -308,7 +351,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stage_gain.setTickInterval(25)
     tab.blob_stage_gain.setToolTip("Scales the amplitude of staged core growth.")
     tab.blob_stage_gain_label = QLabel(f"{tab.blob_stage_gain.value()}%")
-    _bind_slider(tab.blob_stage_gain, lambda v: tab.blob_stage_gain_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_stage_gain.valueChanged,
+        updater=lambda v: tab.blob_stage_gain_label.setText(f"{v}%"),
+    )
     stage_gain_layout.addWidget(tab.blob_stage_gain)
     stage_gain_layout.addWidget(tab.blob_stage_gain_label)
     adv_layout.addWidget(stage_gain_row)
@@ -327,7 +374,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stage2_release_ms.setTickInterval(100)
     tab.blob_stage2_release_ms.setToolTip("Controls how long Stage 2 lingers before releasing (ms).")
     tab.blob_stage2_release_ms_label = QLabel(_ms_label(tab.blob_stage2_release_ms.value()))
-    _bind_slider(tab.blob_stage2_release_ms, lambda v: tab.blob_stage2_release_ms_label.setText(_ms_label(v)))
+    bind_setting_signal(
+        tab,
+        tab.blob_stage2_release_ms.valueChanged,
+        updater=lambda v: tab.blob_stage2_release_ms_label.setText(_ms_label(v)),
+    )
     s2_layout.addWidget(tab.blob_stage2_release_ms)
     s2_layout.addWidget(tab.blob_stage2_release_ms_label)
     adv_layout.addWidget(s2_row)
@@ -342,7 +393,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stage3_release_ms.setTickInterval(100)
     tab.blob_stage3_release_ms.setToolTip("Controls how long Stage 3 lingers before releasing (ms).")
     tab.blob_stage3_release_ms_label = QLabel(_ms_label(tab.blob_stage3_release_ms.value()))
-    _bind_slider(tab.blob_stage3_release_ms, lambda v: tab.blob_stage3_release_ms_label.setText(_ms_label(v)))
+    bind_setting_signal(
+        tab,
+        tab.blob_stage3_release_ms.valueChanged,
+        updater=lambda v: tab.blob_stage3_release_ms_label.setText(_ms_label(v)),
+    )
     s3_layout.addWidget(tab.blob_stage3_release_ms)
     s3_layout.addWidget(tab.blob_stage3_release_ms_label)
     adv_layout.addWidget(s3_row)
@@ -358,7 +413,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_core_scale.setTickInterval(25)
     tab.blob_core_scale.setToolTip("Uniform multiplier applied after staged offsets.")
     tab.blob_core_scale_label = QLabel(f"{tab.blob_core_scale.value()}%")
-    _bind_slider(tab.blob_core_scale, lambda v: tab.blob_core_scale_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_core_scale.valueChanged,
+        updater=lambda v: tab.blob_core_scale_label.setText(f"{v}%"),
+    )
     core_scale_layout.addWidget(tab.blob_core_scale)
     core_scale_layout.addWidget(tab.blob_core_scale_label)
     adv_layout.addWidget(core_scale_row)
@@ -373,7 +432,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_core_floor_bias.setTickInterval(5)
     tab.blob_core_floor_bias.setToolTip("Minimum percentage of the staged core radius preserved during deformation.")
     tab.blob_core_floor_bias_label = QLabel(f"{tab.blob_core_floor_bias.value()}%")
-    _bind_slider(tab.blob_core_floor_bias, lambda v: tab.blob_core_floor_bias_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_core_floor_bias.valueChanged,
+        updater=lambda v: tab.blob_core_floor_bias_label.setText(f"{v}%"),
+    )
     core_floor_layout.addWidget(tab.blob_core_floor_bias)
     core_floor_layout.addWidget(tab.blob_core_floor_bias_label)
     adv_layout.addWidget(core_floor_row)
@@ -389,7 +452,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_reactive_deformation.setTickInterval(50)
     tab.blob_reactive_deformation.setToolTip("Scales overall outward energy-driven growth.")
     tab.blob_reactive_deformation_label = QLabel(f"{tab.blob_reactive_deformation.value()}%")
-    _bind_slider(tab.blob_reactive_deformation, lambda v: tab.blob_reactive_deformation_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_reactive_deformation.valueChanged,
+        updater=lambda v: tab.blob_reactive_deformation_label.setText(f"{v}%"),
+    )
     rd_layout.addWidget(tab.blob_reactive_deformation)
     rd_layout.addWidget(tab.blob_reactive_deformation_label)
     adv_layout.addWidget(rd_row)
@@ -404,7 +471,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_pulse_cap.setTickInterval(25)
     tab.blob_pulse_cap.setToolTip("Caps how much extra reactive lift Blob can add above the underlying support signal. Lower it to stop giant flickery pulses.")
     tab.blob_pulse_cap_label = QLabel(f"{tab.blob_pulse_cap.value()}%")
-    _bind_slider(tab.blob_pulse_cap, lambda v: tab.blob_pulse_cap_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_pulse_cap.valueChanged,
+        updater=lambda v: tab.blob_pulse_cap_label.setText(f"{v}%"),
+    )
     pulse_cap_layout.addWidget(tab.blob_pulse_cap)
     pulse_cap_layout.addWidget(tab.blob_pulse_cap_label)
     adv_layout.addWidget(pulse_cap_row)
@@ -419,7 +490,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_pulse_release_ms.setTickInterval(50)
     tab.blob_pulse_release_ms.setToolTip("Controls how quickly reactive blob pulses fall away after a hit. Attack stays fast; this only shapes the release.")
     tab.blob_pulse_release_ms_label = QLabel(_ms_label(tab.blob_pulse_release_ms.value()))
-    _bind_slider(tab.blob_pulse_release_ms, lambda v: tab.blob_pulse_release_ms_label.setText(_ms_label(v)))
+    bind_setting_signal(
+        tab,
+        tab.blob_pulse_release_ms.valueChanged,
+        updater=lambda v: tab.blob_pulse_release_ms_label.setText(_ms_label(v)),
+    )
     pulse_release_layout.addWidget(tab.blob_pulse_release_ms)
     pulse_release_layout.addWidget(tab.blob_pulse_release_ms_label)
     adv_layout.addWidget(pulse_release_row)
@@ -435,7 +510,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_constant_wobble.setTickInterval(25)
     tab.blob_constant_wobble.setToolTip("Base wobble amplitude present even during silence.")
     tab.blob_constant_wobble_label = QLabel(f"{tab.blob_constant_wobble.value()}%")
-    _bind_slider(tab.blob_constant_wobble, lambda v: tab.blob_constant_wobble_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_constant_wobble.valueChanged,
+        updater=lambda v: tab.blob_constant_wobble_label.setText(f"{v}%"),
+    )
     cw_layout.addWidget(tab.blob_constant_wobble)
     cw_layout.addWidget(tab.blob_constant_wobble_label)
     adv_layout.addWidget(cw_row)
@@ -451,7 +530,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_reactive_wobble.setTickInterval(25)
     tab.blob_reactive_wobble.setToolTip("Energy-driven wobble amplitude.")
     tab.blob_reactive_wobble_label = QLabel(f"{tab.blob_reactive_wobble.value()}%")
-    _bind_slider(tab.blob_reactive_wobble, lambda v: tab.blob_reactive_wobble_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_reactive_wobble.valueChanged,
+        updater=lambda v: tab.blob_reactive_wobble_label.setText(f"{v}%"),
+    )
     rw_layout.addWidget(tab.blob_reactive_wobble)
     rw_layout.addWidget(tab.blob_reactive_wobble_label)
     adv_layout.addWidget(rw_row)
@@ -467,7 +550,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stretch_tendency.setTickInterval(10)
     tab.blob_stretch_tendency.setToolTip("How much peak energy creates directional juts/stretches.")
     tab.blob_stretch_tendency_label = QLabel(f"{tab.blob_stretch_tendency.value()}%")
-    _bind_slider(tab.blob_stretch_tendency, lambda v: tab.blob_stretch_tendency_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_stretch_tendency.valueChanged,
+        updater=lambda v: tab.blob_stretch_tendency_label.setText(f"{v}%"),
+    )
     st_layout.addWidget(tab.blob_stretch_tendency)
     st_layout.addWidget(tab.blob_stretch_tendency_label)
     adv_layout.addWidget(st_row)
@@ -483,7 +570,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stretch_inner.setTickInterval(10)
     tab.blob_stretch_inner.setToolTip("How deep the blob can indent inward. Higher = deeper dents.")
     tab.blob_stretch_inner_label = QLabel(f"{tab.blob_stretch_inner.value()}%")
-    _bind_slider(tab.blob_stretch_inner, lambda v: tab.blob_stretch_inner_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_stretch_inner.valueChanged,
+        updater=lambda v: tab.blob_stretch_inner_label.setText(f"{v}%"),
+    )
     si_layout.addWidget(tab.blob_stretch_inner)
     si_layout.addWidget(tab.blob_stretch_inner_label)
     adv_layout.addWidget(si_row)
@@ -499,7 +590,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stretch_outer.setTickInterval(10)
     tab.blob_stretch_outer.setToolTip("How far the blob extends outward. Higher = bigger protrusions.")
     tab.blob_stretch_outer_label = QLabel(f"{tab.blob_stretch_outer.value()}%")
-    _bind_slider(tab.blob_stretch_outer, lambda v: tab.blob_stretch_outer_label.setText(f"{v}%"))
+    bind_setting_signal(
+        tab,
+        tab.blob_stretch_outer.valueChanged,
+        updater=lambda v: tab.blob_stretch_outer_label.setText(f"{v}%"),
+    )
     so_layout.addWidget(tab.blob_stretch_outer)
     so_layout.addWidget(tab.blob_stretch_outer_label)
     adv_layout.addWidget(so_row)
@@ -526,11 +621,13 @@ def build_blob_growth(tab: "WidgetsTab") -> None:
     tab.blob_growth.setValue(blob_growth_val)
     tab.blob_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_growth.setTickInterval(50)
-    tab.blob_growth.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.blob_growth.valueChanged,
+        updater=lambda v: tab.blob_growth_label.setText(f"{v / 100.0:.1f}x"),
+        auto_switch=True,
+    )
     blob_growth_row.addWidget(tab.blob_growth)
     tab.blob_growth_label = QLabel(f"{blob_growth_val / 100.0:.1f}x")
-    tab.blob_growth.valueChanged.connect(
-        lambda v: tab.blob_growth_label.setText(f"{v / 100.0:.1f}x")
-    )
     blob_growth_row.addWidget(tab.blob_growth_label)
     parent_layout.addLayout(blob_growth_row)
