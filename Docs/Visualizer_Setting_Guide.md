@@ -13,6 +13,8 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 
 ## Technical Controls (All Modes)
 
+- **Scheduler controls** — the micro-scheduler itself is always on and does not have its own master toggle. The transient controls you do see in Technical are tuning controls for how each mode uses scheduler-fed kick/snare energy, not an enable/disable path.
+- **Technical visibility buckets** — `Show AGC Controls` and `Show Transient Controls` only hide/show clutter in the Settings UI. Hidden controls keep their saved values and still affect rendering. Treat them as organization helpers, not runtime toggles.
 - **Manual Floor Baseline** — shared slider (0.05 – 4.0) that now seeds the dynamic floor accumulator the moment you change it, even when Dynamic Floor remains enabled. Treat it as the guaranteed "silence baseline" for every mode; if visuals look stuck too high, check this slider first before touching stage/core floor biases.
 - **Dynamic Floor** — still adapts over time, but every preset reload, mode switch, widget reset, or manual floor edit reseeds the accumulator from the Manual Floor Baseline to prevent stale high floors bleeding across modes.
 - **Energy Boost** (0.5–1.8×) — per-mode post-normalization gain. Amplifies energy bands after AGC processing. Higher values make the visualizer react more strongly to all frequencies. Default 0.85× is deliberately conservative; raise toward 1.2–1.5× if a mode feels sluggish, lower toward 0.5–0.7× to calm it down. *Interacts with Sensitivity — adjust one at a time.*
@@ -22,6 +24,11 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
   - **100%**: Maximum compression. All audio pushed toward constant loudness. Useful for very dynamic playlists but reduces kick/snare punch.
   - *Lower AGC Strength if visualizer feels "flat" during a loud chorus. Raise it if quiet songs produce no visible reaction.*
 - **Input Gain** (5%–200%, default 100%) — per-mode pre-FFT signal scaling (virtual volume). Multiplies raw PCM samples before peak detection and FFT, producing the exact same effect as lowering/raising the system mixer volume without actually changing audio output. Lower values calm the visualizer; higher values make it more reactive. At 100% (default) there is no change. Because the scaling happens before AGC normalization, very low gain values may cause the silence threshold to kick in (signal treated as silence). Very high values may saturate the AGC normalizer. *Adjust this before Energy Boost — Input Gain affects the raw signal, Energy Boost affects post-normalization output.*
+- **Transient Clamp** (0%–300%) — per-mode cap on transient-boosted bass energy. This is the main safety rail for the micro-scheduler/transient path; lower it if beat accents feel too explosive before touching mode-specific pulse/stage sliders.
+- **Mode-only transient controls** — some transient sliders only appear in the modes that actually use them:
+  - Spectrum: `Kick Lane Gain` reinforces the kick express lane.
+  - Bubble: `Transient Pulse` reinforces the scheduler-driven bubble pulse path.
+  - Blob / Bubble / Spectrum / Sine / Oscilloscope: each mode can also expose its own transient mix slider where applicable.
 - **Use Raw Energy** (toggle, default OFF) — per-mode bypass of AGC entirely. When enabled, energy bands come from pre-AGC values with full dynamic range. **Warning**: Raw energy values can be very large during loud passages and near-zero during quiet ones. Only enable for modes/presets where you want maximum dynamic range and are willing to accept the inconsistency.
   - *Blob mode*: Leave OFF — blob deformation relies on consistent ~0.5–0.8 range for smooth morphing. Raw energy causes jarring shape jumps.
   - *Bubble mode*: Leave OFF — the hybrid pulse system handles AGC-constant energy poorly via delta + sustained floor detection. Raw energy may cause over/under-inflation.
@@ -60,6 +67,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Stage Bias / Stage Gain / Stage 2 & 3 Release** (`blob_stage_bias`, `blob_stage_gain`, `blob_stage2_release_ms`, `blob_stage3_release_ms`) — *Advanced sliders*
   - Impact: Shape staged growth envelopes: bias preloads, gain scales amplitude, release sliders control linger durations.
   - Conflicts: High manual floor or dynamic floor can pin stages, making gain changes imperceptible.
+  - Notes: The micro-scheduler now non-destructively peeks recent `kick`/`snare` events into Blob staging. If Stage Gain feels too “steppy,” reduce Stage Gain or Pulse Intensity before assuming the scheduler is overfiring.
 - **Core Scale / Core Floor Bias** (`blob_core_scale`, `blob_core_floor_bias`) — *Advanced sliders*
   - Impact: Core Scale is uniform multiplier after staging; Core Floor keeps minimum radius.
   - Conflicts: Large floor bias reduces effect of Technical floors; too much scale causes clipping.
@@ -173,6 +181,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
   - Impact: Energy Boost scales post-AGC energy; AGC Strength controls normalization compression; Raw Energy bypasses AGC entirely.
   - Conflicts: High Energy Boost with high AGC Strength can double-amplify and saturate pulse. Raw Energy bypasses the hybrid pulse system’s assumptions about near-constant energy levels. Adjust one at a time.
   - **Bubble-specific note**: The hybrid pulse system (delta + sustained floor) was designed for post-AGC energy. Lowering AGC Strength below ~30% or enabling Raw Energy may cause big bubbles to inflate/deflate erratically instead of pulsing on beats.
+  - **Scheduler note**: Big-bubble promotions now prefer consume-once kick events from the micro-scheduler. If Bubble feels too eager, inspect transient floor/gain first; there is no separate scheduler toggle by design.
 
 **Recommended Bubble baselines**
 
@@ -214,6 +223,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Technical controls** (`bar_count`, `<mode>_audio_block_size`, adaptive/sensitivity/floor/dynamic_range, energy_boost, agc_strength, use_raw_energy)
   - Impact: Govern FFT binning, latency, gain, floors, and AGC behaviour.
   - Conflicts: Low bar counts (<24) break curved weighting (bass peak shifts); audio block sizes <256 increase jitter unless the new bar gate remains. Energy Boost >1.2× with Dynamic Range Boost ON can overdrive bar heights.
+  - Notes: Spectrum now routes bass/mid/treble per lane instead of multiplying the whole profile by one shared scalar. The shape editor is still the silhouette guide, but quiet lanes can now drop properly when their source energy disappears.
 
 **Recommended Spectrum baselines**
 
@@ -253,6 +263,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Technical controls** (`osc_bar_count` via technical group, block size, adaptive/sensitivity, floors, energy_boost, agc_strength)
   - Impact: Shared audio parameters plus AGC controls.
   - Conflicts: Lowering bar count below default reduces multi-line energy separation. Energy Boost primarily affects glow intensity for oscilloscope since amplitude comes from waveform data.
+  - Notes: Oscilloscope transient-width reaction now also peeks recent scheduler kick/snare events, so discrete beats can widen the line even when a frame-local onset was missed.
 
 **Recommended Oscilloscope baselines**
 
@@ -294,6 +305,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
   - Conflicts: Growth >1.5× combined with Density <0.8× wastes vertical space.
 - **Technical controls** (per-mode audio block size, adaptive, floors, bar count, energy_boost, agc_strength) — as above.
   - Conflicts: Dropping bar count below ~40 collapses the bass/mid split the sine displacement math expects, so multi-line offset bias and displacement all converge; retune line shifts or raise bar count before blaming density settings. Energy Boost primarily affects glow intensity for sine wave since amplitude comes from waveform data.
+  - Notes: Sine now gets a mode-local scheduler beat assist. Recent kick/snare events still help width reaction and heartbeat, but they also now lift Sine's uploaded band energy/amplitude cues so the mode reacts more visibly on confirmed beats without changing Oscilloscope behavior.
 
 **Recommended Sine Wave baselines**
 

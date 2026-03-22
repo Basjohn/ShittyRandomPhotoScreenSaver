@@ -25,6 +25,89 @@ logger = get_logger(__name__)
 HALO_MOVE_THRESHOLD_DEFAULT = 1.25  # px, prevent redundant window moves
 
 
+def _ctrl_interaction_active(widget) -> bool:
+    """Resolve Ctrl-held interaction state across local, global, and handler fallbacks."""
+    local_ctrl = bool(getattr(widget, "_ctrl_held", False))
+    coordinator = getattr(widget, "_coordinator", None)
+    coordinator_ctrl = bool(getattr(coordinator, "ctrl_held", False))
+    global_ctrl = bool(getattr(type(widget), "_global_ctrl_held", False))
+
+    handler_ctrl = False
+    input_handler = getattr(widget, "_input_handler", None)
+    if input_handler is not None:
+        try:
+            handler_ctrl = bool(input_handler.is_ctrl_held())
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+    return local_ctrl or coordinator_ctrl or global_ctrl or handler_ctrl
+
+
+def _restore_mc_input_focus(widget, reason: str) -> None:
+    """Best-effort MC focus reclaim after interactive clicks."""
+    if not bool(getattr(widget, "_is_mc_build", False)):
+        return
+    try:
+        widget.raise_()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    try:
+        widget.activateWindow()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    try:
+        handle = widget.windowHandle()
+        if handle is not None:
+            handle.requestActivate()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    try:
+        widget.setFocus(Qt.FocusReason.MouseFocusReason)
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    try:
+        widget._perform_activation_refresh(reason)
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+
+def _refresh_halo_after_interaction_click(widget, pos) -> None:
+    """Keep the halo alive after interactive clicks in hard-exit mode."""
+    try:
+        if not widget._is_hard_exit_enabled():
+            return
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        return
+
+    owner = widget
+    try:
+        coordinator = getattr(widget, "_coordinator", None)
+        candidate = getattr(coordinator, "halo_owner", None) if coordinator is not None else None
+        if candidate is not None and candidate.isVisible():
+            owner = candidate
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+    hint = getattr(owner, "_ctrl_cursor_hint", None)
+    try:
+        if hint is None or not hint.isVisible():
+            return
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        return
+
+    try:
+        owner._last_halo_activity_ts = time.monotonic()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+    try:
+        reset_halo_inactivity_timer(owner)
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+
 def ensure_ctrl_cursor_hint(widget) -> None:
     """Create the cursor halo widget if it doesn't exist."""
     if widget._ctrl_cursor_hint is not None:
@@ -84,13 +167,16 @@ def show_ctrl_cursor_hint(widget, pos, mode: str = "none") -> None:
 
     if mode != "fade_out":
         if not rect.contains(local_point):
-            should_hide = (
-                local_point.x() < rect.left() - halo_slack
-                or local_point.y() < rect.top() - halo_slack
-                or local_point.x() > rect.right() + halo_slack
-                or local_point.y() > rect.bottom() + halo_slack
+            within_slack = (
+                local_point.x() >= rect.left() - halo_slack
+                and local_point.y() >= rect.top() - halo_slack
+                and local_point.x() <= rect.right() + halo_slack
+                and local_point.y() <= rect.bottom() + halo_slack
             )
-            if should_hide:
+            if within_slack:
+                local_point.setX(max(rect.left(), min(rect.right(), local_point.x())))
+                local_point.setY(max(rect.top(), min(rect.bottom(), local_point.y())))
+            else:
                 hide_ctrl_cursor_hint(widget, immediate=True)
                 return
         if context_menu_active:
@@ -194,7 +280,7 @@ def on_halo_inactivity_timeout(widget) -> None:
 def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
     """Handle mouse press - exit on any click unless hard exit is enabled."""
     # Phase 5: Use coordinator for global Ctrl state
-    ctrl_mode_active = widget._ctrl_held or widget._coordinator.ctrl_held
+    ctrl_mode_active = _ctrl_interaction_active(widget)
     
     # Phase E: Delegate right-click context menu to InputHandler if available
     # This ensures effect invalidation is triggered consistently before menu popup
@@ -203,7 +289,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
             if widget._input_handler is not None:
                 try:
                     # InputHandler will trigger effect invalidation and emit context_menu_requested
-                    if widget._input_handler.handle_mouse_press(event, widget._coordinator.ctrl_held):
+                    if widget._input_handler.handle_mouse_press(event, ctrl_mode_active):
                         event.accept()
                         return
                 except Exception as e:
@@ -344,7 +430,7 @@ def handle_mouseMoveEvent(widget, event: QMouseEvent) -> None:
         return
     
     # Phase 5: Use coordinator for global Ctrl state
-    ctrl_mode_active = widget._coordinator.ctrl_held
+    ctrl_mode_active = _ctrl_interaction_active(widget)
     hard_exit = widget._is_hard_exit_enabled()
     if hard_exit or ctrl_mode_active:
         # Show/update halo position — but skip repositioning when the event
@@ -353,13 +439,18 @@ def handle_mouseMoveEvent(widget, event: QMouseEvent) -> None:
         if not halo_forwarding:
             local_pos = event.pos()
             hint = widget._ctrl_cursor_hint
-            if hint is not None:
-                halo_hidden = not hint.isVisible()
-                if halo_hidden:
-                    widget._coordinator.set_halo_owner(widget)
-                    show_ctrl_cursor_hint(widget, local_pos, mode="fade_in")
-                else:
-                    show_ctrl_cursor_hint(widget, local_pos, mode="none")
+            halo_hidden = hint is None
+            if not halo_hidden:
+                try:
+                    halo_hidden = not hint.isVisible()
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                    halo_hidden = True
+            if halo_hidden:
+                widget._coordinator.set_halo_owner(widget)
+                show_ctrl_cursor_hint(widget, local_pos, mode="fade_in")
+            else:
+                show_ctrl_cursor_hint(widget, local_pos, mode="none")
         
         # Delegate volume drag to InputHandler
         if widget._input_handler is not None:

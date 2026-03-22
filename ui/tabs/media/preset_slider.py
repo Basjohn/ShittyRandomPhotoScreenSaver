@@ -316,6 +316,8 @@ class VisualizerPresetSlider(QWidget):
             self._mode, idx, self._custom_index,
         )
 
+        setattr(self, "_pending_move_to_custom", True)
+
         # Switch slider to Custom — this triggers _on_slider_changed which
         # emits preset_changed and advanced_toggled, shows Advanced container,
         # and saves settings. The UI widgets retain the preset values so the

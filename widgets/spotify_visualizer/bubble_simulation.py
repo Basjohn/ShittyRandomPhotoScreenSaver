@@ -149,6 +149,7 @@ class BubbleSimulation:
         self._overdrive_last_log_state: Optional[str] = None
         self._overdrive_last_log_ts: float = 0.0
         self._prev_bass: float = 0.0  # previous frame bass for slope detection
+        self._stream_burst_envelope: float = 0.0
 
     def reset(self) -> None:
         """Clear all accumulated state for a clean cold-start on mode re-entry."""
@@ -164,6 +165,7 @@ class BubbleSimulation:
         self._overdrive_last_log_state = None
         self._overdrive_last_log_ts = 0.0
         self._prev_bass = 0.0
+        self._stream_burst_envelope = 0.0
 
     @property
     def count(self) -> int:
@@ -224,9 +226,10 @@ class BubbleSimulation:
                 max_pe = max((b.pulse_energy for b in self._bubbles), default=0.0)
                 logger.debug(
                     "[BUBBLE_SIM] tick=%d dt=%.3f bass=%.3f mid=%.3f overall=%.3f "
-                    "bubbles=%d max_pe=%.3f spd_e=%.3f base=%.2f cap=%.2f react=%.2f",
+                    "bubbles=%d max_pe=%.3f spd_e=%.3f burst=%.3f base=%.2f cap=%.2f react=%.2f",
                     self._diag_tick_count, dt, bass, mid, overall,
                     len(self._bubbles), max_pe, self._smoothed_speed_energy,
+                    self._stream_burst_envelope,
                     stream_const, stream_cap, stream_reactivity,
                 )
 
@@ -258,6 +261,7 @@ class BubbleSimulation:
             self._bass_running_avg += (bass - self._bass_running_avg) * avg_attack
         else:
             self._bass_running_avg += (bass - self._bass_running_avg) * avg_release
+        midhi_prev_avg = self._midhi_running_avg
         midhi = mid * 0.6 + high * 0.4
         if midhi > self._midhi_running_avg:
             self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_attack
@@ -292,23 +296,51 @@ class BubbleSimulation:
         smooth_mid = float(energy_bands.get('smooth_mid', mid)) if isinstance(energy_bands, dict) else mid
         smooth_high = float(energy_bands.get('smooth_high', high)) if isinstance(energy_bands, dict) else high
 
-        # Perceptual curve: expand low-energy region so quiet→loud feels
-        # gradual instead of "off → full".  x^1.4 compresses the top end
-        # (chorus still hits hard) while stretching the bottom (verse has
-        # visible but modest speed).
+        # Perceptual curve: keep quiet passages visibly mobile while still
+        # reserving extra headroom for loud vocal passages.
         vocal_raw = smooth_mid * 0.65 + smooth_high * 0.35
-        vocal_speed = min(1.0, max(0.0, vocal_raw)) ** 1.4
+        vocal_speed = min(1.0, max(0.0, vocal_raw)) ** 1.1
+        vocal_delta = max(0.0, vocal_raw - midhi_prev_avg)
+        vocal_burst_target = min(0.85, vocal_delta * 1.1)
+        if _scheduler is not None:
+            try:
+                vocal_evt = _scheduler.peek_latest("vocal_swell", max_age_s=0.24)
+            except Exception:
+                vocal_evt = None
+            try:
+                snare_evt = _scheduler.peek_latest("snare", max_age_s=0.18)
+            except Exception:
+                snare_evt = None
+            vocal_burst_target = max(
+                vocal_burst_target,
+                float(getattr(vocal_evt, "strength", 0.0) or 0.0) * 0.55,
+                float(getattr(snare_evt, "strength", 0.0) or 0.0) * 0.10,
+            )
 
         # Smoother: extremely fast attack/decay so travel speed mirrors music timing.
         if vocal_speed > self._smoothed_speed_energy:
-            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 28.0)
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 6.0)
         else:
-            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 10.0)
+            self._smoothed_speed_energy += (vocal_speed - self._smoothed_speed_energy) * min(1.0, dt * 9.0)
+        if vocal_burst_target > self._stream_burst_envelope:
+            self._stream_burst_envelope += (
+                vocal_burst_target - self._stream_burst_envelope
+            ) * min(1.0, dt * 4.0)
+        else:
+            self._stream_burst_envelope += (
+                vocal_burst_target - self._stream_burst_envelope
+            ) * min(1.0, dt * 7.0)
 
-        speed_energy = min(1.0, max(0.0, self._smoothed_speed_energy))
+        speed_energy = min(
+            1.0,
+            max(
+                0.0,
+                self._smoothed_speed_energy * 0.92 + self._stream_burst_envelope * 0.25,
+            ),
+        )
         cap = max(0.1, stream_cap)
         baseline = max(0.05, min(cap, stream_const))
-        reactivity_cap = 1.25
+        reactivity_cap = 2.0
         reactivity_raw = max(0.0, min(reactivity_cap, stream_reactivity))
         overdrive_margin = max(0.0, reactivity_raw - 1.0)
         overdrive_norm = overdrive_margin / (reactivity_cap - 1.0) if reactivity_cap > 1.0 else 0.0
@@ -322,14 +354,17 @@ class BubbleSimulation:
         if speed_energy <= 0.0 or reactivity <= 0.0:
             energy_factor = 0.0
         else:
-            curve_exp = 2.0 - reactivity * 1.3  # 2.0 at react=0 → 0.7 at react=1.0
-            energy_factor = min(1.0, speed_energy ** max(0.4, curve_exp))
+            curve_exp = 1.75 - reactivity * 1.15  # 1.75 at react=0 → 0.60 at react=1.0
+            curved = speed_energy ** max(0.35, curve_exp)
+            linear_floor = speed_energy * (0.35 + 0.30 * reactivity)
+            burst_floor = self._stream_burst_envelope * (0.15 + 0.15 * reactivity)
+            energy_factor = min(1.0, max(curved, linear_floor, burst_floor))
 
         # Blend: at zero reactivity we sit at baseline; at full reactivity
         # the energy factor drives the full baseline→cap range.
         effective_speed = baseline + (cap - baseline) * energy_factor * reactivity
 
-        # --- Overdrive band (reactivity slider 101-125%) ---
+        # --- Overdrive band (reactivity slider 101-200%) ---
         overdrive_threshold_gate = 0.12
         if overdrive_margin <= 0.0:
             if self._overdrive_active:

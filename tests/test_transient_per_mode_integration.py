@@ -10,6 +10,7 @@ Verifies:
 from __future__ import annotations
 
 import numpy as np
+import time
 
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 
@@ -67,6 +68,115 @@ class _StubEngine:
 
     def get_pre_agc_energy_bands(self):
         return self._eb or _StubEnergyBands()
+
+
+class _BlobKwargsWidget:
+    """Loose widget stub for build_gpu_push_extra_kwargs()."""
+
+    def __init__(self):
+        self._rainbow_enabled = False
+        self._rainbow_speed = 0.5
+        self._rainbow_per_bar = False
+        self._spectrum_ghosting_enabled = True
+        self._spectrum_ghost_alpha = 0.4
+        self._spectrum_ghost_decay = 0.4
+        self._osc_ghosting_enabled = False
+        self._osc_ghost_intensity = 0.4
+        self._blob_ghosting_enabled = False
+        self._blob_ghost_alpha = 0.4
+        self._blob_ghost_decay = 0.3
+        self._sine_ghosting_enabled = True
+        self._sine_ghost_alpha = 0.45
+        self._sine_ghost_decay = 0.3
+        self._bubble_ghosting_enabled = False
+        self._bubble_ghost_alpha = 0.0
+        self._bubble_ghost_decay = 0.4
+        self._sine_heartbeat = 0.0
+        self._heartbeat_intensity = 0.0
+        self._sine_density = 1.0
+        self._sine_displacement = 0.0
+        self._use_raw_energy = False
+        self._sine_glow_enabled = True
+        self._sine_glow_intensity = 0.5
+        self._sine_glow_size = 1.0
+        self._sine_glow_reactivity = 1.0
+        self._sine_glow_color = None
+        self._sine_reactive_glow = True
+        self._sine_sensitivity = 1.0
+        self._osc_glow_enabled = True
+        self._osc_glow_intensity = 0.5
+        self._osc_glow_size = 1.0
+        self._osc_glow_reactivity = 1.0
+        self._osc_glow_color = None
+        self._osc_reactive_glow = True
+        self._osc_line_amplitude = 3.0
+        self._osc_smoothing = 0.7
+        self._blob_color = None
+        self._blob_glow_color = None
+        self._blob_edge_color = None
+        self._blob_outline_color = None
+        self._blob_pulse = 1.0
+        self._blob_width = 1.0
+        self._blob_size = 1.0
+        self._blob_glow_intensity = 0.5
+        self._blob_glow_reactivity = 1.0
+        self._blob_glow_max_size = 1.0
+        self._blob_reactive_glow = True
+        self._blob_reactive_deformation = 1.0
+        self._blob_stage_gain = 1.0
+        self._blob_core_scale = 1.0
+        self._blob_core_floor_bias = 0.35
+        self._blob_stage_bias = 0.0
+        self._blob_stage2_release_ms = 900.0
+        self._blob_stage3_release_ms = 1200.0
+        self._blob_constant_wobble = 1.0
+        self._blob_reactive_wobble = 1.0
+        self._blob_stretch_tendency = 0.35
+        self._blob_stretch_inner = 0.5
+        self._blob_stretch_outer = 0.5
+        self._sine_speed = 1.0
+        self._sine_line_dim = False
+        self._sine_line_offset_bias = 0.0
+        self._osc_speed = 1.0
+        self._osc_line_dim = False
+        self._osc_line_offset_bias = 0.0
+        self._osc_vertical_shift = 0
+        self._sine_wave_travel = 0
+        self._sine_card_adaptation = 0.30
+        self._sine_travel_line2 = 0
+        self._sine_travel_line3 = 0
+        self._sine_line1_shift = 0.0
+        self._sine_line2_shift = 0.0
+        self._sine_line3_shift = 0.0
+        self._sine_wave_effect = 0.0
+        self._sine_micro_wobble = 0.0
+        self._sine_crawl_amount = 0.0
+        self._sine_width_reaction = 0.0
+        self._sine_vertical_shift = 0
+        self._sine_line_color = None
+        self._osc_line_color = None
+        self._sine_line_count = 1
+        self._osc_line_count = 1
+        self._sine_line2_color = None
+        self._osc_line2_color = None
+        self._sine_line2_glow_color = None
+        self._osc_line2_glow_color = None
+        self._sine_line3_color = None
+        self._osc_line3_color = None
+        self._sine_line3_glow_color = None
+        self._osc_line3_glow_color = None
+
+
+class _SchedulerEngine(_StubEngine):
+    def __init__(self, scheduler, tb=None, eb=None):
+        super().__init__(tb=tb, eb=eb)
+        self._scheduler = scheduler
+
+    def get_waveform(self):
+        return [0.0] * 256
+
+    def get_event_scheduler(self):
+        return self._scheduler
 
 
 # ===========================================================================
@@ -536,7 +646,100 @@ class TestBlobTransientMixWeights:
 
 
 # ===========================================================================
-# 10. Sine/Osc Transient Width Mix (§2.3)
+# 10. Blob Scheduler Event Wiring (§2.4)
+# ===========================================================================
+
+class TestBlobSchedulerEventWiring:
+    """Verify blob GPU kwargs include scheduler-derived event strengths."""
+
+    def test_build_kwargs_includes_blob_event_strengths(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+        from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEventScheduler
+
+        sched = TransientEventScheduler()
+        now = time.time()
+        assert sched.feed(OnsetEvent(timestamp=now, event_type='kick', strength=0.8))
+        assert sched.feed(OnsetEvent(timestamp=now + 0.15, event_type='snare', strength=0.55))
+
+        engine = _SchedulerEngine(
+            sched,
+            tb=TransientEnergyBands(bass_transient=0.3, mid_transient=0.2),
+            eb=_StubEnergyBands(bass=0.4, mid=0.2, high=0.1, overall=0.3),
+        )
+        widget = _BlobKwargsWidget()
+
+        kwargs = build_gpu_push_extra_kwargs(widget, 'blob', engine)
+
+        assert abs(kwargs['blob_kick_event_strength'] - 0.8) < 1e-9
+        assert abs(kwargs['blob_snare_event_strength'] - 0.55) < 1e-9
+
+    def test_build_kwargs_zeros_blob_event_strengths_when_scheduler_empty(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+        from widgets.spotify_visualizer.transient_bus import TransientEventScheduler
+
+        engine = _SchedulerEngine(
+            TransientEventScheduler(),
+            tb=TransientEnergyBands(),
+            eb=_StubEnergyBands(),
+        )
+        widget = _BlobKwargsWidget()
+
+        kwargs = build_gpu_push_extra_kwargs(widget, 'blob', engine)
+
+        assert kwargs['blob_kick_event_strength'] == 0.0
+        assert kwargs['blob_snare_event_strength'] == 0.0
+
+
+# ===========================================================================
+# 11. Sine/Osc Scheduler Event Wiring (§2.4)
+# ===========================================================================
+
+class TestLineSchedulerEventWiring:
+    """Verify sine/osc GPU kwargs include scheduler-derived event strengths."""
+
+    def test_build_kwargs_includes_line_event_strengths(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+        from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEventScheduler
+
+        sched = TransientEventScheduler()
+        now = time.time()
+        assert sched.feed(OnsetEvent(timestamp=now, event_type='kick', strength=0.7))
+        assert sched.feed(OnsetEvent(timestamp=now + 0.12, event_type='snare', strength=0.45))
+
+        engine = _SchedulerEngine(
+            sched,
+            tb=TransientEnergyBands(bass_transient=0.2, mid_transient=0.1),
+            eb=_StubEnergyBands(bass=0.3, mid=0.2, high=0.1, overall=0.2),
+        )
+        widget = _BlobKwargsWidget()
+
+        osc_kwargs = build_gpu_push_extra_kwargs(widget, 'oscilloscope', engine)
+        sine_kwargs = build_gpu_push_extra_kwargs(widget, 'sine_wave', engine)
+
+        assert abs(osc_kwargs['line_kick_event_strength'] - 0.7) < 1e-9
+        assert abs(osc_kwargs['line_snare_event_strength'] - 0.45) < 1e-9
+        assert abs(sine_kwargs['line_kick_event_strength'] - 0.7) < 1e-9
+        assert abs(sine_kwargs['line_snare_event_strength'] - 0.45) < 1e-9
+
+    def test_build_kwargs_zero_line_event_strengths_when_scheduler_empty(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+        from widgets.spotify_visualizer.transient_bus import TransientEventScheduler
+
+        engine = _SchedulerEngine(
+            TransientEventScheduler(),
+            tb=TransientEnergyBands(),
+            eb=_StubEnergyBands(),
+        )
+        widget = _BlobKwargsWidget()
+
+        osc_kwargs = build_gpu_push_extra_kwargs(widget, 'oscilloscope', engine)
+
+        assert osc_kwargs['line_kick_event_strength'] == 0.0
+        assert osc_kwargs['line_snare_event_strength'] == 0.0
+
+
+# ===========================================================================
+# 12. Sine/Osc Transient Width Mix (§2.3)
 # ===========================================================================
 
 class TestSineOscTransientWidthMix:
@@ -577,3 +780,54 @@ class TestSineOscTransientWidthMix:
         base_wr = 0.9
         modulated = min(1.0, base_wr * (1.0 + 1.0 * 1.0))
         assert modulated == 1.0
+
+
+class TestSineSchedulerBeatAssist:
+    """Verify sine-only scheduler assist boosts the parts that visually read as reactivity."""
+
+    class _State:
+        _osc_smoothed_bass = 0.20
+        _osc_smoothed_mid = 0.10
+        _osc_smoothed_high = 0.05
+        _line_kick_event_strength = 0.80
+        _line_snare_event_strength = 0.45
+        _sine_wave_transient_width_mix = 0.40
+        _sine_width_reaction = 0.35
+        _osc_line_amplitude = 1.10
+        _heartbeat_intensity = 0.10
+
+        class _Bands:
+            overall = 0.18
+
+        _energy_bands = _Bands()
+
+    def test_scheduler_boosts_sine_energy_and_amplitude(self):
+        from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
+
+        reactive = _compute_sine_reactivity_state(self._State())
+
+        assert reactive['bass_energy'] > 0.20
+        assert reactive['mid_energy'] > 0.10
+        assert reactive['high_energy'] > 0.05
+        assert reactive['overall_energy'] > 0.18
+        assert reactive['sensitivity'] > 1.10
+        assert reactive['heartbeat_intensity'] > 0.10
+        assert reactive['width_reaction'] > 0.35
+
+    def test_zero_events_leave_sine_base_signals_alone(self):
+        from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
+
+        state = self._State()
+        state._line_kick_event_strength = 0.0
+        state._line_snare_event_strength = 0.0
+        state._sine_wave_transient_width_mix = 0.0
+
+        reactive = _compute_sine_reactivity_state(state)
+
+        assert abs(reactive['bass_energy'] - 0.20) < 1e-9
+        assert abs(reactive['mid_energy'] - 0.10) < 1e-9
+        assert abs(reactive['high_energy'] - 0.05) < 1e-9
+        assert abs(reactive['overall_energy'] - 0.18) < 1e-9
+        assert abs(reactive['sensitivity'] - 1.10) < 1e-9
+        assert abs(reactive['heartbeat_intensity'] - 0.10) < 1e-9
+        assert abs(reactive['width_reaction'] - 0.35) < 1e-9

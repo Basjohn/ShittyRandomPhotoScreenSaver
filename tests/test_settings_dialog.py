@@ -1,4 +1,5 @@
 """Tests for settings dialog."""
+import inspect
 import pytest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
@@ -183,6 +184,30 @@ def test_settings_dialog_has_drop_shadow(qapp, settings_manager, animation_manag
 
     effect = container.graphicsEffect()
     assert effect is not None
+
+
+def test_settings_dialog_show_does_not_install_global_shadow_filter():
+    """showEvent should not opt into the app-wide shadow refresh filter."""
+    source = inspect.getsource(SettingsDialog.showEvent)
+    assert "_install_shadow_event_filter()" not in source
+
+
+def test_settings_dialog_show_does_not_schedule_shell_shadow_refresh():
+    """showEvent should not trigger shell-shadow refresh churn."""
+    source = inspect.getsource(SettingsDialog.showEvent)
+    assert "_schedule_shell_shadow_refresh()" not in source
+
+
+def test_settings_dialog_move_does_not_schedule_shell_shadow_refresh():
+    """moveEvent should not trigger shell-shadow refresh churn."""
+    source = inspect.getsource(SettingsDialog.moveEvent)
+    assert "_schedule_shell_shadow_refresh()" not in source
+
+
+def test_settings_dialog_switch_tab_does_not_schedule_shell_shadow_refresh():
+    """Tab switches should not rebuild the shell shadow."""
+    source = inspect.getsource(SettingsDialog._switch_tab)
+    assert "_schedule_shell_shadow_refresh()" not in source
 
 
 def test_settings_dialog_theme_loaded(qapp, settings_manager, animation_manager):

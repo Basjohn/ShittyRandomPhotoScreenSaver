@@ -167,6 +167,7 @@ class WidgetsTab(QWidget):
         self._media_artwork_size = int(self._widget_default('media', 'artwork_size', 200))
         self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
         self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
+        self._visualizer_tech_bucket_state: Dict[str, bool] = self._load_tech_bucket_states()
         self._loading = True
         self._save_coalesce_pending = False
         _ui_start = time.perf_counter()
@@ -275,6 +276,7 @@ class WidgetsTab(QWidget):
 
     _ADV_STATE_KEY = "ui.visualizer_adv_states"
     _TECH_STATE_KEY = "ui.visualizer_tech_states"
+    _TECH_BUCKET_STATE_KEY = "ui.visualizer_tech_bucket_states"
     _SCROLL_POS_KEY = "ui.visualizer_scroll_positions"
 
     def _load_adv_states(self) -> Dict[str, bool]:
@@ -289,6 +291,13 @@ class WidgetsTab(QWidget):
         raw = self._settings.get(self._TECH_STATE_KEY, {})
         if isinstance(raw, dict):
             return {k: bool(v) for k, v in raw.items()}
+        return {}
+
+    def _load_tech_bucket_states(self) -> Dict[str, bool]:
+        """Load persisted per-mode Technical subsection visibility states."""
+        raw = self._settings.get(self._TECH_BUCKET_STATE_KEY, {})
+        if isinstance(raw, dict):
+            return {str(k): bool(v) for k, v in raw.items()}
         return {}
 
     def get_visualizer_adv_state(self, mode: str) -> bool:
@@ -312,6 +321,24 @@ class WidgetsTab(QWidget):
         self._visualizer_tech_state[mode] = bool(expanded)
         try:
             self._settings.set(self._TECH_STATE_KEY, dict(self._visualizer_tech_state))
+        except Exception:
+            pass
+
+    def get_visualizer_tech_bucket_state(self, mode: str, bucket: str, default: bool = True) -> bool:
+        """Return remembered visibility state for a per-mode Technical subsection."""
+        states = getattr(self, "_visualizer_tech_bucket_state", {})
+        key = f"{mode}:{bucket}"
+        return bool(states.get(key, default))
+
+    def set_visualizer_tech_bucket_state(self, mode: str, bucket: str, visible: bool) -> None:
+        """Persist visibility state for a per-mode Technical subsection."""
+        states = getattr(self, "_visualizer_tech_bucket_state", None)
+        if not isinstance(states, dict):
+            states = {}
+            self._visualizer_tech_bucket_state = states
+        states[f"{mode}:{bucket}"] = bool(visible)
+        try:
+            self._settings.set(self._TECH_BUCKET_STATE_KEY, dict(states))
         except Exception:
             pass
 
@@ -781,7 +808,8 @@ class WidgetsTab(QWidget):
             self._save_settings()
 
     def _snapshot_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> None:
-        snapshot = self._extract_visualizer_snapshot(mode_key, spotify_vis_config)
+        live_config = self._build_current_spotify_visualizer_config(spotify_vis_config)
+        snapshot = self._extract_visualizer_snapshot(mode_key, live_config)
         cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
         if not isinstance(cache, dict):
             cache = {}
@@ -824,7 +852,8 @@ class WidgetsTab(QWidget):
         if not isinstance(spotify_vis_config, dict):
             return {}
 
-        snapshot = self._extract_visualizer_snapshot(mode_key, spotify_vis_config)
+        live_config = self._build_current_spotify_visualizer_config(spotify_vis_config)
+        snapshot = self._extract_visualizer_snapshot(mode_key, live_config)
         if not snapshot:
             return {}
 
@@ -879,6 +908,30 @@ class WidgetsTab(QWidget):
             'rainbow_enabled',
             'rainbow_speed',
         }
+
+    def _build_current_spotify_visualizer_config(
+        self,
+        base_config: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Return a live spotify_visualizer config built from current UI state.
+
+        This preserves any unrelated stored keys while overlaying the current
+        widget state exactly as save_media_settings would serialize it.
+        """
+        config: dict[str, Any] = {}
+        if isinstance(base_config, Mapping):
+            config.update(deepcopy(dict(base_config)))
+
+        try:
+            from ui.tabs.widgets_tab_media import save_media_settings
+
+            _, live_visualizer = save_media_settings(self)
+            if isinstance(live_visualizer, dict):
+                config.update(deepcopy(live_visualizer))
+        except Exception:
+            logger.debug("[WIDGETS_TAB] Failed to build live visualizer config", exc_info=True)
+
+        return config
 
     def cycle_visualizer_preset(self, mode_key: str, direction: int) -> None:
         """Cycle the preset slider for *mode_key* by *direction* (+1/-1)."""
@@ -1291,9 +1344,18 @@ class WidgetsTab(QWidget):
             spotify_vis_config = {}
 
         prev_index = int(spotify_vis_config.get(f"preset_{mode_key}", custom_index))
+        move_to_custom_pending = bool(getattr(slider, "_pending_move_to_custom", False))
 
         if preset_index == custom_index:
-            restored = self._restore_custom_visualizer_mode(mode_key, spotify_vis_config)
+            restored = False
+            if move_to_custom_pending:
+                self._snapshot_custom_visualizer_mode(mode_key, spotify_vis_config)
+                try:
+                    setattr(slider, "_pending_move_to_custom", False)
+                except Exception:
+                    pass
+            else:
+                restored = self._restore_custom_visualizer_mode(mode_key, spotify_vis_config)
             spotify_vis_config[f"preset_{mode_key}"] = custom_index
             if restored:
                 self._loading = True
@@ -1308,6 +1370,12 @@ class WidgetsTab(QWidget):
                     self._loading = False
             self._save_settings()
             return
+
+        if move_to_custom_pending:
+            try:
+                setattr(slider, "_pending_move_to_custom", False)
+            except Exception:
+                pass
 
         if prev_index == custom_index:
             self._snapshot_custom_visualizer_mode(mode_key, spotify_vis_config)

@@ -25,16 +25,19 @@ logger = get_logger(__name__)
 
 @dataclass
 class SpectrumShapeConfig:
-    """Audio-influence weights for the uniform energy model.
+    """Audio-influence weights for the lane-aware spectrum model.
 
-    The node-driven profile is the sole bar-height shaper.  These sliders
-    control how much each audio band contributes to the single energy
-    value that is multiplied against the profile.
+    The node-driven profile remains the primary visual shaper, but each bar
+    now receives a lane-specific energy mix instead of a single shared scalar.
+    Bass/mid/treble energy are routed across the profile with soft crossfades
+    so empty lanes can still collapse toward zero when their source energy is
+    absent.
 
     Attributes:
         bass_emphasis: Bass energy contribution weight.  0→minimal, 1→strong.
-        vocal_peak_position: (Legacy, unused) kept for preset compat.
-        mid_suppression: Dampens mid-band energy contribution.  0→full, 1→heavy cut.
+        vocal_peak_position: Mid/vocal lane center hint.  0.2→closer to bass,
+            0.6→closer to treble.
+        mid_suppression: Dampens mid-band lane contribution.  0→full, 1→heavy cut.
         wave_amplitude: Overall reactivity scaling.  0→subdued, 1→punchy.
         profile_floor: Minimum bar height multiplier (0.05–0.30).
     """
@@ -208,9 +211,9 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
             worker._onset_strength = _t_snap.onset_strength
 
         # ── Shape-node driven profile ────────────────────────────────
-        # The shape editor nodes are the SOLE driver of the bar height
-        # profile.  Sliders control how much each audio energy band
-        # influences the bars at each position (zone weights).
+        # The shape editor remains the visual guide, but lane energy now
+        # routes per-bar so a silent band can genuinely collapse instead of
+        # inheriting a single shared spectrum-wide scalar.
         shape_cfg = getattr(worker, '_spectrum_shape_config', None) or _DEFAULT_SHAPE_CONFIG
         mirrored = getattr(worker, '_spectrum_mirrored', True)
         shape_nodes = getattr(worker, '_spectrum_shape_nodes', None)
@@ -230,21 +233,41 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         profile_shape = np.array(profile_list, dtype="float32")
         profile_shape = np.maximum(profile_shape, shape_cfg.profile_floor)
 
-        # ── Uniform audio energy (profile is sole shaper) ────────────
-        # Sliders scale how much each band contributes to a single
-        # combined energy value.  Every bar gets the SAME energy;
-        # profile_shape alone controls relative heights.
+        # ── Lane-aware audio routing ─────────────────────────────────
+        # Build soft bar weights so the user-authored shape is still the
+        # visual guide, but bass/mid/treble energy can independently drive
+        # and collapse their own lanes.
         bass_w = max(0.1, shape_cfg.bass_emphasis * 1.6)   # 0→0.1 .. 1→1.6
         mid_w = max(0.1, 1.0 - shape_cfg.mid_suppression * 0.8)  # 0→1.0 .. 1→0.2
         react_scale = 0.5 + shape_cfg.wave_amplitude  # 0→0.5 .. 1→1.5
 
-        uniform_energy = (
-            bass_energy * bass_w
-            + mid_energy * mid_w
-            + treble_energy
+        positions = np.linspace(0.0, 1.0, bands, dtype="float32")
+        split1_pos = float(_split1) / max(1.0, float(bands - 1))
+        split2_pos = float(_split2) / max(1.0, float(bands - 1))
+        vocal_center = max(split1_pos, min(split2_pos, float(shape_cfg.vocal_peak_position)))
+
+        blend_width = max(0.06, min(0.22, 0.08 + (split2_pos - split1_pos) * 0.35))
+
+        bass_mask = np.clip((split1_pos + blend_width - positions) / max(blend_width, 1e-6), 0.0, 1.0)
+        treble_mask = np.clip((positions - (split2_pos - blend_width)) / max(blend_width, 1e-6), 0.0, 1.0)
+        mid_mask = 1.0 - np.maximum(bass_mask, treble_mask)
+        mid_peak = np.clip(1.0 - (np.abs(positions - vocal_center) / max(split2_pos - split1_pos, 0.12)), 0.0, 1.0)
+        mid_mask = np.maximum(mid_mask, mid_peak * 0.55)
+
+        weight_sum = bass_mask + mid_mask + treble_mask
+        np.maximum(weight_sum, 1e-6, out=weight_sum)
+
+        bass_weight_map = (bass_mask / weight_sum) * bass_w
+        mid_weight_map = (mid_mask / weight_sum) * mid_w
+        treble_weight_map = treble_mask / weight_sum
+
+        per_bar_energy = (
+            bass_energy * bass_weight_map
+            + mid_energy * mid_weight_map
+            + treble_energy * treble_weight_map
         ) * react_scale
 
-        arr[:bands] = profile_shape[:bands] * uniform_energy
+        arr[:bands] = profile_shape[:bands] * per_bar_energy[:bands]
 
         if low_resolution:
             _apply_low_resolution_adjustments(

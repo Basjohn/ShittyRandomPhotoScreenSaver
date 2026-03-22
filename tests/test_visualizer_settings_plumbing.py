@@ -401,6 +401,11 @@ class TestShaderUniformDeclarations:
         assert "u_heartbeat" in src
         assert "u_heartbeat_intensity" in src
 
+    def test_technical_buckets_reuse_existing_section_layouts(self):
+        src = (ROOT / "ui" / "tabs" / "media" / "technical_controls.py").read_text(encoding="utf-8")
+        assert "QVBoxLayout(agc_section)" not in src
+        assert "QVBoxLayout(transient_section)" not in src
+
     def test_bubble_has_required_uniforms(self):
         src = (SHADER_DIR / "bubble.frag").read_text(encoding="utf-8")
         for u in ("u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",

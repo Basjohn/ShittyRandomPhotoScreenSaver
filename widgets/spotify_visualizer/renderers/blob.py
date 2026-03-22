@@ -77,10 +77,10 @@ def upload_uniforms(gl, u: dict, s) -> bool:
 
     # Energy bands
     eb = s._energy_bands
-    _set1f(gl, u, "u_overall_energy", eb.overall)
-    _set1f(gl, u, "u_bass_energy", eb.bass)
-    _set1f(gl, u, "u_mid_energy", eb.mid)
-    _set1f(gl, u, "u_high_energy", eb.high)
+    _set1f(gl, u, "u_overall_energy", getattr(s, "_blob_live_overall_energy", eb.overall))
+    _set1f(gl, u, "u_bass_energy", getattr(s, "_blob_live_bass_energy", eb.bass))
+    _set1f(gl, u, "u_mid_energy", getattr(s, "_blob_live_mid_energy", eb.mid))
+    _set1f(gl, u, "u_high_energy", getattr(s, "_blob_live_high_energy", eb.high))
 
     # Transient bus (Approach A dual-path)
     tb = getattr(s, '_transient_energy', None)
@@ -89,4 +89,3 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_transient_high", getattr(tb, 'high_transient', 0.0) if tb else 0.0)
 
     return True
-

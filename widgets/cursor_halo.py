@@ -10,8 +10,9 @@ so it floats above all other widgets including QOpenGLWidget-based overlays
 like the Spotify visualizer and volume slider. This avoids Z-order fighting
 with GL widgets that have their own native window handles.
 
-Mouse events are forwarded to the parent widget so context menus and clicks
-still work. The mouse cursor is hidden when the halo is visible.
+Mouse events are forwarded back into the compositor/widget tree so normal
+interaction keeps using the existing DisplayWidget routing. The mouse cursor
+is hidden when the halo is visible.
 """
 import os
 import time
@@ -100,7 +101,7 @@ class CursorHaloWidget(QWidget):
     
     Implemented as a top-level frameless window to guarantee it stays
     above QOpenGLWidget-based overlays (Spotify visualizer, volume slider).
-    Mouse events are forwarded to the parent widget for context menu support.
+    Mouse events are forwarded back to the display/widget tree.
     """
     
     def __init__(self, parent: QWidget) -> None:
@@ -115,7 +116,6 @@ class CursorHaloWidget(QWidget):
         )
         self._parent_widget = parent  # Keep reference for coordinate mapping and event forwarding
         
-        # Don't use WA_TransparentForMouseEvents - we need to receive and forward events
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAutoFillBackground(False)
@@ -409,14 +409,15 @@ class CursorHaloWidget(QWidget):
         if parent is None:
             return
         try:
-            # Map halo-local position to global, then to parent-local
+            # Route back through the DisplayWidget root so its existing
+            # interaction hit-testing, preset cycling, and halo keepalive logic
+            # all continue to run for forwarded clicks.
             global_pos = self.mapToGlobal(event.pos())
-            local_pos = parent.mapFromGlobal(global_pos)
-            
-            # Create a new event with the mapped position
+            parent_local_pos = parent.mapFromGlobal(global_pos)
+
             new_event = QMouseEvent(
                 event.type(),
-                local_pos,
+                parent_local_pos,
                 global_pos,
                 event.button(),
                 event.buttons(),

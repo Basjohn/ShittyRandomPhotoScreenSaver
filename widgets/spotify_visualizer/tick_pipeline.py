@@ -24,6 +24,23 @@ from core.logging.logger import (
 logger = get_logger(__name__)
 
 
+def _ensure_fresh_generation_state(widget: Any) -> None:
+    """Backfill generation-handoff attrs for live widgets created on older paths."""
+    if not hasattr(widget, "_waiting_for_fresh_frame"):
+        widget._waiting_for_fresh_frame = False
+    if not hasattr(widget, "_waiting_for_fresh_engine_frame"):
+        widget._waiting_for_fresh_engine_frame = False
+    if not hasattr(widget, "_pending_engine_generation"):
+        widget._pending_engine_generation = -1
+    if not hasattr(widget, "_last_engine_generation_seen"):
+        widget._last_engine_generation_seen = -1
+
+
+def _mode_requires_fresh_waveform(mode_str: str) -> bool:
+    """Return True when a mode should wait for fresh waveform data after reset."""
+    return str(mode_str or "").lower() in {"oscilloscope", "sine_wave"}
+
+
 # ------------------------------------------------------------------
 # Heartbeat transient detection (CPU-side)
 # ------------------------------------------------------------------
@@ -73,6 +90,16 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
             getattr(_tb_onset, '_onset_detected', False)
             and getattr(_tb_onset, '_onset_type', '') == 'kick'
         )
+    if not _tb_kick and widget._engine is not None:
+        try:
+            scheduler = widget._engine.get_event_scheduler()
+        except Exception:
+            scheduler = None
+        if scheduler is not None:
+            try:
+                _tb_kick = bool(scheduler.has_recent('kick', max_age_s=0.16))
+            except Exception:
+                _tb_kick = False
     if _tb_kick:
         trigger_gate *= 0.6  # much easier to trigger on confirmed kick
 
@@ -250,6 +277,8 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     """
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
 
+    _ensure_fresh_generation_state(widget)
+
     engine = widget._engine
     if engine is None:
         engine = get_shared_spotify_beat_engine(widget._bar_count)
@@ -274,7 +303,14 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
             latest_gen = engine.get_latest_generation_with_frame()
         except Exception:
             latest_gen = -1
-        if latest_gen >= widget._pending_engine_generation:
+        waveform_ready = True
+        if _mode_requires_fresh_waveform(getattr(widget, "_vis_mode_str", "")):
+            try:
+                latest_waveform_gen = engine.get_latest_generation_with_waveform()
+            except Exception:
+                latest_waveform_gen = -1
+            waveform_ready = latest_waveform_gen >= widget._pending_engine_generation
+        if latest_gen >= widget._pending_engine_generation and waveform_ready:
             widget._waiting_for_fresh_engine_frame = False
             widget._last_engine_generation_seen = latest_gen
             logger.debug(
@@ -297,7 +333,7 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
             display_bars[i] = val
             if val > 0.0:
                 any_nonzero = True
-        if any_nonzero:
+        if any_nonzero and widget._pending_engine_generation < 0:
             widget._waiting_for_fresh_engine_frame = False
         else:
             # Still waiting — skip downstream
@@ -520,6 +556,7 @@ def on_tick(widget: Any) -> None:
     interpolates towards it for visual stability.
     """
     _tick_entry_ts = time.time()
+    _ensure_fresh_generation_state(widget)
 
     # PERFORMANCE: Fast validity check without nested try/except
     if not Shiboken.isValid(widget):
@@ -554,7 +591,7 @@ def on_tick(widget: Any) -> None:
     dt_since_last = 0.0
     if last >= 0.0:
         dt_since_last = now_ts - last
-    if last >= 0.0 and dt_since_last < min_dt:
+    if last >= 0.0 and dt_since_last < min_dt and not widget._waiting_for_fresh_engine_frame:
         return
 
     widget._last_update_ts = now_ts

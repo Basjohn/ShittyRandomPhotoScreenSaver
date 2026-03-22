@@ -427,6 +427,52 @@ class TestProcessSupervisor:
         
         supervisor.shutdown()
 
+    def test_cleanup_worker_closes_process_and_queues(self):
+        """Worker cleanup should release parent-side process and queue resources."""
+        supervisor = ProcessSupervisor()
+
+        class FakeProcess:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        class FakeQueue:
+            def __init__(self):
+                self.cancelled = False
+                self.closed = False
+                self.joined = False
+
+            def cancel_join_thread(self):
+                self.cancelled = True
+
+            def close(self):
+                self.closed = True
+
+            def join_thread(self):
+                self.joined = True
+
+        process = FakeProcess()
+        req_queue = FakeQueue()
+        resp_queue = FakeQueue()
+
+        supervisor._workers[WorkerType.IMAGE] = process
+        supervisor._request_queues[WorkerType.IMAGE] = req_queue
+        supervisor._response_queues[WorkerType.IMAGE] = resp_queue
+        supervisor._health[WorkerType.IMAGE].state = WorkerState.RUNNING
+
+        supervisor._cleanup_worker(WorkerType.IMAGE)
+
+        assert process.closed is True
+        assert req_queue.cancelled is True
+        assert req_queue.closed is True
+        assert req_queue.joined is True
+        assert resp_queue.cancelled is True
+        assert resp_queue.closed is True
+        assert resp_queue.joined is True
+        assert supervisor.get_health(WorkerType.IMAGE).state == WorkerState.STOPPED
+
 
 class TestWorkerContracts:
     """Tests for worker contract validation."""

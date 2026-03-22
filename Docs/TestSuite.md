@@ -1,6 +1,8 @@
 # Test Suite Index
 
-**Purpose**: Detailed reference for all tests - what they check and when to use them.
+Living reference for testing architecture, policies, and the current regression bar.
+
+**Purpose**: Detailed reference for all tests, what they check, when to use them, and which suites are the minimum guardrails for active bug work.
 
 **Total Tests**: ~300+ tests across 99 test files
 
@@ -19,25 +21,40 @@
 - [MC (Manual Controller)](#mc-manual-controller) - MC-specific features
 - [Regression Tests](#regression-tests) - Specific bug fixes
 
-## Temporary Test Refresh Plan *(remove after tasks are delivered)*
+## Goals
 
-1. [ ] **Visualizer preset + Advanced bucket coverage** — `tests/test_visualizer_settings_plumbing.py`, `tests/test_visualizer_presets.py`
-   - Add assertions that `bubble_gradient_direction`/`bubble_specular_direction` survive model → overlay, and that `VisualizerPresetSlider` auto-switches to Custom when Advanced controls change.
-   - **Reasoning:** Recent doc/spec updates rely on decoupled gradient/specular plumbing and preset overlay integrity; we need tests to guard the Always-Apply rule and preset indices per mode.
+- Fast, reliable test feedback during development.
+- Clear separation between unit, integration, regression, and policy-enforcement tests.
+- Documented exceptions for flaky/manual-validation cases.
+- A clear “minimum regression bar” for currently active bugs so we do not confuse contract coverage with visual sign-off.
 
-2. [ ] **Reset matrix automation** — new targeted test (e.g., `tests/test_visualizer_reset_matrix.py`) or extend `tests/test_visualizer_playback_gating.py`
-   - Simulate mode switches to assert `_pending_mode_resets`, beat-engine generation increments, and reapplication of curated preset overlays after `_reset_visualizer_state()`.
-   - **Reasoning:** Visualizer_Reset_Matrix now documents strict sequencing; automation keeps regressions from creeping back when future reset logic changes.
+## Test Architecture
 
-3. [ ] **Preset JSON hygiene consolidation** — merge duplicate curated-file scans across `tests/test_visualizer_presets.py` and any custom tooling tests
-   - Build a helper fixture that validates duplicate keys, allowed modes, and SST round-trips once, then reuse it for curated + snapshot payloads.
-   - **Reasoning:** Current tests re-read the same files multiple times; consolidating reduces runtime and keeps the duplicate-key logic centralized for future preset additions.
+### Directory Layout
 
-4. [ ] **WidgetsTab Advanced toggle regression** — extend `tests/test_widgets_tab.py`
-   - Verify Advanced collapse state caching per mode and ensure UI load/save preserves session memory without writing stale defaults back to settings.
-   - **Reasoning:** Documentation emphasizes session-scoped Advanced memory. A regression here would break preset UX and contradict Advanced_Migration guidance.
+```text
+tests/
+├── unit/                    # Fast, isolated tests (no Qt dependencies)
+│   ├── core/               # Core module unit tests
+│   └── test_policy_compliance.py
+├── conftest.py             # Shared fixtures (qt_app, settings_manager)
+├── pytest.ini              # Pytest configuration
+└── test_*.py               # Integration/regression tests (may use Qt)
+```
 
-*(Remove this section once every item above is either merged or tracked in a dedicated doc.)*
+### Test Policy Notes
+
+- **Unit tests**: fast, isolated, no Qt event-loop dependency where possible.
+- **Integration/regression tests**: may use Qt, real component interactions, and targeted synthetic scenarios.
+- **Policy tests**: static architectural checks in `tests/unit/test_policy_compliance.py`.
+- **Visual/runtime bugfixes**: keep a behavior-level regression where possible, but do not confuse source-level or contract-level assertions with real visual validation.
+
+### Stability Rules
+
+- Always use `qt_app.processEvents()` after async GUI work in tests.
+- Use timeouts instead of open-ended waits.
+- Clean up widgets/timers/transitions explicitly in teardown.
+- Document every skip with a reason and a manual validation path when applicable.
 
 ---
 
@@ -338,7 +355,7 @@
 
 ### Run All Tests (recommended: via pytest runner with logging)
 ```powershell
-cd f:\Programming\Apps\ShittyRandomPhotoScreenSaver2_5
+cd F:\Programming\Apps\ShittyRandomPhotoScreenSaver
 python tests\pytest.py tests/ -q
 ```
 Output goes to `logs/pytest_output.log` (rotating). Check that file if terminal output is blank.
@@ -368,7 +385,7 @@ python tests\pytest.py tests\test_perf_dt_max.py -v
 ```powershell
 C:\Python311\python.exe -c "
 import subprocess, sys, time, pathlib
-cwd = r'F:\Programming\Apps\ShittyRandomPhotoScreenSaver2_5'
+cwd = r'F:\Programming\Apps\ShittyRandomPhotoScreenSaver'
 ini = 'tests/pytest.ini'
 for tf in sorted(pathlib.Path(cwd,'tests').glob('test_*.py')):
     start = time.time()
@@ -453,4 +470,19 @@ When writing tests that create `DisplayWidget` or start transitions:
 
 ---
 
-**Last Updated**: Mar 18, 2026 (added test_bubble_reactivity.py, fixed pre-existing failures in display_tab/transitions_tab/no_sources_popup, updated regression table)
+## Current Regression Bar (Mar 22 2026)
+
+- `tests/test_dimming_and_interaction_fixes.py`
+  Minimum bar for Ctrl-held gating, Halo drift clamp, hard-exit click keepalive, and Halo forwarding contract. Important: this is source/runtime contract coverage, not visual proof that Halo click passthrough is fully solved.
+- `tests/test_mc_keyboard_input.py`
+  Guards the MC focus reclaim / hotkey path that restored working keys after click interactions.
+- `tests/test_spotify_visualizer_widget.py`
+  Guards shared-engine fresh-frame/reset gating during mode switches. Still important because the Oscilloscope half-dead-line bug is not yet considered closed.
+- `tests/test_ghost_isolation.py`
+  Guards Blob ghost routing/isolation and retired ghost-path branches. This protects the code contract, but Blob ghost visuals still require user validation.
+- `tests/test_s_hotkey_workflow.py` and `tests/test_flicker_fix_integration.py`
+  Minimum regression bar for the now-resolved settings flicker / settings-launch workflow.
+
+---
+
+**Last Updated**: Mar 22, 2026 (live regression bar refreshed for Halo/Blob/Osc work; older counts may drift until the next full suite inventory pass)

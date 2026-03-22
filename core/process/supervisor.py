@@ -287,6 +287,7 @@ class ProcessSupervisor:
                             worker_type.value,
                         )
                         process.kill()
+                        process.join(timeout=PROCESS_TERMINATE_TIMEOUT_S)
                 
                 self._cleanup_worker(worker_type)
                 logger.info("Stopped %s worker", worker_type.value)
@@ -719,14 +720,26 @@ class ProcessSupervisor:
     
     def _cleanup_worker(self, worker_type: WorkerType) -> None:
         """Clean up worker resources (must hold lock)."""
-        self._workers.pop(worker_type, None)
+        process = self._workers.pop(worker_type, None)
+        if process is not None:
+            try:
+                process.close()
+            except Exception as e:
+                logger.debug("[WORKER] Exception suppressed: %s", e)
         
         # Close queues
         for queue_dict in [self._request_queues, self._response_queues]:
             queue = queue_dict.pop(worker_type, None)
             if queue:
                 try:
+                    queue.cancel_join_thread()
+                except Exception as e:
+                    logger.debug("[WORKER] Exception suppressed: %s", e)
+                try:
                     queue.close()
+                except Exception as e:
+                    logger.debug("[WORKER] Exception suppressed: %s", e)
+                try:
                     queue.join_thread()
                 except Exception as e:
                     logger.debug("[WORKER] Exception suppressed: %s", e)

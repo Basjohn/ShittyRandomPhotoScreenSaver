@@ -81,7 +81,7 @@
           255
         ],
         "bubble_specular_direction": "top_left",
-        "bubble_stream_constant_speed": 0.2,
+        "bubble_stream_constant_speed": 0.35,
         "bubble_stream_direction": "up",
         "bubble_stream_reactivity": 1.2,
         "bubble_stream_speed_cap": 2.22,

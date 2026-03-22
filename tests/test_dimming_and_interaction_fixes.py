@@ -66,22 +66,59 @@ class TestCtrlHaloAttributes:
     """Test that ctrl cursor halo uses correct attributes for transparency."""
 
     def test_halo_code_uses_translucent_background(self, qt_app):
-        """Halo code must use WA_TranslucentBackground for true transparency.
-        
-        The halo needs WA_TranslucentBackground to be truly transparent.
-        Z-order (via raise_overlay) ensures it's always above the dimming overlay.
-        """
+        """Halo widget should be translucent but keep mouse handling for forwarding."""
         from widgets.cursor_halo import CursorHaloWidget
-        
-        # Check the source code of CursorHaloWidget for correct attributes
-        source = inspect.getsource(CursorHaloWidget.__init__)
-        
-        # Must use WA_TranslucentBackground for true transparency
-        assert 'WA_TranslucentBackground' in source
-        # Must set WA_TranslucentBackground to True
-        assert 'setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)' in source
-        # Must be transparent to mouse events
-        assert 'WA_TransparentForMouseEvents' in source
+
+        parent = QWidget()
+        halo = CursorHaloWidget(parent)
+
+        assert halo.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        assert not halo.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def test_display_input_ctrl_gate_uses_all_ctrl_state_sources(self, qt_app):
+        """Mouse-exit suppression should survive local/global/handler ctrl-state drift."""
+        from rendering import display_input
+
+        source = inspect.getsource(display_input._ctrl_interaction_active)
+        assert 'getattr(widget, "_ctrl_held", False)' in source
+        assert 'getattr(coordinator, "ctrl_held", False)' in source
+        assert 'getattr(type(widget), "_global_ctrl_held", False)' in source
+        assert 'input_handler.is_ctrl_held()' in source
+
+    def test_halo_show_clamps_small_out_of_bounds_drift(self, qt_app):
+        """Slight compositor coordinate drift should clamp instead of hiding the halo."""
+        from rendering import display_input
+
+        source = inspect.getsource(display_input.show_ctrl_cursor_hint)
+        assert "within_slack" in source
+        assert "local_point.setX(max(rect.left(), min(rect.right(), local_point.x())))" in source
+        assert "local_point.setY(max(rect.top(), min(rect.bottom(), local_point.y())))" in source
+
+    def test_hard_exit_clicks_do_not_force_halo_refresh(self, qt_app):
+        """Interactive clicks should not run extra halo keepalive logic from the click path."""
+        from rendering import display_input
+
+        source = inspect.getsource(display_input.handle_mousePressEvent)
+        assert '_refresh_halo_after_interaction_click(widget, event.pos())' not in source
+
+    def test_halo_forwarding_routes_back_through_display_root(self, qt_app):
+        """Halo should actively forward events back through the display root."""
+        from widgets.cursor_halo import CursorHaloWidget
+
+        parent = QWidget()
+        halo = CursorHaloWidget(parent)
+        assert not halo.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        source = inspect.getsource(CursorHaloWidget._forward_mouse_event)
+        assert "QApplication.sendEvent(parent, new_event)" in source
+        assert "parent._halo_forwarding = True" in source
+
+    def test_input_handler_ctrl_press_sets_handler_state(self, qt_app):
+        """Ctrl press must mark InputHandler as held so downstream guards agree."""
+        from rendering.input_handler import InputHandler
+
+        source = inspect.getsource(InputHandler.handle_ctrl_press)
+        assert 'self._ctrl_held = True' in source
+        assert 'target_handler.set_ctrl_held(True)' in source
 
 
 class TestMediaWidgetClickDetection:

@@ -1,5 +1,6 @@
 import pytest
 from PySide6.QtCore import Qt
+import inspect
 
 
 @pytest.mark.qt
@@ -34,3 +35,12 @@ def test_mc_display_widget_receives_hotkeys(qt_app, qtbot, settings_manager, mon
     assert counts["c"] == 1
     assert counts["s"] == 1
     assert counts["esc"] == 1
+
+
+def test_mc_interaction_clicks_reclaim_focus():
+    from rendering import display_input
+
+    source = inspect.getsource(display_input._restore_mc_input_focus)
+    assert 'widget.activateWindow()' in source
+    assert 'handle.requestActivate()' in source
+    assert 'widget.setFocus(Qt.FocusReason.MouseFocusReason)' in source

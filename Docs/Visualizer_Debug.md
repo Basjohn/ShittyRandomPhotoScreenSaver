@@ -8,6 +8,7 @@ The Spotify Beat Visualizer consists of a shared pipeline (audio capture → FFT
 - **Mode transition** in `widgets/spotify_visualizer/mode_transition.py` — mode cycling, fade, teardown (~300 lines).
 - **Config applier** in `widgets/spotify_visualizer/config_applier.py` — settings JSON → widget attributes.
 - **Bubble sim** in `widgets/spotify_visualizer/bubble_simulation.py` — CPU-side particle sim.
+- **Event micro-scheduler** in `widgets/spotify_visualizer/transient_bus.py` — discrete onset consumer layer (`consume_next` / `peek_latest`) sitting on top of the transient bus ring buffer.
 
 ---
 
@@ -75,6 +76,7 @@ When debugging, always verify these steps in order:
 - Uniforms: `u_blob_color`, `u_blob_edge_color`, `u_blob_outline_color`, `u_blob_glow_color`, `u_blob_glow_intensity`, `u_blob_reactive_glow`, `u_blob_size`, `u_blob_width`, `u_blob_pulse`, `u_blob_smoothed_energy`
 - Deformation layers: bass pulse, constant wobble (time), reactive wobble (energy), vocal wobble, stretch tendency, reactive deformation scale.
 - **Ghosting V5 (Mar 2026):** Peak tracking uses 150ms hold before decay, decays toward smoothed energy (not raw), and enforces a minimum offset (`max(0.06, smoothed_e * 0.12)`) so the ghost shape is always visible during playback. Shader smoothstep zones widened for broader ghost fill region. Peak state: `_blob_peak_{energy,bass,mid,high,overall}` + `_blob_peak_hold_remaining` in `spotify_bars_gl_overlay.py`.
+- **Event micro-scheduler (Mar 2026):** Blob now also receives discrete scheduler peeks. `build_gpu_push_extra_kwargs()` reads `engine.get_event_scheduler().peek_latest('kick')` / `peek_latest('snare')` and forwards strengths into `SpotifyBarsGLOverlay.set_state()`, where kick boosts stage-driving bass/overall energy and snare boosts wobble-driving mid/high energy without consuming the event.
 - Debug tip: "Tearing" occurs when `blob_growth>5` without card height increase.
 
 ### 2.5 Starfield (dev-gated by `SRPSS_ENABLE_DEV=1`) [GATED FOR BEING SHIT]
@@ -130,6 +132,7 @@ This keeps quiet sections floating at the baseline while letting peaks approach 
 #### Instant Beat Promotions & Faster Reactivity (Mar 2026)
 
 - **No more burst gating:** Every detected beat immediately promotes up to 20% of the largest unpromoted small bubbles (`promote_timer≈0.9s`). Promotions now happen on single hits and clusters alike, so bass runs always thicken the scene.
+- **Event micro-scheduler:** `BubbleSimulation.tick()` now checks `_event_scheduler.consume_next('kick')` first, using the legacy delta heuristic only as a startup-race fallback if the scheduler is unavailable.
 - **Faster smoothing:** Running averages use `dt*3` attack / `dt*6` release so deltas reset between kicks even at 128-sample block sizes. Stream speed smoothing reacts roughly 2× faster (`dt*28` attack / `dt*10` decay) eliminating the previous ~100 ms lag.
 - **Diagnostics:** `[SPOTIFY_VIS][BUBBLE][OVERDRIVE]` logs remain, and enabling `SRPSS_VIZ_DIAGNOSTICS=1` prints speed gate/energy factors for tuning.
 - **Coverage:** `tests/test_bubble_reactivity.py` verifies beat promotion lifetime, decay, quiet→loud transitions, and ensures quiet passages sit at the baseline while loud sections reach the configured cap.
@@ -160,6 +163,7 @@ Each mode has contextual transient mix sliders controlling how much transient en
 - If a mode feels unresponsive to beats, check its transient mix slider isn't at 0%.
 - Blob deformation debugging: log `raw_bass`/`raw_mid` after the mix blend in `spotify_bars_gl_overlay.py` `set_state()`.
 - Sine/Osc width not reacting: verify `_sine_wave_transient_width_mix` / `_osc_transient_width_mix` attrs are propagated from the widget to the overlay.
+- Scheduler contract checks: use `tests/test_event_scheduler.py` for debounce/consume semantics and `tests/test_transient_per_mode_integration.py` for Blob scheduler-event wiring.
 
 ### 2.9 Preset repair workflow (updated Mar 12 2026)
 - Tool: `tools/visualizer_preset_repair.py`
@@ -242,7 +246,7 @@ Double-clicking the visualizer now performs a full teardown/restart to eliminate
 |-------|--------------------------|--------|----------------------|--------------|
 | Idle | 0 | Bars active | Engine ticking normally | `[SPOTIFY_VIS][LATENCY] ... mode_phase=0` |
 | Fade-out | 1 | ShadowFadeProfile fades card to 0 | `_on_mode_cycle_requested` kicks off fade and freezes card height | `Mode cycle requested` + fade latched to 0 |
-| Waiting | 3 | Bars hidden (GPU fade set to 0) | `_mode_teardown_block_until_ready=True`; cancels FFT tasks via `_compute_gate_token`, calls `reset_smoothing_state()` + `reset_floor_state()`, restarts engine and records new `generation_id`; `_destroy_parent_overlay()` blanks the GL framebuffer, destroys the overlay (with `cleanup_gl()`), unregisters from PixelShift, and marks `_waiting_for_fresh_frame=True` so no shadows reattach early | Look for `[SPOTIFY_VIS][LATENCY] ... mode_phase=3` while audio worker reinitializes |
+| Waiting | 3 | Bars hidden (GPU fade set to 0) | `_mode_teardown_block_until_ready=True`; cancels FFT tasks via `_compute_gate_token`, calls `reset_smoothing_state()` + `reset_floor_state()`, clears the overlay buffer, restarts engine and records new `generation_id`; `_destroy_parent_overlay()` blanks the GL framebuffer, destroys the overlay (with `cleanup_gl()`), unregisters from PixelShift, and marks `_waiting_for_fresh_frame=True` so no shadows reattach early | Look for `[SPOTIFY_VIS][LATENCY] ... mode_phase=3` while audio worker reinitializes |
 | Fade-in | 2 | Bars fade back in once fresh frame arrives | `_begin_mode_fade_in()` clears block + restarts ShadowFadeProfile fade-in; the first successful GPU push calls `_on_first_frame_after_cold_start()` to reapply shadows | Latency lines drop back toward 0 once phase=2 completes; when testing ripple brightness fixes, confirm the compositor logs for this phase show ring highlights tapering off before the final frame |
 
 ### Timing guarantees

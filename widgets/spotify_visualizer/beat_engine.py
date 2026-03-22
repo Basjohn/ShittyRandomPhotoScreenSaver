@@ -58,6 +58,7 @@ class _SpotifyBeatEngine(QObject):
         self._last_audio_ts: float = 0.0
         self._generation_id: int = 0
         self._latest_generation_with_frame: int = 0
+        self._latest_generation_with_waveform: int = 0
 
         # Waveform buffer for oscilloscope visualizer (last 256 raw samples)
         self._waveform: List[float] = [0.0] * 256
@@ -101,6 +102,7 @@ class _SpotifyBeatEngine(QObject):
         self._last_smooth_ts = -1.0
         self._energy_bands = EnergyBands()
         self._waveform = [0.0] * self._waveform_count
+        self._waveform_count = 0
         self._latest_bars = [0.0] * self._bar_count
         self._last_audio_ts = 0.0
         # Reset transient bus state for clean mode switch
@@ -111,6 +113,7 @@ class _SpotifyBeatEngine(QObject):
         # Force consumers to wait for the next FFT result produced after
         # this reset instead of reusing the pre-reset generation id.
         self._latest_generation_with_frame = self._generation_id - 1
+        self._latest_generation_with_waveform = self._generation_id - 1
         logger.debug("[SPOTIFY_VIS] Beat engine smoothing state reset (generation=%d)", self._generation_id)
 
     def reset_floor_state(self) -> None:
@@ -414,6 +417,9 @@ class _SpotifyBeatEngine(QObject):
     def get_latest_generation_with_frame(self) -> int:
         return self._latest_generation_with_frame
 
+    def get_latest_generation_with_waveform(self) -> int:
+        return self._latest_generation_with_waveform
+
     def tick(self) -> Optional[List[float]]:
         tm = self._thread_manager
 
@@ -434,9 +440,13 @@ class _SpotifyBeatEngine(QObject):
                         n = len(arr)
                         if n >= 256:
                             self._waveform = arr[-256:].tolist()
+                            self._waveform_count = 256
                         elif n > 0:
                             pad = [0.0] * (256 - n)
                             self._waveform = arr.tolist() + pad
+                            self._waveform_count = n
+                        if n > 0:
+                            self._latest_generation_with_waveform = self._generation_id
                 except Exception:
                     pass
             
@@ -495,6 +505,13 @@ class _SpotifyBeatEngine(QObject):
     def get_waveform(self) -> List[float]:
         """Get the last 256 raw waveform samples for oscilloscope."""
         return list(self._waveform)
+
+    def get_waveform_count(self) -> int:
+        """Get the valid sample count in the waveform buffer."""
+        try:
+            return max(0, min(256, int(self._waveform_count)))
+        except Exception:
+            return 0
 
     def get_energy_bands(self) -> EnergyBands:
         """Get the latest frequency-band energy snapshot."""

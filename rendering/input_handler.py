@@ -445,6 +445,7 @@ class InputHandler(QObject):
             The DisplayWidget that should own the halo, or None
         """
         coordinator.set_ctrl_held(True)
+        self._ctrl_held = True
         try:
             from rendering.display_widget import DisplayWidget
 
@@ -482,6 +483,12 @@ class InputHandler(QObject):
         for w in display_widgets:
             try:
                 w._ctrl_held = False
+                handler = getattr(w, "_input_handler", None)
+                if handler is not None:
+                    try:
+                        handler.set_ctrl_held(False)
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 hint = getattr(w, "_ctrl_cursor_hint", None)
                 if hint is not None:
                     try:
@@ -536,6 +543,12 @@ class InputHandler(QObject):
 
         coordinator.set_halo_owner(target_widget)
         target_widget._ctrl_held = True
+        target_handler = getattr(target_widget, "_input_handler", None)
+        if target_handler is not None:
+            try:
+                target_handler.set_ctrl_held(True)
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         try:
             from rendering.display_widget import DisplayWidget
 
@@ -612,6 +625,12 @@ class InputHandler(QObject):
         if owner is not None:
             try:
                 owner._ctrl_held = False
+                owner_handler = getattr(owner, "_input_handler", None)
+                if owner_handler is not None:
+                    try:
+                        owner_handler.set_ctrl_held(False)
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             except Exception as e:
                 logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
             try:
@@ -639,6 +658,12 @@ class InputHandler(QObject):
                 continue
             try:
                 w._ctrl_held = False
+                handler = getattr(w, "_input_handler", None)
+                if handler is not None:
+                    try:
+                        handler.set_ctrl_held(False)
+                    except Exception as e:
+                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
                 hint = getattr(w, "_ctrl_cursor_hint", None)
                 if hint is not None:
                     try:

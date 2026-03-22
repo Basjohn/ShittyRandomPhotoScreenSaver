@@ -158,7 +158,11 @@ def reset_visualizer_state(
     widget._last_gpu_fade_sent = -1.0
     resume_ts = 0.0
     if getattr(widget, "_mode_transition_phase", 0) != 0:
-        resume_ts = float(getattr(widget, "_mode_transition_resume_ts", 0.0) or 0.0)
+        resume_ts = float(
+            getattr(widget, "_mode_transition_resume_ts", 0.0)
+            or getattr(widget, "_mode_transition_ts", 0.0)
+            or 0.0
+        )
     widget._mode_transition_ts = resume_ts if resume_ts > 0.0 else 0.0
     widget._mode_transition_resume_ts = 0.0
     widget._perf_tick_start_ts = None
@@ -390,7 +394,14 @@ def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:
             latest = engine.get_latest_generation_with_frame()
         except Exception:
             latest = -1
-        if latest >= widget._mode_teardown_target_generation:
+        waveform_ready = True
+        if getattr(widget, "_vis_mode_str", "") in {"oscilloscope", "sine_wave"}:
+            try:
+                latest_waveform = engine.get_latest_generation_with_waveform()
+            except Exception:
+                latest_waveform = -1
+            waveform_ready = latest_waveform >= widget._mode_teardown_target_generation
+        if latest >= widget._mode_teardown_target_generation and waveform_ready:
             ready = True
     elif (now_ts - widget._mode_teardown_wait_started_ts) >= 0.75:
         ready = True

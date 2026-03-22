@@ -155,3 +155,13 @@ def compute_blob_radius_preview(
         stage_bias=0.0,
     )
     return r
+
+
+def compute_blob_ghost_min_offset(smoothed_energy: float) -> float:
+    """Return the minimum ghost peak offset above the live blob state.
+
+    The ghost should stay visible, but it should not dominate the live blob
+    shape or look like the "real" blob on calmer passages.
+    """
+    se = _clamp(smoothed_energy, 0.0, 1.0)
+    return _clamp(max(0.015, se * 0.035), 0.015, 0.035)

@@ -529,6 +529,10 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
 
     if engine is not None:
         extra['waveform'] = engine.get_waveform()
+        try:
+            extra['waveform_count'] = engine.get_waveform_count()
+        except Exception:
+            extra['waveform_count'] = len(extra['waveform'])
         # Per-mode energy source: normalized (default) or raw pre-AGC.
         # Raw preserves dynamic range but has wrong scaling for some modes.
         use_raw = getattr(widget, '_use_raw_energy', False)
@@ -538,6 +542,34 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
             extra['energy_bands'] = engine.get_energy_bands()
         # Transient bus snapshot (Approach A dual-path) — available to all modes
         extra['transient_energy'] = engine.get_transient_energy_bands()
+        if mode_str == 'blob':
+            try:
+                scheduler = engine.get_event_scheduler()
+            except Exception:
+                scheduler = None
+            if scheduler is not None:
+                kick_evt = scheduler.peek_latest('kick', max_age_s=0.18)
+                snare_evt = scheduler.peek_latest('snare', max_age_s=0.22)
+                extra['blob_kick_event_strength'] = (
+                    float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
+                )
+                extra['blob_snare_event_strength'] = (
+                    float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
+                )
+        elif mode_str in {'sine_wave', 'oscilloscope'}:
+            try:
+                scheduler = engine.get_event_scheduler()
+            except Exception:
+                scheduler = None
+            if scheduler is not None:
+                kick_evt = scheduler.peek_latest('kick', max_age_s=0.16)
+                snare_evt = scheduler.peek_latest('snare', max_age_s=0.20)
+                extra['line_kick_event_strength'] = (
+                    float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
+                )
+                extra['line_snare_event_strength'] = (
+                    float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
+                )
 
     _is_sine = (mode_str == 'sine_wave')
     extra['glow_enabled'] = widget._sine_glow_enabled if _is_sine else widget._osc_glow_enabled

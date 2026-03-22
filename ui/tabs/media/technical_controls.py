@@ -79,51 +79,6 @@ _PULSE_GAIN_TIP = (
     "bass energy mixes into bubble/blob pulse amplitude.\n"
     "0% = disabled, 100% = default, 300% = triple."
 )
-_KICK_GAIN_DISABLED_TIP = "Kick lane gain is active in Spectrum mode only."
-_PULSE_GAIN_DISABLED_TIP = "Transient pulse gain is active in Bubble mode only."
-
-
-def _apply_transient_gating(mode_key: str, controls: Dict[str, object]) -> None:
-    """Enable/disable transient sliders based on the active mode.
-
-    - kick_lane_gain: Spectrum only
-    - transient_pulse_gain: Bubble only
-    - transient_clamp: all modes (global)
-
-    When a slider is disabled, its value label shows the stored value
-    as read-only text (greyed out) so preset authors can still see
-    the persisted value without switching modes.
-    """
-    kick_en = mode_key in _KICK_GAIN_MODES
-    pulse_en = mode_key in _PULSE_GAIN_MODES
-
-    for key in ('kick_gain_slider', 'kick_gain_label'):
-        w = controls.get(key)
-        if w is not None:
-            w.setEnabled(kick_en)
-            if hasattr(w, 'setToolTip'):
-                w.setToolTip(_KICK_GAIN_TIP if kick_en else _KICK_GAIN_DISABLED_TIP)
-    # Show stored value as read-only when kick gain is disabled
-    if not kick_en:
-        kg_slider = controls.get('kick_gain_slider')
-        kg_label = controls.get('kick_gain_label')
-        if kg_slider is not None and kg_label is not None:
-            kg_label.setText(f"{kg_slider.value()}% (read-only)")
-
-    for key in ('pulse_gain_slider', 'pulse_gain_label'):
-        w = controls.get(key)
-        if w is not None:
-            w.setEnabled(pulse_en)
-            if hasattr(w, 'setToolTip'):
-                w.setToolTip(_PULSE_GAIN_TIP if pulse_en else _PULSE_GAIN_DISABLED_TIP)
-    # Show stored value as read-only when pulse gain is disabled
-    if not pulse_en:
-        pg_slider = controls.get('pulse_gain_slider')
-        pg_label = controls.get('pulse_gain_label')
-        if pg_slider is not None and pg_label is not None:
-            pg_label.setText(f"{pg_slider.value()}% (read-only)")
-
-
 def _ensure_per_mode_cache(tab) -> Dict[str, Dict[str, Any]]:
     cache = getattr(tab, "_per_mode_technical_config", None)
     if not isinstance(cache, dict):
@@ -143,6 +98,54 @@ def _aligned_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
     row.addLayout(content, 1)
     parent_layout.addLayout(row)
     return content
+
+
+def _build_visibility_toggle(
+    tab,
+    parent_layout: QVBoxLayout,
+    *,
+    mode_key: str,
+    bucket_key: str,
+    label: str,
+    default_visible: bool,
+    helper_text: str,
+) -> tuple[QCheckBox, QWidget]:
+    toggle = QCheckBox(label)
+    toggle.setProperty("circleIndicator", True)
+    toggle.setToolTip(helper_text)
+    getter = getattr(tab, "get_visualizer_tech_bucket_state", None)
+    visible = default_visible
+    if callable(getter):
+        try:
+            visible = bool(getter(mode_key, bucket_key, default_visible))
+        except Exception:
+            visible = default_visible
+    toggle.blockSignals(True)
+    toggle.setChecked(visible)
+    toggle.blockSignals(False)
+
+    toggle_row = _aligned_row(parent_layout, "")
+    toggle_row.addWidget(toggle)
+    toggle_row.addStretch()
+
+    section = QWidget()
+    section_layout = QVBoxLayout(section)
+    section_layout.setContentsMargins(0, 0, 0, 0)
+    section_layout.setSpacing(12)
+    parent_layout.addWidget(section)
+
+    def _apply_visibility(checked: bool) -> None:
+        section.setVisible(checked)
+        setter = getattr(tab, "set_visualizer_tech_bucket_state", None)
+        if callable(setter):
+            try:
+                setter(mode_key, bucket_key, checked)
+            except Exception:
+                pass
+
+    toggle.toggled.connect(_apply_visibility)
+    _apply_visibility(visible)
+    return toggle, section
 
 
 def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
@@ -330,8 +333,24 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     energy_boost_label = QLabel(f"{clamped_eb:.2f}x")
     energy_boost_label.setVisible(False)
 
+    agc_toggle, agc_section = _build_visibility_toggle(
+        tab,
+        layout,
+        mode_key=mode_key,
+        bucket_key="agc",
+        label="Show AGC Controls",
+        default_visible=False,
+        helper_text="Visibility only. Hidden AGC controls still keep their saved values and remain active.",
+    )
+    agc_layout = agc_section.layout()
+    if agc_layout is None:
+        agc_layout = QVBoxLayout()
+        agc_section.setLayout(agc_layout)
+    agc_layout.setContentsMargins(0, 0, 0, 0)
+    agc_layout.setSpacing(12)
+
     # AGC Strength slider
-    agc_row = _aligned_row(layout, "AGC Strength:")
+    agc_row = _aligned_row(agc_layout, "AGC Strength:")
     agc_strength_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     agc_strength_slider.setMinimum(0)
     agc_strength_slider.setMaximum(100)
@@ -353,7 +372,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     agc_row.addWidget(agc_strength_label)
 
     # Input Gain (Virtual Volume) slider
-    input_gain_row = _aligned_row(layout, "Input Gain:")
+    input_gain_row = _aligned_row(agc_layout, "Input Gain:")
     input_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     input_gain_slider.setMinimum(5)
     input_gain_slider.setMaximum(200)
@@ -385,52 +404,66 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     _connect_setting(raw_energy_checkbox.stateChanged, tab)
     raw_energy_checkbox.setVisible(False)
 
+    transient_toggle, transient_section = _build_visibility_toggle(
+        tab,
+        layout,
+        mode_key=mode_key,
+        bucket_key="transient",
+        label="Show Transient Controls",
+        default_visible=True,
+        helper_text="Visibility only. Hidden transient controls still keep their saved values and remain active.",
+    )
+    transient_layout = transient_section.layout()
+    if transient_layout is None:
+        transient_layout = QVBoxLayout()
+        transient_section.setLayout(transient_layout)
+    transient_layout.setContentsMargins(0, 0, 0, 0)
+    transient_layout.setSpacing(12)
+
     # ── Transient Bus Controls (Approach A dual-path) ──────────────────
-    kick_gain_row = _aligned_row(layout, "Kick Lane Gain:\n(Spectrum only)")
-    kick_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-    kick_gain_slider.setMinimum(0)
-    kick_gain_slider.setMaximum(200)
-    kick_gain_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-    kick_gain_slider.setTickInterval(25)
-    default_kg = _per_mode_default_float(tab, mode_key, 'kick_lane_gain', 1.0)
-    clamped_kg = max(0.0, min(2.0, default_kg))
-    kick_gain_slider.blockSignals(True)
-    kick_gain_slider.setValue(int(clamped_kg * 100))
-    kick_gain_slider.blockSignals(False)
-    kick_gain_slider.setToolTip(
-        "Spectrum kick express-lane gain (0%\u2013200%). Controls how strongly\n"
-        "transient bass energy bypasses smoothing for immediate kick response.\n"
-        "0% = disabled, 100% = default, 200% = double."
-    )
-    _connect_setting(kick_gain_slider.valueChanged, tab)
-    kick_gain_row.addWidget(kick_gain_slider)
-    kick_gain_label = QLabel(f"{int(clamped_kg * 100)}%")
-    kick_gain_slider.valueChanged.connect(lambda v: kick_gain_label.setText(f"{v}%"))
-    kick_gain_row.addWidget(kick_gain_label)
+    kick_gain_slider = None
+    kick_gain_label = None
+    if mode_key in _KICK_GAIN_MODES:
+        kick_gain_row = _aligned_row(transient_layout, "Kick Lane Gain:")
+        kick_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        kick_gain_slider.setMinimum(0)
+        kick_gain_slider.setMaximum(200)
+        kick_gain_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        kick_gain_slider.setTickInterval(25)
+        default_kg = _per_mode_default_float(tab, mode_key, 'kick_lane_gain', 1.0)
+        clamped_kg = max(0.0, min(2.0, default_kg))
+        kick_gain_slider.blockSignals(True)
+        kick_gain_slider.setValue(int(clamped_kg * 100))
+        kick_gain_slider.blockSignals(False)
+        kick_gain_slider.setToolTip(_KICK_GAIN_TIP)
+        _connect_setting(kick_gain_slider.valueChanged, tab)
+        kick_gain_row.addWidget(kick_gain_slider)
+        kick_gain_label = QLabel(f"{int(clamped_kg * 100)}%")
+        kick_gain_slider.valueChanged.connect(lambda v: kick_gain_label.setText(f"{v}%"))
+        kick_gain_row.addWidget(kick_gain_label)
 
-    pulse_gain_row = _aligned_row(layout, "Transient Pulse:\n(Bubble only)")
-    pulse_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
-    pulse_gain_slider.setMinimum(0)
-    pulse_gain_slider.setMaximum(300)
-    pulse_gain_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-    pulse_gain_slider.setTickInterval(50)
-    default_pg = _per_mode_default_float(tab, mode_key, 'transient_pulse_gain', 1.0)
-    clamped_pg = max(0.0, min(3.0, default_pg))
-    pulse_gain_slider.blockSignals(True)
-    pulse_gain_slider.setValue(int(clamped_pg * 100))
-    pulse_gain_slider.blockSignals(False)
-    pulse_gain_slider.setToolTip(
-        "Transient pulse gain (0%\u2013300%). Controls how strongly transient\n"
-        "bass energy mixes into bubble/blob pulse amplitude.\n"
-        "0% = disabled, 100% = default, 300% = triple."
-    )
-    _connect_setting(pulse_gain_slider.valueChanged, tab)
-    pulse_gain_row.addWidget(pulse_gain_slider)
-    pulse_gain_label = QLabel(f"{int(clamped_pg * 100)}%")
-    pulse_gain_slider.valueChanged.connect(lambda v: pulse_gain_label.setText(f"{v}%"))
-    pulse_gain_row.addWidget(pulse_gain_label)
+    pulse_gain_slider = None
+    pulse_gain_label = None
+    if mode_key in _PULSE_GAIN_MODES:
+        pulse_gain_row = _aligned_row(transient_layout, "Transient Pulse:")
+        pulse_gain_slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        pulse_gain_slider.setMinimum(0)
+        pulse_gain_slider.setMaximum(300)
+        pulse_gain_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        pulse_gain_slider.setTickInterval(50)
+        default_pg = _per_mode_default_float(tab, mode_key, 'transient_pulse_gain', 1.0)
+        clamped_pg = max(0.0, min(3.0, default_pg))
+        pulse_gain_slider.blockSignals(True)
+        pulse_gain_slider.setValue(int(clamped_pg * 100))
+        pulse_gain_slider.blockSignals(False)
+        pulse_gain_slider.setToolTip(_PULSE_GAIN_TIP)
+        _connect_setting(pulse_gain_slider.valueChanged, tab)
+        pulse_gain_row.addWidget(pulse_gain_slider)
+        pulse_gain_label = QLabel(f"{int(clamped_pg * 100)}%")
+        pulse_gain_slider.valueChanged.connect(lambda v: pulse_gain_label.setText(f"{v}%"))
+        pulse_gain_row.addWidget(pulse_gain_label)
 
-    clamp_row = _aligned_row(layout, "Transient Clamp:\n(all modes)")
+    clamp_row = _aligned_row(transient_layout, "Transient Clamp:")
     clamp_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     clamp_slider.setMinimum(0)
     clamp_slider.setMaximum(300)
@@ -458,7 +491,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     _mix_config_key = None
     if _mix_meta is not None:
         _mix_config_key, _mix_lbl, _mix_tip, _mix_def, _mix_lo, _mix_hi = _mix_meta
-        mix_row = _aligned_row(layout, _mix_lbl)
+        mix_row = _aligned_row(transient_layout, _mix_lbl)
         mix_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         mix_slider.setMinimum(int(_mix_lo * 100))
         mix_slider.setMaximum(int(_mix_hi * 100))
@@ -480,7 +513,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     mix_vocal_slider = None
     mix_vocal_label = None
     if mode_key == 'bubble':
-        voc_row = _aligned_row(layout, "Transient Vocal Mix:")
+        voc_row = _aligned_row(transient_layout, "Transient Vocal Mix:")
         mix_vocal_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         mix_vocal_slider.setMinimum(0)
         mix_vocal_slider.setMaximum(100)
@@ -505,7 +538,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     blob_vocal_slider = None
     blob_vocal_label = None
     if mode_key == 'blob':
-        bvoc_row = _aligned_row(layout, "Transient Vocal Mix:")
+        bvoc_row = _aligned_row(transient_layout, "Transient Vocal Mix:")
         blob_vocal_slider = NoWheelSlider(Qt.Orientation.Horizontal)
         blob_vocal_slider.setMinimum(0)
         blob_vocal_slider.setMaximum(100)
@@ -589,6 +622,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         'group': group,
         'bar_count': bar_count,
         'block_size': block_size,
+        'agc_visibility_toggle': agc_toggle,
         'adaptive': adaptive_checkbox,
         'sensitivity_slider': sensitivity_slider,
         'sensitivity_label': sensitivity_label,
@@ -616,14 +650,13 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         'mix_vocal_label': mix_vocal_label,
         'blob_vocal_slider': blob_vocal_slider,
         'blob_vocal_label': blob_vocal_label,
+        'transient_visibility_toggle': transient_toggle,
         'update_sensitivity': _update_sensitivity_visibility,
         'update_manual_floor': _update_manual_floor_visibility,
         'mode_key': mode_key,
     }
     per_mode_controls['modes'][mode_key] = _controls_dict
     setattr(tab, _PER_MODE_TECH_ATTR, per_mode_controls)
-
-    _apply_transient_gating(mode_key, _controls_dict)
 
     return host
 
@@ -916,7 +949,6 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
         if callable(update_manual_floor):
             update_manual_floor()
 
-        _apply_transient_gating(mode_key, controls)
 
 
 def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any]) -> None:
@@ -995,5 +1027,3 @@ def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any])
     for mode_key, mode_cache in cache.items():
         for key, value in mode_cache.items():
             spotify_vis_config[f'{mode_key}_{key}'] = value
-
-

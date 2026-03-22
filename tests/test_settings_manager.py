@@ -194,6 +194,20 @@ class TestSettingsManagerDefaults:
         result = manager.get("existing.key", 0)
         assert result == 42
 
+    def test_reset_to_defaults_reapplies_mc_profile_overrides(self, tmp_path: Path) -> None:
+        manager = SettingsManager(
+            organization="TestOrg",
+            application="Screensaver_MC",
+            storage_base_dir=tmp_path / "mc_profile",
+        )
+        manager.set("input.hard_exit", False)
+        manager.set("display.show_on_monitors", [0, 1, 2])
+
+        manager.reset_to_defaults()
+
+        assert manager.get("input.hard_exit") is True
+        assert manager.get("display.show_on_monitors") == [1]
+
 
 class TestSettingsManagerValidation:
     def test_validate_and_repair_handles_missing_keys(self, tmp_path: Path) -> None:

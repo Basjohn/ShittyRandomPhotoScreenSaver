@@ -5,7 +5,10 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
-## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — In Progress
+## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
+
+- **User later confirmed this issue is resolved in live use (Mar 22 2026).**
+- The investigation record is retained below because several failed approaches are still useful anti-patterns. The final working state is summarized in the resolved entry dated **2026-03-22**.
 
 - **Problem statement:** On MC builds we only render the fullscreen DisplayWidget on Display 1 while Display 0 remains a normal Windows desktop (winlogon is *not* involved). When we summon Settings (which still launches on Display 0), `engine.stop(exit_app=False)` tears down the MC window on Display 1 *and* leaves Display 0 unprotected for ~3 s while the dialog constructs. Windows fills that gap with a security-style popup that shows a lock icon and rapidly flickers. This is **not** historical behavior; the regression appeared after the March 13 settings work. **Update:** running `main.py` in script mode (non-winlogon screensaver) exhibits the exact same flicker, proving the bug is tied solely to the settings dialog invocation/creation path and is independent of build flags or MC-only windowing.
 - **MC-specific observations supplied by user:**
@@ -69,6 +72,64 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - Always reset the shared beat engine, widget bar cache, and overlay state within the same tick when handling cross-mode transitions.
 - Gate GPU pushes on fresh FFT generations whenever smoothing state is invalidated.
 - Keep regression tests that cover the exact gating contract so future plumbing changes cannot reintroduce stale-state persistence.
+
+## 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved)
+
+**Symptoms**
+- Opening Settings from the screensaver/MC flow could produce a bad Windows placeholder/flicker moment while the dialog came up.
+- The regression was especially visible in mixed monitor setups and became tied to the settings invocation path rather than image rendering itself.
+
+**Failed / insufficient attempts**
+1. Shield overlays and masking experiments did not solve the root problem and could add their own flicker.
+2. Pure teardown-order tweaks were not enough on their own because the settings path still had visible timing gaps.
+3. Early placeholder-tab work and caching helped, but were not originally considered sufficient in isolation.
+
+**Final working state**
+- The screensaver/settings handoff now keeps the workflow on the safe path guarded by `tests/test_s_hotkey_workflow.py`: opening Settings hides display windows instead of leaving fullscreen content in a half-torn state over the dialog.
+- `SettingsDialog` builds the initial tab immediately and hydrates remaining tabs asynchronously, reducing visible construction pressure during first paint.
+- Flicker-regression coverage also lives in `tests/test_flicker_fix_integration.py`, including guards around immediate fullscreen presentation and avoiding `processEvents()`-style races in transition code.
+
+**Validation / guardrail**
+- User later confirmed the settings flicker is resolved in live use.
+- Keep `tests/test_s_hotkey_workflow.py` and `tests/test_flicker_fix_integration.py` as the minimum regression bar before reworking settings launch flow again.
+
+**Takeaways**
+- Do not reintroduce shield-style masking as a first response.
+- Keep the settings launch path explicit and test-guarded: hide displays cleanly, paint Settings quickly, and avoid event-loop race hacks.
+
+## 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch)
+
+**Symptoms**
+- MC hotkeys and media keys could stop working after interaction clicks.
+- Ctrl-held suppression could drift across local/global/handler state.
+- Cursor Halo behavior regressed around compositor interaction: it could fail to return after slight coordinate drift, and hard-exit interaction clicks could make it vanish immediately.
+
+**Failed / insufficient attempts**
+1. Relying on only one Ctrl-held source was too fragile; focus/ownership drift could leave different subsystems disagreeing about whether interaction mode was active.
+2. Halo behavior tied too closely to raw move events was vulnerable to compositor coordinate drift and click-driven focus churn.
+3. A later "simplify it" experiment that made the top-level Halo window `WA_TransparentForMouseEvents` was a regression: clicks could escape the compositor/widget tree instead of being forwarded through the real display interaction path, which in turn worsened click swallowing and shadow-side fallout. Do not reintroduce that top-level transparent Halo path as a casual cleanup.
+
+**Final fix**
+- `display_input._ctrl_interaction_active()` now resolves Ctrl-held state across local widget state, coordinator state, deprecated global state, and handler state.
+- `InputHandler.handle_ctrl_press()` explicitly marks handler-held state, so downstream guards agree even after interaction/focus churn.
+- MC interaction clicks now perform a best-effort focus reclaim via `display_input._restore_mc_input_focus()`, which keeps keyboard/media support alive after clicking overlays.
+- `display_input.show_ctrl_cursor_hint()` clamps small compositor drift back inside the display instead of treating it as a real out-of-bounds exit.
+- `display_input.handle_mousePressEvent()` now refreshes halo visibility/activity after interactive clicks in hard-exit mode, so clicking compositor elements no longer makes the halo disappear immediately.
+- `CursorHaloWidget._forward_mouse_event()` now routes button events back through the fullscreen display root so the existing interaction router, preset cycling, focus reclaim, and halo keepalive logic all run on forwarded clicks.
+- Later Mar 22 follow-up: the blanket click-triggered halo keepalive / focus-reclaim calls in `display_input.handle_mousePressEvent()` were backed back out. They were well-intended, but in live use they worsened Halo visibility and click behavior instead of restoring last-commit behavior. The valuable retained parts are the multi-source Ctrl gate, display-root forwarding, and drift clamp.
+
+**Regression coverage & validation**
+- `tests/test_mc_keyboard_input.py` guards the focus reclaim path and hotkey behavior.
+- `tests/test_dimming_and_interaction_fixes.py` now guards the multi-source Ctrl gate, halo drift clamp, removal of the bad generic click-keepalive path, and display-root halo forwarding contract.
+- User confirmed that keys are now working again in script mode.
+- Follow-up note (later Mar 22 user validation): keyboard/focus improvements held, but Cursor Halo click passthrough/hide behavior was still not fully correct. Keep treating Halo click behavior as an active issue even though the underlying keyboard-focus repair remains valuable and should not be reverted casually.
+
+**Takeaways**
+- Interaction reliability depends on focus reclaim and state agreement together; fixing only one side is not enough.
+- Halo lifetime should be treated as its own interaction contract, not just a side effect of mouse-move traffic.
+- Halo passthrough must preserve the real display interaction pipeline; bypassing the display root silently breaks preset cycling / keepalive behavior even when focus handling looks correct.
+- Top-level transparent Halo windows are not equivalent to real compositor passthrough in this project; preserving forwarded ownership is safer than assuming Qt click-through will land on the right target.
+- When a bug family only partly resolves, keep the resolved sub-contracts documented separately so later work does not accidentally unwind them while chasing the remaining visual issue.
 
 ## 2026-02-26 / 2026-03-05 — Pixel Shift Visualizer Bleed-Through (Resolved)
 

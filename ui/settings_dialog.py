@@ -26,42 +26,8 @@ from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import apply_shadows_to_inputs
 from ui.settings_dialog_cache import get_settings_dialog_cache
-from widgets.shadow_utils import clear_cached_shadow_for_widget
 
 logger = get_logger(__name__)
-
-
-class _ShellShadowInteractionFilter(QObject):
-    """Event filter scheduling shell shadow refreshes on user interaction."""
-
-    _EVENT_TYPES = {
-        QEvent.Type.MouseButtonPress,
-        QEvent.Type.MouseButtonRelease,
-        QEvent.Type.MouseMove,
-        QEvent.Type.HoverEnter,
-        QEvent.Type.HoverMove,
-        QEvent.Type.HoverLeave,
-        QEvent.Type.Wheel,
-        QEvent.Type.FocusIn,
-        QEvent.Type.FocusOut,
-    }
-
-    def __init__(self, dialog: "SettingsDialog") -> None:
-        super().__init__(dialog)
-        self._dialog = dialog
-
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        dialog = self._dialog
-        if not dialog or not dialog.isVisible():
-            return False
-        if event.type() in self._EVENT_TYPES:
-            widget = watched if isinstance(watched, QWidget) else None
-            if widget is None and hasattr(watched, "parent"):
-                parent = watched.parent()
-                widget = parent if isinstance(parent, QWidget) else None
-            if widget is not None and (widget is dialog or dialog.isAncestorOf(widget)):
-                dialog._schedule_shell_shadow_refresh()
-        return False
 
 
 class CustomTitleBar(QWidget):
@@ -530,9 +496,6 @@ class SettingsDialog(QDialog):
         self._shell_shadow.setYOffset(0)
         self._shell_shadow.setColor(QColor(0, 0, 0, 180))
         self._outer_margin = 10
-        self._shell_shadow_refresh_pending = False
-        self._shadow_event_filter = _ShellShadowInteractionFilter(self)
-        self._shadow_event_filter_installed = False
 
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
@@ -888,7 +851,6 @@ class SettingsDialog(QDialog):
             self._restore_scroll_for_tab(index, current_widget)
             self._style_tab_widget(current_widget)
             self._save_last_tab(index)
-            self._schedule_shell_shadow_refresh()
             logger.debug(f"Switched to tab {index}")
         if animate and old_widget is not None:
             def fade_out_complete():
@@ -1095,62 +1057,13 @@ class SettingsDialog(QDialog):
         except Exception:
             logger.debug("Failed to save dialog geometry on close", exc_info=True)
         
-        self._remove_shadow_event_filter()
         super().closeEvent(event)
 
     def _schedule_shell_shadow_refresh(self) -> None:
-        if self._shell_shadow_refresh_pending:
-            return
-        self._shell_shadow_refresh_pending = True
-
-        def _run() -> None:
-            self._shell_shadow_refresh_pending = False
-            self._refresh_shell_shadow_cache()
-
-        QTimer.singleShot(0, _run)
+        return
 
     def _refresh_shell_shadow_cache(self) -> None:
-        container = getattr(self, "_dialog_container", None)
-        effect = getattr(self, "_shell_shadow", None)
-        if container is None or effect is None:
-            return
-        try:
-            container.setGraphicsEffect(None)
-        except Exception:
-            logger.debug("[SETTINGS] Failed to detach shell shadow before refresh", exc_info=True)
-        try:
-            clear_cached_shadow_for_widget(container)
-        except Exception:
-            logger.debug("[SETTINGS] Failed to clear cached shadow for settings shell", exc_info=True)
-        try:
-            container.setGraphicsEffect(effect)
-        except Exception:
-            logger.debug("[SETTINGS] Failed to reattach shell shadow after refresh", exc_info=True)
-
-    def _install_shadow_event_filter(self) -> None:
-        if self._shadow_event_filter_installed:
-            return
-        app = QApplication.instance()
-        if app is None:
-            return
-        try:
-            app.installEventFilter(self._shadow_event_filter)
-            self._shadow_event_filter_installed = True
-        except Exception:
-            logger.debug("[SETTINGS] Failed to install shadow event filter", exc_info=True)
-
-    def _remove_shadow_event_filter(self) -> None:
-        if not self._shadow_event_filter_installed:
-            return
-        app = QApplication.instance()
-        if app is None:
-            return
-        try:
-            app.removeEventFilter(self._shadow_event_filter)
-        except Exception:
-            logger.debug("[SETTINGS] Failed to remove shadow event filter", exc_info=True)
-        finally:
-            self._shadow_event_filter_installed = False
+        return
     
     def _has_image_sources(self) -> bool:
         """Check if user has configured at least one image source (folder or RSS feed)."""
@@ -1590,8 +1503,6 @@ class SettingsDialog(QDialog):
     
     def showEvent(self, event):
         super().showEvent(event)
-        self._install_shadow_event_filter()
-        self._schedule_shell_shadow_refresh()
         # Reset cached width so images rescale on every show
         try:
             self._about_last_card_width = 0
@@ -1607,7 +1518,6 @@ class SettingsDialog(QDialog):
     def moveEvent(self, event):
         """Handle move event to save geometry."""
         super().moveEvent(event)
-        self._schedule_shell_shadow_refresh()
         # Save geometry on move (debounced to avoid excessive saves)
         if hasattr(self, '_move_timer'):
             self._move_timer.stop()

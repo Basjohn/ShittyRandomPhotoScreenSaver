@@ -390,6 +390,12 @@ class SpotifyVisualizerWidget(QWidget):
         self._current_timer_interval_ms: int = 16
         self._last_gpu_fade_sent: float = -1.0
         self._last_gpu_geom: Optional[QRect] = None
+        # Reset/fresh-frame handoff tracking must exist from construction so
+        # the recurring UI tick cannot crash before any mode-reset helpers run.
+        self._waiting_for_fresh_frame: bool = False
+        self._waiting_for_fresh_engine_frame: bool = False
+        self._pending_engine_generation: int = -1
+        self._last_engine_generation_seen: int = -1
 
         # Mode transition driven by double-click (no timers, tick-driven)
         self._mode_transition_ts: float = 0.0   # 0 = no transition active
@@ -612,6 +618,7 @@ class SpotifyVisualizerWidget(QWidget):
             'bubble': VisualizerMode.BUBBLE,
         }
         vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
+        mode_changed = vm != self._vis_mode
         self.set_visualization_mode(vm)
 
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
@@ -622,7 +629,15 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             self._cached_vis_kwargs = dict(kwargs)
 
-        self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
+        if mode_changed:
+            self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
+        else:
+            # Settings refreshes for the already-active mode should update
+            # the live uniforms/config in place instead of cold-resetting
+            # the overlay/engine a second time.
+            self._last_gpu_geom = None
+            self._last_gpu_fade_sent = -1.0
+            self._has_pushed_first_frame = False
         self._mode_transition_apply_height_on_resume = True
 
         if self._mode_transition_phase == 0:
@@ -2024,17 +2039,21 @@ class SpotifyVisualizerWidget(QWidget):
             # Reset display bars so returning modes start clean
             for i in range(len(self._display_bars)):
                 self._display_bars[i] = 0.0
+            self._last_update_ts = -1.0
+            self._last_smooth_ts = 0.0
             # Invalidate cached GPU geometry so the next tick forces a push
             self._last_gpu_geom = None
             self._last_gpu_fade_sent = -1.0
             self._has_pushed_first_frame = False
-            # Reset beat engine smoothing so the new mode starts fresh
-            # (prevents stale smoothed bars/energy dampening reactivity)
-            if self._engine is not None:
-                try:
-                    self._engine.reset_smoothing_state()
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            self._waiting_for_fresh_engine_frame = True
+            self._waiting_for_fresh_frame = True
+            # Reset/track the shared engine as a full generation handoff so the
+            # new mode waits for a real fresh frame instead of partially reusing
+            # stale waveform/bar state from the previous mode.
+            try:
+                self._prepare_engine_for_mode_reset()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to prepare engine on mode switch", exc_info=True)
             logger.debug("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
 
     def get_visualization_mode(self) -> VisualizerMode:

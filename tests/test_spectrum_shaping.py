@@ -18,10 +18,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.bar_computation import (
     SpectrumShapeConfig,
     _DEFAULT_SHAPE_CONFIG,
 )
+from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker, _AudioFrame
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -334,3 +336,64 @@ class TestProfileShapeComputation:
         assert range_high > range_low, (
             "Higher wave_amplitude should create more variation in the profile"
         )
+
+
+class TestLaneAwareSpectrumEnergy:
+    @staticmethod
+    def _make_worker(np_module, bar_count: int = 15) -> SpotifyVisualizerAudioWorker:
+        buf: TripleBuffer[_AudioFrame] = TripleBuffer()
+        worker = SpotifyVisualizerAudioWorker(bar_count=bar_count, buffer=buf)
+        worker._np = np_module  # type: ignore[attr-defined]
+        worker._spectrum_shape_nodes = [[0.0, 0.9], [0.5, 0.9], [1.0, 0.9]]
+        worker._spectrum_mirrored = False
+        worker._spectrum_notch_positions = [
+            [0.0, "Bass"],
+            [0.25, "Low"],
+            [0.50, "Mid"],
+            [0.75, "Hi-Mid"],
+            [1.0, "Treble"],
+        ]
+        worker._spectrum_shape_config = SpectrumShapeConfig(
+            bass_emphasis=0.7,
+            vocal_peak_position=0.5,
+            mid_suppression=0.1,
+            wave_amplitude=0.9,
+            profile_floor=0.05,
+        )
+        worker._use_recommended = False
+        worker._user_sensitivity = 1.0
+        worker._use_dynamic_floor = False
+        worker._manual_floor = 0.12
+        worker._applied_noise_floor = 0.12
+        worker._raw_bass_avg = 0.12
+        return worker
+
+    @staticmethod
+    def _make_fft(np_module, low: float, mid: float, high: float, size: int = 2048):
+        fft = np_module.zeros(size, dtype="float32")
+        fft[2:24] = low
+        fft[48:180] = mid
+        fft[260:640] = high
+        return fft
+
+    def test_missing_bass_can_collapse_bass_lane(self):
+        import numpy as np
+
+        worker = self._make_worker(np)
+        bars = worker._fft_to_bars(self._make_fft(np, low=0.0, mid=12.0, high=10.0))
+
+        bass_lane = sum(bars[:4]) / 4.0
+        vocal_lane = sum(bars[5:10]) / 5.0
+
+        assert bass_lane < vocal_lane * 0.5
+
+    def test_missing_mid_reduces_vocal_lane(self):
+        import numpy as np
+
+        worker = self._make_worker(np)
+        bars = worker._fft_to_bars(self._make_fft(np, low=10.0, mid=0.0, high=2.0))
+
+        bass_lane = sum(bars[:4]) / 4.0
+        vocal_lane = sum(bars[5:10]) / 5.0
+
+        assert vocal_lane < bass_lane * 0.65

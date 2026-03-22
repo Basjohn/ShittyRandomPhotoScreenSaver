@@ -4,6 +4,8 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 `widgets` settings structure (clock + weather) and that defaults and
 roundtrips behave as expected.
 """
+from pathlib import Path
+
 import pytest
 # Some CI environments install the wheel without sip stubs; guard the import.
 try:  # pragma: no cover - only for environments with sip installed separately
@@ -219,6 +221,15 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+
+def test_visualizer_bucket_toggles_use_standard_circle_checkbox_spacing():
+    src = Path(r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\ui\tabs\media\technical_controls.py").read_text(encoding="utf-8")
+    toggle_block_start = src.index("def _build_visibility_toggle(")
+    toggle_block_end = src.index("def _aligned_row_widget(", toggle_block_start)
+    toggle_block = src[toggle_block_start:toggle_block_end]
+    assert 'toggle.setProperty("circleIndicator", True)' in toggle_block
+    assert 'toggle.setProperty("tightSpacing", True)' not in toggle_block
+
     def test_visualizer_custom_preset_roundtrip(self, qt_app, settings_manager):
         """Custom visualizer config survives curated preset switches and restores UI state."""
 
@@ -269,6 +280,138 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_bubble_custom_snapshot_uses_live_ui_state_for_colors(self, qt_app, settings_manager):
+        """Leaving Bubble custom snapshots current swatches even before an explicit save."""
+
+        def _rgba_tuple(color: QColor) -> tuple[int, int, int, int]:
+            return color.red(), color.green(), color.blue(), color.alpha()
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            mode = "bubble"
+            tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+            slider = getattr(tab, "_bubble_preset_slider", None)
+            assert slider is not None
+            custom_index = slider.custom_index()
+
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+            spotify_vis.update({
+                "mode": mode,
+                "preset_bubble": custom_index,
+                "bubble_gradient_light": [20, 30, 40, 255],
+                "bubble_stream_reactivity": 0.2,
+            })
+            settings_manager.set("widgets", widgets_cfg)
+
+            tab._load_settings()
+            tab._save_settings = tab._save_settings_now
+
+            live_color = QColor(171, 122, 77, 240)
+            tab._bubble_gradient_light = live_color
+
+            slider.set_preset_index(0)
+            tab._on_visualizer_preset_changed(mode, 0)
+
+            cache = settings_manager.get("visualizer_custom_presets", {})
+            assert isinstance(cache, dict)
+            assert cache[mode]["bubble_gradient_light"] == list(_rgba_tuple(live_color))
+        finally:
+            tab.deleteLater()
+
+    def test_bubble_custom_snapshot_uses_live_ui_state_for_reactive_speed(self, qt_app, settings_manager):
+        """Leaving Bubble custom snapshots the current reactive-speed slider value."""
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            mode = "bubble"
+            tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+            slider = getattr(tab, "_bubble_preset_slider", None)
+            assert slider is not None
+            custom_index = slider.custom_index()
+
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+            spotify_vis.update({
+                "mode": mode,
+                "preset_bubble": custom_index,
+                "bubble_stream_reactivity": 0.15,
+            })
+            settings_manager.set("widgets", widgets_cfg)
+
+            tab._load_settings()
+            tab._save_settings = tab._save_settings_now
+
+            tab.bubble_stream_reactivity.setValue(95)
+
+            slider.set_preset_index(0)
+            tab._on_visualizer_preset_changed(mode, 0)
+
+            cache = settings_manager.get("visualizer_custom_presets", {})
+            assert isinstance(cache, dict)
+            assert cache[mode]["bubble_stream_reactivity"] == pytest.approx(0.95)
+        finally:
+            tab.deleteLater()
+
+    def test_bubble_stream_reactivity_load_clamps_to_200(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+            spotify_vis["bubble_stream_reactivity"] = 2.75
+            settings_manager.set("widgets", widgets_cfg)
+
+            tab._load_settings()
+
+            assert tab.bubble_stream_reactivity.maximum() == 200
+            assert tab.bubble_stream_reactivity.value() == 200
+            assert tab.bubble_stream_reactivity_label.text() == "200%"
+        finally:
+            tab.deleteLater()
+
+    def test_move_to_custom_preserves_current_visualizer_colors(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._load_settings()
+            tab._save_settings = tab._save_settings_now
+            mode = "bubble"
+            slider = tab._bubble_preset_slider
+            custom_index = slider.custom_index()
+
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+            spotify_vis.update({
+                "mode": mode,
+                "preset_bubble": 0,
+                "bubble_gradient_light": [10, 20, 30, 255],
+                "bubble_gradient_dark": [40, 50, 60, 255],
+                "bubble_outline_color": [70, 80, 90, 255],
+            })
+            settings_manager.set("widgets", widgets_cfg)
+            settings_manager.set("visualizer_custom_presets", {
+                mode: {
+                    "mode": mode,
+                    "bubble_gradient_light": [200, 1, 2, 255],
+                    "bubble_gradient_dark": [201, 3, 4, 255],
+                    "bubble_outline_color": [202, 5, 6, 255],
+                }
+            })
+
+            tab._load_settings()
+
+            assert [tab._bubble_gradient_light.red(), tab._bubble_gradient_light.green(), tab._bubble_gradient_light.blue()] == [10, 20, 30]
+
+            slider.set_preset_index(0)
+            slider._move_to_custom()
+
+            cache = settings_manager.get("visualizer_custom_presets", {})
+            assert cache[mode]["bubble_gradient_light"] == [10, 20, 30, 255]
+            assert cache[mode]["bubble_gradient_dark"] == [40, 50, 60, 255]
+            assert cache[mode]["bubble_outline_color"] == [70, 80, 90, 255]
+            assert [tab._bubble_gradient_light.red(), tab._bubble_gradient_light.green(), tab._bubble_gradient_light.blue()] == [10, 20, 30]
+        finally:
+            tab.deleteLater()
+
     def test_spinbox_stylesheet_attached(self, qt_app, settings_manager):
         """WidgetsTab stylesheet must keep the shared QSpinBox skin."""
 
@@ -316,6 +459,46 @@ class TestWidgetsTab:
                 cfg = reloaded._settings.get('widgets', {}).get('spotify_visualizer', {})
                 assert cfg.get('visualizers_enabled') is False
                 assert cfg.get('enabled') is False
+            finally:
+                reloaded.deleteLater()
+        finally:
+            pass
+
+    def test_visualizer_technical_bucket_visibility_roundtrip(self, qt_app, settings_manager):
+        """Technical subsection visibility toggles should persist per mode."""
+        from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._load_settings()
+            controls = get_per_mode_controls_for_mode(tab, "spectrum")
+            assert controls is not None
+
+            agc_toggle = controls.get("agc_visibility_toggle")
+            transient_toggle = controls.get("transient_visibility_toggle")
+            assert agc_toggle is not None
+            assert transient_toggle is not None
+
+            agc_toggle.setChecked(True)
+            transient_toggle.setChecked(False)
+            qt_app.processEvents()
+
+            assert tab.get_visualizer_tech_bucket_state("spectrum", "agc", False) is True
+            assert tab.get_visualizer_tech_bucket_state("spectrum", "transient", True) is False
+
+            tab.deleteLater()
+
+            reloaded = WidgetsTab(settings_manager)
+            try:
+                reloaded._load_settings()
+                reloaded_controls = get_per_mode_controls_for_mode(reloaded, "spectrum")
+                assert reloaded_controls is not None
+                reloaded_agc = reloaded_controls.get("agc_visibility_toggle")
+                reloaded_transient = reloaded_controls.get("transient_visibility_toggle")
+                assert reloaded_agc is not None
+                assert reloaded_transient is not None
+                assert reloaded_agc.isChecked() is True
+                assert reloaded_transient.isChecked() is False
             finally:
                 reloaded.deleteLater()
         finally:

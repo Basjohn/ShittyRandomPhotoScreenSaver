@@ -25,10 +25,17 @@ def get_uniform_names() -> list[str]:
 def upload_uniforms(gl, u: dict, s) -> bool:
     # Waveform data
     wf = s._waveform
-    wf_count = min(len(wf), 256) if wf else 0
+    if wf:
+        wf_count = min(
+            max(0, int(getattr(s, "_waveform_count", len(wf)) or 0)),
+            len(wf),
+            256,
+        )
+    else:
+        wf_count = 0
     _set1i(gl, u, "u_waveform_count", max(wf_count, 2))
     loc = u.get("u_waveform", -1)
-    if loc >= 0 and wf_count > 0:
+    if loc >= 0:
         wf_buf = np.zeros(256, dtype="float32")
         for i in range(wf_count):
             wf_buf[i] = float(wf[i])
@@ -37,12 +44,13 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     # Ghost waveform
     _set1f(gl, u, "u_osc_ghost_alpha", s._osc_ghost_alpha)
     loc = u.get("u_prev_waveform", -1)
-    if loc >= 0 and s._osc_ghost_alpha > 0.001:
+    if loc >= 0:
         prev_wf = s._prev_waveform
         prev_count = min(len(prev_wf), 256) if prev_wf else 0
         prev_buf = np.zeros(256, dtype="float32")
-        for i in range(prev_count):
-            prev_buf[i] = float(prev_wf[i])
+        if s._osc_ghost_alpha > 0.001:
+            for i in range(prev_count):
+                prev_buf[i] = float(prev_wf[i])
         gl.glUniform1fv(loc, 256, prev_buf)
 
     # Shared line/glow uniforms
@@ -51,7 +59,10 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     # Oscilloscope transient width mix: modulate sensitivity by bass transient
     _otw_mix = getattr(s, '_osc_transient_width_mix', 0.35)
     if _otw_mix > 0.001:
-        _osc_sens_mod = s._osc_line_amplitude * (1.0 + getattr(s, '_osc_smoothed_bass', 0.0) * _otw_mix)
+        kick_evt = getattr(s, '_line_kick_event_strength', 0.0)
+        snare_evt = getattr(s, '_line_snare_event_strength', 0.0)
+        beat_drive = max(getattr(s, '_osc_smoothed_bass', 0.0), kick_evt * 0.95 + snare_evt * 0.35)
+        _osc_sens_mod = s._osc_line_amplitude * (1.0 + beat_drive * _otw_mix)
         _set1f(gl, u, "u_sensitivity", _osc_sens_mod)
 
     # Energy bands (CPU-smoothed for anti-flicker)
@@ -89,4 +100,3 @@ def _upload_shared_line_glow(gl, u, s):
         ("u_line3_glow_color", s._osc_line3_glow_color),
     ):
         _set_color4(gl, u, uname, qc)
-

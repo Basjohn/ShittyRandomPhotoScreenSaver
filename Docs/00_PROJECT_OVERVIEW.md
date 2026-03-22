@@ -75,7 +75,7 @@ Key capabilities:
 
 | Target | Current Status | Notes |
 |--------|----------------|-------|
-| Steady 60 FPS on 1080p | ✅ | GL compositor warms programs per transition, fallback to 240 Hz default if refresh detection fails. |
+| Steady 60 FPS on 4k | ✅ | GL compositor warms programs per transition, fallback to 240 Hz default if refresh detection fails. |
 | Dual 4K stability | ✅ | Image pipeline prefetch/prescale via compute threads; DisplayWidget avoids synchronous repaints. |
 | Memory guard | ✅ | ImageCache bounded by item count + MB, GL overlays tear down cleanly, ResourceManager ensures deterministic cleanup. |
 | Logging | ✅ | Five rotating logs (`screensaver*.log`, `screensaver_perf.log`, `screensaver_spotify_vis.log`, etc.) with suppression/deduplication. |

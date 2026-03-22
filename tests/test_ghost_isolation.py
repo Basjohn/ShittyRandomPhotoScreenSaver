@@ -10,7 +10,14 @@ Validates that per-mode ghosting fields are strictly isolated:
 from __future__ import annotations
 
 import inspect
+import time
 from pathlib import Path
+from types import SimpleNamespace
+
+import numpy as np
+import pytest
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QColor
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -223,6 +230,219 @@ class TestRendererGhostIsolation:
             f"Blob renderer still reads global s._ghost_alpha: {global_alpha_refs}"
         )
 
+    def test_blob_renderer_prefers_blob_live_energy_channels(self):
+        from widgets.spotify_visualizer.renderers import blob as blob_renderer
+
+        class FakeGL:
+            def __init__(self):
+                self.floats = {}
+                self.ints = {}
+
+            def glUniform1f(self, loc, value):
+                self.floats[loc] = float(value)
+
+            def glUniform1i(self, loc, value):
+                self.ints[loc] = int(value)
+
+            def glUniform3f(self, loc, a, b, c):
+                self.floats[loc] = (float(a), float(b), float(c))
+
+            def glUniform4f(self, loc, a, b, c, d):
+                self.floats[loc] = (float(a), float(b), float(c), float(d))
+
+        class FakeColor:
+            def __init__(self, r=1.0, g=1.0, b=1.0, a=1.0):
+                self._rgba = (r, g, b, a)
+
+            def redF(self): return self._rgba[0]
+            def greenF(self): return self._rgba[1]
+            def blueF(self): return self._rgba[2]
+            def alphaF(self): return self._rgba[3]
+
+        gl = FakeGL()
+        uniforms = {
+            "u_playing": 1,
+            "u_ghost_alpha": 2,
+            "u_blob_color": 3,
+            "u_blob_glow_color": 4,
+            "u_blob_edge_color": 5,
+            "u_blob_pulse": 6,
+            "u_blob_width": 7,
+            "u_blob_size": 8,
+            "u_blob_glow_intensity": 9,
+            "u_blob_glow_reactivity": 10,
+            "u_blob_glow_max_size": 11,
+            "u_blob_reactive_glow": 12,
+            "u_blob_outline_color": 13,
+            "u_blob_smoothed_energy": 14,
+            "u_blob_peak_energy": 15,
+            "u_blob_peak_bass": 16,
+            "u_blob_peak_mid": 17,
+            "u_blob_peak_high": 18,
+            "u_blob_peak_overall": 19,
+            "u_blob_reactive_deformation": 20,
+            "u_blob_stage_gain": 21,
+            "u_blob_core_scale": 22,
+            "u_blob_core_floor_bias": 23,
+            "u_blob_stage_bias": 24,
+            "u_blob_stage_progress_override": 25,
+            "u_blob_constant_wobble": 26,
+            "u_blob_reactive_wobble": 27,
+            "u_blob_stretch_tendency": 28,
+            "u_blob_stretch_inner": 29,
+            "u_blob_stretch_outer": 30,
+            "u_overall_energy": 31,
+            "u_bass_energy": 32,
+            "u_mid_energy": 33,
+            "u_high_energy": 34,
+            "u_transient_bass": 35,
+            "u_transient_mid": 36,
+            "u_transient_high": 37,
+        }
+        state = SimpleNamespace(
+            _playing=True,
+            _blob_ghosting_enabled=True,
+            _blob_ghost_alpha=0.4,
+            _blob_color=FakeColor(),
+            _blob_glow_color=FakeColor(),
+            _blob_edge_color=FakeColor(),
+            _blob_pulse=1.0,
+            _blob_width=1.0,
+            _blob_size=1.0,
+            _blob_glow_intensity=0.5,
+            _blob_glow_reactivity=1.0,
+            _blob_glow_max_size=1.0,
+            _blob_reactive_glow=True,
+            _blob_outline_color=FakeColor(),
+            _blob_smoothed_energy=0.7,
+            _blob_peak_energy=0.9,
+            _blob_peak_bass=0.8,
+            _blob_peak_mid=0.6,
+            _blob_peak_high=0.5,
+            _blob_peak_overall=0.85,
+            _blob_reactive_deformation=1.0,
+            _blob_stage_gain=1.0,
+            _blob_core_scale=1.0,
+            _blob_core_floor_bias=0.35,
+            _blob_stage_bias=0.0,
+            _blob_stage_progress_filtered=(0.2, 0.3, 0.4),
+            _blob_stage_progress_ready=True,
+            _blob_constant_wobble=1.0,
+            _blob_reactive_wobble=1.0,
+            _blob_stretch_tendency=0.35,
+            _blob_stretch_inner=0.5,
+            _blob_stretch_outer=0.5,
+            _blob_live_overall_energy=1.1,
+            _blob_live_bass_energy=1.2,
+            _blob_live_mid_energy=0.9,
+            _blob_live_high_energy=0.4,
+            _energy_bands=SimpleNamespace(overall=0.1, bass=0.2, mid=0.3, high=0.4),
+            _transient_energy=SimpleNamespace(bass_transient=0.0, mid_transient=0.0, high_transient=0.0),
+        )
+
+        assert blob_renderer.upload_uniforms(gl, uniforms, state) is True
+        assert gl.floats[31] == pytest.approx(1.1)
+        assert gl.floats[32] == pytest.approx(1.2)
+        assert gl.floats[33] == pytest.approx(0.9)
+        assert gl.floats[34] == pytest.approx(0.4)
+
+    @pytest.mark.qt
+    def test_blob_set_state_uses_current_event_snapshot_consistently(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = 'blob'
+        overlay._last_time_ts = time.time() - 0.016
+        overlay._blob_kick_event_strength = 0.0
+        overlay._blob_snare_event_strength = 0.0
+
+        calls = []
+        original = overlay._compute_blob_live_bands
+
+        def _spy(energy_bands):
+            calls.append(
+                (
+                    float(getattr(overlay, "_blob_kick_event_strength", 0.0)),
+                    float(getattr(overlay, "_blob_snare_event_strength", 0.0)),
+                )
+            )
+            return original(energy_bands)
+
+        overlay._compute_blob_live_bands = _spy
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=SimpleNamespace(bass=0.2, mid=0.3, high=0.4, overall=0.25),
+            blob_kick_event_strength=1.0,
+            blob_snare_event_strength=0.5,
+        )
+
+        assert calls
+        first_kick, first_snare = calls[0]
+        assert first_kick > 0.0
+        assert first_snare > 0.0
+        assert all(kick == pytest.approx(first_kick) for kick, _ in calls)
+        assert all(snare == pytest.approx(first_snare) for _, snare in calls)
+
+    @pytest.mark.qt
+    def test_blob_scheduler_event_envelope_persists_live_blob_between_frames(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = 'blob'
+        energy = SimpleNamespace(bass=0.2, mid=0.15, high=0.1, overall=0.18)
+
+        overlay._last_time_ts = time.time() - 0.016
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=energy,
+            blob_kick_event_strength=1.0,
+            blob_snare_event_strength=0.6,
+        )
+        first_bass = overlay._blob_live_bass_energy
+        first_mid = overlay._blob_live_mid_energy
+
+        overlay._last_time_ts = time.time() - 0.016
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.0],
+            bar_count=1,
+            segments=1,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode='blob',
+            energy_bands=energy,
+            blob_kick_event_strength=0.0,
+            blob_snare_event_strength=0.0,
+        )
+
+        assert overlay._blob_kick_event_strength > 0.0
+        assert overlay._blob_snare_event_strength > 0.0
+        assert overlay._blob_live_bass_energy > float(energy.bass)
+        assert overlay._blob_live_mid_energy > float(energy.mid)
+        assert overlay._blob_live_bass_energy < first_bass
+        assert overlay._blob_live_mid_energy < first_mid
+
     def test_osc_renderer_reads_osc_ghost(self):
         src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "oscilloscope.py").read_text(encoding="utf-8")
         assert "_osc_ghost_alpha" in src, (
@@ -283,6 +503,211 @@ class TestRendererGhostIsolation:
             "bubble.frag must declare uniform float u_ghost_alpha"
         )
 
+    def test_osc_renderer_uploads_zero_waveforms_after_reset(self):
+        from widgets.spotify_visualizer.renderers import oscilloscope
+
+        class FakeGL:
+            def __init__(self):
+                self.uniforms = {}
+
+            def glUniform1fv(self, loc, count, values):
+                self.uniforms[loc] = np.array(values, copy=True)
+
+            def glUniform1f(self, loc, value):
+                self.uniforms[loc] = float(value)
+
+            def glUniform1i(self, loc, value):
+                self.uniforms[loc] = int(value)
+
+            def glUniform4f(self, loc, a, b, c, d):
+                self.uniforms[loc] = (float(a), float(b), float(c), float(d))
+
+        class FakeColor:
+            def __init__(self, r=0.0, g=0.0, b=0.0, a=1.0):
+                self._rgba = (r, g, b, a)
+
+            def redF(self):
+                return self._rgba[0]
+
+            def greenF(self):
+                return self._rgba[1]
+
+            def blueF(self):
+                return self._rgba[2]
+
+            def alphaF(self):
+                return self._rgba[3]
+
+        gl = FakeGL()
+        white = FakeColor(1.0, 1.0, 1.0, 1.0)
+        clear = FakeColor(0.0, 0.0, 0.0, 1.0)
+        uniforms = {
+            "u_waveform": 1,
+            "u_prev_waveform": 2,
+            "u_waveform_count": 3,
+            "u_osc_ghost_alpha": 4,
+            "u_glow_enabled": 5,
+            "u_glow_intensity": 6,
+            "u_glow_size": 7,
+            "u_glow_reactivity": 8,
+            "u_glow_color": 9,
+            "u_reactive_glow": 10,
+            "u_sensitivity": 11,
+            "u_smoothing": 12,
+            "u_line_color": 13,
+            "u_line_count": 14,
+            "u_line2_color": 15,
+            "u_line2_glow_color": 16,
+            "u_line3_color": 17,
+            "u_line3_glow_color": 18,
+            "u_osc_speed": 19,
+            "u_osc_line_dim": 20,
+            "u_osc_line_offset_bias": 21,
+            "u_osc_vertical_shift": 22,
+            "u_overall_energy": 23,
+            "u_bass_energy": 24,
+            "u_mid_energy": 25,
+            "u_high_energy": 26,
+        }
+        state = SimpleNamespace(
+            _waveform=[],
+            _waveform_count=0,
+            _prev_waveform=[],
+            _osc_ghost_alpha=0.0,
+            _glow_enabled=False,
+            _glow_intensity=0.0,
+            _glow_size=1.0,
+            _glow_reactivity=1.0,
+            _glow_color=clear,
+            _reactive_glow=False,
+            _osc_line_amplitude=1.0,
+            _osc_smoothing=0.5,
+            _line_color=white,
+            _osc_line_count=1,
+            _osc_line2_color=white,
+            _osc_line2_glow_color=white,
+            _osc_line3_color=white,
+            _osc_line3_glow_color=white,
+            _osc_smoothed_bass=0.0,
+            _osc_smoothed_mid=0.0,
+            _osc_smoothed_high=0.0,
+            _osc_transient_width_mix=0.35,
+            _line_kick_event_strength=0.0,
+            _line_snare_event_strength=0.0,
+            _energy_bands=SimpleNamespace(overall=0.0),
+            _osc_speed=1.0,
+            _osc_line_dim=False,
+            _osc_line_offset_bias=0.0,
+            _osc_vertical_shift=0,
+        )
+
+        assert oscilloscope.upload_uniforms(gl, uniforms, state) is True
+        assert np.count_nonzero(gl.uniforms[1]) == 0
+        assert np.count_nonzero(gl.uniforms[2]) == 0
+        assert gl.uniforms[3] == 2
+
+    def test_osc_renderer_respects_waveform_count_for_padded_buffers(self):
+        from widgets.spotify_visualizer.renderers import oscilloscope
+
+        class FakeGL:
+            def __init__(self):
+                self.uniforms = {}
+
+            def glUniform1fv(self, loc, count, values):
+                self.uniforms[loc] = np.array(values, copy=True)
+
+            def glUniform1f(self, loc, value):
+                self.uniforms[loc] = float(value)
+
+            def glUniform1i(self, loc, value):
+                self.uniforms[loc] = int(value)
+
+            def glUniform4f(self, loc, a, b, c, d):
+                self.uniforms[loc] = (float(a), float(b), float(c), float(d))
+
+        class FakeColor:
+            def __init__(self, r=0.0, g=0.0, b=0.0, a=1.0):
+                self._rgba = (r, g, b, a)
+
+            def redF(self):
+                return self._rgba[0]
+
+            def greenF(self):
+                return self._rgba[1]
+
+            def blueF(self):
+                return self._rgba[2]
+
+            def alphaF(self):
+                return self._rgba[3]
+
+        gl = FakeGL()
+        white = FakeColor(1.0, 1.0, 1.0, 1.0)
+        clear = FakeColor(0.0, 0.0, 0.0, 1.0)
+        uniforms = {
+            "u_waveform": 1,
+            "u_prev_waveform": 2,
+            "u_waveform_count": 3,
+            "u_osc_ghost_alpha": 4,
+            "u_glow_enabled": 5,
+            "u_glow_intensity": 6,
+            "u_glow_size": 7,
+            "u_glow_reactivity": 8,
+            "u_glow_color": 9,
+            "u_reactive_glow": 10,
+            "u_sensitivity": 11,
+            "u_smoothing": 12,
+            "u_line_color": 13,
+            "u_line_count": 14,
+            "u_line2_color": 15,
+            "u_line2_glow_color": 16,
+            "u_line3_color": 17,
+            "u_line3_glow_color": 18,
+            "u_osc_speed": 19,
+            "u_osc_line_dim": 20,
+            "u_osc_line_offset_bias": 21,
+            "u_osc_vertical_shift": 22,
+            "u_overall_energy": 23,
+            "u_bass_energy": 24,
+            "u_mid_energy": 25,
+            "u_high_energy": 26,
+        }
+        padded_waveform = [0.25] * 128 + [0.0] * 128
+        state = SimpleNamespace(
+            _waveform=padded_waveform,
+            _waveform_count=128,
+            _prev_waveform=[],
+            _osc_ghost_alpha=0.0,
+            _glow_enabled=False,
+            _glow_intensity=0.0,
+            _glow_size=1.0,
+            _glow_reactivity=1.0,
+            _glow_color=clear,
+            _reactive_glow=False,
+            _osc_line_amplitude=1.0,
+            _osc_smoothing=0.5,
+            _line_color=white,
+            _osc_line_count=1,
+            _osc_line2_color=white,
+            _osc_line2_glow_color=white,
+            _osc_line3_color=white,
+            _osc_line3_glow_color=white,
+            _osc_smoothed_bass=0.0,
+            _osc_smoothed_mid=0.0,
+            _osc_smoothed_high=0.0,
+            _osc_transient_width_mix=0.35,
+            _line_kick_event_strength=0.0,
+            _line_snare_event_strength=0.0,
+            _energy_bands=SimpleNamespace(overall=0.0),
+            _osc_speed=1.0,
+            _osc_line_dim=False,
+            _osc_line_offset_bias=0.0,
+            _osc_vertical_shift=0,
+        )
+
+        assert oscilloscope.upload_uniforms(gl, uniforms, state) is True
+        assert gl.uniforms[3] == 128
+
 
 # ===========================================================================
 # 5. Overlay blob peak gate uses blob-specific, not global
@@ -306,6 +731,41 @@ class TestOverlayBlobPeakGate:
         assert "self._blob_ghost_decay" in src and "_peak_decay_per_sec" in src, (
             "Blob peak decay must be routed from _blob_ghost_decay"
         )
+
+    def test_blob_ghost_min_offset_stays_small(self):
+        from widgets.spotify_visualizer.blob_math import compute_blob_ghost_min_offset
+
+        offsets = [
+            compute_blob_ghost_min_offset(0.0),
+            compute_blob_ghost_min_offset(0.5),
+            compute_blob_ghost_min_offset(1.0),
+        ]
+        assert offsets[0] >= 0.015
+        assert offsets[1] > offsets[0]
+        assert offsets[2] <= 0.035
+
+    def test_blob_overlay_uses_peak_hold_instead_of_history_snapshot_path(self):
+        src = (ROOT / "widgets" / "spotify_bars_gl_overlay.py").read_text(encoding="utf-8")
+        assert "_blob_peak_hold_remaining = 0.15" in src
+        assert "_blob_ghost_history" not in src
+
+    def test_blob_overlay_tracks_live_blob_source_for_peak_memory(self):
+        src = (ROOT / "widgets" / "spotify_bars_gl_overlay.py").read_text(encoding="utf-8")
+        assert "live_bass, live_mid, live_high, raw_e = self._compute_blob_live_bands(energy_bands)" in src
+        assert "self._blob_live_bass_energy = live_bass" in src
+        assert "self._blob_peak_bass = max(self._blob_peak_bass, live_bass + min_offset * 0.8)" in src
+
+    def test_blob_shader_tracks_peak_phase_uniforms(self):
+        src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "blob.frag").read_text(encoding="utf-8")
+        assert "u_blob_peak_stage_progress_override" not in src
+        assert "u_blob_peak_time" not in src
+        assert "float smoothed_energy" not in src
+        assert "u_blob_smoothed_energy);" in src
+
+    def test_blob_overlay_snapshots_peak_stage_progress(self):
+        src = (ROOT / "widgets" / "spotify_bars_gl_overlay.py").read_text(encoding="utf-8")
+        assert "_blob_peak_snapshot_pending" not in src
+        assert "_blob_peak_stage_progress_filtered" not in src
 
 
 # ===========================================================================

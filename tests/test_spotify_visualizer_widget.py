@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import inspect
 import time
 from typing import Callable
 
 import pytest
+from types import SimpleNamespace
 
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer import mode_transition
+from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer_widget import (
     SpotifyVisualizerAudioWorker,
     SpotifyVisualizerWidget,
@@ -166,6 +169,7 @@ class _FakeEngine:
         self.reset_calls += 1
         self._generation_id += 1
         self._latest_generation_with_frame = self._generation_id - 1
+        self._latest_generation_with_waveform = self._generation_id - 1
         self._smoothed_bars = [0.0] * self._bar_count
 
     def cancel_pending_compute_tasks(self) -> None:
@@ -183,8 +187,28 @@ class _FakeEngine:
     def get_latest_generation_with_frame(self) -> int:
         return self._latest_generation_with_frame
 
+    def get_latest_generation_with_waveform(self) -> int:
+        return getattr(self, "_latest_generation_with_waveform", self._latest_generation_with_frame)
+
     def get_smoothed_bars(self) -> list[float]:
         return list(self._smoothed_bars)
+
+    def get_waveform(self) -> list[float]:
+        return []
+
+    def get_energy_bands(self):
+        return SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+
+    def get_pre_agc_energy_bands(self):
+        return self.get_energy_bands()
+
+    def get_transient_energy_bands(self):
+        return SimpleNamespace(
+            bass_transient=0.0,
+            mid_transient=0.0,
+            high_transient=0.0,
+            overall_transient=0.0,
+        )
 
     def tick(self):
         return list(self._smoothed_bars)
@@ -192,6 +216,10 @@ class _FakeEngine:
     def publish_frame(self, bars: list[float]) -> None:
         self._smoothed_bars = list(bars)
         self._latest_generation_with_frame = self._generation_id
+        self._latest_generation_with_waveform = self._generation_id
+
+    def publish_waveform_only(self) -> None:
+        self._latest_generation_with_waveform = self._generation_id
 
 
 class _OverlayStub:
@@ -214,6 +242,99 @@ class _FakeDisplayParent(QWidget):
 
     def reset_pushes(self) -> None:
         self.frames.clear()
+
+
+@pytest.mark.qt
+def test_mode_switch_requests_overlay_reset_for_new_mode(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    parent._spotify_bars_overlay.reset_requests.clear()
+    widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
+
+    assert "oscilloscope" in parent._spotify_bars_overlay.reset_requests
+
+
+@pytest.mark.qt
+def test_mode_switch_waits_for_fresh_engine_generation(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget._engine = fake_engine
+    widget.start()
+    qt_app.processEvents()
+    widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
+
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert widget._pending_engine_generation == fake_engine.get_generation_id()
+
+    parent.reset_pushes()
+    widget._on_tick()
+
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert parent.frames == []
+
+    fake_engine.publish_frame([0.75] * widget._bar_count)
+    widget._on_tick()
+
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert parent.frames
+
+
+@pytest.mark.qt
+def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget._engine = fake_engine
+    widget.start()
+    qt_app.processEvents()
+    widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
+
+    parent.reset_pushes()
+    fake_engine._latest_generation_with_frame = fake_engine.get_generation_id()
+    widget._on_tick()
+
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert parent.frames == []
+
+    fake_engine.publish_waveform_only()
+    widget._on_tick()
+
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert parent.frames
 
 
 @pytest.mark.qt
@@ -304,6 +425,11 @@ def test_mode_cycle_resets_engine_smoothing(qt_app, qtbot, monkeypatch):
     assert fake_engine.reset_calls >= 1
 
 
+def test_mode_cycle_clears_overlay_during_crossfade():
+    src = inspect.getsource(mode_transition.mode_transition_fade_factor)
+    assert "clear_overlay=True" in src
+
+
 @pytest.mark.qt
 def test_spotify_visualizer_widgets_share_audio_engine(qt_app, qtbot):
     widget1 = SpotifyVisualizerWidget(parent=None, bar_count=16)
@@ -358,6 +484,35 @@ def test_compute_bars_returns_list_or_none(np_module):
 
 
 @pytest.mark.qt
+def test_visualizer_widget_initializes_fresh_generation_state(qt_app, qtbot):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
+    qtbot.addWidget(widget)
+
+    assert widget._waiting_for_fresh_frame is False
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._pending_engine_generation == -1
+    assert widget._last_engine_generation_seen == -1
+
+
+@pytest.mark.qt
+def test_tick_pipeline_backfills_missing_fresh_generation_state(qt_app, qtbot):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
+    qtbot.addWidget(widget)
+
+    delattr(widget, "_waiting_for_fresh_frame")
+    delattr(widget, "_waiting_for_fresh_engine_frame")
+    delattr(widget, "_pending_engine_generation")
+    delattr(widget, "_last_engine_generation_seen")
+
+    tick_pipeline._ensure_fresh_generation_state(widget)
+
+    assert widget._waiting_for_fresh_frame is False
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._pending_engine_generation == -1
+    assert widget._last_engine_generation_seen == -1
+
+
+@pytest.mark.qt
 def test_mode_cycle_replays_cached_config(qt_app, qtbot, monkeypatch):
     """Double-click mode cycle should replay cached kwargs for parity with settings apply."""
 
@@ -367,10 +522,11 @@ def test_mode_cycle_replays_cached_config(qt_app, qtbot, monkeypatch):
     widget._cached_vis_kwargs = {"sine_travel_line2": 0.42}  # type: ignore[attr-defined]
 
     original_reset = SpotifyVisualizerWidget._reset_visualizer_state
-    replay_flags: dict[str, bool | None] = {"replay": None}
+    replay_flags: dict[str, bool | None] = {"replay": None, "clear_overlay": None}
 
     def _patched_reset(self, *, clear_overlay: bool = False, replay_cached: bool = False):
         replay_flags["replay"] = replay_cached
+        replay_flags["clear_overlay"] = clear_overlay
         return original_reset(self, clear_overlay=clear_overlay, replay_cached=replay_cached)
 
     monkeypatch.setattr(SpotifyVisualizerWidget, "_reset_visualizer_state", _patched_reset)
@@ -383,6 +539,9 @@ def test_mode_cycle_replays_cached_config(qt_app, qtbot, monkeypatch):
     assert (
         replay_flags["replay"] is True
     ), "Mode cycle should cold-reset and replay cached kwargs for reactivity parity"
+    assert (
+        replay_flags["clear_overlay"] is False
+    ), "Mode cycle should not destroy the overlay mid-transition and trigger extra resets"
 
 
 @pytest.mark.qt
@@ -409,6 +568,43 @@ def test_mode_transition_reset_preserves_timestamp(qt_app, qtbot, monkeypatch):
     assert applied["called"] is True
     assert widget._mode_transition_phase == 1
     assert widget._mode_transition_ts == pytest.approx(123.456)
+
+
+@pytest.mark.qt
+def test_apply_vis_mode_config_same_mode_skips_cold_reset(qt_app, qtbot, monkeypatch):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    qtbot.addWidget(widget)
+
+    widget._vis_mode = VisualizerMode.SPECTRUM
+
+    reset_calls = {"count": 0}
+
+    def _patched_reset(*args, **kwargs):
+        reset_calls["count"] += 1
+
+    monkeypatch.setattr(widget, "_reset_visualizer_state", _patched_reset)
+
+    widget.apply_vis_mode_config("spectrum", spectrum_single_piece=True)
+
+    assert reset_calls["count"] == 0
+
+
+@pytest.mark.qt
+def test_set_visualization_mode_does_not_request_overlay_reset_directly(qt_app, qtbot, monkeypatch):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    qtbot.addWidget(widget)
+
+    reset_requests = {"count": 0}
+
+    def _patched_request_overlay_mode_reset(*args, **kwargs):
+        reset_requests["count"] += 1
+
+    monkeypatch.setattr(widget, "_request_overlay_mode_reset", _patched_request_overlay_mode_reset)
+    monkeypatch.setattr(widget, "_prepare_engine_for_mode_reset", lambda: None)
+
+    widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
+
+    assert reset_requests["count"] == 0
 
 
 @pytest.mark.qt
@@ -442,8 +638,10 @@ def test_mode_cycle_without_transitions_behaves_like_cold_start(qt_app, qtbot, m
     assert widget._mode_transition_phase == 3
     assert fade == pytest.approx(0.0)
     assert widget._mode_transition_ts == pytest.approx(now)
-    assert widget._display_bars == [0.0] * 8
-    assert widget._target_bars == [0.0] * 8
+    assert len(widget._display_bars) == widget._bar_count
+    assert len(widget._target_bars) == widget._bar_count
+    assert all(v == 0.0 for v in widget._display_bars)
+    assert all(v == 0.0 for v in widget._target_bars)
     assert widget._last_smooth_ts == pytest.approx(0.0)
 
 

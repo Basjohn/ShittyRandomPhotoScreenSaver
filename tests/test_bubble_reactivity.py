@@ -11,6 +11,9 @@ All tests use synthetic energy dicts fed into BubbleSimulation.tick().
 """
 from __future__ import annotations
 
+import copy
+import random
+
 from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
 
 
@@ -318,4 +321,69 @@ class TestSmallBubblePromotion:
         remaining = sum(1 for b in sim._bubbles if b.promoted)
         assert remaining == 0, (
             f"Promotion should have expired but {remaining} bubbles still promoted"
+        )
+
+
+# ---------------------------------------------------------------------------
+# 6. Stream speed reactivity
+# ---------------------------------------------------------------------------
+
+class TestStreamSpeedReactivity:
+    def test_reactivity_increases_bubble_displacement(self):
+        seed = 1337
+        dt = 1 / 60
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+        vocal = {
+            "bass": 0.12,
+            "mid": 0.82,
+            "high": 0.68,
+            "overall": 0.46,
+            "smooth_mid": 0.82,
+            "smooth_high": 0.68,
+        }
+
+        base_settings = _default_settings(
+            bubble_stream_constant_speed=0.18,
+            bubble_stream_speed_cap=1.9,
+        )
+        high_settings = _default_settings(
+            bubble_stream_constant_speed=0.18,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=1.0,
+        )
+        low_settings = _default_settings(
+            bubble_stream_constant_speed=0.18,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=0.0,
+        )
+
+        random.seed(seed)
+        sim_low = BubbleSimulation()
+        _warm_up(sim_low, base_settings, frames=60)
+
+        random.seed(seed)
+        sim_high = BubbleSimulation()
+        _warm_up(sim_high, base_settings, frames=60)
+
+        sim_high._bubbles = copy.deepcopy(sim_low._bubbles)
+
+        low_before = [b.y for b in sim_low._bubbles if not b.exiting]
+        high_before = [b.y for b in sim_high._bubbles if not b.exiting]
+
+        for _ in range(12):
+            sim_low.tick(dt, quiet, low_settings)
+            sim_high.tick(dt, vocal, high_settings)
+
+        low_after = [b.y for b in sim_low._bubbles if not b.exiting]
+        high_after = [b.y for b in sim_high._bubbles if not b.exiting]
+
+        low_displacement = sum(abs(a - b) for a, b in zip(low_after, low_before))
+        high_displacement = sum(abs(a - b) for a, b in zip(high_after, high_before))
+
+        assert sim_high._smoothed_speed_energy > sim_low._smoothed_speed_energy + 0.05, (
+            "High stream reactivity should build more speed energy than the low-reactivity case"
+        )
+        assert high_displacement > low_displacement * 1.35, (
+            f"High-reactivity stream displacement {high_displacement:.4f} should exceed "
+            f"low-reactivity displacement {low_displacement:.4f}"
         )

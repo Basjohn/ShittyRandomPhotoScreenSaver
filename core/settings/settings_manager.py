@@ -922,6 +922,7 @@ class SettingsManager(QObject):
             # Some sections (widgets, transitions) are stored as nested dicts,
             # while others use flat dot-notation keys for QSettings compatibility
             defaults = get_default_settings()
+            self._apply_profile_overrides(defaults)
             
             # Sections that should be stored as nested dicts (not flattened)
             nested_sections = {'widgets', 'transitions'}

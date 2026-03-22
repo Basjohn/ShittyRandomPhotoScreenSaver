@@ -1282,8 +1282,9 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.bubble_stream_speed_cap_label.setText(f"{v}%")
     if hasattr(tab, 'bubble_stream_reactivity'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_stream_reactivity', 0.5) * 100)
-        tab.bubble_stream_reactivity.setValue(max(0, min(125, v)))
-        tab.bubble_stream_reactivity_label.setText(f"{v}%")
+        clamped_v = max(0, min(200, v))
+        tab.bubble_stream_reactivity.setValue(clamped_v)
+        tab.bubble_stream_reactivity_label.setText(f"{clamped_v}%")
     if hasattr(tab, 'bubble_rotation_amount'):
         v = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bubble_rotation_amount', 0.5) * 100)
         tab.bubble_rotation_amount.setValue(max(0, min(100, v)))

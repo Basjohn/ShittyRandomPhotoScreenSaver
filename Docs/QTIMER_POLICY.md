@@ -34,6 +34,7 @@ All background/async work **must** go through `core/threading/manager.py`:
 
 ## Rules
 
+0. WHENEVER POSSIBLE USE LOCKFREE SAFE THREADING THROUGH THREADMANAGER. SPSC QUEUES or Atomics. Rlock/Mutex avoided.
 1. **Never** use `QTimer` for background work — use `ThreadManager.submit_io_task()` or `submit_compute_task()`
 2. **Never** use raw `threading.Thread()` or `ThreadPoolExecutor()` for business logic
 3. `QTimer.singleShot(0, fn)` is acceptable for deferring UI work to the next event loop tick

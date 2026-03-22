@@ -39,7 +39,7 @@
         "sine_glow_intensity": 0.4,
         "sine_glow_reactivity": 1.6,
         "sine_glow_size": 1.0,
-        "sine_heartbeat": 0.0,
+        "sine_heartbeat": 0.16,
         "sine_line1_color": [
           255,
           255,
@@ -82,12 +82,12 @@
         "sine_line_count": 3,
         "sine_line_dim": false,
         "sine_line_offset_bias": 0.0,
-        "sine_micro_wobble": 0.72,
+        "sine_micro_wobble": 0.42,
         "sine_rainbow_enabled": true,
         "sine_rainbow_speed": 0.25,
         "sine_reactive_glow": true,
-        "sine_sensitivity": 0.45,
-        "sine_speed": 0.15,
+        "sine_sensitivity": 0.58,
+        "sine_speed": 0.12,
         "sine_travel_line2": 0,
         "sine_travel_line3": 0,
         "sine_vertical_shift": 35,
@@ -97,7 +97,7 @@
         "sine_wave_bar_count": 40,
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
-        "sine_wave_effect": 0.94,
+        "sine_wave_effect": 0.72,
         "sine_wave_energy_boost": 0.85,
         "sine_wave_growth": 5.0,
         "sine_wave_input_gain": 0.9,
@@ -108,10 +108,10 @@
         "sine_wave_sensitivity": 0.32,
         "sine_wave_transient_clamp": 1.5,
         "sine_wave_transient_pulse_gain": 1.0,
-        "sine_wave_transient_width_mix": 0.4,
+        "sine_wave_transient_width_mix": 0.68,
         "sine_wave_travel": 0,
         "sine_wave_use_raw_energy": false,
-        "sine_width_reaction": 0.0
+        "sine_width_reaction": 0.28
       }
     }
   },
