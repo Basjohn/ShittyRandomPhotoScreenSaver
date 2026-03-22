@@ -5,15 +5,13 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QSlider, QWidget, QToolButton, QCheckBox,
+    QSlider, QWidget, QCheckBox,
 )
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.technical_controls import build_per_mode_technical_group
+from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
 from ui.tabs.shared_styles import (
-    ADV_HELPER_LABEL_STYLE,
-    add_swatch_label,
     add_aligned_row,
     add_aligned_row_widget,
 )
@@ -26,90 +24,21 @@ if TYPE_CHECKING:
 def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Bubble visualizer settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
-    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
-    tab._bubble_settings_container = QWidget()
-    layout = QVBoxLayout(tab._bubble_settings_container)
-    layout.setContentsMargins(0, 0, 0, 0)
-    layout.setSpacing(12)
-
-    # --- Preset slider ---
-    tab._bubble_preset_slider = VisualizerPresetSlider("bubble")
-    tab._bubble_preset_slider.preset_changed.connect(
-        lambda idx: tab._on_visualizer_preset_changed("bubble", idx)
+    scaffold = build_mode_scaffold(
+        tab,
+        parent_layout,
+        mode_key="bubble",
+        settings_container_attr="_bubble_settings_container",
+        preset_slider_attr="_bubble_preset_slider",
+        normal_attr="_bubble_normal",
+        advanced_host_attr="_bubble_advanced_host",
+        advanced_toggle_attr="_bubble_adv_toggle",
+        advanced_helper_attr="_bubble_adv_helper",
+        advanced_attr="_bubble_advanced",
     )
-    layout.addWidget(tab._bubble_preset_slider)
-
-    tab._bubble_normal = QWidget()
-    _normal_layout = QVBoxLayout(tab._bubble_normal)
-    _normal_layout.setContentsMargins(0, 0, 0, 0)
-    _normal_layout.setSpacing(12)
-    layout.addWidget(tab._bubble_normal)
-
-    tab._bubble_advanced_host = QWidget()
-    _adv_host = QVBoxLayout(tab._bubble_advanced_host)
-    _adv_host.setContentsMargins(0, 0, 0, 12)
-    _adv_host.setSpacing(12)
-    layout.addWidget(tab._bubble_advanced_host)
-
-    _adv_toggle_row = QHBoxLayout()
-    _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
-    _adv_toggle_row.setSpacing(8)
-    tab._bubble_adv_toggle = QToolButton()
-    tab._bubble_adv_toggle.setText("Advanced")
-    tab._bubble_adv_toggle.setCheckable(True)
-    _bubble_adv_default = False
-    getter = getattr(tab, "get_visualizer_adv_state", None)
-    if callable(getter):
-        try:
-            _bubble_adv_default = bool(getter("bubble"))
-        except Exception:
-            _bubble_adv_default = False
-    tab._bubble_adv_toggle.setChecked(_bubble_adv_default)
-    tab._bubble_adv_toggle.setArrowType(Qt.DownArrow)
-    tab._bubble_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-    tab._bubble_adv_toggle.setAutoRaise(True)
-    _adv_toggle_row.addWidget(tab._bubble_adv_toggle)
-    _adv_toggle_row.addStretch()
-    _adv_host.addLayout(_adv_toggle_row)
-
-    tab._bubble_adv_helper = QLabel("Advanced sliders still apply when hidden.")
-    tab._bubble_adv_helper.setProperty("class", "adv-helper")
-    tab._bubble_adv_helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
-    _adv_host.addWidget(tab._bubble_adv_helper)
-
-    tab._bubble_advanced = QWidget()
-    _adv_layout = QVBoxLayout(tab._bubble_advanced)
-    _adv_layout.setContentsMargins(0, 0, 0, 0)
-    _adv_layout.setSpacing(12)
-    _adv_host.addWidget(tab._bubble_advanced)
-
-    tab._bubble_preset_slider.set_advanced_container(tab._bubble_advanced_host)
-
-    def _apply_bubble_adv_toggle_state(checked: bool) -> None:
-        tab._bubble_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        tab._bubble_advanced.setVisible(checked)
-        tab._bubble_adv_helper.setVisible(not checked)
-        setter = getattr(tab, "set_visualizer_adv_state", None)
-        if callable(setter):
-            try:
-                setter("bubble", checked)
-            except Exception:
-                pass
-
-    tab._bubble_adv_toggle.toggled.connect(_apply_bubble_adv_toggle_state)
-    _apply_bubble_adv_toggle_state(tab._bubble_adv_toggle.isChecked())
-
-    def _handle_bubble_preset_adv(is_custom: bool) -> None:
-        tab._bubble_normal.setVisible(is_custom)
-        tab._bubble_advanced_host.setVisible(is_custom)
-
-    tab._bubble_preset_slider.advanced_toggled.connect(_handle_bubble_preset_adv)
-    _handle_bubble_preset_adv(True)
-
-    # Technical bucket (after Advanced)
-    _bubble_tech_host = build_per_mode_technical_group(tab, layout, "bubble")
-    tab._bubble_preset_slider.set_technical_container(_bubble_tech_host)
+    _normal_layout = scaffold.normal_layout
+    _adv_layout = scaffold.advanced_layout
 
     LABEL_WIDTH = 150
 
@@ -137,16 +66,11 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         return content
 
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 8, 0, 8)
-        row_layout.setSpacing(12)
-        add_swatch_label(row_layout, label_text, LABEL_WIDTH)
-        content = QHBoxLayout()
-        content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(12)
-        row_layout.addLayout(content, 1)
-        parent_layout.addWidget(row_widget)
+        _, content, _ = add_builder_swatch_row(
+            parent_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+        )
         return content
 
     # ── Audio Reactivity ──────────────────────────────────────────────
@@ -676,4 +600,3 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_ghost_enabled.stateChanged.connect(_update_bubble_ghost_vis)
     _update_bubble_ghost_vis()
 
-    parent_layout.addWidget(tab._bubble_settings_container)

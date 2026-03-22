@@ -6,15 +6,13 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QCheckBox, QSlider, QWidget,
-    QSpacerItem, QSizePolicy, QToolButton,
+    QSpacerItem, QSizePolicy,
 )
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.technical_controls import build_per_mode_technical_group
+from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
 from ui.tabs.shared_styles import (
-    ADV_HELPER_LABEL_STYLE,
-    add_swatch_label,
     add_aligned_row_widget as shared_add_aligned_row_widget,
 )
 
@@ -25,29 +23,25 @@ if TYPE_CHECKING:
 def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Blob settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
-    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
     LABEL_WIDTH = 140
     tab._blob_label_width = LABEL_WIDTH
 
-    tab._blob_settings_container = QWidget()
-    blob_layout = QVBoxLayout(tab._blob_settings_container)
-    blob_layout.setContentsMargins(0, 0, 0, 0)
-    blob_layout.setSpacing(12)
-
-    # --- Preset slider ---
-    tab._blob_preset_slider = VisualizerPresetSlider("blob")
-    tab._blob_preset_slider.preset_changed.connect(
-        lambda idx: tab._on_visualizer_preset_changed("blob", idx)
+    scaffold = build_mode_scaffold(
+        tab,
+        parent_layout,
+        mode_key="blob",
+        settings_container_attr="_blob_settings_container",
+        preset_slider_attr="_blob_preset_slider",
+        normal_attr="_blob_normal",
+        advanced_host_attr="_blob_advanced_host",
+        advanced_toggle_attr="_blob_adv_toggle",
+        advanced_helper_attr="_blob_adv_helper",
+        advanced_attr="_blob_advanced",
     )
-    blob_layout.addWidget(tab._blob_preset_slider)
-
-    # --- Normal controls container ---
-    tab._blob_normal = QWidget()
-    normal_layout = QVBoxLayout(tab._blob_normal)
-    normal_layout.setContentsMargins(0, 0, 0, 0)
-    normal_layout.setSpacing(12)
-    blob_layout.addWidget(tab._blob_normal)
+    blob_layout = scaffold.layout
+    normal_layout = scaffold.normal_layout
+    adv_layout = scaffold.advanced_layout
 
     def _aligned_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget, inner, _ = shared_add_aligned_row_widget(
@@ -58,15 +52,11 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         return row_widget, inner
 
     def _swatch_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 8, 0, 8)
-        row_layout.setSpacing(12)
-        add_swatch_label(row_layout, label_text, LABEL_WIDTH)
-        inner = QHBoxLayout()
-        inner.setContentsMargins(0, 0, 0, 0)
-        inner.setSpacing(12)
-        row_layout.addLayout(inner, 1)
+        row_widget, inner, _ = add_builder_swatch_row(
+            normal_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+        )
         return row_widget, inner
 
     def _bind_slider(slider: QSlider, updater=None) -> None:
@@ -113,7 +103,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _bind_color(tab.blob_glow_color_btn, '_blob_glow_color')
     glow_layout.addWidget(tab.blob_glow_color_btn)
     glow_layout.addStretch()
-    normal_layout.addWidget(glow_widget)
 
     def _update_glow_row() -> None:
         glow_widget.setVisible(tab.blob_reactive_glow.isChecked())
@@ -128,7 +117,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _bind_color(tab.blob_fill_color_btn, '_blob_color')
     fill_layout.addWidget(tab.blob_fill_color_btn)
     fill_layout.addStretch()
-    normal_layout.addWidget(fill_widget)
 
     edge_widget, edge_layout = _swatch_row("Edge Color:")
     tab.blob_edge_color_btn = ColorSwatchButton(title="Choose Blob Edge Color")
@@ -136,7 +124,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _bind_color(tab.blob_edge_color_btn, '_blob_edge_color')
     edge_layout.addWidget(tab.blob_edge_color_btn)
     edge_layout.addStretch()
-    normal_layout.addWidget(edge_widget)
 
     outline_widget, outline_layout = _swatch_row("Outline Color:")
     tab.blob_outline_color_btn = ColorSwatchButton(title="Choose Blob Outline Color")
@@ -144,7 +131,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _bind_color(tab.blob_outline_color_btn, '_blob_outline_color')
     outline_layout.addWidget(tab.blob_outline_color_btn)
     outline_layout.addStretch()
-    normal_layout.addWidget(outline_widget)
 
     normal_layout.addItem(QSpacerItem(0, 8, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed))
 
@@ -183,72 +169,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab._blob_card_size_layout.addWidget(size_widget)
 
     normal_layout.addItem(QSpacerItem(0, 6, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed))
-
-    # --- Advanced host (toggle + helper + controls) ---
-    tab._blob_advanced_host = QWidget()
-    host_layout = QVBoxLayout(tab._blob_advanced_host)
-    host_layout.setContentsMargins(0, 0, 0, 12)
-    host_layout.setSpacing(12)
-
-    toggle_row = QHBoxLayout()
-    toggle_row.setContentsMargins(0, 0, 0, 0)
-    toggle_row.setSpacing(8)
-    tab._blob_adv_toggle = QToolButton()
-    tab._blob_adv_toggle.setText("Advanced")
-    tab._blob_adv_toggle.setCheckable(True)
-    _blob_adv_default = False
-    getter = getattr(tab, "get_visualizer_adv_state", None)
-    if callable(getter):
-        try:
-            _blob_adv_default = bool(getter("blob"))
-        except Exception:
-            _blob_adv_default = False
-    tab._blob_adv_toggle.setChecked(_blob_adv_default)
-    tab._blob_adv_toggle.setArrowType(Qt.DownArrow)
-    tab._blob_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-    tab._blob_adv_toggle.setAutoRaise(True)
-    toggle_row.addWidget(tab._blob_adv_toggle)
-    toggle_row.addStretch()
-    host_layout.addLayout(toggle_row)
-
-    tab._blob_adv_helper = QLabel("Advanced sliders still apply when hidden.")
-    tab._blob_adv_helper.setProperty("class", "adv-helper")
-    tab._blob_adv_helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
-    host_layout.addWidget(tab._blob_adv_helper)
-
-    tab._blob_advanced = QWidget()
-    adv_layout = QVBoxLayout(tab._blob_advanced)
-    adv_layout.setContentsMargins(0, 0, 0, 0)
-    adv_layout.setSpacing(12)
-    host_layout.addWidget(tab._blob_advanced)
-
-    blob_layout.addWidget(tab._blob_advanced_host)
-    tab._blob_preset_slider.set_advanced_container(tab._blob_advanced_host)
-
-    def _apply_blob_adv_toggle_state(checked: bool) -> None:
-        tab._blob_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        tab._blob_advanced.setVisible(checked)
-        tab._blob_adv_helper.setVisible(not checked)
-        setter = getattr(tab, "set_visualizer_adv_state", None)
-        if callable(setter):
-            try:
-                setter("blob", checked)
-            except Exception:
-                pass
-
-    tab._blob_adv_toggle.toggled.connect(_apply_blob_adv_toggle_state)
-    _apply_blob_adv_toggle_state(tab._blob_adv_toggle.isChecked())
-
-    def _handle_blob_preset_adv(is_custom: bool) -> None:
-        tab._blob_normal.setVisible(is_custom)
-        tab._blob_advanced_host.setVisible(is_custom)
-
-    tab._blob_preset_slider.advanced_toggled.connect(_handle_blob_preset_adv)
-    _handle_blob_preset_adv(True)
-
-    # --- Technical bucket (after Advanced) ---
-    _blob_tech_host = build_per_mode_technical_group(tab, blob_layout, "blob")
-    tab._blob_preset_slider.set_technical_container(_blob_tech_host)
 
     # Glow intensity (advanced)
     glow_row, glow_layout = _aligned_row("Glow Intensity:")
@@ -584,7 +504,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     so_layout.addWidget(tab.blob_stretch_outer_label)
     adv_layout.addWidget(so_row)
 
-    parent_layout.addWidget(tab._blob_settings_container)
 
 
 def build_blob_growth(tab: "WidgetsTab") -> None:

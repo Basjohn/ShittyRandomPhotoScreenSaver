@@ -25,8 +25,9 @@ The Spotify Beat Visualizer consists of a shared pipeline (audio capture → FFT
 Global settings (defaults from `core/settings/defaults.py`):
 
 - `adaptive_sensitivity=True`, `sensitivity=1.0` (UI label: **Suggest Sensitivity**. When checked we hide the manual slider and use the curated auto multiplier; uncheck to expose the slider and honor `sensitivity`.)
-- `dynamic_floor=True`, `manual_floor=2.1`, `ghosting_enabled=True`, `ghost_alpha=0.34`, `ghost_decay=0.35`
+- `dynamic_floor=True`, `manual_floor=0.12`, `ghosting_enabled=True`, `ghost_alpha=0.34`, `ghost_decay=0.35`
 - Per-mode technical slots now own `bar_count`, `<mode>_audio_block_size` (0 = Auto), `<mode>_manual_floor`, etc. There is **no** legacy global `audio_block_size` anymore; presets/repairs must reference the per-mode keys only. The visualizer now always renders through the GPU overlay — the legacy `software_visualizer_enabled` flag and QWidget fallback have been removed entirely.
+- Technical controls are metadata-driven in `ui/tabs/media/technical_controls.py`. When adding or debugging a technical control, update the shared control registry first; do not hand-wire separate build/load/save branches for one mode.
 
 When debugging, always verify these steps in order:
 1. **Media state** – ensure `_spotify_playing` true and `_target_bars` are moving (check `[SPOTIFY_VIS][FLOOR]` logs).

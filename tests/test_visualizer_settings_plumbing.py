@@ -567,6 +567,12 @@ class _StubSlider:
     def value(self) -> int:
         return self._value
 
+    def blockSignals(self, _blocked: bool) -> None:
+        return None
+
+    def setValue(self, value: int) -> None:
+        self._value = value
+
 
 class _StubCombo:
     def __init__(self, data: int):
@@ -575,6 +581,15 @@ class _StubCombo:
     def currentData(self) -> int:
         return self._data
 
+    def blockSignals(self, _blocked: bool) -> None:
+        return None
+
+    def setCurrentIndex(self, _index: int) -> None:
+        return None
+
+    def findData(self, value: int) -> int:
+        return 0 if value == self._data else -1
+
 
 class _StubCheck:
     def __init__(self, checked: bool):
@@ -582,6 +597,20 @@ class _StubCheck:
 
     def isChecked(self) -> bool:
         return self._checked
+
+    def blockSignals(self, _blocked: bool) -> None:
+        return None
+
+    def setChecked(self, checked: bool) -> None:
+        self._checked = checked
+
+
+class _StubLabel:
+    def __init__(self):
+        self.text = ""
+
+    def setText(self, text: str) -> None:
+        self.text = text
 
 
 class TestPerModeTechnicalControlsCollection:
@@ -616,6 +645,79 @@ class TestPerModeTechnicalControlsCollection:
 
         assert config["sine_wave_audio_block_size"] == 128
         assert config["sine_wave_input_gain"] == pytest.approx(1.30)
+
+    def test_collect_per_mode_controls_keeps_direct_transient_keys_unprefixed(self):
+        from ui.tabs.media import technical_controls as tc
+
+        class _DummyTab:
+            pass
+
+        tab = _DummyTab()
+        tc.register_per_mode_technical_controls(
+            tab,
+            "spectrum",
+            controls={
+                "mix_slider": _StubSlider(63),
+                "mix_config_key": "spectrum_lane_transient_mix",
+            },
+            update_sensitivity=lambda: None,
+            update_manual_floor=lambda: None,
+        )
+        tc.register_per_mode_technical_controls(
+            tab,
+            "bubble",
+            controls={
+                "mix_vocal_slider": _StubSlider(28),
+            },
+            update_sensitivity=lambda: None,
+            update_manual_floor=lambda: None,
+        )
+
+        config: dict[str, float | int | bool] = {}
+        tc.collect_per_mode_technical_controls(tab, config)
+
+        assert config["spectrum_lane_transient_mix"] == pytest.approx(0.63)
+        assert config["bubble_transient_mix_vocal"] == pytest.approx(0.28)
+        assert "spectrum_spectrum_lane_transient_mix" not in config
+        assert "bubble_bubble_transient_mix_vocal" not in config
+
+    def test_load_per_mode_controls_reads_direct_transient_keys(self):
+        from ui.tabs.media import technical_controls as tc
+
+        class _DummyTab:
+            def _default_bool(self, *_args):
+                return False
+
+            def _default_int(self, *_args):
+                return 32
+
+            def _default_float(self, *_args):
+                return 0.5
+
+        tab = _DummyTab()
+        tc.register_per_mode_technical_controls(
+            tab,
+            "spectrum",
+            controls={
+                "mix_slider": _StubSlider(0),
+                "mix_label": _StubLabel(),
+                "mix_config_key": "spectrum_lane_transient_mix",
+            },
+            update_sensitivity=lambda: None,
+            update_manual_floor=lambda: None,
+        )
+
+        tc.load_per_mode_technical_controls(
+            tab,
+            {
+                "spectrum_lane_transient_mix": 0.71,
+            },
+        )
+
+        controls = tc.get_per_mode_controls_for_mode(tab, "spectrum")
+        assert controls is not None
+        assert controls["mix_slider"].value() == 71
+        assert controls["mix_label"].text == "71%"
 
 
 # ==========================================================================

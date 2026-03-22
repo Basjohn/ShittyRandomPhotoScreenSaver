@@ -5,13 +5,11 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QCheckBox, QSlider, QWidget, QToolButton,
+    QCheckBox, QSlider, QWidget,
 )
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.technical_controls import build_per_mode_technical_group
+from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
 from ui.tabs.shared_styles import (
-    ADV_HELPER_LABEL_STYLE,
-    add_swatch_label,
     add_aligned_row_widget as shared_add_aligned_row_widget,
     add_aligned_row as shared_add_aligned_row,
 )
@@ -37,90 +35,21 @@ def _update_sine_multi_line_visibility(tab) -> None:
 def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Sine Wave settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
-    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
-    tab._sine_wave_settings_container = QWidget()
-    sine_layout = QVBoxLayout(tab._sine_wave_settings_container)
-    sine_layout.setContentsMargins(0, 0, 0, 0)
-    sine_layout.setSpacing(12)
-
-    # --- Preset slider ---
-    tab._sine_preset_slider = VisualizerPresetSlider("sine_wave")
-    tab._sine_preset_slider.preset_changed.connect(
-        lambda idx: tab._on_visualizer_preset_changed("sine_wave", idx)
+    scaffold = build_mode_scaffold(
+        tab,
+        parent_layout,
+        mode_key="sine_wave",
+        settings_container_attr="_sine_wave_settings_container",
+        preset_slider_attr="_sine_preset_slider",
+        normal_attr="_sine_normal",
+        advanced_host_attr="_sine_advanced_host",
+        advanced_toggle_attr="_sine_adv_toggle",
+        advanced_helper_attr="_sine_adv_helper",
+        advanced_attr="_sine_advanced",
     )
-    sine_layout.addWidget(tab._sine_preset_slider)
-
-    tab._sine_normal = QWidget()
-    _normal = QVBoxLayout(tab._sine_normal)
-    _normal.setContentsMargins(0, 0, 0, 0)
-    _normal.setSpacing(12)
-    sine_layout.addWidget(tab._sine_normal)
-
-    tab._sine_advanced_host = QWidget()
-    _adv_host = QVBoxLayout(tab._sine_advanced_host)
-    _adv_host.setContentsMargins(0, 0, 0, 12)
-    _adv_host.setSpacing(12)
-    sine_layout.addWidget(tab._sine_advanced_host)
-
-    _adv_toggle_row = QHBoxLayout()
-    _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
-    _adv_toggle_row.setSpacing(8)
-    tab._sine_adv_toggle = QToolButton()
-    tab._sine_adv_toggle.setText("Advanced")
-    tab._sine_adv_toggle.setCheckable(True)
-    _sine_adv_default = False
-    getter = getattr(tab, "get_visualizer_adv_state", None)
-    if callable(getter):
-        try:
-            _sine_adv_default = bool(getter("sine_wave"))
-        except Exception:
-            _sine_adv_default = False
-    tab._sine_adv_toggle.setChecked(_sine_adv_default)
-    tab._sine_adv_toggle.setArrowType(Qt.DownArrow)
-    tab._sine_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-    tab._sine_adv_toggle.setAutoRaise(True)
-    _adv_toggle_row.addWidget(tab._sine_adv_toggle)
-    _adv_toggle_row.addStretch()
-    _adv_host.addLayout(_adv_toggle_row)
-
-    tab._sine_adv_helper = QLabel("Advanced sliders still apply when hidden.")
-    tab._sine_adv_helper.setProperty("class", "adv-helper")
-    tab._sine_adv_helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
-    _adv_host.addWidget(tab._sine_adv_helper)
-
-    tab._sine_advanced = QWidget()
-    _adv = QVBoxLayout(tab._sine_advanced)
-    _adv.setContentsMargins(0, 0, 0, 0)
-    _adv.setSpacing(12)
-    _adv_host.addWidget(tab._sine_advanced)
-
-    tab._sine_preset_slider.set_advanced_container(tab._sine_advanced_host)
-
-    def _apply_sine_adv_toggle_state(checked: bool) -> None:
-        tab._sine_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        tab._sine_advanced.setVisible(checked)
-        tab._sine_adv_helper.setVisible(not checked)
-        setter = getattr(tab, "set_visualizer_adv_state", None)
-        if callable(setter):
-            try:
-                setter("sine_wave", checked)
-            except Exception:
-                pass
-
-    tab._sine_adv_toggle.toggled.connect(_apply_sine_adv_toggle_state)
-    _apply_sine_adv_toggle_state(tab._sine_adv_toggle.isChecked())
-
-    def _handle_sine_preset_adv(is_custom: bool) -> None:
-        tab._sine_normal.setVisible(is_custom)
-        tab._sine_advanced_host.setVisible(is_custom)
-
-    tab._sine_preset_slider.advanced_toggled.connect(_handle_sine_preset_adv)
-    _handle_sine_preset_adv(True)
-
-    # Technical bucket (after Advanced)
-    _sine_tech_host = build_per_mode_technical_group(tab, sine_layout, "sine_wave")
-    tab._sine_preset_slider.set_technical_container(_sine_tech_host)
+    _normal = scaffold.normal_layout
+    _adv = scaffold.advanced_layout
 
     LABEL_WIDTH = 150
 
@@ -143,17 +72,11 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _swatch_row_widget(
         parent_layout: QVBoxLayout, label_text: str
     ) -> tuple[QWidget, QHBoxLayout, QLabel]:
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 8, 0, 8)
-        row_layout.setSpacing(12)
-        label = add_swatch_label(row_layout, label_text, LABEL_WIDTH)
-        content = QHBoxLayout()
-        content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(12)
-        row_layout.addLayout(content, 1)
-        parent_layout.addWidget(row_widget)
-        return row_widget, content, label
+        return add_builder_swatch_row(
+            parent_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+        )
 
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str) -> QHBoxLayout:
         _, content, _ = _swatch_row_widget(parent_layout, label_text)
@@ -730,4 +653,3 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.sine_wave_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     sine_growth_row.addWidget(tab.sine_wave_growth_label)
-    parent_layout.addWidget(tab._sine_wave_settings_container)

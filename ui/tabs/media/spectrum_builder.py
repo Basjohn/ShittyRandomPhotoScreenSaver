@@ -5,15 +5,14 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
-    QCheckBox, QSlider, QWidget, QToolButton,
+    QCheckBox, QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
 
 from ui.styled_popup import ColorSwatchButton
-from ui.tabs.media.technical_controls import build_per_mode_technical_group
+from ui.tabs.media.builder_scaffold import add_builder_swatch_row, build_mode_scaffold
 from ui.tabs.shared_styles import (
     ADV_HELPER_LABEL_STYLE,
-    add_swatch_label,
     add_aligned_row_widget as shared_add_aligned_row_widget,
     add_aligned_row as shared_add_aligned_row,
 )
@@ -32,91 +31,22 @@ def _update_ghost_visibility(tab) -> None:
 def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     """Build Spectrum-only settings and add to parent_layout."""
     from ui.tabs.widgets_tab import NoWheelSlider
-    from ui.tabs.media.preset_slider import VisualizerPresetSlider
 
-    tab._spectrum_settings_container = QWidget()
-    spectrum_layout = QVBoxLayout(tab._spectrum_settings_container)
-    spectrum_layout.setContentsMargins(0, 0, 0, 0)
-    spectrum_layout.setSpacing(12)
-
-    # --- Preset slider (always visible) ---
-    tab._spectrum_preset_slider = VisualizerPresetSlider("spectrum")
-    tab._spectrum_preset_slider.preset_changed.connect(
-        lambda idx: tab._on_visualizer_preset_changed("spectrum", idx)
+    scaffold = build_mode_scaffold(
+        tab,
+        parent_layout,
+        mode_key="spectrum",
+        settings_container_attr="_spectrum_settings_container",
+        preset_slider_attr="_spectrum_preset_slider",
+        normal_attr="_spectrum_normal",
+        advanced_host_attr="_spectrum_advanced_host",
+        advanced_toggle_attr="_spectrum_adv_toggle",
+        advanced_helper_attr="_spectrum_adv_helper",
+        advanced_attr="_spectrum_advanced",
     )
-    spectrum_layout.addWidget(tab._spectrum_preset_slider)
-
-    tab._spectrum_normal = QWidget()
-    _normal_layout = QVBoxLayout(tab._spectrum_normal)
-    _normal_layout.setContentsMargins(0, 0, 0, 0)
-    _normal_layout.setSpacing(12)
-    spectrum_layout.addWidget(tab._spectrum_normal)
-
-    # --- Advanced host (toggle + helper + controls) ---
-    tab._spectrum_advanced_host = QWidget()
-    _adv_host = QVBoxLayout(tab._spectrum_advanced_host)
-    _adv_host.setContentsMargins(0, 0, 0, 12)
-    _adv_host.setSpacing(12)
-    spectrum_layout.addWidget(tab._spectrum_advanced_host)
-
-    _adv_toggle_row = QHBoxLayout()
-    _adv_toggle_row.setContentsMargins(0, 0, 0, 0)
-    _adv_toggle_row.setSpacing(8)
-    tab._spectrum_adv_toggle = QToolButton()
-    tab._spectrum_adv_toggle.setText("Advanced")
-    tab._spectrum_adv_toggle.setCheckable(True)
-    _spectrum_adv_default = False
-    getter = getattr(tab, "get_visualizer_adv_state", None)
-    if callable(getter):
-        try:
-            _spectrum_adv_default = bool(getter("spectrum"))
-        except Exception:
-            _spectrum_adv_default = False
-    tab._spectrum_adv_toggle.setChecked(_spectrum_adv_default)
-    tab._spectrum_adv_toggle.setArrowType(Qt.DownArrow)
-    tab._spectrum_adv_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-    tab._spectrum_adv_toggle.setAutoRaise(True)
-    _adv_toggle_row.addWidget(tab._spectrum_adv_toggle)
-    _adv_toggle_row.addStretch()
-    _adv_host.addLayout(_adv_toggle_row)
-
-    tab._spectrum_adv_helper = QLabel("Advanced sliders still apply when hidden.")
-    tab._spectrum_adv_helper.setProperty("class", "adv-helper")
-    tab._spectrum_adv_helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
-    _adv_host.addWidget(tab._spectrum_adv_helper)
-
-    tab._spectrum_advanced = QWidget()
-    _adv_layout = QVBoxLayout(tab._spectrum_advanced)
-    _adv_layout.setContentsMargins(0, 0, 0, 0)
-    _adv_layout.setSpacing(12)
-    _adv_host.addWidget(tab._spectrum_advanced)
-
-    tab._spectrum_preset_slider.set_advanced_container(tab._spectrum_advanced_host)
-
-    def _apply_spectrum_adv_toggle_state(checked: bool) -> None:
-        tab._spectrum_adv_toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        tab._spectrum_advanced.setVisible(checked)
-        tab._spectrum_adv_helper.setVisible(not checked)
-        setter = getattr(tab, "set_visualizer_adv_state", None)
-        if callable(setter):
-            try:
-                setter("spectrum", checked)
-            except Exception:
-                pass
-
-    tab._spectrum_adv_toggle.toggled.connect(_apply_spectrum_adv_toggle_state)
-    _apply_spectrum_adv_toggle_state(tab._spectrum_adv_toggle.isChecked())
-
-    def _handle_spectrum_preset_adv(is_custom: bool) -> None:
-        tab._spectrum_normal.setVisible(is_custom)
-        tab._spectrum_advanced_host.setVisible(is_custom)
-
-    tab._spectrum_preset_slider.advanced_toggled.connect(_handle_spectrum_preset_adv)
-    _handle_spectrum_preset_adv(True)
-
-    # Technical bucket (ordered after Advanced)
-    _spectrum_tech_host = build_per_mode_technical_group(tab, spectrum_layout, "spectrum")
-    tab._spectrum_preset_slider.set_technical_container(_spectrum_tech_host)
+    spectrum_layout = scaffold.layout
+    _normal_layout = scaffold.normal_layout
+    _adv_layout = scaffold.advanced_layout
 
     LABEL_WIDTH = 150
 
@@ -137,16 +67,11 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         return content
 
     def _swatch_row(parent_layout: QVBoxLayout, label_text: str):
-        row_widget = QWidget()
-        row_layout = QHBoxLayout(row_widget)
-        row_layout.setContentsMargins(0, 8, 0, 8)
-        row_layout.setSpacing(12)
-        add_swatch_label(row_layout, label_text, LABEL_WIDTH)
-        content = QHBoxLayout()
-        content.setContentsMargins(0, 0, 0, 0)
-        content.setSpacing(12)
-        row_layout.addLayout(content, 1)
-        parent_layout.addWidget(row_widget)
+        _, content, _ = add_builder_swatch_row(
+            parent_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+        )
         return content
 
     spotify_vis_fill_row = _swatch_row(_normal_layout, "Bar Fill Color:")
@@ -457,5 +382,3 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         lambda v: tab.spectrum_growth_label.setText(f"{v / 100.0:.1f}x")
     )
     spectrum_growth_row.addWidget(tab.spectrum_growth_label)
-
-    parent_layout.addWidget(tab._spectrum_settings_container)

@@ -259,6 +259,27 @@ def test_sine_curated_preset_survives_save_and_reload(qt_app, settings_manager):
     finally:
         reloaded.deleteLater()
 
+
+def test_visualizer_mode_builders_keep_preset_scaffold_wiring(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._load_settings()
+        mode_to_slider = {
+            "spectrum": tab._spectrum_preset_slider,
+            "oscilloscope": tab._osc_preset_slider,
+            "sine_wave": tab._sine_preset_slider,
+            "blob": tab._blob_preset_slider,
+            "bubble": tab._bubble_preset_slider,
+        }
+
+        for mode, slider in mode_to_slider.items():
+            assert slider._advanced_container is not None, mode
+            assert slider._technical_container is not None, mode
+            assert slider._advanced_container.parent() is not None, mode
+            assert slider._technical_container.parent() is not None, mode
+    finally:
+        tab.deleteLater()
+
     def test_visualizer_custom_preset_roundtrip(self, qt_app, settings_manager):
         """Custom visualizer config survives curated preset switches and restores UI state."""
 
