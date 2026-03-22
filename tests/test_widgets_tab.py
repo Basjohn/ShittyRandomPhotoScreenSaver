@@ -192,10 +192,6 @@ class TestWidgetsTab:
         tab = WidgetsTab(settings_manager)
         try:
             tab._load_settings()
-            def _instant_save() -> None:
-                tab._auto_switch_preset_to_custom()
-                tab._save_settings_now()
-            tab._save_settings = _instant_save
             tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("bubble"))
             preset_slider = getattr(tab, "_bubble_preset_slider", None)
             assert preset_slider is not None
@@ -207,12 +203,11 @@ class TestWidgetsTab:
             tab._settings.set('widgets', widgets_cfg)
             tab._settings.save()
 
-            gradient_combo = getattr(tab, "bubble_gradient_direction", None)
-            assert gradient_combo is not None
-            gradient_combo.setCurrentText("Bottom")
-            gradient_combo.currentTextChanged.emit("Bottom")
-            tab._save_settings()
+            pulse_slider = getattr(tab, "bubble_big_bass_pulse", None)
+            assert pulse_slider is not None
+            pulse_slider.setValue(min(pulse_slider.maximum(), pulse_slider.value() + 5))
             qt_app.processEvents()
+            tab._save_settings_now()
 
             assert preset_slider.preset_index() == preset_slider.custom_index()
             widgets_cfg = tab._settings.get('widgets', {}) or {}
@@ -229,6 +224,40 @@ def test_visualizer_bucket_toggles_use_standard_circle_checkbox_spacing():
     toggle_block = src[toggle_block_start:toggle_block_end]
     assert 'toggle.setProperty("circleIndicator", True)' in toggle_block
     assert 'toggle.setProperty("tightSpacing", True)' not in toggle_block
+
+
+def test_sine_curated_preset_survives_save_and_reload(qt_app, settings_manager):
+    """Selecting a curated Sine preset must not silently fall back to Custom."""
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        mode = "sine_wave"
+        curated_index = 0
+        slider = tab._sine_preset_slider
+        custom_index = slider.custom_index()
+
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+        slider.set_preset_index(custom_index)
+        slider._slider.setValue(curated_index)
+        qt_app.processEvents()
+        tab._save_settings_now()
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert saved.get("preset_sine_wave") == curated_index
+        assert slider.preset_index() == curated_index
+        assert slider.preset_index() != custom_index
+    finally:
+        tab.deleteLater()
+
+    reloaded = WidgetsTab(settings_manager)
+    try:
+        reloaded._load_settings()
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert saved.get("preset_sine_wave") == curated_index
+        assert reloaded._sine_preset_slider.preset_index() == curated_index
+        assert reloaded._sine_preset_slider.preset_index() != reloaded._sine_preset_slider.custom_index()
+    finally:
+        reloaded.deleteLater()
 
     def test_visualizer_custom_preset_roundtrip(self, qt_app, settings_manager):
         """Custom visualizer config survives curated preset switches and restores UI state."""
@@ -366,6 +395,32 @@ def test_visualizer_bucket_toggles_use_standard_circle_checkbox_spacing():
             assert tab.bubble_stream_reactivity.maximum() == 200
             assert tab.bubble_stream_reactivity.value() == 200
             assert tab.bubble_stream_reactivity_label.text() == "200%"
+        finally:
+            tab.deleteLater()
+
+    def test_blob_pulse_controls_load_and_roundtrip(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+            spotify_vis["blob_pulse_cap"] = 0.42
+            spotify_vis["blob_pulse_release_ms"] = 480
+            settings_manager.set("widgets", widgets_cfg)
+
+            tab._load_settings()
+
+            assert tab.blob_pulse_cap.value() == 42
+            assert tab.blob_pulse_cap_label.text() == "42%"
+            assert tab.blob_pulse_release_ms.value() == 480
+            assert tab.blob_pulse_release_ms_label.text() == "0.48s"
+
+            tab.blob_pulse_cap.setValue(65)
+            tab.blob_pulse_release_ms.setValue(260)
+            tab._save_settings_now()
+
+            saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+            assert saved.get("blob_pulse_cap") == pytest.approx(0.65)
+            assert saved.get("blob_pulse_release_ms") == 260
         finally:
             tab.deleteLater()
 

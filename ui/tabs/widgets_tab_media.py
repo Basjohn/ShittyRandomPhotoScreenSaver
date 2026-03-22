@@ -960,6 +960,15 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         blob_rd_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_reactive_deformation', 1.0) * 100)
         tab.blob_reactive_deformation.setValue(max(0, min(300, blob_rd_val)))
         tab.blob_reactive_deformation_label.setText(f"{blob_rd_val}%")
+    if hasattr(tab, 'blob_pulse_cap'):
+        blob_pulse_cap_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_pulse_cap', 1.0) * 100)
+        tab.blob_pulse_cap.setValue(max(0, min(200, blob_pulse_cap_val)))
+        tab.blob_pulse_cap_label.setText(f"{blob_pulse_cap_val}%")
+    if hasattr(tab, 'blob_pulse_release_ms'):
+        blob_pulse_release_val = tab._config_int('spotify_visualizer', spotify_vis_config, 'blob_pulse_release_ms', 220)
+        blob_pulse_release_val = max(60, min(800, blob_pulse_release_val))
+        tab.blob_pulse_release_ms.setValue(blob_pulse_release_val)
+        tab.blob_pulse_release_ms_label.setText(f"{blob_pulse_release_val / 1000:.2f}s")
     if hasattr(tab, 'blob_core_scale'):
         blob_core_scale_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'blob_core_scale', 1.0) * 100)
         tab.blob_core_scale.setValue(max(25, min(250, blob_core_scale_val)))
@@ -1504,6 +1513,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'blob_glow_max_size': (tab.blob_glow_max_size.value() if hasattr(tab, 'blob_glow_max_size') else 100) / 100.0,
         'blob_reactive_glow': tab.blob_reactive_glow.isChecked() if hasattr(tab, 'blob_reactive_glow') else False,
         'blob_reactive_deformation': (tab.blob_reactive_deformation.value() if hasattr(tab, 'blob_reactive_deformation') else 100) / 100.0,
+        'blob_pulse_cap': (tab.blob_pulse_cap.value() if hasattr(tab, 'blob_pulse_cap') else 100) / 100.0,
+        'blob_pulse_release_ms': tab.blob_pulse_release_ms.value() if hasattr(tab, 'blob_pulse_release_ms') else 220,
         'blob_stage_gain': (tab.blob_stage_gain.value() if hasattr(tab, 'blob_stage_gain') else 100) / 100.0,
         'blob_core_scale': (tab.blob_core_scale.value() if hasattr(tab, 'blob_core_scale') else 100) / 100.0,
         'blob_core_floor_bias': (tab.blob_core_floor_bias.value() if hasattr(tab, 'blob_core_floor_bias') else 35) / 100.0,

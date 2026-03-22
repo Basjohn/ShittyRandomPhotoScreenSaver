@@ -64,6 +64,7 @@ uniform int u_playing;
 // Wave Effect: positional wave-like undulation along the line (0.0-1.0)
 // Preserves exact sine shape, only shifts line position up/down
 uniform float u_wave_effect;
+uniform float u_wave_effect_gate;
 
 // Micro Wobble: energy-reactive micro distortions / bumps along the line (0.0-1.0)
 // Creates small dents/spikes that react to audio without changing core shape
@@ -370,6 +371,7 @@ void main() {
 
     // Wave effect amount (positional undulation)
     float wave_fx = clamp(u_wave_effect, 0.0, 1.0);
+    float wave_fx_gate = clamp(u_wave_effect_gate, 0.0, 1.0) * play_gate;
 
     // Micro wobble amount (energy-reactive snake lines)
     float micro_wob = clamp(u_micro_wobble, 0.0, 1.0);
@@ -461,7 +463,7 @@ void main() {
         float wfx_raw = sin(nx * 5.3 + u_time * 1.7) * 0.50
                       + sin(nx * 11.1 - u_time * 2.5) * 0.30
                       + sin(nx * 2.1 + u_time * 0.9) * 0.25;
-        wfx1 = wfx_raw * we1 * wave_fx * base_amplitude;
+        wfx1 = wfx_raw * we1 * wave_fx * base_amplitude * wave_fx_gate;
     }
 
     // Micro wobble: snake-like distortions along the line reacting to audio energy.
@@ -580,7 +582,7 @@ void main() {
             float we2 = sqrt(max(we2_raw, 0.0));
             float wfx_raw2_own = sin(nx * 7.7 + u_time * 2.1) * 0.45
                                + sin(nx * 13.3 - u_time * 1.3) * 0.30;
-            float wfx2_own = wfx_raw2_own * we2 * wave_fx * base_amplitude;
+            float wfx2_own = wfx_raw2_own * we2 * wave_fx * base_amplitude * wave_fx_gate;
             wfx2 = mix(wfx1, wfx2_own, lob);
         }
 
@@ -698,7 +700,7 @@ void main() {
             float we3 = sqrt(max(we3_raw, 0.0));
             float wfx_raw3_own = sin(nx * 4.3 - u_time * 1.9) * 0.40
                                + sin(nx * 9.7 + u_time * 2.7) * 0.30;
-            float wfx3_own = wfx_raw3_own * we3 * wave_fx * base_amplitude;
+            float wfx3_own = wfx_raw3_own * we3 * wave_fx * base_amplitude * wave_fx_gate;
             wfx3 = mix(wfx1, wfx3_own, lob);
         }
 

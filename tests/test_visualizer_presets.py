@@ -280,6 +280,26 @@ def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
     assert lean["visualizer_preset_mode"] == mode
 
 
+def test_curated_sine_preset_1_prefers_music_led_motion_over_idle_distortion():
+    preset_path = (
+        Path(__file__).resolve().parents[1]
+        / "presets"
+        / "visualizer_modes"
+        / "sine_wave"
+        / "preset_1_wave.json"
+    )
+    payload = json.loads(preset_path.read_text(encoding="utf-8"))
+    sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+
+    assert sv["sine_sensitivity"] >= 0.60
+    assert sv["sine_width_reaction"] >= 0.25
+    assert sv["sine_heartbeat"] <= 0.30
+    assert sv["sine_wave_effect"] <= 0.15
+    assert sv["sine_crawl_amount"] == 0.0
+    assert sv["sine_micro_wobble"] <= 0.05
+    assert sv["sine_line_count"] == 2
+
+
 def test_repair_tool_audit_flags_duplicate_prefixes_and_backup_blocks():
     payload = {
         "snapshot": {

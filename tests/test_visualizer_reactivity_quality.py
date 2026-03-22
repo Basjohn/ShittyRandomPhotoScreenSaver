@@ -15,6 +15,8 @@ def _push_blob_frame(
     energy,
     kick: float = 0.0,
     snare: float = 0.0,
+    blob_pulse_cap: float = 1.0,
+    blob_pulse_release_ms: float = 220.0,
 ) -> None:
     overlay._last_time_ts = time.time() - dt
     overlay.set_state(
@@ -31,6 +33,8 @@ def _push_blob_frame(
         energy_bands=energy,
         blob_kick_event_strength=kick,
         blob_snare_event_strength=snare,
+        blob_pulse_cap=blob_pulse_cap,
+        blob_pulse_release_ms=blob_pulse_release_ms,
     )
 
 
@@ -216,7 +220,8 @@ def test_blob_stage_inputs_stay_bass_biased_on_snare_phrase(qt_app):
 
     assert overlay._blob_stage_input_mid < live[1] * 0.65
     assert overlay._blob_stage_input_high < live[2] * 0.60
-    assert staged_stage[0] < live_stage[0]
+    assert overlay._blob_stage_input_bass < live[0]
+    assert staged_stage[0] <= live_stage[0]
 
 
 @pytest.mark.qt
@@ -261,6 +266,62 @@ def test_blob_stage_inputs_favor_kick_over_snare_on_light_passages(qt_app):
 
     assert snare_stage_inputs[3] < kick_stage_inputs[3]
     assert snare_stage_inputs[0] < kick_stage_inputs[0]
+
+
+@pytest.mark.qt
+def test_blob_pulse_cap_limits_low_support_reactive_lift(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._blob_kick_event_strength = 0.0
+    overlay._blob_snare_event_strength = 1.0
+    overlay._transient_energy = SimpleNamespace(
+        bass_transient=0.02,
+        mid_transient=0.20,
+        high_transient=0.10,
+    )
+    phrase = SimpleNamespace(bass=0.05, mid=0.22, high=0.12, overall=0.10)
+
+    overlay._blob_pulse_cap = 1.0
+    default_live = overlay._compute_blob_live_bands(phrase)
+    default_stage_overall = overlay._blob_stage_input_overall
+
+    overlay._blob_pulse_cap = 0.35
+    capped_live = overlay._compute_blob_live_bands(phrase)
+    capped_stage_overall = overlay._blob_stage_input_overall
+
+    assert capped_live[1] < default_live[1]
+    assert capped_stage_overall <= default_stage_overall
+
+
+@pytest.mark.qt
+def test_blob_pulse_release_slows_decay_without_slowing_attack(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    calm = SimpleNamespace(bass=0.10, mid=0.12, high=0.04, overall=0.09)
+    hit = SimpleNamespace(bass=0.16, mid=0.52, high=0.09, overall=0.20)
+
+    fast = SpotifyBarsGLOverlay(None)
+    fast._vis_mode = "blob"
+
+    slow = SpotifyBarsGLOverlay(None)
+    slow._vis_mode = "blob"
+
+    _push_blob_frame(fast, dt=0.016, energy=calm, blob_pulse_release_ms=120.0)
+    _push_blob_frame(slow, dt=0.016, energy=calm, blob_pulse_release_ms=420.0)
+
+    _push_blob_frame(fast, dt=0.016, energy=hit, snare=1.0, blob_pulse_release_ms=120.0)
+    fast_peak = fast._blob_live_mid_energy
+    _push_blob_frame(slow, dt=0.016, energy=hit, snare=1.0, blob_pulse_release_ms=420.0)
+    slow_peak = slow._blob_live_mid_energy
+
+    _push_blob_frame(fast, dt=0.016, energy=calm, blob_pulse_release_ms=120.0)
+    fast_release = fast._blob_live_mid_energy
+    _push_blob_frame(slow, dt=0.016, energy=calm, blob_pulse_release_ms=420.0)
+    slow_release = slow._blob_live_mid_energy
+
+    assert abs(fast_peak - slow_peak) < 0.02
+    assert slow_release > fast_release
 
 
 def test_spectrum_lane_isolation_survives_long_run():

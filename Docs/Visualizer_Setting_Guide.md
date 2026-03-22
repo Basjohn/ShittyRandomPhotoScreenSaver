@@ -74,6 +74,12 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Reactive Deformation** (`blob_reactive_deformation`) — *Advanced slider*
   - Impact: Multiplies outward energy-driven growth.
   - Conflicts: Stack carefully with Technical Dynamic Range; both amplify spikes and can overdrive geometry.
+- **Pulse Cap** (`blob_pulse_cap`) — *Advanced slider*
+  - Impact: Caps how much extra reactive lift Blob can add above the underlying continuous/transient support signal. Lower it when Blob still throws giant flickery jumps on light passages.
+  - Conflicts: Too low can make real beat hits feel small; raise Stage Gain only after checking this slider.
+- **Pulse Release** (`blob_pulse_release_ms`) — *Advanced slider*
+  - Impact: Controls how quickly Blob’s reactive pulse falls back after a hit. Attack stays fast; only the release is lengthened/shortened.
+  - Conflicts: Very short values can chatter on vocal phrases; very long values can smear multiple hits together.
 - **Constant Wobble / Reactive Wobble** (`blob_constant_wobble`, `blob_reactive_wobble`) — *Advanced sliders*
   - Impact: Base wobble during silence vs energy-driven wobble on peaks.
   - Conflicts: High values cause jitter, especially with small audio block sizes.
@@ -97,8 +103,10 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 4. *Stretch safety*: Keep Stretch Tendency ≤45 % unless Card Width/Growth stay near defaults; Inner Stretch ≈40 % + Manual Floor around 0.3 preserves dents without clipping.
 5. *Sensitivity strategy*: Leave Adaptive Sensitivity ON for most playlists. If you disable it, set Sensitivity ≈1.10× and avoid pushing Stage Gain beyond ~120 % to prevent double amplification.
 6. *Pulse Intensity*: Treat 1.0× (100 %) as the default. Staying between 0.85×–1.25× keeps Stage Gain/Reactive Deformation in their useful range; only push higher after dialing Stage Gain down so you don’t double-scale the same amplitude envelope.
-7. *Bar layout*: Keep Bar Count between 32–48 for a balanced look. Going past 64 spreads energy too thin (muted pulse) unless Pulse Intensity/Stage Gain drop to compensate; dipping below 24 makes stretch spikes chunky.
-8. *AGC tuning*: Leave Energy Boost at default (0.85×) and AGC Strength at 50%. Blob deformation uses energy bands as continuous drivers — post-AGC ~0.5–0.8 range keeps the blob moderately deformed at all times, which is desirable. Lowering AGC Strength increases dynamic range but may cause the blob to collapse during quiet passages. Do NOT enable Use Raw Energy — raw values cause jarring shape discontinuities because the blob's smoothing was designed for near-constant input range.
+7. *Pulse sanity*: If Blob feels nauseatingly flickery on low-energy music, reduce Pulse Cap before reducing Pulse Intensity. Pulse Cap trims only the extra reactive lift; Pulse Intensity changes the whole mode’s throb.
+8. *Release shaping*: Use Pulse Release around `0.18s – 0.32s` for most music. Shorter values feel snappier but can chatter; longer values are safer for vocals/piano but can smear fast drums.
+9. *Bar layout*: Keep Bar Count between 32–48 for a balanced look. Going past 64 spreads energy too thin (muted pulse) unless Pulse Intensity/Stage Gain drop to compensate; dipping below 24 makes stretch spikes chunky.
+10. *AGC tuning*: Leave Energy Boost at default (0.85×) and AGC Strength at 50%. Blob deformation uses energy bands as continuous drivers — post-AGC ~0.5–0.8 range keeps the blob moderately deformed at all times, which is desirable. Lowering AGC Strength increases dynamic range but may cause the blob to collapse during quiet passages. Do NOT enable Use Raw Energy — raw values cause jarring shape discontinuities because the blob's smoothing was designed for near-constant input range.
 
 ---
 
@@ -290,7 +298,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
   - Conflicts: Sensitivity >1.6× with Card Adaptation >70 % clips at card bounds.
 - **Wave Effect / Micro Wobble / Crawl / Width Reaction** — *Normal sliders*
   - Impact: Additional undulation, jagged wobble, gentle dents, and bass-driven line thickening.
-  - Conflicts: Micro Wobble + Crawl both distort shape; choose one primary effect.
+  - Conflicts: Micro Wobble + Crawl both distort shape; choose one primary effect. `Wave Effect` is now support-gated in code, so quiet passages should calm down more naturally than before; if a preset still feels busy at low energy, reduce `Wave Effect` before blaming `Crawl`.
 - **Density / Heartbeat / Displacement** (`sine_density`, `sine_heartbeat`, `sine_displacement`) — *Advanced sliders*
   - Impact: Controls cycles per card, transient swells, and multi-line shove.
   - Conflicts: Density >2.2× with Width Reaction >40 % drops FPS on lower GPUs; Heartbeat relies on bass detection and ignores Sensitivity.
@@ -305,7 +313,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
   - Conflicts: Growth >1.5× combined with Density <0.8× wastes vertical space.
 - **Technical controls** (per-mode audio block size, adaptive, floors, bar count, energy_boost, agc_strength) — as above.
   - Conflicts: Dropping bar count below ~40 collapses the bass/mid split the sine displacement math expects, so multi-line offset bias and displacement all converge; retune line shifts or raise bar count before blaming density settings. Energy Boost primarily affects glow intensity for sine wave since amplitude comes from waveform data.
-  - Notes: Sine now gets a mode-local scheduler beat assist. Recent kick/snare events still help width reaction and heartbeat, but they also now lift Sine's uploaded band energy/amplitude cues so the mode reacts more visibly on confirmed beats without changing Oscilloscope behavior.
+  - Notes: Sine now gets a mode-local scheduler beat assist. Recent kick/snare events still help width reaction and energy cues, but that assist is support-weighted and capped so it acts as beat confirmation rather than injecting its own giant pseudo-heartbeats. The large swells should still come from the actual heartbeat detector, not isolated scheduler spikes.
 
 **Recommended Sine Wave baselines**
 
@@ -316,5 +324,6 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 5. *Technical*: Audio Block Size 256 (Auto) plus Adaptive Sensitivity ON; if you force block=128, increase Smoothing preset (manual floor) by +0.05 to counter jitter.
 6. *Colour & glow*: Use complementary colours per line (e.g., white primary, cyan secondary) and keep Glow Intensity ≤60 % to avoid blending lines together.
 7. *AGC tuning*: Keep defaults. Like oscilloscope, sine wave amplitude is waveform-driven — Energy Boost and AGC Strength only affect glow brightness. Leave Use Raw Energy OFF; enabling it causes glow to flash erratically on dynamic tracks.
+8. *Preset 1 (Wave) sanity*: Favor Width Reaction, Sensitivity, and modest Heartbeat over heavy Wave Effect / Crawl / Micro Wobble. The current baseline intentionally ships with `Crawl = 0`; if quiet passages still feel too busy, trim `Wave Effect` first. If loud passages feel too flat, raise `Width Reaction` or `Sensitivity` before increasing Heartbeat.
 
 ---

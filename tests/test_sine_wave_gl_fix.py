@@ -64,6 +64,14 @@ class TestSineWaveGLOverlayFix:
         assert source is not None
         assert len(source) > 100
 
+    def test_sine_wave_shader_support_gates_wave_effect(self):
+        """Wave Effect should be explicitly gated so quiet passages stay calmer."""
+        from widgets.spotify_visualizer.shaders import load_fragment_shader
+        source = load_fragment_shader('sine_wave')
+        assert "uniform float u_wave_effect_gate;" in source
+        assert "wave_fx_gate" in source
+        assert "u_wave_effect_gate" in source
+
     def test_card_height_growth_factor_defaults(self):
         """Verify default growth factors per mode."""
         from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH

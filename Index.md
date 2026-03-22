@@ -18,10 +18,9 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Visualizer_Signal_Contract.md | Canonical contract for continuous energy, transient bus, micro-scheduler events, and per-mode smoothing ownership |
 | Docs/Visualizer_Reset_Matrix.md | Canonical reset/freshness matrix for cold start, mode switches, same-mode apply, preset cycling, and waveform gates |
 | Docs/Visualizer_Baseline_Tuning_Matrix.md | Cross-mode baseline tuning sheet: floor/AGC strategy, transient vs scheduler roles, compat-key policy, and validation guardrails |
-| Current_Plan.md (Visualizers) | Tracks Visualizers subtab master toggle (`spotify_visualizer.visualizers_enabled`), Media linkage, pending diagnostics/presets/tests |
+| Current_Plan.md | Live project plan. For visualizers it is the canonical status board for Blob/Sine/Osc validation, audit follow-through, release backlog, and explicit design backlog items such as the future Sine Crawl redesign. |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
-| Current_Plan.md | Live backlog + checkbox/combobox rollout manifest (auto-generated inventory for styled controls) |
-| Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines (bar count, floors, block sizes). **Spectrum “Cake” preset is exempt from bar-count changes** per 2026 audit. |
+| Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines and tuning notes. **Spectrum “Cake” preset is exempt from bar-count changes** per 2026 audit. |
 | Spec.md (Visualizer buckets) | Advanced then Technical collapsible buckets per mode (Spectrum/Bubble/Blob/Sine/Osc); state persisted via `_visualizer_adv_state`/`_visualizer_tech_state`. **Helix/Starfield are deprecated** (dev-only remnants kept for backwards compatibility). |
 
 ## Tooling

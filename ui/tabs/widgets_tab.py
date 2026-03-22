@@ -1273,11 +1273,11 @@ class WidgetsTab(QWidget):
 
         # Identify the sender and the current mode's advanced container
         _adv_map = {
-            'spectrum': '_spectrum_advanced',
-            'oscilloscope': '_osc_advanced',
-            'sine_wave': '_sine_advanced',
-            'blob': '_blob_advanced',
-            'bubble': '_bubble_advanced',
+            'spectrum': ('_spectrum_advanced',),
+            'oscilloscope': ('_osc_advanced',),
+            'sine_wave': ('_sine_advanced', '_sine_advanced_host'),
+            'blob': ('_blob_advanced',),
+            'bubble': ('_bubble_advanced',),
         }
         _slider_map = {
             'spectrum': '_spectrum_preset_slider',
@@ -1292,14 +1292,18 @@ class WidgetsTab(QWidget):
         except Exception:
             return
 
-        adv_attr = _adv_map.get(mode)
+        adv_attrs = _adv_map.get(mode)
         slider_attr = _slider_map.get(mode)
-        if not adv_attr or not slider_attr:
+        if not adv_attrs or not slider_attr:
             return
 
-        adv_container = getattr(self, adv_attr, None)
+        adv_roots = [
+            getattr(self, attr, None)
+            for attr in adv_attrs
+            if getattr(self, attr, None) is not None
+        ]
         slider = getattr(self, slider_attr, None)
-        if adv_container is None or slider is None:
+        if not adv_roots or slider is None:
             return
 
         # If already on Custom, nothing to switch.
@@ -1313,16 +1317,21 @@ class WidgetsTab(QWidget):
         except Exception:
             sender = None
 
-        if sender is not None:
-            w = sender
-            inside_adv = False
-            while w is not None:
-                if w is adv_container:
-                    inside_adv = True
-                    break
-                w = w.parent()
-            if not inside_adv:
-                return
+        # Sender-less saves happen during preset application and other
+        # programmatic flows. They must never be treated as "advanced edit"
+        # signals or we will silently force curated presets back to Custom.
+        if sender is None:
+            return
+
+        w = sender
+        inside_adv = False
+        while w is not None:
+            if any(w is root for root in adv_roots):
+                inside_adv = True
+                break
+            w = w.parent()
+        if not inside_adv:
+            return
 
         slider.set_preset_index(custom_index)
 
@@ -1653,6 +1662,8 @@ class WidgetsTab(QWidget):
             'osc_glow_intensity': (getattr(self, 'osc_glow_intensity', None) and self.osc_glow_intensity.value() or 50) / 100.0,
             'osc_reactive_glow': getattr(self, 'osc_reactive_glow', None) and self.osc_reactive_glow.isChecked(),
             'blob_pulse': (getattr(self, 'blob_pulse', None) and self.blob_pulse.value() or 100) / 100.0,
+            'blob_pulse_cap': (getattr(self, 'blob_pulse_cap', None) and self.blob_pulse_cap.value() or 100) / 100.0,
+            'blob_pulse_release_ms': getattr(self, 'blob_pulse_release_ms', None) and self.blob_pulse_release_ms.value() or 220,
             'blob_growth': (getattr(self, 'blob_growth', None) and self.blob_growth.value() or 250) / 100.0,
         }
         

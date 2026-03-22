@@ -794,6 +794,7 @@ class TestSineSchedulerBeatAssist:
         _line_snare_event_strength = 0.45
         _sine_wave_transient_width_mix = 0.40
         _sine_width_reaction = 0.35
+        _sine_heartbeat = 0.34
         _osc_line_amplitude = 1.10
         _heartbeat_intensity = 0.10
 
@@ -811,9 +812,12 @@ class TestSineSchedulerBeatAssist:
         assert reactive['mid_energy'] > 0.10
         assert reactive['high_energy'] > 0.05
         assert reactive['overall_energy'] > 0.18
-        assert reactive['sensitivity'] > 1.10
+        assert reactive['sensitivity'] > 1.20
         assert reactive['heartbeat_intensity'] > 0.10
-        assert reactive['width_reaction'] > 0.35
+        assert reactive['width_reaction'] > 0.44
+        assert reactive['heartbeat_intensity'] < 0.36
+        assert reactive['sensitivity'] < 1.30
+        assert reactive['wave_effect_gate'] > 0.35
 
     def test_zero_events_leave_sine_base_signals_alone(self):
         from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
@@ -829,6 +833,87 @@ class TestSineSchedulerBeatAssist:
         assert abs(reactive['mid_energy'] - 0.10) < 1e-9
         assert abs(reactive['high_energy'] - 0.05) < 1e-9
         assert abs(reactive['overall_energy'] - 0.18) < 1e-9
-        assert abs(reactive['sensitivity'] - 1.10) < 1e-9
         assert abs(reactive['heartbeat_intensity'] - 0.10) < 1e-9
-        assert abs(reactive['width_reaction'] - 0.35) < 1e-9
+        assert reactive['sensitivity'] > 1.10
+        assert reactive['width_reaction'] > 0.35
+        assert reactive['wave_effect_gate'] > 0.25
+
+    def test_strong_events_on_calm_phrase_do_not_create_huge_pseudo_heartbeat(self):
+        from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
+
+        state = self._State()
+        state._osc_smoothed_bass = 0.03
+        state._osc_smoothed_mid = 0.05
+        state._osc_smoothed_high = 0.03
+        state._energy_bands.overall = 0.05
+        state._line_kick_event_strength = 0.95
+        state._line_snare_event_strength = 0.60
+        state._heartbeat_intensity = 0.0
+        state._sine_heartbeat = 0.34
+
+        reactive = _compute_sine_reactivity_state(state)
+
+        assert reactive['heartbeat_intensity'] < 0.14
+        assert reactive['sensitivity'] < 1.18
+        assert reactive['width_reaction'] < 0.39
+        assert reactive['bass_energy'] < 0.15
+        assert reactive['wave_effect_gate'] < 0.10
+
+    def test_real_heartbeat_envelope_still_wins_over_scheduler_assist(self):
+        from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
+
+        state = self._State()
+        state._heartbeat_intensity = 0.72
+        state._sine_heartbeat = 0.34
+        state._line_kick_event_strength = 0.25
+        state._line_snare_event_strength = 0.10
+
+        reactive = _compute_sine_reactivity_state(state)
+
+        assert reactive['heartbeat_intensity'] == 0.72
+
+    def test_low_sensitivity_slider_is_not_artificially_crushed(self):
+        from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
+
+        state = self._State()
+        state._osc_line_amplitude = 0.42
+        state._line_kick_event_strength = 0.0
+        state._line_snare_event_strength = 0.0
+        state._sine_wave_transient_width_mix = 0.0
+
+        reactive = _compute_sine_reactivity_state(state)
+
+        assert reactive['sensitivity'] >= 0.42
+
+    def test_reactivity_spikes_rise_quickly_but_release_smoothly(self):
+        from widgets.spotify_visualizer.renderers.sine_wave import (
+            _compute_sine_reactivity_state,
+            _compute_sine_reactivity_targets,
+        )
+
+        state = self._State()
+        state._line_kick_event_strength = 0.0
+        state._line_snare_event_strength = 0.0
+        state._sine_wave_transient_width_mix = 0.0
+        baseline = _compute_sine_reactivity_state(state, now_ts=1.000)
+
+        state._line_kick_event_strength = 0.95
+        state._line_snare_event_strength = 0.55
+        state._sine_wave_transient_width_mix = 0.40
+        hit_target = _compute_sine_reactivity_targets(state)
+        hit_frame = _compute_sine_reactivity_state(state, now_ts=1.016)
+
+        state._line_kick_event_strength = 0.0
+        state._line_snare_event_strength = 0.0
+        state._sine_wave_transient_width_mix = 0.0
+        calm_target = _compute_sine_reactivity_targets(state)
+        release_1 = _compute_sine_reactivity_state(state, now_ts=1.032)
+        release_2 = _compute_sine_reactivity_state(state, now_ts=1.048)
+
+        assert hit_frame['width_reaction'] > baseline['width_reaction']
+        assert hit_frame['width_reaction'] < hit_target['width_reaction']
+        assert release_1['width_reaction'] > calm_target['width_reaction']
+        assert release_2['width_reaction'] > calm_target['width_reaction']
+        assert release_1['width_reaction'] < hit_frame['width_reaction']
+        assert release_2['width_reaction'] < release_1['width_reaction']
+        assert release_1['sensitivity'] > calm_target['sensitivity']

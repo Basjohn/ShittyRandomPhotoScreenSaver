@@ -179,6 +179,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_transient_mix_bass: float = 0.5
         self._blob_transient_mix_vocal: float = 0.35
         self._transient_clamp: float = 1.5
+        self._blob_pulse_cap: float = 1.0
+        self._blob_pulse_release_ms: float = 220.0
         # Sine wave ghost: peak-tracked energy per band (decays slowly)
         self._sine_peak_bass: float = 0.0
         self._sine_peak_mid: float = 0.0
@@ -416,6 +418,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_stage_bias: float = 0.0,
         blob_stage2_release_ms: float = 900.0,
         blob_stage3_release_ms: float = 1200.0,
+        blob_pulse_cap: float = 1.0,
+        blob_pulse_release_ms: float = 220.0,
         blob_constant_wobble: float = 1.0,
         blob_reactive_wobble: float = 1.0,
         blob_stretch_tendency: float = 0.35,
@@ -550,8 +554,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 dt_seconds = dt
                 blob_dt = self._compute_blob_smoothing_dt(dt_seconds)
                 blob_dt_seconds = blob_dt
-                kick_tau = 0.22 if blob_kick_raw < self._blob_kick_event_envelope else 0.05
-                snare_tau = 0.18 if blob_snare_raw < self._blob_snare_event_envelope else 0.05
+                hitch_clamped = dt_seconds > (blob_dt + 0.020)
+                kick_tau = 0.22 if blob_kick_raw < self._blob_kick_event_envelope else (0.08 if hitch_clamped else 0.05)
+                snare_tau = 0.18 if blob_snare_raw < self._blob_snare_event_envelope else (0.07 if hitch_clamped else 0.05)
                 kick_alpha = min(1.0, blob_dt / max(kick_tau, 0.01))
                 snare_alpha = min(1.0, blob_dt / max(snare_tau, 0.01))
                 self._blob_kick_event_envelope += (
@@ -748,6 +753,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._line_snare_event_envelope = line_snare_raw
         self._line_kick_event_strength = self._line_kick_event_envelope
         self._line_snare_event_strength = self._line_snare_event_envelope
+        self._blob_pulse_cap = max(0.0, min(2.0, float(blob_pulse_cap)))
+        self._blob_pulse_release_ms = max(60.0, min(800.0, float(blob_pulse_release_ms)))
 
         # Store energy bands (all modes that need them)
         if energy_bands is not None:
@@ -900,6 +907,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stage_bias = max(-0.60, min(0.60, float(blob_stage_bias)))
         self._blob_stage2_release_ms = max(50.0, min(5000.0, float(blob_stage2_release_ms)))
         self._blob_stage3_release_ms = max(50.0, min(5000.0, float(blob_stage3_release_ms)))
+        self._blob_pulse_cap = max(0.0, min(2.0, float(blob_pulse_cap)))
+        self._blob_pulse_release_ms = max(60.0, min(800.0, float(blob_pulse_release_ms)))
         self._blob_constant_wobble = max(0.0, min(2.0, float(blob_constant_wobble)))
         self._blob_reactive_wobble = max(0.0, min(2.0, float(blob_reactive_wobble)))
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
@@ -1357,10 +1366,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if bool(getattr(self, '_blob_seed_pending', False)) or max(prev) <= 0.0001:
             return clamped
         taus = (
-            (0.018, 0.180),  # bass: fast rise, slower decay
-            (0.028, 0.220),  # mid: most visually obvious deformation path
-            (0.025, 0.180),  # high: sparkle without chatter
-            (0.028, 0.260),  # overall: stage/size support
+            (
+                0.018,
+                max(0.08, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 0.75),
+            ),  # bass: fast rise, user-shaped release
+            (
+                0.028,
+                max(0.10, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 1.00),
+            ),  # mid: most visually obvious deformation path
+            (
+                0.025,
+                max(0.08, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 0.85),
+            ),  # high: sparkle without chatter
+            (
+                0.028,
+                max(0.12, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 1.15),
+            ),  # overall: stage/size support
         )
         filtered: List[float] = []
         for idx, (prev_val, cur_val, (rise_tau, decay_tau)) in enumerate(
@@ -1548,11 +1569,35 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         stage_bass_support = min(clamp_max, base_bass + transient_bass * 0.35)
         stage_kick_boost = kick_evt * kick_guard * (0.03 + kick_support * 0.16)
         stage_overall = max(
+            base_overall,
             base_bass * 0.55 + base_overall * 0.45,
             stage_bass_support * 0.75 + base_overall * 0.25 + stage_kick_boost,
         )
         stage_overall = min(clamp_max, stage_overall)
+        pulse_cap_scale = max(0.0, min(2.0, float(getattr(self, '_blob_pulse_cap', 1.0) or 1.0)))
+        support_bass = min(clamp_max, base_bass + transient_bass * 0.65)
+        support_mid = min(clamp_max, base_mid + transient_mid * 0.55)
+        support_high = min(clamp_max, base_high + transient_high * 0.45)
+        support_overall = min(
+            clamp_max,
+            max(base_overall, support_bass * 0.55 + base_overall * 0.45),
+        )
+        cap_unit = (
+            0.035
+            + base_overall * 0.10
+            + transient_bass * 0.12
+            + transient_mid * 0.08
+            + transient_high * 0.05
+        ) * pulse_cap_scale
+        bass = min(bass, support_bass + cap_unit * 1.60)
+        mid = min(mid, support_mid + cap_unit * 1.15)
+        high = min(high, support_high + cap_unit * 0.75)
+        stage_overall = min(
+            stage_overall,
+            max(base_overall, support_overall + cap_unit * 1.10),
+        )
         stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 0.85)
+        stage_bass = min(stage_bass, support_bass + cap_unit * 1.35)
         stage_mid = min(stage_overall, base_mid * 0.20 + transient_mid * 0.08)
         stage_high = min(stage_overall * 0.60, base_high * 0.15 + transient_high * 0.05)
         self._blob_stage_input_bass = stage_bass

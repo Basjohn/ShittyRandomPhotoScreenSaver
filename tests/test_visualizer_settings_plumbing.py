@@ -242,6 +242,14 @@ class TestConfigApplier:
             "config_applier not pushing sine_width_reaction to extra dict"
         )
 
+    def test_blob_pulse_controls_applied_and_pushed(self):
+        src = self._read_config_applier_src()
+        for key in ("blob_pulse_cap", "blob_pulse_release_ms"):
+            assert f"'{key}'" in src, f"config_applier missing {key}"
+            assert f"extra['{key}']" in src, (
+                f"config_applier not pushing {key} to extra dict"
+            )
+
     def test_bubble_gpu_push_has_snapshot_data(self):
         """Bubble GPU push must include pos_data, extra_data, count."""
         src = self._read_config_applier_src()

@@ -119,6 +119,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
     if 'blob_reactive_deformation' in kwargs:
         widget._blob_reactive_deformation = max(0.0, min(3.0, float(kwargs['blob_reactive_deformation'])))
+    if 'blob_pulse_cap' in kwargs:
+        widget._blob_pulse_cap = max(0.0, min(2.0, float(kwargs['blob_pulse_cap'])))
+    if 'blob_pulse_release_ms' in kwargs:
+        widget._blob_pulse_release_ms = max(60.0, min(800.0, float(kwargs['blob_pulse_release_ms'])))
     if 'blob_stage_gain' in kwargs:
         widget._blob_stage_gain = max(0.0, min(2.0, float(kwargs['blob_stage_gain'])))
     if 'blob_core_scale' in kwargs:
@@ -619,6 +623,8 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_glow_max_size'] = getattr(widget, '_blob_glow_max_size', 1.0)
     extra['blob_reactive_glow'] = widget._blob_reactive_glow
     extra['blob_reactive_deformation'] = widget._blob_reactive_deformation
+    extra['blob_pulse_cap'] = getattr(widget, '_blob_pulse_cap', 1.0)
+    extra['blob_pulse_release_ms'] = getattr(widget, '_blob_pulse_release_ms', 220.0)
     extra['blob_stage_gain'] = widget._blob_stage_gain
     extra['blob_core_scale'] = widget._blob_core_scale
     extra['blob_core_floor_bias'] = widget._blob_core_floor_bias
