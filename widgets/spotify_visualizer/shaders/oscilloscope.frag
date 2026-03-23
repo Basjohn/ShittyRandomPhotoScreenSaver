@@ -52,6 +52,8 @@ uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 // Ghost waveform (previous frame trail)
 uniform float u_prev_waveform[256];
 uniform float u_osc_ghost_alpha; // 0 = no ghost, >0 = ghost trail intensity
+uniform int u_ghost_line2_enabled;
+uniform int u_ghost_line3_enabled;
 
 float get_waveform_sample(int idx) {
     // Modular wrap so offset lines read valid circular-buffer data
@@ -239,6 +241,32 @@ vec4 eval_line(
     return vec4(rgb, total_alpha);
 }
 
+void composite_ghost_line(
+    float ny, float inner_height, float wave_val, float amplitude,
+    vec4 ghost_line_color, vec4 ghost_glow_color,
+    float ghost_glow_sigma, float ghost_band_energy,
+    float ghost_alpha,
+    inout vec3 dst_rgb, inout float dst_a
+) {
+    vec3 ghost_line_rgb;
+    vec3 ghost_glow_rgb;
+    float ghost_line_alpha;
+    float ghost_glow_alpha;
+    eval_line(
+        ny, inner_height, wave_val, amplitude,
+        ghost_line_color, ghost_glow_color, ghost_glow_sigma, ghost_band_energy,
+        ghost_line_rgb, ghost_glow_rgb, ghost_line_alpha, ghost_glow_alpha
+    );
+    float ga = (ghost_line_alpha + ghost_glow_alpha) * ghost_alpha;
+    if (ga <= 0.001) {
+        return;
+    }
+    float inv = 1.0 - ga;
+    vec3 premult = (ghost_line_rgb + ghost_glow_rgb) * ghost_alpha;
+    dst_rgb = premult + dst_rgb * inv;
+    dst_a = ga + dst_a * inv;
+}
+
 void composite_line(
     vec3 line_rgb, vec3 glow_rgb, float line_alpha, float glow_alpha,
     inout vec3 dst_rgb, inout float dst_a, inout float glow_accum
@@ -339,39 +367,51 @@ void main() {
         ghost_rgb = gc1.rgb * gc1.a * ga;
         ghost_a = gc1.a * ga;
 
-        if (lines >= 2) {
+        if (lines >= 2 && u_ghost_line2_enabled == 1) {
             int gwf_count = max(u_waveform_count, 2);
             int goffset2 = max(1, gwf_count / 3);
             float gamp2 = amplitude * (0.88 + e2_band * 0.22 * band_boost);
             float gw2 = sample_prev_waveform(nx, goffset2);
-            float gny2 = ny - lob * 0.18;
-            float gsigma2 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.55 : glow_sigma_base * 0.6;
-            vec3 gc2_line_rgb;
-            vec3 gc2_glow_rgb;
-            float gc2_line_alpha;
-            float gc2_glow_alpha;
-            vec4 gc2 = eval_line(gny2, inner_height, gw2, gamp2,
-                                 u_line2_color, glowColor2, gsigma2, e2_band,
-                                 gc2_line_rgb, gc2_glow_rgb, gc2_line_alpha, gc2_glow_alpha);
-            ghost_rgb = ghost_rgb * (1.0 - gc2.a * ga * 0.5) + gc2.rgb * gc2.a * ga;
-            ghost_a = max(ghost_a, gc2.a * ga);
+            float gny2;
+            float gv_shift_pct2 = float(u_osc_vertical_shift) / 100.0;
+            if (abs(gv_shift_pct2) > 0.001) {
+                float gbase_sp2 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gshift2 = (gbase_sp2 * gv_shift_pct2) / inner_height;
+                gny2 = ny + gshift2;
+                gamp2 = amplitude * (0.7 + e2_band * 0.15);
+            } else {
+                gny2 = ny - lob * 0.18;
+            }
+            float ghost_sigma2 = ((u_osc_line_dim == 1) ? glow_sigma_base * 0.925 : glow_sigma_base) * 0.70;
+            composite_ghost_line(
+                gny2 + 0.010, inner_height, gw2, gamp2,
+                vec4(glowColor2.rgb, 1.0), glowColor2, ghost_sigma2, e2_band,
+                ga,
+                ghost_rgb, ghost_a
+            );
         }
-        if (lines >= 3) {
+        if (lines >= 3 && u_ghost_line3_enabled == 1) {
             int gwf_count3 = max(u_waveform_count, 2);
             int goffset3 = max(1, gwf_count3 * 2 / 3);
             float gamp3 = amplitude * (0.75 + e3_band * 0.28 * band_boost);
             float gw3 = sample_prev_waveform(nx, goffset3);
-            float gny3 = ny + lob * 0.18;
-            float gsigma3 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.5 : glow_sigma_base * 0.6;
-            vec3 gc3_line_rgb;
-            vec3 gc3_glow_rgb;
-            float gc3_line_alpha;
-            float gc3_glow_alpha;
-            vec4 gc3 = eval_line(gny3, inner_height, gw3, gamp3,
-                                 u_line3_color, glowColor3, gsigma3, e3_band,
-                                 gc3_line_rgb, gc3_glow_rgb, gc3_line_alpha, gc3_glow_alpha);
-            ghost_rgb = ghost_rgb * (1.0 - gc3.a * ga * 0.4) + gc3.rgb * gc3.a * ga;
-            ghost_a = max(ghost_a, gc3.a * ga);
+            float gny3;
+            float gv_shift_pct3 = float(u_osc_vertical_shift) / 100.0;
+            if (abs(gv_shift_pct3) > 0.001) {
+                float gbase_sp3 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gshift3 = (gbase_sp3 * gv_shift_pct3) / inner_height;
+                gny3 = ny - gshift3;
+                gamp3 = amplitude * (0.6 + e3_band * 0.18);
+            } else {
+                gny3 = ny + lob * 0.18;
+            }
+            float ghost_sigma3 = ((u_osc_line_dim == 1) ? glow_sigma_base * 0.85 : glow_sigma_base) * 0.70;
+            composite_ghost_line(
+                gny3 + 0.010, inner_height, gw3, gamp3,
+                vec4(glowColor3.rgb, 1.0), glowColor3, ghost_sigma3, e3_band,
+                ga,
+                ghost_rgb, ghost_a
+            );
         }
     }
 

@@ -17,6 +17,8 @@ from typing import Any, Dict
 from unittest.mock import MagicMock
 
 import pytest
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.bar_computation import (
@@ -64,6 +66,86 @@ class TestSpectrumShapeConfig:
         d = asdict(cfg)
         restored = SpectrumShapeConfig(**d)
         assert asdict(restored) == d
+
+    def test_interpolate_nodes_mirrored_even_bar_counts_stay_edge_symmetric(self):
+        from ui.tabs.media.spectrum_shape_editor import interpolate_nodes_mirrored
+
+        nodes = [[0.0, 0.98], [0.16, 0.98], [0.58, 0.76], [0.86, 0.90], [1.0, 0.26]]
+        vals = interpolate_nodes_mirrored(nodes, 34)
+
+        assert vals[0] == pytest.approx(vals[-1], abs=1e-6)
+        assert vals[1] == pytest.approx(vals[-2], abs=1e-6)
+
+
+class TestSpectrumShapeEditorNotches:
+    @staticmethod
+    def _mouse_event(event_type, x, y, button, buttons=None):
+        if buttons is None:
+            buttons = button
+        return QMouseEvent(
+            event_type,
+            QPointF(x, y),
+            QPointF(x, y),
+            QPointF(x, y),
+            button,
+            buttons,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+    @pytest.mark.qt
+    def test_dragged_notch_can_cross_neighbors_without_pulling_them(self, qt_app):
+        from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
+
+        editor = SpectrumShapeEditor(mirrored=True)
+        try:
+            editor.resize(320, 180)
+            editor.show()
+
+            original = editor.get_notch_positions()
+            plot = editor._plot_rect()
+            center_x = plot.left() + plot.width() * 0.5
+            half_w = plot.width() * 0.5
+            notch_y = plot.bottom() + 10.0
+
+            drag_idx = 1  # Vocal
+            start_frac = float(original[drag_idx][0])
+            start_x = center_x - start_frac * half_w
+            move_target_x = center_x - (float(original[0][0]) + 0.01) * half_w
+
+            editor.mousePressEvent(
+                self._mouse_event(
+                    QEvent.Type.MouseButtonPress,
+                    start_x,
+                    notch_y,
+                    Qt.MouseButton.LeftButton,
+                )
+            )
+            editor.mouseMoveEvent(
+                self._mouse_event(
+                    QEvent.Type.MouseMove,
+                    move_target_x,
+                    notch_y,
+                    Qt.MouseButton.NoButton,
+                    Qt.MouseButton.LeftButton,
+                )
+            )
+            editor.mouseReleaseEvent(
+                self._mouse_event(
+                    QEvent.Type.MouseButtonRelease,
+                    move_target_x,
+                    notch_y,
+                    Qt.MouseButton.LeftButton,
+                )
+            )
+
+            updated = editor.get_notch_positions()
+            labels_to_positions = {str(label): float(pos) for pos, label in updated}
+            assert labels_to_positions["Mid"] == pytest.approx(float(original[0][0]), abs=1e-6)
+            assert labels_to_positions["Low-Mid"] == pytest.approx(float(original[2][0]), abs=1e-6)
+            assert labels_to_positions["Vocal"] < float(original[0][0]) + 0.03
+            assert labels_to_positions["Vocal"] >= 0.0
+        finally:
+            editor.deleteLater()
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +289,9 @@ class TestSettingsModelShaping:
             "spectrum_mid_suppression": 0.25,
             "spectrum_wave_amplitude": 0.80,
             "spectrum_profile_floor": 0.20,
+            "spectrum_glow_enabled": True,
+            "spectrum_glow_intensity": 0.72,
+            "spectrum_glow_color": [12, 240, 255, 220],
         }
         model = SpotifyVisualizerSettings.from_mapping(mapping)
         assert model.spectrum_bass_emphasis == 0.70
@@ -214,6 +299,9 @@ class TestSettingsModelShaping:
         assert model.spectrum_mid_suppression == 0.25
         assert model.spectrum_wave_amplitude == 0.80
         assert model.spectrum_profile_floor == 0.20
+        assert model.spectrum_glow_enabled is True
+        assert model.spectrum_glow_intensity == pytest.approx(0.72)
+        assert model.spectrum_glow_color == [12, 240, 255, 220]
 
     def test_to_dict_includes_shaping(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -226,6 +314,8 @@ class TestSettingsModelShaping:
         assert flat[f"{prefix}.spectrum_bass_emphasis"] == 0.60
         assert flat[f"{prefix}.spectrum_vocal_position"] == 0.45
         assert flat[f"{prefix}.spectrum_mid_suppression"] == 0.50  # default
+        assert flat[f"{prefix}.spectrum_glow_enabled"] is False
+        assert flat[f"{prefix}.spectrum_glow_intensity"] == pytest.approx(0.55)
         assert f"{prefix}.spectrum_bar_profile" not in flat
 
     def test_no_spectrum_bar_profile_field(self):

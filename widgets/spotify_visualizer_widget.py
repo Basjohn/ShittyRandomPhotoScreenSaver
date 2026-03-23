@@ -96,11 +96,16 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_ghosting_enabled: bool = True
         self._sine_ghost_alpha: float = 0.45
         self._sine_ghost_decay: float = 0.3
+        self._sine_ghost_line2_enabled: bool = True
+        self._sine_ghost_line3_enabled: bool = True
         self._bubble_ghosting_enabled: bool = False
         self._bubble_ghost_alpha: float = 0.0
         self._bubble_ghost_decay: float = 0.4
         self._spectrum_single_piece: bool = False
         self._spectrum_border_radius: float = 0.0
+        self._spectrum_glow_enabled: bool = False
+        self._spectrum_glow_intensity: float = 0.55
+        self._spectrum_glow_color: QColor = QColor(110, 220, 255, 235)
         self._spectrum_mirrored: bool = True
         self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
         self._spectrum_notch_positions_mirrored: list = [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
@@ -209,6 +214,8 @@ class SpotifyVisualizerWidget(QWidget):
         # Oscilloscope ghost trail
         self._osc_ghosting_enabled: bool = False
         self._osc_ghost_intensity: float = 0.4
+        self._osc_ghost_line2_enabled: bool = True
+        self._osc_ghost_line3_enabled: bool = True
 
         # Sine Wave Heartbeat
         self._sine_heartbeat: float = 0.0
@@ -658,7 +665,19 @@ class SpotifyVisualizerWidget(QWidget):
             snapshot = model
         self._settings_model = snapshot
         self._technical_config_cache = self._build_technical_cache(snapshot)
-        self._apply_technical_config_for_mode(self._vis_mode, reason="settings_model_update")
+        target_mode = self._vis_mode
+        try:
+            mode_name = str(getattr(snapshot, "mode", "") or "").lower()
+            target_mode = {
+                "spectrum": VisualizerMode.SPECTRUM,
+                "oscilloscope": VisualizerMode.OSCILLOSCOPE,
+                "blob": VisualizerMode.BLOB,
+                "sine_wave": VisualizerMode.SINE_WAVE,
+                "bubble": VisualizerMode.BUBBLE,
+            }.get(mode_name, self._vis_mode)
+        except Exception:
+            target_mode = self._vis_mode
+        self._apply_technical_config_for_mode(target_mode, reason="settings_model_update")
 
     def _build_technical_cache(self, model: SpotifyVisualizerSettings) -> Dict[str, Dict[str, Any]]:
         cache: Dict[str, Dict[str, Any]] = {}

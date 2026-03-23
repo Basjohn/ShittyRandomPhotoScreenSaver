@@ -35,6 +35,8 @@ htmlcov/
 .coverage.*
 Current_Plan.md
 /logs
+agent.md
+*.bak
 
 # IDE and editor files
 .vscode/

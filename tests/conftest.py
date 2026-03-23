@@ -16,10 +16,18 @@ Chunked test execution:
       python tests/run_chunked.py          # auto-detect chunk count
       python tests/run_chunked.py --chunks 6
 """
+import os
 import pytest
 import sys
 import uuid
+from pathlib import Path
 from PySide6.QtWidgets import QApplication
+
+
+ROOT = Path(__file__).resolve().parents[1]
+TEST_APPDATA = ROOT / "tests_tmp_appdata"
+TEST_APPDATA.mkdir(parents=True, exist_ok=True)
+os.environ["APPDATA"] = str(TEST_APPDATA)
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +61,15 @@ def pytest_collection_modifyitems(config, items):
     if deselected:
         config.hook.pytest_deselected(items=deselected)
     items[:] = selected
+
+
+def pytest_sessionstart(session):
+    """Keep storage-path resolution deterministic for the whole suite."""
+    try:
+        from core.settings.storage_paths import reset_module_cache
+        reset_module_cache()
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope='session')

@@ -34,6 +34,14 @@
         "spectrum_ghost_alpha": 0.56,
         "spectrum_ghost_decay": 0.22,
         "spectrum_ghosting_enabled": true,
+        "spectrum_glow_color": [
+          110,
+          220,
+          255,
+          235
+        ],
+        "spectrum_glow_enabled": false,
+        "spectrum_glow_intensity": 0.55,
         "spectrum_growth": 5.0,
         "spectrum_input_gain": 0.8,
         "spectrum_kick_lane_gain": 1.0,

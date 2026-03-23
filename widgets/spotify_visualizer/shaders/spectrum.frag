@@ -17,6 +17,9 @@ uniform float u_bar_height_scale;  // visual boost for taller cards (1.0 = defau
 uniform int u_single_piece;        // 1 = solid bars (no segment gaps)
 uniform int u_slanted;             // 1 = diagonal-sliced bar edges facing center
 uniform float u_border_radius;     // border radius in px (0 = square, ~6 = rounded)
+uniform int u_spectrum_glow_enabled;
+uniform float u_spectrum_glow_intensity;
+uniform vec4 u_spectrum_glow_color;
 uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 uniform int u_rainbow_per_bar;      // 1 = unique colour per bar, 0 = single shifting colour
 
@@ -56,6 +59,37 @@ vec4 apply_spectrum_rainbow(vec4 col, int bidx) {
     else if (h < 5.0/6.0) rgb = vec3(rb_x, 0.0, c);
     else                  rgb = vec3(c, 0.0, rb_x);
     return vec4(rgb + m, col.a);
+}
+
+float spectrum_rim_alpha(float side_dist_px, float top_dist_px) {
+    if (u_spectrum_glow_enabled != 1) return 0.0;
+    float glow_strength = clamp(u_spectrum_glow_intensity, 0.0, 1.5);
+    if (glow_strength <= 0.001) return 0.0;
+    float edge_dist = min(side_dist_px, top_dist_px);
+    // Inward rim glow: bright core near the edge that fades deeper into the
+    // bar interior.  Thresholds sized so bars of 8-15px width get a clearly
+    // visible tinted band (roughly the outer 40-60% of the bar).
+    float spread = 3.0 + glow_strength * 4.0;          // 3..7 px reach
+    float core_end = max(1.5, spread * 0.35);           // bright inner core
+    float inner_core = 1.0 - smoothstep(0.0, core_end, edge_dist);
+    float inner_falloff = 1.0 - smoothstep(core_end, spread, edge_dist);
+    float rim = max(inner_core * 0.90, inner_falloff * 0.55);
+    float color_alpha = clamp(u_spectrum_glow_color.a, 0.0, 1.0);
+    return rim * clamp(color_alpha * (0.55 + glow_strength * 0.40), 0.0, 0.95);
+}
+
+vec4 blend_spectrum_rim_glow(vec4 base_color, float rim_alpha) {
+    if (rim_alpha <= 0.001) return base_color;
+    vec3 glow_rgb = u_spectrum_glow_color.rgb;
+    float color_alpha = clamp(u_spectrum_glow_color.a, 0.0, 1.0);
+    // Tint replacement: mix the glow colour into the fill.  The strength
+    // scales with rim_alpha so the core band is strongly tinted while the
+    // falloff region blends gently.
+    float stripe_mix = clamp(rim_alpha * (1.20 + color_alpha * 0.60), 0.0, 0.85);
+    vec3 tinted = mix(base_color.rgb, glow_rgb, stripe_mix);
+    // Additive lift so the glow pops even on bright/white fills.
+    vec3 lifted = min(vec3(1.0), tinted + glow_rgb * rim_alpha * (0.30 + color_alpha * 0.15));
+    return vec4(lifted, base_color.a);
 }
 
 void main() {
@@ -350,6 +384,12 @@ void main() {
             sp_is_border = on_border;
             sp_color = on_border ? border : fill;
         }
+        float side_dist_px = min(bar_local_x, bar_width - bar_local_x);
+        float top_dist_px = abs((is_ghost ? peak_height : active_height) - y_rel);
+        float rim_alpha = spectrum_rim_alpha(side_dist_px, top_dist_px) * u_fade;
+        if (!sp_is_border) {
+            sp_color = blend_spectrum_rim_glow(sp_color, rim_alpha);
+        }
         // Border and ghost pixels keep their original colour (white stays white).
         fragColor = sp_is_border ? sp_color : apply_spectrum_rainbow(sp_color, bar_index);
         return;
@@ -524,6 +564,12 @@ void main() {
     } else {
         seg_is_border = on_border;
         out_color = on_border ? border : fill;
+    }
+    float seg_side_dist_px = min(bar_local_x, bar_width - bar_local_x);
+    float seg_top_dist_px = abs(seg_height - seg_local_y);
+    float seg_rim_alpha = spectrum_rim_alpha(seg_side_dist_px, seg_top_dist_px) * u_fade;
+    if (!seg_is_border) {
+        out_color = blend_spectrum_rim_glow(out_color, seg_rim_alpha);
     }
 
     // Border and ghost pixels keep their original colour (white stays white).

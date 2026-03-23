@@ -10,6 +10,7 @@ def get_uniform_names() -> list[str]:
     return [
         "u_waveform_count", "u_waveform",
         "u_osc_ghost_alpha", "u_prev_waveform",
+        "u_ghost_line2_enabled", "u_ghost_line3_enabled",
         "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity", "u_glow_color",
         "u_reactive_glow", "u_sensitivity", "u_smoothing",
         "u_line_color", "u_line_count",
@@ -43,6 +44,8 @@ def upload_uniforms(gl, u: dict, s) -> bool:
 
     # Ghost waveform
     _set1f(gl, u, "u_osc_ghost_alpha", s._osc_ghost_alpha)
+    _set1i(gl, u, "u_ghost_line2_enabled", 1 if getattr(s, "_osc_ghost_line2_enabled", True) else 0)
+    _set1i(gl, u, "u_ghost_line3_enabled", 1 if getattr(s, "_osc_ghost_line3_enabled", True) else 0)
     loc = u.get("u_prev_waveform", -1)
     if loc >= 0:
         prev_wf = s._prev_waveform

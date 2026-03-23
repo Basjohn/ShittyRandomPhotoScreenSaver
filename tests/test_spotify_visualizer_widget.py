@@ -7,6 +7,7 @@ import pytest
 from types import SimpleNamespace
 
 from utils.lockfree import TripleBuffer
+from core.settings.models import SpotifyVisualizerSettings
 from widgets.spotify_visualizer import mode_transition
 from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer_widget import (
@@ -249,6 +250,7 @@ def test_mode_switch_does_not_request_overlay_reset_before_transition_reset(qt_a
     qtbot.addWidget(parent)
 
     fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
     monkeypatch.setattr(
         vis_mod,
         "get_shared_spotify_beat_engine",
@@ -334,6 +336,116 @@ def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monk
 
     assert widget._waiting_for_fresh_engine_frame is False
     assert parent.frames
+
+
+@pytest.mark.qt
+def test_runtime_push_carries_spectrum_glow_settings(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget._engine = fake_engine
+    widget.apply_vis_mode_config(
+        mode="spectrum",
+        spectrum_glow_enabled=True,
+        spectrum_glow_intensity=1.15,
+        spectrum_glow_color=[0, 120, 255, 255],
+    )
+    widget.start()
+    qt_app.processEvents()
+    fake_engine.publish_frame([0.65] * widget._bar_count)
+
+    parent.reset_pushes()
+    widget._on_tick()
+
+    assert parent.frames
+    frame = parent.frames[-1]
+    assert frame["vis_mode"] == "spectrum"
+    assert frame["spectrum_glow_enabled"] is True
+    assert frame["spectrum_glow_intensity"] == pytest.approx(1.15)
+
+
+@pytest.mark.qt
+def test_runtime_push_carries_osc_secondary_ghost_toggles(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget._engine = fake_engine
+    widget.apply_vis_mode_config(
+        mode="oscilloscope",
+        osc_line_count=3,
+        osc_ghosting_enabled=True,
+        osc_ghost_intensity=0.62,
+        osc_ghost_line2_enabled=True,
+        osc_ghost_line3_enabled=False,
+    )
+    widget.start()
+    qt_app.processEvents()
+    fake_engine.publish_frame([0.55] * widget._bar_count)
+    fake_engine.publish_waveform_only()
+
+    parent.reset_pushes()
+    widget._on_tick()
+
+    assert parent.frames
+    frame = parent.frames[-1]
+    assert frame["vis_mode"] == "oscilloscope"
+    assert frame["osc_ghosting_enabled"] is True
+    assert frame["osc_ghost_intensity"] == pytest.approx(0.62)
+    assert frame["osc_ghost_line2_enabled"] is True
+    assert frame["osc_ghost_line3_enabled"] is False
+
+
+@pytest.mark.qt
+def test_set_settings_model_applies_incoming_mode_technical_config(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+
+    model = SpotifyVisualizerSettings(
+        mode="oscilloscope",
+        bar_count=8,
+        oscilloscope_bar_count=24,
+        oscilloscope_dynamic_floor=False,
+        oscilloscope_manual_floor=0.21,
+    )
+
+    widget.set_settings_model(model)
+
+    assert widget._bar_count == 24
+    assert widget._last_floor_config[0] is False
+    assert widget._last_floor_config[1] == pytest.approx(0.21)
 
 
 @pytest.mark.qt

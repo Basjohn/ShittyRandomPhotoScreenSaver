@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parent.parent
+TEST_APPDATA = ROOT / "tests_tmp_appdata"
+TEST_APPDATA.mkdir(parents=True, exist_ok=True)
+os.environ["APPDATA"] = str(TEST_APPDATA)
 
 
 def test_glow_shaders_expose_reactivity_and_intensity_strength_contract() -> None:

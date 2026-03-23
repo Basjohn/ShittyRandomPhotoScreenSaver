@@ -168,6 +168,27 @@ def test_blob_kick_assist_requires_real_low_end_support(qt_app):
 
 
 @pytest.mark.qt
+def test_blob_kick_assist_prefers_stage_growth_over_live_bass_blowout(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._blob_kick_event_strength = 1.0
+    overlay._blob_snare_event_strength = 0.0
+    overlay._transient_energy = SimpleNamespace(
+        bass_transient=0.10,
+        mid_transient=0.04,
+        high_transient=0.02,
+    )
+
+    phrase = SimpleNamespace(bass=0.18, mid=0.08, high=0.03, overall=0.12)
+    live = overlay._compute_blob_live_bands(phrase)
+
+    assert live[0] <= float(phrase.bass) + 0.08
+    assert overlay._blob_stage_input_bass > live[0]
+    assert overlay._blob_stage_input_overall > live[3]
+
+
+@pytest.mark.qt
 def test_blob_snare_assist_does_not_drive_stage_on_vocal_phrase(qt_app):
     from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 

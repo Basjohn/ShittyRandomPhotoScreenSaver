@@ -98,6 +98,8 @@ uniform float u_ghost_alpha;
 uniform float u_ghost_bass;
 uniform float u_ghost_mid;
 uniform float u_ghost_high;
+uniform int u_ghost_line2_enabled;
+uniform int u_ghost_line3_enabled;
 
 float compute_density_cycles() {
     // Two-piece linear: 0.25→1 cycle, 1.0→3 cycles (default), 3.0→8 cycles.
@@ -611,7 +613,7 @@ void main() {
         float w2_pre = w2 + mw2 + crawl_offset2 + wfx2 / amp2_safe;
 
         // Ghost LINE 2: decoupled trailing ghost — slower travel, reduced effects
-        if (u_ghost_alpha > 0.001) {
+        if (u_ghost_alpha > 0.001 && u_ghost_line2_enabled == 1) {
             float ghost_e2 = mix(u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10,
                                  u_ghost_mid * 0.45 + u_ghost_bass * 0.20, lob * 0.4);
             float ghost_amp2_raw = base_amplitude * (1.0 + ghost_e2 * 0.30);
@@ -729,7 +731,7 @@ void main() {
         float w3_pre = w3 + mw3 + crawl_offset3 + wfx3 / amp3_safe;
 
         // Ghost LINE 3: decoupled trailing ghost — slower travel, reduced effects
-        if (u_ghost_alpha > 0.001) {
+        if (u_ghost_alpha > 0.001 && u_ghost_line3_enabled == 1) {
             float ghost_e3 = mix(u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10,
                                  u_ghost_high * 0.35 + u_ghost_bass * 0.25, lob * 0.4);
             float ghost_amp3_raw = base_amplitude * (1.0 + ghost_e3 * 0.30);

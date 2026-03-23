@@ -8,6 +8,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Dynamic floor**: Enabled for every mode/preset by default. Manual floor remains available but should only be raised for stylistic reasons.
 - **Spectrum "Cake" preset**: Explicitly exempt from bar-count swaps; leave its authored value intact unless UX signs off on a redesign.
 - **Deprecated modes**: Helix & Starfield are no longer shipped in production builds. They remain in code/dev builds for archival reasons but should not receive further tuning or preset work. Call out any lingering references when touching tooling/docs.
+- **Curated pack baseline**: Blob, Spectrum, Oscilloscope, and Sine Wave now each ship a six-slot curated pack. Keep slot numbering unique and sequential; if you delete or add curated files, run `tools/visualizer_preset_repair.py --reindex-curated`.
 
 ---
 
@@ -67,7 +68,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Stage Bias / Stage Gain / Stage 2 & 3 Release** (`blob_stage_bias`, `blob_stage_gain`, `blob_stage2_release_ms`, `blob_stage3_release_ms`) — *Advanced sliders*
   - Impact: Shape staged growth envelopes: bias preloads, gain scales amplitude, release sliders control linger durations.
   - Conflicts: High manual floor or dynamic floor can pin stages, making gain changes imperceptible.
-  - Notes: The micro-scheduler now non-destructively peeks recent `kick`/`snare` events into Blob staging. If Stage Gain feels too “steppy,” reduce Stage Gain or Pulse Intensity before assuming the scheduler is overfiring.
+  - Notes: The micro-scheduler now non-destructively peeks recent `kick`/`snare` events into Blob staging. If Stage Gain feels too “steppy,” reduce Stage Gain or Pulse Intensity before assuming the scheduler is overfiring. Technical `Kick Lane Gain` now also applies to Blob and can be set to `0%` to disable scheduler kick assist without disabling continuous/transient support.
 - **Core Scale / Core Floor Bias** (`blob_core_scale`, `blob_core_floor_bias`) — *Advanced sliders*
   - Impact: Core Scale is uniform multiplier after staging; Core Floor keeps minimum radius.
   - Conflicts: Large floor bias reduces effect of Technical floors; too much scale causes clipping.
@@ -105,8 +106,10 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 6. *Pulse Intensity*: Treat 1.0× (100 %) as the default. Staying between 0.85×–1.25× keeps Stage Gain/Reactive Deformation in their useful range; only push higher after dialing Stage Gain down so you don’t double-scale the same amplitude envelope.
 7. *Pulse sanity*: If Blob feels nauseatingly flickery on low-energy music, reduce Pulse Cap before reducing Pulse Intensity. Pulse Cap trims only the extra reactive lift; Pulse Intensity changes the whole mode’s throb.
 8. *Release shaping*: Use Pulse Release around `0.18s – 0.32s` for most music. Shorter values feel snappier but can chatter; longer values are safer for vocals/piano but can smear fast drums.
-9. *Bar layout*: Keep Bar Count between 32–48 for a balanced look. Going past 64 spreads energy too thin (muted pulse) unless Pulse Intensity/Stage Gain drop to compensate; dipping below 24 makes stretch spikes chunky.
-10. *AGC tuning*: Leave Energy Boost at default (0.85×) and AGC Strength at 50%. Blob deformation uses energy bands as continuous drivers — post-AGC ~0.5–0.8 range keeps the blob moderately deformed at all times, which is desirable. Lowering AGC Strength increases dynamic range but may cause the blob to collapse during quiet passages. Do NOT enable Use Raw Energy — raw values cause jarring shape discontinuities because the blob's smoothing was designed for near-constant input range.
+9. *Kick assist triage*: If Blob reacts well overall but still has occasional discrete flicker or giant beat pops, try lowering Technical `Kick Lane Gain` first. `0%` disables scheduler kick help while preserving continuous support and snare-driven wobble/stretch.
+10. *Bar layout*: Keep Bar Count between 32–48 for a balanced look. Going past 64 spreads energy too thin (muted pulse) unless Pulse Intensity/Stage Gain drop to compensate; dipping below 24 makes stretch spikes chunky.
+11. *AGC tuning*: Leave Energy Boost at default (0.85×) and AGC Strength at 50%. Blob deformation uses energy bands as continuous drivers — post-AGC ~0.5–0.8 range keeps the blob moderately deformed at all times, which is desirable. Lowering AGC Strength increases dynamic range but may cause the blob to collapse during quiet passages. Do NOT enable Use Raw Energy — raw values cause jarring shape discontinuities because the blob's smoothing was designed for near-constant input range.
+12. *Curated pack intent*: Use the six shipped Blob presets as distinct starting families rather than one ladder of "more pulse." `The Mighty Blob` is the validation baseline; `Lava Lamp` and `Ice Crystal` are safer low-shock entries; `Reactive Heart`, `Void Heart`, and `Solar Flare` explore stronger looks while staying on the newer Pulse Cap / Pulse Release guardrails.
 
 ---
 
@@ -210,21 +213,21 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Bar Fill / Border Colours & Opacity** (`bar_fill_color`, `bar_border_color`, `bar_border_opacity`) — *Normal controls*
   - Impact: Define main pillar colour, outline, and outline alpha.
   - Conflicts: High opacity borders plus ghosting can leave bright after-images; lower opacity when ghost trails enabled.
+- **Rim Glow Enable / Color / Intensity** (`spectrum_glow_enabled`, `spectrum_glow_color`, `spectrum_glow_intensity`) — *Normal controls*
+  - Impact: Adds a very thin inward rim tint on the bar fill, roughly a 1–2 px bleed just inside the border rather than a separate outer halo or bloom pass.
+  - Conflicts: Strong glow plus very bright borders can make peaks look overlined; trim Border Opacity before assuming the glow is too strong.
 - **Ghosting Enable / Opacity / Decay** (`ghosting_enabled`, `ghost_alpha`, `ghost_decay`) — *Advanced group*
   - Impact: Draws decaying peak bars; opacity sets brightness, decay controls linger length.
   - Conflicts: Slow decay + curved profile amplifies shimmer; combine with Single Piece to avoid floating peaks.
 - **Single Piece Mode** (`spectrum_single_piece`) — *Advanced checkbox*
-  - Impact: Renders solid pillars (no segments) using the curved shader path.
-  - Conflicts: Requires adequate border radius or slanted profile for polish; legacy profile ignores this toggle.
+  - Impact: Renders solid pillars (no segments) using the current node-driven Spectrum path.
+  - Conflicts: Requires adequate border radius for polish; segmented mode usually wants lower radius.
 - **Rainbow Per-Bar** (`spectrum_rainbow_per_bar`) — *Advanced checkbox*
   - Impact: Distributes rainbow shader across bars instead of treating the stack as one gradient.
   - Conflicts: Adds GPU cost; with Single Piece OFF the stripes exaggerate segment gaps.
-- **Bar Profile** (`spectrum_bar_profile`) — *Advanced combo*
-  - Impact: Switch between legacy template and curved dual-peak math.
-  - Conflicts: Curved engages additional smoothing; keep Adaptive Sensitivity ON to avoid clipped peaks when switching back.
 - **Border Radius** (`spectrum_border_radius`) — *Advanced slider*
-  - Impact: Rounds bar tips when using Curved profile (hidden for Legacy).
-  - Conflicts: High radius with segment gaps causes visual gaps between segments; pair with Single Piece for best effect.
+  - Impact: Rounds bar tips and segment corners.
+  - Conflicts: High radius with visible segment gaps causes visual separation; pair stronger values with Single Piece for best effect.
 - **Card Height Growth** (`spectrum_growth`) — *Advanced slider*
   - Impact: Multiplies widget height.
   - Conflicts: Larger cards require higher Manual Floor or Adaptive Sensitivity, otherwise bars look short despite height.
@@ -232,16 +235,21 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
   - Impact: Govern FFT binning, latency, gain, floors, and AGC behaviour.
   - Conflicts: Low bar counts (<24) break curved weighting (bass peak shifts); audio block sizes <256 increase jitter unless the new bar gate remains. Energy Boost >1.2× with Dynamic Range Boost ON can overdrive bar heights.
   - Notes: Spectrum now routes bass/mid/treble per lane instead of multiplying the whole profile by one shared scalar. The shape editor is still the silhouette guide, but quiet lanes can now drop properly when their source energy disappears.
+- **Shape editor notch drag** (`spectrum_notch_positions_mirrored`, `spectrum_notch_positions_linear`) — *Shape editor bottom controls*
+  - Impact: Defines zone boundaries used by the lane-routing model.
+  - Behavior: Dragging now clamps only the selected notch between its neighbors; it no longer pushes adjacent labels around while you drag.
 
 **Recommended Spectrum baselines**
 
-1. *Curved kit*: Bar Profile = Curved, Border Radius ~4px, Single Piece ON, Rainbow Per-Bar OFF for a clean wave look.
-2. *Ghost tuning*: Enable Ghosting only when bar_border_opacity ≤80 %; set Ghost Alpha 35 %, Decay 55 % for smooth peaks without smearing.
-3. *Height vs gain*: At Spectrum Growth >1.3×, raise Adaptive Sensitivity offset by +0.1 (or raise Manual Floor by +0.15) to keep bars from hugging the bottom.
-4. *Bar count*: 32–48 bins keep curved weighting intact; going to 64 needs Sensitivity +15 % to compensate for thinner energy per bar.
-5. *Latency trade*: Audio Block Size 256 (Auto) balances response and smoothness. Drop to 128 only when you also increase ghost decay (faster fade) to avoid shimmer.
-6. *Colour discipline*: Keep Fill alpha ≥85 % if you disable Single Piece; otherwise the gaps show wallpaper bleed and look noisy.
-7. *AGC tuning*: Energy Boost at 0.85× default works well for spectrum. Raise to 1.0–1.2× if bars look short on quieter playlists. AGC Strength 50% (default) is the sweet spot — lowering it increases dynamic range (tall kicks, short verse) while raising it compresses everything toward uniform height. Use Raw Energy can be enabled for dramatic range but expect bars to collapse to zero during quiet passages.
+1. *Clean kit*: Border Radius ~4px, Single Piece ON, Rainbow Per-Bar OFF for a clean wave look.
+2. *Rim glow*: Start with Rim Glow around `45%–70%` and a cool or border-adjacent swatch. It is meant to read as a tiny interior rim accent, not a second fill color or bloom layer.
+3. *Ghost tuning*: Enable Ghosting only when bar_border_opacity ≤80 %; set Ghost Alpha 35 %, Decay 55 % for smooth peaks without smearing.
+4. *Height vs gain*: At Spectrum Growth >1.3×, raise Adaptive Sensitivity offset by +0.1 (or raise Manual Floor by +0.15) to keep bars from hugging the bottom.
+5. *Bar count*: 32–48 bins keep curved weighting intact; going to 64 needs Sensitivity +15 % to compensate for thinner energy per bar.
+6. *Latency trade*: Audio Block Size 256 (Auto) balances response and smoothness. Drop to 128 only when you also increase ghost decay (faster fade) to avoid shimmer.
+7. *Colour discipline*: Keep Fill alpha ≥85 % if you disable Single Piece; otherwise the gaps show wallpaper bleed and look noisy.
+8. *AGC tuning*: Energy Boost at 0.85× default works well for spectrum. Raise to 1.0–1.2× if bars look short on quieter playlists. AGC Strength 50% (default) is the sweet spot — lowering it increases dynamic range (tall kicks, short verse) while raising it compresses everything toward uniform height. Use Raw Energy can be enabled for dramatic range but expect bars to collapse to zero during quiet passages.
+9. *Curated pack intent*: The shipped six-slot Spectrum pack now covers clean default pillars, retro/mirrored shapes, monochrome punch, organ-like single-piece sustain, a non-mirrored neon lane preset (`Prism Runway`), and a warmer sustained-body preset (`Ember Choir`).
 
 ---
 
@@ -282,6 +290,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 5. *Technical split*: Leave Adaptive Sensitivity ON; if you disable it and raise the Technical Sensitivity slider, dial Line Amplitude back ~10 % so the two gains don't double-scale. Manual Floor 1.6 + Dynamic Floor OFF still needs Smoothing around 75 % to avoid chatter.
 6. *Card height*: Growth 1.2× for two lines, 1.4× for three. Re-check widget overlap whenever Smoothing <50 % (lines spike higher).
 7. *AGC tuning*: Keep defaults (Energy Boost 0.85×, AGC Strength 50%). Energy Boost only affects glow brightness for oscilloscope — waveform amplitude is waveform-driven, not energy-driven. Raising Energy Boost beyond 1.2× only makes glow brighter without affecting line height. Leave Use Raw Energy OFF.
+8. *Curated pack intent*: The shipped six-slot Oscilloscope pack intentionally spans one-line punch (`Volt Ribbon`), soft dual-line motion (`Soft Echo`), brighter neon response (`Night Drive`), and smooth three-line glass drift (`Glass Choir`) so tuning experiments start from distinct motion families, not just color swaps.
 
 ---
 
@@ -325,5 +334,6 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 6. *Colour & glow*: Use complementary colours per line (e.g., white primary, cyan secondary) and keep Glow Intensity ≤60 % to avoid blending lines together.
 7. *AGC tuning*: Keep defaults. Like oscilloscope, sine wave amplitude is waveform-driven — Energy Boost and AGC Strength only affect glow brightness. Leave Use Raw Energy OFF; enabling it causes glow to flash erratically on dynamic tracks.
 8. *Preset 1 (Wave) sanity*: Favor Width Reaction, Sensitivity, and modest Heartbeat over heavy Wave Effect / Crawl / Micro Wobble. The current baseline intentionally ships with `Crawl = 0`; if quiet passages still feel too busy, trim `Wave Effect` first. If loud passages feel too flat, raise `Width Reaction` or `Sensitivity` before increasing Heartbeat.
+9. *Curated pack intent*: The shipped six-slot Sine pack now ranges from the current Wave baseline through calmer ribbon/choir presets and up to sharper or more modern pulse-led variants. All new curated Sine presets intentionally keep `Crawl = 0` until Crawl is redesigned as an additive effect instead of distortion.
 
 ---

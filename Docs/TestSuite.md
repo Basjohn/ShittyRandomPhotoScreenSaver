@@ -4,7 +4,8 @@ Living reference for testing architecture, policies, and the current regression 
 
 **Purpose**: Detailed reference for all tests, what they check, when to use them, and which suites are the minimum guardrails for active bug work.
 
-**Total Tests**: ~300+ tests across 99 test files
+**Current Collection Snapshot**: `1724 tests` across `115 test files` (`pytest --collect-only tests -q`, Mar 23 2026)
+Do not treat this as a forever-static number. Refresh it when the suite shape changes substantially.
 
 ---
 
@@ -48,9 +49,14 @@ tests/
 - **Integration/regression tests**: may use Qt, real component interactions, and targeted synthetic scenarios.
 - **Policy tests**: static architectural checks in `tests/unit/test_policy_compliance.py`.
 - **Visual/runtime bugfixes**: keep a behavior-level regression where possible, but do not confuse source-level or contract-level assertions with real visual validation.
+- **Visualizer preset tests**:
+  - `tests/test_visualizer_presets.py` should stay schema/repair/filter focused.
+  - `tests/test_visualizer_preset1_baselines.py` is the intentional rigid synthetic feel fence.
+  - if curated preset 1 is intentionally reauthored, refresh the checked-in baseline in the same change.
 
 ### Stability Rules
 
+- The suite now forces a workspace-local `APPDATA` in `tests/conftest.py` and resets `core.settings.storage_paths` resolution at session start. Tests should not require a manually exported roaming path override to collect.
 - Always use `qt_app.processEvents()` after async GUI work in tests.
 - Use timeouts instead of open-ended waits.
 - Clean up widgets/timers/transitions explicitly in teardown.
@@ -336,16 +342,19 @@ tests/
 | `test_visualizer_preservation.py` | Visualizer state preservation | Visualizer reset bugs |
 | `test_visualizer_playback_gating.py` | Visualizer playback state gating | Bars when paused |
 | `test_visualizer_modes.py` | Visualizer direction/swirl/converge modes | Mode switching |
-| `test_visualizer_architecture_split.py` | 36 tests: module exports, delegation wiring, monolith size guards for the Mar 2026 architecture split | Architecture split regressions |
+| `test_visualizer_architecture_split.py` | Focused architecture split guard: required extracted exports, widget delegation, monolith threshold | Architecture split regressions |
 | `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity | New uniform/kwarg additions |
 | `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering | Preset file changes |
-| `test_visualizer_settings_plumbing.py` | End-to-end settings plumbing (model → widget → overlay → shader) | New visualizer settings |
+Line of intent: keep this suite schema/contract-focused. It should guard payload shape, filtering, repair-tool behavior, and direct transient-key preservation, not freeze artistic tuning choices for curated presets.
+It also guards curated slot normalization through `tools/visualizer_preset_repair.py --reindex-curated`: gap-filling, canonical filename rewrite, recovery when the earliest remaining preset is no longer slot 1, duplicate-slot detection, and Preset 1 presence per primary mode without freezing the rest of the artistic pack size.
+| `test_visualizer_preset1_baselines.py` | Deterministic synthetic preset-1 baseline fence for active shipped modes | Structural migrations, curated preset-1 reauthoring, before/after regression checks |
+| `test_visualizer_settings_plumbing.py` | Behavior-first settings plumbing (model → creator/applier → frame push → overlay state contract), with a small amount of unavoidable shader-source/static coverage | New visualizer settings |
 | `test_visualizer_preset_cycling_runtime.py` | Runtime preset cycling API (`WidgetManager`), SpotifyVisualizerWidget middle/XButton shortcuts, InputHandler routing hit-tests, preset wrap-around | Runtime preset shortcut regressions |
 | `test_visualizer_alignment.py` | Visualizer positioning relative to other widgets | Positioning changes |
 | `test_blob_intensity_reserve.py` | Blob intensity reserve and core floor clamp math | Blob stage tuning |
 | `test_micro_wobble_math.py` | Micro wobble amplitude/frequency math | Wobble parameter changes |
 | `test_sine_wave_gl_fix.py` | Sine wave GL uniform gating regression | Sine mode uniform issues |
-| `test_action_plan_3_0.py` | Action Plan 3.0: heartbeat settings/math, artwork double-click fix, halo forwarding guard, halo shapes, sine line positioning, rainbow/ghosting roundtrip, shader source validation (37 tests) | Tasks 5/6.1/6.2/7/8 |
+| `test_osc_sine_glow_contract.py` | Focused Osc/Sine glow contract: shader strength/reactivity ownership + mode-specific GPU extra routing | Glow reactivity plumbing |
 | `test_bubble_reactivity.py` | Bubble pulse reactivity with simulated audio: rapid beat clusters (burst detection), sustained loud sections, quiet→loud→quiet transitions, single kicks, small→big promotion lifecycle (8 tests) | Bubble sim pulse/reactivity changes |
 | `test_input_gain.py` | Input gain (virtual volume): PCM scaling identity check, very-low-gain silence, FFT magnitude linearity, model round-trip (default/to_dict/from_mapping/resolve), audio worker clamping (9 tests) | Input gain pipeline changes |
 
@@ -409,18 +418,10 @@ for tf in sorted(pathlib.Path(cwd,'tests').glob('test_*.py')):
 | `test_transition_endframe.py` | 9 tests skipped — requires GL context for end-frame pixel assertions | Runtime integration only |
 | `test_transitions_integration.py` | 3 tests skipped — requires GL context | Runtime integration only |
 
-### Pre-existing Failures (not caused by recent changes)
-These tests have known failures unrelated to the burn/styling/test-fixture work:
-- ~~`test_display_tab.py` — 1 failure~~ **Fixed Mar 2026** (timing.interval default 140)
-- `test_settings_dialog.py` — 1 failure
-- ~~`test_settings_no_sources_popup.py` — 4 failures~~ **Fixed Mar 2026** (added `_apply_application_font` to `NoSourcesPopup`)
-- `test_spotify_visualizer_widget.py` — 4 failures
-- ~~`test_transitions_tab.py` — 2 failures~~ **Fixed Mar 2026** (type/direction defaults aligned)
-- `test_visualizer_presets.py` — 1 failure
-- `test_widget_manager_refresh.py` — 1 failure
-- `test_widgets_tab.py` — 2 failures
-- `test_pixel_shift.py` — 1 failure
-- `test_save_debounce.py` — 1 failure
+### Collection Health
+
+- `pytest --collect-only tests -q` now completes cleanly without manual environment overrides.
+- Avoid hard-coding stale “known failures” here. When a regression is active, record it in [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Current_Plan.md) or the relevant bug/debug doc instead of letting this section decay.
 
 ### Test Fixture Best Practices
 When writing tests that create `DisplayWidget` or start transitions:
@@ -454,7 +455,7 @@ When writing tests that create `DisplayWidget` or start transitions:
 
 ## Test Categories Summary
 
-| Category | Count | Files |
+| Category | Approx. Files | Notes |
 |----------|-------|-------|
 | Core Infrastructure | 12 | Threading, process, events, resources, storage paths |
 | Rendering & GL | 20 | GL state, compositor, transitions, rendering backends |
@@ -466,7 +467,7 @@ When writing tests that create `DisplayWidget` or start transitions:
 | Performance & Telemetry | 7 | Timing, logging, perf |
 | MC | 3 | Manual Controller specific |
 | Regression | 18 | Bug fixes, architecture split, visualizer plumbing |
-| **Total** | **99 files** | |
+| **Total** | **115 files** | Current collected `test_*.py` count as of Mar 23 2026 |
 
 ---
 
@@ -480,9 +481,16 @@ When writing tests that create `DisplayWidget` or start transitions:
   Guards shared-engine fresh-frame/reset gating during mode switches. Still important because the Oscilloscope half-dead-line bug is not yet considered closed.
 - `tests/test_ghost_isolation.py`
   Guards Blob ghost routing/isolation and retired ghost-path branches. This protects the code contract, but Blob ghost visuals still require user validation.
+- `tests/test_visualizer_presets.py`
+  Guards curated preset schema, repair-tool behavior, and payload hygiene only. Do not use it to freeze aesthetic tuning decisions.
+  It is also the regression fence for curated reindex behavior (`--reindex-curated`) so slot repair stays metadata-only and deterministic, while tolerating authored artistic pack changes outside the rigid Preset 1 baseline fence.
+- `tests/test_visualizer_settings_plumbing.py`
+  This suite should prefer real model/applier/creator/frame-push behavior checks over source-text assertions. A few static contract checks remain where GL/shader runtime surfaces are impractical.
+- `tests/test_visualizer_preset1_baselines.py`
+  This is the intentional rigid fence for curated preset feel. If preset 1 is deliberately reauthored, refresh the checked-in baseline in the same change.
 - `tests/test_s_hotkey_workflow.py` and `tests/test_flicker_fix_integration.py`
   Minimum regression bar for the now-resolved settings flicker / settings-launch workflow.
 
 ---
 
-**Last Updated**: Mar 22, 2026 (live regression bar refreshed for Halo/Blob/Osc work; older counts may drift until the next full suite inventory pass)
+**Last Updated**: Mar 23, 2026 (test harness/environment refreshed; visualizer contract suites pruned toward behavior-first coverage)

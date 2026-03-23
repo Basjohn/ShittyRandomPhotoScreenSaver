@@ -1,25 +1,30 @@
-"""Regression tests for visualizer settings plumbing across all 8 layers.
+"""Regression tests for visualizer settings plumbing.
 
-Catches bugs like:
-- Bubble kwargs causing TypeError in set_state (sim-only keys forwarded)
-- Missing settings in model/from_settings/from_mapping/to_dict
-- Missing card height entries for new modes
-- Rainbow greyscale saturation fix missing from shaders
-- Width reaction not wired through all layers
+This file aims to stay mostly behavior-level:
+- settings round-trip through the model
+- creator/applier/frame-push propagation
+- set_state compatibility guards
 
-These tests do NOT require a running app or GL context.
+Small source-level checks remain only where there is no practical runtime
+surface without a live GL context (mainly shader-source contracts).
 """
+import os
 import inspect
-import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QColor
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 ROOT = Path(__file__).resolve().parent.parent
 SHADER_DIR = ROOT / "widgets" / "spotify_visualizer" / "shaders"
+TEST_APPDATA = ROOT / "tests_tmp_appdata"
+TEST_APPDATA.mkdir(parents=True, exist_ok=True)
+os.environ["APPDATA"] = str(TEST_APPDATA)
 
 
 # ===========================================================================
@@ -36,18 +41,35 @@ class TestBubbleGpuPushKwargs:
         sig = inspect.signature(SpotifyBarsGLOverlay.set_state)
         return set(sig.parameters.keys()) - {"self"}
 
-    def _get_bubble_extra_keys(self):
-        """Extract keys that build_gpu_push_extra_kwargs adds for bubble mode."""
-        src = (ROOT / "widgets" / "spotify_visualizer" / "config_applier.py").read_text(encoding="utf-8")
-        # Find the bubble block
-        bubble_block = src.split("if mode_str == 'bubble':")[1].split("return extra")[0]
-        keys = re.findall(r"extra\['(\w+)'\]", bubble_block)
-        return set(keys)
+    def _build_bubble_extra(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+
+        class _DummyWidget:
+            def __init__(self):
+                self._bubble_pos_data = [0.1, 0.2, 0.3, 0.4]
+                self._bubble_extra_data = [0.5, 0.6, 0.7, 0.8]
+                self._bubble_trail_data = [0.9, 1.0]
+                self._bubble_count = 2
+
+            def __getattr__(self, name):
+                if name in {"_spectrum_shape_nodes", "_spectrum_notch_positions_mirrored", "_spectrum_notch_positions_linear"}:
+                    return []
+                if name.endswith("_direction"):
+                    return "top"
+                if "color" in name or "tint" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if name.endswith("line_count"):
+                    return 1
+                return 0.0
+
+        return build_gpu_push_extra_kwargs(_DummyWidget(), "bubble", None)
 
     def test_bubble_extra_keys_accepted_by_set_state(self):
         """Every key in bubble GPU push must be accepted by set_state."""
         set_state_params = self._get_set_state_params()
-        bubble_keys = self._get_bubble_extra_keys()
+        bubble_keys = set(self._build_bubble_extra().keys())
         rejected = bubble_keys - set_state_params
         assert not rejected, (
             f"Bubble GPU push keys not accepted by set_state: {rejected}. "
@@ -65,7 +87,7 @@ class TestBubbleGpuPushKwargs:
             "bubble_big_count", "bubble_small_count",
             "bubble_surface_reach",
         }
-        bubble_keys = self._get_bubble_extra_keys()
+        bubble_keys = set(self._build_bubble_extra().keys())
         leaked = bubble_keys & sim_only_keys
         assert not leaked, (
             f"Simulation-only keys leaked into GPU push: {leaked}. "
@@ -97,12 +119,20 @@ class TestCardHeight:
         from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
         assert DEFAULT_GROWTH.get("bubble", 0) >= 2.5
 
-    def test_widget_growth_dict_includes_bubble(self):
-        """Widget's get_preferred_height must include bubble in its growth dict."""
-        src = (ROOT / "widgets" / "spotify_visualizer_widget.py").read_text(encoding="utf-8")
-        assert "'bubble'" in src and "_bubble_growth" in src, (
-            "Widget missing bubble in growth dict or _bubble_growth attribute"
+    def test_widget_get_preferred_height_uses_bubble_growth(self):
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        widget = SimpleNamespace(
+            _vis_mode_str="bubble",
+            _base_height=80,
+            _spectrum_growth=2.0,
+            _osc_growth=2.0,
+            _blob_growth=3.5,
+            _sine_wave_growth=2.0,
+            _bubble_growth=3.0,
         )
+
+        assert SpotifyVisualizerWidget.get_preferred_height(widget) == 240
 
 
 # ===========================================================================
@@ -151,49 +181,63 @@ class TestRainbowGreyscaleFix:
 # ===========================================================================
 
 class TestSettingsModelPlumbing:
-    """Verify that key visualizer settings exist in all model methods."""
+    """Verify key settings survive real model round-trips."""
 
-    CRITICAL_SETTINGS = [
-        "sine_width_reaction",
-        "sine_micro_wobble",
-        "sine_heartbeat",
-        "rainbow_enabled",
-        "rainbow_speed",
-        "osc_ghosting_enabled",
-        "osc_ghost_intensity",
-        "bubble_big_bass_pulse",
-        "bubble_small_freq_pulse",
-        "bubble_stream_direction",
-        "bubble_outline_color",
-        "bubble_specular_direction",
-        "bubble_gradient_direction",
-        "spectrum_drop_speed",
-    ]
+    CRITICAL_SETTINGS = {
+        "sine_width_reaction": 0.42,
+        "sine_micro_wobble": 0.15,
+        "sine_heartbeat": 0.33,
+        "rainbow_enabled": True,
+        "rainbow_speed": 0.8,
+        "osc_ghosting_enabled": True,
+        "osc_ghost_intensity": 0.6,
+        "bubble_big_bass_pulse": 0.65,
+        "bubble_small_freq_pulse": 0.35,
+        "bubble_stream_direction": "left",
+        "bubble_outline_color": [10, 20, 30, 255],
+        "bubble_specular_direction": "bottom_right",
+        "bubble_gradient_direction": "center_out",
+        "spectrum_drop_speed": 2.2,
+    }
 
-    def _read_models_src(self):
-        return (ROOT / "core" / "settings" / "models.py").read_text(encoding="utf-8")
+    def _payload(self):
+        from core.settings import visualizer_presets as vp
 
-    def test_all_critical_settings_in_dataclass(self):
-        src = self._read_models_src()
-        for key in self.CRITICAL_SETTINGS:
-            assert f"{key}:" in src or f"{key} :" in src, (
-                f"Setting '{key}' missing from model dataclass"
-            )
+        return {
+            "mode": "bubble",
+            "preset_bubble": vp.get_custom_preset_index("bubble"),
+            **self.CRITICAL_SETTINGS,
+        }
 
-    def test_all_critical_settings_in_from_settings(self):
-        src = self._read_models_src()
-        for key in self.CRITICAL_SETTINGS:
-            assert f'"{key}"' in src or f"'{key}'" in src, (
-                f"Setting '{key}' may be missing from from_settings/from_mapping"
-            )
+    def _assert_model_matches(self, model):
+        for key, expected in self.CRITICAL_SETTINGS.items():
+            assert getattr(model, key) == expected
 
-    def test_all_critical_settings_in_to_dict(self):
-        src = self._read_models_src()
-        for key in self.CRITICAL_SETTINGS:
-            # to_dict uses f-string prefix keys
-            assert f".{key}" in src or f'"{key}"' in src, (
-                f"Setting '{key}' may be missing from to_dict"
-            )
+    def _assert_serialized_matches(self, payload):
+        for key, expected in self.CRITICAL_SETTINGS.items():
+            assert payload[f"widgets.spotify_visualizer.{key}"] == expected
+
+    def test_critical_settings_round_trip_via_from_mapping(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(self._payload())
+        self._assert_model_matches(model)
+        self._assert_serialized_matches(model.to_dict())
+
+    def test_critical_settings_round_trip_via_from_settings(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        persisted = SpotifyVisualizerSettings.from_mapping(self._payload()).to_dict()
+        model = SpotifyVisualizerSettings.from_settings(_DummySettings(persisted))
+        self._assert_model_matches(model)
+        self._assert_serialized_matches(model.to_dict())
 
 
 # ===========================================================================
@@ -203,25 +247,139 @@ class TestSettingsModelPlumbing:
 class TestCreatorKwargs:
     """Verify spotify_widget_creators passes critical settings."""
 
-    def _read_creators_src(self):
-        return (ROOT / "rendering" / "spotify_widget_creators.py").read_text(encoding="utf-8")
-
-    CRITICAL_PASSTHROUGH = [
-        "sine_width_reaction",
-        "sine_micro_wobble",
-        "sine_heartbeat",
-        "rainbow_enabled",
-        "rainbow_speed",
-        "osc_ghosting_enabled",
-        "osc_ghost_intensity",
-    ]
-
     def test_critical_settings_passed_through(self):
-        src = self._read_creators_src()
-        for key in self.CRITICAL_PASSTHROUGH:
-            assert f"{key}=model.{key}" in src, (
-                f"Creator missing passthrough for '{key}'"
-            )
+        from core.settings.models import SpotifyVisualizerSettings
+        from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+
+        captured = {}
+
+        class FakeVis:
+            def apply_vis_mode_config(self, **kwargs):
+                captured.update(kwargs)
+
+        model = SpotifyVisualizerSettings(
+            mode="bubble",
+            sine_width_reaction=0.42,
+            sine_micro_wobble=0.15,
+            sine_heartbeat=0.33,
+            rainbow_enabled=True,
+            rainbow_speed=0.8,
+            osc_ghosting_enabled=True,
+            osc_ghost_intensity=0.6,
+            bubble_outline_color=[10, 20, 30, 255],
+            bubble_gradient_direction="center_out",
+            bubble_specular_direction="bottom_right",
+        )
+
+        apply_spotify_vis_model_config(FakeVis(), model)
+
+        assert captured["sine_width_reaction"] == pytest.approx(0.42)
+        assert captured["sine_micro_wobble"] == pytest.approx(0.15)
+        assert captured["sine_heartbeat"] == pytest.approx(0.33)
+        assert captured["rainbow_enabled"] is True
+        assert captured["rainbow_speed"] == pytest.approx(0.8)
+        assert captured["osc_ghosting_enabled"] is True
+        assert captured["osc_ghost_intensity"] == pytest.approx(0.6)
+        assert captured["bubble_outline_color"] == [10, 20, 30, 255]
+        assert captured["bubble_gradient_direction"] == "center_out"
+        assert captured["bubble_specular_direction"] == "bottom_right"
+
+    def test_apply_spotify_vis_model_config_passes_spectrum_glow_and_secondary_ghosts(self):
+        from core.settings.models import SpotifyVisualizerSettings
+        from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+
+        captured = {}
+
+        class FakeVis:
+            def apply_vis_mode_config(self, **kwargs):
+                captured.update(kwargs)
+
+        model = SpotifyVisualizerSettings(
+            mode="oscilloscope",
+            osc_ghost_line2_enabled=True,
+            osc_ghost_line3_enabled=False,
+            spectrum_glow_enabled=True,
+            spectrum_glow_intensity=1.1,
+            spectrum_glow_color=[12, 34, 200, 255],
+        )
+
+        apply_spotify_vis_model_config(FakeVis(), model)
+
+        assert captured["spectrum_glow_enabled"] is True
+        assert captured["spectrum_glow_intensity"] == pytest.approx(1.1)
+        assert captured["spectrum_glow_color"] == [12, 34, 200, 255]
+        assert captured["osc_ghost_line2_enabled"] is True
+        assert captured["osc_ghost_line3_enabled"] is False
+
+
+class TestPresetOverlayRuntimeOverrides:
+    def test_from_mapping_preserves_explicit_spectrum_runtime_overrides(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "spectrum",
+                "preset_spectrum": 5,
+                "bar_count": 32,
+                "spectrum_bar_count": 35,
+                "spectrum_glow_enabled": True,
+                "spectrum_glow_intensity": 1.2,
+                "spectrum_glow_color": [0, 120, 255, 255],
+                "spectrum_manual_floor": 0.33,
+            }
+        )
+
+        assert model.resolve_bar_count("spectrum") == 35
+        assert model.spectrum_glow_enabled is True
+        assert model.spectrum_glow_intensity == pytest.approx(1.2)
+        assert model.spectrum_glow_color == [0, 120, 255, 255]
+        assert model.resolve_manual_floor("spectrum") == pytest.approx(0.33)
+
+    def test_from_mapping_preserves_dotted_runtime_overrides(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "widgets.spotify_visualizer.mode": "spectrum",
+                "widgets.spotify_visualizer.preset_spectrum": 5,
+                "widgets.spotify_visualizer.spectrum_bar_count": 35,
+                "widgets.spotify_visualizer.spectrum_glow_enabled": True,
+                "widgets.spotify_visualizer.spectrum_glow_intensity": 1.2,
+                "widgets.spotify_visualizer.spectrum_glow_color": [0, 120, 255, 255],
+            }
+        )
+
+        assert model.resolve_bar_count("spectrum") == 35
+        assert model.spectrum_glow_enabled is True
+        assert model.spectrum_glow_intensity == pytest.approx(1.2)
+        assert model.spectrum_glow_color == [0, 120, 255, 255]
+
+    def test_from_mapping_preserves_explicit_secondary_ghost_toggles(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        osc_model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "oscilloscope",
+                "preset_oscilloscope": 0,
+                "oscilloscope_bar_count": 35,
+                "osc_ghost_line2_enabled": False,
+                "osc_ghost_line3_enabled": True,
+            }
+        )
+        assert osc_model.resolve_bar_count("oscilloscope") == 35
+        assert osc_model.osc_ghost_line2_enabled is False
+        assert osc_model.osc_ghost_line3_enabled is True
+
+        sine_model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "sine_wave",
+                "preset_sine_wave": 0,
+                "sine_ghost_line2_enabled": False,
+                "sine_ghost_line3_enabled": True,
+            }
+        )
+        assert sine_model.sine_ghost_line2_enabled is False
+        assert sine_model.sine_ghost_line3_enabled is True
 
 
 # ===========================================================================
@@ -231,32 +389,153 @@ class TestCreatorKwargs:
 class TestConfigApplier:
     """Verify config_applier handles critical settings."""
 
-    def _read_config_applier_src(self):
-        return (ROOT / "widgets" / "spotify_visualizer" / "config_applier.py").read_text(encoding="utf-8")
-
     def test_sine_width_reaction_applied(self):
-        src = self._read_config_applier_src()
-        assert "sine_width_reaction" in src, "config_applier missing sine_width_reaction"
-        # Must be in both apply (kwargs check) and push (extra dict)
-        assert "extra['sine_width_reaction']" in src, (
-            "config_applier not pushing sine_width_reaction to extra dict"
-        )
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            _sine_width_reaction = 0.0
+
+            def __getattr__(self, name):
+                if "color" in name or "tint" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if name.endswith("_direction"):
+                    return "top"
+                if name.endswith("line_count"):
+                    return 1
+                return 0.0
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {"sine_width_reaction": 0.61})
+        extra = build_gpu_push_extra_kwargs(widget, "sine_wave", None)
+
+        assert widget._sine_width_reaction == pytest.approx(0.61)
+        assert extra["sine_width_reaction"] == pytest.approx(0.61)
 
     def test_blob_pulse_controls_applied_and_pushed(self):
-        src = self._read_config_applier_src()
-        for key in ("blob_pulse_cap", "blob_pulse_release_ms"):
-            assert f"'{key}'" in src, f"config_applier missing {key}"
-            assert f"extra['{key}']" in src, (
-                f"config_applier not pushing {key} to extra dict"
-            )
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            _blob_pulse_cap = 1.0
+            _blob_pulse_release_ms = 220.0
+
+            def __getattr__(self, name):
+                if "color" in name or "tint" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if name.endswith("_direction"):
+                    return "top"
+                if name.endswith("line_count"):
+                    return 1
+                return 0.0
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {
+            "blob_pulse_cap": 0.75,
+            "blob_pulse_release_ms": 320.0,
+        })
+        extra = build_gpu_push_extra_kwargs(widget, "blob", None)
+
+        assert widget._blob_pulse_cap == pytest.approx(0.75)
+        assert widget._blob_pulse_release_ms == pytest.approx(320.0)
+        assert extra["blob_pulse_cap"] == pytest.approx(0.75)
+        assert extra["blob_pulse_release_ms"] == pytest.approx(320.0)
+
+    def test_spectrum_glow_applied_and_pushed(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            _spectrum_glow_enabled = False
+            _spectrum_glow_intensity = 0.55
+            _spectrum_glow_color = QColor(110, 220, 255, 235)
+
+            def __getattr__(self, name):
+                if "color" in name or "tint" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if name.endswith("_direction"):
+                    return "top"
+                if name.endswith("line_count"):
+                    return 1
+                return 0.0
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {
+            "spectrum_glow_enabled": True,
+            "spectrum_glow_intensity": 1.2,
+            "spectrum_glow_color": [0, 120, 255, 255],
+        })
+        extra = build_gpu_push_extra_kwargs(widget, "spectrum", None)
+
+        assert widget._spectrum_glow_enabled is True
+        assert widget._spectrum_glow_intensity == pytest.approx(1.2)
+        assert widget._spectrum_glow_color == QColor(0, 120, 255, 255)
+        assert extra["spectrum_glow_enabled"] is True
+        assert extra["spectrum_glow_intensity"] == pytest.approx(1.2)
+        assert extra["spectrum_glow_color"] == QColor(0, 120, 255, 255)
+
+    def test_line2_line3_ghost_toggles_applied_and_pushed(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            _osc_ghost_line2_enabled = True
+            _osc_ghost_line3_enabled = True
+            _sine_ghost_line2_enabled = True
+            _sine_ghost_line3_enabled = True
+
+            def __getattr__(self, name):
+                if "color" in name or "tint" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if name.endswith("_direction"):
+                    return "top"
+                if name.endswith("line_count"):
+                    return 1
+                return 0.0
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {
+            "osc_ghost_line2_enabled": False,
+            "osc_ghost_line3_enabled": True,
+            "sine_ghost_line2_enabled": False,
+            "sine_ghost_line3_enabled": True,
+        })
+        osc_extra = build_gpu_push_extra_kwargs(widget, "oscilloscope", None)
+        sine_extra = build_gpu_push_extra_kwargs(widget, "sine_wave", None)
+
+        assert osc_extra["osc_ghost_line2_enabled"] is False
+        assert osc_extra["osc_ghost_line3_enabled"] is True
+        assert sine_extra["sine_ghost_line2_enabled"] is False
+        assert sine_extra["sine_ghost_line3_enabled"] is True
 
     def test_bubble_gpu_push_has_snapshot_data(self):
         """Bubble GPU push must include pos_data, extra_data, count."""
-        src = self._read_config_applier_src()
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            _bubble_pos_data = [0.1, 0.2, 0.3, 0.4]
+            _bubble_extra_data = [0.5, 0.6, 0.7, 0.8]
+            _bubble_trail_data = [0.9, 1.0]
+            _bubble_count = 2
+
+            def __getattr__(self, name):
+                if "color" in name or "tint" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if name.endswith("_direction"):
+                    return "top"
+                if name.endswith("line_count"):
+                    return 1
+                return 0.0
+
+        extra = build_gpu_push_extra_kwargs(DummyWidget(), "bubble", None)
         for key in ("bubble_pos_data", "bubble_extra_data", "bubble_count"):
-            assert f"extra['{key}']" in src, (
-                f"config_applier missing {key} in bubble GPU push"
-            )
+            assert key in extra
 
     def test_config_applier_accepts_gradient_direction(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
@@ -352,79 +631,231 @@ class TestConfigApplier:
 # 7. GL overlay: uniform query list and set_state params
 # ===========================================================================
 
-class TestGLOverlayUniforms:
-    """Verify GL overlay queries and pushes critical uniforms."""
+class TestGLOverlayStateContract:
+    """Verify overlay.set_state still accepts the pushed kwargs we rely on."""
 
-    def _read_overlay_src(self):
-        return (ROOT / "widgets" / "spotify_bars_gl_overlay.py").read_text(encoding="utf-8")
+    def test_set_state_accepts_bubble_gpu_and_width_reaction_params(self):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 
-    def test_width_reaction_uniform_queried(self):
-        src = self._read_overlay_src()
-        assert '"u_width_reaction"' in src, "u_width_reaction not in uniform query list"
+        params = set(inspect.signature(SpotifyBarsGLOverlay.set_state).parameters) - {"self"}
+        required = {
+            "bubble_count",
+            "bubble_pos_data",
+            "bubble_extra_data",
+            "bubble_outline_color",
+            "bubble_specular_direction",
+            "bubble_gradient_direction",
+            "sine_width_reaction",
+        }
+        missing = required - params
+        assert not missing, f"overlay.set_state missing required params: {sorted(missing)}"
 
-    def test_width_reaction_uniform_pushed(self):
-        src = self._read_overlay_src()
-        assert "u_width_reaction" in src and "_sine_width_reaction" in src
+    def test_set_state_accepts_secondary_ghosts_and_spectrum_glow(self):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 
-    def test_rainbow_uniform_queried(self):
-        src = self._read_overlay_src()
-        assert '"u_rainbow_hue_offset"' in src
+        params = set(inspect.signature(SpotifyBarsGLOverlay.set_state).parameters) - {"self"}
+        required = {
+            "osc_ghost_line2_enabled",
+            "osc_ghost_line3_enabled",
+            "sine_ghost_line2_enabled",
+            "sine_ghost_line3_enabled",
+            "spectrum_glow_enabled",
+            "spectrum_glow_intensity",
+            "spectrum_glow_color",
+        }
+        missing = required - params
+        assert not missing, f"overlay.set_state missing required params: {sorted(missing)}"
 
-    def test_bubble_uniforms_queried(self):
-        src = self._read_overlay_src()
-        for uname in ("u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
-                       "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_gradient_light"):
-            assert f'"{uname}"' in src, f"Bubble uniform {uname} not queried"
 
-    def test_set_state_accepts_bubble_params(self):
-        src = self._read_overlay_src()
-        for param in ("bubble_count", "bubble_pos_data", "bubble_extra_data",
-                       "bubble_outline_color", "bubble_specular_direction", "bubble_gradient_direction"):
-            assert param in src, f"set_state missing bubble param: {param}"
+class TestCreateTimeRefreshParity:
+    def test_create_spotify_visualizer_widget_reuses_refresh_path(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
 
-    def test_set_state_accepts_width_reaction(self):
-        src = self._read_overlay_src()
-        assert "sine_width_reaction" in src
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.bar_colors = None
 
-    def test_specular_dir_map_includes_cardinal_directions(self):
-        # Direction mapping lives in the bubble renderer, not the overlay
-        src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "bubble.py").read_text(encoding="utf-8")
-        for key in ("'top':", "'bottom':", "'left':", "'right':"):
-            assert key in src, f"Specular direction mapping missing {key}"
+            def set_settings_model(self, model):
+                self.model = model
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_bar_colors(self, fill, border):
+                self.bar_colors = (fill, border)
+
+            def set_ghost_config(self, enabled, alpha, decay):
+                self.ghost = (enabled, alpha, decay)
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+            def apply_vis_mode_config(self, **kwargs):
+                self.mode_kwargs = kwargs
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        refresh_calls = []
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = object()
+                self._widgets = {}
+                self.bound = {}
+
+            def add_expected_overlay(self, name):
+                self.expected_overlay = name
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                self.bound[name] = widget
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                refresh_calls.append(payload)
+
+        mgr = FakeManager()
+        widgets_config = {
+            "media": {
+                "monitor": "ALL",
+                "bg_color": [0, 0, 0, 180],
+                "background_opacity": 0.5,
+                "border_color": [255, 255, 255, 255],
+                "border_opacity": 0.8,
+                "show_background": True,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "mode": "spectrum",
+                "preset_spectrum": 5,
+                "bar_count": 32,
+                "spectrum_bar_count": 35,
+                "spectrum_glow_enabled": True,
+                "spectrum_glow_intensity": 1.2,
+                "spectrum_glow_color": [0, 120, 255, 255],
+                "bar_fill_color": [25, 25, 25, 255],
+                "bar_border_color": [20, 140, 255, 255],
+                "bar_border_opacity": 1.0,
+            },
+        }
+
+        vis = creators.create_spotify_visualizer_widget(
+            mgr,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=FakeMediaWidget(),
+        )
+
+        assert vis is not None
+        assert vis.bar_count == 35
+        assert vis.model.resolve_bar_count("spectrum") == 35
+        assert vis.model.spectrum_glow_enabled is True
+        assert vis.model.spectrum_glow_intensity == pytest.approx(1.2)
+        assert vis.bar_colors is not None
+        fill_color, border_color = vis.bar_colors
+        assert (fill_color.red(), fill_color.green(), fill_color.blue(), fill_color.alpha()) == tuple(vis.model.bar_fill_color)
+        expected_border = list(vis.model.bar_border_color)
+        expected_border[3] = int(float(vis.model.bar_border_opacity) * expected_border[3])
+        assert (border_color.red(), border_color.green(), border_color.blue(), border_color.alpha()) == tuple(expected_border)
+        assert vis.mode_kwargs["spectrum_glow_enabled"] is True
+        assert vis.mode_kwargs["spectrum_glow_intensity"] == pytest.approx(1.2)
+        assert refresh_calls == [widgets_config], (
+            "Create-time visualizer setup must reuse the same refresh contract "
+            "that settings re-entry uses."
+        )
+
+
+class TestDisplayFramePush:
+    def test_push_spotify_visualizer_frame_preserves_spectrum_glow_and_osc_secondary_ghosts(self, monkeypatch):
+        from rendering import display_image_ops
+
+        class FakeOverlay:
+            def __init__(self, parent):
+                self.parent = parent
+                self.last_kwargs = None
+
+            def setObjectName(self, *_args):
+                return None
+
+            def clear_overlay_buffer(self):
+                return None
+
+            def set_state(self, **kwargs):
+                self.last_kwargs = dict(kwargs)
+
+        monkeypatch.setattr(display_image_ops, "SpotifyBarsGLOverlay", FakeOverlay)
+
+        class FakeVis:
+            def isVisible(self):
+                return True
+
+            def geometry(self):
+                return QRect(0, 0, 320, 180)
+
+        class FakeWidget:
+            def __init__(self):
+                self.spotify_visualizer_widget = FakeVis()
+                self._spotify_bars_overlay = None
+                self._resource_manager = None
+                self._widget = self
+
+        widget = FakeWidget()
+        ok = display_image_ops.push_spotify_visualizer_frame(
+            widget,
+            bars=[0.1, 0.3, 0.2],
+            bar_count=3,
+            segments=16,
+            fill_color=QColor(10, 10, 10, 255),
+            border_color=QColor(255, 255, 255, 255),
+            fade=1.0,
+            playing=True,
+            vis_mode="oscilloscope",
+            spectrum_glow_enabled=True,
+            spectrum_glow_intensity=1.2,
+            spectrum_glow_color=QColor(0, 120, 255, 255),
+            osc_ghosting_enabled=True,
+            osc_ghost_intensity=0.55,
+            osc_ghost_line2_enabled=True,
+            osc_ghost_line3_enabled=False,
+        )
+
+        assert ok is True
+        overlay = widget._spotify_bars_overlay
+        assert overlay is not None
+        assert overlay.last_kwargs is not None
+        assert overlay.last_kwargs["spectrum_glow_enabled"] is True
+        assert overlay.last_kwargs["spectrum_glow_intensity"] == pytest.approx(1.2)
+        assert overlay.last_kwargs["osc_ghost_line2_enabled"] is True
+        assert overlay.last_kwargs["osc_ghost_line3_enabled"] is False
 
 
 # ===========================================================================
-# 8. Shader uniform declarations
-# ===========================================================================
-
-class TestShaderUniformDeclarations:
-    """Verify shader .frag files declare required uniforms."""
-
-    def test_sine_wave_has_width_reaction(self):
-        src = (SHADER_DIR / "sine_wave.frag").read_text(encoding="utf-8")
-        assert "u_width_reaction" in src, "sine_wave.frag missing u_width_reaction uniform"
-
-    def test_sine_wave_has_heartbeat(self):
-        src = (SHADER_DIR / "sine_wave.frag").read_text(encoding="utf-8")
-        assert "u_heartbeat" in src
-        assert "u_heartbeat_intensity" in src
-
-    def test_technical_buckets_reuse_existing_section_layouts(self):
-        src = (ROOT / "ui" / "tabs" / "media" / "technical_controls.py").read_text(encoding="utf-8")
-        assert "QVBoxLayout(agc_section)" not in src
-        assert "QVBoxLayout(transient_section)" not in src
-
-    def test_bubble_has_required_uniforms(self):
-        src = (SHADER_DIR / "bubble.frag").read_text(encoding="utf-8")
-        for u in ("u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
-                   "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_specular_color",
-                   "u_gradient_light", "u_gradient_dark", "u_pop_color",
-                   "u_rainbow_hue_offset"):
-            assert u in src, f"bubble.frag missing uniform: {u}"
-
-
-# ===========================================================================
-# 9. Bubble simulation thread safety
+# 8. Bubble simulation thread safety
 # ===========================================================================
 
 class TestBubbleSimulationThreadSafety:
@@ -681,6 +1112,15 @@ class TestPerModeTechnicalControlsCollection:
         assert "spectrum_spectrum_lane_transient_mix" not in config
         assert "bubble_bubble_transient_mix_vocal" not in config
 
+    def test_blob_technical_controls_include_kick_gain_slider(self):
+        from ui.tabs.media import technical_controls as tc
+
+        defs = tc._control_defs_for_mode("blob")
+        config_keys = {defn.config_key for defn in defs}
+
+        assert "kick_lane_gain" in config_keys
+        assert "transient_pulse_gain" not in config_keys
+
     def test_load_per_mode_controls_reads_direct_transient_keys(self):
         from ui.tabs.media import technical_controls as tc
 
@@ -835,30 +1275,8 @@ class TestVisualizerModeEnum:
         assert "bubble" in _SHADER_FILES
 
 
-# ===========================================================================
-# 11. UI builder creates width reaction widget
-# ===========================================================================
-
-class TestSineWaveUIBuilder:
-    """Verify sine wave UI builder creates the width reaction slider."""
-
-    def test_width_reaction_in_builder(self):
-        src = (ROOT / "ui" / "tabs" / "media" / "sine_wave_builder.py").read_text(encoding="utf-8")
-        assert "sine_width_reaction" in src, "Width Reaction slider missing from sine wave builder"
-
-    def test_width_reaction_in_save(self):
-        src = (ROOT / "ui" / "tabs" / "widgets_tab_media.py").read_text(encoding="utf-8")
-        assert "'sine_width_reaction'" in src, "sine_width_reaction missing from save_media_settings"
-
-    def test_width_reaction_in_load(self):
-        src = (ROOT / "ui" / "tabs" / "widgets_tab_media.py").read_text(encoding="utf-8")
-        assert "sine_width_reaction" in src and "sine_width_reaction_label" in src, (
-            "sine_width_reaction missing from load path"
-        )
-
-
 # ==========================================================================
-# 12. Preset repair sanitization + migrations
+# 11. Preset repair sanitization + migrations
 # ==========================================================================
 
 

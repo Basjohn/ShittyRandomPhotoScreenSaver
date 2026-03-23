@@ -293,6 +293,7 @@ def get_uniform_names() -> list[str]:
         "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
         # Ghost (peak-tracked energy envelope)
         "u_ghost_alpha", "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
+        "u_ghost_line2_enabled", "u_ghost_line3_enabled",
         # Shared line/glow
         "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity", "u_glow_color",
         "u_reactive_glow", "u_sensitivity", "u_smoothing",
@@ -316,6 +317,8 @@ def upload_uniforms(gl, u: dict, s) -> bool:
         except Exception:
             ga = 0.0
         gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
+    _set1i(gl, u, "u_ghost_line2_enabled", 1 if getattr(s, "_sine_ghost_line2_enabled", True) else 0)
+    _set1i(gl, u, "u_ghost_line3_enabled", 1 if getattr(s, "_sine_ghost_line3_enabled", True) else 0)
     _set1f(gl, u, "u_ghost_bass", getattr(s, '_sine_peak_bass', 0.0))
     _set1f(gl, u, "u_ghost_mid", getattr(s, '_sine_peak_mid', 0.0))
     _set1f(gl, u, "u_ghost_high", getattr(s, '_sine_peak_high', 0.0))

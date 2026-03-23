@@ -80,6 +80,11 @@ class _SpotifyBeatEngine(QObject):
         self._is_spotify_playing: bool = False
         self._last_playback_state_ts: float = 0.0
 
+        # Reactivity ramp-up: gentle fade-in after play detection to mask
+        # AGC warmup (envelopes converging to actual audio levels).
+        self._play_ramp_start_ts: float = 0.0
+        self._play_ramp_duration: float = 1.5  # seconds
+
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         self._thread_manager = thread_manager
     
@@ -214,8 +219,16 @@ class _SpotifyBeatEngine(QObject):
 
     def set_playback_state(self, is_playing: bool) -> None:
         """Set Spotify playback state for FFT processing gating."""
+        was_playing = self._is_spotify_playing
         self._is_spotify_playing = bool(is_playing)
         self._last_playback_state_ts = time.time()
+
+        # Start reactivity ramp-up on pause→play transition so the first
+        # few FFT frames (where AGC envelopes are still converging) get
+        # gently faded in instead of producing erratic bar heights.
+        if self._is_spotify_playing and not was_playing:
+            self._play_ramp_start_ts = time.time()
+            logger.debug("[SPOTIFY_VIS] Play detected — starting %.1fs reactivity ramp-up", self._play_ramp_duration)
         
         if is_verbose_logging():
             logger.debug(
@@ -223,6 +236,18 @@ class _SpotifyBeatEngine(QObject):
                 self._is_spotify_playing,
                 self._last_playback_state_ts
             )
+
+    def _get_play_ramp_factor(self) -> float:
+        """Return 0.0→1.0 fade factor during AGC warmup after play detection."""
+        if self._play_ramp_start_ts <= 0.0:
+            return 1.0
+        elapsed = time.time() - self._play_ramp_start_ts
+        if elapsed >= self._play_ramp_duration:
+            self._play_ramp_start_ts = 0.0  # ramp complete
+            return 1.0
+        # Smooth ease-in curve (quadratic)
+        t = elapsed / self._play_ramp_duration
+        return t * t
 
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
         """Apply time-based exponential smoothing with anti-flicker (Solution 1+2)."""
@@ -499,8 +524,15 @@ class _SpotifyBeatEngine(QObject):
         return self._latest_bars
     
     def get_smoothed_bars(self) -> List[float]:
-        """Get pre-smoothed bars for UI display."""
-        return list(self._smoothed_bars)
+        """Get pre-smoothed bars for UI display.
+
+        During the reactivity ramp-up window after play detection, bars are
+        scaled by a gentle ease-in factor to mask AGC warmup artifacts.
+        """
+        ramp = self._get_play_ramp_factor()
+        if ramp >= 1.0:
+            return list(self._smoothed_bars)
+        return [v * ramp for v in self._smoothed_bars]
 
     def get_waveform(self) -> List[float]:
         """Get the last 256 raw waveform samples for oscilloscope."""
@@ -514,8 +546,18 @@ class _SpotifyBeatEngine(QObject):
             return 0
 
     def get_energy_bands(self) -> EnergyBands:
-        """Get the latest frequency-band energy snapshot."""
-        return self._energy_bands
+        """Get the latest frequency-band energy snapshot.
+
+        Scaled by the reactivity ramp factor during AGC warmup.
+        """
+        ramp = self._get_play_ramp_factor()
+        if ramp >= 1.0:
+            return self._energy_bands
+        eb = self._energy_bands
+        return EnergyBands(
+            bass=eb.bass * ramp, mid=eb.mid * ramp,
+            high=eb.high * ramp, overall=eb.overall * ramp,
+        )
 
     def get_raw_energy_bands(self) -> EnergyBands:
         """Get energy bands from the latest RAW (unsmoothed) bars.
@@ -534,11 +576,14 @@ class _SpotifyBeatEngine(QObject):
         Post-noise-floor, pre-normalization values that preserve full dynamic
         range.  Modes that need true loudness variance (bubbles, blob) should
         use these instead of post-AGC bar-derived energy.
+
+        Scaled by the reactivity ramp factor during AGC warmup.
         """
         w = self._audio_worker
-        bass = getattr(w, '_pre_agc_bass', 0.0)
-        mid = getattr(w, '_pre_agc_mid', 0.0)
-        high = getattr(w, '_pre_agc_treble', 0.0)
+        ramp = self._get_play_ramp_factor()
+        bass = getattr(w, '_pre_agc_bass', 0.0) * ramp
+        mid = getattr(w, '_pre_agc_mid', 0.0) * ramp
+        high = getattr(w, '_pre_agc_treble', 0.0) * ramp
         overall = max(0.0, min(1.0, (bass * 0.5 + mid * 0.3 + high * 0.2)))
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 

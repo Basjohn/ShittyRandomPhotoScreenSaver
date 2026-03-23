@@ -1,4 +1,5 @@
 {
+  "description": "Saved from Custom preset in Settings.",
   "mode": "oscilloscope",
   "name": "Preset 2 (Electric)",
   "preset_index": 1,
@@ -13,16 +14,15 @@
         ],
         "bar_border_opacity": 1.0,
         "bar_fill_color": [
-          27,
-          27,
-          27,
-          30
+          255,
+          255,
+          255,
+          230
         ],
         "ghost_alpha": 0.56,
-        "ghost_decay": 0.22,
+        "ghost_decay": 0.2,
         "ghosting_enabled": true,
         "mode": "oscilloscope",
-        "monitor": "ALL",
         "osc_ghost_intensity": 0.55,
         "osc_ghosting_enabled": true,
         "osc_glow_color": [
@@ -33,7 +33,7 @@
         ],
         "osc_glow_enabled": true,
         "osc_glow_intensity": 0.4,
-        "osc_glow_reactivity": 1.25,
+        "osc_glow_reactivity": 1.45,
         "osc_glow_size": 1.0,
         "osc_growth": 3.45,
         "osc_line2_color": [
@@ -71,10 +71,10 @@
         "osc_line_dim": false,
         "osc_line_offset_bias": 0.05,
         "osc_rainbow_enabled": false,
-        "osc_rainbow_speed": 0.6,
+        "osc_rainbow_speed": 0.15,
         "osc_reactive_glow": true,
-        "osc_smoothing": 0.4,
-        "osc_speed": 0.25,
+        "osc_smoothing": 0.3,
+        "osc_speed": 0.21,
         "osc_vertical_shift": 20,
         "oscilloscope_adaptive_sensitivity": true,
         "oscilloscope_agc_strength": 0.4,
@@ -82,17 +82,15 @@
         "oscilloscope_bar_count": 32,
         "oscilloscope_dynamic_floor": true,
         "oscilloscope_dynamic_range_enabled": false,
-        "oscilloscope_energy_boost": 0.85,
         "oscilloscope_input_gain": 0.7,
         "oscilloscope_kick_lane_gain": 1.0,
-        "oscilloscope_manual_floor": 0.1,
+        "oscilloscope_manual_floor": 0.12,
         "oscilloscope_rainbow_enabled": false,
         "oscilloscope_rainbow_speed": 0.15,
         "oscilloscope_sensitivity": 0.4,
         "oscilloscope_transient_clamp": 1.5,
         "oscilloscope_transient_pulse_gain": 1.0,
-        "oscilloscope_transient_width_mix": 0.35,
-        "oscilloscope_use_raw_energy": false
+        "oscilloscope_transient_width_mix": 0.35
       }
     }
   },

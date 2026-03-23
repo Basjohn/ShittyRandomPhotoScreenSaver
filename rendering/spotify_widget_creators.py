@@ -64,8 +64,13 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         osc_line2_glow_color=model.osc_line2_glow_color,
         osc_line3_color=model.osc_line3_color,
         osc_line3_glow_color=model.osc_line3_glow_color,
+        osc_ghost_line2_enabled=model.osc_ghost_line2_enabled,
+        osc_ghost_line3_enabled=model.osc_ghost_line3_enabled,
         spectrum_growth=model.spectrum_growth,
         spectrum_single_piece=model.spectrum_single_piece,
+        spectrum_glow_enabled=model.spectrum_glow_enabled,
+        spectrum_glow_intensity=model.spectrum_glow_intensity,
+        spectrum_glow_color=model.spectrum_glow_color,
         spectrum_rainbow_per_bar=model.spectrum_rainbow_per_bar,
         blob_growth=model.blob_growth,
         osc_speed=model.osc_speed,
@@ -103,6 +108,8 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         sine_line2_glow_color=model.sine_line2_glow_color,
         sine_line3_color=model.sine_line3_color,
         sine_line3_glow_color=model.sine_line3_glow_color,
+        sine_ghost_line2_enabled=model.sine_ghost_line2_enabled,
+        sine_ghost_line3_enabled=model.sine_ghost_line3_enabled,
         sine_travel_line2=model.sine_travel_line2,
         sine_travel_line3=model.sine_travel_line3,
         sine_line1_shift=model.sine_line1_shift,
@@ -296,7 +303,10 @@ def create_spotify_visualizer_widget(
     mgr.add_expected_overlay("spotify_visualizer")
 
     try:
-        bar_count = int(model.bar_count)
+        try:
+            bar_count = int(model.resolve_bar_count(str(model.mode)))
+        except Exception:
+            bar_count = int(model.bar_count)
         vis = SpotifyVisualizerWidget(mgr._parent, bar_count=bar_count)
 
         mgr._log_spotify_vis_config("create", spotify_vis_settings)
@@ -355,9 +365,11 @@ def create_spotify_visualizer_widget(
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
-        # Per-bar colours
+        # Per-bar colours should come from the resolved model, not the raw
+        # config dict, so curated preset overlays and explicit runtime edits
+        # share the exact same first-frame path as settings refresh.
         try:
-            fill_color_data = spotify_vis_settings.get('bar_fill_color', [255, 255, 255, 230])
+            fill_color_data = model.bar_fill_color or [255, 255, 255, 230]
             fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
             fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
             bar_fill_qcolor = QColor(fr, fg, fb, fa)
@@ -366,11 +378,11 @@ def create_spotify_visualizer_widget(
             bar_fill_qcolor = QColor(255, 255, 255, 230)
 
         try:
-            bar_border_color_data = spotify_vis_settings.get('bar_border_color', [255, 255, 255, 230])
+            bar_border_color_data = model.bar_border_color or [255, 255, 255, 230]
             br_r, br_g, br_b = bar_border_color_data[0], bar_border_color_data[1], bar_border_color_data[2]
             base_alpha = bar_border_color_data[3] if len(bar_border_color_data) > 3 else 230
             try:
-                bar_bo = float(spotify_vis_settings.get('bar_border_opacity', 0.85))
+                bar_bo = float(model.bar_border_opacity)
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 bar_bo = 0.85
@@ -413,12 +425,32 @@ def create_spotify_visualizer_widget(
             if not getattr(vis, "_srpss_media_connected", False):
                 media_widget.media_updated.connect(vis.handle_media_update)
                 setattr(vis, "_srpss_media_connected", True)
+                # Seed playback state from MediaWidget's current info so the
+                # visualizer doesn't wait for the next poll cycle.  This closes
+                # the cold-start gap where Spotify is already playing but the
+                # visualizer's _spotify_playing flag is still False.
+                try:
+                    seed_info = getattr(media_widget, '_last_info', None)
+                    if seed_info is not None:
+                        from dataclasses import asdict
+                        seed_payload = asdict(seed_info)
+                        seed_payload["state"] = seed_info.state.value
+                        vis.handle_media_update(seed_payload)
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed during playback state seed: %s", e)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         mgr.register_widget("spotify_visualizer", vis)
         logger.debug("Spotify visualizer widget created: %d bars, will start with coordinated fade", bar_count)
         mgr._bind_parent_attribute("spotify_visualizer_widget", vis)
+        try:
+            if hasattr(mgr, '_refresh_spotify_visualizer_config'):
+                # Keep launch-time visualizer state on the same canonical path
+                # that settings re-entry uses so startup cannot drift.
+                mgr._refresh_spotify_visualizer_config(widgets_config)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return vis
     except Exception as e:
         logger.error("Failed to create Spotify visualizer widget: %s", e, exc_info=True)

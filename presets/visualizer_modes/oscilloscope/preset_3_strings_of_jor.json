@@ -1,0 +1,101 @@
+{
+  "description": "Saved from Custom preset in Settings.",
+  "mode": "oscilloscope",
+  "name": "Preset 3 (Strings Of Jor)",
+  "preset_index": 2,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "ghost_alpha": 0.56,
+        "ghost_decay": 0.2,
+        "ghosting_enabled": true,
+        "mode": "oscilloscope",
+        "osc_ghost_intensity": 0.5,
+        "osc_ghost_line2_enabled": true,
+        "osc_ghost_line3_enabled": true,
+        "osc_ghosting_enabled": true,
+        "osc_glow_color": [
+          255,
+          250,
+          255,
+          255
+        ],
+        "osc_glow_enabled": true,
+        "osc_glow_intensity": 0.35,
+        "osc_glow_reactivity": 0.95,
+        "osc_glow_size": 1.0,
+        "osc_growth": 2.95,
+        "osc_line2_color": [
+          246,
+          240,
+          255,
+          220
+        ],
+        "osc_line2_glow_color": [
+          255,
+          245,
+          255,
+          210
+        ],
+        "osc_line3_color": [
+          214,
+          234,
+          255,
+          205
+        ],
+        "osc_line3_glow_color": [
+          218,
+          238,
+          255,
+          200
+        ],
+        "osc_line_amplitude": 5.0,
+        "osc_line_color": [
+          255,
+          255,
+          255,
+          248
+        ],
+        "osc_line_count": 3,
+        "osc_line_dim": false,
+        "osc_line_offset_bias": 0.15,
+        "osc_rainbow_enabled": false,
+        "osc_rainbow_speed": 0.15,
+        "osc_reactive_glow": true,
+        "osc_smoothing": 0.3,
+        "osc_speed": 0.28,
+        "osc_vertical_shift": 100,
+        "oscilloscope_adaptive_sensitivity": true,
+        "oscilloscope_agc_strength": 0.58,
+        "oscilloscope_audio_block_size": 0,
+        "oscilloscope_bar_count": 32,
+        "oscilloscope_dynamic_floor": true,
+        "oscilloscope_dynamic_range_enabled": false,
+        "oscilloscope_input_gain": 0.7,
+        "oscilloscope_kick_lane_gain": 1.0,
+        "oscilloscope_manual_floor": 0.12,
+        "oscilloscope_rainbow_enabled": false,
+        "oscilloscope_rainbow_speed": 0.15,
+        "oscilloscope_sensitivity": 0.34,
+        "oscilloscope_transient_clamp": 1.3,
+        "oscilloscope_transient_pulse_gain": 1.0,
+        "oscilloscope_transient_width_mix": 0.26
+      }
+    }
+  },
+  "visualizer_preset_mode": "oscilloscope",
+  "visualizer_preset_override": true
+}

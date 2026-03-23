@@ -862,6 +862,21 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         br_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_border_radius', 0.0))
         tab.spectrum_border_radius.setValue(max(0, min(12, br_val)))
         tab.spectrum_border_radius_label.setText(f"{br_val}px")
+    if hasattr(tab, 'spectrum_glow_enabled'):
+        tab.spectrum_glow_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_glow_enabled', False)
+        )
+    if hasattr(tab, 'spectrum_glow_intensity'):
+        sg_val = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'spectrum_glow_intensity', 0.55) * 100)
+        tab.spectrum_glow_intensity.setValue(max(0, min(150, sg_val)))
+        tab.spectrum_glow_intensity_label.setText(f"{sg_val}%")
+    spectrum_glow_color_data = spotify_vis_config.get('spectrum_glow_color', [110, 220, 255, 235])
+    try:
+        tab._spectrum_glow_color = QColor(*spectrum_glow_color_data)
+    except Exception:
+        logger.debug("[MEDIA_TAB] Failed to set spectrum_glow_color=%s", spectrum_glow_color_data, exc_info=True)
+        tab._spectrum_glow_color = QColor(110, 220, 255, 235)
+    _apply_color_to_button('spectrum_glow_color_btn', '_spectrum_glow_color')
     if hasattr(tab, 'spectrum_mirrored'):
         tab.spectrum_mirrored.setChecked(
             tab._config_bool('spotify_visualizer', spotify_vis_config, 'spectrum_mirrored', True)
@@ -1202,6 +1217,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         gi = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'osc_ghost_intensity', 0.4) * 100)
         tab.osc_ghost_intensity.setValue(max(5, min(100, gi)))
         tab.osc_ghost_intensity_label.setText(f"{gi}%")
+    if hasattr(tab, 'osc_ghost_line2_enabled'):
+        tab.osc_ghost_line2_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_ghost_line2_enabled', True)
+        )
+    if hasattr(tab, 'osc_ghost_line3_enabled'):
+        tab.osc_ghost_line3_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'osc_ghost_line3_enabled', True)
+        )
 
     # Blob ghost
     if hasattr(tab, 'blob_ghost_enabled'):
@@ -1230,6 +1253,14 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         sgd = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'sine_ghost_decay', 0.3) * 100)
         tab.sine_ghost_decay_slider.setValue(max(10, min(100, sgd)))
         tab.sine_ghost_decay_label.setText(f"{sgd / 100.0:.2f}x")
+    if hasattr(tab, 'sine_ghost_line2_enabled'):
+        tab.sine_ghost_line2_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'sine_ghost_line2_enabled', True)
+        )
+    if hasattr(tab, 'sine_ghost_line3_enabled'):
+        tab.sine_ghost_line3_enabled.setChecked(
+            tab._config_bool('spotify_visualizer', spotify_vis_config, 'sine_ghost_line3_enabled', True)
+        )
 
     # Bubble ghost
     if hasattr(tab, 'bubble_ghost_enabled'):
@@ -1530,6 +1561,9 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'spectrum_single_piece': tab.spectrum_single_piece.isChecked() if hasattr(tab, 'spectrum_single_piece') else False,
         'spectrum_rainbow_per_bar': tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, 'spectrum_rainbow_per_bar') else False,
         'spectrum_border_radius': float(tab.spectrum_border_radius.value()) if hasattr(tab, 'spectrum_border_radius') else 0.0,
+        'spectrum_glow_enabled': tab.spectrum_glow_enabled.isChecked() if hasattr(tab, 'spectrum_glow_enabled') else False,
+        'spectrum_glow_intensity': (tab.spectrum_glow_intensity.value() if hasattr(tab, 'spectrum_glow_intensity') else 55) / 100.0,
+        'spectrum_glow_color': _qcolor_to_list(getattr(tab, '_spectrum_glow_color', None), [110, 220, 255, 235]),
         'spectrum_mirrored': tab.spectrum_mirrored.isChecked() if hasattr(tab, 'spectrum_mirrored') else True,
         'spectrum_shape_nodes': tab.spectrum_shape_editor.get_nodes() if hasattr(tab, 'spectrum_shape_editor') else [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
         'spectrum_notch_positions_mirrored': tab.spectrum_shape_editor._notches_mirrored if hasattr(tab, 'spectrum_shape_editor') else [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]],
@@ -1597,12 +1631,16 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     spotify_vis_config.update({
         'osc_ghosting_enabled': tab.osc_ghost_enabled.isChecked() if hasattr(tab, 'osc_ghost_enabled') else False,
         'osc_ghost_intensity': (tab.osc_ghost_intensity.value() if hasattr(tab, 'osc_ghost_intensity') else 40) / 100.0,
+        'osc_ghost_line2_enabled': tab.osc_ghost_line2_enabled.isChecked() if hasattr(tab, 'osc_ghost_line2_enabled') else True,
+        'osc_ghost_line3_enabled': tab.osc_ghost_line3_enabled.isChecked() if hasattr(tab, 'osc_ghost_line3_enabled') else True,
         'blob_ghosting_enabled': tab.blob_ghost_enabled.isChecked() if hasattr(tab, 'blob_ghost_enabled') else False,
         'blob_ghost_alpha': (tab.blob_ghost_opacity.value() if hasattr(tab, 'blob_ghost_opacity') else 40) / 100.0,
         'blob_ghost_decay': max(0.1, (tab.blob_ghost_decay_slider.value() if hasattr(tab, 'blob_ghost_decay_slider') else 30) / 100.0),
         'sine_ghosting_enabled': tab.sine_ghost_enabled.isChecked() if hasattr(tab, 'sine_ghost_enabled') else True,
         'sine_ghost_alpha': (tab.sine_ghost_opacity.value() if hasattr(tab, 'sine_ghost_opacity') else 45) / 100.0,
         'sine_ghost_decay': max(0.1, (tab.sine_ghost_decay_slider.value() if hasattr(tab, 'sine_ghost_decay_slider') else 30) / 100.0),
+        'sine_ghost_line2_enabled': tab.sine_ghost_line2_enabled.isChecked() if hasattr(tab, 'sine_ghost_line2_enabled') else True,
+        'sine_ghost_line3_enabled': tab.sine_ghost_line3_enabled.isChecked() if hasattr(tab, 'sine_ghost_line3_enabled') else True,
         'bubble_ghosting_enabled': tab.bubble_ghost_enabled.isChecked() if hasattr(tab, 'bubble_ghost_enabled') else False,
         'bubble_ghost_alpha': (tab.bubble_ghost_opacity.value() if hasattr(tab, 'bubble_ghost_opacity') else 0) / 100.0,
         'bubble_ghost_decay': max(0.1, (tab.bubble_ghost_decay_slider.value() if hasattr(tab, 'bubble_ghost_decay_slider') else 40) / 100.0),

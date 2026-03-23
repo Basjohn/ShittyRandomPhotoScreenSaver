@@ -26,6 +26,13 @@ def test_spec_does_not_reference_missing_visualizer_docs():
     assert "Docs/Visualizer_Baseline_Tuning_Matrix.md" in spec_text
     assert "Docs/Visualizer_Presets_Plan.md" not in spec_text
     assert "Docs/Advanced_Migration.md" not in spec_text
+    assert "tools/rebuild_visualizer_presets.py" not in spec_text
+
+
+def test_project_overview_uses_current_visualizer_preset_tooling():
+    overview_text = (ROOT / "Docs" / "00_PROJECT_OVERVIEW.md").read_text(encoding="utf-8")
+    assert "tools/visualizer_preset_repair.py" in overview_text
+    assert "tools/rebuild_visualizer_presets.py" not in overview_text
 
 
 def test_visualizer_baseline_tuning_matrix_exists():

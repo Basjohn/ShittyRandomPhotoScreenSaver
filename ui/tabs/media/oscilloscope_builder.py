@@ -30,8 +30,12 @@ def _update_osc_multi_line_visibility(tab) -> None:
     if container is not None:
         container.setVisible(bool(enabled))
     line_count = getattr(tab, 'osc_line_count', None)
+    show_l2 = enabled and line_count is not None and line_count.value() >= 2
     show_l3 = enabled and line_count is not None and line_count.value() >= 3
-    for w in (getattr(tab, '_osc_l3_row_widget', None),):
+    for w in (getattr(tab, '_osc_line2_ghost_row_widget', None),):
+        if w is not None:
+            w.setVisible(bool(show_l2))
+    for w in (getattr(tab, '_osc_l3_row_widget', None), getattr(tab, '_osc_line3_ghost_row_widget', None)):
         if w is not None:
             w.setVisible(bool(show_l3))
 
@@ -370,6 +374,17 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     osc_l2_row.addLayout(osc_l2_glow_col)
     osc_l2_row.addStretch()
 
+    tab._osc_line2_ghost_row_widget, osc_l2_ghost_row = _aligned_row_widget(ml_layout, "Line 2 Ghost:")
+    tab.osc_ghost_line2_enabled = QCheckBox("Draw Ghost")
+    tab.osc_ghost_line2_enabled.setProperty("circleIndicator", True)
+    tab.osc_ghost_line2_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line2_enabled', True)
+    )
+    tab.osc_ghost_line2_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 2.")
+    bind_setting_signal(tab, tab.osc_ghost_line2_enabled.stateChanged)
+    osc_l2_ghost_row.addWidget(tab.osc_ghost_line2_enabled)
+    osc_l2_ghost_row.addStretch()
+
     tab._osc_l3_row_widget, osc_l3_row = _swatch_row_widget(ml_layout, "Line 3:")
 
     osc_l3_color_col = QVBoxLayout()
@@ -392,6 +407,17 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     osc_l3_glow_col.addWidget(tab.osc_line3_glow_btn)
     osc_l3_row.addLayout(osc_l3_glow_col)
     osc_l3_row.addStretch()
+
+    tab._osc_line3_ghost_row_widget, osc_l3_ghost_row = _aligned_row_widget(ml_layout, "Line 3 Ghost:")
+    tab.osc_ghost_line3_enabled = QCheckBox("Draw Ghost")
+    tab.osc_ghost_line3_enabled.setProperty("circleIndicator", True)
+    tab.osc_ghost_line3_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line3_enabled', True)
+    )
+    tab.osc_ghost_line3_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 3.")
+    bind_setting_signal(tab, tab.osc_ghost_line3_enabled.stateChanged)
+    osc_l3_ghost_row.addWidget(tab.osc_ghost_line3_enabled)
+    osc_l3_ghost_row.addStretch()
 
     _adv_layout.addWidget(tab._osc_multi_container)
     _update_osc_multi_line_visibility(tab)

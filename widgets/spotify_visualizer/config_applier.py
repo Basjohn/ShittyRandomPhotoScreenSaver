@@ -84,6 +84,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         c = _color_or_none(kwargs['osc_line3_glow_color'])
         if c is not None:
             widget._osc_line3_glow_color = c
+    if 'osc_ghost_line2_enabled' in kwargs:
+        widget._osc_ghost_line2_enabled = bool(kwargs['osc_ghost_line2_enabled'])
+    if 'osc_ghost_line3_enabled' in kwargs:
+        widget._osc_ghost_line3_enabled = bool(kwargs['osc_ghost_line3_enabled'])
 
 
     # --- Blob ---------------------------------------------------------
@@ -174,6 +178,14 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
 
     if 'spectrum_border_radius' in kwargs:
         widget._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
+    if 'spectrum_glow_enabled' in kwargs:
+        widget._spectrum_glow_enabled = bool(kwargs['spectrum_glow_enabled'])
+    if 'spectrum_glow_intensity' in kwargs:
+        widget._spectrum_glow_intensity = max(0.0, min(1.5, float(kwargs['spectrum_glow_intensity'])))
+    if 'spectrum_glow_color' in kwargs:
+        c = _color_or_none(kwargs['spectrum_glow_color'])
+        if c is not None:
+            widget._spectrum_glow_color = c
     if 'spectrum_mirrored' in kwargs:
         _new_mirrored = bool(kwargs['spectrum_mirrored'])
         if _new_mirrored != getattr(widget, '_spectrum_mirrored', True):
@@ -353,6 +365,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         c = _color_or_none(kwargs['sine_line3_glow_color'])
         if c is not None:
             widget._sine_line3_glow_color = c
+    if 'sine_ghost_line2_enabled' in kwargs:
+        widget._sine_ghost_line2_enabled = bool(kwargs['sine_ghost_line2_enabled'])
+    if 'sine_ghost_line3_enabled' in kwargs:
+        widget._sine_ghost_line3_enabled = bool(kwargs['sine_ghost_line3_enabled'])
 
     # --- Rainbow (per-mode, falls back to global key for compat) --------
     # Per-mode keys like spectrum_rainbow_enabled take priority over the
@@ -505,17 +521,24 @@ def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
         'rainbow_enabled': getattr(widget, '_rainbow_enabled', False),
         'rainbow_speed': getattr(widget, '_rainbow_speed', 0.5),
         'rainbow_per_bar': getattr(widget, '_rainbow_per_bar', False),
+        'spectrum_glow_enabled': getattr(widget, '_spectrum_glow_enabled', False),
+        'spectrum_glow_intensity': getattr(widget, '_spectrum_glow_intensity', 0.55),
+        'spectrum_glow_color': getattr(widget, '_spectrum_glow_color', None),
         'spectrum_ghosting_enabled': getattr(widget, '_spectrum_ghosting_enabled', True),
         'spectrum_ghost_alpha': getattr(widget, '_spectrum_ghost_alpha', 0.4),
         'spectrum_ghost_decay': getattr(widget, '_spectrum_ghost_decay', 0.4),
         'osc_ghosting_enabled': getattr(widget, '_osc_ghosting_enabled', False),
         'osc_ghost_intensity': getattr(widget, '_osc_ghost_intensity', 0.4),
+        'osc_ghost_line2_enabled': getattr(widget, '_osc_ghost_line2_enabled', True),
+        'osc_ghost_line3_enabled': getattr(widget, '_osc_ghost_line3_enabled', True),
         'blob_ghosting_enabled': getattr(widget, '_blob_ghosting_enabled', False),
         'blob_ghost_alpha': getattr(widget, '_blob_ghost_alpha', 0.4),
         'blob_ghost_decay': getattr(widget, '_blob_ghost_decay', 0.3),
         'sine_ghosting_enabled': getattr(widget, '_sine_ghosting_enabled', True),
         'sine_ghost_alpha': getattr(widget, '_sine_ghost_alpha', 0.45),
         'sine_ghost_decay': getattr(widget, '_sine_ghost_decay', 0.3),
+        'sine_ghost_line2_enabled': getattr(widget, '_sine_ghost_line2_enabled', True),
+        'sine_ghost_line3_enabled': getattr(widget, '_sine_ghost_line3_enabled', True),
         'bubble_ghosting_enabled': getattr(widget, '_bubble_ghosting_enabled', False),
         'bubble_ghost_alpha': getattr(widget, '_bubble_ghost_alpha', 0.0),
         'bubble_ghost_decay': getattr(widget, '_bubble_ghost_decay', 0.4),
@@ -607,6 +630,10 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['osc_line2_glow_color'] = widget._sine_line2_glow_color if is_sine else widget._osc_line2_glow_color
     extra['osc_line3_color'] = widget._sine_line3_color if is_sine else widget._osc_line3_color
     extra['osc_line3_glow_color'] = widget._sine_line3_glow_color if is_sine else widget._osc_line3_glow_color
+    extra['osc_ghost_line2_enabled'] = bool(getattr(widget, '_osc_ghost_line2_enabled', True))
+    extra['osc_ghost_line3_enabled'] = bool(getattr(widget, '_osc_ghost_line3_enabled', True))
+    extra['sine_ghost_line2_enabled'] = bool(getattr(widget, '_sine_ghost_line2_enabled', True))
+    extra['sine_ghost_line3_enabled'] = bool(getattr(widget, '_sine_ghost_line3_enabled', True))
 
 
 def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:

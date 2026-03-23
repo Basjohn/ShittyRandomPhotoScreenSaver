@@ -137,14 +137,19 @@ def interpolate_nodes_mirrored(nodes: List[List[float]], num_bars: int) -> List[
     half = num_bars // 2
     half_samples = interpolate_nodes(nodes, max(2, half + 1))
     result: List[float] = []
-    center = num_bars // 2
+    center_pos = (float(num_bars) - 1.0) * 0.5
+    max_dist = max(center_pos, 1.0)
     for i in range(num_bars):
-        dist = abs(i - center)
-        idx = min(dist, len(half_samples) - 1)
-        result.append(half_samples[idx])
+        dist = abs(float(i) - center_pos)
+        sample_pos = (dist / max_dist) * float(len(half_samples) - 1)
+        idx0 = int(sample_pos)
+        idx1 = min(idx0 + 1, len(half_samples) - 1)
+        frac = max(0.0, min(1.0, sample_pos - float(idx0)))
+        result.append(half_samples[idx0] + (half_samples[idx1] - half_samples[idx0]) * frac)
     # Smooth the center bar so it doesn't dip below its mirrored
     # neighbors when the node curve starts at a local minimum.
-    if num_bars >= 3 and center > 0:
+    center = num_bars // 2
+    if num_bars % 2 == 1 and num_bars >= 3 and center > 0:
         result[center] = max(result[center], (result[center - 1] + result[center + 1]) * 0.5)
     return result
 
@@ -173,6 +178,7 @@ class SpectrumShapeEditor(QWidget):
         self._drag_index: int = -1
         self._hover_index: int = -1
         self._notch_drag_index: int = -1
+        self._notch_drag_ref: Optional[List] = None
         self._notch_hover_index: int = -1
         self._notches_mirrored: List[List] = [[x, lbl] for x, lbl in _NOTCHES_MIRRORED]
         self._notches_linear: List[List] = [[x, lbl] for x, lbl in _NOTCHES_LINEAR]
@@ -300,18 +306,6 @@ class SpectrumShapeEditor(QWidget):
                 return i
         return -1
 
-    def _enforce_notch_spacing(self, notches: List[List], drag_idx: int) -> None:
-        """Enforce minimum spacing between adjacent notches after a drag."""
-        for i in range(len(notches) - 1):
-            gap = notches[i + 1][0] - notches[i][0]
-            if gap < _NOTCH_MIN_SPACING:
-                if i + 1 == drag_idx:
-                    notches[i][0] = notches[i + 1][0] - _NOTCH_MIN_SPACING
-                else:
-                    notches[i + 1][0] = notches[i][0] + _NOTCH_MIN_SPACING
-        for n in notches:
-            n[0] = max(0.0, min(1.0, n[0]))
-
     def mousePressEvent(self, event: QMouseEvent) -> None:
         px, py = event.position().x(), event.position().y()
 
@@ -320,6 +314,8 @@ class SpectrumShapeEditor(QWidget):
             notch_idx = self._notch_hit_test(px, py)
             if notch_idx >= 0:
                 self._notch_drag_index = notch_idx
+                notches = self._notches_mirrored if self._mirrored else self._notches_linear
+                self._notch_drag_ref = notches[notch_idx]
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
                 event.accept()
                 return
@@ -360,8 +356,13 @@ class SpectrumShapeEditor(QWidget):
 
         # Notch dragging
         if self._notch_drag_index >= 0:
-            r = self._plot_rect()
             notches = self._notches_mirrored if self._mirrored else self._notches_linear
+            if self._notch_drag_ref not in notches:
+                self._notch_drag_ref = None
+                self._notch_drag_index = -1
+                event.accept()
+                return
+            r = self._plot_rect()
             if self._mirrored:
                 center_x = r.left() + r.width() * 0.5
                 half_w = r.width() * 0.5
@@ -369,14 +370,8 @@ class SpectrumShapeEditor(QWidget):
             else:
                 new_frac = (px - r.left()) / max(1.0, r.width())
             new_frac = max(0.0, min(1.0, new_frac))
-            notches[self._notch_drag_index][0] = new_frac
-            notches.sort(key=lambda n: n[0])
-            # Re-find drag index after sort
-            for i, n in enumerate(notches):
-                if abs(n[0] - new_frac) < 1e-6:
-                    self._notch_drag_index = i
-                    break
-            self._enforce_notch_spacing(notches, self._notch_drag_index)
+            self._notch_drag_ref[0] = new_frac
+            self._notch_drag_index = notches.index(self._notch_drag_ref)
             self.update()
             event.accept()
             return
@@ -407,7 +402,12 @@ class SpectrumShapeEditor(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self._notch_drag_index >= 0:
+            notches = self._notches_mirrored if self._mirrored else self._notches_linear
+            if self._notch_drag_ref in notches:
+                notches.sort(key=lambda n: n[0])
+                self._notch_drag_index = notches.index(self._notch_drag_ref)
             self._notch_drag_index = -1
+            self._notch_drag_ref = None
             self.setCursor(Qt.CursorShape.CrossCursor)
             self.notch_positions_changed.emit(self.get_notch_positions())
             self.update()

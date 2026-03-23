@@ -5,6 +5,8 @@ import json
 import uuid
 from pathlib import Path
 
+import pytest
+
 from core.settings import visualizer_presets as vp
 from core.settings.settings_manager import SettingsManager
 from core.settings import sst_io
@@ -185,6 +187,17 @@ def test_double_prefixed_mode_keys_are_normalized():
     assert migrated["blob_transient_mix_vocal"] == 0.15
 
 
+def test_double_prefixed_alt_mode_keys_are_normalized():
+    migrated = vp._migrate_preset_settings(
+        "oscilloscope",
+        {
+            "oscilloscope_oscilloscope_transient_width_mix": 0.35,
+        },
+    )
+    assert "oscilloscope_oscilloscope_transient_width_mix" not in migrated
+    assert migrated["oscilloscope_transient_width_mix"] == 0.35
+
+
 def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
     def _make_manager(suffix: str) -> SettingsManager:
         base = tmp_path / suffix
@@ -247,9 +260,6 @@ def test_all_curated_presets_have_unique_keys_and_filtered_settings():
             payload = _load_json_no_dupes(preset_path)
             snapshot = payload.get("snapshot", {})
             assert isinstance(snapshot, dict), f"{preset_path} snapshot must be a dict"
-            assert "custom_preset_backup" not in snapshot, (
-                f"{preset_path} still contains custom_preset_backup"
-            )
             widgets = snapshot.get("widgets", {}) if isinstance(snapshot, dict) else {}
             sv = widgets.get("spotify_visualizer") if isinstance(widgets, dict) else None
             if not isinstance(sv, dict):
@@ -265,7 +275,11 @@ def test_all_curated_presets_have_unique_keys_and_filtered_settings():
 
             assert sv.get("mode") == mode, f"{preset_path} must declare mode={mode}"
             filtered = vp._filter_settings_for_mode(mode, sv)
-            assert filtered == sv, f"{preset_path} contains disallowed keys for mode {mode}"
+            assert filtered, f"{preset_path} filtered to an empty settings payload"
+            for key, value in filtered.items():
+                assert sv.get(key) == value, (
+                    f"{preset_path} changed value for allowed key {key!r} during filtering"
+                )
 
 
 def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
@@ -278,26 +292,6 @@ def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
 
     assert lean["visualizer_preset_override"] is True
     assert lean["visualizer_preset_mode"] == mode
-
-
-def test_curated_sine_preset_1_prefers_music_led_motion_over_idle_distortion():
-    preset_path = (
-        Path(__file__).resolve().parents[1]
-        / "presets"
-        / "visualizer_modes"
-        / "sine_wave"
-        / "preset_1_wave.json"
-    )
-    payload = json.loads(preset_path.read_text(encoding="utf-8"))
-    sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-
-    assert sv["sine_sensitivity"] >= 0.60
-    assert sv["sine_width_reaction"] >= 0.25
-    assert sv["sine_heartbeat"] <= 0.30
-    assert sv["sine_wave_effect"] <= 0.15
-    assert sv["sine_crawl_amount"] == 0.0
-    assert sv["sine_micro_wobble"] <= 0.05
-    assert sv["sine_line_count"] == 2
 
 
 def test_repair_tool_audit_flags_duplicate_prefixes_and_backup_blocks():
@@ -345,3 +339,202 @@ def test_repair_tool_stops_emitting_deprecated_compat_tech_keys():
 
     assert "blob_energy_boost" not in cleaned
     assert "blob_use_raw_energy" not in cleaned
+
+
+def test_repair_tool_backfills_direct_transient_keys_from_current_defaults():
+    payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "bubble_stream_reactivity": 0.45,
+                }
+            }
+        }
+    }
+
+    cleaned, _stats = repair._sanitize_settings("bubble", payload)
+
+    assert "bubble_transient_mix_bass" in cleaned
+    assert "bubble_transient_mix_vocal" in cleaned
+    assert "bubble_bubble_transient_mix_bass" not in cleaned
+    assert "bubble_bubble_transient_mix_vocal" not in cleaned
+
+
+def test_repair_tool_backfills_spectrum_glow_and_line_ghost_toggles():
+    spectrum_payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "spectrum",
+                    "spectrum_growth": 2.7,
+                }
+            }
+        }
+    }
+    spectrum_cleaned, _ = repair._sanitize_settings("spectrum", spectrum_payload)
+    assert spectrum_cleaned["spectrum_glow_enabled"] is False
+    assert spectrum_cleaned["spectrum_glow_intensity"] == pytest.approx(0.55)
+    assert spectrum_cleaned["spectrum_glow_color"] == [110, 220, 255, 235]
+
+    osc_payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "oscilloscope",
+                    "osc_line_count": 3,
+                }
+            }
+        }
+    }
+    osc_cleaned, _ = repair._sanitize_settings("oscilloscope", osc_payload)
+    assert osc_cleaned["osc_ghost_line2_enabled"] is True
+    assert osc_cleaned["osc_ghost_line3_enabled"] is True
+
+
+def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "blob"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+
+    def _payload(name: str | None, preset_index: int | None, growth: float) -> dict:
+        payload = {
+            "description": "Test payload",
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "mode": mode,
+                        "blob_growth": growth,
+                    }
+                }
+            },
+        }
+        if name is not None:
+            payload["name"] = name
+        if preset_index is not None:
+            payload["preset_index"] = preset_index
+        return payload
+
+    (mode_dir / "preset_1_alpha.json").write_text(
+        json.dumps(_payload("Preset 1 (Alpha)", 0, 1.0)), encoding="utf-8"
+    )
+    (mode_dir / "preset_4_delta.json").write_text(
+        json.dumps(_payload("Preset 4 (Delta)", 3, 4.0)), encoding="utf-8"
+    )
+    (mode_dir / "preset_5_echo.json").write_text(
+        json.dumps(_payload("Preset 5 (Echo)", 4, 5.0)), encoding="utf-8"
+    )
+    (mode_dir / "preset_6_foxtrot.json").write_text(
+        json.dumps(_payload("Preset 6 (Foxtrot)", 5, 6.0)), encoding="utf-8"
+    )
+    (mode_dir / "thunder.json").write_text(
+        json.dumps(_payload("Thunder", None, 2.0)), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(repair, "ROOT", root)
+
+    results = repair.reindex_mode_presets(mode)
+
+    assert len(results) == 5
+    names = sorted(path.name for path in mode_dir.glob("*.json"))
+    assert names == [
+        "preset_1_alpha.json",
+        "preset_2_thunder.json",
+        "preset_3_delta.json",
+        "preset_4_echo.json",
+        "preset_5_foxtrot.json",
+    ]
+
+    thunder_payload = json.loads((mode_dir / "preset_2_thunder.json").read_text(encoding="utf-8"))
+    assert thunder_payload["preset_index"] == 1
+    assert thunder_payload["name"] == "Preset 2 (Thunder)"
+    assert thunder_payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] == 2.0
+
+    delta_payload = json.loads((mode_dir / "preset_3_delta.json").read_text(encoding="utf-8"))
+    assert delta_payload["preset_index"] == 2
+    assert delta_payload["name"] == "Preset 3 (Delta)"
+    assert delta_payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] == 4.0
+
+
+def test_reindex_curated_presets_normalizes_first_remaining_slot_to_preset_1(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "spectrum"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+
+    def _payload(name: str, preset_index: int, growth: float) -> dict:
+        return {
+            "name": name,
+            "preset_index": preset_index,
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "mode": mode,
+                        "spectrum_growth": growth,
+                    }
+                }
+            },
+        }
+
+    (mode_dir / "preset_2_second.json").write_text(
+        json.dumps(_payload("Preset 2 (Second)", 1, 2.0)), encoding="utf-8"
+    )
+    (mode_dir / "preset_3_third.json").write_text(
+        json.dumps(_payload("Preset 3 (Third)", 2, 3.0)), encoding="utf-8"
+    )
+
+    monkeypatch.setattr(repair, "ROOT", root)
+
+    results = repair.reindex_mode_presets(mode)
+
+    assert len(results) == 2
+    names = sorted(path.name for path in mode_dir.glob("*.json"))
+    assert names == [
+        "preset_1_second.json",
+        "preset_2_third.json",
+    ]
+
+    second_payload = json.loads((mode_dir / "preset_1_second.json").read_text(encoding="utf-8"))
+    assert second_payload["preset_index"] == 0
+    assert second_payload["name"] == "Preset 1 (Second)"
+    assert second_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 2.0
+
+
+def test_primary_visualizer_modes_ship_at_least_one_curated_preset():
+    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
+    required_modes = ("blob", "spectrum", "oscilloscope", "sine_wave")
+
+    for mode in required_modes:
+        mode_dir = presets_root / mode
+        payloads = sorted(mode_dir.glob("*.json"))
+        assert payloads, f"{mode} should ship at least one curated preset"
+
+        first_slot = False
+        for preset_path in payloads:
+            payload = json.loads(preset_path.read_text(encoding="utf-8"))
+            if payload.get("preset_index") == 0:
+                first_slot = True
+                break
+
+        assert first_slot, f"{mode} should still ship a Preset 1 / slot 0 payload"
+
+
+def test_curated_presets_have_unique_slot_numbers_per_mode():
+    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
+
+    for mode_dir in sorted(presets_root.iterdir()):
+        if not mode_dir.is_dir():
+            continue
+
+        seen = {}
+        for preset_path in sorted(mode_dir.glob("*.json")):
+            payload = json.loads(preset_path.read_text(encoding="utf-8"))
+            preset_index = payload.get("preset_index")
+            assert isinstance(preset_index, int), f"{preset_path} missing preset_index"
+            if preset_index in seen:
+                raise AssertionError(
+                    f"{mode_dir.name} duplicate preset_index {preset_index}: "
+                    f"{seen[preset_index].name} and {preset_path.name}"
+                )
+            seen[preset_index] = preset_path

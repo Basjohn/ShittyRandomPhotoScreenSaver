@@ -31,8 +31,15 @@ def _update_sine_multi_line_visibility(tab) -> None:
     if container is not None:
         container.setVisible(bool(enabled))
     line_count = getattr(tab, 'sine_line_count_slider', None)
+    show_l2 = enabled and line_count is not None and line_count.value() >= 2
     show_l3 = enabled and line_count is not None and line_count.value() >= 3
+    for w in (getattr(tab, '_sine_line2_ghost_row_widget', None),):
+        if w is not None:
+            w.setVisible(bool(show_l2))
     for w in (getattr(tab, '_sine_line3_label', None), getattr(tab, '_sine_l3_row_widget', None)):
+        if w is not None:
+            w.setVisible(bool(show_l3))
+    for w in (getattr(tab, '_sine_line3_ghost_row_widget', None),):
         if w is not None:
             w.setVisible(bool(show_l3))
 
@@ -532,6 +539,17 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     sine_l2_row.addStretch()
 
+    tab._sine_line2_ghost_row_widget, sine_l2_ghost_row = _aligned_row_widget(sine_ml_layout, "Line 2 Ghost:")
+    tab.sine_ghost_line2_enabled = QCheckBox("Draw Ghost")
+    tab.sine_ghost_line2_enabled.setProperty("circleIndicator", True)
+    tab.sine_ghost_line2_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'sine_ghost_line2_enabled', True)
+    )
+    tab.sine_ghost_line2_enabled.setToolTip("Allow the ghost trail to render for sine wave line 2.")
+    bind_setting_signal(tab, tab.sine_ghost_line2_enabled.stateChanged)
+    sine_l2_ghost_row.addWidget(tab.sine_ghost_line2_enabled)
+    sine_l2_ghost_row.addStretch()
+
     # Line 2 horizontal shift
     sine_l2_shift_row = _aligned_row(sine_ml_layout, "Line 2 Horizontal Shift:")
     tab.sine_line2_shift = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -591,6 +609,18 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l3_travel_align.addWidget(tab.sine_travel_line3)
     sine_l3_travel_col.addLayout(sine_l3_travel_align)
     sine_l3_content.addLayout(sine_l3_travel_col)
+    sine_l3_content.addStretch()
+
+    tab._sine_line3_ghost_row_widget, sine_l3_ghost_row = _aligned_row_widget(sine_ml_layout, "Line 3 Ghost:")
+    tab.sine_ghost_line3_enabled = QCheckBox("Draw Ghost")
+    tab.sine_ghost_line3_enabled.setProperty("circleIndicator", True)
+    tab.sine_ghost_line3_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'sine_ghost_line3_enabled', True)
+    )
+    tab.sine_ghost_line3_enabled.setToolTip("Allow the ghost trail to render for sine wave line 3.")
+    bind_setting_signal(tab, tab.sine_ghost_line3_enabled.stateChanged)
+    sine_l3_ghost_row.addWidget(tab.sine_ghost_line3_enabled)
+    sine_l3_ghost_row.addStretch()
 
     sine_l3_content.addStretch()
 

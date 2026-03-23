@@ -15,6 +15,7 @@ def get_uniform_names() -> list[str]:
         "u_slanted", "u_border_radius", "u_bars", "u_peaks",
         "u_playing", "u_ghost_alpha",
         "u_fill_color", "u_border_color",
+        "u_spectrum_glow_enabled", "u_spectrum_glow_intensity", "u_spectrum_glow_color",
         "u_rainbow_per_bar",
     ]
 
@@ -42,6 +43,8 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1i(gl, u, "u_single_piece", 1 if s._single_piece else 0)
     _set1i(gl, u, "u_slanted", 1 if getattr(s, '_slanted', False) else 0)
     _set1f(gl, u, "u_border_radius", float(getattr(s, '_border_radius', 0.0)))
+    _set1i(gl, u, "u_spectrum_glow_enabled", 1 if getattr(s, '_spectrum_glow_enabled', False) else 0)
+    _set1f(gl, u, "u_spectrum_glow_intensity", float(getattr(s, '_spectrum_glow_intensity', 0.55)))
 
     # Bar data
     bars = list(s._bars)
@@ -93,6 +96,6 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     # Fill / border colours
     _set_color4(gl, u, "u_fill_color", QColor(s._fill_color))
     _set_color4(gl, u, "u_border_color", QColor(s._border_color))
+    _set_color4(gl, u, "u_spectrum_glow_color", QColor(getattr(s, '_spectrum_glow_color', s._border_color)))
 
     return True
-

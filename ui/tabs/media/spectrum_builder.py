@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QSlider, QWidget,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.media.builder_scaffold import (
@@ -100,6 +101,69 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     spotify_vis_border_color_row.addWidget(tab.vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
+
+    glow_toggle_row = _aligned_row(_normal_layout, "")
+    tab.spectrum_glow_enabled = QCheckBox("Enable Rim Glow")
+    tab.spectrum_glow_enabled.setProperty("circleIndicator", True)
+    tab.spectrum_glow_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'spectrum_glow_enabled', False)
+    )
+    tab.spectrum_glow_enabled.setToolTip(
+        "Add a thin emissive rim around Spectrum bars without adding bloom smear."
+    )
+    bind_setting_signal(tab, tab.spectrum_glow_enabled.stateChanged)
+    glow_toggle_row.addWidget(tab.spectrum_glow_enabled)
+    glow_toggle_row.addStretch()
+
+    tab._spectrum_glow_widgets: list[QWidget] = []
+
+    spectrum_glow_color_widget, spectrum_glow_color_row = _aligned_row_widget(_normal_layout, "Glow Color:")
+    tab._spectrum_glow_widgets.append(spectrum_glow_color_widget)
+    _spectrum_glow_default = getattr(tab, "_settings", {}).get("widgets", {}).get(
+        "spotify_visualizer", {}
+    ).get("spectrum_glow_color", [110, 220, 255, 235])
+    try:
+        tab._spectrum_glow_color = QColor(*_spectrum_glow_default)
+    except Exception:
+        tab._spectrum_glow_color = QColor(110, 220, 255, 235)
+    tab.spectrum_glow_color_btn = ColorSwatchButton(title="Choose Spectrum Rim Glow Color")
+    bind_color_button(
+        tab,
+        tab.spectrum_glow_color_btn,
+        '_spectrum_glow_color',
+        initial_color=tab._spectrum_glow_color,
+    )
+    spectrum_glow_color_row.addWidget(tab.spectrum_glow_color_btn)
+    spectrum_glow_color_row.addStretch()
+
+    spectrum_glow_intensity_widget, spectrum_glow_intensity_row = _aligned_row_widget(_normal_layout, "Glow Intensity:")
+    tab._spectrum_glow_widgets.append(spectrum_glow_intensity_widget)
+    tab.spectrum_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.spectrum_glow_intensity.setMinimum(0)
+    tab.spectrum_glow_intensity.setMaximum(150)
+    _sg_default = int(tab._default_float('spotify_visualizer', 'spectrum_glow_intensity', 0.55) * 100)
+    tab.spectrum_glow_intensity.setValue(max(0, min(150, _sg_default)))
+    tab.spectrum_glow_intensity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.spectrum_glow_intensity.setTickInterval(10)
+    tab.spectrum_glow_intensity.setToolTip(
+        "How bright the thin Spectrum rim glow appears. Higher = stronger emissive edge."
+    )
+    bind_setting_signal(
+        tab,
+        tab.spectrum_glow_intensity.valueChanged,
+        updater=lambda v: tab.spectrum_glow_intensity_label.setText(f"{v}%"),
+    )
+    spectrum_glow_intensity_row.addWidget(tab.spectrum_glow_intensity)
+    tab.spectrum_glow_intensity_label = QLabel(f"{_sg_default}%")
+    spectrum_glow_intensity_row.addWidget(tab.spectrum_glow_intensity_label)
+
+    def _update_spectrum_glow_visibility(_state=None):
+        visible = tab.spectrum_glow_enabled.isChecked()
+        for widget in tab._spectrum_glow_widgets:
+            widget.setVisible(visible)
+
+    tab.spectrum_glow_enabled.stateChanged.connect(_update_spectrum_glow_visibility)
+    _update_spectrum_glow_visibility()
 
     spotify_vis_border_opacity_row = _aligned_row(_normal_layout, "Bar Border Opacity:")
     tab.vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)

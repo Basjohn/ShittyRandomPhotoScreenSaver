@@ -34,7 +34,10 @@ When debugging, always verify these steps in order:
 2. **Fade gating** – `_get_gpu_fade_factor()` should rise from 0→1 after the card fade finishes.
 3. **Mode uniforms** – confirm `_renderer_config` pushes the expected per-mode values (see sections below).
 4. **State reset parity** – double-click mode switches call `_reset_visualizer_state()`, so stale bars/geometry should never leak between modes. If they do, log `_cached_vis_kwargs` / `_last_applied_model` for corruption.
-5. **Shader output** – enable `[PERF] [GL COMPOSITOR]` metrics and screensaver_perf.log to catch dt spikes.
+5. **Startup vs settings parity** – if a mode behaves strangely on launch but starts behaving after opening Settings and returning, inspect whether the create-time path and `_refresh_spotify_visualizer_config()` have diverged. Creation should reuse the same refresh contract as settings re-entry instead of hand-applying a near-duplicate subset.
+   - The March 2026 failure mode here was not just "startup drift": `SpotifyVisualizerSettings.from_mapping(...)` was applying curated preset overlays strongly enough to stomp explicit live/runtime keys already present in the incoming mapping. If launch loses explicit `spectrum_glow_*`, secondary ghost toggles, or per-mode technical values but settings re-entry restores them, inspect preset-overlay precedence first.
+   - The creator path must also seed first-frame style from the resolved settings model, not the raw config dict. If launch colors/ghost/glow feel different from the same state after settings re-entry, compare creator-time `model.*` values against any direct raw-dict reads.
+6. **Shader output** – enable `[PERF] [GL COMPOSITOR]` metrics and screensaver_perf.log to catch dt spikes.
 
 ---
 
@@ -42,10 +45,15 @@ When debugging, always verify these steps in order:
 
 ### 2.1 Spectrum (default view)
 - Shader: `widgets/spotify_visualizer/shaders/spectrum.frag`
-- Defaults: `spectrum_bar_profile="curved"`, `spectrum_single_piece=True`, `spectrum_border_radius=3.0`, `bar_fill_color=[255,255,255,230]`, `bar_border_color=[255,255,255,220]`
-- Uniforms: `u_bars[64]`, `u_peaks[64]`, `u_bar_count`, `u_segments`, `u_single_piece`, `u_fill_color`, `u_border_color`, `u_ghost_alpha`, `u_fade`, `u_time`, `u_resolution`
+- Defaults: `spectrum_single_piece=True`, `spectrum_border_radius=3.0`, `spectrum_glow_enabled=False`, `spectrum_glow_intensity=0.55`, `spectrum_glow_color=[110,220,255,235]`, `bar_fill_color=[255,255,255,230]`, `bar_border_color=[255,255,255,220]`
+- Uniforms: `u_bars[64]`, `u_peaks[64]`, `u_bar_count`, `u_segments`, `u_single_piece`, `u_fill_color`, `u_border_color`, `u_spectrum_glow_enabled`, `u_spectrum_glow_intensity`, `u_spectrum_glow_color`, `u_ghost_alpha`, `u_fade`, `u_time`, `u_resolution`
 - Behaviour: geometry cache builds mirrored pillars; ghost peaks follow decaying envelope; segment count = `clamp(inner_height//5, 8, 64)`.
 - Debug tip: If curved profile looks flat, confirm multiplication `profile_shape[i] * zone_energy` still occurs before smoothing.
+- Rim-glow guardrail: Spectrum glow is intentionally a tiny inward bleed on the fill side of the bar edge (about 1–2 px), not a post-process bloom or outside halo. If it starts looking smeary or invisible, inspect the shader's fill-only edge-distance math first; do not bolt on time-reactive bloom just because Spectrum already moves quickly.
+- Rim-glow plumbing guardrail: if Spectrum glow is invisible in live use, check the GL overlay uniform query list before touching preset values or shader math. A missing overlay uniform query can make the shader path look "subtle" when it is actually never receiving the setting at all.
+- Rim-glow diagnostics guardrail: `SRPSS_VIZ_DIAGNOSTICS=1` glow logs must reflect post-assignment state. If diagnostics say glow is disabled while the UI says it is enabled, inspect whether `SpotifyBarsGLOverlay.set_state()` is logging before it applies the incoming glow values.
+- Mirrored-shape guardrail: for even bar counts, mirrored interpolation must sample around a half-step center, not `num_bars // 2`. If you see left/right edge mismatches that only appear on counts like `34`, inspect `interpolate_nodes_mirrored()` before touching bar routing or presets.
+- Shape-editor notch guardrail: dragging a notch should move only the selected label, and it must be able to cross neighboring labels without dragging them or getting trapped. Re-sort the notch list after release, not by clamping the active label between neighbors during drag.
 - **Median+hysteresis gate (Mar 12 2026):** `_apply_bar_gate()` now runs before `_apply_reactive_smoothing()` to kill <~1.5 % jitter. Gate tracks the last two frames per bar, takes a 3-sample median, and only updates when the delta exceeds a dynamic threshold (rises require ≈8 % of prior value, drops ≈5 %). When debugging “stuck” bars, log `_bar_gate_prev*` on the worker; if they never seed, ensure the worker saw at least three frames after mode switch.
 - Validation: run `tests/test_visualizer_bar_gate.py` once it lands, or temporarily enable `[SPOTIFY_VIS][TIMER]` to confirm gate isn’t starving when block size = 128.
 
@@ -55,6 +63,8 @@ When debugging, always verify these steps in order:
 - Uniforms: `u_waveform[256]`, `u_line_color`, `u_glow_color`, `u_glow_enabled`, `u_reactive_glow`, `u_line_amplitude`, `u_line_count`, `u_line_dim`, `u_bass/mid/high/overall_energy`
 - Waveform pipeline: sample → Gaussian smooth → Catmull-Rom interpolation → tanh soft-sat. Multi-line mode assigns bass/mid/high per line.
 - Debug tip: `_update_osc_multi_line_visibility()` must run after config load; wave stuck? check `_osc_smoothing` not at 1.0. Oscilloscope line 2/3 colour + glow swatches are now bound via `ColorBinding`, so Taste The Rainbow reaches all glow lines without manual rehydrate/sync code.
+- Ghost-line guardrail: Osc line 2/3 ghost toggles are intended to inherit the same shared ghost alpha/decay feel as line 1. If line 2/3 ghosts disappear while line 1 still trails, inspect whether the secondary ghost branch is composing with the visible glow colors (`u_line2_glow_color` / `u_line3_glow_color`) rather than only the darker raw line colors.
+- Ghost-line launch guardrail: if Osc line 2/3 ghosts still only appear after opening Settings and returning, inspect `from_mapping(...)` precedence and creator-time frame-push payloads before touching shader math again. The broken path can be "toggle never survives launch model construction," not "ghost rendering is too subtle."
 
 -### 2.3 Sine Wave (pure sine successor to oscilloscope sine mode)
 - Shader: `widgets/spotify_visualizer/shaders/sine_wave.frag`
@@ -83,6 +93,14 @@ When debugging, always verify these steps in order:
 - Deformation layers: bass pulse, constant wobble (time), reactive wobble (energy), vocal wobble, stretch tendency, reactive deformation scale.
 - **Ghosting V5 (Mar 2026):** Peak tracking uses 150ms hold before decay, decays toward smoothed energy (not raw), and enforces a minimum offset (`max(0.06, smoothed_e * 0.12)`) so the ghost shape is always visible during playback. Shader smoothstep zones widened for broader ghost fill region. Peak state: `_blob_peak_{energy,bass,mid,high,overall}` + `_blob_peak_hold_remaining` in `spotify_bars_gl_overlay.py`.
 - **Event micro-scheduler (Mar 2026):** Blob now also receives discrete scheduler peeks. `build_gpu_push_extra_kwargs()` reads `engine.get_event_scheduler().peek_latest('kick')` / `peek_latest('snare')` and forwards strengths into `SpotifyBarsGLOverlay.set_state()`, where kick boosts stage-driving bass/overall energy and snare boosts wobble-driving mid/high energy without consuming the event.
+- **Stage-first event routing (Mar 2026):** Blob’s scheduler help is now intentionally asymmetric:
+  - live `bass` / `overall` stay anchored to continuous + transient support so whole-body scalar pulse cannot explode from a stray event
+  - kick energy is primarily spent on `_blob_stage_input_*` so stage progression can carry larger movement smoothly
+  - snare energy is primarily spent on live `mid/high` so shape drama shows up as wobble/stretch instead of giant size jumps
+  - `kick_lane_gain` now applies to Blob too: `0%` disables scheduler kick assist for Blob without disabling continuous/transient support or snare-driven deformation
+  - Guardrail: Blob control reads in the live-band path must preserve valid zero values. Avoid `... or default` when reading `kick_lane_gain`, `blob_pulse_cap`, or transient mixes, or the mode will appear to ignore “off” settings.
+  - if Blob starts doing sudden giant pulses again, inspect whether event energy has leaked back into the same live bass/overall channels that feed `u_bass_energy` / `u_overall_energy`
+- **Curated pack guardrail (Mar 2026):** Blob now participates in a six-slot curated primary-mode pack. Do not allow duplicate `preset_index` values in shipped curated JSON. Regression coverage lives in `tests/test_visualizer_presets.py`.
 - Debug tip: "Tearing" occurs when `blob_growth>5` without card height increase.
 
 ### 2.5 Starfield (dev-gated by `SRPSS_ENABLE_DEV=1`) [GATED FOR BEING SHIT]
@@ -163,30 +181,45 @@ Each mode has contextual transient mix sliders controlling how much transient en
 | Sine | `sine_wave_transient_width_mix` | 40% | `renderers/sine_wave.py` | Modulates `u_width_reaction` by `(1 + smoothed_bass × mix)` |
 | Osc | `oscilloscope_transient_width_mix` | 35% | `renderers/oscilloscope.py` | Modulates `u_sensitivity` by `(1 + smoothed_bass × mix)` |
 
-**Disabled slider behaviour:** `kick_lane_gain` (Spectrum only) and `transient_pulse_gain` (Bubble only) show their stored value with "(read-only)" suffix when disabled outside their target mode. Label annotations: "(Spectrum only)", "(Bubble only)", "(all modes)" for clamp.
+**Disabled slider behaviour:** `kick_lane_gain` (Spectrum/Blob only) and `transient_pulse_gain` (Bubble only) show their stored value with "(read-only)" suffix when disabled outside their target mode. Label annotations: "(Spectrum/Blob only)", "(Bubble only)", "(all modes)" for clamp.
 
 **Debug tips:**
 - If a mode feels unresponsive to beats, check its transient mix slider isn't at 0%.
 - Blob deformation debugging: log `raw_bass`/`raw_mid` after the mix blend in `spotify_bars_gl_overlay.py` `set_state()`.
+- Blob flicker debugging: if deformation feels strong but too flickery, lower `kick_lane_gain` before adding more smoothing. That disables or reduces scheduler kick help while preserving continuous support, transient mixes, and snare-driven wobble.
 - Sine/Osc width not reacting: verify `_sine_wave_transient_width_mix` / `_osc_transient_width_mix` attrs are propagated from the widget to the overlay.
 - Scheduler contract checks: use `tests/test_event_scheduler.py` for debounce/consume semantics and `tests/test_transient_per_mode_integration.py` for Blob scheduler-event wiring.
 
 ### 2.9 Preset repair workflow (updated Mar 12 2026)
 - Tool: `tools/visualizer_preset_repair.py`
 - Purpose: sanitize curated preset JSON/SST payloads by dropping foreign keys, enforcing per-mode defaults, and rewriting the payload in the new lean format (only `snapshot.widgets.spotify_visualizer` plus non-visualizer widgets when present).
+- It also owns **curated slot normalization** now: `--reindex-curated` closes preset-number gaps per mode, rewrites `preset_index`, and renames files back to canonical `preset_<n>_<slug>.json` form without touching the actual visualizer settings payload.
+- Primary shipped visualizer modes (`blob`, `spectrum`, `oscilloscope`, `sine_wave`) now maintain a six-slot curated pack baseline. Treat that as a product contract unless design intentionally expands it.
 - Key behaviour changes:
   - `_build_clean_payload()` now emits a single `spotify_visualizer` block; `snapshot.custom_preset_backup` + top-level `widgets.spotify_visualizer` are stripped.
   - Mandatory technical suffixes drive optional backfill logic; at present we only prune junk and preserve provided values (no auto backfill unless explicitly enabled).
   - `--repair-all` CLI flag + GUI “Repair All Presets” button batch-process every JSON under `presets/visualizer_modes/**`. Each file gets a `.bakN` backup before rewrite.
+  - `--reindex-curated` and the GUI `Reindex Curated Presets` button normalize slot numbering after manual deletes/adds. Guardrails:
+    - if `Preset 1` is missing, the earliest remaining preset is moved to slot 1
+    - markerless files such as `thunder.json` fill the earliest open gap before higher explicit slots are compressed down
+    - payload content is preserved; only metadata/filenames are normalized
 - Usage:
   1. Launch `python tools/visualizer_preset_repair.py` (GUI) or run `python tools/visualizer_preset_repair.py --repair-all` for CLI batch.
   2. Pick the mode/preset. Inspect the stats log (added/removed/changed keys). GUI keeps an undo stack per session.
   3. Validate repaired JSONs manually (`git diff` or `jq`) to ensure only the target keys remain.
+  4. If curated numbering drifted, run `python tools/visualizer_preset_repair.py --reindex-curated` before authoring more presets so new files land in predictable slots.
 - When to run it:
   - After adding/removing visualizer settings so curated presets stay in sync with runtime filters.
   - When QA hands you SST snapshots full of entire widget trees.
   - Before checking in curated preset edits, to guarantee they only contain allowed keys.
   - As part of doc refreshes so editors see only one copy of each control.
+  - After deleting/renaming curated presets manually, or after dropping in a markerless preset file that should become the next logical curated slot.
+- Guardrails:
+  - `tools/rebuild_visualizer_presets.py` is retired on purpose and must not be revived or referenced as the active workflow.
+  - `tests/test_visualizer_presets.py` should stay contract-level: schema, filtering, duplicate-prefix cleanup, direct transient-key handling, SST shape.
+  - `tests/test_visualizer_presets.py` also guards the curated reindex rules: gap fill, canonical filename rewrite, and `Preset 1` normalization.
+  - Duplicate-prefix cleanup must cover alternate accepted mode prefixes too (`osc_` and `oscilloscope_`, `sine_` and `sine_wave_`, etc.), not only the first canonical prefix.
+  - `tests/test_visualizer_preset1_baselines.py` is the only intentionally rigid preset-feel fence. If curated preset 1 is intentionally reauthored, refresh that baseline in the same change instead of forcing artistic values into general preset tests.
 
 ---
 

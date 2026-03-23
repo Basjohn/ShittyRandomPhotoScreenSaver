@@ -25,7 +25,7 @@ _PER_MODE_TECH_ATTR = "_per_mode_technical_controls"
 MANUAL_FLOOR_MIN = 0.05
 MANUAL_FLOOR_MAX = 1.0
 
-_KICK_GAIN_MODES = frozenset({"spectrum"})
+_KICK_GAIN_MODES = frozenset({"spectrum", "blob"})
 _PULSE_GAIN_MODES = frozenset({"bubble"})
 
 _TRANSIENT_MIX_META: Dict[str, tuple] = {
@@ -67,8 +67,9 @@ _TRANSIENT_MIX_META: Dict[str, tuple] = {
 }
 
 _KICK_GAIN_TIP = (
-    "Spectrum kick express-lane gain (0%–200%). Controls how strongly\n"
-    "transient bass energy bypasses smoothing for immediate kick response.\n"
+    "Kick event gain (0%–200%). Controls how strongly discrete kick help\n"
+    "pushes the mode's fast-react path. 0% = disabled, 100% = default.\n"
+    "Spectrum spends this in the kick lane; Blob spends it in stage/kick assist.\n"
     "0% = disabled, 100% = default, 200% = double."
 )
 _PULSE_GAIN_TIP = (

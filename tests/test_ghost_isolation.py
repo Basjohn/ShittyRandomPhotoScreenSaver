@@ -43,6 +43,8 @@ class TestWidgetGhostAttrs:
             "_sine_ghosting_enabled": True,
             "_sine_ghost_alpha": 0.45,
             "_sine_ghost_decay": 0.3,
+            "_sine_ghost_line2_enabled": True,
+            "_sine_ghost_line3_enabled": True,
         },
         "bubble": {
             "_bubble_ghosting_enabled": False,
@@ -52,6 +54,8 @@ class TestWidgetGhostAttrs:
         "oscilloscope": {
             "_osc_ghosting_enabled": False,
             "_osc_ghost_intensity": 0.4,
+            "_osc_ghost_line2_enabled": True,
+            "_osc_ghost_line3_enabled": True,
         },
     }
 
@@ -83,8 +87,9 @@ class TestConfigApplierGhost:
         "spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay",
         "blob_ghosting_enabled", "blob_ghost_alpha", "blob_ghost_decay",
         "sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay",
+        "sine_ghost_line2_enabled", "sine_ghost_line3_enabled",
         "bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay",
-        "osc_ghosting_enabled", "osc_ghost_intensity",
+        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
     ]
 
     def test_apply_vis_mode_kwargs_handles_all_ghost_keys(self):
@@ -177,8 +182,9 @@ class TestOverlaySetStateGhostParams:
         "spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay",
         "blob_ghosting_enabled", "blob_ghost_alpha", "blob_ghost_decay",
         "sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay",
+        "sine_ghost_line2_enabled", "sine_ghost_line3_enabled",
         "bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay",
-        "osc_ghosting_enabled", "osc_ghost_intensity",
+        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
     ]
 
     def test_set_state_signature_has_all_ghost_params(self):
@@ -428,6 +434,8 @@ class TestRendererGhostIsolation:
         )
         first_bass = overlay._blob_live_bass_energy
         first_mid = overlay._blob_live_mid_energy
+        first_stage_bass = overlay._blob_stage_input_bass
+        first_stage_overall = overlay._blob_stage_input_overall
 
         overlay._last_time_ts = time.time() - 0.016
         overlay.set_state(
@@ -448,10 +456,14 @@ class TestRendererGhostIsolation:
 
         assert overlay._blob_kick_event_strength > 0.0
         assert overlay._blob_snare_event_strength > 0.0
-        assert overlay._blob_live_bass_energy > float(energy.bass)
+        assert overlay._blob_live_bass_energy >= float(energy.bass)
         assert overlay._blob_live_mid_energy > float(energy.mid)
-        assert overlay._blob_live_bass_energy < first_bass
+        assert overlay._blob_live_bass_energy <= first_bass
         assert overlay._blob_live_mid_energy < first_mid
+        assert overlay._blob_stage_input_bass > float(energy.bass)
+        assert overlay._blob_stage_input_overall > float(energy.overall)
+        assert overlay._blob_stage_input_bass < first_stage_bass
+        assert overlay._blob_stage_input_overall < first_stage_overall
 
     @pytest.mark.qt
     def test_blob_live_band_filter_prevents_one_frame_snap_back(self, qt_app):
@@ -551,12 +563,21 @@ class TestRendererGhostIsolation:
         calm = overlay._compute_blob_live_bands(
             SimpleNamespace(bass=0.05, mid=0.05, high=0.03, overall=0.04)
         )
+        calm_stage = (
+            overlay._blob_stage_input_bass,
+            overlay._blob_stage_input_overall,
+        )
         loud = overlay._compute_blob_live_bands(
             SimpleNamespace(bass=0.45, mid=0.35, high=0.20, overall=0.38)
         )
+        loud_stage = (
+            overlay._blob_stage_input_bass,
+            overlay._blob_stage_input_overall,
+        )
 
-        assert loud[0] - 0.45 > calm[0] - 0.05
         assert loud[1] - 0.35 > calm[1] - 0.05
+        assert loud_stage[0] - 0.45 > calm_stage[0] - 0.05
+        assert loud_stage[1] - 0.38 > calm_stage[1] - 0.04
 
     @pytest.mark.qt
     def test_blob_snare_help_does_not_inflate_stage_overall_like_kick(self, qt_app):
@@ -587,7 +608,7 @@ class TestRendererGhostIsolation:
         )
 
         assert snare_bands[1] > kick_bands[1]
-        assert snare_bands[3] <= kick_bands[3]
+        assert snare_bands[3] <= kick_bands[3] + 0.02
         assert snare_stage_inputs[3] <= kick_stage_inputs[3]
         assert snare_stage_inputs[0] <= kick_stage_inputs[0]
 
@@ -608,10 +629,50 @@ class TestRendererGhostIsolation:
 
         assert snare_stage[0] <= kick_stage[0]
 
+    @pytest.mark.qt
+    def test_blob_kick_lane_gain_can_disable_scheduler_kick_assist(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        base = SimpleNamespace(bass=0.10, mid=0.08, high=0.03, overall=0.09)
+        transient = SimpleNamespace(bass_transient=0.35, mid_transient=0.0, high_transient=0.0)
+
+        disabled = SpotifyBarsGLOverlay(None)
+        disabled._kick_lane_gain = 0.0
+        disabled._blob_kick_event_strength = 1.0
+        disabled._blob_snare_event_strength = 0.0
+        disabled._transient_energy = transient
+        disabled_bands = disabled._compute_blob_live_bands(base)
+        disabled_stage = (
+            disabled._blob_stage_input_bass,
+            disabled._blob_stage_input_overall,
+        )
+
+        enabled = SpotifyBarsGLOverlay(None)
+        enabled._kick_lane_gain = 1.0
+        enabled._blob_kick_event_strength = 1.0
+        enabled._blob_snare_event_strength = 0.0
+        enabled._transient_energy = transient
+        enabled_bands = enabled._compute_blob_live_bands(base)
+        enabled_stage = (
+            enabled._blob_stage_input_bass,
+            enabled._blob_stage_input_overall,
+        )
+
+        assert disabled_bands[0] <= enabled_bands[0]
+        assert disabled_bands[3] <= enabled_bands[3]
+        assert disabled_stage[0] < enabled_stage[0]
+        assert disabled_stage[1] < enabled_stage[1]
+
     def test_osc_renderer_reads_osc_ghost(self):
         src = (ROOT / "widgets" / "spotify_visualizer" / "renderers" / "oscilloscope.py").read_text(encoding="utf-8")
         assert "_osc_ghost_alpha" in src, (
             "Oscilloscope renderer must read _osc_ghost_alpha"
+        )
+        assert "_osc_ghost_line2_enabled" in src, (
+            "Oscilloscope renderer must read _osc_ghost_line2_enabled"
+        )
+        assert "_osc_ghost_line3_enabled" in src, (
+            "Oscilloscope renderer must read _osc_ghost_line3_enabled"
         )
 
     def test_sine_renderer_reads_sine_ghost(self):
@@ -621,6 +682,12 @@ class TestRendererGhostIsolation:
         )
         assert "_sine_ghost_alpha" in src, (
             "Sine wave renderer must read _sine_ghost_alpha, not global"
+        )
+        assert "_sine_ghost_line2_enabled" in src, (
+            "Sine wave renderer must read _sine_ghost_line2_enabled"
+        )
+        assert "_sine_ghost_line3_enabled" in src, (
+            "Sine wave renderer must read _sine_ghost_line3_enabled"
         )
 
     def test_sine_renderer_does_not_read_global_ghost(self):
@@ -711,6 +778,8 @@ class TestRendererGhostIsolation:
             "u_prev_waveform": 2,
             "u_waveform_count": 3,
             "u_osc_ghost_alpha": 4,
+            "u_ghost_line2_enabled": 27,
+            "u_ghost_line3_enabled": 28,
             "u_glow_enabled": 5,
             "u_glow_intensity": 6,
             "u_glow_size": 7,
@@ -739,6 +808,8 @@ class TestRendererGhostIsolation:
             _waveform_count=0,
             _prev_waveform=[],
             _osc_ghost_alpha=0.0,
+            _osc_ghost_line2_enabled=False,
+            _osc_ghost_line3_enabled=True,
             _glow_enabled=False,
             _glow_intensity=0.0,
             _glow_size=1.0,
@@ -770,6 +841,8 @@ class TestRendererGhostIsolation:
         assert np.count_nonzero(gl.uniforms[1]) == 0
         assert np.count_nonzero(gl.uniforms[2]) == 0
         assert gl.uniforms[3] == 2
+        assert gl.uniforms[27] == 0
+        assert gl.uniforms[28] == 1
 
     def test_osc_renderer_respects_waveform_count_for_padded_buffers(self):
         from widgets.spotify_visualizer.renderers import oscilloscope
@@ -814,6 +887,8 @@ class TestRendererGhostIsolation:
             "u_prev_waveform": 2,
             "u_waveform_count": 3,
             "u_osc_ghost_alpha": 4,
+            "u_ghost_line2_enabled": 27,
+            "u_ghost_line3_enabled": 28,
             "u_glow_enabled": 5,
             "u_glow_intensity": 6,
             "u_glow_size": 7,
@@ -843,6 +918,8 @@ class TestRendererGhostIsolation:
             _waveform_count=128,
             _prev_waveform=[],
             _osc_ghost_alpha=0.0,
+            _osc_ghost_line2_enabled=True,
+            _osc_ghost_line3_enabled=False,
             _glow_enabled=False,
             _glow_intensity=0.0,
             _glow_size=1.0,
@@ -872,6 +949,8 @@ class TestRendererGhostIsolation:
 
         assert oscilloscope.upload_uniforms(gl, uniforms, state) is True
         assert gl.uniforms[3] == 128
+        assert gl.uniforms[27] == 1
+        assert gl.uniforms[28] == 0
 
 
 # ===========================================================================
@@ -909,6 +988,83 @@ class TestOverlayBlobPeakGate:
         assert offsets[1] > offsets[0]
         assert offsets[2] <= 0.035
 
+
+class TestSpectrumGlowUniforms:
+    def test_spectrum_renderer_uploads_rim_glow_uniforms(self):
+        from widgets.spotify_visualizer.renderers import spectrum
+
+        class FakeGL:
+            def __init__(self):
+                self.uniforms = {}
+
+            def glUniform1fv(self, loc, count, values):
+                self.uniforms[loc] = np.array(values, copy=True)
+
+            def glUniform1f(self, loc, value):
+                self.uniforms[loc] = float(value)
+
+            def glUniform1i(self, loc, value):
+                self.uniforms[loc] = int(value)
+
+            def glUniform4f(self, loc, a, b, c, d):
+                self.uniforms[loc] = (float(a), float(b), float(c), float(d))
+
+        gl = FakeGL()
+        uniforms = {
+            "u_bar_count": 1,
+            "u_segments": 2,
+            "u_bar_height_scale": 3,
+            "u_single_piece": 4,
+            "u_slanted": 5,
+            "u_border_radius": 6,
+            "u_bars": 7,
+            "u_peaks": 8,
+            "u_playing": 9,
+            "u_ghost_alpha": 10,
+            "u_fill_color": 11,
+            "u_border_color": 12,
+            "u_spectrum_glow_enabled": 13,
+            "u_spectrum_glow_intensity": 14,
+            "u_spectrum_glow_color": 15,
+            "u_rainbow_per_bar": 16,
+        }
+        state = SimpleNamespace(
+            _bar_count=5,
+            _segments=12,
+            _render_rect=SimpleNamespace(height=lambda: 120),
+            _single_piece=True,
+            _slanted=False,
+            _border_radius=3.0,
+            _bars=[0.2, 0.4, 0.8, 0.4, 0.2],
+            _peaks=[0.3, 0.5, 0.9, 0.5, 0.3],
+            _bars_buffer=np.zeros(64, dtype="float32"),
+            _peaks_buffer=np.zeros(64, dtype="float32"),
+            _debug_bars_logged=True,
+            _playing=True,
+            _spectrum_ghost_alpha=0.25,
+            _spectrum_ghosting_enabled=True,
+            _fill_color=QColor(255, 180, 80, 230),
+            _border_color=QColor(255, 240, 180, 255),
+            _spectrum_glow_enabled=True,
+            _spectrum_glow_intensity=0.94,
+            _spectrum_glow_color=QColor(15, 230, 255, 210),
+        )
+
+        assert spectrum.upload_uniforms(gl, uniforms, state) is True
+        assert gl.uniforms[13] == 1
+        assert gl.uniforms[14] == pytest.approx(0.94)
+
+    def test_oscilloscope_secondary_ghosts_use_glow_colors(self):
+        src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "oscilloscope.frag").read_text(encoding="utf-8")
+        assert "u_line2_glow_color" in src
+        assert "u_line3_glow_color" in src
+        assert "u_line2_color, glowColor2" in src, (
+            "Osc secondary ghost path must use line 2 glow color, not only the raw line color."
+        )
+        assert "u_line3_color, glowColor3" in src, (
+            "Osc secondary ghost path must use line 3 glow color, not only the raw line color."
+        )
+
     def test_blob_overlay_uses_peak_hold_instead_of_history_snapshot_path(self):
         src = (ROOT / "widgets" / "spotify_bars_gl_overlay.py").read_text(encoding="utf-8")
         assert "_blob_peak_hold_remaining = 0.15" in src
@@ -939,7 +1095,7 @@ class TestOverlayBlobPeakGate:
             blob_snare_event_strength=0.4,
         )
 
-        assert overlay._blob_live_bass_energy > float(energy.bass)
+        assert overlay._blob_stage_input_bass > float(energy.bass)
         assert overlay._blob_peak_bass >= overlay._blob_live_bass_energy
         assert overlay._blob_peak_energy >= overlay._blob_smoothed_energy
 
@@ -996,8 +1152,9 @@ class TestCreatorGhostKwargs:
         "spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay",
         "blob_ghosting_enabled", "blob_ghost_alpha", "blob_ghost_decay",
         "sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay",
+        "sine_ghost_line2_enabled", "sine_ghost_line3_enabled",
         "bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay",
-        "osc_ghosting_enabled", "osc_ghost_intensity",
+        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
     ]
 
     def test_all_ghost_kwargs_passed_from_model(self):

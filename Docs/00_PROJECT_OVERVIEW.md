@@ -14,7 +14,7 @@ Deliver a modern Windows screensaver and media controller that blends curated im
 | Centralized lifecycle | ResourceManager tracks every Qt object, GL overlay, and animation. Settings changes replay through `SettingsManager` with JSON snapshots + SST import/export. | `Index.md`, `Docs/Defaults_Guide.md`, `core/settings/sst_io.py` |
 | GPU-first rendering | Each display owns a single `GLCompositorWidget` that runs all shader-backed transitions, Spotify visualizer modes, and diagnostics. CPU/QPainter fallbacks remain for older hardware. | `Spec.md` → “Transitions”, `Docs/Visualizer_Debug.md` |
 | Widget parity | Overlay widgets (clock/weather/media/Reddit/Spotify visualizer) follow `Docs/10_WIDGET_GUIDELINES.md` (ShadowFadeProfile, fade synchronization, interaction gating). | Widget guidelines doc |
-| Preset hygiene | Global widget presets plus per-visualizer curated presets derive from canonical defaults and filtered snapshots; rebuild tooling prevents eco-mode or malformed JSON regressions. | `tools/rebuild_visualizer_presets.py`, `Docs/Visualizer_Presets_Plan.md`, new tests in `tests/test_visualizer_presets.py` |
+| Preset hygiene | Global widget presets plus per-visualizer curated presets derive from canonical defaults and filtered snapshots; repair/audit tooling prevents malformed JSON, duplicate-prefixed keys, and stale backup payloads from drifting into shipped presets. | `tools/visualizer_preset_repair.py`, `Docs/Visualizer_Debug.md`, `tests/test_visualizer_presets.py` |
 
 ## 3. Feature Overview
 
@@ -38,7 +38,7 @@ Key capabilities:
 
 - **Advanced toggle hygiene**: Normal vs Advanced buckets share a session-cached collapse state per mode. Hidden sliders keep their values (Always-Apply rule).
 - **Bubble controls**: Specular and gradient directions are fully decoupled (`bubble_specular_direction`, `bubble_gradient_direction`). Defaults, UI, config applier, overlay uniforms, and preset rebuild all ship both keys so curated presets + SST snapshots remain authoritative.
-- **Preset integrity**: Curated JSON files are rebuilt from canonical defaults, filtered by mode, and covered by tests checking duplicate keys, mode enforcement, and SST round-trips (`tests/test_visualizer_presets.py`).
+- **Preset integrity**: Curated JSON files are filtered by the same runtime migration/filter helpers used by loading, and covered by tests checking duplicate keys, mode enforcement, direct transient-key handling, and SST round-trips (`tests/test_visualizer_presets.py`). Artistic preset feel is intentionally allowed to evolve; the strict snapshot fence lives in `tests/test_visualizer_preset1_baselines.py`.
 - **Diagnostics**: `Docs/Visualizer_Debug.md` + `Visualizer_Reset_Matrix.md` document cold-start expectations, shared beat engine resets, and per-mode shader uniform maps.
 
 ### 3.4 Widgets & Overlays
@@ -85,7 +85,7 @@ Key capabilities:
 
 - **Defaults**: `core/settings/default_settings.py` (mirrored to `core/settings/defaults_snapshot.*`).
 - **Models**: `core/settings/models.py` – Spotify visualizer dataclass includes both specular and gradient direction fields.
-- **Preset rebuild**: `tools/rebuild_visualizer_presets.py` overlays canonical defaults + legacy JSON, filters allowed keys, writes compact payload.
+- **Preset repair/audit**: `tools/visualizer_preset_repair.py` overlays canonical defaults + live filtering, prunes stale backup payload shapes, preserves direct transient keys, and writes `.bak*` backups before rewrite.
 - **SST export/import**: `core/settings/sst_io.py`. Export includes metadata + snapshot; import merge respects structured roots and skips deprecated display toggles automatically. Preview path computes diffs without mutating settings.
 
 ## 7. Documentation Map

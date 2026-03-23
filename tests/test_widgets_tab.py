@@ -188,6 +188,24 @@ class TestWidgetsTab:
         finally:
             reloaded_tab.deleteLater()
 
+    def test_secondary_line_ghost_toggles_persist(self, qt_app, settings_manager):
+        first_tab = WidgetsTab(settings_manager)
+        first_tab.osc_ghost_line2_enabled.setChecked(False)
+        first_tab.osc_ghost_line3_enabled.setChecked(True)
+        first_tab.sine_ghost_line2_enabled.setChecked(True)
+        first_tab.sine_ghost_line3_enabled.setChecked(False)
+        first_tab._save_settings_now()
+        first_tab.deleteLater()
+
+        reloaded_tab = WidgetsTab(settings_manager)
+        try:
+            assert reloaded_tab.osc_ghost_line2_enabled.isChecked() is False
+            assert reloaded_tab.osc_ghost_line3_enabled.isChecked() is True
+            assert reloaded_tab.sine_ghost_line2_enabled.isChecked() is True
+            assert reloaded_tab.sine_ghost_line3_enabled.isChecked() is False
+        finally:
+            reloaded_tab.deleteLater()
+
     def test_visualizer_advanced_edit_switches_to_custom(self, qt_app, settings_manager):
         tab = WidgetsTab(settings_manager)
         try:
@@ -380,6 +398,9 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
             "spectrum_growth": 3.1,
             "spectrum_single_piece": False,
             "spectrum_border_radius": 1.0,
+            "spectrum_glow_enabled": False,
+            "spectrum_glow_intensity": 0.55,
+            "spectrum_glow_color": [110, 220, 255, 235],
             "spectrum_mirrored": True,
             "spectrum_bar_count": 33,
             "spectrum_sensitivity": 0.50,
@@ -402,6 +423,9 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         tab.spectrum_single_piece.setChecked(True)
         tab.spectrum_rainbow_per_bar.setChecked(True)
         tab.spectrum_border_radius.setValue(7)
+        tab.spectrum_glow_enabled.setChecked(True)
+        tab.spectrum_glow_intensity.setValue(94)
+        tab._spectrum_glow_color = QColor(15, 230, 255, 210)
         tab.spectrum_mirrored.setChecked(False)
         tab.spectrum_bass_emphasis.setValue(81)
         tab.spectrum_vocal_position.setValue(57)
@@ -432,6 +456,9 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         assert snapshot["spectrum_growth"] == pytest.approx(3.7)
         assert snapshot["spectrum_single_piece"] is True
         assert snapshot["spectrum_border_radius"] == pytest.approx(7.0)
+        assert snapshot["spectrum_glow_enabled"] is True
+        assert snapshot["spectrum_glow_intensity"] == pytest.approx(0.94)
+        assert snapshot["spectrum_glow_color"] == [15, 230, 255, 210]
         assert snapshot["spectrum_mirrored"] is False
         assert snapshot["spectrum_shape_nodes"] == [[0.0, 0.10], [0.4, 0.85], [1.0, 0.65]]
         assert snapshot["spectrum_bar_count"] == 44
@@ -450,6 +477,9 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         assert restored.get("spectrum_growth") == pytest.approx(3.7)
         assert restored.get("spectrum_single_piece") is True
         assert restored.get("spectrum_border_radius") == pytest.approx(7.0)
+        assert restored.get("spectrum_glow_enabled") is True
+        assert restored.get("spectrum_glow_intensity") == pytest.approx(0.94)
+        assert restored.get("spectrum_glow_color") == [15, 230, 255, 210]
         assert restored.get("spectrum_mirrored") is False
         assert restored.get("spectrum_shape_nodes") == [[0.0, 0.10], [0.4, 0.85], [1.0, 0.65]]
         assert restored.get("spectrum_bar_count") == 44

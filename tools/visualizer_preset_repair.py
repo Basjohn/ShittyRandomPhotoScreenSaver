@@ -15,9 +15,11 @@ import json
 import shutil
 import sys
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Sequence, Tuple
+import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -79,7 +81,11 @@ _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
         "reactive_glow",
         "line_color",
         "line2_color",
+        "line2_glow_color",
+        "ghost_line2_enabled",
         "line3_color",
+        "line3_glow_color",
+        "ghost_line3_enabled",
     ),
     "sine_wave": (
         "glow_enabled",
@@ -92,6 +98,8 @@ _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
         "line1_color",
         "line2_color",
         "line3_color",
+        "ghost_line2_enabled",
+        "ghost_line3_enabled",
         "line2_glow_color",
         "line3_glow_color",
     ),
@@ -144,6 +152,9 @@ _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
     "spectrum": (
         "growth",
         "border_radius",
+        "glow_enabled",
+        "glow_intensity",
+        "glow_color",
         "rainbow_per_bar",
         "single_piece",
         "mirrored",
@@ -168,6 +179,15 @@ _MODE_TECH_PREFIXES: Dict[str, str] = {
     "sine_wave": "sine_wave_",
     "oscilloscope": "oscilloscope_",
 }
+
+
+@dataclass
+class ReindexEntry:
+    mode: str
+    path: Path
+    payload: Dict[str, Any]
+    current_index: int | None
+    suffix: str | None
 
 
 def _load_visualizer_defaults() -> Dict[str, Any]:
@@ -284,8 +304,7 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         "deprecated_authored_keys": [],
         "top_level_visualizer_duplication": False,
     }
-    prefix = _canonical_mode_prefix(mode)
-    double_prefix = f"{prefix}{prefix}" if prefix else ""
+    prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
 
     snapshot = payload.get("snapshot")
     if isinstance(snapshot, Mapping) and isinstance(snapshot.get("custom_preset_backup"), Mapping):
@@ -301,7 +320,7 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         for key in section.keys():
             if not isinstance(key, str):
                 continue
-            if double_prefix and key.startswith(double_prefix):
+            if any(prefix and key.startswith(f"{prefix}{prefix}") for prefix in prefixes):
                 issues["duplicate_prefixed_keys"].append(key)
             if any(key.endswith(suffix) for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES):
                 issues["deprecated_authored_keys"].append(key)
@@ -390,6 +409,174 @@ def _ensure_backup(path: Path) -> Path:
         counter += 1
     shutil.copy2(path, candidate)
     return candidate
+
+
+def _cleanup_suffix_text(value: str | None) -> str | None:
+    if not value:
+        return None
+    cleaned = re.sub(r"[_-]+", " ", str(value)).strip()
+    cleaned = cleaned.strip("() ")
+    return cleaned or None
+
+
+def _suffix_from_payload_name(name: Any) -> str | None:
+    if not isinstance(name, str):
+        return None
+    candidate = name.strip()
+    if not candidate:
+        return None
+    match = re.match(r"^preset[\s_-]*\d+(?:[\s_-]*\((.+)\)|[\s_-]+(.+))?$", candidate, flags=re.IGNORECASE)
+    if match:
+        return _cleanup_suffix_text(match.group(1) or match.group(2))
+    return _cleanup_suffix_text(candidate)
+
+
+def _suffix_from_path_stem(path: Path) -> str | None:
+    inferred = vp._infer_suffix_from_name(path.stem)  # type: ignore[attr-defined]
+    if inferred:
+        return _cleanup_suffix_text(inferred)
+    stem = re.sub(r"^preset[\s_-]*\d+[\s_-]*", "", path.stem, flags=re.IGNORECASE).strip()
+    return _cleanup_suffix_text(stem)
+
+
+def _slugify_suffix(suffix: str | None) -> str:
+    if not suffix:
+        return ""
+    slug = re.sub(r"[^a-z0-9]+", "_", suffix.lower()).strip("_")
+    return slug
+
+
+def _load_reindex_entry(mode: str, path: Path) -> ReindexEntry:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Payload root must be a JSON object")
+    current_index = payload.get("preset_index")
+    if not isinstance(current_index, int):
+        current_index = vp._infer_preset_index_from_name(path.stem)  # type: ignore[attr-defined]
+    suffix = _suffix_from_payload_name(payload.get("name")) or _suffix_from_path_stem(path)
+    return ReindexEntry(
+        mode=mode,
+        path=path,
+        payload=payload,
+        current_index=current_index,
+        suffix=suffix,
+    )
+
+
+def _ordered_reindex_entries(entries: List[ReindexEntry]) -> List[ReindexEntry]:
+    indexed = sorted(
+        [entry for entry in entries if entry.current_index is not None],
+        key=lambda entry: (int(entry.current_index), entry.path.name.lower()),
+    )
+    unindexed = sorted(
+        [entry for entry in entries if entry.current_index is None],
+        key=lambda entry: entry.path.name.lower(),
+    )
+
+    ordered: List[ReindexEntry] = []
+    target_index = 0
+    while indexed or unindexed:
+        if indexed and indexed[0].current_index == target_index:
+            ordered.append(indexed.pop(0))
+        elif unindexed and (not indexed or int(indexed[0].current_index) > target_index):
+            ordered.append(unindexed.pop(0))
+        elif indexed:
+            ordered.append(indexed.pop(0))
+        else:
+            ordered.append(unindexed.pop(0))
+        target_index += 1
+    return ordered
+
+
+def _canonical_reindexed_payload(entry: ReindexEntry, target_index: int) -> Dict[str, Any]:
+    payload = deepcopy(entry.payload)
+    payload["preset_index"] = target_index
+    payload["name"] = vp._friendly_name_from_suffix(target_index, entry.suffix)  # type: ignore[attr-defined]
+    return payload
+
+
+def _canonical_reindexed_path(mode_dir: Path, target_index: int, suffix: str | None) -> Path:
+    slug = _slugify_suffix(suffix)
+    filename = f"preset_{target_index + 1}.json"
+    if slug:
+        filename = f"preset_{target_index + 1}_{slug}.json"
+    return mode_dir / filename
+
+
+def reindex_mode_presets(mode: str) -> List[Tuple[Path, Path, Path]]:
+    mode_dir = ROOT / "presets" / "visualizer_modes" / mode
+    if not mode_dir.exists():
+        return []
+
+    entries = [_load_reindex_entry(mode, path) for path in sorted(mode_dir.glob("*.json"))]
+    if not entries:
+        return []
+
+    ordered = _ordered_reindex_entries(entries)
+    plans: List[Tuple[ReindexEntry, Path, Dict[str, Any], str]] = []
+    for target_index, entry in enumerate(ordered):
+        final_payload = _canonical_reindexed_payload(entry, target_index)
+        final_path = _canonical_reindexed_path(mode_dir, target_index, entry.suffix)
+        final_text = json.dumps(final_payload, indent=2, sort_keys=True) + "\n"
+        plans.append((entry, final_path, final_payload, final_text))
+
+    changed_plans = [
+        (entry, final_path, final_payload, final_text)
+        for entry, final_path, final_payload, final_text in plans
+        if final_path != entry.path or entry.path.read_text(encoding="utf-8") != final_text
+    ]
+    if not changed_plans:
+        return []
+
+    temp_dir = mode_dir / ".reindex_tmp"
+    if temp_dir.exists():
+        shutil.rmtree(temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    backups: List[Tuple[Path, Path]] = []
+    results: List[Tuple[Path, Path, Path]] = []
+    try:
+        for index, (entry, final_path, _final_payload, final_text) in enumerate(changed_plans):
+            backup = _ensure_backup(entry.path)
+            backups.append((entry.path, backup))
+            staged_path = temp_dir / f"{index:03d}.json"
+            staged_path.write_text(final_text, encoding="utf-8")
+            results.append((entry.path, final_path, backup))
+
+        for entry, _final_path, _final_payload, _final_text in changed_plans:
+            if entry.path.exists():
+                entry.path.unlink()
+
+        for index, (_entry, final_path, _final_payload, _final_text) in enumerate(changed_plans):
+            staged_path = temp_dir / f"{index:03d}.json"
+            final_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(staged_path), str(final_path))
+    finally:
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    return results
+
+
+def reindex_curated_presets(
+    *,
+    on_result: Callable[[str, Path, Path, Path], None] | None = None,
+    on_error: Callable[[str, Exception], None] | None = None,
+) -> List[Tuple[str, Path, Path, Path]]:
+    processed: List[Tuple[str, Path, Path, Path]] = []
+    for mode in vp.MODES:
+        try:
+            mode_results = reindex_mode_presets(mode)
+        except Exception as exc:
+            if on_error:
+                on_error(mode, exc)
+            continue
+        for old_path, new_path, backup in mode_results:
+            entry = (mode, old_path, new_path, backup)
+            processed.append(entry)
+            if on_result:
+                on_result(*entry)
+    return processed
 
 
 def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
@@ -518,6 +705,10 @@ class VisualizerPresetRepairApp(QWidget):
         self.repair_all_btn = QPushButton("Repair All Presets Found")
         self.repair_all_btn.clicked.connect(self._on_repair_all_clicked)
         btn_row.addWidget(self.repair_all_btn)
+
+        self.reindex_btn = QPushButton("Reindex Curated Presets")
+        self.reindex_btn.clicked.connect(self._on_reindex_clicked)
+        btn_row.addWidget(self.reindex_btn)
         main_layout.addLayout(btn_row)
 
         self.status_label = QLabel("Ready.")
@@ -616,6 +807,40 @@ class VisualizerPresetRepairApp(QWidget):
         summary += "."
         self.status_label.setText(summary)
 
+    def _on_reindex_clicked(self) -> None:
+        self.reindex_btn.setEnabled(False)
+        updated = 0
+        failed = 0
+
+        def _handle_result(mode: str, old_path: Path, new_path: Path, backup: Path) -> None:
+            nonlocal updated
+            updated += 1
+            self._history.append((old_path, backup))
+            old_rel = old_path.relative_to(ROOT)
+            new_rel = new_path.relative_to(ROOT)
+            self._append_log(
+                f"Reindexed {old_rel} ({mode}) -> {new_rel}. Backup: {backup.name}."
+            )
+
+        def _handle_error(mode: str, exc: Exception) -> None:
+            nonlocal failed
+            failed += 1
+            self._append_log(f"Failed to reindex {mode}: {exc}")
+
+        try:
+            reindex_curated_presets(on_result=_handle_result, on_error=_handle_error)
+        finally:
+            self.reindex_btn.setEnabled(True)
+
+        if self._history:
+            self.undo_btn.setEnabled(True)
+
+        summary = f"Curated preset reindex complete: {updated} updated"
+        if failed:
+            summary += f", {failed} failed"
+        summary += "."
+        self.status_label.setText(summary)
+
     def _on_undo_clicked(self) -> None:
         if not self._history:
             return
@@ -652,6 +877,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         "--audit-curated",
         action="store_true",
         help="Audit curated preset JSON files for duplicate prefixes, backup blocks, and stale authored payloads.",
+    )
+    parser.add_argument(
+        "--reindex-curated",
+        action="store_true",
+        help="Normalize curated preset indices, names, and filenames into sequential preset slots per mode.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -695,6 +925,22 @@ def main(argv: Sequence[str] | None = None) -> None:
             print(f"{rel} ({mode}): {'; '.join(summary)}", flush=True)
         print(f"Curated preset audit found issues in {len(findings)} preset(s).", flush=True)
         raise SystemExit(1)
+
+    if args.reindex_curated:
+        def _cli_result(mode: str, old_path: Path, new_path: Path, backup: Path) -> None:
+            old_rel = old_path.relative_to(ROOT)
+            new_rel = new_path.relative_to(ROOT)
+            print(
+                f"Reindexed {old_rel} ({mode}) -> {new_rel}. Backup: {backup.name}.",
+                flush=True,
+            )
+
+        def _cli_error(mode: str, exc: Exception) -> None:
+            print(f"Failed to reindex {mode}: {exc}", file=sys.stderr, flush=True)
+
+        results = reindex_curated_presets(on_result=_cli_result, on_error=_cli_error)
+        print(f"Completed curated preset reindex for {len(results)} preset(s).", flush=True)
+        return
 
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling)
     app = QApplication.instance() or QApplication(sys.argv)
