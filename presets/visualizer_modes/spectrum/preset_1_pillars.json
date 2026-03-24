@@ -3,35 +3,297 @@
   "mode": "spectrum",
   "name": "Preset 1 (Pillars)",
   "preset_index": 0,
+  "settings": {
+    "spotify_visualizer": {
+      "adaptive_sensitivity": false,
+      "bar_border_color": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "bar_border_opacity": 1.0,
+      "bar_count": 33,
+      "bar_fill_color": [
+        255,
+        255,
+        255,
+        230
+      ],
+      "dynamic_floor": true,
+      "dynamic_range_enabled": false,
+      "enabled": true,
+      "ghost_alpha": 0.56,
+      "ghost_decay": 0.2,
+      "ghosting_enabled": true,
+      "manual_floor": 0.3,
+      "mode": "spectrum",
+      "rainbow_enabled": true,
+      "rainbow_speed": 0.6,
+      "sensitivity": 0.5,
+      "spectrum_adaptive_sensitivity": false,
+      "spectrum_agc_strength": 0.2,
+      "spectrum_audio_block_size": 0,
+      "spectrum_bar_count": 33,
+      "spectrum_bass_emphasis": 0.1,
+      "spectrum_border_radius": 2.0,
+      "spectrum_drop_speed": 2.79,
+      "spectrum_dynamic_floor": true,
+      "spectrum_dynamic_range_enabled": false,
+      "spectrum_energy_boost": 1.5,
+      "spectrum_ghost_alpha": 0.56,
+      "spectrum_ghost_decay": 0.2,
+      "spectrum_ghosting_enabled": true,
+      "spectrum_glow_color": [
+        110,
+        220,
+        255,
+        235
+      ],
+      "spectrum_glow_enabled": false,
+      "spectrum_glow_intensity": 0.55,
+      "spectrum_growth": 5.0,
+      "spectrum_input_gain": 0.8,
+      "spectrum_kick_lane_gain": 1.25,
+      "spectrum_lane_transient_mix": 0.7,
+      "spectrum_manual_floor": 0.3,
+      "spectrum_mid_suppression": 0.5,
+      "spectrum_mirrored": true,
+      "spectrum_notch_positions_linear": [
+        [
+          0.0,
+          "Bass"
+        ],
+        [
+          0.25,
+          "Low"
+        ],
+        [
+          0.5022879267863428,
+          "Mid"
+        ],
+        [
+          0.6261879619852164,
+          "Hi-Mid"
+        ],
+        [
+          1.0,
+          "Treble"
+        ]
+      ],
+      "spectrum_notch_positions_mirrored": [
+        [
+          0.04725738396624492,
+          "Vocal"
+        ],
+        [
+          0.2840549102428722,
+          "Mid"
+        ],
+        [
+          0.5797254487856388,
+          "Low-Mid"
+        ],
+        [
+          0.9012658227848102,
+          "Bass"
+        ]
+      ],
+      "spectrum_profile_floor": 0.1,
+      "spectrum_rainbow_enabled": true,
+      "spectrum_rainbow_per_bar": true,
+      "spectrum_rainbow_speed": 0.6,
+      "spectrum_sensitivity": 0.5,
+      "spectrum_shape_nodes": [
+        [
+          0.0,
+          0.9660493827160498
+        ],
+        [
+          0.43611404435058077,
+          0.2654320987654323
+        ],
+        [
+          0.7317845828933475,
+          0.9506172839506175
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "spectrum_single_piece": false,
+      "spectrum_transient_clamp": 1.6,
+      "spectrum_use_raw_energy": false,
+      "spectrum_vocal_position": 0.4,
+      "spectrum_wave_amplitude": 0.2,
+      "visualizers_enabled": true
+    }
+  },
   "snapshot": {
+    "custom_preset_backup": {
+      "widgets.spotify_visualizer.adaptive_sensitivity": false,
+      "widgets.spotify_visualizer.bar_border_color": [
+        0,
+        0,
+        0,
+        255
+      ],
+      "widgets.spotify_visualizer.bar_border_opacity": 1.0,
+      "widgets.spotify_visualizer.bar_count": 33,
+      "widgets.spotify_visualizer.bar_fill_color": [
+        255,
+        255,
+        255,
+        230
+      ],
+      "widgets.spotify_visualizer.dynamic_floor": true,
+      "widgets.spotify_visualizer.dynamic_range_enabled": false,
+      "widgets.spotify_visualizer.enabled": true,
+      "widgets.spotify_visualizer.ghost_alpha": 0.56,
+      "widgets.spotify_visualizer.ghost_decay": 0.2,
+      "widgets.spotify_visualizer.ghosting_enabled": true,
+      "widgets.spotify_visualizer.manual_floor": 0.3,
+      "widgets.spotify_visualizer.mode": "spectrum",
+      "widgets.spotify_visualizer.rainbow_enabled": true,
+      "widgets.spotify_visualizer.rainbow_speed": 0.6,
+      "widgets.spotify_visualizer.sensitivity": 0.5,
+      "widgets.spotify_visualizer.spectrum_adaptive_sensitivity": false,
+      "widgets.spotify_visualizer.spectrum_agc_strength": 0.2,
+      "widgets.spotify_visualizer.spectrum_audio_block_size": 0,
+      "widgets.spotify_visualizer.spectrum_bar_count": 33,
+      "widgets.spotify_visualizer.spectrum_bass_emphasis": 0.1,
+      "widgets.spotify_visualizer.spectrum_border_radius": 2.0,
+      "widgets.spotify_visualizer.spectrum_drop_speed": 2.79,
+      "widgets.spotify_visualizer.spectrum_dynamic_floor": true,
+      "widgets.spotify_visualizer.spectrum_dynamic_range_enabled": false,
+      "widgets.spotify_visualizer.spectrum_energy_boost": 1.5,
+      "widgets.spotify_visualizer.spectrum_ghost_alpha": 0.56,
+      "widgets.spotify_visualizer.spectrum_ghost_decay": 0.2,
+      "widgets.spotify_visualizer.spectrum_ghosting_enabled": true,
+      "widgets.spotify_visualizer.spectrum_glow_color": [
+        110,
+        220,
+        255,
+        235
+      ],
+      "widgets.spotify_visualizer.spectrum_glow_enabled": false,
+      "widgets.spotify_visualizer.spectrum_glow_intensity": 0.55,
+      "widgets.spotify_visualizer.spectrum_growth": 5.0,
+      "widgets.spotify_visualizer.spectrum_input_gain": 0.8,
+      "widgets.spotify_visualizer.spectrum_kick_lane_gain": 1.25,
+      "widgets.spotify_visualizer.spectrum_lane_transient_mix": 0.7,
+      "widgets.spotify_visualizer.spectrum_manual_floor": 0.3,
+      "widgets.spotify_visualizer.spectrum_mid_suppression": 0.5,
+      "widgets.spotify_visualizer.spectrum_mirrored": true,
+      "widgets.spotify_visualizer.spectrum_notch_positions_linear": [
+        [
+          0.0,
+          "Bass"
+        ],
+        [
+          0.25,
+          "Low"
+        ],
+        [
+          0.5022879267863428,
+          "Mid"
+        ],
+        [
+          0.6261879619852164,
+          "Hi-Mid"
+        ],
+        [
+          1.0,
+          "Treble"
+        ]
+      ],
+      "widgets.spotify_visualizer.spectrum_notch_positions_mirrored": [
+        [
+          0.04725738396624492,
+          "Vocal"
+        ],
+        [
+          0.2840549102428722,
+          "Mid"
+        ],
+        [
+          0.5797254487856388,
+          "Low-Mid"
+        ],
+        [
+          0.9012658227848102,
+          "Bass"
+        ]
+      ],
+      "widgets.spotify_visualizer.spectrum_profile_floor": 0.1,
+      "widgets.spotify_visualizer.spectrum_rainbow_enabled": true,
+      "widgets.spotify_visualizer.spectrum_rainbow_per_bar": true,
+      "widgets.spotify_visualizer.spectrum_rainbow_speed": 0.6,
+      "widgets.spotify_visualizer.spectrum_sensitivity": 0.5,
+      "widgets.spotify_visualizer.spectrum_shape_nodes": [
+        [
+          0.0,
+          0.9660493827160498
+        ],
+        [
+          0.43611404435058077,
+          0.2654320987654323
+        ],
+        [
+          0.7317845828933475,
+          0.9506172839506175
+        ],
+        [
+          1.0,
+          1.0
+        ]
+      ],
+      "widgets.spotify_visualizer.spectrum_single_piece": false,
+      "widgets.spotify_visualizer.spectrum_transient_clamp": 1.6,
+      "widgets.spotify_visualizer.spectrum_use_raw_energy": false,
+      "widgets.spotify_visualizer.spectrum_vocal_position": 0.4,
+      "widgets.spotify_visualizer.spectrum_wave_amplitude": 0.2,
+      "widgets.spotify_visualizer.visualizers_enabled": true
+    },
     "widgets": {
       "spotify_visualizer": {
+        "adaptive_sensitivity": false,
         "bar_border_color": [
-          255,
-          255,
-          255,
+          0,
+          0,
+          0,
           255
         ],
         "bar_border_opacity": 1.0,
+        "bar_count": 33,
         "bar_fill_color": [
           255,
           255,
           255,
           230
         ],
+        "dynamic_floor": true,
+        "dynamic_range_enabled": false,
+        "enabled": true,
         "ghost_alpha": 0.56,
         "ghost_decay": 0.2,
         "ghosting_enabled": true,
+        "manual_floor": 0.3,
         "mode": "spectrum",
+        "rainbow_enabled": true,
+        "rainbow_speed": 0.6,
+        "sensitivity": 0.5,
         "spectrum_adaptive_sensitivity": false,
         "spectrum_agc_strength": 0.2,
-        "spectrum_audio_block_size": 128,
+        "spectrum_audio_block_size": 0,
         "spectrum_bar_count": 33,
         "spectrum_bass_emphasis": 0.1,
         "spectrum_border_radius": 2.0,
         "spectrum_drop_speed": 2.79,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": false,
+        "spectrum_energy_boost": 1.5,
         "spectrum_ghost_alpha": 0.56,
         "spectrum_ghost_decay": 0.2,
         "spectrum_ghosting_enabled": true,
@@ -115,9 +377,10 @@
         ],
         "spectrum_single_piece": false,
         "spectrum_transient_clamp": 1.6,
-        "spectrum_transient_pulse_gain": 1.0,
+        "spectrum_use_raw_energy": false,
         "spectrum_vocal_position": 0.4,
-        "spectrum_wave_amplitude": 0.2
+        "spectrum_wave_amplitude": 0.2,
+        "visualizers_enabled": true
       }
     }
   },
