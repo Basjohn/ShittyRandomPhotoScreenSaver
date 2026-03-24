@@ -114,6 +114,16 @@ class _SpotifyBeatEngine(QObject):
         _tb = getattr(self._audio_worker, '_transient_bus', None)
         if _tb is not None:
             _tb.reset()
+        # Reset per-frame DSP state on the audio worker so stale bar-gate
+        # history and reactive-smoothing accumulators cannot bleed across
+        # mode switches or cold-start restarts.
+        aw = self._audio_worker
+        aw._bar_gate_prev1 = None
+        aw._bar_gate_prev2 = None
+        aw._bar_gate_output = None
+        aw._bar_history = None
+        aw._bar_hold_timers = None
+        aw._last_fft_ts = 0.0
         self._generation_id += 1
         # Force consumers to wait for the next FFT result produced after
         # this reset instead of reusing the pre-reset generation id.

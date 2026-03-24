@@ -39,7 +39,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "startmenu"; Description: "Create Start Menu Shortcuts"; GroupDescription: "Additional options:"
 Name: "desktop"; Description: "Create Desktop Shortcuts"; GroupDescription: "Additional options:"
-Name: "replacevispresets"; Description: "Replace shipped visualizer presets (backs up replaced files)"; GroupDescription: "Visualizer presets:"; Flags: checkedonce
+Name: "replacevispresets"; Description: "Replace shipped visualizer presets (backs up replaced files)"; GroupDescription: "Visualizer presets:"; Flags: checked
 Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-install option:"; Flags: unchecked
 
 [Files]
@@ -68,49 +68,6 @@ Type: filesandordirs; Name: "{app}"
 ; No legacy files to remove for MC yet, keep placeholder section for parity.
 
 [Code]
-const
-  ShippedSpectrumPresetCount = 4;
-  ShippedOscilloscopePresetCount = 6;
-  ShippedSineWavePresetCount = 9;
-  ShippedBlobPresetCount = 6;
-  ShippedBubblePresetCount = 8;
-
-function GetShippedPresetCountForMode(const ModeName: String): Integer;
-begin
-  Result := 0;
-  if CompareText(ModeName, 'spectrum') = 0 then
-    Result := ShippedSpectrumPresetCount
-  else if CompareText(ModeName, 'oscilloscope') = 0 then
-    Result := ShippedOscilloscopePresetCount
-  else if CompareText(ModeName, 'sine_wave') = 0 then
-    Result := ShippedSineWavePresetCount
-  else if CompareText(ModeName, 'blob') = 0 then
-    Result := ShippedBlobPresetCount
-  else if CompareText(ModeName, 'bubble') = 0 then
-    Result := ShippedBubblePresetCount;
-end;
-
-function ExtractPresetSlotNumber(const FileName: String): Integer;
-var
-  NameLower: String;
-  StartPos, EndPos: Integer;
-begin
-  Result := 0;
-  NameLower := LowerCase(FileName);
-  if Pos('preset_', NameLower) <> 1 then
-    Exit;
-
-  StartPos := Length('preset_') + 1;
-  EndPos := StartPos;
-  while (EndPos <= Length(NameLower)) and (NameLower[EndPos] >= '0') and (NameLower[EndPos] <= '9') do
-    EndPos := EndPos + 1;
-
-  if EndPos <= StartPos then
-    Exit;
-
-  Result := StrToIntDef(Copy(NameLower, StartPos, EndPos - StartPos), 0);
-end;
-
 function BuildNextPresetBackupPath(const ExistingPath: String): String;
 var
   Candidate: String;
@@ -126,15 +83,11 @@ begin
   Result := Candidate;
 end;
 
-procedure BackupReplacedVisualizerPresetsForMode(const ModeName: String; const ShippedCount: Integer);
+procedure BackupPresetsForMode(const ModeName: String);
 var
   ModeDir, ExistingPath, BackupPath: String;
   FindRec: TFindRec;
-  SlotNumber: Integer;
 begin
-  if ShippedCount <= 0 then
-    Exit;
-
   ModeDir := ExpandConstant('{app}\presets\visualizer_modes\' + ModeName);
   if not DirExists(ModeDir) then
     Exit;
@@ -145,16 +98,12 @@ begin
       repeat
         if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
         begin
-          SlotNumber := ExtractPresetSlotNumber(FindRec.Name);
-          if (SlotNumber >= 1) and (SlotNumber <= ShippedCount) then
-          begin
-            ExistingPath := ModeDir + '\' + FindRec.Name;
-            BackupPath := BuildNextPresetBackupPath(ExistingPath);
-            if RenameFile(ExistingPath, BackupPath) then
-              Log(Format('Backed up shipped visualizer preset: %s -> %s', [ExistingPath, BackupPath]))
-            else
-              Log(Format('Failed to back up shipped visualizer preset: %s', [ExistingPath]));
-          end;
+          ExistingPath := ModeDir + '\' + FindRec.Name;
+          BackupPath := BuildNextPresetBackupPath(ExistingPath);
+          if RenameFile(ExistingPath, BackupPath) then
+            Log(Format('Backed up visualizer preset: %s -> %s', [ExistingPath, BackupPath]))
+          else
+            Log(Format('Failed to back up visualizer preset: %s', [ExistingPath]));
         end;
       until not FindNext(FindRec);
     finally
@@ -163,17 +112,33 @@ begin
   end;
 end;
 
-procedure BackupReplacedVisualizerPresets();
+procedure BackupAllVisualizerPresets();
+var
+  ModesDir: String;
+  FindRec: TFindRec;
 begin
-  BackupReplacedVisualizerPresetsForMode('spectrum', ShippedSpectrumPresetCount);
-  BackupReplacedVisualizerPresetsForMode('oscilloscope', ShippedOscilloscopePresetCount);
-  BackupReplacedVisualizerPresetsForMode('sine_wave', ShippedSineWavePresetCount);
-  BackupReplacedVisualizerPresetsForMode('blob', ShippedBlobPresetCount);
-  BackupReplacedVisualizerPresetsForMode('bubble', ShippedBubblePresetCount);
+  ModesDir := ExpandConstant('{app}\presets\visualizer_modes');
+  if not DirExists(ModesDir) then
+    Exit;
+
+  if FindFirst(ModesDir + '\*', FindRec) then
+  begin
+    try
+      repeat
+        if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
+           (FindRec.Name <> '.') and (FindRec.Name <> '..') then
+        begin
+          BackupPresetsForMode(FindRec.Name);
+        end;
+      until not FindNext(FindRec);
+    finally
+      FindClose(FindRec);
+    end;
+  end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if (CurStep = ssInstall) and WizardIsTaskSelected('replacevispresets') then
-    BackupReplacedVisualizerPresets();
+    BackupAllVisualizerPresets();
 end;

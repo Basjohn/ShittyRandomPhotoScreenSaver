@@ -1460,12 +1460,10 @@ class SpotifyVisualizerWidget(QWidget):
             if self._thread_manager is not None:
                 engine.set_thread_manager(self._thread_manager)
             engine.acquire()
-            self._replay_engine_config(engine)
-            engine.ensure_started()
-            # Ensure the active mode's technical configuration is re-sent on every
-            # activation so shared engine caches (floors, sensitivity, block size)
-            # cannot bleed between runs.
-            self._apply_technical_config_for_mode(self._vis_mode, reason="activate_impl")
+            # Full canonical engine reset — same path as start() and mode
+            # cycling to prevent erratic cold-start behavior.
+            self._reset_engine_state(reason="activate_impl")
+            engine.set_playback_state(self._spotify_playing)
         except Exception:
             logger.debug("[LIFECYCLE] Failed to start shared beat engine", exc_info=True)
         
@@ -1540,13 +1538,23 @@ class SpotifyVisualizerWidget(QWidget):
             if self._thread_manager is not None:
                 engine.set_thread_manager(self._thread_manager)
             engine.acquire()
-            self._replay_engine_config(engine)
-            
+
+            # Full canonical engine reset — identical to what mode-cycling
+            # does via _reset_engine_state().  The previous code only called
+            # _replay_engine_config() which pushes a SUBSET of config
+            # (floor, sensitivity, shape) but omits AGC strength, audio
+            # block size, transient bus controls, and kick lane gain.
+            # It also skipped the smoothing/floor state reset and the
+            # fresh-frame generation gate that mode-cycling performs.
+            # This mismatch caused persistent erratic/flickery bars on
+            # cold start that only resolved after a full mode cycle.
+            self._reset_engine_state(reason="cold_start")
+            logger.info("[SPOTIFY_VIS] Cold-start canonical engine reset applied (mode=%s, bars=%d)",
+                        self._vis_mode.name, self._bar_count)
+
             # CRITICAL: Initialize beat engine with current playback state
             # This ensures audio gating is active from startup
             engine.set_playback_state(self._spotify_playing)
-            
-            engine.ensure_started()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
 
