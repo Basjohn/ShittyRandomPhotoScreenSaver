@@ -109,6 +109,9 @@ def smart_title_case(text: str) -> str:
 def try_bring_reddit_window_to_front() -> None:
     """Best-effort attempt to foreground a browser window with 'reddit' in title.
 
+    Uses ``AllowSetForegroundWindow``, ``IsIconic``/``ShowWindow(SW_RESTORE)``,
+    and ``SetForegroundWindow`` for reliable cross-process focus stealing.
+
     Windows-only; no-op on other platforms. All failures are silent to avoid
     introducing new focus or flicker problems.
     """
@@ -153,7 +156,6 @@ def try_bring_reddit_window_to_front() -> None:
             if "reddit" in title.lower():
                 candidates.append(hwnd)
         except Exception:
-            # Enum callbacks must not raise; keep scanning.
             return True
         return True
 
@@ -168,7 +170,19 @@ def try_bring_reddit_window_to_front() -> None:
 
     hwnd = candidates[0]
     try:
+        ASFW_ANY = 0xFFFFFFFF
+        SW_RESTORE = 9
+        SW_SHOW = 5
+
+        if hasattr(user32, "AllowSetForegroundWindow"):
+            user32.AllowSetForegroundWindow(ASFW_ANY)
+
+        is_iconic = bool(user32.IsIconic(hwnd))
+        if is_iconic:
+            user32.ShowWindow(hwnd, SW_RESTORE)
+        else:
+            user32.ShowWindow(hwnd, SW_SHOW)
+
         user32.SetForegroundWindow(hwnd)
     except Exception:
-        # Foreground requests may fail silently depending on OS policy.
         return

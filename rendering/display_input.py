@@ -365,20 +365,24 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                             this_is_primary, primary_is_covered, widget._exiting, widget.screen_index)
                 
                 if primary_is_covered:
-                    # Cases A & B: Primary is covered, user wants to leave screensaver
-                    logger.info("[REDDIT] Primary covered; requesting immediate exit")
+                    # Cases A & B: Primary is covered, user wants to leave screensaver.
+                    # Queue URL to ProgramData so the user-session watcher opens it
+                    # after the screensaver process exits.  This is a benign file
+                    # write — no process launching from the Winlogon desktop.
+                    logger.info("[REDDIT] Primary covered; queuing URL and requesting exit")
                     if not widget._exiting:
                         widget._exiting = True
                         if reddit_url:
                             widget._pending_reddit_url = reddit_url
-                        # Bring browser to foreground after windows start closing
-                        def _bring_browser_foreground():
                             try:
-                                from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                                _try_bring_reddit_window_to_front()
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        QTimer.singleShot(300, _bring_browser_foreground)
+                                from core.windows import reddit_helper_bridge
+                                if reddit_helper_bridge is not None and reddit_helper_bridge.is_bridge_available():
+                                    reddit_helper_bridge.enqueue_url(reddit_url, source="scr_click")
+                                    logger.info("[REDDIT] URL queued to ProgramData bridge: %s", reddit_url)
+                                else:
+                                    logger.warning("[REDDIT] Bridge unavailable; URL will be lost: %s", reddit_url)
+                            except Exception:
+                                logger.warning("[REDDIT] Failed to queue URL to bridge", exc_info=True)
                         widget.exit_requested.emit()
                 else:
                     # Case C: MC mode - primary not covered, stay open
@@ -407,7 +411,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                                 logger.debug("[REDDIT] MC mode: browser foreground attempted")
                             except Exception as e:
                                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        QTimer.singleShot(300, _bring_browser_foreground_mc)
+                        QTimer.singleShot(800, _bring_browser_foreground_mc)
                 
             event.accept()
             return

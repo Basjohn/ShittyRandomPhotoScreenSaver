@@ -531,9 +531,12 @@ def _apply_bar_gate(worker: "SpotifyVisualizerAudioWorker", arr, np) -> None:
     prev2 = getattr(worker, "_bar_gate_prev2", None)
     prev_out = getattr(worker, "_bar_gate_output", None)
 
+    # Check for None before accessing any attributes to avoid race conditions
     if (
         prev1 is None or prev2 is None or prev_out is None
-        or prev1.shape[0] != bands or prev2.shape[0] != bands or prev_out.shape[0] != bands
+        or (prev1 is not None and prev1.shape[0] != bands)
+        or (prev2 is not None and prev2.shape[0] != bands) 
+        or (prev_out is not None and prev_out.shape[0] != bands)
     ):
         worker._bar_gate_prev1 = current_raw
         worker._bar_gate_prev2 = current_raw
@@ -608,7 +611,12 @@ def _apply_reactive_smoothing(worker: "SpotifyVisualizerAudioWorker", arr, bands
 
     bar_history = worker._bar_history
     hold_timers = worker._bar_hold_timers
-    if hold_timers is None or hold_timers.shape[0] != bands:
+    
+    # Handle race conditions where reset clears these arrays
+    if bar_history is None or bar_history.shape[0] != bands:
+        bar_history = np.zeros(bands, dtype="float32")
+        worker._bar_history = bar_history
+    if hold_timers is None or (hold_timers is not None and hold_timers.shape[0] != bands):
         hold_timers = np.zeros(bands, dtype="int32")
         worker._bar_hold_timers = hold_timers
     if dt > 2.0:

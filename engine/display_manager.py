@@ -18,11 +18,9 @@ from utils.lockfree.spsc_queue import SPSCQueue
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
 
-try:  # Windows-only helper to escape Winlogon desktop
-    from core.windows import url_launcher as windows_url_launcher
+try:  # Windows-only bridge for ProgramData queue
     from core.windows import reddit_helper_bridge
 except Exception:  # pragma: no cover - non-Windows or optional import failure
-    windows_url_launcher = None
     reddit_helper_bridge = None
 
 
@@ -685,7 +683,14 @@ class DisplayManager(QObject):
         return urls
 
     def flush_deferred_reddit_urls(self, *, ensure_widgets_dismissed: bool = False) -> None:
-        """Open any deferred Reddit URLs collected during the last cleanup."""
+        """Open any deferred Reddit URLs collected during the last cleanup.
+
+        Build-aware behaviour:
+        - **MC builds**: open directly via ``QDesktopServices.openUrl()``.
+        - **SCR builds**: URLs were pre-queued to ProgramData at click time.
+          This flush acts as a safety-net for any URLs collected during
+          cleanup that weren't pre-queued (e.g. edge-case race).
+        """
         urls = self.take_deferred_reddit_urls()
         if not urls:
             return
@@ -698,59 +703,29 @@ class DisplayManager(QObject):
             except Exception:
                 logger.debug("[REDDIT] processEvents failed before flush", exc_info=True)
 
-        if REDDIT_FLUSH_LOGGING:
-            logger.info("[REDDIT] Deferred URL flush started (count=%d)", len(urls))
-        else:
-            logger.info("[REDDIT] Opening %d deferred Reddit URLs", len(urls))
+        logger.info("[REDDIT] Deferred URL flush started (count=%d)", len(urls))
 
-        helper_module = windows_url_launcher
-        helper_bridge = reddit_helper_bridge
-        use_helper = False
-        use_bridge = False
-        if helper_module is not None:
-            try:
-                use_helper = helper_module.should_use_session_launcher()
-            except Exception:
-                logger.debug("[REDDIT] Helper capability check failed", exc_info=True)
-                use_helper = False
-        if helper_bridge is not None and helper_bridge.is_bridge_available():
-            use_bridge = True
-
-        for url in urls:
-            launched = False
-
-            if use_bridge:
+        from core.mc import is_mc_build
+        if is_mc_build():
+            for url in urls:
                 try:
-                    launched = helper_bridge.enqueue_url(url)
-                    if launched:
-                        logger.info("[REDDIT] Deferred URL queued via ProgramData bridge: %s", url)
-                        continue
-                except Exception:
-                    logger.warning("[REDDIT] Bridge enqueue failed; falling back", exc_info=True)
-                    launched = False
-
-            if use_helper:
-                try:
-                    launched = bool(helper_module.launch_url_via_user_desktop(url))
-                    if launched:
-                        logger.info("[REDDIT] Helper launched deferred URL: %s", url)
+                    opened = QDesktopServices.openUrl(QUrl(url))
+                    if opened:
+                        logger.info("[REDDIT] MC flush opened: %s", url)
                     else:
-                        logger.debug("[REDDIT] Helper declined to launch URL; falling back")
+                        logger.warning("[REDDIT] MC flush rejected: %s", url)
                 except Exception:
-                    logger.warning("[REDDIT] Helper launch failed; falling back", exc_info=True)
-                    launched = False
-
-            if not launched:
-                try:
-                    launched = QDesktopServices.openUrl(QUrl(url))
-                except Exception as exc:
-                    logger.warning("[REDDIT] Failed to open deferred URL: %s", exc, exc_info=True)
-                    launched = False
-
-                if launched:
-                    logger.info("[REDDIT] Deferred URL opened: %s", url)
-                else:
-                    logger.warning(
-                        "[REDDIT] Failed to open deferred URL (QDesktopServices rejected): %s",
-                        url,
-                    )
+                    logger.warning("[REDDIT] MC flush failed: %s", url, exc_info=True)
+        else:
+            # SCR build: URLs should have been pre-queued at click time.
+            # Safety-net: queue any that weren't (collected during cleanup).
+            helper_bridge = reddit_helper_bridge
+            if helper_bridge is not None and helper_bridge.is_bridge_available():
+                for url in urls:
+                    try:
+                        helper_bridge.enqueue_url(url, source="flush_safety_net")
+                        logger.info("[REDDIT] Safety-net queued: %s", url)
+                    except Exception:
+                        logger.warning("[REDDIT] Safety-net queue failed: %s", url, exc_info=True)
+            else:
+                logger.warning("[REDDIT] Bridge unavailable; %d URLs will be lost", len(urls))

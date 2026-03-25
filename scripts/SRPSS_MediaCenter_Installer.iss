@@ -52,6 +52,13 @@ Source: "..\release\main_mc.dist\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flag
 ; Installer icon for shortcuts / ARP entry
 Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 
+; Reddit helper watcher (placed at install time, not runtime-extracted)
+Source: "..\release\helpers\SRPSS_RedditHelper.exe"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: ignoreversion
+
+[Registry]
+; Start the Reddit helper watcher on user login
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; ValueType: string; ValueData: """{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"" --watch --queue ""{commonappdata}\SRPSS\url_queue"""; Flags: uninsdeletevalue
+
 [Icons]
 Name: "{group}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: startmenu
 Name: "{commondesktop}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: desktop
@@ -59,10 +66,18 @@ Name: "{commondesktop}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Cente
 [Run]
 Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Center"; Flags: nowait postinstall skipifsilent; Tasks: runafter
 
+[UninstallRun]
+; Kill watcher before uninstall
+Filename: "taskkill"; Parameters: "/F /IM SRPSS_RedditHelper.exe"; Flags: runhidden nowait; RunOnceId: "KillHelper"
+
 [UninstallDelete]
 ; Ensure the install directory is removed on uninstall (default behavior), but
 ; explicitly clean any residual dist folders if structure changes in future.
 Type: filesandordirs; Name: "{app}"
+; Clean up Reddit helper and queue
+Type: files; Name: "{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"
+Type: dirifempty; Name: "{commonappdata}\SRPSS\helper"
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
 
 [InstallDelete]
 ; No legacy files to remove for MC yet, keep placeholder section for parity.

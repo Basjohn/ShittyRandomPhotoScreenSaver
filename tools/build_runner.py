@@ -6,8 +6,9 @@ Usage:
 Pipeline (sequential):
   1. Standard Build      — scripts/build_nuitka.ps1
   2. Media Center Build  — scripts/build_nuitka_mc_onedir.ps1
-  3. Standard Installer  — scripts/SRPSS_Installer.iss  (ISCC.exe)
-  4. MC Installer         — scripts/SRPSS_MediaCenter_Installer.iss (ISCC.exe)
+  3. Reddit Helper Build — scripts/build_reddit_helper.ps1
+  4. Standard Installer  — scripts/SRPSS_Installer.iss  (ISCC.exe)
+  5. MC Installer         — scripts/SRPSS_MediaCenter_Installer.iss (ISCC.exe)
 
 Pre-flight checks run before any work begins.  If issues are found the GUI
 offers a **Proceed Anyway** button so you can skip non-critical problems.
@@ -80,6 +81,7 @@ class Job:
 JOBS: tuple[Job, ...] = (
     Job("Standard Build",     "powershell", SCRIPTS_DIR / "build_nuitka.ps1"),
     Job("Media Center Build", "powershell", SCRIPTS_DIR / "build_nuitka_mc_onedir.ps1"),
+    Job("Reddit Helper Build","powershell", SCRIPTS_DIR / "build_reddit_helper.ps1"),
     Job("Standard Installer", "inno",       SCRIPTS_DIR / "SRPSS_Installer.iss"),
     Job("MC Installer",       "inno",       SCRIPTS_DIR / "SRPSS_MediaCenter_Installer.iss"),
 )
@@ -161,6 +163,8 @@ def _run_preflight() -> PreflightResult:
     icon = REPO_ROOT / "SRPSS.ico"
     logo = REPO_ROOT / "images" / "LogoBMP.bmp"
 
+    helper_exe = REPO_ROOT / "release" / "helpers" / "SRPSS_RedditHelper.exe"
+
     if not std_scr.exists():
         r.warnings.append(
             "release/SRPSS.scr not found (will be created by build step 1)."
@@ -169,6 +173,11 @@ def _run_preflight() -> PreflightResult:
         r.warnings.append(
             "release/main_mc.dist/SRPSS_Media_Center.exe not found "
             "(will be created by build step 2)."
+        )
+    if not helper_exe.exists():
+        r.warnings.append(
+            "release/helpers/SRPSS_RedditHelper.exe not found "
+            "(will be created by build step 3)."
         )
     if not icon.exists():
         r.warnings.append("SRPSS.ico not found (needed by installers).")
@@ -207,6 +216,7 @@ class BuildRunnerApp:
         self._root.title(f"SRPSS Build Runner  (v{APP_VERSION})")
         self._root.resizable(True, False)
         self._queue: queue.Queue[tuple] = queue.Queue()
+        self._skip_helper = False
 
         # -- Header --
         self._header = ttk.Label(root, text="Running pre-flight checks…")
@@ -241,6 +251,33 @@ class BuildRunnerApp:
 
     def _handle_preflight(self, result: PreflightResult) -> None:
         if result.ok:
+            # Check if we should skip the helper build
+            helper_exe = REPO_ROOT / "release" / "helpers" / "SRPSS_RedditHelper.exe"
+            helper_source = REPO_ROOT / "helpers" / "reddit_helper_worker.py"
+            
+            should_prompt_skip = helper_exe.exists() and helper_source.exists()
+            if should_prompt_skip:
+                try:
+                    exe_time = helper_exe.stat().st_mtime
+                    src_time = helper_source.stat().st_mtime
+                    should_prompt_skip = exe_time >= src_time
+                except Exception:
+                    should_prompt_skip = False
+            
+            if should_prompt_skip:
+                title = "Reddit Helper Build"
+                msg = (
+                    f"Helper EXE exists and is up-to-date:\n{helper_exe.name}\n\n"
+                    "Rebuild the helper? (Usually not needed unless you modified reddit_helper_worker.py)"
+                )
+                rebuild = messagebox.askyesno(title, msg, parent=self._root, default="no")
+                if not rebuild:
+                    # Mark helper step as skipped
+                    self._skip_helper = True
+                    self._header["text"] = "Pre-flight OK. Building (helper skipped)…"
+                    self._start_pipeline()
+                    return
+            
             self._header["text"] = "Pre-flight OK.  Building…"
             self._start_pipeline()
             return
@@ -279,6 +316,11 @@ class BuildRunnerApp:
         all_ok = True
 
         for idx, job in enumerate(JOBS):
+            # Skip helper build if user chose to skip (job index 2)
+            if idx == 2 and self._skip_helper and job.name == "Reddit Helper Build":
+                self._queue.put(("status", idx, "Skipped (up-to-date)"))
+                continue
+
             self._queue.put(("status", idx, "Running…"))
 
             try:
@@ -414,7 +456,7 @@ class BuildRunnerApp:
 
 def main() -> None:
     root = tk.Tk()
-    root.geometry("520x280")
+    root.geometry("520x320")
     BuildRunnerApp(root)
     root.mainloop()
 

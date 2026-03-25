@@ -1,10 +1,16 @@
 """
 User-session Reddit helper worker.
 
-This script runs inside the interactive user session (triggered via a
-scheduled task).  It drains the ProgramData queue populated by the
-Winlogon screensaver build and opens each deferred Reddit URL using the
-user's default browser.
+This script runs inside the interactive user session (started via HKCU\Run
+registry entry placed by the Inno Setup installer).  It watches the
+ProgramData queue populated by the Winlogon screensaver build and opens
+each deferred Reddit URL using the user's default browser.
+
+Modes:
+- ``--watch``  : Continuous polling loop (default when started at login).
+                 Polls every ``--poll-interval`` seconds, opens URLs, then
+                 sleeps.  Exits cleanly on SIGINT/SIGTERM.
+- One-shot     : Drains queue once and exits (legacy / manual invocation).
 """
 
 from __future__ import annotations
@@ -17,7 +23,6 @@ import os
 import subprocess
 import sys
 import time
-import textwrap
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any, Dict
@@ -33,7 +38,7 @@ DEFAULT_QUEUE = DEFAULT_BASE / "url_queue"
 DEFAULT_LOG_DIR = DEFAULT_BASE / "logs"
 DEFAULT_SIGNAL_DIR = DEFAULT_BASE / "helper_signals"
 DEFAULT_MAX_BATCH = 50
-_DEFAULT_TASK_NAME = os.getenv("SRPSS_REDDIT_HELPER_TASK", r"SRPSS\RedditHelper")
+DEFAULT_POLL_INTERVAL = 2.0
 WINDOW_POLL_INTERVAL = 0.25
 BROWSER_FOREGROUND_TIMEOUT = 5.0
 _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -75,6 +80,15 @@ def configure_logging(log_dir: Path, verbose: bool) -> None:
     )
 
 
+_watcher_running = True
+
+
+def _signal_handler(signum, frame):  # noqa: ARG001
+    global _watcher_running
+    _watcher_running = False
+    logging.info("Shutdown signal received (sig=%s)", signum)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SRPSS Reddit helper worker")
     parser.add_argument(
@@ -101,9 +115,15 @@ def parse_args() -> argparse.Namespace:
         help="Enable verbose console logging",
     )
     parser.add_argument(
-        "--register-only",
+        "--watch",
         action="store_true",
-        help="Only register/refresh the scheduled task, then exit",
+        help="Run in continuous watcher mode (poll queue directory)",
+    )
+    parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=DEFAULT_POLL_INTERVAL,
+        help="Seconds between queue polls in watch mode (default: %.1f)" % DEFAULT_POLL_INTERVAL,
     )
     return parser.parse_args()
 
@@ -168,19 +188,12 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
 
 
 def main() -> int:
+    import signal as _signal
+
     args = parse_args()
     _hide_own_window()
     args.queue.mkdir(parents=True, exist_ok=True)
     configure_logging(args.log_dir, args.verbose)
-    helper_path = Path(sys.argv[0]).resolve()
-    if args.register_only:
-        success = ensure_scheduled_task_registered(helper_path, args.queue, args.log_dir)
-        return 0 if success else 1
-    try:
-        ensure_scheduled_task_registered(helper_path, args.queue, args.log_dir)
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
-        logging.debug("Scheduled task registration skipped due to error", exc_info=True)
 
     signal_dir = DEFAULT_SIGNAL_DIR
     try:
@@ -188,9 +201,39 @@ def main() -> int:
     except Exception as exc:
         logger.debug("[REDDIT] Failed to ensure signal dir %s: %s", signal_dir, exc)
 
-    logging.info("Helper started (queue=%s)", args.queue)
+    if args.watch:
+        _signal.signal(_signal.SIGINT, _signal_handler)
+        _signal.signal(_signal.SIGTERM, _signal_handler)
+        return _run_watcher(args.queue, args.max_batch, signal_dir, args.poll_interval)
+
+    logging.info("Helper started one-shot (queue=%s)", args.queue)
     processed = process_queue(args.queue, args.max_batch, signal_dir)
     logging.info("Helper finished (processed=%d)", processed)
+    return 0
+
+
+def _run_watcher(queue_dir: Path, max_batch: int, signal_dir: Path, poll_interval: float) -> int:
+    """Continuous watcher loop — polls queue, opens URLs, sleeps."""
+    global _watcher_running
+    poll_interval = max(0.5, poll_interval)
+    logging.info("Watcher started (queue=%s, poll=%.1fs)", queue_dir, poll_interval)
+
+    while _watcher_running:
+        try:
+            processed = process_queue(queue_dir, max_batch, signal_dir)
+            if processed > 0:
+                logging.info("Watcher cycle: processed %d entries", processed)
+        except Exception:
+            logging.error("Watcher cycle error", exc_info=True)
+
+        # Sleep in small increments so we respond to shutdown quickly
+        slept = 0.0
+        while slept < poll_interval and _watcher_running:
+            chunk = min(0.5, poll_interval - slept)
+            time.sleep(chunk)
+            slept += chunk
+
+    logging.info("Watcher stopped cleanly")
     return 0
 
 
@@ -280,110 +323,6 @@ def _handle_open_settings(data: Dict[str, Any], signal_dir: Path) -> bool:
         logging.warning("Failed to write completion token %s: %s", completion_path, exc)
     return True
 
-
-def ensure_scheduled_task_registered(helper_exe: Path, queue_dir: Path, log_dir: Path) -> bool:
-    if not _DEFAULT_TASK_NAME:
-        return False
-    if os.getenv("SRPSS_SKIP_TASK_REGISTER"):
-        return False
-    False
-    task_path, _, task_leaf = _DEFAULT_TASK_NAME.rpartition("\\")
-    if not task_leaf:
-        task_leaf = task_path
-        task_path = ""
-    if not task_leaf:
-        task_leaf = "RedditHelper"
-    sanitized_task_path = task_path.strip("\\")
-    folder_parts = [part for part in sanitized_task_path.split("\\") if part]
-    folder_array_literal = ", ".join(f"'{part}'" for part in folder_parts)
-    folder_array_expr = f"@({folder_array_literal})" if folder_parts else "@()"
-
-    helper_literal = helper_exe.as_posix().replace("'", "''")
-    queue_literal = queue_dir.as_posix().replace("'", "''")
-    log_literal = log_dir.as_posix().replace("'", "''")
-    args_literal = f"--queue \"{queue_literal}\" --log-dir \"{log_literal}\""
-    description = "SRPSS Reddit helper worker"
-
-    ps_script = textwrap.dedent(
-        f"""
-        $ErrorActionPreference = 'Stop'
-        try {{
-            $taskName = '{task_leaf}'
-            $taskFolderParts = {folder_array_expr}
-            $service = New-Object -ComObject 'Schedule.Service'
-            $service.Connect()
-            $targetFolder = $service.GetFolder("\\")
-            foreach ($part in $taskFolderParts) {{
-                if ([string]::IsNullOrWhiteSpace($part)) {{ continue }}
-                $normalized = $part.Trim()
-                if (-not $normalized) {{ continue }}
-                $nextPath = if ($targetFolder.Path -eq "\\") {{ "\\" + $normalized }} else {{ $targetFolder.Path.TrimEnd("\\") + "\\" + $normalized }}
-                try {{
-                    $targetFolder = $service.GetFolder($nextPath)
-                }} catch {{
-                    $targetFolder = $targetFolder.CreateFolder($normalized)
-                }}
-            }}
-
-            $definition = $service.NewTask(0)
-            $definition.RegistrationInfo.Description = '{description}'
-            $definition.Settings.Enabled = $true
-            $definition.Settings.AllowDemandStart = $true
-            $definition.Settings.StartWhenAvailable = $true
-            $definition.Settings.DisallowStartIfOnBatteries = $false
-            $definition.Settings.StopIfGoingOnBatteries = $false
-            $definition.Settings.ExecutionTimeLimit = "PT5M"
-            $definition.Settings.Hidden = $true
-            $definition.Principal.UserId = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
-            $definition.Principal.LogonType = 3  # TASK_LOGON_INTERACTIVE_TOKEN
-            $definition.Principal.RunLevel = 1   # TASK_RUNLEVEL_HIGHEST
-            $definition.Triggers.Clear()
-
-            $action = $definition.Actions.Create(0) # TASK_ACTION_EXEC
-            $action.Path = '{helper_literal}'
-            $action.Arguments = '{args_literal}'
-            $action.WorkingDirectory = '{helper_exe.parent.as_posix().replace("'", "''")}'
-
-            $targetFolder.RegisterTaskDefinition($taskName, $definition, 6, $null, $null, 3, $null) | Out-Null
-        }} catch {{
-            Write-Output ("TASK_REGISTER_ERROR: " + $_.Exception.Message)
-            if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {{
-                Write-Output ("TASK_REGISTER_ERROR_POS: " + ($_.InvocationInfo.PositionMessage.Trim()))
-            }}
-            exit 1
-        }}
-        """
-    ).strip()
-
-    result = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            ps_script,
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-        creationflags=_NO_WINDOW_FLAG if os.name == "nt" and _NO_WINDOW_FLAG else 0,
-    )
-    if result.returncode != 0:
-        message = (result.stderr or result.stdout or "").strip()
-        logging.debug(
-            "Scheduled task registration failed (rc=%s): %s",
-            result.returncode,
-            message,
-        )
-        logging.warning(
-            "Scheduled task registration failed (rc=%s): %s",
-            result.returncode,
-            message,
-        )
-        return False
-    logging.info("Scheduled task ensured (%s)", _DEFAULT_TASK_NAME)
-    return True
 
 
 def bring_browser_foreground(url: str) -> bool:

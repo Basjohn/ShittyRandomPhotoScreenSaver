@@ -5,20 +5,23 @@ The screensaver process running inside Winlogon (SYSTEM account, secure
 desktop) cannot reliably launch browser processes or write to user
 directories.  This module provides a very small IPC layer that queues
 deferred Reddit URLs into a ProgramData-backed spool so that a
-user-session helper (running on the interactive desktop) can pick them up
+user-session watcher (running on the interactive desktop) can pick them up
 and launch them safely.
 
 Current transport: file-based queue under ``%ProgramData%\\SRPSS\\url_queue``.
-Each queued URL is written as a JSON file with metadata.  A future helper
-process will monitor the directory, launch URLs on behalf of the user, and
-delete the file once processed.
+Each queued URL is written as a JSON file with metadata.  The watcher
+process (installed by the Inno Setup installer, started on user login)
+monitors the directory, opens URLs on behalf of the user, and deletes the
+file once processed.
+
+This module performs **only benign file I/O** — no process launching, no
+token manipulation, no scheduled tasks.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import subprocess
 import time
 import uuid
 from pathlib import Path
@@ -26,19 +29,12 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from core.logging.logger import get_logger
 
-try:
-    from core.windows import reddit_helper_installer
-except Exception:  # pragma: no cover - import guard for non-Windows
-    reddit_helper_installer = None
-
 logger = get_logger(__name__)
 
 _PROGRAM_DATA = os.getenv("PROGRAMDATA", r"C:\ProgramData")
 _BASE_DIR = Path(_PROGRAM_DATA) / "SRPSS"
 _QUEUE_DIR = _BASE_DIR / "url_queue"
 _SIGNAL_DIR = _BASE_DIR / "helper_signals"
-_HELPER_TASK_NAME = os.getenv("SRPSS_REDDIT_HELPER_TASK", r"SRPSS\RedditHelper")
-_NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 _SPOOL_READY = False
 
 
@@ -118,9 +114,6 @@ def _write_entry(entry: Dict[str, Any]) -> bool:
             payload.get("action", "open_url"),
             token,
         )
-        triggered = _trigger_helper_process()
-        if not triggered:
-            _kick_helper()
         return True
     except Exception as exc:
         logger.warning("[REDDIT-BRIDGE] Failed to queue helper entry: %s", exc, exc_info=True)
@@ -177,42 +170,3 @@ def enqueue_settings_request(
     return _write_entry(entry)
 
 
-def _kick_helper() -> None:
-    if not _HELPER_TASK_NAME:
-        return
-    try:
-        result = subprocess.run(
-            [
-                "schtasks",
-                "/Run",
-                "/TN",
-                _HELPER_TASK_NAME,
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            creationflags=_NO_WINDOW_FLAG if _NO_WINDOW_FLAG else 0,
-        )
-        if result.returncode != 0:
-            logger.debug(
-                "[REDDIT-BRIDGE] schtasks /Run failed (rc=%s): %s",
-                result.returncode,
-                (result.stderr or result.stdout).strip(),
-            )
-    except Exception as exc:
-        logger.debug("[REDDIT-BRIDGE] Unable to trigger helper task: %s", exc, exc_info=True)
-
-
-def _trigger_helper_process() -> bool:
-    if reddit_helper_installer is None:
-        return False
-    try:
-        launched = reddit_helper_installer.trigger_helper_run()
-        if launched:
-            logger.debug("[REDDIT-BRIDGE] Embedded helper triggered directly")
-        else:
-            logger.debug("[REDDIT-BRIDGE] Embedded helper trigger declined")
-        return launched
-    except Exception as exc:
-        logger.debug("[REDDIT-BRIDGE] Embedded helper trigger failed: %s", exc, exc_info=True)
-        return False

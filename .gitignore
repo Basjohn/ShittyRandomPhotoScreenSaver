@@ -55,6 +55,7 @@ Desktop.ini
 # Custom: reusable utility modules you don’t want tracked
 MyReuseableUtilityModules/
 build/
+build_deps/
 release/
 dist/
 
