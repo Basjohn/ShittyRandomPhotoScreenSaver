@@ -603,6 +603,8 @@ def _coerce_value(value: Any, defn: _ControlDef, fallback: Any) -> Any:
         return _coerce_bool(value, bool(fallback))
     if defn.default_type == "int":
         coerced = _coerce_int(value, int(fallback))
+        if defn.widget_kind == "combo":
+            return coerced
         return int(_clamp_numeric(coerced, defn))
     coerced = _coerce_float(value, float(fallback))
     return float(_clamp_numeric(coerced, defn))

@@ -25,7 +25,9 @@ from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings,
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
     get_preset_count,
+    resolve_preset_index_from_mapping,
 )
+from core.settings.visualizer_mode_registry import get_preset_key
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_factories import WidgetFactoryRegistry
@@ -346,11 +348,8 @@ class WidgetManager:
             spotify_vis_config = {}
 
         vis_config = dict(spotify_vis_config)
-        preset_key = f"preset_{mode}"
-        try:
-            current_idx = int(vis_config.get(preset_key, 0) or 0)
-        except Exception:
-            current_idx = 0
+        preset_key = get_preset_key(mode)
+        current_idx = resolve_preset_index_from_mapping(mode, vis_config, prefix="widgets.spotify_visualizer")
         current_idx = max(0, min(preset_count - 1, current_idx))
 
         step = 1 if direction > 0 else -1

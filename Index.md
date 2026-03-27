@@ -70,6 +70,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Frame Budget | core/performance/frame_budget.py | FrameBudget, GCController | Frame time allocation |
 | Settings | core/settings/defaults.py | get_default_settings() | Canonical defaults |
 | Settings | core/settings/models.py | DisplaySettings, TransitionSettings | Type-safe dataclass models |
+| Vis Mode Registry | core/settings/visualizer_mode_registry.py | VisualizerModeDescriptor, iter_visualizer_mode_descriptors(), get_preset_key() | Shared visualizer mode identity contract: mode ids, display labels, preset keys, and preset-slider ownership wiring |
 | Settings | core/settings/json_store.py | JsonSettingsStore | JSON persistence layer (structured roots: widgets, transitions, custom_preset_backup, ui) |
 | Storage Paths | core/settings/storage_paths.py | get_app_data_dir(), get_cache_dir(), get_rss_cache_dir(), get_feed_health_file(), run_all_migrations() | Canonical path resolver for all app data (settings, cache, state, logs). Replaces scattered %TEMP% paths. |
 | Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
@@ -80,6 +81,8 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
 | Presets | core/settings/presets.py | PresetDefinition, apply_preset() | Widget presets system (moved from core/presets.py) |
 | Vis Presets | core/settings/visualizer_presets.py | VisualizerPreset, get_presets(), apply_preset_to_config() | Per-visualizer-mode preset registry. Curated presets load from `presets/visualizer_modes/<mode>`. Snapshot overrides are **explicit-only** from `presets/visualizer_mode_overrides` and require marker+mode+preset_index to avoid full-SST export contamination. |
+| Vis Mode Binding | ui/tabs/media/visualizer_mode_binding.py | initialize_visualizer_mode_combo(), load_visualizer_mode_selection(), load_visualizer_preset_indices(), load_visualizer_rainbow_state() | Shared WidgetsTab adapter for visualizer mode combo initialization plus per-mode preset and rainbow state binding |
+| Blob Binding | ui/tabs/media/blob_settings_binding.py | load_blob_mode_settings(), collect_blob_mode_settings() | Blob-owned WidgetsTab load/save adapter so Blob enhancements do not expand the central media-tab coordinator |
 | Vis Preset Slider | ui/tabs/media/preset_slider.py | VisualizerPresetSlider | Reusable 4-notch slider widget with Advanced toggle for per-mode presets |
 | SST I/O | core/settings/sst_io.py | export_to_sst(), import_from_sst(), preview_import_from_sst() | Settings snapshot transport (extracted from settings_manager.py) |
 | Lifecycle | core/lifecycle.py | Lifecycle, Cleanable | Runtime-checkable Protocols for start/stop/cleanup interface |

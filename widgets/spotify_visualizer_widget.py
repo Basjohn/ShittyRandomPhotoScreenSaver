@@ -17,6 +17,7 @@ from core.logging.logger import (
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from core.settings.models import SpotifyVisualizerSettings, PER_MODE_TECHNICAL_MODES
+from core.settings.visualizer_presets import apply_preset_to_config, resolve_preset_index_from_mapping
 from widgets.shadow_utils import configure_overlay_widget_attributes
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -2046,12 +2047,10 @@ class SpotifyVisualizerWidget(QWidget):
                 wm = getattr(self, '_widget_manager', None)
                 sm = getattr(wm, '_settings_manager', None) if wm is not None else None
                 if sm is not None:
-                    from core.settings.visualizer_presets import apply_preset_to_config
-
                     cfg = sm.get('widgets', {}) or {}
                     vis_cfg = dict(cfg.get('spotify_visualizer', {}) or {})
                     mode_str = self._vis_mode_str
-                    preset_idx = int(vis_cfg.get(f'preset_{mode_str}', 0) or 0)
+                    preset_idx = resolve_preset_index_from_mapping(mode_str, vis_cfg)
                     vis_cfg = apply_preset_to_config(mode_str, preset_idx, vis_cfg)
 
                     pm_re = f'{mode_str}_rainbow_enabled'

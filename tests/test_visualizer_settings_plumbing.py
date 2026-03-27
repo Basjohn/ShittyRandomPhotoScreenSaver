@@ -1006,20 +1006,28 @@ class _StubSlider:
 
 
 class _StubCombo:
-    def __init__(self, data: int):
-        self._data = data
+    def __init__(self, data: int, options: list[int] | None = None):
+        self._options = list(options or [0, 128, 256, 512, 1024])
+        try:
+            self._index = self._options.index(data)
+        except ValueError:
+            self._index = 0
 
     def currentData(self) -> int:
-        return self._data
+        return self._options[self._index]
 
     def blockSignals(self, _blocked: bool) -> None:
         return None
 
-    def setCurrentIndex(self, _index: int) -> None:
-        return None
+    def setCurrentIndex(self, index: int) -> None:
+        if 0 <= index < len(self._options):
+            self._index = index
 
     def findData(self, value: int) -> int:
-        return 0 if value == self._data else -1
+        try:
+            return self._options.index(value)
+        except ValueError:
+            return -1
 
 
 class _StubCheck:
@@ -1158,6 +1166,605 @@ class TestPerModeTechnicalControlsCollection:
         assert controls is not None
         assert controls["mix_slider"].value() == 71
         assert controls["mix_label"].text == "71%"
+
+    @pytest.mark.parametrize("block_size", [128, 512])
+    def test_load_per_mode_controls_preserves_valid_combo_block_sizes(self, block_size):
+        from ui.tabs.media import technical_controls as tc
+
+        class _DummyTab:
+            def _default_bool(self, *_args):
+                return False
+
+            def _default_int(self, *_args):
+                return 0
+
+            def _default_float(self, *_args):
+                return 0.5
+
+        tab = _DummyTab()
+        tc.register_per_mode_technical_controls(
+            tab,
+            "sine_wave",
+            controls={
+                "block_size": _StubCombo(0),
+            },
+            update_sensitivity=lambda: None,
+            update_manual_floor=lambda: None,
+        )
+
+        tc.load_per_mode_technical_controls(
+            tab,
+            {
+                "sine_wave_audio_block_size": block_size,
+            },
+        )
+
+        controls = tc.get_per_mode_controls_for_mode(tab, "sine_wave")
+        assert controls is not None
+        assert controls["block_size"].currentData() == block_size
+
+
+class TestVisualizerPresetDefaultResolution:
+    def test_from_mapping_uses_first_preset_for_missing_mode_preset(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "sine_wave",
+            }
+        )
+
+        assert model.preset_sine_wave == 0
+        assert model.preset_blob == 0
+
+    def test_from_settings_uses_first_preset_for_missing_mode_preset(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        model = SpotifyVisualizerSettings.from_settings(
+            _DummySettings(
+                {
+                    "widgets.spotify_visualizer.mode": "blob",
+                }
+            )
+        )
+
+        assert model.preset_blob == 0
+        assert model.preset_sine_wave == 0
+
+    def test_get_active_preset_index_uses_first_preset_when_missing(self):
+        from core.settings.visualizer_presets import get_active_preset_index
+
+        class _DummySettings:
+            def get(self, _key, default=None):
+                return default
+
+        settings = _DummySettings()
+
+        assert get_active_preset_index(settings, "sine_wave") == 0
+        assert get_active_preset_index(settings, "blob") == 0
+
+
+class TestVisualizerModeRegistryContract:
+    def test_registry_matches_preset_modes_and_has_stable_preset_keys(self):
+        from core.settings.visualizer_mode_registry import (
+            VISUALIZER_MODE_IDS,
+            iter_visualizer_mode_descriptors,
+        )
+        from core.settings.visualizer_presets import MODES
+
+        descriptors = iter_visualizer_mode_descriptors()
+        assert tuple(MODES) == VISUALIZER_MODE_IDS
+        assert tuple(descriptor.mode_id for descriptor in descriptors) == VISUALIZER_MODE_IDS
+        assert tuple(descriptor.preset_key for descriptor in descriptors) == tuple(
+            f"preset_{mode}" for mode in VISUALIZER_MODE_IDS
+        )
+
+    def test_missing_preset_fallback_comes_from_registry_not_shipped_defaults(self):
+        from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+        from core.settings.visualizer_presets import get_missing_preset_fallback_index
+
+        for mode in VISUALIZER_MODE_IDS:
+            assert get_missing_preset_fallback_index(mode) == 0
+
+    def test_resolve_all_preset_indices_from_mapping_uses_registry_for_sparse_input(self):
+        from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+        from core.settings.visualizer_presets import resolve_all_preset_indices_from_mapping
+
+        resolved = resolve_all_preset_indices_from_mapping(
+            {
+                "mode": "blob",
+                "preset_blob": 2,
+            }
+        )
+
+        assert resolved["preset_blob"] == 2
+        for mode in VISUALIZER_MODE_IDS:
+            key = f"preset_{mode}"
+            if key == "preset_blob":
+                continue
+            assert resolved[key] == 0
+
+    def test_resolve_all_preset_indices_from_getter_uses_shared_prefixed_contract(self):
+        from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
+        from core.settings.visualizer_presets import resolve_all_preset_indices_from_getter
+
+        data = {
+            "widgets.spotify_visualizer.preset_blob": 2,
+        }
+
+        resolved = resolve_all_preset_indices_from_getter(
+            lambda key, default=None: data.get(key, default)
+        )
+
+        assert resolved["preset_blob"] == 2
+        for mode in VISUALIZER_MODE_IDS:
+            key = f"preset_{mode}"
+            if key == "preset_blob":
+                continue
+            assert resolved[key] == 0
+
+
+class TestVisualizerModeBinding:
+    def test_populate_visualizer_mode_combo_uses_registry_order(self):
+        from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+        from ui.tabs.media.visualizer_mode_binding import populate_visualizer_mode_combo
+
+        class _Combo:
+            def __init__(self):
+                self.items = []
+
+            def addItem(self, label, data):
+                self.items.append((label, data))
+
+        combo = _Combo()
+        populate_visualizer_mode_combo(combo)
+
+        assert combo.items == [
+            (descriptor.display_name, descriptor.mode_id)
+            for descriptor in iter_visualizer_mode_descriptors()
+        ]
+
+    def test_initialize_visualizer_mode_combo_uses_shared_build_default(self):
+        from ui.tabs.media.visualizer_mode_binding import initialize_visualizer_mode_combo
+
+        class _Combo:
+            def __init__(self):
+                self.items = []
+                self._index = -1
+
+            def addItem(self, label, data):
+                self.items.append((label, data))
+
+            def findData(self, value):
+                for idx, (_label, data) in enumerate(self.items):
+                    if data == value:
+                        return idx
+                return -1
+
+            def setCurrentIndex(self, index):
+                self._index = index
+
+            def currentData(self):
+                if 0 <= self._index < len(self.items):
+                    return self.items[self._index][1]
+                return None
+
+        class _Tab:
+            def __init__(self):
+                self.vis_mode_combo = _Combo()
+
+            def _default_str(self, *_args):
+                return "bubble"
+
+        tab = _Tab()
+        initialize_visualizer_mode_combo(tab)
+
+        assert tab.vis_mode_combo.currentData() == "bubble"
+
+    def test_load_visualizer_mode_selection_falls_back_when_saved_mode_is_unknown(self):
+        from ui.tabs.media.visualizer_mode_binding import (
+            initialize_visualizer_mode_combo,
+            load_visualizer_mode_selection,
+        )
+
+        class _Combo:
+            def __init__(self):
+                self.items = []
+                self._index = -1
+
+            def addItem(self, label, data):
+                self.items.append((label, data))
+
+            def findData(self, value):
+                for idx, (_label, data) in enumerate(self.items):
+                    if data == value:
+                        return idx
+                return -1
+
+            def setCurrentIndex(self, index):
+                self._index = index
+
+            def currentData(self):
+                if 0 <= self._index < len(self.items):
+                    return self.items[self._index][1]
+                return None
+
+        class _Tab:
+            def __init__(self):
+                self.vis_mode_combo = _Combo()
+
+            def _default_str(self, *_args):
+                return "spectrum"
+
+            def _config_str(self, _section, config, key, default):
+                return config.get(key, default)
+
+        tab = _Tab()
+        initialize_visualizer_mode_combo(tab)
+        load_visualizer_mode_selection(tab, {"mode": "not_a_real_mode"})
+
+        assert tab.vis_mode_combo.currentData() == "spectrum"
+
+    def test_load_visualizer_rainbow_state_uses_registry_modes_and_active_selection(self):
+        from ui.tabs.media.visualizer_mode_binding import (
+            initialize_visualizer_mode_combo,
+            load_visualizer_rainbow_state,
+        )
+
+        class _Combo:
+            def __init__(self):
+                self.items = []
+                self._index = -1
+
+            def addItem(self, label, data):
+                self.items.append((label, data))
+
+            def findData(self, value):
+                for idx, (_label, data) in enumerate(self.items):
+                    if data == value:
+                        return idx
+                return -1
+
+            def setCurrentIndex(self, index):
+                self._index = index
+
+            def currentData(self):
+                if 0 <= self._index < len(self.items):
+                    return self.items[self._index][1]
+                return None
+
+        class _Check:
+            def __init__(self):
+                self.checked = None
+
+            def setChecked(self, value):
+                self.checked = value
+
+        class _Slider:
+            def __init__(self):
+                self.value = None
+
+            def setValue(self, value):
+                self.value = value
+
+        class _Label:
+            def __init__(self):
+                self.text = None
+
+            def setText(self, text):
+                self.text = text
+
+        class _Tab:
+            def __init__(self):
+                self.vis_mode_combo = _Combo()
+                self.rainbow_enabled = _Check()
+                self.rainbow_speed_slider = _Slider()
+                self.rainbow_speed_label = _Label()
+                self.rainbow_updates = 0
+
+            def _default_str(self, *_args):
+                return "bubble"
+
+            def _config_bool(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_float(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _update_rainbow_visibility(self):
+                self.rainbow_updates += 1
+
+        tab = _Tab()
+        initialize_visualizer_mode_combo(tab)
+        load_visualizer_rainbow_state(
+            tab,
+            {
+                "bubble_rainbow_enabled": True,
+                "bubble_rainbow_speed": 0.76,
+            },
+        )
+
+        assert tab._rainbow_per_mode["bubble"] == (True, 76)
+        assert tab.rainbow_enabled.checked is True
+        assert tab.rainbow_speed_slider.value == 76
+        assert tab.rainbow_speed_label.text == "0.76"
+        assert tab.rainbow_updates == 1
+
+    def test_collect_visualizer_rainbow_state_writes_known_mode_keys_from_active_mode(self):
+        from ui.tabs.media.visualizer_mode_binding import (
+            collect_visualizer_rainbow_state,
+            initialize_visualizer_mode_combo,
+        )
+
+        class _Combo:
+            def __init__(self):
+                self.items = []
+                self._index = -1
+
+            def addItem(self, label, data):
+                self.items.append((label, data))
+
+            def findData(self, value):
+                for idx, (_label, data) in enumerate(self.items):
+                    if data == value:
+                        return idx
+                return -1
+
+            def setCurrentIndex(self, index):
+                self._index = index
+
+            def currentData(self):
+                if 0 <= self._index < len(self.items):
+                    return self.items[self._index][1]
+                return None
+
+        class _Check:
+            def __init__(self, checked):
+                self._checked = checked
+
+            def isChecked(self):
+                return self._checked
+
+        class _Slider:
+            def __init__(self, value):
+                self._value = value
+
+            def value(self):
+                return self._value
+
+        class _Tab:
+            def __init__(self):
+                self.vis_mode_combo = _Combo()
+                self.rainbow_enabled = _Check(True)
+                self.rainbow_speed_slider = _Slider(63)
+                self._rainbow_per_mode = {
+                    "spectrum": (False, 20),
+                    "blob": (False, 40),
+                }
+
+            def _default_str(self, *_args):
+                return "bubble"
+
+        tab = _Tab()
+        initialize_visualizer_mode_combo(tab)
+        payload = {}
+        collect_visualizer_rainbow_state(tab, payload)
+
+        assert payload["bubble_rainbow_enabled"] is True
+        assert payload["bubble_rainbow_speed"] == pytest.approx(0.63)
+        assert payload["spectrum_rainbow_enabled"] is False
+        assert payload["spectrum_rainbow_speed"] == pytest.approx(0.20)
+        assert payload["oscilloscope_rainbow_enabled"] is False
+        assert payload["oscilloscope_rainbow_speed"] == pytest.approx(0.50)
+
+    def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
+        from ui.tabs.media.visualizer_mode_binding import (
+            collect_visualizer_preset_indices,
+            load_visualizer_preset_indices,
+        )
+
+        class _Slider:
+            def __init__(self, index):
+                self._index = index
+
+            def preset_index(self):
+                return self._index
+
+            def set_preset_index(self, index):
+                self._index = index
+
+        class _Tab:
+            _spectrum_preset_slider = _Slider(1)
+            _osc_preset_slider = _Slider(0)
+            _sine_preset_slider = _Slider(2)
+            _blob_preset_slider = _Slider(3)
+            _bubble_preset_slider = _Slider(1)
+
+        tab = _Tab()
+        payload = {}
+        collect_visualizer_preset_indices(tab, payload)
+
+        assert payload == {
+            "preset_spectrum": 1,
+            "preset_oscilloscope": 0,
+            "preset_sine_wave": 2,
+            "preset_blob": 3,
+            "preset_bubble": 1,
+        }
+
+        load_visualizer_preset_indices(
+            tab,
+            {
+                "preset_spectrum": 0,
+                "preset_oscilloscope": 2,
+                "preset_sine_wave": 1,
+                "preset_blob": 0,
+                "preset_bubble": 3,
+            },
+        )
+
+        assert tab._spectrum_preset_slider.preset_index() == 0
+        assert tab._osc_preset_slider.preset_index() == 2
+        assert tab._sine_preset_slider.preset_index() == 1
+        assert tab._blob_preset_slider.preset_index() == 0
+        assert tab._bubble_preset_slider.preset_index() == 3
+
+
+class TestBlobSettingsBinding:
+    def test_load_blob_mode_settings_updates_blob_owned_controls(self):
+        from ui.tabs.media.blob_settings_binding import load_blob_mode_settings
+
+        class _Check:
+            def __init__(self):
+                self.checked = None
+
+            def setChecked(self, checked):
+                self.checked = checked
+
+        class _Slider:
+            def __init__(self):
+                self.value = None
+
+            def setValue(self, value):
+                self.value = value
+
+        class _Label:
+            def __init__(self):
+                self.text = None
+
+            def setText(self, text):
+                self.text = text
+
+        class _Tab:
+            def __init__(self):
+                self.blob_ghost_enabled = _Check()
+                self.blob_ghost_opacity = _Slider()
+                self.blob_ghost_opacity_label = _Label()
+                self.blob_ghost_decay_slider = _Slider()
+                self.blob_ghost_decay_label = _Label()
+                self.blob_pulse = _Slider()
+                self.blob_pulse_label = _Label()
+                self.blob_stage_bias = _Slider()
+                self.blob_stage_bias_label = _Label()
+                self.blob_pulse_release_ms = _Slider()
+                self.blob_pulse_release_ms_label = _Label()
+                self.blob_growth = _Slider()
+                self.blob_growth_label = _Label()
+
+            def _config_bool(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_float(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_int(self, _section, config, key, default):
+                return config.get(key, default)
+
+        tab = _Tab()
+        synced = []
+        load_blob_mode_settings(
+            tab,
+            {
+                "blob_ghosting_enabled": True,
+                "blob_ghost_alpha": 0.37,
+                "blob_ghost_decay": 0.44,
+                "blob_pulse": 1.23,
+                "blob_stage_bias": -0.18,
+                "blob_pulse_release_ms": 410,
+                "blob_growth": 3.10,
+                "blob_color": [1, 2, 3, 4],
+            },
+            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
+        )
+
+        assert tab.blob_ghost_enabled.checked is True
+        assert tab.blob_ghost_opacity.value == 37
+        assert tab.blob_ghost_opacity_label.text == "37%"
+        assert tab.blob_ghost_decay_slider.value == 44
+        assert tab.blob_ghost_decay_label.text == "0.44x"
+        assert tab.blob_pulse.value == 123
+        assert tab.blob_pulse_label.text == "1.23x"
+        assert tab.blob_stage_bias.value == -18
+        assert tab.blob_stage_bias_label.text == "-0.18"
+        assert tab.blob_pulse_release_ms.value == 410
+        assert tab.blob_pulse_release_ms_label.text == "0.41s"
+        assert tab.blob_growth.value == 310
+        assert tab.blob_growth_label.text == "3.1x"
+        assert (tab._blob_color.red(), tab._blob_color.green(), tab._blob_color.blue(), tab._blob_color.alpha()) == (1, 2, 3, 4)
+        assert synced == [
+            ("blob_fill_color_btn", "_blob_color"),
+            ("blob_glow_color_btn", "_blob_glow_color"),
+            ("blob_edge_color_btn", "_blob_edge_color"),
+            ("blob_outline_color_btn", "_blob_outline_color"),
+        ]
+
+    def test_collect_blob_mode_settings_serializes_blob_owned_state(self):
+        from ui.tabs.media.blob_settings_binding import collect_blob_mode_settings
+
+        class _Check:
+            def __init__(self, checked):
+                self._checked = checked
+
+            def isChecked(self):
+                return self._checked
+
+        class _Slider:
+            def __init__(self, value):
+                self._value = value
+
+            def value(self):
+                return self._value
+
+        class _Tab:
+            blob_ghost_enabled = _Check(True)
+            blob_ghost_opacity = _Slider(45)
+            blob_ghost_decay_slider = _Slider(38)
+            blob_pulse = _Slider(140)
+            blob_width = _Slider(92)
+            blob_size = _Slider(135)
+            blob_glow_intensity = _Slider(67)
+            blob_glow_reactivity = _Slider(123)
+            blob_glow_max_size = _Slider(210)
+            blob_reactive_glow = _Check(True)
+            blob_reactive_deformation = _Slider(88)
+            blob_pulse_cap = _Slider(76)
+            blob_pulse_release_ms = _Slider(330)
+            blob_stage_gain = _Slider(111)
+            blob_core_scale = _Slider(95)
+            blob_core_floor_bias = _Slider(27)
+            blob_stage_bias = _Slider(-14)
+            blob_stage2_release_ms = _Slider(1200)
+            blob_stage3_release_ms = _Slider(1500)
+            blob_constant_wobble = _Slider(80)
+            blob_reactive_wobble = _Slider(90)
+            blob_stretch_tendency = _Slider(55)
+            blob_stretch_inner = _Slider(62)
+            blob_stretch_outer = _Slider(48)
+            blob_growth = _Slider(275)
+            _blob_color = QColor(10, 20, 30, 200)
+            _blob_glow_color = QColor(40, 50, 60, 210)
+            _blob_edge_color = QColor(70, 80, 90, 220)
+            _blob_outline_color = QColor(100, 110, 120, 230)
+
+        payload = collect_blob_mode_settings(_Tab())
+
+        assert payload["blob_ghosting_enabled"] is True
+        assert payload["blob_ghost_alpha"] == pytest.approx(0.45)
+        assert payload["blob_ghost_decay"] == pytest.approx(0.38)
+        assert payload["blob_pulse"] == pytest.approx(1.4)
+        assert payload["blob_color"] == [10, 20, 30, 200]
+        assert payload["blob_glow_color"] == [40, 50, 60, 210]
+        assert payload["blob_edge_color"] == [70, 80, 90, 220]
+        assert payload["blob_outline_color"] == [100, 110, 120, 230]
+        assert payload["blob_stage_bias"] == pytest.approx(-0.14)
+        assert payload["blob_growth"] == pytest.approx(2.75)
 
 
 # ==========================================================================

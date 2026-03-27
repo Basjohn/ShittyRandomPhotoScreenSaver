@@ -19,7 +19,10 @@ from PySide6.QtGui import QColor
 from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.shared_styles import SPINBOX_STYLE
 from core.settings import SettingsManager
-
+from core.settings.visualizer_mode_registry import (
+    get_default_visualizer_mode_id,
+    iter_visualizer_mode_descriptors,
+)
 
 @pytest.fixture
 def widgets_tab(qt_app, settings_manager):
@@ -282,21 +285,106 @@ def test_visualizer_mode_builders_keep_preset_scaffold_wiring(qt_app, settings_m
     tab = WidgetsTab(settings_manager)
     try:
         tab._load_settings()
-        mode_to_slider = {
-            "spectrum": tab._spectrum_preset_slider,
-            "oscilloscope": tab._osc_preset_slider,
-            "sine_wave": tab._sine_preset_slider,
-            "blob": tab._blob_preset_slider,
-            "bubble": tab._bubble_preset_slider,
-        }
-
-        for mode, slider in mode_to_slider.items():
-            assert slider._advanced_container is not None, mode
-            assert slider._technical_container is not None, mode
-            assert slider._advanced_container.parent() is not None, mode
-            assert slider._technical_container.parent() is not None, mode
+        for descriptor in iter_visualizer_mode_descriptors():
+            slider = getattr(tab, descriptor.preset_slider_attr)
+            assert slider._advanced_container is not None, descriptor.mode_id
+            assert slider._technical_container is not None, descriptor.mode_id
+            assert slider._advanced_container.parent() is not None, descriptor.mode_id
+            assert slider._technical_container.parent() is not None, descriptor.mode_id
     finally:
         tab.deleteLater()
+
+
+def test_visualizer_sparse_mapping_uses_first_preset_fallback(qt_app, settings_manager):
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    widgets_cfg["spotify_visualizer"] = {
+        "mode": "sine_wave",
+    }
+    settings_manager.set("widgets", widgets_cfg)
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._load_settings()
+        assert tab._sine_preset_slider.preset_index() == 0
+        assert tab._blob_preset_slider.preset_index() == 0
+        assert tab._bubble_preset_slider.preset_index() == 0
+    finally:
+        tab.deleteLater()
+
+
+def test_visualizer_mode_roundtrip_uses_shared_binding_contract(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._load_settings()
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("bubble"))
+        qt_app.processEvents()
+        tab._save_settings_now()
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert saved.get("mode") == "bubble"
+    finally:
+        tab.deleteLater()
+
+    reloaded = WidgetsTab(settings_manager)
+    try:
+        reloaded._load_settings()
+        assert reloaded.vis_mode_combo.currentData() == "bubble"
+    finally:
+        reloaded.deleteLater()
+
+
+def test_visualizer_unknown_saved_mode_falls_back_to_registry_default(qt_app, settings_manager):
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    widgets_cfg["spotify_visualizer"] = {
+        "mode": "not_a_real_mode",
+    }
+    settings_manager.set("widgets", widgets_cfg)
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._load_settings()
+        assert tab.vis_mode_combo.currentData() == get_default_visualizer_mode_id()
+    finally:
+        tab.deleteLater()
+
+
+def test_visualizer_block_size_roundtrip_preserves_non_auto_values(qt_app, settings_manager):
+    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._load_settings()
+
+        sine_controls = get_per_mode_controls_for_mode(tab, "sine_wave")
+        osc_controls = get_per_mode_controls_for_mode(tab, "oscilloscope")
+        assert sine_controls is not None
+        assert osc_controls is not None
+
+        sine_combo = sine_controls["block_size"]
+        osc_combo = osc_controls["block_size"]
+
+        sine_combo.setCurrentIndex(sine_combo.findData(128))
+        osc_combo.setCurrentIndex(osc_combo.findData(512))
+        qt_app.processEvents()
+        tab._save_settings_now()
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert saved.get("sine_wave_audio_block_size") == 128
+        assert saved.get("oscilloscope_audio_block_size") == 512
+    finally:
+        tab.deleteLater()
+
+    reloaded = WidgetsTab(settings_manager)
+    try:
+        reloaded._load_settings()
+        sine_controls = get_per_mode_controls_for_mode(reloaded, "sine_wave")
+        osc_controls = get_per_mode_controls_for_mode(reloaded, "oscilloscope")
+        assert sine_controls is not None
+        assert osc_controls is not None
+        assert sine_controls["block_size"].currentData() == 128
+        assert osc_controls["block_size"].currentData() == 512
+    finally:
+        reloaded.deleteLater()
 
 
 def test_blob_normal_edit_switches_curated_preset_to_custom(qt_app, settings_manager):
