@@ -208,6 +208,33 @@ class TestSettingsManagerDefaults:
         assert manager.get("input.hard_exit") is True
         assert manager.get("display.show_on_monitors") == [1]
 
+    def test_reset_visualizers_to_defaults_replaces_stale_visualizer_section(self, tmp_path: Path) -> None:
+        from core.settings.defaults import get_default_settings
+        from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+
+        manager = _make_manager(tmp_path)
+        manager.set(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_growth": 9.9,
+                    "obsolete_custom_key": "remove-me",
+                }
+            },
+        )
+
+        manager.reset_visualizers_to_defaults()
+
+        widgets = manager.get("widgets")
+        vis = widgets["spotify_visualizer"]
+        expected = normalize_visualizer_section_mapping(
+            get_default_settings()["widgets"]["spotify_visualizer"],
+            apply_preset_overlay=False,
+        )
+        assert vis == expected
+        assert "obsolete_custom_key" not in vis
+
 
 class TestSettingsManagerValidation:
     def test_validate_and_repair_handles_missing_keys(self, tmp_path: Path) -> None:

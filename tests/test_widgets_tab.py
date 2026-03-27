@@ -737,6 +737,39 @@ def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_man
     finally:
         tab.deleteLater()
 
+
+def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        mode = "bubble"
+        custom_index = tab._bubble_preset_slider.custom_index()
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": mode,
+            "preset_bubble": custom_index,
+            "manual_floor": 0.28,
+            "input_gain": 0.81,
+            "bubble_growth": 3.4,
+            "bubble_rainbow_enabled": True,
+            "bubble_rainbow_speed": 0.62,
+        }
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+        payload = tab.build_visualizer_preset_payload(mode)
+        assert payload
+
+        snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        assert snapshot["bubble_manual_floor"] == pytest.approx(0.28)
+        assert snapshot["bubble_input_gain"] == pytest.approx(0.81)
+        assert snapshot["bubble_growth"] == pytest.approx(3.4)
+        assert snapshot["bubble_rainbow_enabled"] is True
+        assert snapshot["bubble_rainbow_speed"] == pytest.approx(0.62)
+        assert "manual_floor" not in snapshot
+        assert "input_gain" not in snapshot
+    finally:
+        tab.deleteLater()
+
 def test_spinbox_stylesheet_attached(qt_app, settings_manager):
     """WidgetsTab stylesheet must keep the shared QSpinBox skin."""
 

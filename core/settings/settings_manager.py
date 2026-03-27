@@ -11,6 +11,7 @@ from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
 from core.settings.json_store import JsonSettingsStore, determine_storage_path
 from core.settings.models import SpotifyVisualizerSettings
+from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
 logger = get_logger('SettingsManager')
 
@@ -598,11 +599,17 @@ class SettingsManager(QObject):
             logger.debug("No spotify_visualizer defaults found during reset request")
             return
 
-        flat_values = {
-            f"widgets.spotify_visualizer.{key}": value
-            for key, value in vis_defaults.items()
-        }
-        self.set_many(flat_values)
+        normalized_defaults = normalize_visualizer_section_mapping(
+            vis_defaults,
+            apply_preset_overlay=False,
+        )
+        widgets = self.get('widgets', {})
+        if isinstance(widgets, Mapping):
+            widgets_dict = dict(widgets)
+        else:
+            widgets_dict = {}
+        widgets_dict['spotify_visualizer'] = normalized_defaults
+        self.set('widgets', widgets_dict)
 
     def save(self) -> None:
         """Force save settings to persistent storage."""
@@ -766,6 +773,27 @@ class SettingsManager(QObject):
                     self._settings.setValue('widgets', {})
                 repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
             elif isinstance(widgets, Mapping):
+                vis_section = widgets.get('spotify_visualizer')  # type: ignore[index]
+                if isinstance(vis_section, Mapping):
+                    normalized_vis = normalize_visualizer_section_mapping(
+                        vis_section,
+                        apply_preset_overlay=False,
+                    )
+                    if dict(vis_section) != normalized_vis:
+                        for key, old_value in dict(vis_section).items():
+                            if not str(key).endswith('manual_floor'):
+                                continue
+                            new_value = normalized_vis.get(key)
+                            if old_value != new_value:
+                                repairs[f'widgets.spotify_visualizer.{key}'] = (
+                                    f"Manual floor normalized to {float(new_value):.2f} "
+                                    f"(range {self._MANUAL_FLOOR_MIN:.2f}-{self._MANUAL_FLOOR_MAX:.2f})"
+                                )
+                        widgets_copy = dict(widgets)
+                        widgets_copy['spotify_visualizer'] = normalized_vis
+                        self._settings.setValue('widgets', widgets_copy)
+                        widgets = widgets_copy
+                        repairs['widgets.spotify_visualizer'] = "Normalized visualizer section"
                 clamp_repairs = self._clamp_visualizer_manual_floors(widgets)
                 if clamp_repairs:
                     repairs.update(clamp_repairs)
@@ -961,6 +989,12 @@ class SettingsManager(QObject):
             widgets = self._settings.value('widgets', {})
             if isinstance(widgets, Mapping):
                 widgets_dict = dict(widgets)
+                vis_defaults = widgets_dict.get('spotify_visualizer')
+                if isinstance(vis_defaults, Mapping):
+                    widgets_dict['spotify_visualizer'] = normalize_visualizer_section_mapping(
+                        vis_defaults,
+                        apply_preset_overlay=False,
+                    )
                 weather = widgets_dict.get('weather', {})
                 if isinstance(weather, Mapping):
                     weather_dict = dict(weather)

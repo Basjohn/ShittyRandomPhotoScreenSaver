@@ -158,7 +158,7 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 | `widgets.spotify_visualizer.sine_line2_shift` | `0.0` | Same as above for line 2 (visible when multi-line enabled). |
 | `widgets.spotify_visualizer.sine_line3_shift` | `0.0` | Same as above for line 3. |
 | `widgets.spotify_visualizer.adaptive_sensitivity` | `True` | Stored as a bool but exposed in the UI as **Suggest Sensitivity** — when enabled the manual slider stays hidden and we apply the curated auto multiplier; uncheck to reveal the slider and use the manual `sensitivity` value |
-| `widgets.spotify_visualizer.preset_<mode>` | `0` | One key per mode (e.g. `preset_spectrum`, `preset_bubble`). Stores the curated slot index used by `VisualizerPresetSlider`; values clamp between 0 and the Custom slot. Preset overlays are applied at model-build time, but **Custom** always reflects the user’s raw settings. |
+| `widgets.spotify_visualizer.preset_<mode>` | `0` | One key per mode (e.g. `preset_spectrum`, `preset_bubble`). Stores the curated slot index used by `VisualizerPresetSlider`; values clamp between 0 and the Custom slot. Preset overlays are applied at model-build time, but **Custom** always reflects the user’s raw settings. Missing-key fallback must resolve through `core/settings/visualizer_presets.py` against the preset registry's first non-custom slot for that mode, never through shipped settings defaults or ad-hoc literal fallback in UI/runtime code. |
 | `widgets.spotify_visualizer.dynamic_floor` | `True` | Global legacy fallback. Actual floor/toggle defaults live per-mode (see below). |
 | `widgets.spotify_visualizer.manual_floor` | `0.12` | Global fallback; UI + runtime clamp to **0.12–1.0** and immediately reseed the dynamic accumulator. |
 | `widgets.spotify_visualizer.ghosting_enabled` | `True` | |
@@ -167,6 +167,20 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 | `widgets.spotify_visualizer.use_raw_energy` | `False` | Per-mode toggle: when True, uses pre-AGC energy bands (full dynamic range) instead of post-AGC normalized energy. |
 
 **Per-mode technical schema (Mar 2026):** Every mode owns an explicit set of technical keys (`<mode>_bar_count`, `<mode>_dynamic_floor`, `<mode>_manual_floor`, `<mode>_adaptive_sensitivity`, `<mode>_sensitivity`, `<mode>_audio_block_size`, `<mode>_dynamic_range_enabled`, `<mode>_energy_boost`, `<mode>_agc_strength`, `<mode>_use_raw_energy`). Defaults for Spectrum/Bubble/Blob/Sine/Osc are defined in `defaults.py` under `widgets.spotify_visualizer` and seed `<mode>_manual_floor = 0.12`. `technical_controls.py` now uses one shared metadata registry to build/load/save these controls, while special transient-mix keys such as `spectrum_lane_transient_mix` and `bubble_transient_mix_vocal` stay as direct keys rather than doubled prefixed variants. The global `bar_count`/`dynamic_floor` fallbacks remain for legacy SST snapshots but should not be edited going forward.
+
+**Visualizer settings ownership (Mar 2026):**
+- Mode identity, display labels, preset keys, and preset-slider ownership come from `core/settings/visualizer_mode_registry.py`.
+- Sparse preset-index fallback/lookup comes from `core/settings/visualizer_preset_indices.py`.
+- Shared sparse-mapping/per-mode fallback resolution comes from `core/settings/visualizer_settings_contract.py`.
+- Canonical `widgets.spotify_visualizer` normalization for reset/defaults/SST/preset payloads comes from `core/settings/visualizer_settings_snapshot.py`.
+- WidgetsTab mode selection plus per-mode preset/rainbow persistence flow through `ui/tabs/media/visualizer_mode_binding.py`.
+- Mode-owned load/save translation should live in dedicated adapters, not in `ui/tabs/widgets_tab_media.py`. The current extracted adapters are:
+  - `ui/tabs/media/spectrum_settings_binding.py`
+  - `ui/tabs/media/blob_settings_binding.py`
+  - `ui/tabs/media/bubble_settings_binding.py`
+  - `ui/tabs/media/oscilloscope_settings_binding.py`
+  - `ui/tabs/media/sine_wave_settings_binding.py`
+- When adding or changing a visualizer setting, update the owning mode adapter if the setting is mode-specific instead of expanding the central media-tab coordinator.
 
 **AGC per-mode controls (Mar 2026):** `energy_boost`, `agc_strength`, and `use_raw_energy` are stored per-mode (e.g. `spectrum_energy_boost`, `bubble_agc_strength`). The model resolves these through `SpotifyVisualizerSettings.resolve_*()` methods with fallback to global keys. All three are included in `GLOBAL_ALLOWED_KEYS` for preset persistence.
 
@@ -371,6 +385,17 @@ Every new visualizer setting must be added to **all 8 layers** or it silently us
 8. GL overlay `set_state()` (`widgets/spotify_bars_gl_overlay.py`) — per-mode uniform upload via `renderers/<mode>.py`
 
 Plus UI creation, UI save, and shader uniform if applicable.
+
+### Visualizer UI Persistence Boundary
+
+- `ui/tabs/widgets_tab_media.py` should act as the coordinator, not the owner of mode semantics.
+- `core/settings/visualizer_settings_contract.py` should own shared sparse-mapping/per-mode fallback rules used by `SpotifyVisualizerSettings` loaders.
+- `core/settings/visualizer_preset_indices.py` should own sparse preset-index fallback/lookup rules.
+- `core/settings/visualizer_settings_snapshot.py` should own persisted/SST/preset-payload normalization of `widgets.spotify_visualizer`.
+- `ui/tabs/media/visualizer_mode_binding.py` owns mode selection, preset index persistence, and rainbow-state persistence.
+- `ui/tabs/media/*_settings_binding.py` owns mode-specific UI load/save translation.
+- `ui/tabs/media/technical_controls.py` owns per-mode technical control metadata and combo coercion.
+- If a change requires adding fresh mode-specific fallback logic to `widgets_tab_media.py`, treat that as a structural smell and look for the owning adapter/contract layer first.
 
 ### Widget Factory Default Drift (Mar 2026 Audit)
 

@@ -1311,6 +1311,110 @@ class TestVisualizerModeRegistryContract:
             assert resolved[key] == 0
 
 
+class TestVisualizerSettingsContract:
+    def test_resolve_visualizer_baselines_reads_shared_legacy_defaults_once(self):
+        from core.settings.visualizer_settings_contract import resolve_visualizer_baselines
+
+        data = {
+            "bar_count": 41,
+            "adaptive_sensitivity": False,
+            "sensitivity": 1.7,
+            "dynamic_floor": False,
+            "manual_floor": 0.18,
+            "dynamic_range_enabled": True,
+            "energy_boost": 0.92,
+            "agc_strength": 0.61,
+            "use_raw_energy": True,
+            "input_gain": 1.3,
+        }
+
+        baselines = resolve_visualizer_baselines(lambda key, default=None: data.get(key, default))
+
+        assert baselines == {
+            "bar_count": 41,
+            "adaptive_sensitivity": False,
+            "sensitivity": pytest.approx(1.7),
+            "dynamic_floor": False,
+            "manual_floor": pytest.approx(0.18),
+            "dynamic_range_enabled": True,
+            "energy_boost": pytest.approx(0.92),
+            "agc_strength": pytest.approx(0.61),
+            "use_raw_energy": True,
+            "input_gain": pytest.approx(1.3),
+        }
+
+    def test_build_visualizer_mode_kwargs_applies_shared_sparse_fallback_contract(self):
+        from core.settings.visualizer_settings_contract import build_visualizer_mode_kwargs
+
+        baselines = {
+            "bar_count": 41,
+            "adaptive_sensitivity": False,
+            "sensitivity": 1.7,
+            "dynamic_floor": False,
+            "manual_floor": 0.18,
+            "dynamic_range_enabled": True,
+            "energy_boost": 0.92,
+            "agc_strength": 0.61,
+            "use_raw_energy": True,
+            "input_gain": 1.3,
+        }
+        per_mode = {
+            ("blob", "bar_count"): 24,
+            ("spectrum", "lane_transient_mix"): 0.72,
+            ("sine_wave", "rainbow_enabled"): True,
+        }
+
+        kwargs = build_visualizer_mode_kwargs(
+            lambda mode, key, fallback: per_mode.get((mode, key), fallback),
+            baselines,
+        )
+
+        assert kwargs["blob_bar_count"] == 24
+        assert kwargs["bubble_bar_count"] == 41
+        assert kwargs["blob_manual_floor"] == pytest.approx(0.18)
+        assert kwargs["bubble_use_raw_energy"] is True
+        assert kwargs["spectrum_lane_transient_mix"] == pytest.approx(0.72)
+        assert kwargs["bubble_transient_mix_bass"] == pytest.approx(0.75)
+        assert kwargs["oscilloscope_audio_block_size"] == 0
+
+
+class TestVisualizerSettingsSnapshotNormalization:
+    def test_section_normalizer_preserves_per_mode_rainbow_alias_inputs(self):
+        from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+
+        normalized = normalize_visualizer_section_mapping(
+            {
+                "mode": "sine_wave",
+                "sine_rainbow_enabled": True,
+                "sine_rainbow_speed": 0.41,
+            },
+            apply_preset_overlay=False,
+        )
+
+        assert normalized["sine_wave_rainbow_enabled"] is True
+        assert normalized["sine_wave_rainbow_speed"] == pytest.approx(0.41)
+        assert normalized["bubble_rainbow_enabled"] is False
+
+    def test_mode_payload_normalizer_promotes_shared_technical_keys_to_mode_keys(self):
+        from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
+
+        normalized = normalize_visualizer_mode_payload(
+            "bubble",
+            {
+                "mode": "bubble",
+                "manual_floor": 0.22,
+                "input_gain": 0.75,
+                "bubble_growth": 3.1,
+            },
+        )
+
+        assert "manual_floor" not in normalized
+        assert "input_gain" not in normalized
+        assert normalized["bubble_manual_floor"] == pytest.approx(0.22)
+        assert normalized["bubble_input_gain"] == pytest.approx(0.75)
+        assert normalized["bubble_growth"] == pytest.approx(3.1)
+
+
 class TestVisualizerModeBinding:
     def test_populate_visualizer_mode_combo_uses_registry_order(self):
         from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
@@ -1765,6 +1869,916 @@ class TestBlobSettingsBinding:
         assert payload["blob_outline_color"] == [100, 110, 120, 230]
         assert payload["blob_stage_bias"] == pytest.approx(-0.14)
         assert payload["blob_growth"] == pytest.approx(2.75)
+
+
+class TestOscilloscopeSettingsBinding:
+    def test_load_oscilloscope_mode_settings_updates_osc_owned_controls(self):
+        from ui.tabs.media.oscilloscope_settings_binding import load_oscilloscope_mode_settings
+
+        class _Check:
+            def __init__(self):
+                self.checked = None
+
+            def setChecked(self, checked):
+                self.checked = checked
+
+        class _Slider:
+            def __init__(self):
+                self.value = None
+
+            def setValue(self, value):
+                self.value = value
+
+        class _Label:
+            def __init__(self):
+                self.text = None
+
+            def setText(self, text):
+                self.text = text
+
+        class _Tab:
+            def __init__(self):
+                self.osc_glow_enabled = _Check()
+                self.osc_glow_intensity = _Slider()
+                self.osc_glow_intensity_label = _Label()
+                self.osc_glow_reactivity = _Slider()
+                self.osc_glow_reactivity_label = _Label()
+                self.osc_reactive_glow = _Check()
+                self.osc_line_amplitude = _Slider()
+                self.osc_line_amplitude_label = _Label()
+                self.osc_smoothing = _Slider()
+                self.osc_smoothing_label = _Label()
+                self.osc_growth = _Slider()
+                self.osc_growth_label = _Label()
+                self.osc_speed = _Slider()
+                self.osc_speed_label = _Label()
+                self.osc_line_dim = _Check()
+                self.osc_line_offset_bias = _Slider()
+                self.osc_line_offset_bias_label = _Label()
+                self.osc_vertical_shift = _Slider()
+                self.osc_vertical_shift_label = _Label()
+                self.osc_multi_line = _Check()
+                self.osc_line_count = _Slider()
+                self.osc_line_count_label = _Label()
+                self.osc_ghost_enabled = _Check()
+                self.osc_ghost_intensity = _Slider()
+                self.osc_ghost_intensity_label = _Label()
+                self.osc_ghost_line2_enabled = _Check()
+                self.osc_ghost_line3_enabled = _Check()
+
+            def _config_bool(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_float(self, _section, config, key, default):
+                return config.get(key, default)
+
+        tab = _Tab()
+        synced = []
+        visibility_calls = []
+
+        def _load_extra(tab_obj, config):
+            tab_obj._osc_line2_color = QColor(*config["osc_line2_color"])
+            tab_obj._osc_line2_glow_color = QColor(*config["osc_line2_glow_color"])
+            tab_obj._osc_line3_color = QColor(*config["osc_line3_color"])
+            tab_obj._osc_line3_glow_color = QColor(*config["osc_line3_glow_color"])
+
+        load_oscilloscope_mode_settings(
+            tab,
+            {
+                "osc_glow_enabled": False,
+                "osc_glow_intensity": 0.62,
+                "osc_glow_reactivity": 1.44,
+                "osc_reactive_glow": False,
+                "osc_line_amplitude": 4.7,
+                "osc_smoothing": 0.58,
+                "osc_growth": 2.6,
+                "osc_speed": 0.72,
+                "osc_line_dim": True,
+                "osc_line_offset_bias": 0.23,
+                "osc_vertical_shift": 32,
+                "osc_line_color": [1, 2, 3, 4],
+                "osc_glow_color": [5, 6, 7, 8],
+                "osc_line_count": 3,
+                "osc_line2_color": [9, 10, 11, 12],
+                "osc_line2_glow_color": [13, 14, 15, 16],
+                "osc_line3_color": [17, 18, 19, 20],
+                "osc_line3_glow_color": [21, 22, 23, 24],
+                "osc_ghosting_enabled": True,
+                "osc_ghost_intensity": 0.41,
+                "osc_ghost_line2_enabled": False,
+                "osc_ghost_line3_enabled": True,
+            },
+            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
+            load_extra_color_bindings=_load_extra,
+            update_multi_line_visibility=lambda tab_obj: visibility_calls.append(tab_obj),
+        )
+
+        assert tab.osc_glow_enabled.checked is False
+        assert tab.osc_glow_intensity.value == 62
+        assert tab.osc_glow_intensity_label.text == "62%"
+        assert tab.osc_glow_reactivity.value == 144
+        assert tab.osc_line_amplitude.value == 47
+        assert tab.osc_line_amplitude_label.text == "4.7x"
+        assert tab.osc_growth.value == 260
+        assert tab.osc_speed.value == 72
+        assert tab.osc_line_dim.checked is True
+        assert tab.osc_line_offset_bias.value == 23
+        assert tab.osc_vertical_shift.value == 32
+        assert tab.osc_multi_line.checked is True
+        assert tab.osc_line_count.value == 3
+        assert tab.osc_ghost_enabled.checked is True
+        assert tab.osc_ghost_intensity.value == 41
+        assert tab.osc_ghost_line2_enabled.checked is False
+        assert tab.osc_ghost_line3_enabled.checked is True
+        assert (tab._osc_line_color.red(), tab._osc_line_color.green(), tab._osc_line_color.blue(), tab._osc_line_color.alpha()) == (1, 2, 3, 4)
+        assert (tab._osc_line3_glow_color.red(), tab._osc_line3_glow_color.green(), tab._osc_line3_glow_color.blue(), tab._osc_line3_glow_color.alpha()) == (21, 22, 23, 24)
+        assert synced == [
+            ("osc_line_color_btn", "_osc_line_color"),
+            ("osc_glow_color_btn", "_osc_glow_color"),
+            ("osc_line2_color_btn", "_osc_line2_color"),
+            ("osc_line2_glow_btn", "_osc_line2_glow_color"),
+            ("osc_line3_color_btn", "_osc_line3_color"),
+            ("osc_line3_glow_btn", "_osc_line3_glow_color"),
+        ]
+        assert visibility_calls == [tab]
+
+    def test_collect_oscilloscope_mode_settings_serializes_osc_owned_state(self):
+        from ui.tabs.media.oscilloscope_settings_binding import collect_oscilloscope_mode_settings
+
+        class _Check:
+            def __init__(self, checked):
+                self._checked = checked
+
+            def isChecked(self):
+                return self._checked
+
+        class _Slider:
+            def __init__(self, value):
+                self._value = value
+
+            def value(self):
+                return self._value
+
+        class _Tab:
+            osc_glow_enabled = _Check(True)
+            osc_glow_intensity = _Slider(66)
+            osc_glow_reactivity = _Slider(135)
+            osc_reactive_glow = _Check(False)
+            osc_line_amplitude = _Slider(42)
+            osc_smoothing = _Slider(77)
+            osc_growth = _Slider(245)
+            osc_speed = _Slider(81)
+            osc_line_dim = _Check(True)
+            osc_line_offset_bias = _Slider(18)
+            osc_vertical_shift = _Slider(27)
+            osc_multi_line = _Check(True)
+            osc_line_count = _Slider(3)
+            osc_ghost_enabled = _Check(True)
+            osc_ghost_intensity = _Slider(52)
+            osc_ghost_line2_enabled = _Check(False)
+            osc_ghost_line3_enabled = _Check(True)
+            _osc_line_color = QColor(1, 2, 3, 4)
+            _osc_glow_color = QColor(5, 6, 7, 8)
+
+        payload = collect_oscilloscope_mode_settings(
+            _Tab(),
+            collect_extra_color_bindings=lambda _tab: {
+                "osc_line2_color": [9, 10, 11, 12],
+                "osc_line2_glow_color": [13, 14, 15, 16],
+                "osc_line3_color": [17, 18, 19, 20],
+                "osc_line3_glow_color": [21, 22, 23, 24],
+            },
+        )
+
+        assert payload["osc_glow_enabled"] is True
+        assert payload["osc_glow_intensity"] == pytest.approx(0.66)
+        assert payload["osc_glow_reactivity"] == pytest.approx(1.35)
+        assert payload["osc_reactive_glow"] is False
+        assert payload["osc_line_amplitude"] == pytest.approx(4.2)
+        assert payload["osc_smoothing"] == pytest.approx(0.77)
+        assert payload["osc_line_color"] == [1, 2, 3, 4]
+        assert payload["osc_glow_color"] == [5, 6, 7, 8]
+        assert payload["osc_line_count"] == 3
+        assert payload["osc_growth"] == pytest.approx(2.45)
+        assert payload["osc_speed"] == pytest.approx(0.81)
+        assert payload["osc_line_dim"] is True
+        assert payload["osc_line_offset_bias"] == pytest.approx(0.18)
+        assert payload["osc_vertical_shift"] == 27
+        assert payload["osc_ghosting_enabled"] is True
+        assert payload["osc_ghost_intensity"] == pytest.approx(0.52)
+        assert payload["osc_ghost_line2_enabled"] is False
+        assert payload["osc_ghost_line3_enabled"] is True
+        assert payload["osc_line3_glow_color"] == [21, 22, 23, 24]
+
+
+class TestSineWaveSettingsBinding:
+    def test_load_sine_wave_mode_settings_updates_sine_owned_controls(self):
+        from ui.tabs.media.sine_wave_settings_binding import load_sine_wave_mode_settings
+
+        class _Check:
+            def __init__(self):
+                self.checked = None
+
+            def setChecked(self, checked):
+                self.checked = checked
+
+        class _Slider:
+            def __init__(self):
+                self.value = None
+
+            def setValue(self, value):
+                self.value = value
+
+        class _Label:
+            def __init__(self):
+                self.text = None
+
+            def setText(self, text):
+                self.text = text
+
+        class _Combo:
+            def __init__(self):
+                self.index = None
+
+            def setCurrentIndex(self, index):
+                self.index = index
+
+        class _Tab:
+            def __init__(self):
+                self.sine_glow_enabled = _Check()
+                self.sine_glow_intensity = _Slider()
+                self.sine_glow_intensity_label = _Label()
+                self.sine_glow_reactivity = _Slider()
+                self.sine_glow_reactivity_label = _Label()
+                self.sine_reactive_glow = _Check()
+                self.sine_sensitivity = _Slider()
+                self.sine_sensitivity_label = _Label()
+                self.sine_speed = _Slider()
+                self.sine_speed_label = _Label()
+                self.sine_wave_effect = _Slider()
+                self.sine_wave_effect_label = _Label()
+                self.sine_micro_wobble = _Slider()
+                self.sine_micro_wobble_label = _Label()
+                self.sine_crawl_slider = _Slider()
+                self.sine_crawl_label = _Label()
+                self.sine_width_reaction = _Slider()
+                self.sine_width_reaction_label = _Label()
+                self.sine_density = _Slider()
+                self.sine_density_label = _Label()
+                self.sine_heartbeat = _Slider()
+                self.sine_heartbeat_label = _Label()
+                self.sine_displacement = _Slider()
+                self.sine_displacement_label = _Label()
+                self.sine_vertical_shift = _Slider()
+                self.sine_vertical_shift_label = _Label()
+                self.sine_line1_shift = _Slider()
+                self.sine_line1_shift_label = _Label()
+                self.sine_travel = _Combo()
+                self.sine_travel_line2 = _Combo()
+                self.sine_travel_line3 = _Combo()
+                self.sine_multi_line = _Check()
+                self.sine_line_count_slider = _Slider()
+                self.sine_line_count_label = _Label()
+                self.sine_line2_shift = _Slider()
+                self.sine_line2_shift_label = _Label()
+                self.sine_line3_shift = _Slider()
+                self.sine_line3_shift_label = _Label()
+                self.sine_line_dim = _Check()
+                self.sine_line_offset_bias = _Slider()
+                self.sine_line_offset_bias_label = _Label()
+                self.sine_card_adaptation = _Slider()
+                self.sine_card_adaptation_label = _Label()
+                self.sine_wave_growth = _Slider()
+                self.sine_wave_growth_label = _Label()
+                self.sine_ghost_enabled = _Check()
+                self.sine_ghost_opacity = _Slider()
+                self.sine_ghost_opacity_label = _Label()
+                self.sine_ghost_decay_slider = _Slider()
+                self.sine_ghost_decay_label = _Label()
+                self.sine_ghost_line2_enabled = _Check()
+                self.sine_ghost_line3_enabled = _Check()
+
+            def _config_bool(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_float(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _default_float(self, _section, key, default):
+                return default
+
+        tab = _Tab()
+        synced = []
+        visibility_calls = []
+
+        load_sine_wave_mode_settings(
+            tab,
+            {
+                "sine_glow_enabled": False,
+                "sine_glow_intensity": 0.61,
+                "sine_glow_reactivity": 1.32,
+                "sine_glow_color": [1, 2, 3, 4],
+                "sine_line_color": [5, 6, 7, 8],
+                "sine_reactive_glow": False,
+                "sine_sensitivity": 1.8,
+                "sine_speed": 0.73,
+                "sine_wave_effect": 0.22,
+                "sine_micro_wobble": 0.16,
+                "sine_crawl_amount": 0.44,
+                "sine_width_reaction": 0.31,
+                "sine_density": 1.25,
+                "sine_heartbeat": 0.53,
+                "sine_displacement": 0.19,
+                "sine_vertical_shift": 14,
+                "sine_line1_shift": 0.25,
+                "sine_wave_travel": 2,
+                "sine_travel_line2": 1,
+                "sine_travel_line3": 2,
+                "sine_line_count": 3,
+                "sine_line2_color": [9, 10, 11, 12],
+                "sine_line2_glow_color": [13, 14, 15, 16],
+                "sine_line3_color": [17, 18, 19, 20],
+                "sine_line3_glow_color": [21, 22, 23, 24],
+                "sine_line2_shift": -0.34,
+                "sine_line3_shift": 0.42,
+                "sine_line_dim": True,
+                "sine_line_offset_bias": 0.29,
+                "sine_card_adaptation": 0.41,
+                "sine_wave_growth": 2.9,
+                "sine_ghosting_enabled": False,
+                "sine_ghost_alpha": 0.36,
+                "sine_ghost_decay": 0.47,
+                "sine_ghost_line2_enabled": True,
+                "sine_ghost_line3_enabled": False,
+            },
+            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
+            update_multi_line_visibility=lambda tab_obj: visibility_calls.append(tab_obj),
+        )
+
+        assert tab.sine_glow_enabled.checked is False
+        assert tab.sine_glow_intensity.value == 61
+        assert tab.sine_glow_reactivity.value == 132
+        assert tab.sine_reactive_glow.checked is False
+        assert tab.sine_sensitivity.value == 180
+        assert tab.sine_sensitivity_label.text == "1.80x"
+        assert tab.sine_speed.value == 73
+        assert tab.sine_wave_effect.value == 22
+        assert tab.sine_micro_wobble.value == 16
+        assert tab.sine_crawl_slider.value == 44
+        assert tab.sine_width_reaction.value == 31
+        assert tab.sine_density.value == 125
+        assert tab.sine_density_label.text == "1.25×"
+        assert tab.sine_heartbeat.value == 53
+        assert tab.sine_displacement.value == 19
+        assert tab.sine_vertical_shift.value == 14
+        assert tab.sine_line1_shift.value == 25
+        assert tab.sine_travel.index == 2
+        assert tab.sine_travel_line2.index == 1
+        assert tab.sine_travel_line3.index == 2
+        assert tab.sine_multi_line.checked is True
+        assert tab.sine_line_count_slider.value == 3
+        assert tab.sine_line2_shift.value == -34
+        assert tab.sine_line3_shift.value == 42
+        assert tab.sine_line_dim.checked is True
+        assert tab.sine_line_offset_bias.value == 28
+        assert tab.sine_card_adaptation.value == 41
+        assert tab.sine_wave_growth.value == 290
+        assert tab.sine_ghost_enabled.checked is False
+        assert tab.sine_ghost_opacity.value == 36
+        assert tab.sine_ghost_decay_slider.value == 47
+        assert tab.sine_ghost_line2_enabled.checked is True
+        assert tab.sine_ghost_line3_enabled.checked is False
+        assert (tab._sine_glow_color.red(), tab._sine_glow_color.green(), tab._sine_glow_color.blue(), tab._sine_glow_color.alpha()) == (1, 2, 3, 4)
+        assert (tab._sine_line3_glow_color.red(), tab._sine_line3_glow_color.green(), tab._sine_line3_glow_color.blue(), tab._sine_line3_glow_color.alpha()) == (21, 22, 23, 24)
+        assert synced == [
+            ("sine_glow_color_btn", "_sine_glow_color"),
+            ("sine_line_color_btn", "_sine_line_color"),
+            ("sine_line2_color_btn", "_sine_line2_color"),
+            ("sine_line2_glow_btn", "_sine_line2_glow_color"),
+            ("sine_line3_color_btn", "_sine_line3_color"),
+            ("sine_line3_glow_btn", "_sine_line3_glow_color"),
+        ]
+        assert visibility_calls == [tab]
+
+    def test_collect_sine_wave_mode_settings_serializes_sine_owned_state(self):
+        from ui.tabs.media.sine_wave_settings_binding import collect_sine_wave_mode_settings
+
+        class _Check:
+            def __init__(self, checked):
+                self._checked = checked
+
+            def isChecked(self):
+                return self._checked
+
+        class _Slider:
+            def __init__(self, value):
+                self._value = value
+
+            def value(self):
+                return self._value
+
+        class _Combo:
+            def __init__(self, index):
+                self._index = index
+
+            def currentIndex(self):
+                return self._index
+
+        class _Tab:
+            sine_glow_enabled = _Check(True)
+            sine_glow_intensity = _Slider(64)
+            sine_glow_reactivity = _Slider(145)
+            _sine_glow_color = QColor(1, 2, 3, 4)
+            _sine_line_color = QColor(5, 6, 7, 8)
+            sine_reactive_glow = _Check(False)
+            sine_sensitivity = _Slider(175)
+            sine_speed = _Slider(82)
+            sine_wave_effect = _Slider(17)
+            sine_crawl_slider = _Slider(46)
+            sine_micro_wobble = _Slider(23)
+            sine_width_reaction = _Slider(31)
+            sine_density = _Slider(135)
+            sine_heartbeat = _Slider(28)
+            sine_displacement = _Slider(19)
+            sine_vertical_shift = _Slider(22)
+            sine_line1_shift = _Slider(-14)
+            sine_travel = _Combo(2)
+            sine_travel_line2 = _Combo(1)
+            sine_travel_line3 = _Combo(0)
+            sine_multi_line = _Check(True)
+            sine_line_count_slider = _Slider(3)
+            sine_line_dim = _Check(True)
+            sine_line_offset_bias = _Slider(26)
+            sine_card_adaptation = _Slider(37)
+            sine_wave_growth = _Slider(305)
+            _sine_line2_color = QColor(9, 10, 11, 12)
+            _sine_line2_glow_color = QColor(13, 14, 15, 16)
+            _sine_line3_color = QColor(17, 18, 19, 20)
+            _sine_line3_glow_color = QColor(21, 22, 23, 24)
+            sine_line2_shift = _Slider(18)
+            sine_line3_shift = _Slider(-27)
+            sine_ghost_enabled = _Check(False)
+            sine_ghost_opacity = _Slider(42)
+            sine_ghost_decay_slider = _Slider(39)
+            sine_ghost_line2_enabled = _Check(True)
+            sine_ghost_line3_enabled = _Check(False)
+
+        payload = collect_sine_wave_mode_settings(_Tab())
+
+        assert payload["sine_glow_enabled"] is True
+        assert payload["sine_glow_intensity"] == pytest.approx(0.64)
+        assert payload["sine_glow_reactivity"] == pytest.approx(1.45)
+        assert payload["sine_glow_color"] == [1, 2, 3, 4]
+        assert payload["sine_line_color"] == [5, 6, 7, 8]
+        assert payload["sine_reactive_glow"] is False
+        assert payload["sine_sensitivity"] == pytest.approx(1.75)
+        assert payload["sine_speed"] == pytest.approx(0.82)
+        assert payload["sine_wave_effect"] == pytest.approx(0.17)
+        assert payload["sine_crawl_amount"] == pytest.approx(0.46)
+        assert payload["sine_micro_wobble"] == pytest.approx(0.23)
+        assert payload["sine_width_reaction"] == pytest.approx(0.31)
+        assert payload["sine_density"] == pytest.approx(1.35)
+        assert payload["sine_heartbeat"] == pytest.approx(0.28)
+        assert payload["sine_displacement"] == pytest.approx(0.19)
+        assert payload["sine_vertical_shift"] == 22
+        assert payload["sine_line1_shift"] == pytest.approx(-0.14)
+        assert payload["sine_wave_travel"] == 2
+        assert payload["sine_travel_line2"] == 1
+        assert payload["sine_travel_line3"] == 0
+        assert payload["sine_line_count"] == 3
+        assert payload["sine_line_dim"] is True
+        assert payload["sine_line_offset_bias"] == pytest.approx(0.26)
+        assert payload["sine_card_adaptation"] == pytest.approx(0.37)
+        assert payload["sine_wave_growth"] == pytest.approx(3.05)
+        assert payload["sine_line2_color"] == [9, 10, 11, 12]
+        assert payload["sine_line3_glow_color"] == [21, 22, 23, 24]
+        assert payload["sine_line2_shift"] == pytest.approx(0.18)
+        assert payload["sine_line3_shift"] == pytest.approx(-0.27)
+        assert payload["sine_ghosting_enabled"] is False
+        assert payload["sine_ghost_alpha"] == pytest.approx(0.42)
+        assert payload["sine_ghost_decay"] == pytest.approx(0.39)
+        assert payload["sine_ghost_line2_enabled"] is True
+        assert payload["sine_ghost_line3_enabled"] is False
+
+
+class TestSpectrumSettingsBinding:
+    def test_load_spectrum_mode_settings_updates_spectrum_owned_controls(self):
+        from ui.tabs.media.spectrum_settings_binding import load_spectrum_mode_settings
+
+        class _Check:
+            def __init__(self):
+                self.checked = None
+
+            def setChecked(self, checked):
+                self.checked = checked
+
+        class _Slider:
+            def __init__(self):
+                self.value = None
+
+            def setValue(self, value):
+                self.value = value
+
+        class _Label:
+            def __init__(self):
+                self.text = None
+
+            def setText(self, text):
+                self.text = text
+
+        class _ShapeEditor:
+            def __init__(self):
+                self.nodes = None
+                self.mirrored = None
+                self.notches = []
+
+            def set_nodes(self, nodes):
+                self.nodes = nodes
+
+            def set_mirrored(self, mirrored):
+                self.mirrored = mirrored
+
+            def set_notch_positions(self, notches, mirrored):
+                self.notches.append((mirrored, notches))
+
+        class _Tab:
+            def __init__(self):
+                self.spectrum_growth = _Slider()
+                self.spectrum_growth_label = _Label()
+                self.spectrum_single_piece = _Check()
+                self.spectrum_rainbow_per_bar = _Check()
+                self.spectrum_bass_emphasis = _Slider()
+                self.spectrum_bass_emphasis_label = _Label()
+                self.spectrum_vocal_position = _Slider()
+                self.spectrum_mid_suppression = _Slider()
+                self.spectrum_mid_suppression_label = _Label()
+                self.spectrum_wave_amplitude = _Slider()
+                self.spectrum_wave_amplitude_label = _Label()
+                self.spectrum_profile_floor = _Slider()
+                self.spectrum_profile_floor_label = _Label()
+                self.spectrum_drop_speed = _Slider()
+                self.spectrum_drop_speed_label = _Label()
+                self.spectrum_border_radius = _Slider()
+                self.spectrum_border_radius_label = _Label()
+                self.spectrum_glow_enabled = _Check()
+                self.spectrum_glow_intensity = _Slider()
+                self.spectrum_glow_intensity_label = _Label()
+                self.spectrum_mirrored = _Check()
+                self.spectrum_shape_editor = _ShapeEditor()
+                self.vis_ghost_enabled = _Check()
+                self.vis_ghost_opacity_slider = _Slider()
+                self.vis_ghost_opacity_label = _Label()
+                self.vis_ghost_decay_slider = _Slider()
+                self.vis_ghost_decay_label = _Label()
+
+            def _config_bool(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_float(self, _section, config, key, default):
+                return config.get(key, default)
+
+        tab = _Tab()
+        synced = []
+        ghost_visibility_calls = []
+
+        load_spectrum_mode_settings(
+            tab,
+            {
+                "spectrum_growth": 2.4,
+                "spectrum_single_piece": True,
+                "spectrum_rainbow_per_bar": True,
+                "spectrum_bass_emphasis": 0.63,
+                "spectrum_vocal_position": 0.46,
+                "spectrum_mid_suppression": 0.28,
+                "spectrum_wave_amplitude": 0.55,
+                "spectrum_profile_floor": 0.17,
+                "spectrum_drop_speed": 1.9,
+                "spectrum_border_radius": 7,
+                "spectrum_glow_enabled": True,
+                "spectrum_glow_intensity": 1.15,
+                "spectrum_glow_color": [1, 2, 3, 4],
+                "spectrum_mirrored": False,
+                "spectrum_shape_nodes": [[0.0, 0.22], [1.0, 0.88]],
+                "spectrum_notch_positions_mirrored": [[0.0, "Mid"], [1.0, "Bass"]],
+                "spectrum_notch_positions_linear": [[0.0, "Bass"], [1.0, "Treble"]],
+                "spectrum_ghosting_enabled": False,
+                "spectrum_ghost_alpha": 0.37,
+                "spectrum_ghost_decay": 0.42,
+            },
+            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
+            update_ghost_visibility=lambda tab_obj: ghost_visibility_calls.append(tab_obj),
+        )
+
+        assert tab.spectrum_growth.value == 240
+        assert tab.spectrum_growth_label.text == "2.4x"
+        assert tab.spectrum_single_piece.checked is True
+        assert tab.spectrum_rainbow_per_bar.checked is True
+        assert tab.spectrum_bass_emphasis.value == 63
+        assert tab.spectrum_vocal_position.value == 46
+        assert tab.spectrum_mid_suppression.value == 28
+        assert tab.spectrum_wave_amplitude.value == 55
+        assert tab.spectrum_profile_floor.value == 17
+        assert tab.spectrum_profile_floor_label.text == "0.17"
+        assert tab.spectrum_drop_speed.value == 190
+        assert tab.spectrum_border_radius.value == 7
+        assert tab.spectrum_glow_enabled.checked is True
+        assert tab.spectrum_glow_intensity.value == 114
+        assert tab.spectrum_mirrored.checked is False
+        assert tab.spectrum_shape_editor.nodes == [[0.0, 0.22], [1.0, 0.88]]
+        assert tab.spectrum_shape_editor.mirrored is False
+        assert tab.spectrum_shape_editor.notches == [
+            (True, [[0.0, "Mid"], [1.0, "Bass"]]),
+            (False, [[0.0, "Bass"], [1.0, "Treble"]]),
+        ]
+        assert tab.vis_ghost_enabled.checked is False
+        assert tab.vis_ghost_opacity_slider.value == 37
+        assert tab.vis_ghost_decay_slider.value == 42
+        assert (tab._spectrum_glow_color.red(), tab._spectrum_glow_color.green(), tab._spectrum_glow_color.blue(), tab._spectrum_glow_color.alpha()) == (1, 2, 3, 4)
+        assert synced == [("spectrum_glow_color_btn", "_spectrum_glow_color")]
+        assert ghost_visibility_calls == [tab]
+
+    def test_collect_spectrum_mode_settings_serializes_spectrum_owned_state(self):
+        from ui.tabs.media.spectrum_settings_binding import collect_spectrum_mode_settings
+
+        class _Check:
+            def __init__(self, checked):
+                self._checked = checked
+
+            def isChecked(self):
+                return self._checked
+
+        class _Slider:
+            def __init__(self, value):
+                self._value = value
+
+            def value(self):
+                return self._value
+
+        class _ShapeEditor:
+            def __init__(self):
+                self._notches_mirrored = [[0.0, "Mid"], [1.0, "Bass"]]
+                self._notches_linear = [[0.0, "Bass"], [1.0, "Treble"]]
+
+            def get_nodes(self):
+                return [[0.0, 0.21], [1.0, 0.79]]
+
+        class _Tab:
+            vis_ghost_enabled = _Check(True)
+            vis_ghost_opacity_slider = _Slider(43)
+            vis_ghost_decay_slider = _Slider(38)
+            spectrum_growth = _Slider(260)
+            spectrum_single_piece = _Check(True)
+            spectrum_rainbow_per_bar = _Check(False)
+            spectrum_border_radius = _Slider(6)
+            spectrum_glow_enabled = _Check(True)
+            spectrum_glow_intensity = _Slider(120)
+            _spectrum_glow_color = QColor(1, 2, 3, 4)
+            spectrum_mirrored = _Check(False)
+            spectrum_shape_editor = _ShapeEditor()
+            spectrum_bass_emphasis = _Slider(68)
+            spectrum_vocal_position = _Slider(47)
+            spectrum_mid_suppression = _Slider(29)
+            spectrum_wave_amplitude = _Slider(51)
+            spectrum_profile_floor = _Slider(18)
+            spectrum_drop_speed = _Slider(175)
+
+        payload = collect_spectrum_mode_settings(_Tab())
+
+        assert payload["spectrum_ghosting_enabled"] is True
+        assert payload["spectrum_ghost_alpha"] == pytest.approx(0.43)
+        assert payload["spectrum_ghost_decay"] == pytest.approx(0.38)
+        assert payload["spectrum_growth"] == pytest.approx(2.6)
+        assert payload["spectrum_single_piece"] is True
+        assert payload["spectrum_rainbow_per_bar"] is False
+        assert payload["spectrum_border_radius"] == pytest.approx(6.0)
+        assert payload["spectrum_glow_enabled"] is True
+        assert payload["spectrum_glow_intensity"] == pytest.approx(1.2)
+        assert payload["spectrum_glow_color"] == [1, 2, 3, 4]
+        assert payload["spectrum_mirrored"] is False
+        assert payload["spectrum_shape_nodes"] == [[0.0, 0.21], [1.0, 0.79]]
+        assert payload["spectrum_notch_positions_mirrored"] == [[0.0, "Mid"], [1.0, "Bass"]]
+        assert payload["spectrum_notch_positions_linear"] == [[0.0, "Bass"], [1.0, "Treble"]]
+        assert payload["spectrum_bass_emphasis"] == pytest.approx(0.68)
+        assert payload["spectrum_vocal_position"] == pytest.approx(0.47)
+        assert payload["spectrum_mid_suppression"] == pytest.approx(0.29)
+        assert payload["spectrum_wave_amplitude"] == pytest.approx(0.51)
+        assert payload["spectrum_profile_floor"] == pytest.approx(0.18)
+        assert payload["spectrum_drop_speed"] == pytest.approx(1.75)
+
+
+class TestBubbleSettingsBinding:
+    def test_load_bubble_mode_settings_updates_bubble_owned_controls(self):
+        from ui.tabs.media.bubble_settings_binding import load_bubble_mode_settings
+
+        class _Check:
+            def __init__(self):
+                self.checked = None
+
+            def setChecked(self, checked):
+                self.checked = checked
+
+        class _Slider:
+            def __init__(self):
+                self.value = None
+
+            def setValue(self, value):
+                self.value = value
+
+        class _Label:
+            def __init__(self):
+                self.text = None
+
+            def setText(self, text):
+                self.text = text
+
+        class _Combo:
+            def __init__(self, values):
+                self._values = list(values)
+                self._index = -1
+
+            def findData(self, value):
+                try:
+                    return self._values.index(value)
+                except ValueError:
+                    return -1
+
+            def setCurrentIndex(self, index):
+                self._index = index
+
+            def currentData(self):
+                if 0 <= self._index < len(self._values):
+                    return self._values[self._index]
+                return None
+
+        class _TextCombo:
+            def __init__(self):
+                self._index = -1
+
+            def setCurrentIndex(self, index):
+                self._index = index
+
+        class _Tab:
+            def __init__(self):
+                self.bubble_ghost_enabled = _Check()
+                self.bubble_ghost_opacity = _Slider()
+                self.bubble_ghost_opacity_label = _Label()
+                self.bubble_ghost_decay_slider = _Slider()
+                self.bubble_ghost_decay_label = _Label()
+                self.bubble_big_bass_pulse = _Slider()
+                self.bubble_big_bass_pulse_label = _Label()
+                self.bubble_stream_direction = _TextCombo()
+                self.bubble_drift_direction = _Combo(["none", "left", "right", "random"])
+                self.bubble_swirl_enabled = _Check()
+                self.bubble_swirl_direction = _Combo(["swirl_cw", "swirl_ccw"])
+                self.bubble_specular_direction = _Combo(["top_left", "bottom_right"])
+                self.bubble_gradient_direction = _Combo(["top", "bottom", "center_out"])
+                self.bubble_big_count = _Slider()
+                self.bubble_big_count_label = _Label()
+                self.bubble_small_count = _Slider()
+                self.bubble_small_count_label = _Label()
+                self.bubble_surface_reach = _Slider()
+                self.bubble_surface_reach_label = _Label()
+                self.bubble_growth = _Slider()
+                self.bubble_growth_label = _Label()
+                self.bubble_tail_opacity = _Slider()
+                self.bubble_tail_opacity_label = _Label()
+
+            def _config_bool(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_float(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_int(self, _section, config, key, default):
+                return config.get(key, default)
+
+            def _config_str(self, _section, config, key, default):
+                return config.get(key, default)
+
+        tab = _Tab()
+        synced = []
+        load_bubble_mode_settings(
+            tab,
+            {
+                "bubble_ghosting_enabled": True,
+                "bubble_ghost_alpha": 0.22,
+                "bubble_ghost_decay": 0.58,
+                "bubble_big_bass_pulse": 0.71,
+                "bubble_stream_direction": "left",
+                "bubble_drift_direction": "swirl_ccw",
+                "bubble_big_count": 12,
+                "bubble_surface_reach": 0.66,
+                "bubble_specular_direction": "bottom_right",
+                "bubble_gradient_direction": "center_out",
+                "bubble_growth": 3.2,
+                "bubble_tail_opacity": 0.17,
+                "bubble_outline_color": [5, 6, 7, 8],
+            },
+            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
+        )
+
+        assert tab.bubble_ghost_enabled.checked is True
+        assert tab.bubble_ghost_opacity.value == 22
+        assert tab.bubble_ghost_decay_slider.value == 58
+        assert tab.bubble_big_bass_pulse.value == 71
+        assert tab.bubble_stream_direction._index == 3
+        assert tab.bubble_swirl_enabled.checked is True
+        assert tab.bubble_swirl_direction.currentData() == "swirl_ccw"
+        assert tab.bubble_drift_direction.currentData() == "none"
+        assert tab.bubble_big_count.value == 12
+        assert tab.bubble_surface_reach.value == 66
+        assert tab.bubble_specular_direction.currentData() == "bottom_right"
+        assert tab.bubble_gradient_direction.currentData() == "center_out"
+        assert tab.bubble_growth.value == 320
+        assert tab.bubble_tail_opacity.value == 17
+        assert (tab._bubble_outline_color.red(), tab._bubble_outline_color.green(), tab._bubble_outline_color.blue(), tab._bubble_outline_color.alpha()) == (5, 6, 7, 8)
+        assert synced == [
+            ("bubble_outline_color_btn", "_bubble_outline_color"),
+            ("bubble_specular_color_btn", "_bubble_specular_color"),
+            ("bubble_gradient_light_btn", "_bubble_gradient_light"),
+            ("bubble_gradient_dark_btn", "_bubble_gradient_dark"),
+            ("bubble_pop_color_btn", "_bubble_pop_color"),
+        ]
+
+    def test_collect_bubble_mode_settings_serializes_bubble_owned_state(self):
+        from ui.tabs.media.bubble_settings_binding import collect_bubble_mode_settings
+
+        class _Check:
+            def __init__(self, checked):
+                self._checked = checked
+
+            def isChecked(self):
+                return self._checked
+
+        class _Slider:
+            def __init__(self, value):
+                self._value = value
+
+            def value(self):
+                return self._value
+
+        class _TextCombo:
+            def __init__(self, text):
+                self._text = text
+
+            def currentText(self):
+                return self._text
+
+        class _DataCombo:
+            def __init__(self, value):
+                self._value = value
+
+            def currentData(self):
+                return self._value
+
+        class _Tab:
+            bubble_ghost_enabled = _Check(True)
+            bubble_ghost_opacity = _Slider(33)
+            bubble_ghost_decay_slider = _Slider(48)
+            bubble_big_bass_pulse = _Slider(76)
+            bubble_small_freq_pulse = _Slider(44)
+            bubble_stream_direction = _TextCombo("Diagonal")
+            bubble_stream_constant_speed = _Slider(61)
+            bubble_stream_speed_cap = _Slider(240)
+            bubble_stream_reactivity = _Slider(83)
+            bubble_rotation_amount = _Slider(58)
+            bubble_drift_amount = _Slider(37)
+            bubble_drift_speed = _Slider(28)
+            bubble_drift_frequency = _Slider(49)
+            bubble_swirl_enabled = _Check(True)
+            bubble_swirl_direction = _DataCombo("swirl_ccw")
+            bubble_drift_direction = _DataCombo("random")
+            bubble_big_count = _Slider(9)
+            bubble_small_count = _Slider(31)
+            bubble_surface_reach = _Slider(72)
+            bubble_specular_direction = _DataCombo("bottom_right")
+            bubble_gradient_direction = _DataCombo("center_out")
+            bubble_big_size_max = _Slider(42)
+            bubble_small_size_max = _Slider(15)
+            bubble_big_specular_max_size = _Slider(260)
+            bubble_big_size_clamp = _Slider(420)
+            bubble_big_contraction_bias = _Slider(64)
+            bubble_growth = _Slider(310)
+            bubble_trail_strength = _Slider(18)
+            bubble_tail_opacity = _Slider(11)
+            _bubble_outline_color = QColor(1, 2, 3, 4)
+            _bubble_specular_color = QColor(5, 6, 7, 8)
+            _bubble_gradient_light = QColor(9, 10, 11, 12)
+            _bubble_gradient_dark = QColor(13, 14, 15, 16)
+            _bubble_pop_color = QColor(17, 18, 19, 20)
+
+        payload = collect_bubble_mode_settings(_Tab())
+
+        assert payload["bubble_ghosting_enabled"] is True
+        assert payload["bubble_ghost_alpha"] == pytest.approx(0.33)
+        assert payload["bubble_ghost_decay"] == pytest.approx(0.48)
+        assert payload["bubble_stream_direction"] == "diagonal"
+        assert payload["bubble_drift_direction"] == "swirl_ccw"
+        assert payload["bubble_gradient_direction"] == "center_out"
+        assert payload["bubble_outline_color"] == [1, 2, 3, 4]
+        assert payload["bubble_big_size_max"] == pytest.approx(0.042)
+        assert payload["bubble_growth"] == pytest.approx(3.10)
+        assert payload["bubble_tail_opacity"] == pytest.approx(0.11)
 
 
 # ==========================================================================

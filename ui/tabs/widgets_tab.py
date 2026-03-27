@@ -27,6 +27,10 @@ from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.defaults import get_default_settings
+from core.settings.visualizer_settings_snapshot import (
+    normalize_visualizer_mode_payload,
+    normalize_visualizer_section_mapping,
+)
 from core.settings.visualizer_presets import (
     GLOBAL_ALLOWED_KEYS,
     MODE_KEY_PREFIXES,
@@ -809,7 +813,12 @@ class WidgetsTab(QWidget):
 
     def _snapshot_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> None:
         live_config = self._build_current_spotify_visualizer_config(spotify_vis_config)
-        snapshot = self._extract_visualizer_snapshot(mode_key, live_config)
+        normalized_live = normalize_visualizer_section_mapping(
+            live_config,
+            apply_preset_overlay=False,
+        )
+        snapshot = self._extract_visualizer_snapshot(mode_key, normalized_live)
+        snapshot = normalize_visualizer_mode_payload(mode_key, snapshot)
         cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
         if not isinstance(cache, dict):
             cache = {}
@@ -860,7 +869,12 @@ class WidgetsTab(QWidget):
             return {}
 
         live_config = self._build_current_spotify_visualizer_config(spotify_vis_config)
-        snapshot = self._extract_visualizer_snapshot(mode_key, live_config)
+        normalized_live = normalize_visualizer_section_mapping(
+            live_config,
+            apply_preset_overlay=False,
+        )
+        snapshot = self._extract_visualizer_snapshot(mode_key, normalized_live)
+        snapshot = normalize_visualizer_mode_payload(mode_key, snapshot)
         if not snapshot:
             return {}
 

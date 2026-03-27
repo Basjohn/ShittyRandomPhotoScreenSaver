@@ -344,11 +344,11 @@ tests/
 | `test_visualizer_modes.py` | Visualizer direction/swirl/converge modes | Mode switching |
 | `test_visualizer_architecture_split.py` | Focused architecture split guard: required extracted exports, widget delegation, monolith threshold | Architecture split regressions |
 | `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity | New uniform/kwarg additions |
-| `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering | Preset file changes |
+| `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering, canonical mode-payload normalization | Preset file changes |
 Line of intent: keep this suite schema/contract-focused. It should guard payload shape, filtering, repair-tool behavior, and direct transient-key preservation, not freeze artistic tuning choices for curated presets.
 It also guards curated slot normalization through `tools/visualizer_preset_repair.py --reindex-curated`: gap-filling, canonical filename rewrite, recovery when the earliest remaining preset is no longer slot 1, duplicate-slot detection, and Preset 1 presence per primary mode without freezing the rest of the artistic pack size.
 | `test_visualizer_preset1_baselines.py` | Deterministic synthetic preset-1 baseline fence for active shipped modes | Structural migrations, curated preset-1 reauthoring, before/after regression checks |
-| `test_visualizer_settings_plumbing.py` | Behavior-first settings plumbing (model → creator/applier → frame push → overlay state contract), with a small amount of unavoidable shader-source/static coverage | New visualizer settings |
+| `test_visualizer_settings_plumbing.py` | Behavior-first settings plumbing (model → creator/applier → frame push → overlay state contract), plus direct adapter coverage for Spectrum / Blob / Bubble / Oscilloscope / Sine mode-owned WidgetsTab bindings and the shared visualizer settings contract/snapshot helpers | New visualizer settings, adapter extraction regressions, and sparse-mapping contract drift |
 | `test_visualizer_preset_cycling_runtime.py` | Runtime preset cycling API (`WidgetManager`), SpotifyVisualizerWidget middle/XButton shortcuts, InputHandler routing hit-tests, preset wrap-around | Runtime preset shortcut regressions |
 | `test_visualizer_alignment.py` | Visualizer positioning relative to other widgets | Positioning changes |
 | `test_blob_intensity_reserve.py` | Blob intensity reserve and core floor clamp math | Blob stage tuning |
@@ -486,6 +486,7 @@ When writing tests that create `DisplayWidget` or start transitions:
   It is also the regression fence for curated reindex behavior (`--reindex-curated`) so slot repair stays metadata-only and deterministic, while tolerating authored artistic pack changes outside the rigid Preset 1 baseline fence.
 - `tests/test_visualizer_settings_plumbing.py`
   This suite should prefer real model/applier/creator/frame-push behavior checks over source-text assertions. A few static contract checks remain where GL/shader runtime surfaces are impractical.
+  It is also now the direct regression fence for extracted WidgetsTab adapters (`spectrum_settings_binding.py`, `blob_settings_binding.py`, `bubble_settings_binding.py`, `oscilloscope_settings_binding.py`, `sine_wave_settings_binding.py`) and for `core/settings/visualizer_settings_contract.py` plus `core/settings/visualizer_settings_snapshot.py`, so coordinator-shrinking refactors and sparse-mapping/SST contract work stay behavior-safe.
 - `tests/test_visualizer_preset1_baselines.py`
   This is the intentional rigid fence for curated preset feel. If preset 1 is deliberately reauthored, refresh the checked-in baseline in the same change.
 - `tests/test_s_hotkey_workflow.py` and `tests/test_flicker_fix_integration.py`
@@ -493,4 +494,4 @@ When writing tests that create `DisplayWidget` or start transitions:
 
 ---
 
-**Last Updated**: Mar 23, 2026 (test harness/environment refreshed; visualizer contract suites pruned toward behavior-first coverage)
+**Last Updated**: Mar 27, 2026 (visualizer mode-binding extraction coverage expanded for Blob/Bubble/Oscilloscope/Sine)

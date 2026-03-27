@@ -48,8 +48,8 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
     glow_burst = presets[4]
     assert glow_burst.name == "Preset 5 (Glow Burst)"
     assert glow_burst.settings.get("sine_wave_effect") == 0.42
-    # rainbow_enabled migrated to per-mode key sine_rainbow_enabled
-    assert glow_burst.settings.get("sine_rainbow_enabled") is True
+    # rainbow_enabled migrated to the canonical mode-id scoped key.
+    assert glow_burst.settings.get("sine_wave_rainbow_enabled") is True
     assert "rainbow_enabled" not in glow_burst.settings
     assert "blob_growth" not in glow_burst.settings
 
@@ -233,8 +233,17 @@ def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
     assert round_tripped["bubble_specular_direction"] == "bottom_right"
     assert round_tripped["mode"] == "bubble"
 
+    from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+
+    assert round_tripped == normalize_visualizer_section_mapping(
+        round_tripped,
+        apply_preset_overlay=False,
+    )
+
     filtered = vp._filter_settings_for_mode("bubble", round_tripped)
-    assert filtered == round_tripped
+    assert filtered["bubble_gradient_direction"] == "left"
+    assert filtered["bubble_specular_direction"] == "bottom_right"
+    assert filtered["mode"] == "bubble"
 
 
 def test_all_curated_presets_have_unique_keys_and_filtered_settings():
