@@ -39,7 +39,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "startmenu"; Description: "Create Start Menu Shortcuts"; GroupDescription: "Additional options:"
 Name: "desktop"; Description: "Create Desktop Shortcuts"; GroupDescription: "Additional options:"
-Name: "replacevispresets"; Description: "Replace shipped visualizer presets (backs up replaced files)"; GroupDescription: "Visualizer presets:"; Flags: checked
+Name: "replacevispresets"; Description: "Replace shipped visualizer presets (backs up replaced files)"; GroupDescription: "Visualizer presets:"; Flags: checkedonce
 Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-install option:"; Flags: unchecked
 
 [Files]
