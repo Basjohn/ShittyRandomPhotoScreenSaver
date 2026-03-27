@@ -235,6 +235,28 @@ class TestSettingsManagerDefaults:
         assert vis == expected
         assert "obsolete_custom_key" not in vis
 
+    def test_existing_visualizer_section_does_not_gain_bubble_semantics_marker_during_default_merge(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from core.settings.defaults import get_default_settings
+
+        manager = _make_manager(tmp_path)
+        legacy_widgets = {
+            "spotify_visualizer": {
+                "mode": "bubble",
+                "bubble_gradient_direction": "left",
+            }
+        }
+        manager._settings.setValue("widgets", legacy_widgets)
+
+        manager._ensure_widgets_defaults(get_default_settings()["widgets"])
+
+        widgets = manager.get("widgets")
+        vis = widgets["spotify_visualizer"]
+        assert vis["bubble_gradient_direction"] == "left"
+        assert "bubble_gradient_semantics_version" not in vis
+
 
 class TestSettingsManagerValidation:
     def test_validate_and_repair_handles_missing_keys(self, tmp_path: Path) -> None:

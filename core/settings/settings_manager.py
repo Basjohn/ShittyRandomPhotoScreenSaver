@@ -13,6 +13,15 @@ from core.settings.json_store import JsonSettingsStore, determine_storage_path
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
+_WIDGET_DEFAULT_MERGE_SKIP_KEYS: dict[str, frozenset[str]] = {
+    # Migration/version markers must only be written when a section has been
+    # normalized from real persisted data. Injecting them during default-merges
+    # hides the difference between legacy payloads and already-migrated ones.
+    "spotify_visualizer": frozenset({
+        "bubble_gradient_semantics_version",
+    }),
+}
+
 logger = get_logger('SettingsManager')
 
 
@@ -314,7 +323,10 @@ class SettingsManager(QObject):
                     # the user's existing values even when QSettings returns
                     # a mapping type that is not a plain dict.
                     section_dict = dict(existing_section)
+                    skip_keys = _WIDGET_DEFAULT_MERGE_SKIP_KEYS.get(section_name, frozenset())
                     for k, v in section_defaults.items():
+                        if k in skip_keys and k not in section_dict:
+                            continue
                         if k not in section_dict:
                             section_dict[k] = v
                             changed = True

@@ -78,7 +78,8 @@
           255
         ],
         "bubble_specular_direction": "bottom_left",
-        "bubble_gradient_direction": "bottom_right",
+        "bubble_gradient_direction": "bottom_left",
+        "bubble_gradient_semantics_version": 2,
         "bubble_big_size_max": 0.026,
         "bubble_small_size_max": 0.014,
         "bubble_big_specular_max_size": 1.5,
@@ -182,7 +183,8 @@
         255
       ],
       "widgets.spotify_visualizer.bubble_specular_direction": "bottom_left",
-      "widgets.spotify_visualizer.bubble_gradient_direction": "bottom_right",
+      "widgets.spotify_visualizer.bubble_gradient_direction": "bottom_left",
+      "widgets.spotify_visualizer.bubble_gradient_semantics_version": 2,
       "widgets.spotify_visualizer.bubble_big_size_max": 0.026,
       "widgets.spotify_visualizer.bubble_small_size_max": 0.014,
       "widgets.spotify_visualizer.bubble_big_specular_max_size": 1.5,
@@ -287,7 +289,8 @@
         255
       ],
       "bubble_specular_direction": "bottom_left",
-      "bubble_gradient_direction": "bottom_right",
+      "bubble_gradient_direction": "bottom_left",
+      "bubble_gradient_semantics_version": 2,
       "bubble_big_size_max": 0.026,
       "bubble_small_size_max": 0.014,
       "bubble_big_specular_max_size": 1.5,

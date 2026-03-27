@@ -3,6 +3,10 @@ from __future__ import annotations
 
 import numpy as np
 
+from core.settings.bubble_gradient_semantics import (
+    get_bubble_gradient_shader_mode,
+    get_bubble_gradient_shader_vector,
+)
 from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
 
 
@@ -25,7 +29,7 @@ def get_uniform_names() -> list[str]:
         "u_playing", "u_ghost_alpha", "u_bubble_count",
         "u_bubbles_pos", "u_bubbles_extra", "u_bubbles_trail",
         "u_trail_strength", "u_tail_opacity",
-        "u_specular_dir", "u_gradient_dir",
+        "u_specular_dir", "u_gradient_dir", "u_gradient_mode",
         "u_outline_color", "u_specular_color",
         "u_gradient_light", "u_gradient_dark", "u_pop_color",
     ]
@@ -92,10 +96,11 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     if loc >= 0:
         gl.glUniform2f(loc, float(sd[0]), float(sd[1]))
 
-    gd = _DIRECTION_VECS.get(s._bubble_gradient_direction, (0.0, 1.0))
+    gd = get_bubble_gradient_shader_vector(getattr(s, "_bubble_gradient_direction", "top"))
     loc = u.get("u_gradient_dir", -1)
     if loc >= 0:
         gl.glUniform2f(loc, float(gd[0]), float(gd[1]))
+    _set1i(gl, u, "u_gradient_mode", get_bubble_gradient_shader_mode(getattr(s, "_bubble_gradient_direction", "top")))
 
     # Colour uniforms
     for uname, qc in (

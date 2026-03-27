@@ -2854,14 +2854,40 @@ class TestBubbleSpecularDirection:
 
         model = SpotifyVisualizerSettings.from_mapping({
             "mode": "bubble",
-            "preset_bubble": 3,
-            "bubble_gradient_direction": "center_out",
-        })
-        assert model.bubble_gradient_direction == "center_out"
+            "bubble_gradient_direction": "center_out_reverse",
+            "bubble_gradient_semantics_version": 2,
+        }, apply_preset_overlay=False)
+        assert model.bubble_gradient_direction == "center_out_reverse"
 
         payload = model.to_dict()
         key = "widgets.spotify_visualizer.bubble_gradient_direction"
-        assert payload[key] == "center_out"
+        assert payload[key] == "center_out_reverse"
+        assert payload["widgets.spotify_visualizer.bubble_gradient_semantics_version"] == 2
+
+    def test_legacy_gradient_direction_migrates_to_canonical_label(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping({
+            "mode": "bubble",
+            "bubble_gradient_direction": "left",
+        }, apply_preset_overlay=False)
+        assert model.bubble_gradient_direction == "right"
+
+        model = SpotifyVisualizerSettings.from_mapping({
+            "mode": "bubble",
+            "bubble_gradient_direction": "top",
+        }, apply_preset_overlay=False)
+        assert model.bubble_gradient_direction == "bottom"
+
+    def test_versioned_gradient_direction_preserves_canonical_label(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping({
+            "mode": "bubble",
+            "bubble_gradient_direction": "left",
+            "bubble_gradient_semantics_version": 2,
+        }, apply_preset_overlay=False)
+        assert model.bubble_gradient_direction == "left"
 
     def test_config_applier_accepts_cardinal_directions(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
@@ -2878,6 +2904,44 @@ class TestBubbleSpecularDirection:
             })
             assert widget._bubble_specular_direction == val
             assert widget._bubble_gradient_direction == val
+
+    def test_config_applier_accepts_center_out_reverse_for_gradient(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bubble_gradient_direction = "top"
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {
+            "bubble_gradient_direction": "center_out_reverse",
+        })
+        assert widget._bubble_gradient_direction == "center_out_reverse"
+
+    def test_gradient_shader_helper_uses_brightest_point_semantics(self):
+        from core.settings.bubble_gradient_semantics import (
+            get_bubble_gradient_shader_mode,
+            get_bubble_gradient_shader_vector,
+        )
+
+        assert get_bubble_gradient_shader_vector("left") == (-1.0, 0.0)
+        assert get_bubble_gradient_shader_vector("top") == (0.0, -1.0)
+        assert get_bubble_gradient_shader_vector("bottom_right") == (0.707, 0.707)
+        assert get_bubble_gradient_shader_mode("center_out") == 1
+        assert get_bubble_gradient_shader_mode("center_out_reverse") == 2
+
+    def test_bubble_shader_radial_modes_keep_center_out_as_primary_mode(self):
+        shader = Path(
+            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\bubble.frag"
+        ).read_text(encoding="utf-8")
+
+        assert 'grad_t = (u_gradient_mode == 2) ? radial_t : (1.0 - radial_t);' in shader
+
+    def test_gl_overlay_queries_bubble_gradient_mode_uniform(self):
+        src = Path(
+            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_bars_gl_overlay.py"
+        ).read_text(encoding="utf-8")
+
+        assert '"u_specular_dir", "u_gradient_dir", "u_gradient_mode", "u_outline_color", "u_specular_color"' in src
 
 
 # ===========================================================================

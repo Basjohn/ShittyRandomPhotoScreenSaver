@@ -12,6 +12,10 @@ from typing import Any, Dict
 from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
+from core.settings.bubble_gradient_semantics import (
+    normalize_bubble_gradient_direction,
+    normalize_bubble_specular_direction,
+)
 
 logger = get_logger(__name__)
 
@@ -28,7 +32,7 @@ def _normalize_direction(value: Any, default: str = "top_left") -> str:
     valid = {
         "top", "bottom", "left", "right",
         "top_left", "top_right", "bottom_left", "bottom_right",
-        "center_out",
+        "center_out", "center_out_reverse",
     }
     return val if val in valid else default
 
@@ -494,9 +498,9 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if c is not None:
             widget._bubble_pop_color = c
     if 'bubble_specular_direction' in kwargs:
-        widget._bubble_specular_direction = _normalize_direction(kwargs['bubble_specular_direction'], default='top_left')
+        widget._bubble_specular_direction = normalize_bubble_specular_direction(kwargs['bubble_specular_direction'])
     if 'bubble_gradient_direction' in kwargs:
-        widget._bubble_gradient_direction = _normalize_direction(kwargs['bubble_gradient_direction'], default='top')
+        widget._bubble_gradient_direction = normalize_bubble_gradient_direction(kwargs['bubble_gradient_direction'])
     if 'bubble_big_size_max' in kwargs:
         widget._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
     if 'bubble_small_size_max' in kwargs:

@@ -6,6 +6,12 @@ from typing import Any, Callable
 
 from PySide6.QtGui import QColor
 
+from core.settings.bubble_gradient_semantics import (
+    CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION,
+    get_bubble_gradient_semantics_version,
+    normalize_bubble_specular_direction,
+    resolve_bubble_gradient_direction,
+)
 from core.logging.logger import get_logger
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 
@@ -45,6 +51,7 @@ def load_bubble_mode_settings(
 ) -> None:
     """Load Bubble-owned settings from the visualizer config into the tab."""
     config = spotify_vis_config if isinstance(spotify_vis_config, Mapping) else {}
+    bubble_gradient_semantics_version = get_bubble_gradient_semantics_version(config, prefix="widgets.spotify_visualizer")
 
     if hasattr(tab, "bubble_ghost_enabled"):
         tab.bubble_ghost_enabled.setChecked(
@@ -129,10 +136,16 @@ def load_bubble_mode_settings(
         tab.bubble_surface_reach_label.setText(f"{v}%")
 
     if hasattr(tab, "bubble_specular_direction"):
-        specular_direction = tab._config_str("spotify_visualizer", config, "bubble_specular_direction", "top_left").lower()
+        specular_direction = normalize_bubble_specular_direction(
+            tab._config_str("spotify_visualizer", config, "bubble_specular_direction", "top_left")
+        )
         _set_combo_data_or_fallback(tab.bubble_specular_direction, specular_direction, "top_left")
     if hasattr(tab, "bubble_gradient_direction"):
-        gradient_direction = tab._config_str("spotify_visualizer", config, "bubble_gradient_direction", "top").lower()
+        gradient_direction = resolve_bubble_gradient_direction(
+            tab._config_str("spotify_visualizer", config, "bubble_gradient_direction", "top"),
+            semantics_version=bubble_gradient_semantics_version,
+            default="top",
+        )
         _set_combo_data_or_fallback(tab.bubble_gradient_direction, gradient_direction, "top")
 
     if hasattr(tab, "bubble_big_size_max"):
@@ -241,6 +254,7 @@ def collect_bubble_mode_settings(tab) -> dict[str, Any]:
             if hasattr(tab, "bubble_gradient_direction")
             else "top"
         ),
+        "bubble_gradient_semantics_version": CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION,
         "bubble_big_size_max": (tab.bubble_big_size_max.value() if hasattr(tab, "bubble_big_size_max") else 38) / 1000.0,
         "bubble_small_size_max": (tab.bubble_small_size_max.value() if hasattr(tab, "bubble_small_size_max") else 18) / 1000.0,
         "bubble_big_specular_max_size": (

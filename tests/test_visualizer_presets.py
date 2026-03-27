@@ -229,7 +229,8 @@ def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
     assert sst_io.import_from_sst(target_mgr, str(export_path), merge=True)
 
     round_tripped = target_mgr.get("widgets.spotify_visualizer")
-    assert round_tripped["bubble_gradient_direction"] == "left"
+    assert round_tripped["bubble_gradient_direction"] == "right"
+    assert round_tripped["bubble_gradient_semantics_version"] == 2
     assert round_tripped["bubble_specular_direction"] == "bottom_right"
     assert round_tripped["mode"] == "bubble"
 
@@ -241,9 +242,38 @@ def test_sst_roundtrip_preserves_visualizer_mode_settings(tmp_path):
     )
 
     filtered = vp._filter_settings_for_mode("bubble", round_tripped)
-    assert filtered["bubble_gradient_direction"] == "left"
+    assert filtered["bubble_gradient_direction"] == "right"
+    assert filtered["bubble_gradient_semantics_version"] == 2
     assert filtered["bubble_specular_direction"] == "bottom_right"
     assert filtered["mode"] == "bubble"
+
+
+def test_sst_roundtrip_preserves_versioned_bubble_gradient_direction(tmp_path):
+    def _make_manager(suffix: str) -> SettingsManager:
+        base = tmp_path / suffix
+        base.mkdir(parents=True, exist_ok=True)
+        return SettingsManager(
+            organization="Test",
+            application=f"PresetAuditVersioned_{uuid.uuid4().hex}",
+            storage_base_dir=base,
+        )
+
+    source_mgr = _make_manager("src_v2")
+    source_mgr.set("widgets.spotify_visualizer", {
+        "mode": "bubble",
+        "bubble_gradient_direction": "left",
+        "bubble_gradient_semantics_version": 2,
+    })
+
+    export_path = tmp_path / "snapshot_roundtrip_v2.json"
+    assert sst_io.export_to_sst(source_mgr, str(export_path))
+
+    target_mgr = _make_manager("dst_v2")
+    assert sst_io.import_from_sst(target_mgr, str(export_path), merge=True)
+
+    round_tripped = target_mgr.get("widgets.spotify_visualizer")
+    assert round_tripped["bubble_gradient_direction"] == "left"
+    assert round_tripped["bubble_gradient_semantics_version"] == 2
 
 
 def test_all_curated_presets_have_unique_keys_and_filtered_settings():

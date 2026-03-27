@@ -468,6 +468,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab.bubble_specular_direction.addItem(label, key)
         tab.bubble_gradient_direction.addItem(label, key)
     tab.bubble_gradient_direction.addItem("Center Out", "center_out")
+    tab.bubble_gradient_direction.addItem("Center Out Reverse", "center_out_reverse")
 
     saved_sd = tab._default_str('spotify_visualizer', 'bubble_specular_direction', 'top_left').lower()
     idx = tab.bubble_specular_direction.findData(saved_sd)

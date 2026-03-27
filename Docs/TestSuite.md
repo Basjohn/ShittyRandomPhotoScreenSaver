@@ -487,6 +487,7 @@ When writing tests that create `DisplayWidget` or start transitions:
 - `tests/test_visualizer_settings_plumbing.py`
   This suite should prefer real model/applier/creator/frame-push behavior checks over source-text assertions. A few static contract checks remain where GL/shader runtime surfaces are impractical.
   It is also now the direct regression fence for extracted WidgetsTab adapters (`spectrum_settings_binding.py`, `blob_settings_binding.py`, `bubble_settings_binding.py`, `oscilloscope_settings_binding.py`, `sine_wave_settings_binding.py`) and for `core/settings/visualizer_settings_contract.py` plus `core/settings/visualizer_settings_snapshot.py`, so coordinator-shrinking refactors and sparse-mapping/SST contract work stay behavior-safe.
+  Bubble gradient semantics coverage also lives here now: legacy-label migration, `center_out_reverse`, and canonical shader-vector/mode mapping are tested without relying on visual inspection alone.
 - `tests/test_visualizer_preset1_baselines.py`
   This is the intentional rigid fence for curated preset feel. If preset 1 is deliberately reauthored, refresh the checked-in baseline in the same change.
 - `tests/test_s_hotkey_workflow.py` and `tests/test_flicker_fix_integration.py`
@@ -494,4 +495,4 @@ When writing tests that create `DisplayWidget` or start transitions:
 
 ---
 
-**Last Updated**: Mar 27, 2026 (visualizer mode-binding extraction coverage expanded for Blob/Bubble/Oscilloscope/Sine)
+**Last Updated**: Mar 27, 2026 (Bubble gradient semantics + migration coverage added to visualizer plumbing/settings suites)

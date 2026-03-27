@@ -173,6 +173,7 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 - Sparse preset-index fallback/lookup comes from `core/settings/visualizer_preset_indices.py`.
 - Shared sparse-mapping/per-mode fallback resolution comes from `core/settings/visualizer_settings_contract.py`.
 - Canonical `widgets.spotify_visualizer` normalization for reset/defaults/SST/preset payloads comes from `core/settings/visualizer_settings_snapshot.py`.
+- Bubble gradient label migration plus renderer/shader mapping comes from `core/settings/bubble_gradient_semantics.py`.
 - WidgetsTab mode selection plus per-mode preset/rainbow persistence flow through `ui/tabs/media/visualizer_mode_binding.py`.
 - Mode-owned load/save translation should live in dedicated adapters, not in `ui/tabs/widgets_tab_media.py`. The current extracted adapters are:
   - `ui/tabs/media/spectrum_settings_binding.py`
@@ -211,7 +212,8 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 | `bubble_gradient_dark` | `[80, 60, 50, 255]` | Gradient bottom color |
 | `bubble_pop_color` | `[255, 255, 255, 180]` | Burst sparkle |
 | `bubble_specular_direction` | `"top_left"` | Lighting direction (`top`, `bottom`, `left`, `right`, diagonals) for the highlight offset (Advanced bucket). Applies even when Advanced is collapsed (Always-Apply rule). |
-| `bubble_gradient_direction` | `"top"` | Independent gradient tilt vector (Normal bucket). Preset rebuilds and SST exports carry this key so curated/default visuals stay in sync. |
+| `bubble_gradient_direction` | `"top"` | Independent Bubble shading direction (Normal bucket). Label semantics are **brightest point location**, not dark-side origin: `top` = brightest at top, `bottom_left` = brightest at bottom-left, etc. `center_out` remains radial and `center_out_reverse` is the inverted radial variant. |
+| `bubble_gradient_semantics_version` | `2` | Persisted Bubble migration marker. Normalized/save paths write this so legacy direction labels migrate exactly once. Existing visualizer sections must not receive this key from default-merging alone, or old payloads become indistinguishable from already-migrated ones. |
 | `bubble_big_size_max` | `0.038` | Max radius for big bubbles |
 | `bubble_small_size_max` | `0.018` | Max radius for small bubbles |
 | `bubble_growth` | `3.0` | Size multiplier |

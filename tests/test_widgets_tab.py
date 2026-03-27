@@ -668,6 +668,61 @@ def test_bubble_stream_reactivity_load_clamps_to_200(qt_app, settings_manager):
     finally:
         tab.deleteLater()
 
+
+def test_bubble_legacy_gradient_direction_loads_as_canonical_label_and_saves_version(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        custom_index = tab._bubble_preset_slider.custom_index()
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+        spotify_vis.pop("bubble_gradient_semantics_version", None)
+        spotify_vis.update({
+            "mode": "bubble",
+            "preset_bubble": custom_index,
+            "bubble_gradient_direction": "left",
+        })
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+
+        assert tab.bubble_gradient_direction.currentData() == "right"
+
+        tab._save_settings_now()
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert saved.get("bubble_gradient_direction") == "right"
+        assert saved.get("bubble_gradient_semantics_version") == 2
+    finally:
+        tab.deleteLater()
+
+
+def test_bubble_center_out_reverse_round_trips_through_widgets_tab(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        custom_index = tab._bubble_preset_slider.custom_index()
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+        spotify_vis.update({
+            "mode": "bubble",
+            "preset_bubble": custom_index,
+            "bubble_gradient_direction": "center_out_reverse",
+            "bubble_gradient_semantics_version": 2,
+        })
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+
+        assert tab.bubble_gradient_direction.currentData() == "center_out_reverse"
+
+        tab._save_settings_now()
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert saved.get("bubble_gradient_direction") == "center_out_reverse"
+        assert saved.get("bubble_gradient_semantics_version") == 2
+    finally:
+        tab.deleteLater()
+
+
 def test_blob_pulse_controls_load_and_roundtrip(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:

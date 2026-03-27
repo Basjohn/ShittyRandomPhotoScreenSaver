@@ -1796,7 +1796,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # Bubble mode uniforms
                     "u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
                     "u_bubbles_trail", "u_trail_strength", "u_tail_opacity",
-                    "u_specular_dir", "u_gradient_dir", "u_outline_color", "u_specular_color",
+                    "u_specular_dir", "u_gradient_dir", "u_gradient_mode", "u_outline_color", "u_specular_color",
                     "u_gradient_light", "u_gradient_dark", "u_pop_color",
                     "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
                     "u_ghost_bass", "u_ghost_mid", "u_ghost_high",

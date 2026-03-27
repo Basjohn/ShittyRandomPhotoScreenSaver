@@ -30,7 +30,8 @@ uniform float u_tail_opacity;       // max opacity ceiling for tail gradient (0.
 
 // --- Styling ---
 uniform vec2 u_specular_dir;       // normalised direction to light source
-uniform vec2 u_gradient_dir;       // gradient direction (light -> dark)
+uniform vec2 u_gradient_dir;       // gradient direction helper vector
+uniform int u_gradient_mode;       // 0=directional, 1=center_out, 2=center_out_reverse
 uniform vec4 u_outline_color;      // bubble outline colour (RGBA 0-1)
 uniform vec4 u_specular_color;     // specular highlight colour
 uniform vec4 u_gradient_light;     // gradient light end
@@ -122,19 +123,23 @@ void main() {
     float px = 1.0 / max(inner_h, 1.0);
     
     // --- Background gradient ---
-    // Gradient direction follows dedicated control.
-    // Special: (0,0) = center-out radial gradient (light at center, dark at edges).
+    // Gradient direction now follows "brightest point location" semantics.
+    // Radial special cases are handled explicitly via u_gradient_mode.
     vec2 center = vec2(0.5, 0.5);
     vec2 grad_dir = u_gradient_dir;
     float grad_t;
-    if (length(grad_dir) < 0.001) {
-        // Center-out radial: dark at center, light at edges.
-        // Gentle power-curve falloff so the transition feels smooth.
-        float radial_dist = length(uv - center);
-        float norm = clamp(radial_dist / 0.85, 0.0, 1.0);
-        grad_t = pow(norm, 1.65);
+    if (u_gradient_mode == 1 || u_gradient_mode == 2) {
+        // Radial center-out modes.
+        vec2 radial_delta = vec2((uv.x - center.x) * aspect, uv.y - center.y);
+        float radial_dist = length(radial_delta);
+        float max_radial = max(length(vec2(0.5 * aspect, 0.5)), 0.0001);
+        float norm = clamp(radial_dist / max_radial, 0.0, 1.0);
+        float radial_t = pow(norm, 1.65);
+        // "Center Out" keeps the brightest point at the center and darkens
+        // toward the outside. Reverse flips that relationship.
+        grad_t = (u_gradient_mode == 2) ? radial_t : (1.0 - radial_t);
     } else {
-        grad_t = dot(uv - center, -grad_dir) + 0.5;
+        grad_t = dot(uv - center, grad_dir) + 0.5;
         grad_t = clamp(grad_t, 0.0, 1.0);
     }
     

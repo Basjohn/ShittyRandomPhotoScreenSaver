@@ -44,6 +44,7 @@
           255
         ],
         "bubble_gradient_direction": "center_out",
+        "bubble_gradient_semantics_version": 2,
         "bubble_gradient_light": [
           0,
           179,
