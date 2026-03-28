@@ -63,6 +63,29 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
             monkeypatch.setitem(vp._PRESETS, "sine_wave", original)
 
 
+def test_preset_repair_defaults_loader_uses_canonical_defaults_entrypoint(monkeypatch):
+    previous_cache = repair._DEFAULTS_CACHE
+    repair._DEFAULTS_CACHE = None
+
+    def _fake_defaults():
+        return {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "bubble_manual_floor": 0.33,
+                }
+            }
+        }
+
+    monkeypatch.setattr("core.settings.defaults.get_default_settings", _fake_defaults)
+
+    try:
+        loaded = repair._load_visualizer_defaults()
+        assert loaded["bubble_manual_floor"] == pytest.approx(0.33)
+    finally:
+        repair._DEFAULTS_CACHE = previous_cache
+
+
 def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkeypatch):
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"

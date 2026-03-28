@@ -502,7 +502,7 @@ class RedditWidget(BaseOverlayWidget):
         def _starter() -> None:
             if not shiboken_isValid(self):
                 return
-            self._start_widget_fade_in(1500)
+            self._start_widget_fade_in()
         
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
             try:
@@ -884,7 +884,7 @@ class RedditWidget(BaseOverlayWidget):
                 # Guard against widget being deleted before deferred callback runs
                 if not shiboken_isValid(self):
                     return
-                self._start_widget_fade_in(1500)
+                self._start_widget_fade_in()
 
             if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
                 try:
@@ -1360,9 +1360,14 @@ class RedditWidget(BaseOverlayWidget):
         years = days // 365
         return f"{years}Y AGO"
 
-    def _start_widget_fade_in(self, duration_ms: int = 1000) -> None:
+    def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         logger.debug("[REDDIT] _start_widget_fade_in: duration_ms=%s", duration_ms)
-        if duration_ms <= 0:
+        resolved_duration_ms = (
+            ShadowFadeProfile.default_duration_ms()
+            if duration_ms is None
+            else max(0, int(duration_ms))
+        )
+        if resolved_duration_ms <= 0:
             if self.parent():
                 try:
                     self._update_position()
@@ -1395,6 +1400,7 @@ class RedditWidget(BaseOverlayWidget):
             ShadowFadeProfile.start_fade_in(
                 self,
                 self._shadow_config,
+                duration_ms=resolved_duration_ms,
                 has_background_frame=self._show_background,
             )
         except Exception:

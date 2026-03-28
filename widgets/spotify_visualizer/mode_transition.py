@@ -18,6 +18,17 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 
+def resolve_shared_widget_fade_in_duration_ms() -> int:
+    """Return the canonical shared overlay fade-in duration."""
+
+    from widgets.shadow_utils import ShadowFadeProfile
+
+    try:
+        return ShadowFadeProfile.default_duration_ms()
+    except Exception:
+        return max(0, int(getattr(ShadowFadeProfile, "DURATION_MS", 1800)))
+
+
 def cycle_mode(widget: Any) -> bool:
     """Cycle to the next visualizer mode with a crossfade.
 
@@ -219,9 +230,12 @@ def reset_visualizer_state(
 # Phase 2: Widget fade in/out
 # ------------------------------------------------------------------
 
-def start_widget_fade_in(widget: Any, duration_ms: int = 1500) -> None:
+def start_widget_fade_in(widget: Any, duration_ms: Optional[int] = None) -> None:
     """Fade the visualizer card in via ShadowFadeProfile."""
     from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+
+    if duration_ms is None:
+        duration_ms = resolve_shared_widget_fade_in_duration_ms()
 
     if duration_ms <= 0:
         try:
@@ -379,7 +393,7 @@ def begin_mode_fade_in(widget: Any, now_ts: float) -> None:
     invalidate_shadow_cache_if_needed(widget)
     apply_pending_mode_transition_layout(widget)
     try:
-        start_widget_fade_in(widget, 1500)
+        start_widget_fade_in(widget)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Mode fade-in fallback path", exc_info=True)
 
@@ -472,6 +486,12 @@ def on_first_frame_after_cold_start(widget: Any) -> None:
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to reattach shadow after fresh frame", exc_info=True)
         widget._shadow_config_missing = False
+    try:
+        finish_reveal = getattr(widget, "_finish_staged_startup_reveal", None)
+        if callable(finish_reveal):
+            finish_reveal(reason="fresh_frame")
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed staged startup reveal after fresh frame", exc_info=True)
 
 
 def get_gpu_fade_factor(widget: Any, now_ts: float) -> float:

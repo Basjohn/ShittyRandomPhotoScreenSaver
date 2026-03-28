@@ -137,7 +137,7 @@ class SpotifyVolumeWidget(QWidget):
                 # Media widget became visible - show volume widget
                 if is_verbose_logging():
                     logger.debug("[SPOTIFY_VOL] Anchor visible, requesting fade-in")
-                self._start_widget_fade_in(1500)
+                self._start_widget_fade_in()
             elif not anchor_visible and self.isVisible():
                 # Media widget hidden - hide volume widget
                 if is_verbose_logging():
@@ -307,7 +307,7 @@ class SpotifyVolumeWidget(QWidget):
         def _starter() -> None:
             if not self._enabled:
                 return
-            self._start_widget_fade_in(1500)
+            self._start_widget_fade_in()
 
         parent = self.parent()
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
@@ -584,7 +584,7 @@ class SpotifyVolumeWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VOL] Failed to submit set_volume task", exc_info=True)
 
-    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+    def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         """Fade the widget in using the shared ShadowFadeProfile.
 
         This mirrors the behaviour of other overlay widgets (media, weather,
@@ -592,14 +592,20 @@ class SpotifyVolumeWidget(QWidget):
         the same two-stage card/shadow fade.
         """
 
-        if self._has_faded_in and duration_ms <= 0:
+        resolved_duration_ms = (
+            ShadowFadeProfile.default_duration_ms()
+            if duration_ms is None
+            else max(0, int(duration_ms))
+        )
+
+        if self._has_faded_in and resolved_duration_ms <= 0:
             try:
                 self.show()
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
             return
 
-        if duration_ms <= 0:
+        if resolved_duration_ms <= 0:
             try:
                 self.show()
             except Exception as e:
@@ -616,6 +622,7 @@ class SpotifyVolumeWidget(QWidget):
             ShadowFadeProfile.start_fade_in(
                 self,
                 self._shadow_config,
+                duration_ms=resolved_duration_ms,
                 has_background_frame=False,
             )
             self._has_faded_in = True

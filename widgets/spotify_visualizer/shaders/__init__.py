@@ -14,6 +14,7 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 _SHADER_DIR = Path(__file__).parent
+_FRAGMENT_SHADER_CACHE: Dict[str, str] | None = None
 
 # Shared vertex shader for all visualizer types (fullscreen quad)
 SHARED_VERTEX_SHADER: str = """#version 330 core
@@ -41,6 +42,10 @@ def load_fragment_shader(vis_mode: str) -> str | None:
     Returns ``None`` if the shader file does not exist or cannot be read,
     allowing the caller to skip compilation for that mode gracefully.
     """
+    cache = _FRAGMENT_SHADER_CACHE
+    if cache is not None:
+        return cache.get(vis_mode)
+
     filename = _SHADER_FILES.get(vis_mode)
     if filename is None:
         logger.warning("[SHADER_LOADER] Unknown vis_mode: %s", vis_mode)
@@ -60,13 +65,13 @@ def load_fragment_shader(vis_mode: str) -> str | None:
         return None
 
 
-def load_all_fragment_shaders() -> Dict[str, str]:
-    """Load all available fragment shaders.
+def preload_fragment_shaders(*, force: bool = False) -> Dict[str, str]:
+    """Warm the shared fragment-shader source cache once per process."""
 
-    Returns a dict mapping vis_mode → GLSL source for every shader that
-    loaded successfully.  Modes whose files are missing or unreadable
-    are silently skipped.
-    """
+    global _FRAGMENT_SHADER_CACHE
+    if _FRAGMENT_SHADER_CACHE is not None and not force:
+        return dict(_FRAGMENT_SHADER_CACHE)
+
     result: Dict[str, str] = {}
     missing: list[str] = []
     for mode in _SHADER_FILES:
@@ -89,4 +94,15 @@ def load_all_fragment_shaders() -> Dict[str, str]:
         raise RuntimeError(
             "Visualizer shaders missing: " + ", ".join(sorted(missing))
         )
-    return result
+    _FRAGMENT_SHADER_CACHE = dict(result)
+    return dict(_FRAGMENT_SHADER_CACHE)
+
+
+def load_all_fragment_shaders() -> Dict[str, str]:
+    """Load all available fragment shaders.
+
+    Returns a dict mapping vis_mode → GLSL source for every shader that
+    loaded successfully.  Modes whose files are missing or unreadable
+    are silently skipped.
+    """
+    return preload_fragment_shaders()

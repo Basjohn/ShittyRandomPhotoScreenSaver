@@ -407,6 +407,76 @@ def push_spotify_visualizer_frame(
     if geom.width() <= 0 or geom.height() <= 0:
         return False
 
+    overlay = _ensure_spotify_bars_overlay(widget)
+    if overlay is None:
+        return False
+
+    return _push_spotify_bars_overlay_state(
+        widget,
+        overlay=overlay,
+        geom=geom,
+        bars=bars,
+        bar_count=bar_count,
+        segments=segments,
+        fill_color=fill_color,
+        border_color=border_color,
+        fade=fade,
+        playing=playing,
+        ghosting_enabled=ghosting_enabled,
+        ghost_alpha=ghost_alpha,
+        ghost_decay=ghost_decay,
+        vis_mode=vis_mode,
+        **extra_kwargs,
+    )
+
+
+def prewarm_spotify_visualizer_overlay(widget) -> bool:
+    """Create and initialize the Spotify GL overlay before the first visible frame."""
+
+    vis = getattr(widget, "spotify_visualizer_widget", None)
+    if vis is None:
+        return False
+
+    try:
+        geom = vis.geometry()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        return False
+
+    if geom.width() <= 0 or geom.height() <= 0:
+        return False
+
+    overlay = _ensure_spotify_bars_overlay(widget)
+    if overlay is None:
+        return False
+
+    try:
+        from widgets.spotify_visualizer.shaders import preload_fragment_shaders
+
+        # Prime the shared shader-source cache before the GL widget asks for
+        # program creation so startup hot-path work does not include file IO.
+        preload_fragment_shaders()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to preload visualizer shader sources", exc_info=True)
+        return False
+
+    try:
+        if hasattr(overlay, "prewarm_context"):
+            overlay.prewarm_context(geom)
+        else:
+            overlay.setGeometry(geom)
+            overlay.show()
+            overlay.update()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to prewarm SpotifyBarsGLOverlay", exc_info=True)
+        return False
+
+    return True
+
+
+def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
+    """Return the shared Spotify GL overlay, creating it if needed."""
+
     # Lazily create a small GL overlay dedicated to Spotify bars. This
     # sits above the card widget in Z-order while the card itself remains
     # a normal QWidget with ShadowFadeProfile-driven opacity.
@@ -433,12 +503,12 @@ def push_spotify_visualizer_frame(
             # flashes over neighbouring widgets (e.g. weather).
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to initialize SpotifyBarsGLOverlay", exc_info=True)
-            widget._widget._spotify_bars_overlay = None
-            return False
+            widget._spotify_bars_overlay = None
+            return None
 
     if overlay is None:
         logger.warning("[SPOTIFY_VIS] Missing SpotifyBarsGLOverlay after initialization; visualizer bars will be blank")
-        return False
+        return None
 
     if not hasattr(overlay, "clear_overlay_buffer"):
         module_name = type(overlay).__module__
@@ -452,6 +522,27 @@ def push_spotify_visualizer_frame(
         )
         raise RuntimeError("SpotifyBarsGLOverlay missing clear_overlay_buffer; stale build detected")
 
+    return overlay
+
+
+def _push_spotify_bars_overlay_state(
+    widget,
+    *,
+    overlay: SpotifyBarsGLOverlay,
+    geom: QRect,
+    bars,
+    bar_count,
+    segments,
+    fill_color,
+    border_color,
+    fade,
+    playing,
+    ghosting_enabled=True,
+    ghost_alpha=0.4,
+    ghost_decay=-1.0,
+    vis_mode="spectrum",
+    **extra_kwargs,
+) -> bool:
     try:
         overlay_kwargs = {
             "rect": geom,

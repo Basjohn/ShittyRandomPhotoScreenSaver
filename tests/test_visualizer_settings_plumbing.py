@@ -784,6 +784,10 @@ class TestCreateTimeRefreshParity:
         assert (border_color.red(), border_color.green(), border_color.blue(), border_color.alpha()) == tuple(expected_border)
         assert vis.mode_kwargs["spectrum_glow_enabled"] is True
         assert vis.mode_kwargs["spectrum_glow_intensity"] == pytest.approx(1.2)
+        assert getattr(mgr, "expected_overlay", None) is None, (
+            "Visualizer should no longer register as a primary overlay participant; "
+            "it now joins via the Spotify secondary stage."
+        )
         assert refresh_calls == [widgets_config], (
             "Create-time visualizer setup must reuse the same refresh contract "
             "that settings re-entry uses."

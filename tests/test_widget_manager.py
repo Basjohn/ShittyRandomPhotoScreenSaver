@@ -348,6 +348,113 @@ class TestFadeCallbacks:
         cb2.assert_called_once_with(0.75)
 
 
+class TestStartupCoordination:
+    """Tests for centralized startup fade + Spotify secondary-stage ownership."""
+
+    def test_expected_overlays_are_mirrored_to_parent(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+
+        manager.add_expected_overlay("clock")
+        manager.add_expected_overlay("media")
+
+        assert parent._overlay_fade_expected == {"clock", "media"}
+
+    def test_secondary_fades_queue_until_compositor_ready_then_use_startup_delay(self, monkeypatch):
+        from rendering.widget_manager import WidgetManager
+        from rendering.display_overlays import SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+
+        parent = MagicMock()
+        parent.screen_index = 1
+        parent._has_rendered_first_frame = False
+        parent.image_displayed = MagicMock()
+        manager = WidgetManager(parent)
+        manager.add_expected_overlay("clock")
+
+        scheduled: list[int] = []
+        monkeypatch.setattr(
+            "rendering.widget_manager.QTimer.singleShot",
+            lambda delay_ms, starter: scheduled.append(int(delay_ms)),
+        )
+        prewarm_calls: list[str] = []
+        monkeypatch.setattr(
+            manager,
+            "_prewarm_spotify_visualizer_overlay",
+            lambda: prewarm_calls.append("prewarm") or True,
+        )
+
+        manager.register_spotify_secondary_fade(lambda: None)
+
+        assert len(manager._spotify_secondary_fade_starters) == 1
+
+        manager._on_compositor_ready("first-image")
+
+        assert parent._overlay_fade_started is True
+        assert parent._overlay_fade_expected == {"clock"}
+        assert scheduled == [SPOTIFY_SECONDARY_STARTUP_DELAY_MS]
+        assert prewarm_calls == ["prewarm"]
+        assert len(manager._spotify_secondary_fade_starters) == 0
+        assert parent._spotify_secondary_not_before_ts > 0.0
+
+    def test_secondary_fades_use_direct_delay_when_registered_after_compositor_ready(self, monkeypatch):
+        from rendering.widget_manager import WidgetManager
+        from rendering.display_overlays import SPOTIFY_SECONDARY_DIRECT_DELAY_MS
+
+        parent = MagicMock()
+        parent.screen_index = 1
+        parent._has_rendered_first_frame = False
+        parent.image_displayed = MagicMock()
+        manager = WidgetManager(parent)
+        manager.add_expected_overlay("clock")
+
+        scheduled: list[int] = []
+        monkeypatch.setattr(
+            "rendering.widget_manager.QTimer.singleShot",
+            lambda delay_ms, starter: scheduled.append(int(delay_ms)),
+        )
+        prewarm_calls: list[str] = []
+        monkeypatch.setattr(
+            manager,
+            "_prewarm_spotify_visualizer_overlay",
+            lambda: prewarm_calls.append("prewarm") or True,
+        )
+
+        manager._on_compositor_ready("first-image")
+        scheduled.clear()
+        prewarm_calls.clear()
+
+        manager.register_spotify_secondary_fade(lambda: None)
+
+        assert scheduled == [SPOTIFY_SECONDARY_DIRECT_DELAY_MS]
+        assert prewarm_calls == ["prewarm"]
+
+    def test_reset_fade_coordination_clears_spotify_overlay_prewarm_flags(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        manager._spotify_overlay_prewarm_attempted = True
+        manager._spotify_overlay_prewarmed = True
+
+        manager.reset_fade_coordination()
+
+        assert manager._spotify_overlay_prewarm_attempted is False
+        assert manager._spotify_overlay_prewarmed is False
+
+    def test_spotify_overlay_prewarm_can_retry_after_early_unavailable_widget(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        parent.spotify_visualizer_widget = None
+        manager = WidgetManager(parent)
+
+        assert manager._prewarm_spotify_visualizer_overlay() is False
+        assert manager._spotify_overlay_prewarm_attempted is False
+        assert manager._spotify_overlay_prewarmed is False
+
+
 class TestCleanup:
     """Tests for cleanup operations."""
     

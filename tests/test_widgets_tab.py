@@ -825,6 +825,31 @@ def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settin
     finally:
         tab.deleteLater()
 
+
+def test_build_current_widgets_config_uses_live_visualizer_builder(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": "bubble",
+            "preset_bubble": 2,
+            "bubble_gradient_direction": "center_out_reverse",
+            "bubble_gradient_semantics_version": 2,
+            "bubble_big_bass_pulse": 0.72,
+        }
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+
+        built = tab._build_current_widgets_config()["spotify_visualizer"]
+
+        assert built["mode"] == "bubble"
+        assert built["bubble_gradient_direction"] == "center_out_reverse"
+        assert built["bubble_gradient_semantics_version"] == 2
+        assert built["bubble_big_bass_pulse"] == pytest.approx(0.72)
+    finally:
+        tab.deleteLater()
+
 def test_spinbox_stylesheet_attached(qt_app, settings_manager):
     """WidgetsTab stylesheet must keep the shared QSpinBox skin."""
 

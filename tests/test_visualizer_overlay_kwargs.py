@@ -74,3 +74,23 @@ def test_overlay_accepts_all_gpu_kwargs(qt_app):
         assert not unexpected, f"Overlay missing params for {mode_name}: {sorted(unexpected)}"
 
     widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_spectrum_gpu_kwargs_include_shared_engine_signal_snapshot(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+
+    stub_engine = _StubEngine()
+    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
+
+    extras = build_gpu_push_extra_kwargs(widget, "spectrum", stub_engine)
+
+    assert "energy_bands" in extras
+    assert isinstance(extras["energy_bands"], EnergyBands)
+    assert "transient_energy" in extras
+    assert isinstance(extras["transient_energy"], TransientEnergyBands)
+    assert "waveform" in extras
+    assert "waveform_count" in extras
+
+    widget.deleteLater()

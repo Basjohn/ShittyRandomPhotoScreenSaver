@@ -85,6 +85,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
 | Presets | core/settings/presets.py | PresetDefinition, apply_preset() | Widget presets system (moved from core/presets.py) |
 | Vis Presets | core/settings/visualizer_presets.py | VisualizerPreset, get_presets(), apply_preset_to_config() | Per-visualizer-mode preset registry. Curated presets load from `presets/visualizer_modes/<mode>`. Snapshot overrides are **explicit-only** from `presets/visualizer_mode_overrides` and require marker+mode+preset_index to avoid full-SST export contamination. |
+| Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | preload_fragment_shaders(), load_fragment_shader(), load_all_fragment_shaders() | Fragment shader source loading plus cached startup preload for the visualizer shader set |
 | Vis Mode Binding | ui/tabs/media/visualizer_mode_binding.py | initialize_visualizer_mode_combo(), load_visualizer_mode_selection(), load_visualizer_preset_indices(), load_visualizer_rainbow_state() | Shared WidgetsTab adapter for visualizer mode combo initialization plus per-mode preset and rainbow state binding |
 | Blob Binding | ui/tabs/media/blob_settings_binding.py | load_blob_mode_settings(), collect_blob_mode_settings() | Blob-owned WidgetsTab load/save adapter so Blob enhancements do not expand the central media-tab coordinator |
 | Bubble Binding | ui/tabs/media/bubble_settings_binding.py | load_bubble_mode_settings(), collect_bubble_mode_settings() | Bubble-owned WidgetsTab load/save adapter so Bubble direction/color/state work does not expand the central media-tab coordinator; routes gradient labels through the shared semantics helper instead of local direction math |
@@ -143,7 +144,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 |--------|------|-------------|---------|
 | DisplayWidget | rendering/display_widget.py | DisplayWidget | Core fullscreen presenter (1595 lines, delegates to 6 helper modules) |
 | Display Setup | rendering/display_setup.py | show_on_screen, setup_widgets, ensure_overlay_stack | Display initialization, widget setup, screen change |
-| Display Image Ops | rendering/display_image_ops.py | set_processed_image, on_transition_finished, push_spotify_visualizer_frame | Image display pipeline, transition finish |
+| Display Image Ops | rendering/display_image_ops.py | set_processed_image, on_transition_finished, push_spotify_visualizer_frame, prewarm_spotify_visualizer_overlay | Image display pipeline, transition finish, and hidden visualizer-overlay prewarm before staged reveal |
 | Display GL Init | rendering/display_gl_init.py | init_renderer_backend, ensure_gl_compositor, ensure_render_surface | GL compositor/surface setup, cleanup |
 | Display Context Menu | rendering/display_context_menu.py | show_context_menu, on_context_transition_selected | Context menu creation and handlers |
 | Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter, media key passthrough (focus re-claim removed Feb 2026 to keep Settings responsive) |
@@ -163,12 +164,12 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| WidgetManager | rendering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fade coordination via FadeCoordinator. Owns runtime-safe visualizer preset cycling via `cycle_visualizer_preset(mode, direction)` (settings-backed, non-UI). |
+| WidgetManager | rendering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fade coordination via FadeCoordinator, and Spotify secondary-stage registration/wakeup routing. Owns runtime-safe visualizer preset cycling via `cycle_visualizer_preset(mode, direction)` (settings-backed, non-UI). |
 | FadeCoordinator | rendering/fade_coordinator.py | FadeCoordinator | Centralized lock-free fade synchronization |
 | WidgetPositioner | rendering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
 | WidgetFactories | rendering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |
 | SpotifyWidgetCreators | rendering/spotify_widget_creators.py | apply_spotify_vis_model_config() | Reusable vis config apply for init + live refresh; forwards curated bar fill/border colours plus opacity into `SpotifyVisualizerWidget.apply_vis_mode_config()` so preset hotswaps can’t inherit stale card colours |
-| WidgetSetup | rendering/widget_setup.py | parse_color_to_qcolor(), compute_expected_overlays() | Setup helpers |
+| WidgetSetup | rendering/widget_setup.py | parse_color_to_qcolor(), compute_expected_overlays() | Setup helpers, including the primary expected-overlay contract that intentionally excludes `spotify_visualizer` from the first coordinated fade wave |
 
 ## Rendering - Input & Control
 
@@ -278,7 +279,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
 | Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | SHARED_VERTEX_SHADER, load_fragment_shader, load_all_fragment_shaders | GLSL shader source loading for multi-shader architecture |
 
-> **Manual floor contract (Mar 2026):** Global and per-mode `manual_floor` keys clamp to `0.12–1.0` everywhere (UI sliders, `SpotifyVisualizerSettings`, audio worker, shared beat engine). Canonical defaults (`core/settings/default_settings.py`, `core/settings/defaults_snapshot.py`) and shipping snapshots (`SRPSS_Settings_Screensaver_*.json`) all seed 0.12 so curated presets, defaults, and migrations can’t resurrect the retired 2.1 baseline. SettingsManager migrations and the audio worker both reseed the dynamic accumulator whenever a clamped value is applied.
+> **Manual floor contract (Mar 2026):** Global and per-mode `manual_floor` keys clamp to `0.12–1.0` everywhere (UI sliders, `SpotifyVisualizerSettings`, audio worker, shared beat engine). Canonical defaults live in `core/settings/default_settings.py` via `core/settings/defaults.py`, while `core/settings/defaults_snapshot.py` / `defaults_snapshot.json` are derived artifacts from that same source through `core/settings/defaults_snapshot_builder.py`. All of those paths seed 0.12 so curated presets, defaults, and migrations can’t resurrect the retired 2.1 baseline. SettingsManager migrations and the audio worker both reseed the dynamic accumulator whenever a clamped value is applied.
 
 ### Visualizer Per-Mode Renderers (`widgets/spotify_visualizer/renderers/`)
 
@@ -469,6 +470,7 @@ value = settings.get("display.mode", "fill")
 | tests/test_weather_widget.py | Weather fetch, display, caching (26 tests) |
 | tests/test_slide_jitter.py | Slide transition frame timing (7 tests) |
 | tests/test_widget_manager.py | WidgetManager lifecycle, fade, factory |
+| tests/test_display_image_ops.py | Display image ops visualizer prewarm pipeline and shader-preload ordering |
 | tests/test_sine_wave_gl_fix.py | Sine wave GL overlay fix regression (mode validation, cycle, shader, card height) |
 | tests/test_micro_wobble_math.py | Micro wobble shader math: energy weighting, spatial freq, displacement bounds, smoothness (20 tests) |
 | tests/test_visualizer_settings_plumbing.py | Visualizer settings plumbing: behavior-first model/creator/applier/frame-push coverage plus a small static shader/contract layer |

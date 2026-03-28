@@ -1266,6 +1266,37 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             logger.warning("[PERF] [SPOTIFY_BARS_GL] set_state breakdown: geom=%.2fms, show=%.2fms, update=%.2fms",
                           _geom_elapsed, _show_elapsed, _update_elapsed)
 
+    def prewarm_context(self, rect: QRect) -> None:
+        """Pre-create the GL context and shader pipeline off the visible hot path."""
+
+        try:
+            self.setGeometry(rect)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry during prewarm", exc_info=True)
+
+        self._enabled = False
+        self._fade = 0.0
+
+        try:
+            if not self.isVisible():
+                self.show()
+            self.update()
+            # Force the QOpenGLWidget to realise its GL surface now instead
+            # of waiting until the visualizer's staged reveal window. This
+            # shifts context creation + shader compilation into the shared
+            # startup prewarm phase.
+            if not self._gl_state.is_ready() and not self._gl_state.is_error():
+                try:
+                    self.grabFramebuffer()
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] grabFramebuffer prewarm fallback triggered",
+                        exc_info=True,
+                    )
+                    self.repaint()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to prewarm SpotifyBarsGLOverlay", exc_info=True)
+
     def clear_overlay_buffer(self) -> None:
         """Reset overlay state and clear the GL backing buffer."""
 

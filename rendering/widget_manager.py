@@ -92,7 +92,11 @@ class WidgetManager:
         self._fade_coordinator: FadeCoordinator = FadeCoordinator(
             screen_index=getattr(parent, "screen_index", 0)
         )
-        
+        self._expected_overlays: set[str] = set()
+        self._spotify_secondary_fade_starters: list[Callable[[], None]] = []
+        self._spotify_overlay_prewarm_attempted: bool = False
+        self._spotify_overlay_prewarmed: bool = False
+
         # Wait for compositor first frame before starting widget fades
         self._compositor_ready: bool = False
         self._connect_compositor_ready_signal()
@@ -110,6 +114,87 @@ class WidgetManager:
         self._pending_spotify_visibility_sync: bool = False
         
         logger.debug("[WIDGET_MANAGER] Initialized")
+
+    def _mirror_parent_overlay_state(self) -> None:
+        parent = self._parent
+        if parent is None:
+            return
+        try:
+            parent._overlay_fade_expected = set(self._expected_overlays)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+    def _mark_parent_spotify_secondary_not_before(self, delay_ms: int) -> None:
+        parent = self._parent
+        if parent is None:
+            return
+        try:
+            parent._spotify_secondary_not_before_ts = time.monotonic() + (
+                max(0, int(delay_ms)) / 1000.0
+            )
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+    def _prewarm_spotify_visualizer_overlay(self) -> bool:
+        """Prewarm the Spotify visualizer GL overlay before hot-start reveal."""
+
+        if self._spotify_overlay_prewarmed:
+            return self._spotify_overlay_prewarmed
+
+        parent = self._parent
+        if parent is None:
+            return False
+
+        vis = getattr(parent, "spotify_visualizer_widget", None)
+        if vis is None:
+            return False
+
+        try:
+            from rendering.display_image_ops import prewarm_spotify_visualizer_overlay
+
+            self._spotify_overlay_prewarmed = bool(
+                prewarm_spotify_visualizer_overlay(parent)
+            )
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_SECONDARY] Failed to prewarm Spotify visualizer overlay",
+                exc_info=True,
+            )
+            self._spotify_overlay_prewarmed = False
+        else:
+            self._spotify_overlay_prewarm_attempted = self._spotify_overlay_prewarmed
+
+        logger.debug(
+            "[SPOTIFY_SECONDARY] visualizer overlay prewarm result=%s",
+            self._spotify_overlay_prewarmed,
+        )
+        return self._spotify_overlay_prewarmed
+
+    def _schedule_spotify_secondary_fades(self, delay_ms: int) -> None:
+        queued = list(self._spotify_secondary_fade_starters)
+        self._spotify_secondary_fade_starters = []
+        self._prewarm_spotify_visualizer_overlay()
+        self._mark_parent_spotify_secondary_not_before(delay_ms)
+        logger.debug(
+            "[SPOTIFY_SECONDARY] scheduling %d queued starters (delay_ms=%s, compositor_ready=%s, expected=%s)",
+            len(queued),
+            int(delay_ms),
+            self._compositor_ready,
+            sorted(self._expected_overlays),
+        )
+
+        for starter in queued:
+            try:
+                if delay_ms <= 0:
+                    starter()
+                else:
+                    QTimer.singleShot(delay_ms, starter)
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+                try:
+                    starter()
+                except Exception as inner:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", inner)
 
     def _bind_parent_attribute(self, attr_name: str, widget: Optional[QWidget]) -> None:
         """Expose newly created widgets on the parent DisplayWidget immediately."""
@@ -153,6 +238,24 @@ class WidgetManager:
         self._compositor_ready = True
         # Signal FadeCoordinator that compositor is ready
         self._fade_coordinator.signal_compositor_ready()
+        try:
+            self._parent._overlay_fade_started = True
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+        if self._expected_overlays:
+            try:
+                from rendering.display_overlays import SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+                logger.debug(
+                    "[SPOTIFY_SECONDARY] compositor ready; using startup secondary delay=%sms",
+                    int(SPOTIFY_SECONDARY_STARTUP_DELAY_MS),
+                )
+
+                self._schedule_spotify_secondary_fades(
+                    int(SPOTIFY_SECONDARY_STARTUP_DELAY_MS),
+                )
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         
         logger.info("[FADE_SYNC] Compositor ready on screen=%s (first image: %s)", screen_idx, image_path)
         
@@ -1340,6 +1443,18 @@ class WidgetManager:
         """Reset fade coordination state for a new widget setup cycle."""
         if hasattr(self, '_fade_coordinator') and self._fade_coordinator is not None:
             self._fade_coordinator.reset()
+        self._expected_overlays = set()
+        self._spotify_secondary_fade_starters = []
+        self._spotify_overlay_prewarm_attempted = False
+        self._spotify_overlay_prewarmed = False
+        self._mirror_parent_overlay_state()
+        parent = self._parent
+        if parent is not None:
+            try:
+                parent._overlay_fade_started = False
+                parent._spotify_secondary_not_before_ts = 0.0
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
     def set_expected_overlays(self, expected: Set[str]) -> None:
         """Set the overlays expected to participate in coordinated fade.
@@ -1347,11 +1462,15 @@ class WidgetManager:
         Args:
             expected: Set of overlay names (e.g., {"weather", "media", "reddit"})
         """
+        self._expected_overlays = set(expected)
+        self._mirror_parent_overlay_state()
         for name in expected:
             self._fade_coordinator.register_participant(name)
 
     def add_expected_overlay(self, name: str) -> None:
         """Add an overlay to the expected set."""
+        self._expected_overlays.add(name)
+        self._mirror_parent_overlay_state()
         self._fade_coordinator.register_participant(name)
 
     def request_overlay_fade_sync(self, overlay_name: str, starter: Callable[[], None]) -> None:
@@ -1366,21 +1485,59 @@ class WidgetManager:
 
     def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
         """Register a Spotify second-wave fade to run after primary overlays."""
-        # Check if fade coordination is active
-        state = self._fade_coordinator.get_state()
-        if not state['participants'] or state['started']:
-            # Run with delay if coordination already started or no participants
+        try:
+            from rendering.display_overlays import (
+                SPOTIFY_SECONDARY_DIRECT_DELAY_MS,
+                SPOTIFY_SECONDARY_STARTUP_DELAY_MS,
+            )
+        except Exception:
+            SPOTIFY_SECONDARY_DIRECT_DELAY_MS = 1200
+            SPOTIFY_SECONDARY_STARTUP_DELAY_MS = 2500
+
+        if not self._expected_overlays:
+            self._prewarm_spotify_visualizer_overlay()
+            self._mark_parent_spotify_secondary_not_before(
+                int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+            )
+            logger.debug(
+                "[SPOTIFY_SECONDARY] no primary overlays registered; using direct delay=%sms",
+                int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+            )
             try:
-                QTimer.singleShot(500, starter)
+                QTimer.singleShot(int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS), starter)
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 try:
                     starter()
-                except Exception as e:
-                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+                except Exception as inner:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", inner)
             return
-        # Add to secondary fade list for later execution
-        self._spotify_secondary_fade_starters.append(starter)
+
+        if not self._compositor_ready:
+            self._spotify_secondary_fade_starters.append(starter)
+            logger.debug(
+                "[SPOTIFY_SECONDARY] queued starter until compositor ready (expected=%s, queued=%d)",
+                sorted(self._expected_overlays),
+                len(self._spotify_secondary_fade_starters),
+            )
+            return
+
+        self._prewarm_spotify_visualizer_overlay()
+        self._mark_parent_spotify_secondary_not_before(
+            int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+        )
+        logger.debug(
+            "[SPOTIFY_SECONDARY] compositor already ready; using direct delay=%sms",
+            int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+        )
+        try:
+            QTimer.singleShot(int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS), starter)
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            try:
+                starter()
+            except Exception as inner:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", inner)
 
     def _queue_spotify_visibility_sync(self, media_widget: Optional[MediaWidget]) -> None:
         if not media_widget or self._pending_spotify_visibility_sync:
@@ -1412,12 +1569,10 @@ class WidgetManager:
     def _register_spotify_secondary_fade(self, widget: Optional[QWidget]) -> None:
         if widget is None:
             return
-        parent = self._parent
-        if parent is None:
-            return
-        register = getattr(parent, "register_spotify_secondary_fade", None)
-        if not callable(register):
-            return
+        try:
+            setattr(widget, "_spotify_secondary_stage_registered", True)
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to mark widget as secondary-stage registered", exc_info=True)
 
         anchor = getattr(widget, "_anchor_media", None)
         max_deferrals = 20
@@ -1428,6 +1583,10 @@ class WidgetManager:
             except RuntimeError:
                 return
             try:
+                begin_secondary = getattr(widget, "begin_spotify_secondary_stage", None)
+                if callable(begin_secondary):
+                    begin_secondary()
+                    return
                 sync = getattr(widget, "sync_visibility_with_anchor", None)
                 if callable(sync):
                     sync()
@@ -1479,10 +1638,7 @@ class WidgetManager:
                 widget.objectName() or type(widget).__name__,
                 getattr(self._parent, "screen_index", "?"),
             )
-        try:
-            register(_starter)
-        except Exception as exc:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+        self.register_spotify_secondary_fade(_starter)
 
     # =========================================================================
     # Widget Factory Methods (Phase 2 - Jan 2026)

@@ -193,9 +193,9 @@ class ReindexEntry:
 def _load_visualizer_defaults() -> Dict[str, Any]:
     global _DEFAULTS_CACHE
     if _DEFAULTS_CACHE is None:
-        from core.settings import default_settings
+        from core.settings.defaults import get_default_settings
 
-        defaults = deepcopy(default_settings.DEFAULT_SETTINGS["widgets"]["spotify_visualizer"])
+        defaults = deepcopy(get_default_settings()["widgets"]["spotify_visualizer"])
         _DEFAULTS_CACHE = defaults
     return deepcopy(_DEFAULTS_CACHE)
 

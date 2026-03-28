@@ -231,12 +231,12 @@ class ClockWidget(BaseOverlayWidget):
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
             try:
                 overlay_name = getattr(self, "_overlay_name", "clock")
-                parent.request_overlay_fade_sync(overlay_name, lambda: self._start_widget_fade_in(1500))
+                parent.request_overlay_fade_sync(overlay_name, self._start_widget_fade_in)
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
-                self._start_widget_fade_in(1500)
+                self._start_widget_fade_in()
         else:
-            self._start_widget_fade_in(1500)
+            self._start_widget_fade_in()
         
         logger.debug("[LIFECYCLE] ClockWidget activated")
     
@@ -291,7 +291,7 @@ class ClockWidget(BaseOverlayWidget):
             # Guard against widget being deleted before deferred callback runs
             if not Shiboken.isValid(self):
                 return
-            self._start_widget_fade_in(1500)
+            self._start_widget_fade_in()
 
         if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
             try:
@@ -319,12 +319,18 @@ class ClockWidget(BaseOverlayWidget):
         
         logger.debug("Clock widget stopped")
     
-    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+    def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         # Guard against widget being deleted before this method runs
         if not Shiboken.isValid(self):
             return
-            
-        if duration_ms <= 0:
+
+        resolved_duration_ms = (
+            ShadowFadeProfile.default_duration_ms()
+            if duration_ms is None
+            else max(0, int(duration_ms))
+        )
+
+        if resolved_duration_ms <= 0:
             try:
                 self.show()
             except Exception as e:
@@ -354,11 +360,6 @@ class ClockWidget(BaseOverlayWidget):
                 self._update_position()
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
-
-        try:
-            self.show()
-        except Exception as e:
-            logger.debug("[CLOCK] Exception suppressed: %s", e)
         if self._tz_label:
             try:
                 self._tz_label.show()
@@ -366,17 +367,29 @@ class ClockWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
 
-        # Only apply widget-level shadow in digital mode. Analog mode uses
-        # QPainter-drawn shadows to avoid QGraphicsDropShadowEffect cache corruption.
-        if self._display_mode != "analog":
+        try:
+            ShadowFadeProfile.start_fade_in(
+                self,
+                self._shadow_config,
+                duration_ms=resolved_duration_ms,
+                has_background_frame=self._show_background,
+                apply_shadow_on_finish=self._display_mode != "analog",
+            )
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
             try:
-                ShadowFadeProfile.start_fade_in(
-                    self,
-                    self._shadow_config,
-                    has_background_frame=self._show_background,
-                )
+                self.show()
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
+            if self._tz_label:
+                try:
+                    self._tz_label.show()
+                    self._tz_label.raise_()
+                except Exception as e:
+                    logger.debug("[CLOCK] Exception suppressed: %s", e)
+            # Only apply widget-level shadow in digital mode. Analog mode uses
+            # QPainter-drawn shadows to avoid QGraphicsDropShadowEffect cache corruption.
+            if self._display_mode != "analog":
                 try:
                     apply_widget_shadow(
                         self,

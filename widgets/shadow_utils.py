@@ -221,10 +221,17 @@ class ShadowFadeProfile:
     """
 
     # Single global profile for all widgets – not user-configurable for
-    # now. Duration and easing should match the existing 1.5s InOutCubic
-    # behaviour used by the individual widgets.
-    DURATION_MS: int = 1500
-    EASING: QEasingCurve.Type = QEasingCurve.InOutCubic
+    # now. Keep this slightly longer than the earlier 1.5s profile and
+    # use an easing curve that becomes visible sooner, so startup reads as
+    # a gentle coordinated fade instead of a dead gap followed by a late pop.
+    DURATION_MS: int = 1800
+    EASING: QEasingCurve.Type = QEasingCurve.OutCubic
+
+    @classmethod
+    def default_duration_ms(cls) -> int:
+        """Return the canonical shared fade duration."""
+
+        return max(0, int(cls.DURATION_MS))
 
     @classmethod
     def attach_shadow(
@@ -376,7 +383,9 @@ class ShadowFadeProfile:
         widget: QWidget,
         config: Mapping[str, Any] | None,
         *,
+        duration_ms: Optional[int] = None,
         has_background_frame: bool,
+        apply_shadow_on_finish: bool = True,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> None:
         """Fade ``widget`` in, then apply the shared drop shadow.
@@ -389,6 +398,9 @@ class ShadowFadeProfile:
         """
 
         cfg = config or {}
+        resolved_duration_ms = (
+            cls.default_duration_ms() if duration_ms is None else max(0, int(duration_ms))
+        )
 
         try:
             # Stop any in-flight fade animation created by this helper.
@@ -413,12 +425,31 @@ class ShadowFadeProfile:
                 logger.debug(
                     "[SHADOW_FADE] start_fade_in widget=%r duration=%sms easing=%s",
                     widget,
-                    cls.DURATION_MS,
+                    resolved_duration_ms,
                     cls.EASING,
                 )
 
+            # Show immediately while pinned at 0 opacity so the coordinated
+            # fade remains visible even if the event loop is briefly busy
+            # before the first animation tick fires.
+            try:
+                widget.show()
+            except Exception:
+                # Showing may fail during shutdown; in that case we still
+                # allow the animation/shadow logic to proceed.
+                pass
+
+            try:
+                setattr(widget, "_shadowfade_progress", 0.0)
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
+            try:
+                setattr(widget, "_shadowfade_completed", False)
+            except Exception as e:
+                logger.debug("[SHADOW] Exception suppressed: %s", e)
+
             anim = QVariantAnimation(widget)
-            anim.setDuration(max(0, int(cls.DURATION_MS)))
+            anim.setDuration(resolved_duration_ms)
             anim.setStartValue(0.0)
             anim.setEndValue(1.0)
             try:
@@ -426,9 +457,6 @@ class ShadowFadeProfile:
             except Exception:
                 # Easing failures should not break the fade.
                 pass
-
-            # Track whether we've shown the widget yet
-            widget_shown = [False]
 
             def _on_value_changed(value: float) -> None:
                 if not Shiboken.isValid(effect):
@@ -438,17 +466,7 @@ class ShadowFadeProfile:
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
                     f = 0.0
-                
-                # Show the widget on first animation tick when opacity is confirmed at 0.0
-                if not widget_shown[0]:
-                    try:
-                        widget.show()
-                        widget_shown[0] = True
-                    except Exception:
-                        # Showing may fail during shutdown; in that case we still
-                        # allow the animation/shadow logic to proceed.
-                        pass
-                
+
                 try:
                     effect.setOpacity(f)
                 except Exception as e:
@@ -492,16 +510,17 @@ class ShadowFadeProfile:
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
 
-                try:
-                    cls._start_shadow_fade(widget, cfg, has_background_frame=has_background_frame)
-                except Exception as e:
-                    logger.debug("[SHADOW] Exception suppressed: %s", e)
-                    if is_verbose_logging():
-                        logger.debug(
-                            "[SHADOW_FADE] Failed to start shadow fade for %r",
-                            widget,
-                            exc_info=True,
-                        )
+                if apply_shadow_on_finish:
+                    try:
+                        cls._start_shadow_fade(widget, cfg, has_background_frame=has_background_frame)
+                    except Exception as e:
+                        logger.debug("[SHADOW] Exception suppressed: %s", e)
+                        if is_verbose_logging():
+                            logger.debug(
+                                "[SHADOW_FADE] Failed to start shadow fade for %r",
+                                widget,
+                                exc_info=True,
+                            )
                 if on_finished is not None:
                     try:
                         on_finished()

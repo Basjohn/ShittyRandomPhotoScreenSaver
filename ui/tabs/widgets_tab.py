@@ -1720,20 +1720,12 @@ class WidgetsTab(QWidget):
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         
         # Spotify Visualizer
-        config['spotify_visualizer'] = {
-            'visualizers_enabled': getattr(self, 'visualizers_enabled', None) and self.visualizers_enabled.isChecked(),
-            'enabled': getattr(self, 'vis_enabled_checkbox', None) and self.vis_enabled_checkbox.isChecked(),
-            'monitor': getattr(self, 'vis_monitor_combo', None) and self.vis_monitor_combo.currentText() or 'ALL',
-            # Per-mode values are managed by technical controls helpers; bar_count here is placeholder legacy.
-            'bar_count': 16,
-            'mode': getattr(self, 'vis_mode_combo', None) and self.vis_mode_combo.currentData() or 'spectrum',
-            'osc_glow_enabled': getattr(self, 'osc_glow_enabled', None) and self.osc_glow_enabled.isChecked(),
-            'osc_glow_intensity': (getattr(self, 'osc_glow_intensity', None) and self.osc_glow_intensity.value() or 50) / 100.0,
-            'osc_reactive_glow': getattr(self, 'osc_reactive_glow', None) and self.osc_reactive_glow.isChecked(),
-            'blob_pulse': (getattr(self, 'blob_pulse', None) and self.blob_pulse.value() or 100) / 100.0,
-            'blob_pulse_cap': (getattr(self, 'blob_pulse_cap', None) and self.blob_pulse_cap.value() or 100) / 100.0,
-            'blob_pulse_release_ms': getattr(self, 'blob_pulse_release_ms', None) and self.blob_pulse_release_ms.value() or 220,
-            'blob_growth': (getattr(self, 'blob_growth', None) and self.blob_growth.value() or 250) / 100.0,
-        }
+        stored_widgets = self._settings.get("widgets", {}) or {}
+        base_visualizer = {}
+        if isinstance(stored_widgets, Mapping):
+            candidate = stored_widgets.get("spotify_visualizer", {})
+            if isinstance(candidate, Mapping):
+                base_visualizer = dict(candidate)
+        config['spotify_visualizer'] = self._build_current_spotify_visualizer_config(base_visualizer)
         
         return config

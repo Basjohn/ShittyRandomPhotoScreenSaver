@@ -1225,13 +1225,20 @@ class DisplayWidget(QWidget):
         from rendering.display_overlays import start_overlay_fades
         start_overlay_fades(self)
 
-    def _run_spotify_secondary_fades(self) -> None:
+    def _run_spotify_secondary_fades(self, *, base_delay_ms: int = 0) -> None:
         """Delegates to rendering.display_overlays."""
         from rendering.display_overlays import run_spotify_secondary_fades
-        run_spotify_secondary_fades(self)
+        run_spotify_secondary_fades(self, base_delay_ms=base_delay_ms)
 
     def register_spotify_secondary_fade(self, starter) -> None:
-        """Delegates to rendering.display_overlays."""
+        """Delegate Spotify secondary-stage registration to WidgetManager."""
+        if self._widget_manager is not None:
+            try:
+                self._widget_manager.register_spotify_secondary_fade(starter)
+                return
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
         from rendering.display_overlays import register_spotify_secondary_fade
         register_spotify_secondary_fade(self, starter)
 

@@ -145,7 +145,10 @@ def compute_expected_overlays(
         if spotify_volume_enabled:
             expected.add("spotify_volume")
 
-        # Visualizers remain positioned with media; require media enabled
+        # Visualizers remain positioned with media, but they intentionally do
+        # not join the primary compositor fade wave. Their startup is handled
+        # as a Spotify secondary stage so engine reset, timer start, and GL
+        # shader warm-up can happen off the first visible overlay wave.
         spotify_vis_settings = widgets_map.get('spotify_visualizer', {})
         visualizers_enabled = SettingsManager.to_bool(
             spotify_vis_settings.get('visualizers_enabled', True), True
@@ -155,6 +158,9 @@ def compute_expected_overlays(
         )
         vis_monitor = spotify_vis_settings.get('monitor', media_monitor)
         if visualizers_enabled and spotify_vis_enabled and resolve_monitor_visibility(vis_monitor, screen_index):
-            expected.add("spotify_visualizer")
+            logger.debug(
+                "[FADE_SYNC] spotify_visualizer excluded from primary expected overlays; "
+                "startup is staged via Spotify secondary fades"
+            )
 
     return expected

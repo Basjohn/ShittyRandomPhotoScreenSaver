@@ -179,10 +179,19 @@ tests/
 | Test File | What It Tests | When To Use |
 |-----------|---------------|-------------|
 | `test_clock_widget.py` | ClockWidget (digital + analog), multi-clock support | Clock widget changes |
+Normal fade-path coverage here now explicitly guards that analog Clock still uses the shared fade helper instead of bypassing startup fade coordination.
+| `test_shadow_utils.py` | Shared fade helper visibility/opacity contract | Central fade regressions |
+This is now the direct fence for the shared `ShadowFadeProfile.start_fade_in()` contract: widgets must become visible immediately at `opacity=0.0`, rather than waiting for the first animation tick and accidentally collapsing the coordinated fade into a delayed pop under startup load.
+It also now guards the shared fade-profile defaults themselves so startup fade tuning does not quietly drift back to an almost-imperceptible feel.
+It also guards the honesty of the shared fade API: explicit `duration_ms` overrides must be respected, so true special cases can be intentional instead of silently inheriting the default while pretending otherwise.
 | `test_weather_widget.py` | WeatherWidget, Open-Meteo integration | Weather widget, fetch issues |
 | `test_media_widget.py` | MediaWidget, GSMTC integration, artwork | Media display changes |
 | `test_reddit_widget.py` | RedditWidget, fetch, display, clicks | Reddit widget issues |
 | `test_spotify_visualizer_widget.py` | SpotifyVisualizerWidget, BeatEngine, bar rendering | Visualizer widget changes |
+Startup staging coverage here now explicitly guards Spotify secondary-stage deferral, widget self-registration into that stage, first-fresh-frame reveal completion, exact ready-driven reveal after the minimum hidden warmup delay, anchor-visibility release, anchor-sync obedience to the centralized parent secondary-stage deadline, overlay prewarm before reveal, deferred pre-stage wake routing, and the rule that staged hot start must not immediately re-run the normal `engine.wake()` restart path.
+Visualizer startup fade timing here is now expected to derive from the shared fade helper contract rather than from local hardcoded durations.
+| `test_display_image_ops.py` | Display image ops visualizer prewarm pipeline | Startup prewarm regressions |
+This suite now directly guards that visualizer shader-source preload happens before hidden overlay prewarm, so shader file IO stays out of the first visible startup window.
 | `test_spotify_visualizer_integration.py` | Visualizer integration with DisplayWidget | Visualizer integration |
 | `test_imgur_cache.py` | Imgur LRU disk cache, GIF conversion | Imgur cache changes |
 | `test_imgur_scraper.py` | Imgur web scraping, rate limiting | Imgur scraper changes |
@@ -241,7 +250,7 @@ tests/
 | `test_settings.py` | Settings persistence, JSON store | Settings storage changes |
 | `test_settings_schema.py` | Settings schema validation | Schema changes |
 | `test_settings_sync.py` | Settings synchronization | Sync issues |
-| `test_settings_defaults_parity.py` | Defaults match between code and UI | Default value consistency |
+| `test_settings_defaults_parity.py` | Canonical defaults, compatibility aliases, and derived snapshot artifacts stay in parity | Default/source-of-truth consistency |
 | `test_settings_profile_separation.py` | Normal vs MC profile isolation | Profile isolation issues |
 
 ### Settings Dialog
@@ -339,6 +348,11 @@ tests/
 | `test_phase_e_effect_corruption.py` | Effect cache corruption from context menus | Phase E corruption |
 | `test_prewarm_no_deadlock.py` | GL prewarm deadlock prevention | Startup deadlock |
 | `test_widget_overlay_regressions.py` | Various overlay widget regressions | Multiple overlay bugs |
+| `test_widget_setup.py` | Setup helpers, expected-overlay contracts, startup-wave exclusions | Overlay coordination / staged-start contracts |
+This suite now also guards that the primary wave starts immediately instead of inserting compositor-only startup dead air, and that Spotify secondary startup remains delayed behind that primary wave instead of collapsing back into it.
+It also now guards that the parent display records the centralized Spotify secondary-stage not-before deadline used by runtime startup gating.
+| `test_widget_manager.py` | WidgetManager lifecycle, registration, startup ownership | Manager-side startup/fade regressions |
+This suite now also guards that WidgetManager mirrors expected overlays back to the parent display and that queued Spotify secondary fades use compositor-ready plus the correct startup-vs-direct delay split, so secondary-stage timing cannot drift onto an orphaned display-local path again.
 | `test_visualizer_preservation.py` | Visualizer state preservation | Visualizer reset bugs |
 | `test_visualizer_playback_gating.py` | Visualizer playback state gating | Bars when paused |
 | `test_visualizer_modes.py` | Visualizer direction/swirl/converge modes | Mode switching |
@@ -422,6 +436,14 @@ for tf in sorted(pathlib.Path(cwd,'tests').glob('test_*.py')):
 
 - `pytest --collect-only tests -q` now completes cleanly without manual environment overrides.
 - Avoid hard-coding stale “known failures” here. When a regression is active, record it in [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Current_Plan.md) or the relevant bug/debug doc instead of letting this section decay.
+- Active startup-reactivity coverage currently splits between:
+  - `tests/test_widget_manager.py` for manager-owned source-of-truth checks around expected overlays, compositor-ready, and Spotify secondary-stage scheduling
+  - `tests/test_spotify_visualizer_widget.py` for widget-side staged startup and reveal gating
+  - `tests/test_widget_setup.py` for the primary-wave exclusion contract plus the stronger “fade immediately, delay only the visualizer” startup cadence
+  - `tests/test_clock_widget.py` for the analog Clock shared-fade contract so a primary overlay cannot silently bypass the coordinated fade wave
+  - `tests/test_shadow_utils.py` for the shared fade helper itself, so “delay then instant plaster” regressions fail at the centralized seam instead of only surfacing in live runtime
+  - `tests/test_display_image_ops.py` for centralized shader preload plus visualizer overlay prewarm ordering
+  - manual/log validation for true cold-start parity versus settings re-entry and mode-cycle refresh
 
 ### Test Fixture Best Practices
 When writing tests that create `DisplayWidget` or start transitions:
@@ -478,7 +500,9 @@ When writing tests that create `DisplayWidget` or start transitions:
 - `tests/test_mc_keyboard_input.py`
   Guards the MC focus reclaim / hotkey path that restored working keys after click interactions.
 - `tests/test_spotify_visualizer_widget.py`
-  Guards shared-engine fresh-frame/reset gating during mode switches. Still important because the Oscilloscope half-dead-line bug is not yet considered closed.
+  Guards shared-engine fresh-frame/reset gating during mode switches.
+  It is also now the direct regression fence for staged visualizer startup: secondary-stage deferral, first-fresh-frame reveal, ready-driven post-warmup reveal scheduling, and anchor-visibility release.
+  Still important because the Oscilloscope half-dead-line bug is not yet considered closed.
 - `tests/test_ghost_isolation.py`
   Guards Blob ghost routing/isolation and retired ghost-path branches. This protects the code contract, but Blob ghost visuals still require user validation.
 - `tests/test_visualizer_presets.py`
@@ -495,4 +519,4 @@ When writing tests that create `DisplayWidget` or start transitions:
 
 ---
 
-**Last Updated**: Mar 27, 2026 (Bubble gradient semantics + migration coverage added to visualizer plumbing/settings suites)
+**Last Updated**: Mar 28, 2026 (startup suites now also guard against primary-wave dead-air and keep the visualizer delay isolated to the Spotify secondary stage)

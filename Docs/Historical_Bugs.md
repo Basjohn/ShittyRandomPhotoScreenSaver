@@ -5,6 +5,48 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
+## 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Pending Architectural Follow-Up)
+
+**Status**
+- **Pending.** Startup fade behavior improved and the visualizer now enters later, but the architecture is not yet clean enough to treat this bug family as fully closed.
+
+**Why this is recorded here**
+- This issue exposed a broader anti-pattern: startup sequencing and fade ownership drifted across multiple runtime layers, which made timing fixes look correct in isolation while live startup still behaved badly.
+- The risk is not just this one visualizer bug recurring; it is the project regrowing split managers and duplicate sources of truth around startup orchestration.
+
+**Symptoms that led to the audit**
+- Primary overlays had periods where they appeared after a dead gap and then popped in too abruptly instead of following a clearly coordinated fade wave.
+- The Spotify visualizer could start later than before but still arrive in a bad state: jittery first frames, large early latency spikes, fallback-timer reveal instead of a clearly ready reveal, and occasional audio-capture restart noise during startup.
+- Re-entry paths such as mode cycling or settings return could behave differently from true cold start, pointing to startup-only orchestration drift rather than pure shader or FFT quality.
+
+**What the audit found**
+- `WidgetManager` / `FadeCoordinator` were the real owners of primary overlay fade state, but Spotify secondary-stage timing still depended on display-local `_overlay_fade_*` and `_spotify_secondary_not_before_ts` readers in the display layer.
+- That meant logs from the real fade coordinator could look healthy while the visualizer still took a different scheduling path at runtime.
+- In other words: the system had improved internals, but not one fully trustworthy startup contract.
+
+**What was fixed already**
+- Spotify secondary-stage scheduling was moved back under manager-owned runtime control, with display-local fields demoted to mirrored readable state rather than primary ownership.
+- Shared fade helper behavior was corrected so widgets do not wait for a first animation tick before becoming visible at opacity `0.0`.
+- Primary fade no longer carries the earlier explicit warmup dead-gap.
+- Visualizer startup now defers hot-start and reveal behind the centralized secondary-stage deadline instead of waking immediately on early anchor/media events.
+- Shared startup fade timing is now more centralized: `ShadowFadeProfile` owns the shared fade defaults, and visualizer startup fade derives from that helper instead of carrying separate local timing literals.
+- Visualizer startup prewarm is now deeper and more centralized:
+  - shader-source preload is cached before overlay warmup
+  - overlay prewarm forces actual GL realization instead of only queueing hidden repaint work
+  - WidgetManager prewarm attempts can retry if startup reaches the seam before the visualizer widget exists
+- A related fade-contract cleanup also landed: the shared fade helper now really honors explicit duration overrides, and normal widget startup fades no longer carry decorative `1500/1200/1000ms` literals that the helper ignored.
+
+**Why this remains pending**
+- The architecture is much healthier, but this family stays pending until fresh cold-start logs confirm the new shared fade/prewarm contract actually produces healthy runtime startup, not just cleaner ownership on paper.
+
+**Guardrails / future direction**
+- Keep fade ownership centralized. Avoid reintroducing display-local scheduling logic that can diverge from manager/coordinator state.
+- Prefer mirrored runtime-readable fields over duplicate decision-making fields when another subsystem is already authoritative.
+- The next cleanup should consolidate startup sequencing further without turning `WidgetManager` into a new monolith:
+  - keep the coordinator authoritative for shared fade phases
+  - keep visualizer-specific staged startup local to the visualizer path
+  - expose narrow, explicit runtime contracts between them
+
 ## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
 
 - **User later confirmed this issue is resolved in live use (Mar 22 2026).**

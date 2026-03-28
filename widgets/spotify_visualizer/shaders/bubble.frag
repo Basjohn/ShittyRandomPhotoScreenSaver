@@ -134,7 +134,9 @@ void main() {
         float radial_dist = length(radial_delta);
         float max_radial = max(length(vec2(0.5 * aspect, 0.5)), 0.0001);
         float norm = clamp(radial_dist / max_radial, 0.0, 1.0);
-        float radial_t = pow(norm, 1.65);
+        // Slightly gentler than the first corrective pass so the center-to-edge
+        // transition reads more softly in-card.
+        float radial_t = pow(norm, 1.40);
         // "Center Out" keeps the brightest point at the center and darkens
         // toward the outside. Reverse flips that relationship.
         grad_t = (u_gradient_mode == 2) ? radial_t : (1.0 - radial_t);

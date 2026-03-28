@@ -6,6 +6,8 @@ import pytest
 
 from core.settings.presets import (
     PRESET_DEFINITIONS,
+    _restore_custom_backup,
+    _save_custom_backup,
     adjust_settings_for_mc_mode,
     apply_preset,
     check_and_switch_to_custom,
@@ -200,6 +202,40 @@ class TestCustomPresetBackup:
         # Verify settings were restored
         # Note: Backup only includes widgets, so check widget settings
         assert settings_manager.get('preset') == 'custom'
+
+    def test_custom_backup_normalizes_visualizer_section(self, settings_manager: SettingsManager):
+        settings_manager.set("widgets", {
+            "spotify_visualizer": {
+                "mode": "bubble",
+                "bubble_gradient_direction": "left",
+            }
+        })
+
+        _save_custom_backup(settings_manager)
+
+        backup = settings_manager.get("custom_preset_backup", {})
+        widgets = backup.get("widgets", {})
+        spotify_vis = widgets.get("spotify_visualizer", {})
+
+        assert spotify_vis.get("bubble_gradient_direction") == "right"
+        assert spotify_vis.get("bubble_gradient_semantics_version") == 2
+
+    def test_custom_restore_normalizes_legacy_visualizer_backup(self, settings_manager: SettingsManager):
+        settings_manager.set("custom_preset_backup", {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "preset_bubble": 9,
+                    "bubble_gradient_direction": "left",
+                }
+            }
+        })
+
+        _restore_custom_backup(settings_manager)
+
+        spotify_vis = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert spotify_vis.get("bubble_gradient_direction") == "right"
+        assert spotify_vis.get("bubble_gradient_semantics_version") == 2
 
 
 class TestMCModeAdjustments:

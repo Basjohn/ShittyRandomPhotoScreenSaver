@@ -33,7 +33,7 @@ Single source of truth for architecture and key decisions.
 - Spectrum rim-glow contract: Spectrum glow is a thin shader-local inward rim tint owned by `spectrum_glow_enabled`, `spectrum_glow_intensity`, and `spectrum_glow_color`. It should bleed only slightly into the bar fill (roughly 1–2 px), remain non-reactive by default, and should not be escalated into an outer halo, bloom, or trail system unless product direction explicitly changes.
 - Spectrum notch-drag contract: bottom notch dragging in the shape editor must move only the active notch while still allowing it to cross adjacent labels. Neighbor labels must not be pushed along during drag, and ordering should be normalized after release rather than by collision-clamping the active notch.
 - Migration helpers (`core/settings/visualizer_presets.py::_migrate_preset_settings`) convert legacy fields (e.g., `sine_min_height`, `blob_stretch_x_bias`, global `rainbow_enabled`) into the new per-mode schema. Preset ingestion filters keys via `GLOBAL_ALLOWED_KEYS` + mode prefixes.
-- Manual floor baseline slider now clamps 0.12 – 1.0 and immediately reseeds the dynamic floor accumulator on every change, even when Dynamic Floor stays enabled. Engine activation, mode switches, widget resets, preset reloads, and SettingsManager migrations all pull the fresh per-mode manual floor before audio ticks resume, eliminating stale high floors bleeding between modes. Canonical defaults (`core/settings/default_settings.py`), the generated defaults snapshot, and shipping JSON profiles (`SRPSS_Settings_Screensaver_*.json`) all seed 0.12 so no baseline drifting back to 2.1 can occur.
+- Manual floor baseline slider now clamps 0.12 – 1.0 and immediately reseeds the dynamic floor accumulator on every change, even when Dynamic Floor stays enabled. Engine activation, mode switches, widget resets, preset reloads, and SettingsManager migrations all pull the fresh per-mode manual floor before audio ticks resume, eliminating stale high floors bleeding between modes. Canonical defaults live in `core/settings/default_settings.py` via `core/settings/defaults.py`, and the derived snapshot artifacts (`core/settings/defaults_snapshot.py` / `defaults_snapshot.json`) are generated from that same source. All of those paths seed 0.12 so no baseline drifting back to 2.1 can occur.
 - **Input gain contract (Mar 2026)**: Every mode now exposes a per-mode `input_gain` slider (5%–200%, default 100%) that scales PCM samples *before* FFT. The setting is wired through all eight layers (settings model/load/save, creator kwargs, widget cache/apply, beat engine/audio worker) and the audio worker clamps + forwards the gain to `bar_computation.compute_bars_from_samples()`, which multiplies the mono signal prior to peak detection/FFT so the effect matches Windows mixer volume changes without muting actual audio. Docs/TestSuite include regression coverage (`tests/test_input_gain.py`).
 - **Preset repair schema enforcement (Mar 2026)**: `tools/visualizer_preset_repair.py` promotes legacy global technical keys (manual_floor, sensitivity, `input_gain`, etc.) into mode-specific namespaces before filtering, injects missing per-mode defaults from `core/settings/default_settings.py`, and now exposes `--audit-curated` so duplicate prefixed keys / stale backup blocks / top-level visualizer duplication fail loudly instead of drifting silently. Mandatory visual keys (glow + line colours, bubble gradients, blob glow) cover every mode to prevent curator edits from yielding incomplete payloads. Deprecated compat keys such as `energy_boost` and `use_raw_energy` remain import-compatible but are no longer part of the canonical curated authored shape.
 - **Curated pack baseline (Mar 2026)**: Primary shipped visualizer modes (`blob`, `spectrum`, `oscilloscope`, `sine_wave`) now maintain a six-slot curated pack baseline. Duplicate curated `preset_index` values are considered a contract violation, and regression coverage in `tests/test_visualizer_presets.py` now guards both slot uniqueness and the six-slot minimum for those modes.
@@ -483,45 +483,65 @@ Canonical reset/freshness behavior now lives in `Docs/Visualizer_Reset_Matrix.md
 - **Defaults / migration guard**: existing `widgets.spotify_visualizer` sections must not receive `bubble_gradient_semantics_version` via default-merging alone. That marker is meaningful migration state, so it should only be written by normalized/save paths after a real payload has been interpreted.
 - **Presets / repair**: `tools/visualizer_preset_repair.py` keeps Bubble curated payloads aligned with current defaults/filtering, including `bubble_gradient_direction`, `bubble_gradient_semantics_version`, and `bubble_specular_direction`. Re-run repair/audit after modifying those defaults so commits always include the new key.
 
-When the Spotify Beat Visualizer misbehaves (no fade, flat bars, or popping),
-debug in this order:
+When the Spotify Beat Visualizer misbehaves (late wake, jittery startup, flat
+bars, or popping), debug in this order:
 
-1. **Card creation & primary fade** – `DisplayWidget._setup_widgets` must:
-   - Create `SpotifyVisualizerWidget` when both media and Spotify visualiser
-     are enabled for the display.
-   - Register `"spotify_visualizer"` in `_overlay_fade_expected` so the card
-     participates in the primary overlay fade wave next to media/weather/Reddit.
-   - Call `SpotifyVisualizerWidget.start()` once, which in turn registers a
-     `request_overlay_fade_sync("spotify_visualizer", starter)` callback.
-2. **ShadowFadeProfile progress** – the widget stores fade progress from
-   `ShadowFadeProfile` (card + shadow) and exposes it to the GPU path via a
-   private `_shadowfade_progress` field. If this value never advances from 0→1,
-   the card will not fade and the GPU bars will remain fully gated.
-3. **GPU fade factor & secondary wave** – `_get_gpu_fade_factor(now_ts)` on the
-   widget derives a delayed cubic fade from `_shadowfade_progress`. Bars and the
-   Spotify volume widget should:
-   - Stay at 0.0 while the card fade is in its early stages.
-   - Ramp smoothly from 0.0→1.0 after the card crosses the configured delay.
-   If bars pop in instantly or never appear, inspect this helper first.
-4. **Media state & playback gating** – `MediaWidget.media_updated` emits a
-   payload with `state` mapped to `MediaPlaybackState` (`PLAYING`, `PAUSED`,
-   `STOPPED`). `SpotifyVisualizerWidget.handle_media_update(payload)` sets a
-   boolean `_spotify_playing` gate and clears `_target_bars` only when not
-   playing so the idle floor shows while preventing motion.
-5. **Beat engine & smoothing** – `_SpotifyBeatEngine` owns a single
-   `SpotifyVisualizerAudioWorker` and per-process triple buffers for bar
-   magnitudes. `SpotifyVisualizerWidget._on_tick()` pulls bars from the engine
-   when `_spotify_playing` is true, applies time-based per-bar smoothing and the
-   current GPU fade, then calls
-    `DisplayWidget.push_spotify_visualizer_frame(...)` when values or fade
-    change. Flat bars with a healthy fade usually point to either a muted/
-    stalled beat engine or smoothing never updating `_display_bars`.
-6. **GL overlay wiring** – `SpotifyBarsGLOverlay` must be created via
-   `overlay_manager.prepare_gl_overlay` and raised after transitions; if the
-   overlay is never visible, bars will not appear even with correct fade and
-   bar values. PERF logs (`[PERF] [SPOTIFY_VIS] Tick/Paint metrics`) and
-    `[PERF] [GL COMPOSITOR]` summaries are the canonical signals for confirming
-    that frames are being produced and composited.
+1. **Primary wave vs staged visualizer startup**:
+   - `rendering/widget_setup.py::compute_expected_overlays()` must *not* add
+     `spotify_visualizer` to the primary expected-overlay set.
+   - The Media card still belongs to the primary coordinated fade.
+   - The visualizer must start through the Spotify secondary stage instead of
+     the first overlay wave, or cold-start hot work leaks back into the first
+     visible reactive window.
+   - `rendering/display_overlays.py` must let the primary wave begin fading as
+     soon as the compositor is ready. The deliberate startup delay belongs to
+     the Spotify secondary wave, not to the primary overlay wave. If widgets
+     feel like they are popping in instantly again, inspect those shared timing
+     constants first.
+2. **Secondary-stage registration path**:
+   - `rendering/widget_manager.py` should register/wake Spotify secondary-stage
+     participants.
+   - `SpotifyVisualizerWidget` may self-register through
+     `register_spotify_secondary_fade(...)` when that seam is exposed by the
+     parent, so startup does not depend on a single brittle creator path.
+3. **Playback/media seed before hot start**:
+   - `SpotifyVisualizerWidget` startup owns the authoritative playback seed.
+   - It should seed from the anchor Media widget and shared media cache, then
+     request `refresh_playback_state()` if no snapshot exists yet.
+   - The older create-time bridge in `rendering/spotify_widget_creators.py` is
+     opportunistic only and must not be treated as sufficient cold-start truth.
+4. **Delayed hot start + reveal gating**:
+   - `_arm_staged_startup()` should hide the widget and defer heavy engine/timer
+     work until `begin_spotify_secondary_stage()`.
+   - `_begin_hot_start()` should start the engine calmly, then keep visible
+     reveal pending until the first fresh frame and the minimum hidden warmup
+     window have both been satisfied.
+   - If the first fresh frame arrives before the minimum hidden warmup window
+     expires, startup must schedule an exact ready-driven reveal attempt for
+     that deadline instead of idling until the coarse fallback timer.
+   - The guarded fallback is only for quiet/paused startup, not the normal
+     reveal path for active playback.
+   - Deferred startup wake must not immediately re-run the normal
+     `engine.wake()` capture-restart path when staged hot start is already
+     doing the reset/start work.
+5. **Overlay prewarm before reveal**:
+   - `rendering/display_image_ops.py::prewarm_spotify_visualizer_overlay()`
+     plus `SpotifyBarsGLOverlay.prewarm_context()` should create the GL overlay
+     and force context/shader bring-up before the visualizer becomes visible.
+   - If shader compilation still lands in the first visible reactive seconds,
+     inspect this seam first.
+6. **Beat engine / smoothing / reset parity**:
+   - `_SpotifyBeatEngine` still owns audio capture and bar generation.
+   - `SpotifyVisualizerWidget._on_tick()` still owns smoothing and GPU push.
+   - If startup remains worse than settings re-entry or mode-cycle refresh after
+     staging/prewarm are correct, compare reset/generation/bar-count readiness
+     against the mode-switch path before touching buffer or smoothing policy.
+7. **GL overlay wiring and metrics**:
+   - `DisplayWidget.push_spotify_visualizer_frame(...)` should only push once
+     the widget is visible and the overlay is ready.
+   - PERF logs (`[PERF] [SPOTIFY_VIS] Tick/Paint metrics`) and
+     `[PERF] [GL COMPOSITOR]` summaries remain the canonical signals for
+     confirming that frames are being produced and composited.
 
 #### Blob staged core sizing (Stage Gain / Core Scale / Stage Bias)
 
@@ -696,7 +716,25 @@ Diagnostic state capture for shutdown debugging:
   - `set_expected_overlays()` / `add_expected_overlay()` → `FadeCoordinator.register_participant()`
   - `request_overlay_fade_sync()` → `FadeCoordinator.request_fade()`
   - `_on_compositor_ready()` → `FadeCoordinator.signal_compositor_ready()`
+- Shared fade timing contract:
+  - primary overlays must remain on the shared fade helper path and begin fading immediately once the compositor is ready
+  - analog Clock is not allowed to bypass startup fade just because it owns its own painter-based shadow look
+  - the shared fade helper must show widgets immediately at `opacity=0.0`; it must not wait for the first animation tick to make a widget exist on screen
+  - shared startup fade defaults now live in `widgets/shadow_utils.py::ShadowFadeProfile` and should remain the single source of truth for common fade duration/easing
+  - normal widget startup callers should use that shared default directly rather than copying local `1500ms`-style literals into wrapper methods
+  - Spotify secondary startup delay should stay derived from `ShadowFadeProfile.DURATION_MS`, so visualizer hot-start cannot drift back into the primary wave by accident
+  - `WidgetManager` + `FadeCoordinator` are the authoritative runtime startup source of truth; any mirrored display-local `_overlay_fade_*` or `_spotify_secondary_not_before_ts` fields exist only so widgets can read the current manager-owned state
+  - the parent display's `_spotify_secondary_not_before_ts` deadline is the manager-mirrored runtime gate for Spotify secondary-stage startup, including anchor/media-driven retries
+  - visualizer fade-in should also derive from `ShadowFadeProfile` rather than shipping separate local timing literals in startup or mode-transition paths
+  - explicit shorter/longer durations are allowed only when they are intentionally passed as true overrides and actually honored by the shared fade helper
 - Legacy SPSCQueue/TripleBuffer fade coordination has been removed in favor of the centralized FadeCoordinator
+
+### Visualizer Startup Prewarm Contract
+
+- `rendering/display_image_ops.py::prewarm_spotify_visualizer_overlay()` owns centralized visualizer prewarm orchestration.
+- `widgets/spotify_visualizer/shaders/__init__.py::preload_fragment_shaders()` should prime shader-source cache before visualizer overlay prewarm begins, so shader file IO does not re-enter the first visible reactive window.
+- `widgets/spotify_bars_gl_overlay.py::prewarm_context()` should force actual GL realization while hidden rather than relying on a passive hidden `show()/update()` path.
+- `rendering/widget_manager.py` should treat visualizer prewarm as retryable until it has succeeded against a real widget instance; early startup ordering must not permanently burn the prewarm attempt.
 
 ### Media Key Updates
   - `play_pause()` bypasses diff gating for optimistic state updates

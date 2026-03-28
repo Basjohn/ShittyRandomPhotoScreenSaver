@@ -146,6 +146,8 @@ class _FakeEngine:
         self._smoothed_bars = [0.0] * bar_count
         self._generation_id = 1
         self._latest_generation_with_frame = self._generation_id
+        self.playback_states: list[bool] = []
+        self.wake_calls = 0
 
     def set_floor_config(self, dyn: bool, floor: float) -> None:
         self.last_floor_config = (dyn, floor)
@@ -161,6 +163,9 @@ class _FakeEngine:
 
     def release(self) -> None:
         self.acquired = max(0, self.acquired - 1)
+
+    def wake(self) -> None:
+        self.wake_calls += 1
 
     def ensure_started(self) -> None:
         self.started += 1
@@ -180,6 +185,9 @@ class _FakeEngine:
 
     def set_smoothing(self, smoothing: float) -> None:
         self.last_smoothing = smoothing
+
+    def set_playback_state(self, is_playing: bool) -> None:
+        self.playback_states.append(bool(is_playing))
 
     def get_generation_id(self) -> int:
         return self._generation_id
@@ -258,7 +266,6 @@ def test_mode_switch_does_not_request_overlay_reset_before_transition_reset(qt_a
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     parent._spotify_bars_overlay.reset_requests.clear()
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
@@ -280,7 +287,6 @@ def test_mode_switch_waits_for_fresh_engine_generation(qt_app, qtbot, monkeypatc
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     widget._engine = fake_engine
     widget.start()
@@ -317,7 +323,6 @@ def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monk
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     widget._engine = fake_engine
     widget.start()
@@ -352,7 +357,6 @@ def test_runtime_push_carries_spectrum_glow_settings(qt_app, qtbot, monkeypatch)
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     widget._engine = fake_engine
     widget.apply_vis_mode_config(
@@ -389,7 +393,6 @@ def test_runtime_push_carries_osc_secondary_ghost_toggles(qt_app, qtbot, monkeyp
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     widget._engine = fake_engine
     widget.apply_vis_mode_config(
@@ -431,7 +434,6 @@ def test_set_settings_model_applies_incoming_mode_technical_config(qt_app, qtbot
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     model = SpotifyVisualizerSettings(
         mode="oscilloscope",
@@ -462,7 +464,6 @@ def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, mo
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     widget._engine = fake_engine
     widget.start()
@@ -535,7 +536,6 @@ def test_blob_crossover_waits_for_fresh_engine_frame(qt_app, qtbot, monkeypatch)
     )
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    qtbot.addWidget(widget)
 
     widget.set_visualization_mode(VisualizerMode.SPECTRUM)
     widget.start()
@@ -923,44 +923,413 @@ def test_shadow_cache_invalidated_once_per_cycle(qt_app, qtbot, monkeypatch):
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_start_requests_fade_sync(qt_app, qtbot, monkeypatch):
-    """Visualizer start should register with parent's overlay fade sync."""
-
-    class _FakeParent(QWidget):
-        def __init__(self) -> None:
-            super().__init__()
-            self.calls: list[tuple[str, object]] = []
-
-        def request_overlay_fade_sync(self, name: str, starter) -> None:
-            self.calls.append((name, starter))
-            # call immediately to simulate DisplayWidget behavior
-            starter()
-
-    parent = _FakeParent()
+def test_spotify_visualizer_secondary_stage_defers_hot_start_until_triggered(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
     qtbot.addWidget(parent)
-    parent.resize(400, 200)
     parent.show()
 
     anchor = QWidget(parent)
-    anchor.resize(200, 60)
+    anchor.show()
+    anchor.show()
     anchor.show()
 
+    class _FakeTimer:
+        def stop(self) -> None:
+            return None
+
+    class _FakeThreadManager:
+        def __init__(self) -> None:
+            self.calls: list[int] = []
+
+        def schedule_recurring(self, interval_ms: int, callback):
+            self.calls.append(interval_ms)
+            return _FakeTimer()
+
+    fake_engine = _FakeEngine(bar_count=14)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=14)
+    vis.set_thread_manager(_FakeThreadManager())
     vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
 
     fade_calls: list[int] = []
-    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration=1500: fade_calls.append(duration))
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
 
-    try:
-        vis.start()
-        qt_app.processEvents()
+    vis.start()
+    qt_app.processEvents()
 
-        assert parent.calls
-        assert parent.calls[0][0] == "spotify_visualizer"
-        assert fade_calls == [1500]
-    finally:
-        vis.deleteLater()
-        parent.close()
+    assert vis._startup_secondary_stage_pending is True
+    assert fake_engine.acquired == 0
+    assert vis._bars_timer is None
+    assert fade_calls == []
+
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    assert vis._startup_secondary_stage_pending is False
+    assert vis._startup_hot_start_started is True
+    assert vis._startup_reveal_pending is True
+    assert fake_engine.acquired == 1
+    assert fake_engine.playback_states[-1] is False
+    assert vis._bars_timer is not None
+    assert fade_calls == []
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_self_registers_secondary_stage_when_parent_supports_it(qt_app, qtbot, monkeypatch):
+    class _Parent(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.secondary_starters: list[Callable[[], None]] = []
+
+        def register_spotify_secondary_fade(self, starter) -> None:
+            self.secondary_starters.append(starter)
+
+    parent = _Parent()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=12)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=12)
+    vis.set_anchor_media_widget(anchor)
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    vis.start()
+    qt_app.processEvents()
+
+    assert vis._spotify_secondary_stage_registered is True
+    assert vis._startup_secondary_stage_pending is True
+    assert fake_engine.acquired == 0
+    assert len(parent.secondary_starters) == 1
+
+    parent.secondary_starters[0]()
+    qt_app.processEvents()
+
+    assert fake_engine.acquired == 1
+    assert vis._startup_secondary_stage_pending is False
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_first_fresh_frame_finishes_staged_reveal(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    vis._spotify_playing = True
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis.start()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    assert vis._startup_reveal_pending is True
+    assert vis._waiting_for_fresh_frame is True
+
+    vis._startup_reveal_not_before_ts = 0.0
+    vis._on_first_frame_after_cold_start()
+
+    assert vis._startup_reveal_pending is False
+    assert fade_calls == [1500]
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_anchor_visibility_can_release_secondary_stage(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    vis.start()
+    qt_app.processEvents()
+
+    assert fake_engine.acquired == 0
+    assert vis._startup_secondary_stage_pending is True
+
+    anchor.show()
+    parent._spotify_secondary_not_before_ts = time.monotonic() - 1.0
+    vis.sync_visibility_with_anchor()
+    qt_app.processEvents()
+
+    assert fake_engine.acquired == 1
+    assert vis._startup_secondary_stage_pending is False
+    assert vis._startup_reveal_pending is True
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_anchor_sync_respects_parent_secondary_stage_deadline(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+    parent._overlay_fade_expected = {"clock", "weather"}
+    parent._overlay_fade_started = False
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    vis.start()
+    qt_app.processEvents()
+
+    parent._spotify_secondary_not_before_ts = time.monotonic() - 1.0
+    vis.sync_visibility_with_anchor()
+    qt_app.processEvents()
+
+    assert vis._startup_secondary_stage_pending is True
+    assert fake_engine.acquired == 0
+
+    parent._overlay_fade_started = True
+    parent._spotify_secondary_not_before_ts = time.monotonic() + 60.0
+    vis.sync_visibility_with_anchor()
+    qt_app.processEvents()
+
+    assert vis._startup_secondary_stage_pending is True
+    assert fake_engine.acquired == 0
+
+    parent._spotify_secondary_not_before_ts = time.monotonic() - 1.0
+    vis.sync_visibility_with_anchor()
+    qt_app.processEvents()
+
+    assert vis._startup_secondary_stage_pending is False
+    assert fake_engine.acquired == 1
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_secondary_stage_prewarms_overlay_before_reveal(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    prewarm_calls: list[str] = []
+    monkeypatch.setattr(vis, "_prewarm_parent_overlay", lambda: prewarm_calls.append("prewarm"))
+
+    vis.start()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    assert prewarm_calls == ["prewarm"]
+    assert vis._startup_reveal_pending is True
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_fresh_frame_waits_for_minimum_reveal_delay(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    vis._spotify_playing = True
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis.start()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    vis._startup_reveal_not_before_ts = time.monotonic() + 60.0
+    vis._on_first_frame_after_cold_start()
+
+    assert vis._startup_reveal_pending is True
+    assert fade_calls == []
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_fresh_frame_schedules_ready_driven_reveal_after_min_delay(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    vis._spotify_playing = True
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis.start()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    vis._startup_reveal_not_before_ts = time.monotonic() + 0.05
+    vis._on_first_frame_after_cold_start()
+
+    assert vis._startup_reveal_pending is True
+    assert vis._startup_reveal_ready_token == vis._startup_reveal_token
+    assert fade_calls == []
+
+    qtbot.wait(120)
+    qt_app.processEvents()
+
+    assert vis._startup_reveal_pending is False
+    assert fade_calls == [1500]
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_fallback_reveal_waits_for_playing_state_when_startup_begins_paused(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+
+    fade_calls: list[int] = []
+    def _record_fade(duration_ms=1500):
+        fade_calls.append(duration_ms)
+        vis.show()
+    monkeypatch.setattr(vis, "_start_widget_fade_in", _record_fade)
+
+    vis.start()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    assert vis._startup_require_playing_before_reveal is True
+    vis._startup_reveal_not_before_ts = 0.0
+    vis._finish_staged_startup_reveal(reason="fallback_timer", allow_waiting_fallback=True)
+
+    assert vis._startup_reveal_pending is True
+    assert fade_calls == []
+
+    vis._waiting_for_fresh_frame = False
+    vis.handle_media_update({"state": "playing"})
+
+    assert vis._startup_reveal_pending is False
+    assert fade_calls == [1500]
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_play_transition_still_waits_for_fresh_frame_when_startup_begins_paused(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis.start()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    assert vis._startup_require_playing_before_reveal is True
+    vis._startup_reveal_not_before_ts = 0.0
+    vis.handle_media_update({"state": "playing"})
+
+    assert vis._startup_require_playing_before_reveal is False
+    assert vis._startup_reveal_pending is True
+    assert fade_calls == []
+
+    vis._on_first_frame_after_cold_start()
+
+    assert vis._startup_reveal_pending is False
+    assert fade_calls == [1500]
+
+    vis.stop()
 
 @pytest.mark.qt
 def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
@@ -975,3 +1344,115 @@ def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
     assert vis._spotify_playing is True
     
     vis.deleteLater()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_defers_wake_until_staged_hot_start(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    vis.start()
+    qt_app.processEvents()
+
+    vis.handle_media_update({"state": "playing", "artwork_url": "art://wake"})
+
+    assert vis._startup_secondary_stage_pending is True
+    assert vis._startup_wake_deferred is True
+    assert fake_engine.wake_calls == 0
+
+    anchor.show()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    assert vis._startup_secondary_stage_pending is False
+    assert vis._startup_wake_deferred is False
+    assert fake_engine.wake_calls == 0
+    assert fake_engine.playback_states[-1] is True
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_start_seeds_playback_from_anchor_cache(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    class _Anchor(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.refresh_requests = 0
+            self._last_info = SimpleNamespace(
+                title="Track",
+                artist="Artist",
+                album="Album",
+                state=SimpleNamespace(value="playing"),
+                artwork_url="art://seed",
+            )
+
+        def refresh_playback_state(self) -> None:
+            self.refresh_requests += 1
+
+    anchor = _Anchor(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    vis.start()
+    qt_app.processEvents()
+
+    assert vis._spotify_playing is True
+    assert fake_engine.playback_states[-1] is True
+    assert anchor.refresh_requests == 0
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_start_requests_media_refresh_when_anchor_cache_missing(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    class _Anchor(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.refresh_requests = 0
+            self._last_info = None
+
+        def refresh_playback_state(self) -> None:
+            self.refresh_requests += 1
+
+    anchor = _Anchor(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    vis.start()
+    qt_app.processEvents()
+
+    assert anchor.refresh_requests == 1
+    assert fake_engine.playback_states[-1] is False
+
+    vis.stop()

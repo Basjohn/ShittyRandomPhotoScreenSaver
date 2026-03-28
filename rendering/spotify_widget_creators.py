@@ -300,8 +300,6 @@ def create_spotify_visualizer_widget(
     if not (spotify_vis_enabled and show_on_this):
         return None
 
-    mgr.add_expected_overlay("spotify_visualizer")
-
     try:
         try:
             bar_count = int(model.resolve_bar_count(str(model.mode)))
@@ -425,10 +423,10 @@ def create_spotify_visualizer_widget(
             if not getattr(vis, "_srpss_media_connected", False):
                 media_widget.media_updated.connect(vis.handle_media_update)
                 setattr(vis, "_srpss_media_connected", True)
-                # Seed playback state from MediaWidget's current info so the
-                # visualizer doesn't wait for the next poll cycle.  This closes
-                # the cold-start gap where Spotify is already playing but the
-                # visualizer's _spotify_playing flag is still False.
+                # Fast path for already-warm media widgets: if metadata is
+                # already cached, seed the visualizer immediately. The
+                # authoritative cold-start seed still happens inside the
+                # visualizer lifecycle once startup ordering has settled.
                 try:
                     seed_info = getattr(media_widget, '_last_info', None)
                     if seed_info is not None:

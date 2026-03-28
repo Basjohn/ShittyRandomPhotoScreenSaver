@@ -515,6 +515,10 @@ class TestSpotifyWidgetIntegration:
             media.show()
             qt_app.processEvents()
             monkeypatch.setattr(media, "isVisible", lambda: True, raising=False)
+            vis._enabled = True
+            vis._startup_secondary_stage_pending = False
+            display._overlay_fade_started = True
+            display._spotify_secondary_not_before_ts = 0.0
             media._notify_spotify_widgets_visibility()
 
             if not pre_vis:

@@ -1376,8 +1376,13 @@ class MediaWidget(BaseOverlayWidget):
         from widgets.media.painting import load_brand_pixmap
         return load_brand_pixmap(provider=self._provider)
 
-    def _start_widget_fade_in(self, duration_ms: int = 1500) -> None:
+    def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         """Fade the entire widget in, then attach the global drop shadow."""
+        resolved_duration_ms = (
+            ShadowFadeProfile.default_duration_ms()
+            if duration_ms is None
+            else max(0, int(duration_ms))
+        )
         # Reset fade completion flag so re-entrancy (wake from idle) reapplies the shadow.
         self._fade_in_completed = False
         # CRITICAL: Position the widget BEFORE showing to prevent teleport flash
@@ -1388,7 +1393,7 @@ class MediaWidget(BaseOverlayWidget):
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         
-        if duration_ms <= 0:
+        if resolved_duration_ms <= 0:
             try:
                 self.show()
             except Exception as e:
@@ -1411,6 +1416,7 @@ class MediaWidget(BaseOverlayWidget):
             ShadowFadeProfile.start_fade_in(
                 self,
                 self._shadow_config,
+                duration_ms=resolved_duration_ms,
                 has_background_frame=self._show_background,
                 on_finished=self._handle_fade_in_complete,
             )

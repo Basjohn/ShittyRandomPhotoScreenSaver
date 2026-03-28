@@ -83,7 +83,7 @@ Key capabilities:
 
 ## 6. Settings Snapshot Cheat Sheet
 
-- **Defaults**: `core/settings/default_settings.py` (mirrored to `core/settings/defaults_snapshot.*`).
+- **Defaults**: `core/settings/default_settings.py` via `core/settings/defaults.py`. Derived snapshot artifacts live in `core/settings/defaults_snapshot.py` / `core/settings/defaults_snapshot.json`, both built from the same source through `core/settings/defaults_snapshot_builder.py` (`tools/regenerate_defaults_snapshot_artifacts.py` refreshes the JSON artifact).
 - **Models**: `core/settings/models.py` – Spotify visualizer dataclass includes both specular and gradient direction fields.
 - **Preset repair/audit**: `tools/visualizer_preset_repair.py` overlays canonical defaults + live filtering, prunes stale backup payload shapes, preserves direct transient keys, and writes `.bak*` backups before rewrite.
 - **SST export/import**: `core/settings/sst_io.py`. Export includes metadata + snapshot; import merge respects structured roots and skips deprecated display toggles automatically. Preview path computes diffs without mutating settings.

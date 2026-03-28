@@ -14,12 +14,39 @@ from typing import Callable, TYPE_CHECKING
 from PySide6.QtCore import QTimer
 
 from core.logging.logger import get_logger
+from widgets.shadow_utils import ShadowFadeProfile
 
 if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+
+# Startup cadence for the coordinated overlay wave. These are intentionally
+# conservative so the compositor can settle and the user can actually perceive
+# the fade rather than seeing widgets pop in almost immediately.
+PRIMARY_OVERLAY_STARTUP_WARMUP_MS = 0
+PRIMARY_OVERLAY_POST_FADE_BUFFER_MS = 1000
+SPOTIFY_SECONDARY_STARTUP_DELAY_MS = (
+    max(1000, int(getattr(ShadowFadeProfile, "DURATION_MS", 1500)))
+    + PRIMARY_OVERLAY_POST_FADE_BUFFER_MS
+)
+SPOTIFY_SECONDARY_DIRECT_DELAY_MS = max(
+    1200,
+    int(getattr(ShadowFadeProfile, "DURATION_MS", 1500) * 0.8),
+)
+
+
+def _mark_spotify_secondary_not_before(widget, *, delay_ms: int) -> None:
+    """Record when Spotify secondary startup work is allowed to begin."""
+
+    try:
+        widget._spotify_secondary_not_before_ts = time.monotonic() + (
+            max(0, int(delay_ms)) / 1000.0
+        )
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
 
 def start_overlay_fades(widget, force: bool = False) -> None:
@@ -53,11 +80,12 @@ def start_overlay_fades(widget, force: bool = False) -> None:
     )
     widget._overlay_fade_pending = {}
 
-    # To reduce visible pops on startup when the event loop is still busy
-    # with GL/image initialisation, introduce a short warm-up delay for
-    # coordinated fades. The force path keeps immediate behaviour so a
-    # misbehaving overlay cannot block fades indefinitely.
-    warmup_delay_ms = 0 if force else 250
+    # Primary overlays should begin fading as soon as the compositor is
+    # ready. Delaying the first wave creates a visible "wallpaper only"
+    # dead zone and defeats the purpose of the gentle coordinated fade.
+    # The heavy startup delay belongs to the Spotify secondary stage, not
+    # to the primary overlay wave.
+    warmup_delay_ms = 0 if force else PRIMARY_OVERLAY_STARTUP_WARMUP_MS
 
     if warmup_delay_ms <= 0:
         for starter in starters:
@@ -65,11 +93,20 @@ def start_overlay_fades(widget, force: bool = False) -> None:
                 starter()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        # When the primary fades fire immediately (force path or no
-        # warm-up), still give Spotify widgets a brief second-wave delay
-        # so they do not appear before the main group.
+
+        spotify_delay_ms = (
+            SPOTIFY_SECONDARY_DIRECT_DELAY_MS
+            if force
+            else SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+        )
         try:
-            widget._run_spotify_secondary_fades(base_delay_ms=150)
+            _mark_spotify_secondary_not_before(
+                widget,
+                delay_ms=spotify_delay_ms,
+            )
+            widget._run_spotify_secondary_fades(
+                base_delay_ms=spotify_delay_ms,
+            )
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         return
@@ -88,7 +125,14 @@ def start_overlay_fades(widget, force: bool = False) -> None:
     # coordinated primary warm-up, so the volume slider and visualiser
     # card feel attached to the wave without blocking it.
     try:
-        widget._run_spotify_secondary_fades(base_delay_ms=warmup_delay_ms + 150)
+        spotify_delay_ms = warmup_delay_ms + SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+        _mark_spotify_secondary_not_before(
+            widget,
+            delay_ms=spotify_delay_ms,
+        )
+        widget._run_spotify_secondary_fades(
+            base_delay_ms=spotify_delay_ms,
+        )
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
@@ -144,7 +188,11 @@ def register_spotify_secondary_fade(widget, starter: Callable[[], None]) -> None
     # instead of waiting for a coordinator that will never fire.
     if not expected or getattr(widget, "_overlay_fade_started", False):
         try:
-            QTimer.singleShot(150, starter)
+            _mark_spotify_secondary_not_before(
+                widget,
+                delay_ms=SPOTIFY_SECONDARY_DIRECT_DELAY_MS,
+            )
+            QTimer.singleShot(SPOTIFY_SECONDARY_DIRECT_DELAY_MS, starter)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:

@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QWidget
 from core.logging.logger import get_logger
 from core.media import system_mute
 from core.threading.manager import ThreadManager
-from widgets.shadow_utils import configure_overlay_widget_attributes
+from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
 
 logger = get_logger(__name__)
 
@@ -100,14 +100,14 @@ class MuteButtonWidget(QWidget):
             self.hide()
             return
         if not self._has_faded_in:
-            self._start_widget_fade_in(1200)
+            self._start_widget_fade_in()
         else:
             self.show()
             self.raise_()
         self.update_position()
         self.poll_mute_state()
 
-    def _start_widget_fade_in(self, duration_ms: int = 1200) -> None:
+    def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         """Fade the widget in using a lightweight opacity effect.
 
         The mute button paints its own inner shadow via QPainter so it
@@ -115,7 +115,12 @@ class MuteButtonWidget(QWidget):
         40×36 widget creates a disproportionate cache area that is prone
         to corruption artifacts visible as dark rectangles.
         """
-        if duration_ms <= 0:
+        resolved_duration_ms = (
+            ShadowFadeProfile.default_duration_ms()
+            if duration_ms is None
+            else max(0, int(duration_ms))
+        )
+        if resolved_duration_ms <= 0:
             self.show()
             self.raise_()
             self._has_faded_in = True
@@ -137,8 +142,8 @@ class MuteButtonWidget(QWidget):
             anim = QVariantAnimation(self)
             anim.setStartValue(0.0)
             anim.setEndValue(1.0)
-            anim.setDuration(duration_ms)
-            anim.setEasingCurve(QEasingCurve.Type.InOutQuad)
+            anim.setDuration(resolved_duration_ms)
+            anim.setEasingCurve(ShadowFadeProfile.EASING)
 
             def _on_value(val):
                 try:

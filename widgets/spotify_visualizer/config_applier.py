@@ -689,10 +689,10 @@ def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
     """Build the mode-local GPU extras payload for the compositor overlay."""
     extra = _build_shared_visualizer_extras(widget)
+    _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
     if mode_str == 'spectrum':
         return extra
 
-    _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
     _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
     _append_blob_visual_extras(extra, widget)
     if mode_str == 'bubble':
