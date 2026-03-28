@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QWidget
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
+from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
 from widgets.shadow_utils import apply_widget_shadow as _apply_widget_shadow
@@ -135,6 +136,11 @@ class WidgetManager:
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
+    def _get_overlay_startup_policy(self):
+        """Return the canonical overlay startup timing policy."""
+
+        return get_overlay_startup_fade_policy()
+
     def _prewarm_spotify_visualizer_overlay(self) -> bool:
         """Prewarm the Spotify visualizer GL overlay before hot-start reveal."""
 
@@ -245,14 +251,14 @@ class WidgetManager:
 
         if self._expected_overlays:
             try:
-                from rendering.display_overlays import SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+                policy = self._get_overlay_startup_policy()
                 logger.debug(
                     "[SPOTIFY_SECONDARY] compositor ready; using startup secondary delay=%sms",
-                    int(SPOTIFY_SECONDARY_STARTUP_DELAY_MS),
+                    int(policy.spotify_secondary_startup_delay_ms),
                 )
 
                 self._schedule_spotify_secondary_fades(
-                    int(SPOTIFY_SECONDARY_STARTUP_DELAY_MS),
+                    int(policy.spotify_secondary_startup_delay_ms),
                 )
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
@@ -1486,25 +1492,22 @@ class WidgetManager:
     def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
         """Register a Spotify second-wave fade to run after primary overlays."""
         try:
-            from rendering.display_overlays import (
-                SPOTIFY_SECONDARY_DIRECT_DELAY_MS,
-                SPOTIFY_SECONDARY_STARTUP_DELAY_MS,
-            )
+            policy = self._get_overlay_startup_policy()
+            direct_delay_ms = int(policy.spotify_secondary_direct_delay_ms)
         except Exception:
-            SPOTIFY_SECONDARY_DIRECT_DELAY_MS = 1200
-            SPOTIFY_SECONDARY_STARTUP_DELAY_MS = 2500
+            direct_delay_ms = 1200
 
         if not self._expected_overlays:
             self._prewarm_spotify_visualizer_overlay()
             self._mark_parent_spotify_secondary_not_before(
-                int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+                direct_delay_ms,
             )
             logger.debug(
                 "[SPOTIFY_SECONDARY] no primary overlays registered; using direct delay=%sms",
-                int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+                direct_delay_ms,
             )
             try:
-                QTimer.singleShot(int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS), starter)
+                QTimer.singleShot(direct_delay_ms, starter)
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
                 try:
@@ -1524,14 +1527,14 @@ class WidgetManager:
 
         self._prewarm_spotify_visualizer_overlay()
         self._mark_parent_spotify_secondary_not_before(
-            int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+            direct_delay_ms,
         )
         logger.debug(
             "[SPOTIFY_SECONDARY] compositor already ready; using direct delay=%sms",
-            int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS),
+            direct_delay_ms,
         )
         try:
-            QTimer.singleShot(int(SPOTIFY_SECONDARY_DIRECT_DELAY_MS), starter)
+            QTimer.singleShot(direct_delay_ms, starter)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             try:

@@ -34,6 +34,7 @@ from widgets.spotify_visualizer.beat_engine import (
     get_shared_spotify_beat_engine,
     _SpotifyBeatEngine,
 )
+from widgets.spotify_visualizer.startup_contract import VisualizerStartupState
 
 logger = get_logger(__name__)
 
@@ -428,23 +429,107 @@ class SpotifyVisualizerWidget(QWidget):
 
         # Tick source coordination
         self._using_animation_ticks: bool = False
-        self._spotify_secondary_stage_registered: bool = False
-        self._startup_secondary_stage_pending: bool = False
-        self._startup_hot_start_started: bool = False
-        self._startup_reveal_pending: bool = False
-        self._startup_reveal_token: int = 0
-        self._startup_reveal_ready_token: int = -1
-        self._startup_wake_deferred: bool = False
-        self._startup_require_playing_before_reveal: bool = False
         try:
             shared_fade_ms = ShadowFadeProfile.default_duration_ms()
         except Exception:
             shared_fade_ms = max(0, int(getattr(ShadowFadeProfile, "DURATION_MS", 1800)))
-        self._startup_min_reveal_delay_ms: int = max(900, int(shared_fade_ms * 0.8))
-        self._startup_reveal_fallback_ms: int = self._startup_min_reveal_delay_ms + 1000
-        self._startup_reveal_not_before_ts: float = 0.0
+        self._startup_phase = VisualizerStartupState.from_shared_fade_duration(shared_fade_ms)
 
         self._setup_ui()
+
+    def _get_startup_phase_attr(self, attr_name: str):
+        return getattr(self._startup_phase, attr_name)
+
+    def _set_startup_phase_attr(self, attr_name: str, value) -> None:
+        setattr(self._startup_phase, attr_name, value)
+
+    @property
+    def _spotify_secondary_stage_registered(self) -> bool:
+        return bool(self._get_startup_phase_attr("secondary_stage_registered"))
+
+    @_spotify_secondary_stage_registered.setter
+    def _spotify_secondary_stage_registered(self, value: bool) -> None:
+        self._set_startup_phase_attr("secondary_stage_registered", bool(value))
+
+    @property
+    def _startup_secondary_stage_pending(self) -> bool:
+        return bool(self._get_startup_phase_attr("secondary_stage_pending"))
+
+    @_startup_secondary_stage_pending.setter
+    def _startup_secondary_stage_pending(self, value: bool) -> None:
+        self._set_startup_phase_attr("secondary_stage_pending", bool(value))
+
+    @property
+    def _startup_hot_start_started(self) -> bool:
+        return bool(self._get_startup_phase_attr("hot_start_started"))
+
+    @_startup_hot_start_started.setter
+    def _startup_hot_start_started(self, value: bool) -> None:
+        self._set_startup_phase_attr("hot_start_started", bool(value))
+
+    @property
+    def _startup_reveal_pending(self) -> bool:
+        return bool(self._get_startup_phase_attr("reveal_pending"))
+
+    @_startup_reveal_pending.setter
+    def _startup_reveal_pending(self, value: bool) -> None:
+        self._set_startup_phase_attr("reveal_pending", bool(value))
+
+    @property
+    def _startup_reveal_token(self) -> int:
+        return int(self._get_startup_phase_attr("reveal_token"))
+
+    @_startup_reveal_token.setter
+    def _startup_reveal_token(self, value: int) -> None:
+        self._set_startup_phase_attr("reveal_token", int(value))
+
+    @property
+    def _startup_reveal_ready_token(self) -> int:
+        return int(self._get_startup_phase_attr("reveal_ready_token"))
+
+    @_startup_reveal_ready_token.setter
+    def _startup_reveal_ready_token(self, value: int) -> None:
+        self._set_startup_phase_attr("reveal_ready_token", int(value))
+
+    @property
+    def _startup_wake_deferred(self) -> bool:
+        return bool(self._get_startup_phase_attr("wake_deferred"))
+
+    @_startup_wake_deferred.setter
+    def _startup_wake_deferred(self, value: bool) -> None:
+        self._set_startup_phase_attr("wake_deferred", bool(value))
+
+    @property
+    def _startup_require_playing_before_reveal(self) -> bool:
+        return bool(self._get_startup_phase_attr("require_playing_before_reveal"))
+
+    @_startup_require_playing_before_reveal.setter
+    def _startup_require_playing_before_reveal(self, value: bool) -> None:
+        self._set_startup_phase_attr("require_playing_before_reveal", bool(value))
+
+    @property
+    def _startup_min_reveal_delay_ms(self) -> int:
+        return int(self._get_startup_phase_attr("min_reveal_delay_ms"))
+
+    @_startup_min_reveal_delay_ms.setter
+    def _startup_min_reveal_delay_ms(self, value: int) -> None:
+        self._set_startup_phase_attr("min_reveal_delay_ms", int(value))
+
+    @property
+    def _startup_reveal_fallback_ms(self) -> int:
+        return int(self._get_startup_phase_attr("reveal_fallback_ms"))
+
+    @_startup_reveal_fallback_ms.setter
+    def _startup_reveal_fallback_ms(self, value: int) -> None:
+        self._set_startup_phase_attr("reveal_fallback_ms", int(value))
+
+    @property
+    def _startup_reveal_not_before_ts(self) -> float:
+        return float(self._get_startup_phase_attr("reveal_not_before_ts"))
+
+    @_startup_reveal_not_before_ts.setter
+    def _startup_reveal_not_before_ts(self, value: float) -> None:
+        self._set_startup_phase_attr("reveal_not_before_ts", float(value))
 
     def _replay_engine_config(self, engine: Optional[_SpotifyBeatEngine]) -> None:
         """Ensure the shared engine reflects the last applied widget config."""

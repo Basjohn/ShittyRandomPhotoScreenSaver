@@ -156,8 +156,10 @@ tests/
 |-----------|---------------|-------------|
 | `test_widget_lifecycle.py` | WidgetLifecycleState machine (CREATED→INITIALIZED→ACTIVE→HIDDEN→DESTROYED) | Widget lifecycle changes |
 | `test_widget_manager.py` | WidgetManager overlay lifecycle, Z-order, raises | Widget management changes |
+Startup-coordination coverage here now asserts against the live overlay startup policy object, so manager-owned Spotify secondary-stage delays cannot silently drift away from the display startup contract.
 | `test_widget_manager_refresh.py` | Widget refresh on settings change, position updates | Settings refresh issues |
 | `test_overlay_ready_state.py` | Overlay ready/waiting states | Overlay initialization issues |
+| `test_overlay_startup_policy.py` | Shared overlay-startup timing policy derivation | Startup fade policy changes |
 
 ### Widget Positioning
 
@@ -182,14 +184,15 @@ tests/
 Normal fade-path coverage here now explicitly guards that analog Clock still uses the shared fade helper instead of bypassing startup fade coordination.
 | `test_shadow_utils.py` | Shared fade helper visibility/opacity contract | Central fade regressions |
 This is now the direct fence for the shared `ShadowFadeProfile.start_fade_in()` contract: widgets must become visible immediately at `opacity=0.0`, rather than waiting for the first animation tick and accidentally collapsing the coordinated fade into a delayed pop under startup load.
-It also now guards the shared fade-profile defaults themselves so startup fade tuning does not quietly drift back to an almost-imperceptible feel.
+It also now guards the shared fade-profile defaults themselves so startup fade tuning does not quietly drift back to an almost-imperceptible feel, and it records the new softer centralized easing profile instead of letting per-widget wrappers invent their own fade shape.
 It also guards the honesty of the shared fade API: explicit `duration_ms` overrides must be respected, so true special cases can be intentional instead of silently inheriting the default while pretending otherwise.
 | `test_weather_widget.py` | WeatherWidget, Open-Meteo integration | Weather widget, fetch issues |
 | `test_media_widget.py` | MediaWidget, GSMTC integration, artwork | Media display changes |
 | `test_reddit_widget.py` | RedditWidget, fetch, display, clicks | Reddit widget issues |
 | `test_spotify_visualizer_widget.py` | SpotifyVisualizerWidget, BeatEngine, bar rendering | Visualizer widget changes |
 Startup staging coverage here now explicitly guards Spotify secondary-stage deferral, widget self-registration into that stage, first-fresh-frame reveal completion, exact ready-driven reveal after the minimum hidden warmup delay, anchor-visibility release, anchor-sync obedience to the centralized parent secondary-stage deadline, overlay prewarm before reveal, deferred pre-stage wake routing, and the rule that staged hot start must not immediately re-run the normal `engine.wake()` restart path.
-Visualizer startup fade timing here is now expected to derive from the shared fade helper contract rather than from local hardcoded durations.
+Visualizer startup fade timing here is now expected to derive from the shared fade helper contract rather than from local hardcoded durations, and the widget’s old underscored startup flags are now expected to delegate to the shared visualizer startup contract instead of behaving like independent loose state.
+| `test_visualizer_startup_contract.py` | Shared visualizer staged-startup contract derivation | Visualizer startup contract changes |
 | `test_display_image_ops.py` | Display image ops visualizer prewarm pipeline | Startup prewarm regressions |
 This suite now directly guards that visualizer shader-source preload happens before hidden overlay prewarm, so shader file IO stays out of the first visible startup window.
 | `test_spotify_visualizer_integration.py` | Visualizer integration with DisplayWidget | Visualizer integration |

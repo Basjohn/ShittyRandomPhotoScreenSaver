@@ -221,11 +221,11 @@ class ShadowFadeProfile:
     """
 
     # Single global profile for all widgets – not user-configurable for
-    # now. Keep this slightly longer than the earlier 1.5s profile and
-    # use an easing curve that becomes visible sooner, so startup reads as
-    # a gentle coordinated fade instead of a dead gap followed by a late pop.
+    # now. Keep this slightly longer than the earlier 1.5s profile, but
+    # prefer a softer easing curve so startup feels coordinated rather than
+    # immediately front-loaded into the first few hundred milliseconds.
     DURATION_MS: int = 1800
-    EASING: QEasingCurve.Type = QEasingCurve.OutCubic
+    EASING: QEasingCurve.Type = QEasingCurve.InOutCubic
 
     @classmethod
     def default_duration_ms(cls) -> int:

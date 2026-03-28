@@ -14,7 +14,7 @@ from typing import Callable, TYPE_CHECKING
 from PySide6.QtCore import QTimer
 
 from core.logging.logger import get_logger
-from widgets.shadow_utils import ShadowFadeProfile
+from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 
 if TYPE_CHECKING:
     pass
@@ -23,19 +23,17 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
-# Startup cadence for the coordinated overlay wave. These are intentionally
-# conservative so the compositor can settle and the user can actually perceive
-# the fade rather than seeing widgets pop in almost immediately.
-PRIMARY_OVERLAY_STARTUP_WARMUP_MS = 0
-PRIMARY_OVERLAY_POST_FADE_BUFFER_MS = 1000
-SPOTIFY_SECONDARY_STARTUP_DELAY_MS = (
-    max(1000, int(getattr(ShadowFadeProfile, "DURATION_MS", 1500)))
-    + PRIMARY_OVERLAY_POST_FADE_BUFFER_MS
-)
-SPOTIFY_SECONDARY_DIRECT_DELAY_MS = max(
-    1200,
-    int(getattr(ShadowFadeProfile, "DURATION_MS", 1500) * 0.8),
-)
+def _startup_policy():
+    """Return the canonical startup timing policy for overlay fades."""
+
+    return get_overlay_startup_fade_policy()
+
+
+# Compatibility aliases for callers/tests that still import the legacy names.
+PRIMARY_OVERLAY_STARTUP_WARMUP_MS = _startup_policy().primary_warmup_ms
+PRIMARY_OVERLAY_POST_FADE_BUFFER_MS = _startup_policy().primary_post_fade_buffer_ms
+SPOTIFY_SECONDARY_STARTUP_DELAY_MS = _startup_policy().spotify_secondary_startup_delay_ms
+SPOTIFY_SECONDARY_DIRECT_DELAY_MS = _startup_policy().spotify_secondary_direct_delay_ms
 
 
 def _mark_spotify_secondary_not_before(widget, *, delay_ms: int) -> None:
@@ -85,7 +83,8 @@ def start_overlay_fades(widget, force: bool = False) -> None:
     # dead zone and defeats the purpose of the gentle coordinated fade.
     # The heavy startup delay belongs to the Spotify secondary stage, not
     # to the primary overlay wave.
-    warmup_delay_ms = 0 if force else PRIMARY_OVERLAY_STARTUP_WARMUP_MS
+    policy = _startup_policy()
+    warmup_delay_ms = 0 if force else int(policy.primary_warmup_ms)
 
     if warmup_delay_ms <= 0:
         for starter in starters:
@@ -95,9 +94,9 @@ def start_overlay_fades(widget, force: bool = False) -> None:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         spotify_delay_ms = (
-            SPOTIFY_SECONDARY_DIRECT_DELAY_MS
+            int(policy.spotify_secondary_direct_delay_ms)
             if force
-            else SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+            else int(policy.spotify_secondary_startup_delay_ms)
         )
         try:
             _mark_spotify_secondary_not_before(
@@ -125,7 +124,7 @@ def start_overlay_fades(widget, force: bool = False) -> None:
     # coordinated primary warm-up, so the volume slider and visualiser
     # card feel attached to the wave without blocking it.
     try:
-        spotify_delay_ms = warmup_delay_ms + SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+        spotify_delay_ms = warmup_delay_ms + int(policy.spotify_secondary_startup_delay_ms)
         _mark_spotify_secondary_not_before(
             widget,
             delay_ms=spotify_delay_ms,
@@ -187,12 +186,13 @@ def register_spotify_secondary_fade(widget, starter: Callable[[], None]) -> None
     # primary wave has already started, run this as a tiny second wave
     # instead of waiting for a coordinator that will never fire.
     if not expected or getattr(widget, "_overlay_fade_started", False):
+        policy = _startup_policy()
         try:
             _mark_spotify_secondary_not_before(
                 widget,
-                delay_ms=SPOTIFY_SECONDARY_DIRECT_DELAY_MS,
+                delay_ms=int(policy.spotify_secondary_direct_delay_ms),
             )
-            QTimer.singleShot(SPOTIFY_SECONDARY_DIRECT_DELAY_MS, starter)
+            QTimer.singleShot(int(policy.spotify_secondary_direct_delay_ms), starter)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from rendering import display_overlays
+from rendering.overlay_startup_policy import OverlayStartupFadePolicy, get_overlay_startup_fade_policy
 from rendering.widget_setup import compute_expected_overlays
 from widgets.shadow_utils import ShadowFadeProfile
 
@@ -55,16 +56,16 @@ def test_start_overlay_fades_uses_deliberate_primary_and_secondary_startup_delay
     finally:
         display_overlays.QTimer.singleShot = original_single_shot
 
-    expected_secondary_delay = display_overlays.SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+    expected_secondary_delay = get_overlay_startup_fade_policy().spotify_secondary_startup_delay_ms
 
     assert primary_calls == ["clock", "weather"]
     assert scheduled == []
     assert secondary_delays == [expected_secondary_delay]
     assert widget._spotify_secondary_not_before_ts > 0.0
-    assert display_overlays.SPOTIFY_SECONDARY_STARTUP_DELAY_MS == (
-        ShadowFadeProfile.DURATION_MS + display_overlays.PRIMARY_OVERLAY_POST_FADE_BUFFER_MS
+    assert expected_secondary_delay == (
+        ShadowFadeProfile.DURATION_MS + get_overlay_startup_fade_policy().primary_post_fade_buffer_ms
     )
-    assert display_overlays.SPOTIFY_SECONDARY_DIRECT_DELAY_MS >= 1200
+    assert get_overlay_startup_fade_policy().spotify_secondary_direct_delay_ms >= 1200
 
 
 def test_start_overlay_fades_does_not_insert_primary_startup_dead_air():
@@ -83,4 +84,34 @@ def test_start_overlay_fades_does_not_insert_primary_startup_dead_air():
     display_overlays.start_overlay_fades(widget)
 
     assert primary_calls == ["clock"]
-    assert secondary_delays == [display_overlays.SPOTIFY_SECONDARY_STARTUP_DELAY_MS]
+    assert secondary_delays == [get_overlay_startup_fade_policy().spotify_secondary_startup_delay_ms]
+
+
+def test_start_overlay_fades_uses_live_startup_policy(monkeypatch):
+    primary_calls: list[str] = []
+    secondary_delays: list[int] = []
+
+    widget = SimpleNamespace(
+        _overlay_fade_started=False,
+        _overlay_fade_timeout=None,
+        _overlay_fade_pending={
+            "clock": lambda: primary_calls.append("clock"),
+        },
+        _run_spotify_secondary_fades=lambda *, base_delay_ms=0: secondary_delays.append(base_delay_ms),
+    )
+
+    monkeypatch.setattr(
+        display_overlays,
+        "get_overlay_startup_fade_policy",
+        lambda: OverlayStartupFadePolicy(
+            primary_warmup_ms=0,
+            primary_post_fade_buffer_ms=777,
+            spotify_secondary_startup_delay_ms=2345,
+            spotify_secondary_direct_delay_ms=1234,
+        ),
+    )
+
+    display_overlays.start_overlay_fades(widget)
+
+    assert primary_calls == ["clock"]
+    assert secondary_delays == [2345]

@@ -36,7 +36,7 @@ def test_shared_fade_shows_widget_immediately_at_zero_opacity(qt_app, qtbot):
 def test_shared_fade_profile_stays_gentle_and_visible():
     assert ShadowFadeProfile.DURATION_MS >= 1800
     assert ShadowFadeProfile.default_duration_ms() == ShadowFadeProfile.DURATION_MS
-    assert ShadowFadeProfile.EASING == QEasingCurve.OutCubic
+    assert ShadowFadeProfile.EASING == QEasingCurve.InOutCubic
 
 
 @pytest.mark.qt

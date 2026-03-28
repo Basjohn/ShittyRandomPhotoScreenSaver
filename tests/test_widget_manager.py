@@ -364,7 +364,7 @@ class TestStartupCoordination:
 
     def test_secondary_fades_queue_until_compositor_ready_then_use_startup_delay(self, monkeypatch):
         from rendering.widget_manager import WidgetManager
-        from rendering.display_overlays import SPOTIFY_SECONDARY_STARTUP_DELAY_MS
+        from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 
         parent = MagicMock()
         parent.screen_index = 1
@@ -391,16 +391,18 @@ class TestStartupCoordination:
 
         manager._on_compositor_ready("first-image")
 
+        policy = get_overlay_startup_fade_policy()
+
         assert parent._overlay_fade_started is True
         assert parent._overlay_fade_expected == {"clock"}
-        assert scheduled == [SPOTIFY_SECONDARY_STARTUP_DELAY_MS]
+        assert scheduled == [policy.spotify_secondary_startup_delay_ms]
         assert prewarm_calls == ["prewarm"]
         assert len(manager._spotify_secondary_fade_starters) == 0
         assert parent._spotify_secondary_not_before_ts > 0.0
 
     def test_secondary_fades_use_direct_delay_when_registered_after_compositor_ready(self, monkeypatch):
         from rendering.widget_manager import WidgetManager
-        from rendering.display_overlays import SPOTIFY_SECONDARY_DIRECT_DELAY_MS
+        from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 
         parent = MagicMock()
         parent.screen_index = 1
@@ -427,8 +429,43 @@ class TestStartupCoordination:
 
         manager.register_spotify_secondary_fade(lambda: None)
 
-        assert scheduled == [SPOTIFY_SECONDARY_DIRECT_DELAY_MS]
+        assert scheduled == [get_overlay_startup_fade_policy().spotify_secondary_direct_delay_ms]
         assert prewarm_calls == ["prewarm"]
+
+    def test_secondary_fades_use_live_policy_object(self, monkeypatch):
+        from rendering.overlay_startup_policy import OverlayStartupFadePolicy
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        parent.screen_index = 1
+        parent._has_rendered_first_frame = False
+        parent.image_displayed = MagicMock()
+        manager = WidgetManager(parent)
+        manager.add_expected_overlay("clock")
+
+        scheduled: list[int] = []
+        monkeypatch.setattr(
+            "rendering.widget_manager.QTimer.singleShot",
+            lambda delay_ms, starter: scheduled.append(int(delay_ms)),
+        )
+        monkeypatch.setattr(
+            manager,
+            "_get_overlay_startup_policy",
+            lambda: OverlayStartupFadePolicy(
+                primary_warmup_ms=0,
+                primary_post_fade_buffer_ms=555,
+                spotify_secondary_startup_delay_ms=2345,
+                spotify_secondary_direct_delay_ms=1234,
+            ),
+        )
+
+        manager.register_spotify_secondary_fade(lambda: None)
+        manager._on_compositor_ready("first-image")
+        assert scheduled == [2345]
+
+        scheduled.clear()
+        manager.register_spotify_secondary_fade(lambda: None)
+        assert scheduled == [1234]
 
     def test_reset_fade_coordination_clears_spotify_overlay_prewarm_flags(self):
         from rendering.widget_manager import WidgetManager

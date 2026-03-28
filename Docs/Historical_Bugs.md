@@ -8,7 +8,7 @@ Section by date and type.
 ## 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Pending Architectural Follow-Up)
 
 **Status**
-- **Pending.** Startup fade behavior improved and the visualizer now enters later, but the architecture is not yet clean enough to treat this bug family as fully closed.
+- **Pending.** Startup fade behavior improved, the visualizer now enters later, and explicit startup policy/contract objects now exist, but the family remains open until cold-start runtime feel and first-frame health are fully validated.
 
 **Why this is recorded here**
 - This issue exposed a broader anti-pattern: startup sequencing and fade ownership drifted across multiple runtime layers, which made timing fixes look correct in isolation while live startup still behaved badly.
@@ -30,6 +30,9 @@ Section by date and type.
 - Primary fade no longer carries the earlier explicit warmup dead-gap.
 - Visualizer startup now defers hot-start and reveal behind the centralized secondary-stage deadline instead of waking immediately on early anchor/media events.
 - Shared startup fade timing is now more centralized: `ShadowFadeProfile` owns the shared fade defaults, and visualizer startup fade derives from that helper instead of carrying separate local timing literals.
+- Explicit contract objects now back the architecture:
+  - `rendering/overlay_startup_policy.py` owns display-side startup timing
+  - `widgets/spotify_visualizer/startup_contract.py` owns visualizer staged-startup state
 - Visualizer startup prewarm is now deeper and more centralized:
   - shader-source preload is cached before overlay warmup
   - overlay prewarm forces actual GL realization instead of only queueing hidden repaint work

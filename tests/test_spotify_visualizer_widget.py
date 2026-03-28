@@ -82,6 +82,28 @@ def test_spotify_visualizer_compute_bars_reasonable_runtime(np_module):
     assert elapsed < 0.5, f"compute_bars_from_samples too slow: {elapsed:.3f}s"
 
 
+@pytest.mark.qt
+def test_visualizer_mode_transition_fade_forwards_duration_override(qt_app, monkeypatch):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    widget._shadow_config = {"enabled": False}
+    widget._show_background = True
+
+    calls: list[int | None] = []
+
+    def _fake_start_fade_in(target, config, *, duration_ms=None, has_background_frame):
+        calls.append(duration_ms)
+
+    monkeypatch.setattr(
+        "widgets.shadow_utils.ShadowFadeProfile.start_fade_in",
+        _fake_start_fade_in,
+    )
+
+    mode_transition.start_widget_fade_in(widget, duration_ms=2222)
+
+    assert calls == [2222]
+    widget.deleteLater()
+
+
 def test_spotify_visualizer_set_floor_config_clamps_and_snaps(np_module):
     worker = _make_audio_worker(np_module)
     worker._raw_bass_avg = 3.5  # type: ignore[attr-defined]
@@ -1241,6 +1263,24 @@ def test_spotify_visualizer_fresh_frame_schedules_ready_driven_reveal_after_min_
     assert fade_calls == [1500]
 
     vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_startup_flags_delegate_to_shared_startup_contract(qt_app):
+    vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
+
+    vis._startup_secondary_stage_pending = True
+    vis._startup_reveal_token = 7
+    vis._startup_reveal_not_before_ts = 12.5
+
+    assert vis._startup_phase.secondary_stage_pending is True
+    assert vis._startup_phase.reveal_token == 7
+    assert vis._startup_phase.reveal_not_before_ts == pytest.approx(12.5)
+
+    vis._startup_phase.wake_deferred = True
+
+    assert vis._startup_wake_deferred is True
+    vis.deleteLater()
 
 
 @pytest.mark.qt

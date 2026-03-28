@@ -150,6 +150,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Display Native Events | rendering/display_native_events.py | handle_nativeEvent, handle_eventFilter | Win32 native events, global event filter, media key passthrough (focus re-claim removed Feb 2026 to keep Settings responsive) |
 | Display Input | rendering/display_input.py | handle_mousePressEvent, show_ctrl_cursor_hint, ensure_ctrl_cursor_hint | Cursor halo (shape from `input.halo_shape`), mouse press/move, multi-source Ctrl gate, Halo show path now recreates/shows on move even when no hint exists yet, normal click routing stays on the underlying display/widget tree; `_halo_forwarding` guard remains as a defensive no-jitter fallback. Generic post-click halo keepalive/focus reclaim is no longer forced on every compositor interaction. |
 | Display Overlays | rendering/display_overlays.py | start_overlay_fades, perform_activation_refresh | Overlay fades, window diagnostics |
+| Overlay Startup Policy | rendering/overlay_startup_policy.py | OverlayStartupFadePolicy, get_overlay_startup_fade_policy() | Canonical startup timing for the primary overlay wave plus Spotify secondary-stage scheduling |
 | GLCompositor | rendering/gl_compositor.py | GLCompositorWidget | Core GL surface (1772 lines, thin delegates) |
 | GL Transitions | rendering/gl_compositor_pkg/transitions.py | start_crossfade, start_warp, etc. | 12 transition start methods |
 | GL Overlays | rendering/gl_compositor_pkg/overlays.py | paint_debug_overlay, paint_spotify_visualizer | Debug/Spotify/dimming overlays |
@@ -275,6 +276,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Preset Workflow | core/settings/visualizer_presets.py | VisualizerPreset dataclass, `_build_presets_for_mode`, `_filter_settings_for_mode` | Drop-in preset loader. Curated folders use mode-specific JSON under `presets/visualizer_modes/*`; snapshot-style overrides are opt-in and explicit (dedicated folder + markers). Filters keys via global allowlist + mode prefixes, auto-expands preset counts, keeps Custom trailing. Main shipped visualizer modes currently maintain a six-slot curated pack, and duplicate slot ids are test-guarded. |
 | Blob Math | widgets/spotify_visualizer/blob_math.py | compute_stage_offset(), compute_blob_radius_preview() | Shared staged sizing helper used by diagnostics/tests/overlay + shader mirroring Stage Gain/Core Scale logic |
 | Mode Transition | widgets/spotify_visualizer/mode_transition.py | cycle_mode, mode_transition_fade_factor, persist_vis_mode, reset_visualizer_state, start_widget_fade_in/out, reset_teardown_bookkeeping, on_mode_cycle_requested, prepare_engine_for_mode_reset, check_mode_teardown_ready, invalidate_shadow_cache_if_needed, get_gpu_fade_factor | Mode-cycling crossfade, fade in/out, teardown bookkeeping, shared-engine reset + generation tracking, overlay clear on crossfade reset, shadow cache invalidation, GPU fade factor (~500 LOC) |
+| Startup Contract | widgets/spotify_visualizer/startup_contract.py | VisualizerStartupState | Canonical staged-startup state for the Spotify visualizer so reveal/hot-start timing is not spread across ad-hoc widget booleans |
 | Tick Pipeline | widgets/spotify_visualizer/tick_pipeline.py | on_tick, process_heartbeat, dispatch_bubble_simulation, consume_engine_bars, push_gpu_frame, record_tick_perf, log_audio_latency_metrics | Main tick entry point, heartbeat detection, bubble dispatch, engine bar consumption, GPU push (~420 LOC) |
 | Tick Helpers | widgets/spotify_visualizer/tick_helpers.py | log_perf_snapshot, rebuild_geometry_cache, apply_visual_smoothing, get_transition_context, resolve_max_fps, update_timer_interval, pause_timer_during_transition, log_tick_spike | Tick utilities, perf metrics, geometry cache (extracted from widget) |
 | Shader Loader | widgets/spotify_visualizer/shaders/__init__.py | SHARED_VERTEX_SHADER, load_fragment_shader, load_all_fragment_shaders | GLSL shader source loading for multi-shader architecture |
@@ -470,7 +472,9 @@ value = settings.get("display.mode", "fill")
 | tests/test_weather_widget.py | Weather fetch, display, caching (26 tests) |
 | tests/test_slide_jitter.py | Slide transition frame timing (7 tests) |
 | tests/test_widget_manager.py | WidgetManager lifecycle, fade, factory |
+| tests/test_overlay_startup_policy.py | Startup fade policy derivation and delay floors |
 | tests/test_display_image_ops.py | Display image ops visualizer prewarm pipeline and shader-preload ordering |
+| tests/test_visualizer_startup_contract.py | Visualizer staged-startup contract derivation |
 | tests/test_sine_wave_gl_fix.py | Sine wave GL overlay fix regression (mode validation, cycle, shader, card height) |
 | tests/test_micro_wobble_math.py | Micro wobble shader math: energy weighting, spatial freq, displacement bounds, smoothness (20 tests) |
 | tests/test_visualizer_settings_plumbing.py | Visualizer settings plumbing: behavior-first model/creator/applier/frame-push coverage plus a small static shader/contract layer |

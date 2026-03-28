@@ -259,6 +259,7 @@ def start_widget_fade_in(widget: Any, duration_ms: Optional[int] = None) -> None
         ShadowFadeProfile.start_fade_in(
             widget,
             widget._shadow_config,
+            duration_ms=duration_ms,
             has_background_frame=widget._show_background,
         )
     except Exception:
