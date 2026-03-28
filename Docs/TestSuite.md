@@ -192,6 +192,7 @@ It also guards the honesty of the shared fade API: explicit `duration_ms` overri
 | `test_media_display_update.py` | Retained-display policy, alternate-provider snapshot handoff, and media-card re-entry after a real hide | Media lifecycle / retained-metadata behavior changes |
 | `test_media_provider_runtime.py` | Shared runtime provider rebinding and persisted auto-fallback path in WidgetManager | Media provider failover / rebinding changes |
 | `test_media_widget_runtime_methods.py` | Canonical MediaWidget poll-stage helper behavior and track-identity composition | Media polling cadence / dead-duplicate cleanup |
+| `test_media_artwork_layout.py` | Aspect-preserving artwork box sizing plus decode normalization for Spotify video-frame thumbnails | Media artwork distortion fixes |
 | `test_reddit_widget.py` | RedditWidget, fetch, display, clicks | Reddit widget issues |
 | `test_spotify_visualizer_widget.py` | SpotifyVisualizerWidget, BeatEngine, bar rendering | Visualizer widget changes |
 Startup staging coverage here now explicitly guards Spotify secondary-stage deferral, widget self-registration into that stage, first-fresh-frame reveal completion, exact ready-driven reveal after the minimum hidden warmup delay, anchor-visibility release, anchor-sync obedience to the centralized parent secondary-stage deadline, overlay prewarm before reveal, deferred pre-stage wake routing, and the rule that staged hot start must not immediately re-run the normal `engine.wake()` restart path.
@@ -311,8 +312,8 @@ This suite now directly guards that visualizer shader-source preload happens bef
 | `test_reddit_rate_limiter.py` | Reddit API rate limiting | Rate limit handling |
 | `test_reddit_progressive_loading.py` | Progressive post loading | Loading performance |
 | `test_reddit_paint_caching.py` | Reddit widget paint caching | Paint performance |
-| `test_reddit_helper_runtime.py` | User-session helper heartbeat/bootstrap self-heal | Reddit helper lifecycle changes |
-| `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry | Reddit helper worker changes |
+| `test_reddit_helper_runtime.py` | User-session helper heartbeat/bootstrap self-heal plus persistent-vs-session-scoped command shaping | Reddit helper lifecycle changes |
+| `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry, and owner-idle self-exit for session-scoped launches | Reddit helper worker changes |
 
 ---
 
@@ -516,6 +517,8 @@ When writing tests that create `DisplayWidget` or start transitions:
   These are now the direct regression fence for retained media display: cached metadata/artwork must survive temporary session loss, provider auto-fallback must stay on the shared settings-backed runtime path, and a previously hidden media card must re-enter through the shared fade path when metadata returns.
 - `tests/test_media_widget_runtime_methods.py`
   This is the direct fence for the post-audit MediaWidget helper cleanup: poll-stage changes must rebuild the active timer immediately, and track identity must keep artwork-sensitive diff gating instead of drifting back to an older duplicate-helper variant.
+- `tests/test_media_artwork_layout.py`
+  This is the direct fence for the Spotify video-frame artwork fix: artwork must fit inside the configured box without square-frame distortion, and decode should normalize pixmap scaling metadata before painting gets involved.
 - `tests/test_ghost_isolation.py`
   Guards Blob ghost routing/isolation and retired ghost-path branches. This protects the code contract, but Blob ghost visuals still require user validation.
 - `tests/test_visualizer_presets.py`

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from helpers.reddit_helper_worker import (
     HEARTBEAT_FILE_NAME,
+    _evaluate_owner_idle_exit,
     iter_queue_files,
     process_queue,
     _run_watcher,
@@ -165,3 +166,70 @@ class TestWatcherMode:
         assert opened == ["https://example.com/watch"]
         assert not (tmp_path / "watch.json").exists()
         assert (signal_dir / HEARTBEAT_FILE_NAME).exists()
+
+    def test_owner_idle_exit_starts_only_when_queue_is_empty(self, tmp_path: Path):
+        (tmp_path / "queued.json").write_text("{}", encoding="utf-8")
+
+        with patch("helpers.reddit_helper_worker._is_process_alive", return_value=False):
+            should_exit, idle_since = _evaluate_owner_idle_exit(
+                tmp_path,
+                owner_pid=777,
+                idle_exit_seconds=10.0,
+                idle_since=None,
+                persistent=False,
+                now=100.0,
+            )
+
+        assert should_exit is False
+        assert idle_since is None
+
+    def test_owner_idle_exit_exits_after_owner_dead_and_queue_idle(self, tmp_path: Path):
+        with patch("helpers.reddit_helper_worker._is_process_alive", return_value=False):
+            should_exit, idle_since = _evaluate_owner_idle_exit(
+                tmp_path,
+                owner_pid=777,
+                idle_exit_seconds=10.0,
+                idle_since=None,
+                persistent=False,
+                now=100.0,
+            )
+            should_exit, idle_since = _evaluate_owner_idle_exit(
+                tmp_path,
+                owner_pid=777,
+                idle_exit_seconds=10.0,
+                idle_since=idle_since,
+                persistent=False,
+                now=111.0,
+            )
+
+        assert should_exit is True
+        assert idle_since == 100.0
+
+    def test_watcher_exits_when_owner_is_gone_and_queue_stays_idle(self, tmp_path: Path):
+        import helpers.reddit_helper_worker as worker
+
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+
+        original_running = worker._watcher_running
+        try:
+            worker._watcher_running = True
+            with patch(
+                "helpers.reddit_helper_worker._evaluate_owner_idle_exit",
+                return_value=(True, 100.0),
+            ), patch("helpers.reddit_helper_worker.time.sleep", return_value=None):
+                rc = _run_watcher(
+                    tmp_path,
+                    max_batch=10,
+                    signal_dir=signal_dir,
+                    poll_interval=0.5,
+                    owner_pid=777,
+                    idle_exit_seconds=1.0,
+                )
+        finally:
+            worker._watcher_running = original_running
+
+        assert rc == 0
+        heartbeat = json.loads((signal_dir / HEARTBEAT_FILE_NAME).read_text(encoding="utf-8"))
+        assert heartbeat["persistent"] is False
+        assert heartbeat["owner_pid"] == 777

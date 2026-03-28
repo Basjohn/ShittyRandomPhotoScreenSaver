@@ -12,7 +12,12 @@ Section by date and type.
 - **Architecture note:** this should be solved through explicit helper-lifecycle ownership rules:
   - heartbeat/singleton semantics
   - stale-session or stale-owner detection
-  - possibly different rules for installed HKCU Run watcher vs preview/script bootstrap
+  - different rules for installed HKCU Run watcher vs preview/script bootstrap
+- **Progress landed (Mar 28 2026):**
+  - installed ProgramData helper is now explicitly persistent
+  - repo/source helper launches are now session-scoped (`owner-pid` + idle-exit)
+  - worker exits once the owner is gone and the queue stays idle long enough
+- **What is still pending:** real installed SCR validation that the persistent watcher behavior is acceptable and does not create a worse long-lived process problem than the preview/script linger we already fixed.
 - **Anti-pattern warning:** do not paper over this with fragile one-shot cleanup hooks that only work when Windows allows a graceful exit path.
 
 ## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived

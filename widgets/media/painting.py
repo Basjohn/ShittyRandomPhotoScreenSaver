@@ -22,6 +22,7 @@ from PySide6.QtGui import (
 )
 
 from core.logging.logger import get_logger
+from widgets.media.artwork_layout import compute_artwork_frame_size
 from core.media.media_controller import MediaPlaybackState
 from widgets.shadow_utils import draw_rounded_rect_with_shadow
 
@@ -338,8 +339,9 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
         dpr = 1.0
     scale_dpr = max(1.0, dpr)
 
-    frame_w = size
-    frame_h = size
+    frame_size = compute_artwork_frame_size(pm, size)
+    frame_w = max(1, frame_size.width())
+    frame_h = max(1, frame_size.height())
 
     # PERF: Cache scaled artwork to avoid expensive SmoothTransformation on every paint
     cache_key = (id(pm), frame_w, frame_h, scale_dpr)
@@ -366,7 +368,8 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
 
     pad = 20
     x = max(pad, widget.width() - pad - frame_w)
-    y = pad
+    bias = max(0.0, min(1.0, float(getattr(widget, "_artwork_vertical_bias", 0.4))))
+    y = pad + int(round((size - frame_h) * bias))
     widget._last_artwork_rect = QRect(x, y, frame_w, frame_h)
     painter.save()
     try:

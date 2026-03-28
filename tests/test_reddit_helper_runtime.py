@@ -6,6 +6,55 @@ from pathlib import Path
 
 
 class TestRedditHelperRuntime:
+    def test_resolve_helper_command_marks_installed_helper_persistent(self, tmp_path, monkeypatch):
+        from core.windows import reddit_helper_runtime as runtime
+
+        base_dir = tmp_path / "base"
+        installed = base_dir / "helper" / "SRPSS_RedditHelper.exe"
+        installed.parent.mkdir(parents=True)
+        installed.write_text("", encoding="utf-8")
+
+        monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
+        monkeypatch.setattr(runtime, "_queue_dir", lambda: base_dir / "url_queue")
+        monkeypatch.setattr(runtime, "_installed_helper_path", lambda: installed)
+        monkeypatch.setattr(runtime, "_repo_helper_candidates", lambda: [])
+
+        command = runtime.resolve_helper_command(persistent=False)
+
+        assert command is not None
+        assert command[0] == str(installed)
+        assert "--persistent" in command
+        assert "--owner-pid" not in command
+
+    def test_resolve_helper_command_marks_source_helper_session_scoped(self, tmp_path, monkeypatch):
+        from core.windows import reddit_helper_runtime as runtime
+
+        base_dir = tmp_path / "base"
+        queue_dir = base_dir / "url_queue"
+        signal_dir = base_dir / "signals"
+        queue_dir.mkdir(parents=True)
+        signal_dir.mkdir(parents=True)
+
+        monkeypatch.setattr(runtime, "_base_dir", lambda: base_dir)
+        monkeypatch.setattr(runtime, "_queue_dir", lambda: queue_dir)
+        monkeypatch.setattr(runtime, "_signal_dir", lambda: signal_dir)
+        monkeypatch.setattr(runtime, "_installed_helper_path", lambda: base_dir / "helper" / "SRPSS_RedditHelper.exe")
+        monkeypatch.setattr(runtime, "_repo_helper_candidates", lambda: [])
+        monkeypatch.setattr(
+            runtime,
+            "_source_helper_command",
+            lambda: [r"C:\Python\pythonw.exe", r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\helpers\reddit_helper_worker.py"],
+        )
+        monkeypatch.setattr(runtime.os, "getpid", lambda: 4242)
+
+        command = runtime.resolve_helper_command(persistent=False)
+
+        assert command is not None
+        assert "--owner-pid" in command
+        assert "4242" in command
+        assert "--idle-exit-seconds" in command
+        assert "--persistent" not in command
+
     def test_is_helper_healthy_reads_recent_heartbeat(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
 
@@ -42,7 +91,7 @@ class TestRedditHelperRuntime:
         monkeypatch.setattr(
             runtime,
             "resolve_helper_command",
-            lambda: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir)],
+            lambda persistent=False: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--persistent"],
         )
         monkeypatch.setattr(runtime, "_ensure_run_entry", lambda command: registrations.append(command) or True)
         monkeypatch.setattr(runtime, "_launch_helper", lambda command: launches.append(command) or True)
@@ -50,6 +99,8 @@ class TestRedditHelperRuntime:
         assert runtime.ensure_helper_runtime(source="test") is True
         assert len(registrations) == 1
         assert len(launches) == 1
+        assert "--persistent" in registrations[0]
+        assert "--persistent" in launches[0]
 
     def test_ensure_helper_runtime_skips_launch_when_heartbeat_is_fresh(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
@@ -75,7 +126,7 @@ class TestRedditHelperRuntime:
         monkeypatch.setattr(
             runtime,
             "resolve_helper_command",
-            lambda: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir)],
+            lambda persistent=False: [str(base_dir / "helper" / "SRPSS_RedditHelper.exe"), "--watch", "--queue", str(queue_dir), "--persistent"],
         )
         monkeypatch.setattr(runtime, "_ensure_run_entry", lambda command: True)
         monkeypatch.setattr(runtime, "_launch_helper", lambda command: launches.append(command) or True)

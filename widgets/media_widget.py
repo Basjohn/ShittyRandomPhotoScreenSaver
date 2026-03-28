@@ -21,8 +21,9 @@ from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import QTimer, Qt, Signal, QPoint
 from PySide6.QtGui import (
     QFont,
-    QPixmap,
     QFontMetrics,
+    QImageReader,
+    QPixmap,
 )
 from shiboken6 import Shiboken
 
@@ -1108,10 +1109,22 @@ class MediaWidget(BaseOverlayWidget):
             len(data), header_hex,
         )
 
-        pm = QPixmap()
+        image = None
         try:
-            if not pm.loadFromData(data):
-                logger.debug("[MEDIA_WIDGET] loadFromData returned False (%d bytes)", len(data))
+            from PySide6.QtCore import QBuffer, QByteArray
+
+            byte_array = QByteArray(data)
+            buffer = QBuffer(byte_array)
+            if not buffer.open(QBuffer.OpenModeFlag.ReadOnly):
+                logger.debug("[MEDIA_WIDGET] Failed to open artwork buffer (%d bytes)", len(data))
+                return None
+
+            reader = QImageReader(buffer)
+            reader.setAutoTransform(True)
+            image = reader.read()
+            buffer.close()
+            if image is None or image.isNull():
+                logger.debug("[MEDIA_WIDGET] QImageReader returned null image (%d bytes)", len(data))
                 return None
         except MemoryError:
             logger.error("[MEDIA_WIDGET] Out of memory decoding artwork", exc_info=True)
@@ -1120,12 +1133,17 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Failed to decode artwork pixmap", exc_info=True)
             return None
 
+        pm = QPixmap.fromImage(image)
         if pm.isNull():
             logger.debug("[MEDIA_WIDGET] Decoded pixmap is null")
             return None
         if pm.width() <= 0 or pm.height() <= 0:
             logger.debug("[MEDIA_WIDGET] Decoded pixmap has zero dimensions: %dx%d", pm.width(), pm.height())
             return None
+        try:
+            pm.setDevicePixelRatio(1.0)
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Failed to normalize artwork DPR", exc_info=True)
         logger.debug("[MEDIA_WIDGET] Artwork decoded OK: %dx%d", pm.width(), pm.height())
         return pm
     

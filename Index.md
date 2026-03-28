@@ -81,6 +81,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Media | core/media/media_controller.py | WindowsGlobalMediaController, create_media_controller(app_filter) | GSMTC media state; app_filter selects provider session (spotify/musicbee) |
 | Media | core/media/spotify_volume.py | SpotifyVolumeController(provider=) | pycaw per-session volume control; provider-aware (spotify/musicbee process filter) |
 | Media Runtime State | widgets/media/runtime_state.py | MediaWidgetRuntimeState, cache_retained_display_info(), build_retained_display_info(), should_probe_provider_failover() | Shared runtime-only retained-display contract for the media card: cached metadata/artwork, missing-session tracking, paused/non-reactive downgrade, and provider auto-fallback cooldown/state |
+| Media Artwork Layout | widgets/media/artwork_layout.py | compute_artwork_frame_size() | Shared media-artwork sizing helper: preserves source aspect ratio inside the configured artwork box so album art stays square when appropriate while Spotify video-frame thumbnails do not distort |
 | Animation | core/animation/types.py | EasingCurve, resolve_easing(name, auto_default) | Shared easing name→enum mapper for all transitions (replaces 12× _resolve_easing duplication) |
 | Media | core/media/system_mute.py | is_available(), get_mute(), set_mute(), toggle_mute() | System-wide mute via IAudioEndpointVolume (pycaw) |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
@@ -98,9 +99,9 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Lifecycle | core/lifecycle.py | Lifecycle, Cleanable | Runtime-checkable Protocols for start/stop/cleanup interface |
 | Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
 | Reddit Helper Bridge | core/windows/reddit_helper_bridge.py | enqueue_url(), enqueue_settings_request() | ProgramData-backed queue writer only. Secure-desktop / SYSTEM runs should queue work here and do no browser launching themselves. |
-| Reddit Helper Runtime | core/windows/reddit_helper_runtime.py | ensure_helper_runtime(), is_helper_healthy(), resolve_helper_command() | User-session helper lifecycle contract: heartbeat health, HKCU Run self-heal for installed helper, and best-effort preview/script bootstrap without relying on Winlogon cleanup. |
+| Reddit Helper Runtime | core/windows/reddit_helper_runtime.py | ensure_helper_runtime(), is_helper_healthy(), resolve_helper_command() | User-session helper lifecycle contract: heartbeat health, HKCU Run self-heal for the installed persistent helper, and session-scoped preview/script bootstrap with owner-pid idle-exit instead of relying on Winlogon cleanup. |
 | Reddit Helper Installer | core/windows/reddit_helper_installer.py | _running_as_system(), _log_helper_event() | Minimal retained helper utilities only; old token/scheduler/runtime-drop behavior is intentionally gone. |
-| Reddit Helper Worker | helpers/reddit_helper_worker.py | main(), process_queue(), _run_watcher() | Interactive desktop worker: opens URLs, handles open_settings action + completion tokens, writes heartbeat, canonicalizes retry/backoff, and expires stale queue entries safely. |
+| Reddit Helper Worker | helpers/reddit_helper_worker.py | main(), process_queue(), _run_watcher() | Interactive desktop worker: opens URLs, handles open_settings action + completion tokens, writes heartbeat, canonicalizes retry/backoff, expires stale queue entries safely, and self-exits for session-scoped launches once the owner is gone and the queue is idle. |
 | Display Cleanup | rendering/display_cleanup.py | on_destroyed() | Widget destruction/cleanup logic (extracted from display_widget.py) |
 
 ## RSS Image Source (`sources/rss/`)

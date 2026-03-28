@@ -66,6 +66,7 @@ Single source of truth for architecture and key decisions.
 - Shared overlay fade shape still comes from `widgets/shadow_utils.py::ShadowFadeProfile`. Startup timing policy may reference that shared fade duration, but fade shape/easing should stay centralized there so normal widgets and visualizer card fade-in remain coordinated by design.
 - Media retained-display lifecycle now has a shared runtime seam in `widgets/media/runtime_state.py`. Session loss must be split into retained metadata/artwork, live-session acquisition, playback/reactivity gating, and provider fallback/rebinding rather than collapsed into one “hide the card” branch.
 - `widgets/media/display_update.py` is the canonical retained-display policy: if live session data disappears but a retained snapshot exists, the media card stays visible, metadata/artwork stay cached, and downstream consumers receive a paused/non-reactive state instead of a hide signal.
+- Media artwork decode/paint must preserve source aspect ratio. `widgets/media_widget.py::_decode_artwork_pixmap()` is the canonical decode seam (reader auto-transform + normalized pixmap DPR), and `widgets/media/artwork_layout.py` owns the artwork-box fit logic so normal square album art stays square while Spotify video-frame thumbnails do not stretch vertically.
 - Runtime provider fallback must stay settings-backed. `rendering/widget_manager.py` owns the shared provider-runtime rebinding path for the media card and dependent widgets, and runtime auto-fallback must persist through that same settings source of truth instead of inventing a parallel runtime-only provider choice.
 - SettingsManager provides dot-notation access, persisted to a JSON snapshot under
   `%APPDATA%/SRPSS/settings_v2.json` (or `%APPDATA%/SRPSS_MC/` for MC). Legacy
@@ -737,9 +738,10 @@ Diagnostic state capture for shutdown debugging:
   - explicit shorter/longer durations are allowed only when they are intentionally passed as true overrides and actually honored by the shared fade helper
 - Reddit helper lifecycle contract:
   - `core/windows/reddit_helper_bridge.py` is queue-only and must remain benign.
-  - `core/windows/reddit_helper_runtime.py` owns user-session helper bootstrap/health through a shared heartbeat file and best-effort HKCU Run self-heal for the installed ProgramData helper.
+  - `core/windows/reddit_helper_runtime.py` owns user-session helper bootstrap/health through a shared heartbeat file, best-effort HKCU Run self-heal for the installed ProgramData helper, and explicit launch ownership rules.
   - Winlogon / SYSTEM screensaver runs must not assume they will receive a polite shutdown path; helper reliability has to come from persisted queue state and a separately healthy user-session watcher.
-  - `helpers/reddit_helper_worker.py` is the only queue drainer and must keep retry/backoff, legacy `.retry` migration, and stale-entry expiry under one canonical contract so queue files cannot become invisible forever.
+  - Installed helper launches are intentionally persistent; repo/source launches are session-scoped and must pass an owner pid plus idle-exit window instead of relying on app-side cleanup hooks.
+  - `helpers/reddit_helper_worker.py` is the only queue drainer and must keep retry/backoff, legacy `.retry` migration, stale-entry expiry, and owner-idle shutdown under one canonical contract so queue files cannot become invisible forever and preview/script helpers do not linger indefinitely.
 - Legacy SPSCQueue/TripleBuffer fade coordination has been removed in favor of the centralized FadeCoordinator
 
 ### Visualizer Startup Prewarm Contract

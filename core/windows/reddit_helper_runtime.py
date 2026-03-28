@@ -31,6 +31,7 @@ HEARTBEAT_FILE_NAME = "reddit_helper_heartbeat.json"
 RUN_VALUE_NAME = "SRPSS_RedditHelper"
 HELPER_HEARTBEAT_STALE_SECONDS = 10.0
 HELPER_LAUNCH_COOLDOWN_SECONDS = 15.0
+SESSION_HELPER_IDLE_EXIT_SECONDS = 45.0
 
 
 def _signal_dir() -> Path:
@@ -86,24 +87,47 @@ def _source_helper_command() -> Optional[list[str]]:
     return [
         str(python_exe),
         str(script_path),
-        "--watch",
-        "--queue",
-        str(_queue_dir()),
-        "--log-dir",
-        str(_base_dir() / "logs"),
     ]
 
 
-def resolve_helper_command() -> Optional[list[str]]:
+def _scoped_watch_args(*, persistent: bool) -> list[str]:
+    args = [
+        "--watch",
+        "--queue",
+        str(_queue_dir()),
+    ]
+    if persistent:
+        args.append("--persistent")
+    else:
+        args.extend(
+            [
+                "--owner-pid",
+                str(os.getpid()),
+                "--idle-exit-seconds",
+                str(int(SESSION_HELPER_IDLE_EXIT_SECONDS)),
+            ]
+        )
+    return args
+
+
+def resolve_helper_command(*, persistent: bool = False) -> Optional[list[str]]:
     installed = _installed_helper_path()
     if installed.exists():
-        return [str(installed), "--watch", "--queue", str(_queue_dir())]
+        return [str(installed), *_scoped_watch_args(persistent=True)]
 
     for candidate in _repo_helper_candidates():
         if candidate.exists():
-            return [str(candidate), "--watch", "--queue", str(_queue_dir())]
+            return [str(candidate), *_scoped_watch_args(persistent=persistent)]
 
-    return _source_helper_command()
+    command = _source_helper_command()
+    if not command:
+        return None
+    return [
+        *command,
+        *_scoped_watch_args(persistent=persistent),
+        "--log-dir",
+        str(_base_dir() / "logs"),
+    ]
 
 
 def _read_json(path: Path) -> Optional[dict]:
@@ -221,7 +245,7 @@ def ensure_helper_runtime(*, source: str = "app_start") -> bool:
         logger.warning("[REDDIT-HELPER] Bridge unavailable; helper bootstrap skipped (%s)", source)
         return False
 
-    command = resolve_helper_command()
+    command = resolve_helper_command(persistent=False)
     if not command:
         logger.warning("[REDDIT-HELPER] No helper command available for bootstrap (%s)", source)
         return False

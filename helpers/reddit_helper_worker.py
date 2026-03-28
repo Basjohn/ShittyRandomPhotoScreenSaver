@@ -129,6 +129,23 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_POLL_INTERVAL,
         help="Seconds between queue polls in watch mode (default: %.1f)" % DEFAULT_POLL_INTERVAL,
     )
+    parser.add_argument(
+        "--persistent",
+        action="store_true",
+        help="Keep the watcher alive independently of the launching app/session owner",
+    )
+    parser.add_argument(
+        "--owner-pid",
+        type=int,
+        default=0,
+        help="Owner process id for session-scoped watcher shutdown",
+    )
+    parser.add_argument(
+        "--idle-exit-seconds",
+        type=float,
+        default=0.0,
+        help="Seconds to stay alive after owner exit once the queue is idle",
+    )
     return parser.parse_args()
 
 
@@ -153,11 +170,30 @@ def _heartbeat_path(signal_dir: Path) -> Path:
 
 
 def _write_heartbeat(signal_dir: Path, queue_dir: Path, poll_interval: float) -> None:
+    _write_heartbeat_with_lifecycle(
+        signal_dir,
+        queue_dir,
+        poll_interval=poll_interval,
+        persistent=False,
+        owner_pid=0,
+    )
+
+
+def _write_heartbeat_with_lifecycle(
+    signal_dir: Path,
+    queue_dir: Path,
+    *,
+    poll_interval: float,
+    persistent: bool,
+    owner_pid: int,
+) -> None:
     payload = {
         "updated_at": time.time(),
         "pid": os.getpid(),
         "queue_dir": str(queue_dir),
         "poll_interval": float(poll_interval),
+        "persistent": bool(persistent),
+        "owner_pid": int(owner_pid or 0),
     }
     path = _heartbeat_path(signal_dir)
     tmp_path = path.with_suffix(".tmp")
@@ -228,6 +264,45 @@ def _clear_retry_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
     payload.pop("last_error", None)
     payload.pop("next_attempt_ts", None)
     return payload
+
+
+def _is_process_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return True
+    return True
+
+
+def _queue_has_pending_entries(queue_dir: Path) -> bool:
+    return any(iter_queue_files(queue_dir))
+
+
+def _evaluate_owner_idle_exit(
+    queue_dir: Path,
+    *,
+    owner_pid: int,
+    idle_exit_seconds: float,
+    idle_since: float | None,
+    persistent: bool,
+    now: float | None = None,
+) -> tuple[bool, float | None]:
+    if persistent or owner_pid <= 0 or idle_exit_seconds <= 0.0:
+        return False, None
+    if _is_process_alive(owner_pid):
+        return False, None
+    if _queue_has_pending_entries(queue_dir):
+        return False, None
+
+    now = time.time() if now is None else now
+    idle_since = idle_since or now
+    return (now - idle_since) >= idle_exit_seconds, idle_since
 
 
 def _action_error(action: str) -> str:
@@ -326,12 +401,26 @@ def main() -> int:
         signal_dir.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
         logger.debug("[REDDIT] Failed to ensure signal dir %s: %s", signal_dir, exc)
-    _write_heartbeat(signal_dir, args.queue, args.poll_interval if args.watch else 0.0)
+    _write_heartbeat_with_lifecycle(
+        signal_dir,
+        args.queue,
+        poll_interval=args.poll_interval if args.watch else 0.0,
+        persistent=args.persistent,
+        owner_pid=args.owner_pid,
+    )
 
     if args.watch:
         _signal.signal(_signal.SIGINT, _signal_handler)
         _signal.signal(_signal.SIGTERM, _signal_handler)
-        return _run_watcher(args.queue, args.max_batch, signal_dir, args.poll_interval)
+        return _run_watcher(
+            args.queue,
+            max_batch=args.max_batch,
+            signal_dir=signal_dir,
+            poll_interval=args.poll_interval,
+            persistent=args.persistent,
+            owner_pid=args.owner_pid,
+            idle_exit_seconds=args.idle_exit_seconds,
+        )
 
     logging.info("Helper started one-shot (queue=%s)", args.queue)
     processed = process_queue(args.queue, args.max_batch, signal_dir)
@@ -339,18 +428,56 @@ def main() -> int:
     return 0
 
 
-def _run_watcher(queue_dir: Path, max_batch: int, signal_dir: Path, poll_interval: float) -> int:
+def _run_watcher(
+    queue_dir: Path,
+    max_batch: int,
+    signal_dir: Path,
+    poll_interval: float,
+    *,
+    persistent: bool = False,
+    owner_pid: int = 0,
+    idle_exit_seconds: float = 0.0,
+) -> int:
     """Continuous watcher loop — polls queue, opens URLs, sleeps."""
     global _watcher_running
     poll_interval = max(0.5, poll_interval)
-    logging.info("Watcher started (queue=%s, poll=%.1fs)", queue_dir, poll_interval)
+    idle_exit_seconds = max(0.0, float(idle_exit_seconds or 0.0))
+    logging.info(
+        "Watcher started (queue=%s, poll=%.1fs, persistent=%s, owner_pid=%s, idle_exit=%.1fs)",
+        queue_dir,
+        poll_interval,
+        persistent,
+        owner_pid or 0,
+        idle_exit_seconds,
+    )
+    owner_idle_since: float | None = None
 
     while _watcher_running:
         try:
-            _write_heartbeat(signal_dir, queue_dir, poll_interval)
+            _write_heartbeat_with_lifecycle(
+                signal_dir,
+                queue_dir,
+                poll_interval=poll_interval,
+                persistent=persistent,
+                owner_pid=owner_pid,
+            )
             processed = process_queue(queue_dir, max_batch, signal_dir)
             if processed > 0:
                 logging.info("Watcher cycle: processed %d entries", processed)
+            should_exit, owner_idle_since = _evaluate_owner_idle_exit(
+                queue_dir,
+                owner_pid=owner_pid,
+                idle_exit_seconds=idle_exit_seconds,
+                idle_since=owner_idle_since,
+                persistent=persistent,
+            )
+            if should_exit:
+                logging.info(
+                    "Watcher exiting after owner %s disappeared and queue stayed idle for %.1fs",
+                    owner_pid,
+                    idle_exit_seconds,
+                )
+                break
         except Exception:
             logging.error("Watcher cycle error", exc_info=True)
 
