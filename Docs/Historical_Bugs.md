@@ -5,51 +5,6 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
-## 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Pending Architectural Follow-Up)
-
-**Status**
-- **Pending.** Startup fade behavior improved, the visualizer now enters later, and explicit startup policy/contract objects now exist, but the family remains open until cold-start runtime feel and first-frame health are fully validated.
-
-**Why this is recorded here**
-- This issue exposed a broader anti-pattern: startup sequencing and fade ownership drifted across multiple runtime layers, which made timing fixes look correct in isolation while live startup still behaved badly.
-- The risk is not just this one visualizer bug recurring; it is the project regrowing split managers and duplicate sources of truth around startup orchestration.
-
-**Symptoms that led to the audit**
-- Primary overlays had periods where they appeared after a dead gap and then popped in too abruptly instead of following a clearly coordinated fade wave.
-- The Spotify visualizer could start later than before but still arrive in a bad state: jittery first frames, large early latency spikes, fallback-timer reveal instead of a clearly ready reveal, and occasional audio-capture restart noise during startup.
-- Re-entry paths such as mode cycling or settings return could behave differently from true cold start, pointing to startup-only orchestration drift rather than pure shader or FFT quality.
-
-**What the audit found**
-- `WidgetManager` / `FadeCoordinator` were the real owners of primary overlay fade state, but Spotify secondary-stage timing still depended on display-local `_overlay_fade_*` and `_spotify_secondary_not_before_ts` readers in the display layer.
-- That meant logs from the real fade coordinator could look healthy while the visualizer still took a different scheduling path at runtime.
-- In other words: the system had improved internals, but not one fully trustworthy startup contract.
-
-**What was fixed already**
-- Spotify secondary-stage scheduling was moved back under manager-owned runtime control, with display-local fields demoted to mirrored readable state rather than primary ownership.
-- Shared fade helper behavior was corrected so widgets do not wait for a first animation tick before becoming visible at opacity `0.0`.
-- Primary fade no longer carries the earlier explicit warmup dead-gap.
-- Visualizer startup now defers hot-start and reveal behind the centralized secondary-stage deadline instead of waking immediately on early anchor/media events.
-- Shared startup fade timing is now more centralized: `ShadowFadeProfile` owns the shared fade defaults, and visualizer startup fade derives from that helper instead of carrying separate local timing literals.
-- Explicit contract objects now back the architecture:
-  - `rendering/overlay_startup_policy.py` owns display-side startup timing
-  - `widgets/spotify_visualizer/startup_contract.py` owns visualizer staged-startup state
-- Visualizer startup prewarm is now deeper and more centralized:
-  - shader-source preload is cached before overlay warmup
-  - overlay prewarm forces actual GL realization instead of only queueing hidden repaint work
-  - WidgetManager prewarm attempts can retry if startup reaches the seam before the visualizer widget exists
-- A related fade-contract cleanup also landed: the shared fade helper now really honors explicit duration overrides, and normal widget startup fades no longer carry decorative `1500/1200/1000ms` literals that the helper ignored.
-
-**Why this remains pending**
-- The architecture is much healthier, but this family stays pending until fresh cold-start logs confirm the new shared fade/prewarm contract actually produces healthy runtime startup, not just cleaner ownership on paper.
-
-**Guardrails / future direction**
-- Keep fade ownership centralized. Avoid reintroducing display-local scheduling logic that can diverge from manager/coordinator state.
-- Prefer mirrored runtime-readable fields over duplicate decision-making fields when another subsystem is already authoritative.
-- The next cleanup should consolidate startup sequencing further without turning `WidgetManager` into a new monolith:
-  - keep the coordinator authoritative for shared fade phases
-  - keep visualizer-specific staged startup local to the visualizer path
-  - expose narrow, explicit runtime contracts between them
-
 ## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
 
 - **User later confirmed this issue is resolved in live use (Mar 22 2026).**
@@ -90,6 +45,45 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 #### RESOLVED BELOW THIS LINE ####
 ##
 ##
+
+## 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Resolved)
+
+**Symptoms**
+- Primary overlays could sit behind a compositor-only dead gap and then appear too abruptly instead of following a coordinated fade wave.
+- The Spotify visualizer could enter later than before but still in a bad state: jittery first frames, fallback-timer reveal, and occasional startup-side audio restart noise.
+- Cold start, mode-cycle recovery, and settings-return recovery could behave differently, which pointed to orchestration drift rather than one isolated renderer bug.
+
+**Root Cause**
+- `WidgetManager` / `FadeCoordinator` were the real owners of primary fade state, but Spotify secondary-stage timing still depended on display-local fade/runtime fields.
+- That split let coordinator logs look healthy while the live visualizer still followed a different runtime schedule.
+- Shared fade behavior also had helper-level leaks: some widgets waited for the first animation tick to become visible, and several callers carried timing literals that were not actually authoritative.
+
+**Fixes**
+- Moved Spotify secondary-stage scheduling back under manager-owned control, with display-local fields treated as mirrored readable state rather than a second source of truth.
+- Removed the old primary startup dead-gap and fixed the shared fade helper so widgets can become visible immediately at opacity `0.0`.
+- Centralized startup contracts into:
+  - `rendering/overlay_startup_policy.py` for display-side startup timing
+  - `widgets/spotify_visualizer/startup_contract.py` for visualizer staged-startup state
+- Delayed visualizer hot-start/reveal behind the centralized Spotify secondary stage, seeded from anchor/media state, and prewarmed shader/overlay work while hidden.
+- Blocked the delayed-play startup branch from revealing via fallback before real playback becomes live.
+- Restored proper duration-override forwarding so shared fade timing is real policy, not decorative literals.
+
+**Validation**
+- Latest user-validated runs covered all three comparison paths:
+  - cold start with music already playing
+  - full mode cycle back to Spectrum
+  - settings open/close and return
+- In those runs:
+  - primary fade begins at compositor-ready
+  - the visualizer reveals through `fresh_frame_ready_delay`, not `fallback_timer`
+  - `Audio capture unhealthy, restarting...` no longer appears during startup
+  - startup behavior now matches the healthier recovery paths closely enough to close the bug
+
+**Takeaways**
+- Keep shared fade ownership centralized. Do not reintroduce display-local scheduling logic that can diverge from manager/coordinator state.
+- Prefer narrow mirrored runtime-readable state over duplicate decision-making state.
+- If startup needs more polish later, tune it from the shared fade/startup contracts instead of adding visualizer-specific timing hacks.
+- Occasional future fade-softness polish is a separate UX tuning topic, not a reason to reopen this resolved startup bug unless the old parity failure returns.
 
 
 ## 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)
