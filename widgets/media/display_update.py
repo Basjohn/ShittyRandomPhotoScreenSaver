@@ -69,6 +69,10 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
         cls = type(widget)
         cls._shared_last_valid_info = info
         cls._shared_last_valid_info_ts = time.monotonic()
+        try:
+            widget.cache_retained_display_info(info)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
     # Smart polling: diff gating - compute track identity
     if info is not None:
@@ -127,11 +131,36 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
             logger.debug("[MEDIA_WIDGET] Using shared info from another display")
             info = shared_info
             widget._last_info = info
+            try:
+                widget.cache_retained_display_info(info)
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         # else: No shared info - proceed with normal None handling
 
     if info is None:
-        _handle_no_media(widget)
-        return
+        try:
+            failover_info = widget.try_provider_failover()
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            failover_info = None
+        if failover_info is not None:
+            logger.info("[MEDIA_WIDGET] Alternate provider located; continuing with runtime failover snapshot")
+            info = failover_info
+            widget._last_info = info
+            cls = type(widget)
+            cls._shared_last_valid_info = info
+            cls._shared_last_valid_info_ts = time.monotonic()
+            try:
+                widget.cache_retained_display_info(info)
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+
+    if info is None:
+        retained_info = _handle_no_media(widget)
+        if retained_info is None:
+            return
+        info = retained_info
+        widget._last_info = info
 
     # --- Build metadata HTML ---
     _build_and_apply_metadata(widget, info, prev_info)
@@ -155,8 +184,12 @@ def _update_app_process_state(widget: "MediaWidget") -> None:
         widget._app_process_running = False
 
 
-def _handle_no_media(widget: "MediaWidget") -> None:
-    """Handle case where no media info is available — idle/hide logic."""
+def _handle_no_media(widget: "MediaWidget") -> Optional[MediaTrackInfo]:
+    """Handle case where no media info is available.
+
+    Returns a retained display snapshot when the widget should stay visible,
+    otherwise returns ``None`` after performing hide/idle logic.
+    """
     # Check grace period after activation - don't hide immediately
     time_since_activation = time.monotonic() - widget._activation_time
     if widget._activation_time > 0 and time_since_activation < widget._post_activation_grace_sec:
@@ -165,10 +198,14 @@ def _handle_no_media(widget: "MediaWidget") -> None:
                 "[MEDIA_WIDGET] In grace period after activation (%.1fs), skipping hide",
                 time_since_activation,
             )
-        return
+        return widget.get_retained_display_info()
 
     # Smart polling: idle detection - track consecutive None results
     widget._consecutive_none_count += 1
+    try:
+        widget.note_missing_session()
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
     # Enter idle mode after threshold consecutive None results (~30s)
     if widget._consecutive_none_count >= widget._idle_threshold and not widget._is_idle:
@@ -201,7 +238,23 @@ def _handle_no_media(widget: "MediaWidget") -> None:
             )
             widget._ensure_timer(force=True)
 
-    # No active media session – hide widget with graceful fade
+    retained_info = None
+    try:
+        retained_info = widget.get_retained_display_info()
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+
+    if retained_info is not None:
+        if widget._telemetry_last_visibility is not True:
+            logger.info("[MEDIA_WIDGET] Live session missing; retaining cached media card display")
+        widget._telemetry_last_visibility = True
+        try:
+            widget._emit_media_update(retained_info)
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        return retained_info
+
+    # No retained snapshot available – hide widget with graceful fade
     last_vis = widget._telemetry_last_visibility
     if last_vis or last_vis is None:
         logger.info("[MEDIA_WIDGET] No active media session; hiding media card")
@@ -226,6 +279,7 @@ def _handle_no_media(widget: "MediaWidget") -> None:
         widget._complete_hide_sequence()
 
     widget._telemetry_last_visibility = False
+    return None
 
 
 def _build_and_apply_metadata(
@@ -371,6 +425,7 @@ def _build_and_apply_metadata(
         return
 
     widget._emit_media_update(info)
+    _ensure_widget_visible_for_active_metadata(widget)
 
     # Decode optional artwork bytes (for subsequent updates after first track)
     prev_pm = widget._artwork_pixmap
@@ -407,3 +462,31 @@ def _build_and_apply_metadata(
 
         if should_fade_artwork:
             widget._start_artwork_fade_in()
+
+
+def _ensure_widget_visible_for_active_metadata(widget: "MediaWidget") -> None:
+    """Re-enter the shared fade path when metadata returns after a real hide."""
+
+    try:
+        if widget.isVisible():
+            widget._telemetry_last_visibility = True
+            return
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        return
+
+    try:
+        widget._start_widget_fade_in()
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Failed to restart media fade-in: %s", e)
+        try:
+            widget.show()
+        except Exception as show_exc:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", show_exc)
+            return
+
+    try:
+        widget._notify_spotify_widgets_visibility()
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+    widget._telemetry_last_visibility = True

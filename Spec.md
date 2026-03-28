@@ -64,6 +64,9 @@ Single source of truth for architecture and key decisions.
 - ResourceManager tracks Qt objects for deterministic cleanup; includes QPixmap/QImage pooling to reduce GC pressure.
 - Overlay startup cadence now has an explicit display-side source of truth in `rendering/overlay_startup_policy.py`. `rendering/display_overlays.py` and `rendering/widget_manager.py` must derive primary-wave and Spotify secondary-stage startup delays from that shared policy rather than carrying separate startup-delay constants.
 - Shared overlay fade shape still comes from `widgets/shadow_utils.py::ShadowFadeProfile`. Startup timing policy may reference that shared fade duration, but fade shape/easing should stay centralized there so normal widgets and visualizer card fade-in remain coordinated by design.
+- Media retained-display lifecycle now has a shared runtime seam in `widgets/media/runtime_state.py`. Session loss must be split into retained metadata/artwork, live-session acquisition, playback/reactivity gating, and provider fallback/rebinding rather than collapsed into one “hide the card” branch.
+- `widgets/media/display_update.py` is the canonical retained-display policy: if live session data disappears but a retained snapshot exists, the media card stays visible, metadata/artwork stay cached, and downstream consumers receive a paused/non-reactive state instead of a hide signal.
+- Runtime provider fallback must stay settings-backed. `rendering/widget_manager.py` owns the shared provider-runtime rebinding path for the media card and dependent widgets, and runtime auto-fallback must persist through that same settings source of truth instead of inventing a parallel runtime-only provider choice.
 - SettingsManager provides dot-notation access, persisted to a JSON snapshot under
   `%APPDATA%/SRPSS/settings_v2.json` (or `%APPDATA%/SRPSS_MC/` for MC). Legacy
   QSettings profiles are migrated once at startup and future writes stay in
@@ -622,6 +625,7 @@ The volume slider widget (`widgets/spotify_volume_widget.py`) uses `core/media/s
 - **Limitation**: Does NOT sync with Spotify's internal volume slider - they are independent controls
 - **Limitation**: Spotify audio sessions are only discoverable via Core Audio when actively playing; volume changes while paused will silently fail
 - Volume fill colour alpha is user-configurable (default 140/255 ≈ 55%); border alpha is always forced to 255
+- Runtime provider rebinding now flows through the same media settings source of truth used by the media card, so `spotify` / `musicbee` auto-fallback can retarget both the GSMTC metadata path and the Core Audio session filter without recreating the widgets.
 
 ### Alternative: Spotify Web API
 Spotify's Web API provides `PUT /v1/me/player/volume` which controls the **internal Spotify volume** (the slider inside the app):

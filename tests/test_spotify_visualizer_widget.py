@@ -1387,6 +1387,38 @@ def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
 
 
 @pytest.mark.qt
+def test_spotify_visualizer_paused_update_keeps_visible_anchor_path(qt_app, qtbot, monkeypatch):
+    """Paused retained-media updates must stop reactivity without hiding the widget."""
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    engine_states = []
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis._engine = SimpleNamespace(set_playback_state=lambda playing: engine_states.append(bool(playing)))
+    vis.set_anchor_media_widget(anchor)
+    vis._enabled = True
+    vis.show()
+
+    hide_calls = []
+    fade_calls = []
+    monkeypatch.setattr(vis, "hide", lambda: hide_calls.append(True))
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis.handle_media_update({"state": "paused"})
+
+    assert vis._spotify_playing is False
+    assert engine_states == [False]
+    assert hide_calls == []
+    assert fade_calls == []
+
+    vis.deleteLater()
+
+
+@pytest.mark.qt
 def test_spotify_visualizer_defers_wake_until_staged_hot_start(qt_app, qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)

@@ -18,7 +18,7 @@ from enum import Enum
 from typing import Optional, TYPE_CHECKING, ClassVar, Any
 
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import QTimer, Qt, Signal, QVariantAnimation, QPoint
+from PySide6.QtCore import QTimer, Qt, Signal, QPoint
 from PySide6.QtGui import (
     QFont,
     QPixmap,
@@ -36,6 +36,16 @@ from core.media.media_controller import (
 )
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.media.runtime_state import (
+    MediaWidgetRuntimeState,
+    build_retained_display_info,
+    cache_retained_display_info,
+    clear_missing_session,
+    get_alternate_provider,
+    mark_provider_probe_attempt,
+    note_missing_session,
+    should_probe_provider_failover,
+)
 from widgets.shadow_utils import ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 
@@ -144,7 +154,7 @@ class MediaWidget(BaseOverlayWidget):
         # Default artwork size (logical pixels); overridable via settings.
         self._artwork_size: int = 200
         self._artwork_opacity: float = 1.0
-        self._artwork_anim: Optional[QVariantAnimation] = None
+        self._artwork_anim: Optional[object] = None
 
         # Artwork border behaviour
         self._rounded_artwork_border: bool = True
@@ -166,6 +176,7 @@ class MediaWidget(BaseOverlayWidget):
 
         # Central ResourceManager wiring
         self._last_info: Optional[MediaTrackInfo] = None
+        self._runtime_state = MediaWidgetRuntimeState()
         
         # Smart polling: diff gating to skip unnecessary updates
         self._last_track_identity: Optional[tuple] = None  # (title, artist, album, state)
@@ -257,6 +268,97 @@ class MediaWidget(BaseOverlayWidget):
     def provider_display_name(self) -> str:
         """Human-readable provider name for the header text."""
         return "MUSICBEE" if self._provider == "musicbee" else "SPOTIFY"
+
+    def cache_retained_display_info(self, info: MediaTrackInfo) -> None:
+        """Remember the latest valid metadata/artwork snapshot for retained display."""
+
+        cache_retained_display_info(self._runtime_state, info)
+
+    def get_retained_display_info(self) -> Optional[MediaTrackInfo]:
+        """Return a retained snapshot downgraded to a non-reactive playback state."""
+
+        return build_retained_display_info(self._runtime_state)
+
+    def note_missing_session(self) -> None:
+        """Record that live session acquisition temporarily disappeared."""
+
+        note_missing_session(self._runtime_state)
+
+    def clear_missing_session(self) -> None:
+        """Clear the current missing-session marker."""
+
+        clear_missing_session(self._runtime_state)
+
+    def should_probe_provider_failover(self) -> bool:
+        """Return True when runtime auto-fallback is allowed to probe again."""
+
+        return should_probe_provider_failover(self._runtime_state)
+
+    def mark_provider_probe_attempt(self) -> None:
+        """Record a runtime provider auto-fallback probe attempt."""
+
+        mark_provider_probe_attempt(self._runtime_state)
+
+    def set_provider_runtime(self, provider: object) -> bool:
+        """Retarget controller/branding to a new provider without recreating the widget."""
+
+        normalized = self._validate_provider(provider)
+        if normalized == self._provider and getattr(self, "_controller", None) is not None:
+            return False
+
+        controller_tm = self._thread_manager or self._pending_controller_tm
+        controller = create_media_controller(thread_manager=controller_tm, app_filter=normalized)
+        if controller_tm is not None:
+            try:
+                controller.set_thread_manager(controller_tm)
+            except Exception as exc:
+                logger.debug("[MEDIA_WIDGET] Exception suppressing controller TM injection: %s", exc)
+
+        old_provider = self._provider
+        self._provider = normalized
+        self._controller = controller
+        self._brand_pixmap = self._load_brand_pixmap()
+        self._safe_update()
+        logger.info("[MEDIA_WIDGET] Runtime provider switch: %s -> %s", old_provider, normalized)
+        return True
+
+    def _probe_provider_snapshot(self, provider: str) -> Optional[MediaTrackInfo]:
+        """Best-effort probe for an alternate provider using the shared controller contract."""
+
+        normalized = self._validate_provider(provider)
+        controller_tm = self._thread_manager or self._pending_controller_tm
+        try:
+            controller = create_media_controller(thread_manager=controller_tm, app_filter=normalized)
+            if controller_tm is not None:
+                try:
+                    controller.set_thread_manager(controller_tm)
+                except Exception as exc:
+                    logger.debug("[MEDIA_WIDGET] Exception suppressing probe controller TM injection: %s", exc)
+            return controller.get_current_track()
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Alternate provider probe failed for %s", normalized, exc_info=True)
+            return None
+
+    def try_provider_failover(self) -> Optional[MediaTrackInfo]:
+        """Probe the alternate provider and switch runtime/settings if it is the live source."""
+
+        if not self.should_probe_provider_failover():
+            return None
+
+        alternate = get_alternate_provider(self._provider)
+        self.mark_provider_probe_attempt()
+        alt_info = self._probe_provider_snapshot(alternate)
+        if alt_info is None:
+            return None
+
+        self.set_provider_runtime(alternate)
+        manager = self._widget_manager
+        if manager is not None and hasattr(manager, "handle_media_provider_failover"):
+            try:
+                manager.handle_media_provider_failover(alternate, source="media_runtime_autofallback")
+            except Exception:
+                logger.debug("[MEDIA_WIDGET] Failed to persist provider failover", exc_info=True)
+        return alt_info
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -452,25 +554,6 @@ class MediaWidget(BaseOverlayWidget):
     # Smart Polling Helpers
     # ------------------------------------------------------------------
     
-    def _compute_track_identity(self, info: MediaTrackInfo) -> tuple:
-        """Compute a tuple representing the track's identity for diff gating.
-        
-        Returns a tuple of (title, artist, album, state) that uniquely identifies
-        the current track state. Used to skip unnecessary _update_display() calls
-        when the track hasn't changed.
-        """
-        try:
-            title = (getattr(info, 'title', None) or '').strip().lower()
-            artist = (getattr(info, 'artist', None) or '').strip().lower()
-            album = (getattr(info, 'album', None) or '').strip().lower()
-            state = getattr(info, 'state', None)
-            state_val = state.value if hasattr(state, 'value') else str(state)
-            return (title, artist, album, state_val)
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception in _compute_track_identity: %s", e)
-            # Return a unique tuple on error to force update
-            return (id(info), None, None, None)
-    
     def wake_from_idle(self) -> None:
         """Wake the media widget from idle mode to resume polling.
         
@@ -486,64 +569,11 @@ class MediaWidget(BaseOverlayWidget):
             if self._enabled and self._thread_manager is not None:
                 self._refresh_async()
 
-    def _advance_poll_stage(self) -> None:
-        """Advance to next (slower) poll interval if not at max."""
-        if self._current_poll_stage >= len(self._poll_intervals) - 1:
-            return  # Already at slowest
-        
-        self._current_poll_stage += 1
-        self._polls_at_current_stage = 0
-        new_interval = self._poll_intervals[self._current_poll_stage]
-        
-        # Recreate timer with new interval
-        self._ensure_timer(force=True)
-        
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget advanced to poll stage %d (%dms)", 
-                        self._current_poll_stage, new_interval)
-    
-    def _reset_poll_stage(self) -> None:
-        """Reset to fastest poll interval (used when resuming from idle)."""
-        if self._current_poll_stage == 0:
-            return  # Already at fastest
-        
-        self._current_poll_stage = 0
-        self._polls_at_current_stage = 0
-        
-        # Recreate timer with fast interval
-        self._ensure_timer(force=True)
-        
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] Media widget reset to fast poll (1000ms)")
-    
-    def _stop_timer(self) -> None:
-        """Stop the current poll timer."""
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        self._update_timer_handle = None
-        self._update_timer = None
-
     def _update_position(self) -> None:
         """Delegates to widgets.media_layout."""
         from widgets.media_layout import update_position
         update_position(self)
 
-    def _complete_hide_sequence(self) -> None:
-        """Complete the hide sequence after fade out animation.
-        
-        Called as callback after fade out completes to hide widget and
-        notify Spotify-related widgets.
-        """
-        try:
-            self.hide()
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        # Notify parent to hide Spotify-related widgets
-        self._notify_spotify_widgets_visibility()
-    
     def _notify_spotify_widgets_visibility(self) -> None:
         """Notify Spotify-related widgets to sync their visibility with this widget.
         
@@ -1139,70 +1169,13 @@ class MediaWidget(BaseOverlayWidget):
         from widgets.media.painting import draw_control_icon
         draw_control_icon(self, painter, rect, key)
     
-    def _complete_hide_sequence(self) -> None:
-        """Complete the hide sequence after fade out."""
-        try:
-            self.hide()
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        # Clear artwork to free memory
-        self._artwork_pixmap = None
-        self._scaled_artwork_cache = None
-        self._scaled_artwork_cache_key = None
-        # Notify Spotify widgets
-        self._notify_spotify_widgets_visibility()
-    
-    def _handle_fade_in_complete(self) -> None:
-        """Mark fade-in complete."""
-        self._fade_in_completed = True
-    
-    def _start_artwork_fade_in(self) -> None:
-        """Fade in artwork with animation."""
-        # Cancel any existing artwork animation
-        if self._artwork_anim is not None:
-            try:
-                self._artwork_anim.stop()
-                self._artwork_anim.deleteLater()
-            except Exception:
-                pass
-            self._artwork_anim = None
-        
-        self._artwork_opacity = 0.0
-        
-        # Simple fade using QVariantAnimation
-        try:
-            anim = QVariantAnimation(self)
-            anim.setDuration(850)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.valueChanged.connect(lambda val: self._on_artwork_fade_tick(val))
-            anim.finished.connect(lambda: self._on_artwork_fade_complete())
-            self._artwork_anim = anim
-            anim.start()
-        except Exception as e:
-            logger.debug("[MEDIA_WIDGET] Artwork fade failed: %s", e)
-            # Fallback: just set progress and let timer expire it
-            self._artwork_opacity = 1.0
-            self._safe_update()
-    
-    def _on_artwork_fade_tick(self, value: float) -> None:
-        """Update artwork opacity during fade."""
-        self._artwork_opacity = float(value)
-        self._safe_update()
-    
-    def _on_artwork_fade_complete(self) -> None:
-        """Clean up after artwork fade."""
-        self._artwork_anim = None
-        self._artwork_opacity = 1.0
-        self._safe_update()
-    
     def _compute_track_identity(self, info: MediaTrackInfo) -> tuple:
         """Compute track identity for diff gating."""
         return (
-            (info.title or "").strip(),
-            (info.artist or "").strip(),
-            (info.album or "").strip(),
-            info.state,
+            (info.title or "").strip().lower(),
+            (info.artist or "").strip().lower(),
+            (info.album or "").strip().lower(),
+            getattr(info.state, "value", info.state),
             self._compute_artwork_key(info),
         )
 
@@ -1222,17 +1195,24 @@ class MediaWidget(BaseOverlayWidget):
     
     def _reset_poll_stage(self) -> None:
         """Reset polling to fastest interval."""
+        if self._current_poll_stage == 0:
+            return
         self._current_poll_stage = 0
         self._polls_at_current_stage = 0
+        self._ensure_timer(force=True)
+        if is_perf_metrics_enabled():
+            logger.debug("[PERF] Media widget reset to fast poll (%dms)", self._poll_intervals[0])
     
     def _advance_poll_stage(self) -> None:
         """Advance to next slower polling interval."""
-        if self._current_poll_stage < len(self._poll_intervals) - 1:
-            self._current_poll_stage += 1
-            self._polls_at_current_stage = 0
-            if is_perf_metrics_enabled():
-                interval = self._poll_intervals[self._current_poll_stage]
-                logger.debug("[PERF] Media widget advanced to %dms poll interval", interval)
+        if self._current_poll_stage >= len(self._poll_intervals) - 1:
+            return
+        self._current_poll_stage += 1
+        self._polls_at_current_stage = 0
+        self._ensure_timer(force=True)
+        if is_perf_metrics_enabled():
+            interval = self._poll_intervals[self._current_poll_stage]
+            logger.debug("[PERF] Media widget advanced to %dms poll interval", interval)
     
     def _stop_timer(self) -> None:
         """Stop the update timer."""

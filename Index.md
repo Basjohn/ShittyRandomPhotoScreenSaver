@@ -80,6 +80,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
 | Media | core/media/media_controller.py | WindowsGlobalMediaController, create_media_controller(app_filter) | GSMTC media state; app_filter selects provider session (spotify/musicbee) |
 | Media | core/media/spotify_volume.py | SpotifyVolumeController(provider=) | pycaw per-session volume control; provider-aware (spotify/musicbee process filter) |
+| Media Runtime State | widgets/media/runtime_state.py | MediaWidgetRuntimeState, cache_retained_display_info(), build_retained_display_info(), should_probe_provider_failover() | Shared runtime-only retained-display contract for the media card: cached metadata/artwork, missing-session tracking, paused/non-reactive downgrade, and provider auto-fallback cooldown/state |
 | Animation | core/animation/types.py | EasingCurve, resolve_easing(name, auto_default) | Shared easing name→enum mapper for all transitions (replaces 12× _resolve_easing duplication) |
 | Media | core/media/system_mute.py | is_available(), get_mute(), set_mute(), toggle_mute() | System-wide mute via IAudioEndpointVolume (pycaw) |
 | ~~Eco Mode~~ | ~~core/eco_mode.py~~ | ~~EcoModeManager~~ | **REMOVED** - eco_mode fully stripped |
@@ -166,7 +167,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 
 | Module | File | Key Classes | Purpose |
 |--------|------|-------------|---------|
-| WidgetManager | rendering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fade coordination via FadeCoordinator, and Spotify secondary-stage registration/wakeup routing. Owns runtime-safe visualizer preset cycling via `cycle_visualizer_preset(mode, direction)` (settings-backed, non-UI). |
+| WidgetManager | rendering/widget_manager.py | WidgetManager | Widget lifecycle, Z-order, fade coordination via FadeCoordinator, Spotify secondary-stage registration/wakeup routing, and shared runtime media-provider rebinding/persisted auto-fallback. Owns runtime-safe visualizer preset cycling via `cycle_visualizer_preset(mode, direction)` (settings-backed, non-UI). |
 | FadeCoordinator | rendering/fade_coordinator.py | FadeCoordinator | Centralized lock-free fade synchronization |
 | WidgetPositioner | rendering/widget_positioner.py | WidgetPositioner, PositionAnchor | Position calculation |
 | WidgetFactories | rendering/widget_factories.py | ClockWidgetFactory, MediaWidgetFactory, etc. | Widget creation |

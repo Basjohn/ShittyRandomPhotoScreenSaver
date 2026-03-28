@@ -5,6 +5,16 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
+## PENDING RUNTIME / LIFECYCLE BUG: Reddit Helper Process Lingering After App Close
+
+- **Current symptom:** `SRPSS_RedditHelper` can remain alive long after the main application path has closed.
+- **Why this is tricky:** secure-desktop / SYSTEM screensaver runs cannot rely on polite cleanup or normal process-lifetime ownership, so “just exit the helper when the app exits” is not a sufficient model by itself.
+- **Architecture note:** this should be solved through explicit helper-lifecycle ownership rules:
+  - heartbeat/singleton semantics
+  - stale-session or stale-owner detection
+  - possibly different rules for installed HKCU Run watcher vs preview/script bootstrap
+- **Anti-pattern warning:** do not paper over this with fragile one-shot cleanup hooks that only work when Windows allows a graceful exit path.
+
 ## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
 
 - **User later confirmed this issue is resolved in live use (Mar 22 2026).**

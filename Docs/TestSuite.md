@@ -188,10 +188,15 @@ It also now guards the shared fade-profile defaults themselves so startup fade t
 It also guards the honesty of the shared fade API: explicit `duration_ms` overrides must be respected, so true special cases can be intentional instead of silently inheriting the default while pretending otherwise.
 | `test_weather_widget.py` | WeatherWidget, Open-Meteo integration | Weather widget, fetch issues |
 | `test_media_widget.py` | MediaWidget, GSMTC integration, artwork | Media display changes |
+| `test_media_runtime_state.py` | Retained-display snapshot downgrade, missing-session/provider-failover cooldown helpers | Media retained-display contract changes |
+| `test_media_display_update.py` | Retained-display policy, alternate-provider snapshot handoff, and media-card re-entry after a real hide | Media lifecycle / retained-metadata behavior changes |
+| `test_media_provider_runtime.py` | Shared runtime provider rebinding and persisted auto-fallback path in WidgetManager | Media provider failover / rebinding changes |
+| `test_media_widget_runtime_methods.py` | Canonical MediaWidget poll-stage helper behavior and track-identity composition | Media polling cadence / dead-duplicate cleanup |
 | `test_reddit_widget.py` | RedditWidget, fetch, display, clicks | Reddit widget issues |
 | `test_spotify_visualizer_widget.py` | SpotifyVisualizerWidget, BeatEngine, bar rendering | Visualizer widget changes |
 Startup staging coverage here now explicitly guards Spotify secondary-stage deferral, widget self-registration into that stage, first-fresh-frame reveal completion, exact ready-driven reveal after the minimum hidden warmup delay, anchor-visibility release, anchor-sync obedience to the centralized parent secondary-stage deadline, overlay prewarm before reveal, deferred pre-stage wake routing, and the rule that staged hot start must not immediately re-run the normal `engine.wake()` restart path.
 Visualizer startup fade timing here is now expected to derive from the shared fade helper contract rather than from local hardcoded durations, and the widget’s old underscored startup flags are now expected to delegate to the shared visualizer startup contract instead of behaving like independent loose state.
+It also now guards the retained-media lifecycle boundary on the visualizer side: a paused-but-still-visible anchor should leave the visualizer visible while forcing non-playing reactivity gating, rather than collapsing back into a hide path.
 | `test_visualizer_startup_contract.py` | Shared visualizer staged-startup contract derivation | Visualizer startup contract changes |
 | `test_display_image_ops.py` | Display image ops visualizer prewarm pipeline | Startup prewarm regressions |
 This suite now directly guards that visualizer shader-source preload happens before hidden overlay prewarm, so shader file IO stays out of the first visible startup window.
@@ -507,6 +512,10 @@ When writing tests that create `DisplayWidget` or start transitions:
   Guards shared-engine fresh-frame/reset gating during mode switches.
   It is also now the direct regression fence for staged visualizer startup: secondary-stage deferral, first-fresh-frame reveal, ready-driven post-warmup reveal scheduling, and anchor-visibility release.
   Still important because the Oscilloscope half-dead-line bug is not yet considered closed.
+- `tests/test_media_runtime_state.py`, `tests/test_media_display_update.py`, and `tests/test_media_provider_runtime.py`
+  These are now the direct regression fence for retained media display: cached metadata/artwork must survive temporary session loss, provider auto-fallback must stay on the shared settings-backed runtime path, and a previously hidden media card must re-enter through the shared fade path when metadata returns.
+- `tests/test_media_widget_runtime_methods.py`
+  This is the direct fence for the post-audit MediaWidget helper cleanup: poll-stage changes must rebuild the active timer immediately, and track identity must keep artwork-sensitive diff gating instead of drifting back to an older duplicate-helper variant.
 - `tests/test_ghost_isolation.py`
   Guards Blob ghost routing/isolation and retired ghost-path branches. This protects the code contract, but Blob ghost visuals still require user validation.
 - `tests/test_visualizer_presets.py`

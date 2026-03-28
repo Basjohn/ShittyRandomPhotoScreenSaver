@@ -795,6 +795,7 @@ class WidgetManager:
             return
 
         model = MediaWidgetSettings.from_mapping(media_cfg)
+        self._sync_media_provider_runtime(model.provider)
 
         try:
             if hasattr(media_widget, 'set_text_color'):
@@ -826,6 +827,60 @@ class WidgetManager:
         vis_widget = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
         if vis_widget is not None:
             self._apply_media_card_style_to_visualizer(vis_widget, media_cfg)
+
+    def _sync_media_provider_runtime(self, provider: object) -> None:
+        """Rebind live media dependents to the active provider setting/runtime choice."""
+
+        normalized = str(provider or "spotify").strip().lower() or "spotify"
+
+        media_widget = self._widgets.get('media_widget') or self._widgets.get('media')
+        if media_widget is not None and hasattr(media_widget, 'set_provider_runtime'):
+            try:
+                media_widget.set_provider_runtime(normalized)
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to sync media provider runtime", exc_info=True)
+
+        volume_widget = self._widgets.get('spotify_volume') or self._widgets.get('spotify_volume_widget')
+        if volume_widget is not None and hasattr(volume_widget, 'set_provider_runtime'):
+            try:
+                volume_widget.set_provider_runtime(normalized)
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to sync volume provider runtime", exc_info=True)
+
+    def handle_media_provider_failover(self, provider: object, *, source: str = "runtime") -> None:
+        """Persist a runtime media-provider auto-fallback through the shared settings path."""
+
+        normalized = str(provider or "spotify").strip().lower() or "spotify"
+        self._sync_media_provider_runtime(normalized)
+
+        settings = self._settings_manager
+        if settings is None:
+            return
+
+        widgets_cfg = settings.get('widgets', {}) or {}
+        if not isinstance(widgets_cfg, Mapping):
+            widgets_cfg = {}
+        media_cfg = widgets_cfg.get('media', {}) or {}
+        if not isinstance(media_cfg, Mapping):
+            media_cfg = {}
+
+        current = str(media_cfg.get('provider', 'spotify') or 'spotify').strip().lower() or 'spotify'
+        if current == normalized:
+            return
+
+        updated_media_cfg = dict(media_cfg)
+        updated_media_cfg['provider'] = normalized
+        updated_widgets_cfg = dict(widgets_cfg)
+        updated_widgets_cfg['media'] = updated_media_cfg
+
+        logger.info(
+            "[WIDGET_MANAGER] Persisting runtime media provider failover: %s -> %s (source=%s)",
+            current,
+            normalized,
+            source,
+        )
+        settings.set('widgets', updated_widgets_cfg)
+        settings.save()
 
     def _refresh_reddit_configs(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
         """Apply latest reddit settings to live reddit widgets (reddit, reddit2)."""

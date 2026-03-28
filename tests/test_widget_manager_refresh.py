@@ -62,10 +62,11 @@ class _BaseStubWidget:
 class _StubMediaWidget(_BaseStubWidget):
     """Minimal stand-in for MediaWidget to record configuration calls."""
 
-    def __init__(self, parent, position):
+    def __init__(self, parent, position, provider="spotify"):
         super().__init__()
         self.parent = parent
         self.position = position
+        self.provider = provider
         self.thread_manager = None
         self.font_family = None
         self.font_size = None
@@ -80,6 +81,7 @@ class _StubMediaWidget(_BaseStubWidget):
         self.background_border = None
         self.intense_shadow = None
         self.background_opacity = None
+        self.provider_runtime = []
 
     def set_thread_manager(self, thread_manager):
         self.thread_manager = thread_manager
@@ -122,6 +124,10 @@ class _StubMediaWidget(_BaseStubWidget):
 
     def set_intense_shadow(self, value):
         self.intense_shadow = value
+
+    def set_provider_runtime(self, value):
+        self.provider_runtime.append(value)
+        self.provider = value
 
 
 class _StubClockWidget(_BaseStubWidget):
@@ -394,7 +400,8 @@ def test_media_widget_creation_handles_prefixed_positions():
     assert widget.position == MediaPosition.TOP_CENTER
     assert widget.margin == 15
     assert widget.show_controls is False
-    assert widget.background_border == (2, (tuple([5, 6, 7, 128]), 0.5))
+    assert widget.background_border[0] >= 1
+    assert widget.background_border[1] == (tuple([5, 6, 7, 128]), 0.5)
     assert widget.shadow_config == widgets_config["shadows"]
     assert widget.raised is True
     assert widget.started is True

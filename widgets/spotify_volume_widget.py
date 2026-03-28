@@ -45,6 +45,7 @@ class SpotifyVolumeWidget(QWidget):
     def __init__(self, parent: Optional[QWidget] = None, provider: str = "spotify") -> None:
         super().__init__(parent)
 
+        self._provider = str(provider or "spotify").strip().lower() or "spotify"
         self._controller = SpotifyVolumeController(provider=provider)
         self._thread_manager: Optional[ThreadManager] = None
         self._shadow_config = None
@@ -74,6 +75,21 @@ class SpotifyVolumeWidget(QWidget):
         self._fill_color: QColor = QColor(255, 255, 255, 230)
 
         self._setup_ui()
+
+    def set_provider_runtime(self, provider: object) -> bool:
+        """Retarget the underlying Core Audio session filter without recreating the widget."""
+
+        normalized = str(provider or "spotify").strip().lower() or "spotify"
+        if normalized == self._provider:
+            return False
+        self._provider = normalized
+        try:
+            self._controller.set_process_filter(normalized)
+        except Exception:
+            logger.debug("[SPOTIFY_VOL] Failed to retarget provider runtime", exc_info=True)
+            return False
+        logger.info("[SPOTIFY_VOL] Runtime provider switch applied: %s", normalized)
+        return True
 
     # ------------------------------------------------------------------
     # Public configuration
