@@ -463,7 +463,17 @@ def main():
             app.setWindowIcon(QIcon(str(icon_path)))
         except Exception:
             logger.debug("Failed to set application icon from SRPSS.ico", exc_info=True)
-    
+
+    # Keep the Reddit queue watcher alive from normal user-session entrypoints
+    # (config / script / preview / standard desktop runs). Secure-desktop
+    # SYSTEM runs intentionally no-op inside the helper runtime module.
+    try:
+        from core.windows import reddit_helper_runtime
+
+        reddit_helper_runtime.ensure_helper_runtime(source=f"main:{mode.value}")
+    except Exception:
+        logger.debug("[REDDIT-HELPER] Best-effort runtime bootstrap failed", exc_info=True)
+
     # Increase Qt image allocation limit from 256MB to 1GB for high-res images
     # This is per-image when loaded, not total memory for all images
     # Images are loaded on-demand, not all at startup (ImageQueue stores metadata only)

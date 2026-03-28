@@ -96,9 +96,10 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | SST I/O | core/settings/sst_io.py | export_to_sst(), import_from_sst(), preview_import_from_sst() | Settings snapshot transport (extracted from settings_manager.py) |
 | Lifecycle | core/lifecycle.py | Lifecycle, Cleanable | Runtime-checkable Protocols for start/stop/cleanup interface |
 | Rate Limiting | core/reddit_rate_limiter.py | RedditRateLimiter | Reddit API rate limiting (per-process) |
-| Reddit Helper Bridge | core/windows/reddit_helper_bridge.py | enqueue_url(), enqueue_settings_request() | ProgramData file queue + helper trigger (URLs, interactive desktop settings launch) |
-| Reddit Helper Installer | core/windows/reddit_helper_installer.py | ensure_helper_installed(), trigger_helper_run() | Copies helper payload + launches in active user session (schtasks/token fallback) |
-| Reddit Helper Worker | helpers/reddit_helper_worker.py | main(), process_queue() | Interactive desktop worker: opens URLs, handles open_settings action + completion tokens |
+| Reddit Helper Bridge | core/windows/reddit_helper_bridge.py | enqueue_url(), enqueue_settings_request() | ProgramData-backed queue writer only. Secure-desktop / SYSTEM runs should queue work here and do no browser launching themselves. |
+| Reddit Helper Runtime | core/windows/reddit_helper_runtime.py | ensure_helper_runtime(), is_helper_healthy(), resolve_helper_command() | User-session helper lifecycle contract: heartbeat health, HKCU Run self-heal for installed helper, and best-effort preview/script bootstrap without relying on Winlogon cleanup. |
+| Reddit Helper Installer | core/windows/reddit_helper_installer.py | _running_as_system(), _log_helper_event() | Minimal retained helper utilities only; old token/scheduler/runtime-drop behavior is intentionally gone. |
+| Reddit Helper Worker | helpers/reddit_helper_worker.py | main(), process_queue(), _run_watcher() | Interactive desktop worker: opens URLs, handles open_settings action + completion tokens, writes heartbeat, canonicalizes retry/backoff, and expires stale queue entries safely. |
 | Display Cleanup | rendering/display_cleanup.py | on_destroyed() | Widget destruction/cleanup logic (extracted from display_widget.py) |
 
 ## RSS Image Source (`sources/rss/`)

@@ -631,12 +631,14 @@ class DisplayManager(QObject):
 
             try:
                 url = getattr(display, "_pending_reddit_url", None)
-                if isinstance(url, str) and url:
+                prequeued = bool(getattr(display, "_pending_reddit_url_prequeued", False))
+                if isinstance(url, str) and url and not prequeued:
                     pending_reddit_urls.append(url)
-                    try:
-                        setattr(display, "_pending_reddit_url", None)
-                    except Exception as e:
-                        logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
+                try:
+                    setattr(display, "_pending_reddit_url", None)
+                    setattr(display, "_pending_reddit_url_prequeued", False)
+                except Exception as e:
+                    logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
                 # Instrumentation: log state and stop render pipeline before clearing
                 if is_perf_metrics_enabled():
                     try:

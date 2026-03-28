@@ -374,11 +374,16 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                         widget._exiting = True
                         if reddit_url:
                             widget._pending_reddit_url = reddit_url
+                            widget._pending_reddit_url_prequeued = False
                             try:
                                 from core.windows import reddit_helper_bridge
                                 if reddit_helper_bridge is not None and reddit_helper_bridge.is_bridge_available():
-                                    reddit_helper_bridge.enqueue_url(reddit_url, source="scr_click")
-                                    logger.info("[REDDIT] URL queued to ProgramData bridge: %s", reddit_url)
+                                    queued = reddit_helper_bridge.enqueue_url(reddit_url, source="scr_click")
+                                    widget._pending_reddit_url_prequeued = bool(queued)
+                                    if queued:
+                                        logger.info("[REDDIT] URL queued to ProgramData bridge: %s", reddit_url)
+                                    else:
+                                        logger.warning("[REDDIT] Bridge enqueue rejected; cleanup safety-net remains active: %s", reddit_url)
                                 else:
                                     logger.warning("[REDDIT] Bridge unavailable; URL will be lost: %s", reddit_url)
                             except Exception:

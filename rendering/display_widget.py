@@ -267,6 +267,7 @@ class DisplayWidget(QWidget):
         self._overlay_fade_timeout: Optional[QTimer] = None
         self._reddit_exit_on_click: bool = True
         self._pending_reddit_url: Optional[str] = None  # URL to open once saver exits
+        self._pending_reddit_url_prequeued: bool = False
         self._pending_activation_refresh: bool = False
         self._last_deactivate_ts: float = 0.0
         

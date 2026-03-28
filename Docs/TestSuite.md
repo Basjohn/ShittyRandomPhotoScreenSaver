@@ -306,7 +306,8 @@ This suite now directly guards that visualizer shader-source preload happens bef
 | `test_reddit_rate_limiter.py` | Reddit API rate limiting | Rate limit handling |
 | `test_reddit_progressive_loading.py` | Progressive post loading | Loading performance |
 | `test_reddit_paint_caching.py` | Reddit widget paint caching | Paint performance |
-| `test_reddit_helper_installer.py` | Reddit helper installation | Helper installer |
+| `test_reddit_helper_runtime.py` | User-session helper heartbeat/bootstrap self-heal | Reddit helper lifecycle changes |
+| `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry | Reddit helper worker changes |
 
 ---
 

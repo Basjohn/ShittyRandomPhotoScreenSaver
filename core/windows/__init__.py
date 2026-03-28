@@ -12,6 +12,7 @@ __all__ = [
     "url_launcher",
     "reddit_helper_bridge",
     "reddit_helper_installer",
+    "reddit_helper_runtime",
 ]
 
 

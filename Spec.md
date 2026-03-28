@@ -127,6 +127,7 @@ if dev_features_enabled:
 - Normal screensaver build:
   - Entry: `main.py`, deployed as `SRPSS.scr` / `SRPSS.exe`.
   - Uses the `ShittyRandomPhotoScreenSaver/Screensaver` profile name for legacy migration only; the canonical runtime store is `%APPDATA%/SRPSS/settings_v2.json`.
+  - Reddit-link opening from secure desktop is queue-based only: Winlogon / SYSTEM runs must persist ProgramData queue entries and exit, without relying on direct browser launch or graceful cleanup callbacks.
 - Manual Controller (MC) build:
   - Entry: `main_mc.py`, deployed as `SRPSS_Media_Center.exe` (Nuitka onedir) or legacy `SRPSS MC.exe` (PyInstaller onefile).
   - Uses the same organization but stores settings in `%APPDATA%/SRPSS_MC/settings_v2.json`, keeping MC configuration isolated from the normal screensaver profile. Detection now includes the renamed executable stems (`srpss_media_center.exe`) so MC settings stay isolated regardless of the build artifact name and JSON directory.
@@ -730,6 +731,11 @@ Diagnostic state capture for shutdown debugging:
   - the parent display's `_spotify_secondary_not_before_ts` deadline is the manager-mirrored runtime gate for Spotify secondary-stage startup, including anchor/media-driven retries
   - visualizer fade-in should also derive from `ShadowFadeProfile` rather than shipping separate local timing literals in startup or mode-transition paths
   - explicit shorter/longer durations are allowed only when they are intentionally passed as true overrides and actually honored by the shared fade helper
+- Reddit helper lifecycle contract:
+  - `core/windows/reddit_helper_bridge.py` is queue-only and must remain benign.
+  - `core/windows/reddit_helper_runtime.py` owns user-session helper bootstrap/health through a shared heartbeat file and best-effort HKCU Run self-heal for the installed ProgramData helper.
+  - Winlogon / SYSTEM screensaver runs must not assume they will receive a polite shutdown path; helper reliability has to come from persisted queue state and a separately healthy user-session watcher.
+  - `helpers/reddit_helper_worker.py` is the only queue drainer and must keep retry/backoff, legacy `.retry` migration, and stale-entry expiry under one canonical contract so queue files cannot become invisible forever.
 - Legacy SPSCQueue/TripleBuffer fade coordination has been removed in favor of the centralized FadeCoordinator
 
 ### Visualizer Startup Prewarm Contract

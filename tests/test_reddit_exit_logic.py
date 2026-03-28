@@ -193,6 +193,7 @@ class TestDisplayManagerDeferredUrls:
         fake_display = MagicMock()
         fake_display.screen_index = 0
         fake_display._pending_reddit_url = "https://example.com/pending"
+        fake_display._pending_reddit_url_prequeued = False
         fake_display.clear = MagicMock()
         fake_display.close = MagicMock()
         fake_display.deleteLater = MagicMock()
@@ -202,8 +203,39 @@ class TestDisplayManagerDeferredUrls:
         manager.cleanup()
 
         assert fake_display._pending_reddit_url is None
+        assert fake_display._pending_reddit_url_prequeued is False
         urls = manager.take_deferred_reddit_urls()
         assert urls == ["https://example.com/pending"]
+
+    @pytest.mark.qt
+    def test_cleanup_skips_urls_already_prequeued(self, qt_app, monkeypatch):
+        """DisplayManager.cleanup should not duplicate URLs already queued at click time."""
+        from engine.display_manager import DisplayManager
+
+        monkeypatch.setattr(
+            display_manager_module,
+            "reddit_helper_bridge",
+            None,
+            raising=False,
+        )
+
+        manager = DisplayManager()
+        fake_display = MagicMock()
+        fake_display.screen_index = 0
+        fake_display._pending_reddit_url = "https://example.com/already-queued"
+        fake_display._pending_reddit_url_prequeued = True
+        fake_display.clear = MagicMock()
+        fake_display.close = MagicMock()
+        fake_display.deleteLater = MagicMock()
+
+        manager.displays = [fake_display]
+
+        manager.cleanup()
+
+        urls = manager.take_deferred_reddit_urls()
+        assert urls == []
+        assert fake_display._pending_reddit_url is None
+        assert fake_display._pending_reddit_url_prequeued is False
 
 
 class TestCleanQueueFlow:
@@ -397,6 +429,7 @@ class TestDeferredRedditFlow:
             widget.mousePressEvent(event)
 
             assert widget._pending_reddit_url == target_url
+            assert widget._pending_reddit_url_prequeued is True
         finally:
             MultiMonitorCoordinator.reset()
 
