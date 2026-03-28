@@ -473,6 +473,44 @@ def test_set_settings_model_applies_incoming_mode_technical_config(qt_app, qtbot
 
 
 @pytest.mark.qt
+def test_apply_vis_mode_config_merges_runtime_technical_overrides(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+
+    widget.apply_vis_mode_config(
+        mode="blob",
+        blob_dynamic_floor=False,
+        blob_manual_floor=0.12,
+        blob_adaptive_sensitivity=False,
+        blob_sensitivity=0.58,
+        blob_audio_block_size=128,
+    )
+
+    blob_cfg = widget._technical_config_cache["blob"]
+    assert blob_cfg["dynamic_floor"] is False
+    assert blob_cfg["manual_floor"] == pytest.approx(0.12)
+    assert blob_cfg["adaptive_sensitivity"] is False
+    assert blob_cfg["sensitivity"] == pytest.approx(0.58)
+    assert blob_cfg["audio_block_size"] == 128
+    assert widget._last_floor_config[0] is False
+    assert widget._last_floor_config[1] == pytest.approx(0.12)
+    assert widget._last_sensitivity_config[0] is False
+    assert widget._last_sensitivity_config[1] == pytest.approx(0.58)
+    assert widget._last_audio_block_size == 128
+
+
+@pytest.mark.qt
 def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)

@@ -18,24 +18,19 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Technical visibility buckets** — `Show AGC Controls` and `Show Transient Controls` only hide/show clutter in the Settings UI. Hidden controls keep their saved values and still affect rendering. Treat them as organization helpers, not runtime toggles.
 - **Manual Floor Baseline** — shared slider (0.05 – 4.0) that now seeds the dynamic floor accumulator the moment you change it, even when Dynamic Floor remains enabled. Treat it as the guaranteed "silence baseline" for every mode; if visuals look stuck too high, check this slider first before touching stage/core floor biases.
 - **Dynamic Floor** — still adapts over time, but every preset reload, mode switch, widget reset, or manual floor edit reseeds the accumulator from the Manual Floor Baseline to prevent stale high floors bleeding across modes.
-- **Energy Boost** (0.5–1.8×) — per-mode post-normalization gain. Amplifies energy bands after AGC processing. Higher values make the visualizer react more strongly to all frequencies. Default 0.85× is deliberately conservative; raise toward 1.2–1.5× if a mode feels sluggish, lower toward 0.5–0.7× to calm it down. *Interacts with Sensitivity — adjust one at a time.*
 - **AGC Strength** (0%–100%) — per-mode automatic gain control compression. Controls how aggressively the dual-window envelope normalizer tracks and compresses loudness:
-  - **0%**: Bypasses normalization entirely. Energy bands track raw FFT output. Good for testing or when using raw energy mode.
+  - **0%**: Bypasses normalization entirely. Energy bands track the uncompressed post-input-gain path.
   - **50%** (default): Moderate compression. Preserves dynamics during loud passages while keeping quiet sections visible.
   - **100%**: Maximum compression. All audio pushed toward constant loudness. Useful for very dynamic playlists but reduces kick/snare punch.
   - *Lower AGC Strength if visualizer feels "flat" during a loud chorus. Raise it if quiet songs produce no visible reaction.*
-- **Input Gain** (5%–200%, default 100%) — per-mode pre-FFT signal scaling (virtual volume). Multiplies raw PCM samples before peak detection and FFT, producing the exact same effect as lowering/raising the system mixer volume without actually changing audio output. Lower values calm the visualizer; higher values make it more reactive. At 100% (default) there is no change. Because the scaling happens before AGC normalization, very low gain values may cause the silence threshold to kick in (signal treated as silence). Very high values may saturate the AGC normalizer. *Adjust this before Energy Boost — Input Gain affects the raw signal, Energy Boost affects post-normalization output.*
+- **Input Gain** (5%–200%, default 100%) — per-mode pre-FFT signal scaling (virtual volume). Multiplies raw PCM samples before peak detection and FFT, producing the exact same effect as lowering/raising the system mixer volume without actually changing audio output. Lower values calm the visualizer; higher values make it more reactive. At 100% (default) there is no change. Because the scaling happens before AGC normalization, very low gain values may cause the silence threshold to kick in (signal treated as silence). Very high values may saturate the AGC normalizer. *Adjust this before AGC Strength or mode-specific shaping — Input Gain changes the source signal, while AGC Strength changes how that signal is compressed afterward.*
 - **Transient Clamp** (0%–300%) — per-mode cap on transient-boosted bass energy. This is the main safety rail for the micro-scheduler/transient path; lower it if beat accents feel too explosive before touching mode-specific pulse/stage sliders.
 - **Mode-only transient controls** — some transient sliders only appear in the modes that actually use them:
   - Spectrum: `Kick Lane Gain` reinforces the kick express lane.
   - Bubble: `Transient Pulse` reinforces the scheduler-driven bubble pulse path.
   - Blob / Bubble / Spectrum / Sine / Oscilloscope: each mode can also expose its own transient mix slider where applicable.
-- **Use Raw Energy** (toggle, default OFF) — per-mode bypass of AGC entirely. When enabled, energy bands come from pre-AGC values with full dynamic range. **Warning**: Raw energy values can be very large during loud passages and near-zero during quiet ones. Only enable for modes/presets where you want maximum dynamic range and are willing to accept the inconsistency.
-  - *Blob mode*: Leave OFF — blob deformation relies on consistent ~0.5–0.8 range for smooth morphing. Raw energy causes jarring shape jumps.
-  - *Bubble mode*: Leave OFF — the hybrid pulse system handles AGC-constant energy poorly via delta + sustained floor detection. Raw energy may cause over/under-inflation.
-  - *Spectrum mode*: Can be enabled for dramatic bar height variation, but bars may collapse to zero during quiet passages.
-  - *Sine/Oscilloscope*: Leave OFF — waveform drives amplitude, energy only affects glow.
-- **Per-mode persistence** — all Technical controls save under `<mode>_<setting>` keys (no more global `audio_block_size`). Every curated preset was re-audited on 2026‑03‑11 so each non-Custom slot ships the mandatory per-mode set: manual/dynamic floor, adaptive toggle, sensitivity, `<mode>_audio_block_size` (Auto/0 means "use driver buffer"), dynamic range flag, energy boost, AGC strength, and raw energy toggle. Whenever you touch a preset JSON/SST, rerun `tools/visualizer_preset_repair.py` to keep that structure intact.
+- **Retired authored compat controls** — `energy_boost` and `use_raw_energy` are no longer part of the persisted settings/defaults/preset schema. Runtime still has internal/debug seams for derived AGC boost and raw-energy inspection, but authored presets, SST-normalized payloads, and save/export flows must not emit those keys anymore.
+- **Per-mode persistence** — all living Technical controls save under `<mode>_<setting>` keys (no more global `audio_block_size`). Every curated preset should carry the mandatory per-mode set: manual/dynamic floor, adaptive toggle, sensitivity, `<mode>_audio_block_size` (Auto/0 means "use driver buffer"), dynamic range flag, AGC strength, input gain, and the mode-appropriate transient controls. Whenever you touch a preset JSON/SST, rerun `tools/visualizer_preset_repair.py` to keep that structure intact.
 
 ---
 
@@ -108,7 +103,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 8. *Release shaping*: Use Pulse Release around `0.18s – 0.32s` for most music. Shorter values feel snappier but can chatter; longer values are safer for vocals/piano but can smear fast drums.
 9. *Kick assist triage*: If Blob reacts well overall but still has occasional discrete flicker or giant beat pops, try lowering Technical `Kick Lane Gain` first. `0%` disables scheduler kick help while preserving continuous support and snare-driven wobble/stretch.
 10. *Bar layout*: Keep Bar Count between 32–48 for a balanced look. Going past 64 spreads energy too thin (muted pulse) unless Pulse Intensity/Stage Gain drop to compensate; dipping below 24 makes stretch spikes chunky.
-11. *AGC tuning*: Leave Energy Boost at default (0.85×) and AGC Strength at 50%. Blob deformation uses energy bands as continuous drivers — post-AGC ~0.5–0.8 range keeps the blob moderately deformed at all times, which is desirable. Lowering AGC Strength increases dynamic range but may cause the blob to collapse during quiet passages. Do NOT enable Use Raw Energy — raw values cause jarring shape discontinuities because the blob's smoothing was designed for near-constant input range.
+11. *AGC tuning*: Keep AGC Strength around 50 % and Input Gain near 100 % as the neutral Blob baseline. Blob deformation uses smoothed post-AGC energy as its continuous driver, so moderate compression keeps the body alive without turning wobble/stretch into pure transient chatter. Lower AGC Strength only when loud sections feel too flat, and raise Input Gain only when the whole mode is genuinely underfed. Do not reintroduce authored raw-energy behavior through presets or repair flows; Blob’s smoothing contract still expects the canonical shared post-AGC path.
 12. *Curated pack intent*: Use the six shipped Blob presets as distinct starting families rather than one ladder of "more pulse." `The Mighty Blob` is the validation baseline; `Lava Lamp` and `Ice Crystal` are safer low-shock entries; `Reactive Heart`, `Void Heart`, and `Solar Flare` explore stronger looks while staying on the newer Pulse Cap / Pulse Release guardrails.
 
 ---
@@ -188,10 +183,10 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Dynamic Noise Floor / Manual Floor** — *Technical checkbox + slider*
   - Impact: Dynamic floor auto-adjusts baseline; manual floor takes over when dynamic disabled.
   - Conflicts: Set manual floor before toggling; high values reduce contrast between big/small bubbles.
-- **Energy Boost / AGC Strength / Use Raw Energy** — *Technical sliders + toggle*
-  - Impact: Energy Boost scales post-AGC energy; AGC Strength controls normalization compression; Raw Energy bypasses AGC entirely.
-  - Conflicts: High Energy Boost with high AGC Strength can double-amplify and saturate pulse. Raw Energy bypasses the hybrid pulse system’s assumptions about near-constant energy levels. Adjust one at a time.
-  - **Bubble-specific note**: The hybrid pulse system (delta + sustained floor) was designed for post-AGC energy. Lowering AGC Strength below ~30% or enabling Raw Energy may cause big bubbles to inflate/deflate erratically instead of pulsing on beats.
+- **Input Gain / AGC Strength / Dynamic Range** — *Technical controls*
+  - Impact: Input Gain scales the pre-FFT signal, AGC Strength controls how aggressively the shared normalizer compresses it, and Dynamic Range Boost toggles the stronger derived runtime output scale.
+  - Conflicts: Very high Input Gain plus high AGC Strength can still flatten Bubble into a narrow energy band; very low AGC Strength can make the hybrid pulse system too contrasty for calmer presets. Adjust one axis at a time.
+  - **Bubble-specific note**: The hybrid pulse system (delta + sustained floor) was designed around the canonical shared post-AGC path. If big bubbles inflate/deflate erratically, inspect AGC Strength, Input Gain, and transient mixes before assuming the motion model is wrong.
   - **Scheduler note**: Big-bubble promotions now prefer consume-once kick events from the micro-scheduler. If Bubble feels too eager, inspect transient floor/gain first; there is no separate scheduler toggle by design.
 
 **Recommended Bubble baselines**
@@ -203,7 +198,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 5. *Tail discipline*: Tail Length 40 % with Tail Opacity 25 % adds motion blur without fog. Raise opacity only if bubble counts are modest (<20 small).
 6. *Lighting*: Pair Specular Direction “Top Left” with Gradient Direction “Center Out” for dimensional highlights; keep Gradient Light at least 30 % brighter than Gradient Dark so pop colour remains readable.
 7. *Technical*: Start with Bar Count 48, Adaptive Sensitivity ON, Manual Floor governed by dynamic floor. If you disable dynamic floor, set Manual Floor ≈0.22 and lower Speed Cap by ~20 % to offset the higher baseline energy.
-8. *AGC tuning*: Leave Energy Boost at default (0.85×) and AGC Strength at 50%. The hybrid pulse system handles post-AGC constant energy correctly via delta + sustained floor detection. Only lower AGC Strength if big bubbles feel unresponsive during very dynamic tracks. Do NOT enable Use Raw Energy unless you’ve tested with your specific playlist — raw energy can cause erratic inflation.
+8. *AGC tuning*: Keep AGC Strength around 50 % and Input Gain near 100 % as the Bubble baseline. The hybrid pulse system already handles sustained post-AGC energy via delta + sustained-floor detection. Lower AGC Strength only if big bubbles feel too compressed during very dynamic tracks, and use Input Gain when the whole mode is underfed. Raw-energy behavior is now a runtime/debug seam only, not a supported authored preset path.
 9. *Hybrid pulse explained*: Big bubbles react to bass kicks (delta component: deviation above running average) AND stay moderately inflated during sustained loud sections (sustained component: absolute energy above a perceptual knee). This prevents both "permanently stuck at max size" (old AGC bug) and "deflating mid-chorus" (pure delta problem). No user-facing slider controls the hybrid system — it is always active and self-tuning.
 
 ---
@@ -231,9 +226,9 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Card Height Growth** (`spectrum_growth`) — *Advanced slider*
   - Impact: Multiplies widget height.
   - Conflicts: Larger cards require higher Manual Floor or Adaptive Sensitivity, otherwise bars look short despite height.
-- **Technical controls** (`bar_count`, `<mode>_audio_block_size`, adaptive/sensitivity/floor/dynamic_range, energy_boost, agc_strength, use_raw_energy)
+- **Technical controls** (`bar_count`, `<mode>_audio_block_size`, adaptive/sensitivity/floor/dynamic_range, input_gain, agc_strength, transient mixes where applicable)
   - Impact: Govern FFT binning, latency, gain, floors, and AGC behaviour.
-  - Conflicts: Low bar counts (<24) break curved weighting (bass peak shifts); audio block sizes <256 increase jitter unless the new bar gate remains. Energy Boost >1.2× with Dynamic Range Boost ON can overdrive bar heights.
+  - Conflicts: Low bar counts (<24) break curved weighting (bass peak shifts); audio block sizes <256 increase jitter unless the new bar gate remains. High input gain together with Dynamic Range Boost can overdrive bar heights.
   - Notes: Spectrum now routes bass/mid/treble per lane instead of multiplying the whole profile by one shared scalar. The shape editor is still the silhouette guide, but quiet lanes can now drop properly when their source energy disappears.
 - **Shape editor notch drag** (`spectrum_notch_positions_mirrored`, `spectrum_notch_positions_linear`) — *Shape editor bottom controls*
   - Impact: Defines zone boundaries used by the lane-routing model.
@@ -248,7 +243,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 5. *Bar count*: 32–48 bins keep curved weighting intact; going to 64 needs Sensitivity +15 % to compensate for thinner energy per bar.
 6. *Latency trade*: Audio Block Size 256 (Auto) balances response and smoothness. Drop to 128 only when you also increase ghost decay (faster fade) to avoid shimmer.
 7. *Colour discipline*: Keep Fill alpha ≥85 % if you disable Single Piece; otherwise the gaps show wallpaper bleed and look noisy.
-8. *AGC tuning*: Energy Boost at 0.85× default works well for spectrum. Raise to 1.0–1.2× if bars look short on quieter playlists. AGC Strength 50% (default) is the sweet spot — lowering it increases dynamic range (tall kicks, short verse) while raising it compresses everything toward uniform height. Use Raw Energy can be enabled for dramatic range but expect bars to collapse to zero during quiet passages.
+8. *AGC tuning*: AGC Strength 50 % and Input Gain 100 % remain the Spectrum baseline. Lower AGC Strength when loud sections feel too uniform; raise Input Gain when the whole preset is genuinely underfed. The old authored `energy_boost` / `use_raw_energy` controls are retired, so do not try to retune Spectrum by reintroducing them through presets or repair tooling.
 9. *Curated pack intent*: The shipped six-slot Spectrum pack now covers clean default pillars, retro/mirrored shapes, monochrome punch, organ-like single-piece sustain, a non-mirrored neon lane preset (`Prism Runway`), and a warmer sustained-body preset (`Ember Choir`).
 
 ---
@@ -276,9 +271,9 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Card Height** (`osc_growth`) — *Advanced slider*
   - Impact: Widget height multiplier.
   - Conflicts: Large growth plus Vertical Shift can overlap other widgets; adjust Layout margins accordingly.
-- **Technical controls** (`osc_bar_count` via technical group, block size, adaptive/sensitivity, floors, energy_boost, agc_strength)
+- **Technical controls** (`osc_bar_count` via technical group, block size, adaptive/sensitivity, floors, input_gain, agc_strength)
   - Impact: Shared audio parameters plus AGC controls.
-  - Conflicts: Lowering bar count below default reduces multi-line energy separation. Energy Boost primarily affects glow intensity for oscilloscope since amplitude comes from waveform data.
+  - Conflicts: Lowering bar count below default reduces multi-line energy separation. Input Gain changes how hard the waveform/glow support is fed before AGC, while amplitude still remains fundamentally waveform-driven.
   - Notes: Oscilloscope transient-width reaction now also peeks recent scheduler kick/snare events, so discrete beats can widen the line even when a frame-local onset was missed.
 
 **Recommended Oscilloscope baselines**
@@ -289,7 +284,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 4. *Multi-line spacing*: Line Count = 2, Offset Bias 35 %, Vertical Shift 60 for layered look. At 3 lines set Offset Bias ≥55 % and Vertical Shift ≥110.
 5. *Technical split*: Leave Adaptive Sensitivity ON; if you disable it and raise the Technical Sensitivity slider, dial Line Amplitude back ~10 % so the two gains don't double-scale. Manual Floor 1.6 + Dynamic Floor OFF still needs Smoothing around 75 % to avoid chatter.
 6. *Card height*: Growth 1.2× for two lines, 1.4× for three. Re-check widget overlap whenever Smoothing <50 % (lines spike higher).
-7. *AGC tuning*: Keep defaults (Energy Boost 0.85×, AGC Strength 50%). Energy Boost only affects glow brightness for oscilloscope — waveform amplitude is waveform-driven, not energy-driven. Raising Energy Boost beyond 1.2× only makes glow brighter without affecting line height. Leave Use Raw Energy OFF.
+7. *AGC tuning*: Keep defaults (AGC Strength 50%, Input Gain 100%). Oscilloscope waveform amplitude is still waveform-driven, so AGC/Input Gain changes mostly affect glow support and perceived liveliness rather than the base line-height contract.
 8. *Curated pack intent*: The shipped six-slot Oscilloscope pack intentionally spans one-line punch (`Volt Ribbon`), soft dual-line motion (`Soft Echo`), brighter neon response (`Night Drive`), and smooth three-line glass drift (`Glass Choir`) so tuning experiments start from distinct motion families, not just color swaps.
 
 ---
@@ -320,8 +315,8 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 - **Card Height** (`sine_wave_growth`) — *Advanced*
   - Impact: Widget height multiplier.
   - Conflicts: Growth >1.5× combined with Density <0.8× wastes vertical space.
-- **Technical controls** (per-mode audio block size, adaptive, floors, bar count, energy_boost, agc_strength) — as above.
-  - Conflicts: Dropping bar count below ~40 collapses the bass/mid split the sine displacement math expects, so multi-line offset bias and displacement all converge; retune line shifts or raise bar count before blaming density settings. Energy Boost primarily affects glow intensity for sine wave since amplitude comes from waveform data.
+- **Technical controls** (per-mode audio block size, adaptive, floors, bar count, input_gain, agc_strength) — as above.
+  - Conflicts: Dropping bar count below ~40 collapses the bass/mid split the sine displacement math expects, so multi-line offset bias and displacement all converge; retune line shifts or raise bar count before blaming density settings. Input Gain primarily affects glow support and support-band liveliness for sine wave since amplitude remains waveform-driven.
   - Notes: Sine now gets a mode-local scheduler beat assist. Recent kick/snare events still help width reaction and energy cues, but that assist is support-weighted and capped so it acts as beat confirmation rather than injecting its own giant pseudo-heartbeats. The large swells should still come from the actual heartbeat detector, not isolated scheduler spikes.
 
 **Recommended Sine Wave baselines**
@@ -332,7 +327,7 @@ This document captures mode-specific guidance for the Spotify Beat Visualizer. E
 4. *Heartbeat gating*: Keep Heartbeat ≤20 % unless Sensitivity <0.9×; high heartbeat on loud mixes causes constant swells.
 5. *Technical*: Audio Block Size 256 (Auto) plus Adaptive Sensitivity ON; if you force block=128, increase Smoothing preset (manual floor) by +0.05 to counter jitter.
 6. *Colour & glow*: Use complementary colours per line (e.g., white primary, cyan secondary) and keep Glow Intensity ≤60 % to avoid blending lines together.
-7. *AGC tuning*: Keep defaults. Like oscilloscope, sine wave amplitude is waveform-driven — Energy Boost and AGC Strength only affect glow brightness. Leave Use Raw Energy OFF; enabling it causes glow to flash erratically on dynamic tracks.
+7. *AGC tuning*: Keep defaults. Like oscilloscope, sine wave amplitude is waveform-driven, so AGC/Input Gain tuning mainly affects glow/support feel rather than the core waveform silhouette.
 8. *Preset 1 (Wave) sanity*: Favor Width Reaction, Sensitivity, and modest Heartbeat over heavy Wave Effect / Crawl / Micro Wobble. The current baseline intentionally ships with `Crawl = 0`; if quiet passages still feel too busy, trim `Wave Effect` first. If loud passages feel too flat, raise `Width Reaction` or `Sensitivity` before increasing Heartbeat.
 9. *Curated pack intent*: The shipped six-slot Sine pack now ranges from the current Wave baseline through calmer ribbon/choir presets and up to sharper or more modern pulse-led variants. All new curated Sine presets intentionally keep `Crawl = 0` until Crawl is redesigned as an additive effect instead of distortion.
 

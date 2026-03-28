@@ -11,6 +11,7 @@ from core.settings import visualizer_presets as vp
 from core.settings.settings_manager import SettingsManager
 from core.settings import sst_io
 from tools import visualizer_preset_repair as repair
+from ui.tabs.widgets_tab import WidgetsTab
 
 
 def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch):
@@ -336,6 +337,15 @@ def test_all_curated_presets_have_unique_keys_and_filtered_settings():
             )
 
             assert sv.get("mode") == mode, f"{preset_path} must declare mode={mode}"
+            audit = repair.audit_payload(mode, payload)
+            assert audit["deprecated_global_keys"] == [], (
+                f"{preset_path} contains deprecated global authored keys: "
+                f"{audit['deprecated_global_keys']}"
+            )
+            assert audit["deprecated_mode_alias_keys"] == [], (
+                f"{preset_path} contains deprecated mode alias keys: "
+                f"{audit['deprecated_mode_alias_keys']}"
+            )
             filtered = vp._filter_settings_for_mode(mode, sv)
             assert filtered, f"{preset_path} filtered to an empty settings payload"
             for key, value in filtered.items():
@@ -383,6 +393,94 @@ def test_curated_payload_parser_drops_retired_compat_keys():
     assert preset.settings["blob_stage_bias"] == pytest.approx(-0.16)
 
 
+@pytest.mark.parametrize(
+    ("mode", "slider_attr", "mode_key", "mode_value"),
+    [
+        ("spectrum", "_spectrum_preset_slider", "spectrum_growth", 2.9),
+        ("bubble", "_bubble_preset_slider", "bubble_growth", 3.2),
+        ("blob", "_blob_preset_slider", "blob_stage_bias", -0.18),
+        ("sine_wave", "_sine_preset_slider", "sine_wave_growth", 1.7),
+        ("oscilloscope", "_osc_preset_slider", "osc_growth", 2.4),
+    ],
+)
+def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
+    qt_app,
+    tmp_path,
+    monkeypatch,
+    mode,
+    slider_attr,
+    mode_key,
+    mode_value,
+):
+    curated_root = tmp_path / "curated"
+    snapshots_root = tmp_path / "snapshots"
+    (curated_root / mode).mkdir(parents=True)
+    snapshots_root.mkdir()
+    original_presets = list(vp.get_presets(mode))
+
+    monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+
+    manager = SettingsManager(
+        organization="Test",
+        application=f"PresetSaveOverwrite_{uuid.uuid4().hex}",
+        storage_base_dir=tmp_path / "settings",
+    )
+    tab = WidgetsTab(manager)
+    try:
+        slider = getattr(tab, slider_attr)
+        custom_index = slider.custom_index()
+        prefix = vp.MODE_KEY_PREFIXES[mode][0]
+
+        widgets_cfg = manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": mode,
+            f"preset_{mode}": custom_index,
+            "energy_boost": 1.11,
+            "use_raw_energy": True,
+            f"{prefix}energy_boost": 1.33,
+            f"{prefix}use_raw_energy": True,
+            "manual_floor": 0.22,
+            "input_gain": 0.81,
+            mode_key: mode_value,
+        }
+        manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+        payload = tab.build_visualizer_preset_payload(mode)
+        assert payload
+
+        preset_path = curated_root / mode / "preset_1_roundtrip.json"
+        slider._apply_filename_metadata(preset_path, payload)
+        payload.setdefault("description", "Saved from current Settings state.")
+        preset_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+        audit = repair.audit_payload(mode, json.loads(preset_path.read_text(encoding="utf-8")))
+        assert audit["problem_count"] == 0
+
+        vp.reload_presets(mode)
+        preset = vp.get_presets(mode)[0]
+
+        assert preset.name == "Preset 1 (Roundtrip)"
+        assert preset.settings["mode"] == mode
+        assert preset.settings[mode_key] == pytest.approx(mode_value)
+        assert f"{prefix}energy_boost" not in preset.settings
+        assert f"{prefix}use_raw_energy" not in preset.settings
+        assert "energy_boost" not in preset.settings
+        assert "use_raw_energy" not in preset.settings
+        assert any(
+            key.endswith("manual_floor") and preset.settings[key] == pytest.approx(0.22)
+            for key in preset.settings
+        )
+        assert any(
+            key.endswith("input_gain") and preset.settings[key] == pytest.approx(0.81)
+            for key in preset.settings
+        )
+    finally:
+        vp._PRESETS[mode] = original_presets
+        tab.deleteLater()
+
+
 def test_repair_tool_audit_flags_duplicate_prefixes_and_backup_blocks():
     payload = {
         "snapshot": {
@@ -409,7 +507,42 @@ def test_repair_tool_audit_flags_duplicate_prefixes_and_backup_blocks():
     assert report["has_custom_preset_backup"] is True
     assert report["top_level_visualizer_duplication"] is True
     assert "blob_blob_transient_mix_bass" in report["duplicate_prefixed_keys"]
-    assert "blob_energy_boost" in report["deprecated_authored_keys"]
+    assert "ghosting_enabled" not in report["deprecated_global_keys"]
+
+
+def test_repair_tool_audit_flags_global_mirrors_and_osc_aliases():
+    blob_payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "ghosting_enabled": True,
+                    "ghost_alpha": 0.3,
+                    "ghost_decay": 0.2,
+                    "blob_ghosting_enabled": True,
+                }
+            }
+        }
+    }
+    blob_report = repair.audit_payload("blob", blob_payload)
+    assert blob_report["deprecated_global_keys"] == [
+        "ghost_alpha",
+        "ghost_decay",
+        "ghosting_enabled",
+    ]
+
+    osc_payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "oscilloscope",
+                    "osc_sensitivity": 0.4,
+                }
+            }
+        }
+    }
+    osc_report = repair.audit_payload("oscilloscope", osc_payload)
+    assert osc_report["deprecated_mode_alias_keys"] == ["osc_sensitivity"]
 
 
 def test_repair_tool_stops_emitting_deprecated_compat_tech_keys():
@@ -644,3 +777,47 @@ def test_curated_visualizer_tree_audits_clean():
                 problems.append(f"{preset_path}: {audit}")
 
     assert not problems, "\n".join(problems)
+
+
+def test_checked_in_appdata_fixture_uses_modern_visualizer_schema():
+    fixture_path = Path(__file__).resolve().parents[1] / "tests_tmp_appdata" / "SRPSS" / "settings_v2.json"
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+
+    retired = [
+        key for key in sv
+        if key == "energy_boost"
+        or key == "use_raw_energy"
+        or key.endswith("_energy_boost")
+        or key.endswith("_use_raw_energy")
+    ]
+    assert not retired, f"tests_tmp_appdata fixture still carries retired visualizer keys: {retired}"
+
+
+def test_release_main_mc_dist_curated_tree_matches_source_when_present():
+    root = Path(__file__).resolve().parents[1]
+    source_root = root / "presets" / "visualizer_modes"
+    release_root = root / "release" / "main_mc.dist" / "presets" / "visualizer_modes"
+
+    if not release_root.exists():
+        pytest.skip("release/main_mc.dist preset tree not present in this checkout")
+
+    source_files = sorted(
+        path.relative_to(source_root).as_posix()
+        for path in source_root.rglob("*.json")
+    )
+    release_files = sorted(
+        path.relative_to(release_root).as_posix()
+        for path in release_root.rglob("*.json")
+    )
+
+    assert release_files == source_files, "release/main_mc.dist preset tree drifted from source presets"
+
+    mismatched: list[str] = []
+    for rel in source_files:
+        source_text = (source_root / rel).read_text(encoding="utf-8")
+        release_text = (release_root / rel).read_text(encoding="utf-8")
+        if source_text != release_text:
+            mismatched.append(rel)
+
+    assert not mismatched, f"release/main_mc.dist preset payloads differ from source: {mismatched}"

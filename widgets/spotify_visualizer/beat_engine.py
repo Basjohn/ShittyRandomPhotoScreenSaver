@@ -597,6 +597,47 @@ class _SpotifyBeatEngine(QObject):
         overall = max(0.0, min(1.0, (bass * 0.5 + mid * 0.3 + high * 0.2)))
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
+    def get_floor_snapshot(self) -> dict:
+        """Return the latest shared floor state for consumers that need context.
+
+        The continuous energy bands remain the source of truth; this snapshot is
+        just the shaping context that produced them. Modes like Blob can use it
+        to distinguish real sustained support from temporarily elevated floor
+        pressure without inventing their own settings path.
+        """
+        w = self._audio_worker
+        try:
+            dynamic_enabled = bool(getattr(w, '_use_dynamic_floor', True))
+        except Exception:
+            dynamic_enabled = True
+        try:
+            manual_floor = float(getattr(w, '_manual_floor', 0.12) or 0.12)
+        except Exception:
+            manual_floor = 0.12
+        try:
+            applied_floor = float(getattr(w, '_applied_noise_floor', manual_floor) or manual_floor)
+        except Exception:
+            applied_floor = manual_floor
+        try:
+            last_noise_floor = float(getattr(w, '_last_noise_floor', applied_floor) or applied_floor)
+        except Exception:
+            last_noise_floor = applied_floor
+
+        manual_floor = max(0.0, min(1.0, manual_floor))
+        applied_floor = max(0.0, min(1.0, applied_floor))
+        last_noise_floor = max(0.0, min(1.0, last_noise_floor))
+        pressure = 0.0
+        if dynamic_enabled:
+            denom = max(0.12, 1.0 - manual_floor)
+            pressure = max(0.0, min(1.0, (applied_floor - manual_floor) / denom))
+        return {
+            'dynamic_enabled': dynamic_enabled,
+            'manual_floor': manual_floor,
+            'applied_floor': applied_floor,
+            'last_noise_floor': last_noise_floor,
+            'pressure': pressure,
+        }
+
     def get_transient_energy_bands(self) -> TransientEnergyBands:
         """Get the latest transient bus snapshot (fast-path, 1-frame latency).
 

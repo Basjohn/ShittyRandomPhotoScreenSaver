@@ -62,6 +62,14 @@ _DEPRECATED_COMPAT_TECH_SUFFIXES: Tuple[str, ...] = (
     "energy_boost",
     "use_raw_energy",
 )
+_DEPRECATED_AUTHORED_GLOBAL_KEYS: Tuple[str, ...] = (
+    "ghosting_enabled",
+    "ghost_alpha",
+    "ghost_decay",
+)
+_DEPRECATED_MODE_ALIAS_KEYS: Dict[str, Tuple[str, ...]] = {
+    "oscilloscope": ("osc_sensitivity",),
+}
 
 _MANDATORY_MODE_TRANSIENT_MIX: Dict[str, Tuple[str, ...]] = {
     "spectrum": ("spectrum_lane_transient_mix",),
@@ -273,7 +281,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
         original_filtered.update(filtered)
         base.update(filtered)
 
-    sanitized = dict(base)
+    sanitized = vp.normalize_visualizer_mode_payload(mode, base)  # type: ignore[attr-defined]
     _promote_global_technical_settings(mode, sanitized)
     _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
     _strip_deprecated_curated_keys(mode, sanitized)
@@ -303,6 +311,8 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         "duplicate_prefixed_keys": [],
         "has_custom_preset_backup": False,
         "deprecated_authored_keys": [],
+        "deprecated_global_keys": [],
+        "deprecated_mode_alias_keys": [],
         "top_level_visualizer_duplication": False,
     }
     prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
@@ -325,12 +335,20 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
                 issues["duplicate_prefixed_keys"].append(key)
             if any(key.endswith(suffix) for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES):
                 issues["deprecated_authored_keys"].append(key)
+            if key in _DEPRECATED_AUTHORED_GLOBAL_KEYS:
+                issues["deprecated_global_keys"].append(key)
+            if key in _DEPRECATED_MODE_ALIAS_KEYS.get(mode, ()):
+                issues["deprecated_mode_alias_keys"].append(key)
 
     issues["duplicate_prefixed_keys"] = sorted(set(issues["duplicate_prefixed_keys"]))
     issues["deprecated_authored_keys"] = sorted(set(issues["deprecated_authored_keys"]))
+    issues["deprecated_global_keys"] = sorted(set(issues["deprecated_global_keys"]))
+    issues["deprecated_mode_alias_keys"] = sorted(set(issues["deprecated_mode_alias_keys"]))
     issues["problem_count"] = (
         len(issues["duplicate_prefixed_keys"])
         + len(issues["deprecated_authored_keys"])
+        + len(issues["deprecated_global_keys"])
+        + len(issues["deprecated_mode_alias_keys"])
         + int(bool(issues["has_custom_preset_backup"]))
         + int(bool(issues["top_level_visualizer_duplication"]))
     )

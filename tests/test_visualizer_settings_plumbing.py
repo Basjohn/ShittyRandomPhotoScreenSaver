@@ -443,6 +443,55 @@ class TestConfigApplier:
         assert extra["blob_pulse_cap"] == pytest.approx(0.75)
         assert extra["blob_pulse_release_ms"] == pytest.approx(320.0)
 
+    def test_blob_gpu_push_includes_floor_snapshot_from_engine(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+        from widgets.spotify_visualizer.energy_bands import EnergyBands
+        from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+
+        class _DummyWidget:
+            def __getattr__(self, name):
+                if "color" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if "alpha" in name or "decay" in name or "intensity" in name:
+                    return 0.0
+                return 0
+
+        class _Engine:
+            def get_waveform(self):
+                return []
+
+            def get_waveform_count(self):
+                return 0
+
+            def get_pre_agc_energy_bands(self):
+                return EnergyBands(bass=0.1, mid=0.2, high=0.1, overall=0.15)
+
+            def get_energy_bands(self):
+                return EnergyBands(bass=0.1, mid=0.2, high=0.1, overall=0.15)
+
+            def get_transient_energy_bands(self):
+                return TransientEnergyBands()
+
+            def get_floor_snapshot(self):
+                return {
+                    "dynamic_enabled": True,
+                    "manual_floor": 0.15,
+                    "applied_floor": 0.88,
+                    "last_noise_floor": 0.86,
+                    "pressure": 0.86,
+                }
+
+            def get_event_scheduler(self):
+                return None
+
+        extra = build_gpu_push_extra_kwargs(_DummyWidget(), "blob", _Engine())
+
+        assert extra["floor_snapshot"]["dynamic_enabled"] is True
+        assert extra["floor_snapshot"]["manual_floor"] == pytest.approx(0.15)
+        assert extra["floor_snapshot"]["applied_floor"] == pytest.approx(0.88)
+
     def test_spectrum_glow_applied_and_pushed(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
 
@@ -1075,9 +1124,7 @@ class TestPerModeTechnicalControlsCollection:
                 "dynamic_floor": _StubCheck(True),
                 "manual_floor": _StubSlider(20),
                 "dynamic_range": _StubCheck(False),
-                "energy_boost_slider": _StubSlider(90),
                 "agc_strength_slider": _StubSlider(55),
-                "raw_energy": _StubCheck(False),
             },
             update_sensitivity=lambda: None,
             update_manual_floor=lambda: None,
@@ -1326,9 +1373,7 @@ class TestVisualizerSettingsContract:
             "dynamic_floor": False,
             "manual_floor": 0.18,
             "dynamic_range_enabled": True,
-            "energy_boost": 0.92,
             "agc_strength": 0.61,
-            "use_raw_energy": True,
             "input_gain": 1.3,
         }
 
@@ -1341,9 +1386,7 @@ class TestVisualizerSettingsContract:
             "dynamic_floor": False,
             "manual_floor": pytest.approx(0.18),
             "dynamic_range_enabled": True,
-            "energy_boost": pytest.approx(0.92),
             "agc_strength": pytest.approx(0.61),
-            "use_raw_energy": True,
             "input_gain": pytest.approx(1.3),
         }
 
@@ -1357,9 +1400,7 @@ class TestVisualizerSettingsContract:
             "dynamic_floor": False,
             "manual_floor": 0.18,
             "dynamic_range_enabled": True,
-            "energy_boost": 0.92,
             "agc_strength": 0.61,
-            "use_raw_energy": True,
             "input_gain": 1.3,
         }
         per_mode = {
@@ -1376,10 +1417,29 @@ class TestVisualizerSettingsContract:
         assert kwargs["blob_bar_count"] == 24
         assert kwargs["bubble_bar_count"] == 41
         assert kwargs["blob_manual_floor"] == pytest.approx(0.18)
-        assert kwargs["bubble_use_raw_energy"] is True
         assert kwargs["spectrum_lane_transient_mix"] == pytest.approx(0.72)
         assert kwargs["bubble_transient_mix_bass"] == pytest.approx(0.75)
         assert kwargs["oscilloscope_audio_block_size"] == 0
+        assert "bubble_use_raw_energy" not in kwargs
+
+    def test_section_normalizer_drops_retired_live_compat_keys(self):
+        from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+
+        normalized = normalize_visualizer_section_mapping(
+            {
+                "mode": "blob",
+                "blob_energy_boost": 1.2,
+                "blob_use_raw_energy": True,
+                "blob_input_gain": 1.1,
+                "blob_stage_bias": -0.1,
+            },
+            apply_preset_overlay=False,
+        )
+
+        assert "blob_energy_boost" not in normalized
+        assert "blob_use_raw_energy" not in normalized
+        assert normalized["blob_input_gain"] == pytest.approx(1.1)
+        assert normalized["blob_stage_bias"] == pytest.approx(-0.1)
 
 
 class TestVisualizerSettingsSnapshotNormalization:
@@ -1417,6 +1477,27 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert normalized["bubble_manual_floor"] == pytest.approx(0.22)
         assert normalized["bubble_input_gain"] == pytest.approx(0.75)
         assert normalized["bubble_growth"] == pytest.approx(3.1)
+
+    def test_model_roundtrip_omits_retired_compat_settings_keys(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "blob",
+                "blob_energy_boost": 1.4,
+                "blob_use_raw_energy": True,
+                "blob_input_gain": 1.2,
+                "blob_stage_bias": -0.2,
+            },
+            apply_preset_overlay=False,
+        )
+
+        saved = model.to_dict()
+
+        assert "widgets.spotify_visualizer.blob_energy_boost" not in saved
+        assert "widgets.spotify_visualizer.blob_use_raw_energy" not in saved
+        assert saved["widgets.spotify_visualizer.blob_input_gain"] == pytest.approx(1.2)
+        assert saved["widgets.spotify_visualizer.blob_stage_bias"] == pytest.approx(-0.2)
 
 
 class TestVisualizerModeBinding:
@@ -2794,10 +2875,11 @@ class TestBubbleSwirlSettings:
 
     def test_swirl_direction_round_trip_in_settings_model(self):
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import get_custom_preset_index
 
         model = SpotifyVisualizerSettings.from_mapping({
             "mode": "bubble",
-            "preset_bubble": 3,  # custom slot to prevent preset overlay
+            "preset_bubble": get_custom_preset_index("bubble"),
             "bubble_drift_direction": "swirl_ccw",
         })
         assert model.bubble_drift_direction == "swirl_ccw"

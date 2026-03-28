@@ -205,11 +205,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_line_amplitude = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_line_amplitude.setMinimum(5)
     tab.osc_line_amplitude.setMaximum(100)
-    osc_amp_default = tab._default_float(
-        'spotify_visualizer',
-        'osc_line_amplitude',
-        tab._default_float('spotify_visualizer', 'osc_sensitivity', 3.0),
-    )
+    osc_amp_default = tab._default_float('spotify_visualizer', 'osc_line_amplitude', 3.0)
     osc_amp_val = int(osc_amp_default * 10)
     tab.osc_line_amplitude.setValue(max(5, min(100, osc_amp_val)))
     tab.osc_line_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)

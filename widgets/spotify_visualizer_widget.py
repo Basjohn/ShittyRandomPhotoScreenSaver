@@ -730,6 +730,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         apply_vis_mode_kwargs(self, kwargs)
+        mode_key = vm.name.lower()
+        merged_runtime_technical = self._merge_runtime_technical_overrides(mode_key, kwargs)
 
         try:
             self._cached_vis_kwargs = copy.deepcopy(kwargs)
@@ -749,6 +751,9 @@ class SpotifyVisualizerWidget(QWidget):
 
         if self._mode_transition_phase == 0:
             self._apply_pending_mode_transition_layout()
+
+        if merged_runtime_technical:
+            self._apply_technical_config_for_mode(vm, reason="vis_mode_config")
 
         logger.debug("[SPOTIFY_VIS] Applied vis mode config: mode=%s", mode)
 
@@ -779,6 +784,60 @@ class SpotifyVisualizerWidget(QWidget):
             target_mode = self._vis_mode
         self._apply_technical_config_for_mode(target_mode, reason="settings_model_update")
 
+    def _extract_technical_config_from_kwargs(
+        self,
+        mode_key: str,
+        kwargs: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        extracted: Dict[str, Any] = {}
+        shared_keys = (
+            "bar_count",
+            "dynamic_floor",
+            "manual_floor",
+            "adaptive_sensitivity",
+            "sensitivity",
+            "audio_block_size",
+            "dynamic_range_enabled",
+            "agc_strength",
+            "input_gain",
+            "kick_lane_gain",
+            "transient_pulse_gain",
+            "transient_clamp",
+        )
+        mode_specific_keys = {
+            "spectrum": ("spectrum_lane_transient_mix",),
+            "bubble": ("bubble_transient_mix_bass", "bubble_transient_mix_vocal"),
+            "blob": ("blob_transient_mix_bass", "blob_transient_mix_vocal"),
+            "sine_wave": ("sine_wave_transient_width_mix",),
+            "oscilloscope": ("oscilloscope_transient_width_mix",),
+        }.get(mode_key, ())
+
+        for key in shared_keys:
+            prefixed_key = f"{mode_key}_{key}"
+            if prefixed_key in kwargs:
+                extracted[key] = kwargs[prefixed_key]
+            elif key in kwargs:
+                extracted[key] = kwargs[key]
+
+        for key in mode_specific_keys:
+            if key in kwargs:
+                extracted[key] = kwargs[key]
+
+        return extracted
+
+    def _merge_runtime_technical_overrides(
+        self,
+        mode_key: str,
+        kwargs: Dict[str, Any],
+    ) -> bool:
+        overrides = self._extract_technical_config_from_kwargs(mode_key, kwargs)
+        if not overrides:
+            return False
+        current = dict(self._technical_config_cache.get(mode_key, {}))
+        current.update(overrides)
+        self._technical_config_cache[mode_key] = current
+        return True
+
     def _build_technical_cache(self, model: SpotifyVisualizerSettings) -> Dict[str, Dict[str, Any]]:
         cache: Dict[str, Dict[str, Any]] = {}
         for mode_key in PER_MODE_TECHNICAL_MODES:
@@ -791,9 +850,7 @@ class SpotifyVisualizerWidget(QWidget):
                     "sensitivity": model.resolve_sensitivity(mode_key),
                     "audio_block_size": model.resolve_audio_block_size(mode_key),
                     "dynamic_range_enabled": model.resolve_dynamic_range_enabled(mode_key),
-                    "energy_boost": model.resolve_energy_boost(mode_key),
                     "agc_strength": model.resolve_agc_strength(mode_key),
-                    "use_raw_energy": model.resolve_use_raw_energy(mode_key),
                     "input_gain": model.resolve_input_gain(mode_key),
                     "kick_lane_gain": model.resolve_kick_lane_gain(mode_key),
                     "transient_pulse_gain": model.resolve_transient_pulse_gain(mode_key),
@@ -845,16 +902,11 @@ class SpotifyVisualizerWidget(QWidget):
         sensitivity = float(config.get("sensitivity", 1.0))
         audio_block_size = int(config.get("audio_block_size", 0) or 0)
         dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
-        energy_boost_raw = config.get("energy_boost", None)
-        if energy_boost_raw is not None:
-            energy_boost = max(0.5, min(1.8, float(energy_boost_raw)))
-        else:
-            energy_boost = self._compute_energy_boost(dynamic_range_enabled)
+        energy_boost = self._compute_energy_boost(dynamic_range_enabled)
         agc_strength = max(0.0, min(1.0, float(config.get("agc_strength", 0.5))))
-        use_raw_energy = bool(config.get("use_raw_energy", False))
         input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
 
-        self._use_raw_energy = use_raw_energy
+        self._use_raw_energy = False
         # Transient bus controls from config
         self._kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
         self._transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.0))))

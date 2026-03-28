@@ -15,6 +15,7 @@ from core.settings.presets import (
     get_ordered_presets,
 )
 from core.settings.settings_manager import SettingsManager
+from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
 
 def _make_manager(tmp_path, base_name=None, app_name=None) -> SettingsManager:
@@ -49,6 +50,25 @@ class TestPresetDefinitions:
             assert isinstance(preset.settings, dict), f"{preset_key} settings must be a dict"
             assert preset.name, f"{preset_key} must have a name"
             assert preset.description, f"{preset_key} must have a description"
+
+    def test_visualizer_preset_definitions_do_not_ship_retired_aliases(self):
+        """Hardcoded widget presets should not reintroduce retired visualizer keys."""
+        deprecated_keys = {
+            "widgets.spotify_visualizer.osc_sensitivity",
+            "widgets.spotify_visualizer.manual_floor",
+            "widgets.spotify_visualizer.dynamic_floor",
+            "widgets.spotify_visualizer.dynamic_range_enabled",
+            "widgets.spotify_visualizer.adaptive_sensitivity",
+            "widgets.spotify_visualizer.sensitivity",
+            "widgets.spotify_visualizer.bar_count",
+            "widgets.spotify_visualizer.ghosting_enabled",
+            "widgets.spotify_visualizer.ghost_alpha",
+            "widgets.spotify_visualizer.ghost_decay",
+        }
+
+        for preset_key, preset in PRESET_DEFINITIONS.items():
+            overlap = deprecated_keys.intersection(preset.settings.keys())
+            assert not overlap, f"{preset_key} ships deprecated visualizer keys: {sorted(overlap)}"
 
 
 class TestApplyPreset:
@@ -98,6 +118,20 @@ class TestApplyPreset:
         assert settings_manager.get('widgets.media.enabled') is True
         assert settings_manager.get('widgets.reddit.enabled') is True
         assert settings_manager.get('preset') == 'full_monty'
+
+        spotify_vis = settings_manager.get('widgets', {}).get('spotify_visualizer', {})
+        assert spotify_vis.get('osc_line_amplitude') == pytest.approx(7.5)
+        assert spotify_vis.get('oscilloscope_manual_floor') == pytest.approx(1.0)
+        assert spotify_vis.get('oscilloscope_dynamic_floor') is True
+        assert spotify_vis.get('oscilloscope_dynamic_range_enabled') is True
+        assert spotify_vis.get('oscilloscope_bar_count') == 21
+        assert 'osc_sensitivity' not in spotify_vis
+        assert spotify_vis.get('manual_floor') == pytest.approx(0.12)
+        assert spotify_vis.get('dynamic_floor') is True
+        assert spotify_vis.get('dynamic_range_enabled') is True
+        assert spotify_vis.get('ghosting_enabled') is True
+        assert spotify_vis.get('ghost_alpha') == pytest.approx(0.4)
+        assert spotify_vis.get('ghost_decay') == pytest.approx(0.35)
     
     def test_apply_custom_preset_restores_backup(self, settings_manager: SettingsManager):
         """Test applying Custom preset restores from backup."""
@@ -236,6 +270,34 @@ class TestCustomPresetBackup:
         spotify_vis = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
         assert spotify_vis.get("bubble_gradient_direction") == "right"
         assert spotify_vis.get("bubble_gradient_semantics_version") == 2
+
+    def test_visualizer_normalization_forward_migrates_osc_alias(self):
+        normalized = normalize_visualizer_section_mapping(
+            {
+                "mode": "oscilloscope",
+                "osc_sensitivity": 4.2,
+            },
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
+
+        assert normalized.get("osc_line_amplitude") == pytest.approx(4.2)
+        assert "osc_sensitivity" not in normalized
+
+    def test_settings_validation_rewrites_osc_alias_to_canonical_key(self, settings_manager: SettingsManager):
+        settings_manager.set("widgets", {
+            "spotify_visualizer": {
+                "mode": "oscilloscope",
+                "osc_sensitivity": 5.1,
+            }
+        })
+
+        repairs = settings_manager.validate_and_repair()
+        spotify_vis = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+
+        assert spotify_vis.get("osc_line_amplitude") == pytest.approx(5.1)
+        assert "osc_sensitivity" not in spotify_vis
+        assert "widgets.spotify_visualizer" in repairs
 
 
 class TestMCModeAdjustments:

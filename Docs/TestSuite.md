@@ -51,6 +51,9 @@ tests/
 - **Visual/runtime bugfixes**: keep a behavior-level regression where possible, but do not confuse source-level or contract-level assertions with real visual validation.
 - **Visualizer preset tests**:
   - `tests/test_visualizer_presets.py` should stay schema/repair/filter focused.
+  - it is also the direct fence for the real authored overwrite flow: Custom -> save over curated filename -> reload preset registry must keep modern keys only across all primary modes.
+  - it now explicitly audits forward-only authored schema too: no global ghost mirrors in curated/custom preset payloads, no retired Oscilloscope alias `osc_sensitivity`, and no re-entry of retired compat keys through repair/save flows.
+  - it also now guards checked-in artifact parity: the shared `tests_tmp_appdata` visualizer fixture must stay on the modern schema, and `release/main_mc.dist/presets/visualizer_modes` must match the source curated preset tree when that release copy is present in the repo.
   - `tests/test_visualizer_preset1_baselines.py` is the intentional rigid synthetic feel fence.
   - if curated preset 1 is intentionally reauthored, refresh the checked-in baseline in the same change.
 
@@ -369,9 +372,10 @@ This suite now also guards that WidgetManager mirrors expected overlays back to 
 | `test_visualizer_playback_gating.py` | Visualizer playback state gating | Bars when paused |
 | `test_visualizer_modes.py` | Visualizer direction/swirl/converge modes | Mode switching |
 | `test_visualizer_architecture_split.py` | Focused architecture split guard: required extracted exports, widget delegation, monolith threshold | Architecture split regressions |
-| `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity plus shared continuous-energy contract guards (`use_raw_energy` only switches to pre-AGC when explicitly enabled) | New uniform/kwarg additions |
+| `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity plus shared continuous-energy contract guards (normal persisted paths stay on the canonical smoothed energy source; runtime-only raw-energy seam remains opt-in) | New uniform/kwarg additions |
 | `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering, canonical mode-payload normalization, and full curated-tree audit via `tools/visualizer_preset_repair.audit_payload()` | Preset file changes |
 Line of intent: keep this suite schema/contract-focused. It should guard payload shape, filtering, repair-tool behavior, and direct transient-key preservation, not freeze artistic tuning choices for curated presets.
+| `test_widgets_tab.py` | WidgetsTab integration plus cross-mode visualizer save-over-preset payload fences so the real `curated -> Custom -> edit -> save` flow cannot reintroduce retired schema keys | UI save/preset workflow changes |
 It also guards curated slot normalization through `tools/visualizer_preset_repair.py --reindex-curated`: gap-filling, canonical filename rewrite, recovery when the earliest remaining preset is no longer slot 1, duplicate-slot detection, and Preset 1 presence per primary mode without freezing the rest of the artistic pack size.
 | `test_visualizer_preset_manifest.py` | Shipped curated-preset manifest parity and stale-file sync behavior | Stable onefile extraction / stale curated preset cleanup |
 | `test_visualizer_preset1_baselines.py` | Deterministic synthetic preset-1 baseline fence for active shipped modes | Structural migrations, curated preset-1 reauthoring, before/after regression checks |
@@ -527,6 +531,8 @@ When writing tests that create `DisplayWidget` or start transitions:
 - `tests/test_visualizer_presets.py`
   Guards curated preset schema, repair-tool behavior, and payload hygiene only. Do not use it to freeze aesthetic tuning decisions.
   It is also the regression fence for curated reindex behavior (`--reindex-curated`) so slot repair stays metadata-only and deterministic, while tolerating authored artistic pack changes outside the rigid Preset 1 baseline fence.
+  It also now guards the real authored overwrite path end-to-end: `WidgetsTab.build_visualizer_preset_payload()` -> filename metadata application -> JSON write -> `reload_presets()` must not leak retired compat keys back into curated mode payloads.
+  It also now guards checked-in schema mirrors: the shared APPDATA fixture and the MC release preset tree cannot silently drift back to retired compat keys or stale curated payloads.
 - `tests/test_visualizer_reactivity_quality.py`
   Guards Blob/Spectrum behavior-level reactivity contracts. It now includes a representative Blob Preset 1-style moderate-kick stage regression so future fixes do not drift back toward the over-damped “live bands move but stage stays asleep” failure.
   It also guards the Blob stage ladder directly: stage 1 must keep headroom, stage 2/3 must be reachable on stronger phrases, and stage-1 decay must not leave the silhouette parked in one size.

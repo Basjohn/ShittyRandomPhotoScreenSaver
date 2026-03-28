@@ -19,10 +19,8 @@
           12,
           230
         ],
-        "ghost_alpha": 0.59,
-        "ghost_decay": 0.18,
-        "ghosting_enabled": true,
         "mode": "spectrum",
+        "monitor": "ALL",
         "spectrum_adaptive_sensitivity": false,
         "spectrum_agc_strength": 0.4,
         "spectrum_audio_block_size": 128,

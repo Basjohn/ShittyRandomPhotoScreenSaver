@@ -23,6 +23,7 @@ from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     iter_visualizer_mode_descriptors,
 )
+from core.settings.visualizer_presets import MODE_KEY_PREFIXES
 
 @pytest.fixture
 def widgets_tab(qt_app, settings_manager):
@@ -826,6 +827,9 @@ def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settin
         assert snapshot["bubble_rainbow_speed"] == pytest.approx(0.62)
         assert "manual_floor" not in snapshot
         assert "input_gain" not in snapshot
+        assert "ghosting_enabled" not in snapshot
+        assert "ghost_alpha" not in snapshot
+        assert "ghost_decay" not in snapshot
         assert "settings" not in payload
         assert "custom_preset_backup" not in payload["snapshot"]
         assert "bubble_use_raw_energy" not in snapshot
@@ -854,6 +858,55 @@ def test_build_visualizer_preset_payload_uses_shared_missing_preset_fallback(qt_
 
         assert payload
         assert payload["preset_index"] == 0
+    finally:
+        tab.deleteLater()
+
+
+@pytest.mark.parametrize(
+    ("mode", "slider_attr", "mode_key", "mode_value"),
+    [
+        ("spectrum", "_spectrum_preset_slider", "spectrum_growth", 2.9),
+        ("bubble", "_bubble_preset_slider", "bubble_growth", 3.2),
+        ("blob", "_blob_preset_slider", "blob_stage_bias", -0.18),
+        ("sine_wave", "_sine_preset_slider", "sine_wave_growth", 1.7),
+        ("oscilloscope", "_osc_preset_slider", "osc_growth", 2.4),
+    ],
+)
+def test_build_visualizer_preset_payload_strips_retired_compat_keys_for_all_modes(
+    qt_app,
+    settings_manager,
+    mode,
+    slider_attr,
+    mode_key,
+    mode_value,
+):
+    tab = WidgetsTab(settings_manager)
+    try:
+        slider = getattr(tab, slider_attr)
+        custom_index = slider.custom_index()
+        prefix = MODE_KEY_PREFIXES[mode][0]
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": mode,
+            f"preset_{mode}": custom_index,
+            f"{prefix}energy_boost": 1.33,
+            f"{prefix}use_raw_energy": True,
+            mode_key: mode_value,
+        }
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+        payload = tab.build_visualizer_preset_payload(mode)
+
+        assert payload
+        snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        assert f"{prefix}energy_boost" not in snapshot
+        assert f"{prefix}use_raw_energy" not in snapshot
+        assert "ghosting_enabled" not in snapshot
+        assert "ghost_alpha" not in snapshot
+        assert "ghost_decay" not in snapshot
+        assert "osc_sensitivity" not in snapshot
+        assert snapshot[mode_key] == pytest.approx(mode_value)
     finally:
         tab.deleteLater()
 

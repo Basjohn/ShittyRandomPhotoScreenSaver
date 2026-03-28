@@ -19,10 +19,8 @@
           0,
           130
         ],
-        "ghost_alpha": 0.48,
-        "ghost_decay": 0.26,
-        "ghosting_enabled": true,
         "mode": "sine_wave",
+        "monitor": "ALL",
         "sine_card_adaptation": 0.24,
         "sine_crawl_amount": 0.0,
         "sine_density": 1.6,
@@ -47,7 +45,7 @@
           255,
           255,
           255,
-          228
+          230
         ],
         "sine_line1_shift": 0.0,
         "sine_line2_color": [
@@ -86,8 +84,6 @@
         "sine_line_dim": false,
         "sine_line_offset_bias": 0.12,
         "sine_micro_wobble": 0.08,
-        "sine_rainbow_enabled": false,
-        "sine_rainbow_speed": 0.22,
         "sine_reactive_glow": true,
         "sine_sensitivity": 0.36,
         "sine_speed": 0.42,

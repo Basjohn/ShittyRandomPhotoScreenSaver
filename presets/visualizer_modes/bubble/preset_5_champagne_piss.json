@@ -93,10 +93,8 @@
         "bubble_transient_mix_bass": 0.85,
         "bubble_transient_mix_vocal": 0.3,
         "bubble_transient_pulse_gain": 1.2,
-        "ghost_alpha": 0.56,
-        "ghost_decay": 0.22,
-        "ghosting_enabled": true,
-        "mode": "bubble"
+        "mode": "bubble",
+        "monitor": "ALL"
       }
     }
   },

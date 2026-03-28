@@ -154,6 +154,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_peak_mid: float = 0.0
         self._blob_peak_high: float = 0.0
         self._blob_peak_overall: float = 0.0
+        self._continuous_floor_dynamic_enabled: bool = False
+        self._continuous_floor_manual: float = 0.12
+        self._continuous_floor_applied: float = 0.12
+        self._continuous_floor_pressure: float = 0.0
         self._blob_seed_pending: bool = False
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
@@ -407,7 +411,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         glow_color: QColor | None = None,
         reactive_glow: bool = True,
         osc_line_amplitude: float = 3.0,
-        osc_sensitivity: float | None = None,
         osc_smoothing: float = 0.7,
         blob_color: QColor | None = None,
         blob_glow_color: QColor | None = None,
@@ -507,6 +510,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_snare_event_strength: float = 0.0,
         line_kick_event_strength: float = 0.0,
         line_snare_event_strength: float = 0.0,
+        floor_snapshot: dict | None = None,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -518,6 +522,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if not visible:
             self.clear_overlay_buffer()
             return
+
+        self._apply_floor_snapshot(floor_snapshot)
 
         # Set active visualizer mode
         prev_mode = self._vis_mode
@@ -597,11 +603,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         blob_dt,
                     )
                     prev = self._blob_smoothed_energy
-                    # Use a bass-weighted signal so vocal energy doesn't
-                    # drive pulse/size.  Raw bands → single fast EMA.
-                    raw_bass = self._blob_raw_bass_energy
-                    raw_overall = self._blob_raw_overall_energy
-                    se_input = raw_bass * 0.70 + raw_overall * 0.30
+                    # Keep Blob glow/body breath anchored to bass support so
+                    # vocals do not hijack whole-body intensity, but retain a
+                    # small overall contribution so the body never collapses
+                    # into a twitchy near-off state between bass phrases.
+                    se_input = live_bass * 0.92 + live_overall * 0.08
                     if se_input > prev:
                         # Magnitude-scaled rise: big jumps (kicks) snap fast,
                         # small wobbles (vocal flutter) get heavily damped.
@@ -851,8 +857,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if line_color is not None:
             self._line_color = QColor(line_color)
         self._reactive_glow = bool(reactive_glow)
-        _amp_value = osc_line_amplitude if osc_sensitivity is None else osc_sensitivity
-        self._osc_line_amplitude = max(0.5, min(10.0, float(_amp_value)))
+        self._osc_line_amplitude = max(0.5, min(10.0, float(osc_line_amplitude)))
         self._osc_smoothing = max(0.0, min(1.0, float(osc_smoothing)))
 
         # Multi-line oscilloscope
@@ -1492,6 +1497,69 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             filtered.append(prev_val + (cur_val - prev_val) * alpha)
         return (filtered[0], filtered[1], filtered[2], filtered[3])
 
+    def _apply_floor_snapshot(self, floor_snapshot: dict | None) -> None:
+        if not isinstance(floor_snapshot, dict):
+            self._continuous_floor_dynamic_enabled = False
+            self._continuous_floor_manual = 0.12
+            self._continuous_floor_applied = 0.12
+            self._continuous_floor_pressure = 0.0
+            return
+
+        try:
+            dynamic_enabled = bool(floor_snapshot.get('dynamic_enabled', False))
+        except Exception:
+            dynamic_enabled = False
+        try:
+            manual_floor = float(floor_snapshot.get('manual_floor', 0.12) or 0.12)
+        except Exception:
+            manual_floor = 0.12
+        try:
+            applied_floor = float(floor_snapshot.get('applied_floor', manual_floor) or manual_floor)
+        except Exception:
+            applied_floor = manual_floor
+        try:
+            pressure = float(floor_snapshot.get('pressure', 0.0) or 0.0)
+        except Exception:
+            pressure = 0.0
+
+        self._continuous_floor_dynamic_enabled = dynamic_enabled
+        self._continuous_floor_manual = max(0.0, min(1.0, manual_floor))
+        self._continuous_floor_applied = max(0.0, min(1.0, applied_floor))
+        self._continuous_floor_pressure = max(0.0, min(1.0, pressure if dynamic_enabled else 0.0))
+
+    def _get_blob_floor_pressure(self) -> float:
+        return max(0.0, min(1.0, float(getattr(self, '_continuous_floor_pressure', 0.0) or 0.0)))
+
+    def _rebalance_blob_support_for_floor(
+        self,
+        bass: float,
+        mid: float,
+        high: float,
+        overall: float,
+    ) -> tuple[float, float, float, float]:
+        pressure = self._get_blob_floor_pressure()
+        if pressure <= 0.001:
+            return (bass, mid, high, overall)
+
+        body_trim = 0.02 + pressure * 0.07
+        body_gain = 1.0 + pressure * 0.55
+        wobble_trim = body_trim * 0.35
+        wobble_gain = 1.0 + pressure * 0.22
+
+        def _reshape(value: float, trim: float, gain: float) -> float:
+            value = max(0.0, float(value))
+            if value <= 0.0:
+                return 0.0
+            rebased = max(0.0, value - trim) * gain
+            return min(1.5, rebased)
+
+        return (
+            _reshape(bass, body_trim, body_gain),
+            _reshape(mid, wobble_trim, wobble_gain),
+            _reshape(high, wobble_trim * 0.85, wobble_gain),
+            _reshape(overall, body_trim * 0.85, body_gain),
+        )
+
     def _maybe_log_blob_diagnostics(
         self,
         *,
@@ -1677,6 +1745,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             + transient_high * 0.05
         ) * pulse_cap_scale
 
+        support_bass, support_mid, support_high, support_overall = self._rebalance_blob_support_for_floor(
+            support_bass,
+            support_mid,
+            support_high,
+            support_overall,
+        )
+
         # Live silhouette: keep bass/overall on the continuous path so whole-blob
         # pulse remains calm, while events mostly show up in the stretch/wobble bands.
         bass = support_bass
@@ -1707,27 +1782,27 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Stage-driving support should stay rooted in the same continuous bass path
         # as the live silhouette, but kicks need a less punitive gate than the
         # old over-damped stage branch or normal musical phrases never register.
-        stage_bass_support = min(clamp_max, support_bass * 0.92 + base_bass * 0.08)
+        stage_bass_support = min(clamp_max, support_bass * 0.96 + base_bass * 0.10)
         stage_kick_guard = _clamp01((kick_support - 0.04) / 0.28)
         stage_kick_boost = kick_evt * stage_kick_guard * (0.05 + kick_support * 0.24)
         stage_overall = max(
             base_overall,
             support_overall,
-            stage_bass_support * 0.78 + support_overall * 0.22 + stage_kick_boost * 1.15,
+            stage_bass_support * 0.82 + support_overall * 0.18 + stage_kick_boost * 1.20,
         )
         stage_overall = min(
             clamp_max,
             max(base_overall, min(stage_overall, support_overall + cap_unit * 1.20)),
         )
-        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 1.35)
+        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 1.45)
         stage_bass = min(stage_bass, support_bass + cap_unit * 1.45)
         stage_mid = min(
             stage_overall,
-            base_mid * 0.18 + transient_mid * 0.08 + snare_drive * 0.16 + kick_drive * 0.06,
+            base_mid * 0.14 + transient_mid * 0.08 + snare_drive * 0.12 + kick_drive * 0.05,
         )
         stage_high = min(
             stage_overall * 0.70,
-            base_high * 0.14 + transient_high * 0.05 + snare_drive * 0.12 + kick_drive * 0.04,
+            base_high * 0.12 + transient_high * 0.05 + snare_drive * 0.10 + kick_drive * 0.03,
         )
         self._blob_stage_input_bass = stage_bass
         self._blob_stage_input_mid = stage_mid

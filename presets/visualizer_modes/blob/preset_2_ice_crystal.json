@@ -63,8 +63,6 @@
           228
         ],
         "blob_pulse": 0.52,
-        "blob_pulse_cap": 0.18,
-        "blob_pulse_release_ms": 950,
         "blob_rainbow_enabled": false,
         "blob_rainbow_speed": 0.1,
         "blob_reactive_deformation": 0.62,
@@ -84,10 +82,8 @@
         "blob_transient_mix_vocal": 0.1,
         "blob_transient_pulse_gain": 0.55,
         "blob_width": 0.96,
-        "ghost_alpha": 0.46,
-        "ghost_decay": 0.36,
-        "ghosting_enabled": true,
-        "mode": "blob"
+        "mode": "blob",
+        "monitor": "ALL"
       }
     }
   },

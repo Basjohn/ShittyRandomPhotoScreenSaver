@@ -95,12 +95,12 @@ vec3 compute_stage_progress_values(
     float overall = clamp(overall_energy, 0.0, 1.0);
     float se = clamp(u_blob_smoothed_energy, 0.0, 1.0);
 
-    float weighted = clamp(bass * 0.55 + overall * 0.30 + high * 0.15, 0.0, 1.0);
-    float weighted_stage1 = clamp(weighted * 0.85 + se * 0.15, 0.0, 1.0);
-    float base_stage2_drive = clamp(weighted * 0.80 + high * 0.20, 0.0, 1.0);
-    float stage2_drive = clamp(base_stage2_drive * 0.75 + se * 0.25, 0.0, 1.0);
-    float chorus_drive = clamp(max(stage2_drive, high * 0.65 + mid * 0.10 + bass * 0.25), 0.0, 1.0);
-    chorus_drive = clamp(max(chorus_drive, se * 0.55 + overall * 0.45), 0.0, 1.0);
+    float weighted = clamp(bass * 0.56 + overall * 0.28 + high * 0.10 + mid * 0.06, 0.0, 1.0);
+    float weighted_stage1 = clamp(weighted * 0.88 + se * 0.12, 0.0, 1.0);
+    float base_stage2_drive = clamp(weighted * 0.74 + bass * 0.10 + mid * 0.12 + high * 0.04, 0.0, 1.0);
+    float stage2_drive = clamp(base_stage2_drive * 0.84 + se * 0.16, 0.0, 1.0);
+    float chorus_drive = clamp(max(stage2_drive, bass * 0.38 + overall * 0.30 + mid * 0.18 + high * 0.14), 0.0, 1.0);
+    chorus_drive = clamp(max(chorus_drive, se * 0.34 + overall * 0.44 + mid * 0.22), 0.0, 1.0);
 
     float bias = clamp(u_blob_stage_bias, -0.60, 0.60);
     if (abs(bias) > 0.00001) {
@@ -113,9 +113,9 @@ vec3 compute_stage_progress_values(
     // Keep stage 1 reachable on ordinary musical support, but leave room for
     // stage 2/3 to appear on stronger passages instead of making the first rung
     // saturate immediately while the later rungs stay effectively unreachable.
-    float stage1_t = smoothstep(0.10, 0.40, weighted_stage1);
-    float stage2_t = smoothstep(0.20, 0.48, stage2_drive);
-    float stage3_t = smoothstep(0.30, 0.58, chorus_drive);
+    float stage1_t = smoothstep(0.08, 0.34, weighted_stage1);
+    float stage2_t = smoothstep(0.16, 0.42, stage2_drive);
+    float stage3_t = smoothstep(0.24, 0.52, chorus_drive);
 
     return vec3(stage1_t, stage2_t, stage3_t);
 }
@@ -159,9 +159,9 @@ float compute_stage_offset(
     float stage3_t = stage_progress.z;
 
     float stage_unit = base_size * 0.18 + 0.02;
-    float stage1_amt = stage_unit * 0.50;
-    float stage2_amt = stage_unit * 1.00;
-    float stage3_amt = stage_unit * 1.80;
+    float stage1_amt = stage_unit * 0.58;
+    float stage2_amt = stage_unit * 1.22;
+    float stage3_amt = stage_unit * 2.10;
 
     float offset = stage1_t * stage1_amt;
     offset += stage2_t * max(0.0, stage2_amt - stage1_amt);
@@ -180,6 +180,8 @@ float blob_sdf_ex(vec2 p, float time,
     r += e_bass * e_bass * 0.066;
     r += e_bass * 0.077 * u_blob_pulse;
     float se = clamp(smoothed_e, 0.0, 1.0);
+    float breath = max(e_bass, se * 0.82);
+    r += max(0.03, breath) * 0.020;
     r -= (1.0 - se) * 0.028 * u_blob_pulse;
 
     vec3 stage_progress = vec3(0.0);
@@ -217,31 +219,33 @@ float blob_sdf_ex(vec2 p, float time,
     wobble_component += sin(angle * 1.0 + time * 0.2)  * 0.040 * cw;
 
     // Reactive wobble — energy-driven shape distortion.
-    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.055 * e_mid * rw;
-    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.040 * e_mid * rw;
-    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.025 * e_high * rw;
-    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.015 * e_high * rw;
+    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.082 * e_mid * rw;
+    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.054 * e_mid * rw;
+    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.010 * e_high * rw;
+    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.005 * e_high * rw;
 
     // Vocal emphasis — mid-range creates broad amorphous lobes.
     float vocal = clamp(e_mid, 0.0, 1.0);
-    wobble_component += sin(angle * 2.0 + time * 0.9)  * 0.065 * vocal * rw;
-    wobble_component += sin(angle * 4.0 - time * 1.1)  * 0.045 * vocal * vocal * rw;
+    wobble_component += sin(angle * 2.0 + time * 0.9)  * 0.105 * vocal * rw;
+    wobble_component += sin(angle * 4.0 - time * 1.1)  * 0.074 * vocal * vocal * rw;
 
     float stretch_component = 0.0;
     if (st > 0.01) {
-        // Keep dramatic stretch focused on beat/impact energy. Mid/high still
-        // contribute, but vocals/snare should mostly wobble rather than yank the
-        // whole silhouette into giant protrusions.
-        float impact = max(e_bass, max(e_overall * 0.35, max(e_mid * 0.18, e_high * 0.10)));
+        // Stretch is now primarily vocal-driven with a light bass assist so it
+        // stays alive on musical passages without turning every kick into a
+        // whole-body spear.
+        float vocal_impact = clamp(e_mid * 1.08 + e_high * 0.22, 0.0, 1.0);
+        float bass_support = clamp(e_bass * 0.22 + e_overall * 0.10, 0.0, 1.0);
+        float impact = clamp(vocal_impact * 0.90 + bass_support * 0.25, 0.0, 1.0);
         float impact2 = impact * impact;
         float impact3 = impact2 * impact;
         float stretch = 0.0;
-        stretch += sin(angle * 2.0 + time * 0.7)  * impact3 * 1.8;
-        stretch += sin(angle * 1.0 + time * 0.15) * impact2 * 1.2;
-        stretch += sin(angle * 3.0 - time * 1.3)  * e_bass * e_bass * 1.4;
-        stretch += sin(angle * 5.0 + time * 2.1)  * e_mid * e_mid * 0.12;
-        stretch += sin(angle * 7.0 - time * 0.5)  * e_mid * e_mid * 0.08;
-        stretch += sin(angle * 9.0 + time * 3.3)  * e_high * 0.06;
+        stretch += sin(angle * 2.0 + time * 0.7)  * impact3 * 1.18;
+        stretch += sin(angle * 1.0 + time * 0.15) * impact2 * 0.82;
+        stretch += sin(angle * 4.0 - time * 1.0)  * vocal_impact * vocal_impact * 1.02;
+        stretch += sin(angle * 5.0 + time * 2.1)  * vocal_impact * 0.62;
+        stretch += sin(angle * 3.0 - time * 1.3)  * bass_support * bass_support * 0.26;
+        stretch += sin(angle * 7.0 - time * 0.5)  * e_high * 0.10;
         stretch_component += stretch * st;
     }
 

@@ -48,12 +48,7 @@ def load_oscilloscope_mode_settings(
         )
     if hasattr(tab, "osc_line_amplitude"):
         osc_line_amplitude = int(
-            tab._config_float(
-                "spotify_visualizer",
-                config,
-                "osc_line_amplitude",
-                tab._config_float("spotify_visualizer", config, "osc_sensitivity", 3.0),
-            ) * 10
+            tab._config_float("spotify_visualizer", config, "osc_line_amplitude", 3.0) * 10
         )
         tab.osc_line_amplitude.setValue(max(5, min(100, osc_line_amplitude)))
         tab.osc_line_amplitude_label.setText(f"{osc_line_amplitude / 10.0:.1f}x")

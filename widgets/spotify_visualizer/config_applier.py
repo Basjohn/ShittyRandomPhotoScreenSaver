@@ -61,9 +61,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._osc_reactive_glow = bool(kwargs['osc_reactive_glow'])
     if 'osc_line_amplitude' in kwargs:
         widget._osc_line_amplitude = max(0.5, min(10.0, float(kwargs['osc_line_amplitude'])))
-    elif 'osc_sensitivity' in kwargs:
-        # Legacy key fallback (pre-Mar 2026 builds)
-        widget._osc_line_amplitude = max(0.5, min(10.0, float(kwargs['osc_sensitivity'])))
     if 'osc_smoothing' in kwargs:
         widget._osc_smoothing = max(0.0, min(1.0, float(kwargs['osc_smoothing'])))
     if 'osc_line_color' in kwargs:
@@ -574,6 +571,12 @@ def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_st
 
     extra['energy_bands'] = _resolve_continuous_energy_bands(widget, mode_str, engine)
     extra['transient_energy'] = engine.get_transient_energy_bands()
+    try:
+        floor_snapshot = engine.get_floor_snapshot()
+    except Exception:
+        floor_snapshot = None
+    if floor_snapshot is not None:
+        extra['floor_snapshot'] = floor_snapshot
 
     try:
         scheduler = engine.get_event_scheduler()
