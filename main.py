@@ -468,9 +468,14 @@ def main():
     # (config / script / preview / standard desktop runs). Secure-desktop
     # SYSTEM runs intentionally no-op inside the helper runtime module.
     try:
+        from core.mc import is_mc_build
         from core.windows import reddit_helper_runtime
 
-        reddit_helper_runtime.ensure_helper_runtime(source=f"main:{mode.value}")
+        if mode == ScreensaverMode.RUN and not is_mc_build():
+            reddit_helper_runtime.ensure_helper_runtime(
+                source=f"main:{mode.value}",
+                persistent=not is_script_mode(),
+            )
     except Exception:
         logger.debug("[REDDIT-HELPER] Best-effort runtime bootstrap failed", exc_info=True)
 

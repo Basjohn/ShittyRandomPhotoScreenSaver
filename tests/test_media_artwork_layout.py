@@ -20,12 +20,12 @@ def _image_bytes(width: int, height: int) -> bytes:
     return bytes(payload)
 
 
-def test_compute_artwork_frame_size_preserves_landscape_video_ratio(qt_app) -> None:
+def test_compute_artwork_frame_size_uses_cover_frame_for_landscape_video(qt_app) -> None:
     pixmap = QPixmap.fromImage(QImage(640, 360, QImage.Format.Format_ARGB32))
 
     frame = compute_artwork_frame_size(pixmap, 200)
 
-    assert frame == QSize(200, 112)
+    assert frame == QSize(200, 200)
 
 
 def test_compute_artwork_frame_size_keeps_square_art_square(qt_app) -> None:

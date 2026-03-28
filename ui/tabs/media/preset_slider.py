@@ -361,7 +361,7 @@ class VisualizerPresetSlider(QWidget):
             path = path.with_suffix(".json")
 
         self._apply_filename_metadata(path, payload)
-        payload.setdefault("description", "Saved from Custom preset in Settings.")
+        payload.setdefault("description", "Saved from current Settings state.")
 
         try:
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -244,6 +244,7 @@ def _strip_deprecated_curated_keys(mode: str, sanitized: Dict[str, Any]) -> None
     """Curated authored payloads should not keep deprecated compat keys alive."""
     prefix = _MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))
     for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES:
+        sanitized.pop(suffix, None)
         sanitized.pop(f"{prefix}{suffix}", None)
 
 

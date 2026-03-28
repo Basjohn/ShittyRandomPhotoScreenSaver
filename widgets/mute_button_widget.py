@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QWidget
 from core.logging.logger import get_logger
 from core.media import system_mute
 from core.threading.manager import ThreadManager
+from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
 
 logger = get_logger(__name__)
@@ -92,18 +93,17 @@ class MuteButtonWidget(QWidget):
 
     def sync_visibility_with_anchor(self) -> None:
         """Show/hide based on anchor media widget visibility and enabled state."""
-        if not self._enabled or not self._available:
-            self.hide()
-            return
-        anchor = self._anchor_media
-        if anchor is None or not anchor.isVisible():
-            self.hide()
-            return
-        if not self._has_faded_in:
-            self._start_widget_fade_in()
-        else:
-            self.show()
-            self.raise_()
+        sync_anchor_dependent_visibility(
+            self,
+            anchor=self._anchor_media,
+            enabled=self._enabled and self._available,
+            has_faded_in=self._has_faded_in,
+            start_fade_in=self._start_widget_fade_in,
+            refresh_visible=self._refresh_visible_state,
+        )
+
+    def _refresh_visible_state(self) -> None:
+        """Refresh geometry/state after the anchor-driven visibility decision."""
         self.update_position()
         self.poll_mute_state()
 

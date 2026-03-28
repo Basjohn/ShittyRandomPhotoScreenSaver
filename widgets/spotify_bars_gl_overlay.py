@@ -1417,7 +1417,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         filtered: List[float] = []
         stage2_tau = max(0.05, self._blob_stage2_release_ms / 1000.0)
         stage3_tau = max(0.05, self._blob_stage3_release_ms / 1000.0)
-        decay_taus = (0.40, stage2_tau, stage3_tau)
+        # Keep the first stage breathing. Stage 1 is the main size-support rung,
+        # so if it decays too slowly Blob feels parked in one silhouette while
+        # higher-order motion is left to twitch on top.
+        decay_taus = (0.24, stage2_tau, stage3_tau)
         rise_tau = 0.020
         for idx, (prev_val, new_val) in enumerate(zip(prev, new_clamped)):
             if new_val >= prev_val:
@@ -1701,19 +1704,23 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         high = min(high, support_high + cap_unit * 0.85)
         overall = min(overall, support_overall + cap_unit * 0.35)
 
-        stage_bass_support = min(clamp_max, base_bass + transient_bass * 0.35)
-        stage_kick_boost = kick_evt * kick_guard * (0.05 + kick_support * 0.20)
+        # Stage-driving support should stay rooted in the same continuous bass path
+        # as the live silhouette, but kicks need a less punitive gate than the
+        # old over-damped stage branch or normal musical phrases never register.
+        stage_bass_support = min(clamp_max, support_bass * 0.92 + base_bass * 0.08)
+        stage_kick_guard = _clamp01((kick_support - 0.04) / 0.28)
+        stage_kick_boost = kick_evt * stage_kick_guard * (0.05 + kick_support * 0.24)
         stage_overall = max(
             base_overall,
             support_overall,
-            stage_bass_support * 0.82 + base_overall * 0.18 + stage_kick_boost,
+            stage_bass_support * 0.78 + support_overall * 0.22 + stage_kick_boost * 1.15,
         )
         stage_overall = min(
             clamp_max,
-            max(base_overall, min(stage_overall, support_overall + cap_unit * 1.05)),
+            max(base_overall, min(stage_overall, support_overall + cap_unit * 1.20)),
         )
-        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 0.95)
-        stage_bass = min(stage_bass, support_bass + cap_unit * 1.20)
+        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 1.35)
+        stage_bass = min(stage_bass, support_bass + cap_unit * 1.45)
         stage_mid = min(
             stage_overall,
             base_mid * 0.18 + transient_mid * 0.08 + snare_drive * 0.16 + kick_drive * 0.06,

@@ -102,16 +102,20 @@ vec3 compute_stage_progress_values(
     float chorus_drive = clamp(max(stage2_drive, high * 0.65 + mid * 0.10 + bass * 0.25), 0.0, 1.0);
     chorus_drive = clamp(max(chorus_drive, se * 0.55 + overall * 0.45), 0.0, 1.0);
 
-    float stage1_t = smoothstep(0.10, 0.32, weighted_stage1);
-    float stage2_t = smoothstep(0.58, 0.86, stage2_drive);
-    float stage3_t = smoothstep(0.68, 0.94, chorus_drive);
-
     float bias = clamp(u_blob_stage_bias, -0.60, 0.60);
     if (abs(bias) > 0.00001) {
-        stage1_t = clamp(stage1_t + bias, 0.0, 1.0);
-        stage2_t = clamp(stage2_t + bias, 0.0, 1.0);
-        stage3_t = clamp(stage3_t + bias, 0.0, 1.0);
+        weighted_stage1 = clamp(weighted_stage1 + bias * 0.12, 0.0, 1.0);
+        stage2_drive = clamp(stage2_drive + bias * 0.10, 0.0, 1.0);
+        chorus_drive = clamp(chorus_drive + bias * 0.08, 0.0, 1.0);
     }
+
+    // Blob should climb a ladder, not park on stage 1 forever.
+    // Keep stage 1 reachable on ordinary musical support, but leave room for
+    // stage 2/3 to appear on stronger passages instead of making the first rung
+    // saturate immediately while the later rungs stay effectively unreachable.
+    float stage1_t = smoothstep(0.10, 0.40, weighted_stage1);
+    float stage2_t = smoothstep(0.20, 0.48, stage2_drive);
+    float stage3_t = smoothstep(0.30, 0.58, chorus_drive);
 
     return vec3(stage1_t, stage2_t, stage3_t);
 }

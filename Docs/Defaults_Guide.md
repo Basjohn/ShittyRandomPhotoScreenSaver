@@ -167,9 +167,9 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 | `widgets.spotify_visualizer.dynamic_floor` | `True` | Global legacy fallback. Actual floor/toggle defaults live per-mode (see below). |
 | `widgets.spotify_visualizer.manual_floor` | `0.12` | Global fallback; UI + runtime clamp to **0.12–1.0** and immediately reseed the dynamic accumulator. |
 | `widgets.spotify_visualizer.ghosting_enabled` | `True` | |
-| `widgets.spotify_visualizer.energy_boost` | `0.85` | Per-mode post-normalization gain (0.5–1.8×). Higher values amplify energy bands after AGC. |
+| `widgets.spotify_visualizer.energy_boost` | `0.85` | Legacy technical setting still present in the settings schema. It is no longer part of curated preset/save/export authoring and should be retired from schema/runtime deliberately rather than reintroduced into presets. |
 | `widgets.spotify_visualizer.agc_strength` | `0.5` | Per-mode AGC compression (0.0–1.0). 0.0 bypasses normalization entirely, 0.5 moderate, 1.0 maximum compression. |
-| `widgets.spotify_visualizer.use_raw_energy` | `False` | Per-mode toggle: when True, uses pre-AGC energy bands (full dynamic range) instead of post-AGC normalized energy. |
+| `widgets.spotify_visualizer.use_raw_energy` | `False` | Legacy technical setting still present in the settings schema. It is no longer part of curated preset/save/export authoring and should be retired from schema/runtime deliberately rather than reintroduced into presets. |
 
 **Per-mode technical schema (Mar 2026):** Every mode owns an explicit set of technical keys (`<mode>_bar_count`, `<mode>_dynamic_floor`, `<mode>_manual_floor`, `<mode>_adaptive_sensitivity`, `<mode>_sensitivity`, `<mode>_audio_block_size`, `<mode>_dynamic_range_enabled`, `<mode>_energy_boost`, `<mode>_agc_strength`, `<mode>_use_raw_energy`). Defaults for Spectrum/Bubble/Blob/Sine/Osc are defined in `defaults.py` under `widgets.spotify_visualizer` and seed `<mode>_manual_floor = 0.12`. `technical_controls.py` now uses one shared metadata registry to build/load/save these controls, while special transient-mix keys such as `spectrum_lane_transient_mix` and `bubble_transient_mix_vocal` stay as direct keys rather than doubled prefixed variants. The global `bar_count`/`dynamic_floor` fallbacks remain for legacy SST snapshots but should not be edited going forward.
 
@@ -188,11 +188,13 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
   - `ui/tabs/media/sine_wave_settings_binding.py`
 - When adding or changing a visualizer setting, update the owning mode adapter if the setting is mode-specific instead of expanding the central media-tab coordinator.
 
-**AGC per-mode controls (Mar 2026):** `energy_boost`, `agc_strength`, and `use_raw_energy` are stored per-mode (e.g. `spectrum_energy_boost`, `bubble_agc_strength`). The model resolves these through `SpotifyVisualizerSettings.resolve_*()` methods with fallback to global keys. All three are included in `GLOBAL_ALLOWED_KEYS` for preset persistence.
+**AGC / legacy technical controls (Mar 2026):** `agc_strength` is still part of the living visualizer schema. `energy_boost` and `use_raw_energy` still exist in parts of the settings model/runtime, but curated preset JSON, preset save/export, and repair output have been migrated away from authoring them. Treat any remaining schema/runtime presence as retirement work, not as a reason to put them back into authored preset payloads.
+
+**Blob continuous-energy policy (Mar 2026):** Blob stays on the same shared continuous-energy source of truth as the other visualizer modes: smoothed/post-AGC energy by default, pre-AGC only when the generic `use_raw_energy` toggle is explicitly enabled. Do not "fix" future Blob feel issues by inventing a Blob-only sidecar signal path or extra Blob-local settings storage outside `widgets.spotify_visualizer`; investigate tuning/runtime shaping while keeping the shared signal contract intact.
 
 > **Manual floor contract (Mar 2026):** Any stored value below `0.12` or above `1.0` is clamped by UI sliders, SettingsManager migrations, preset loaders, and the derived defaults snapshot artifacts (`defaults_snapshot.py` / `defaults_snapshot.json`). When changing defaults or presets, verify both the curated JSON and derived snapshot outputs stay within this range to avoid silently resurrecting the retired `2.1` baseline.
 
-**Preset hygiene:** Use `tools/visualizer_preset_repair.py` to refresh curated preset JSON/SST payloads whenever defaults change. The tool reads `DEFAULT_SETTINGS`, applies `_migrate_preset_settings()` + `_filter_settings_for_mode()`, fills missing keys, writes `.bak` backups, and keeps an in-session undo stack.
+**Preset hygiene:** Use `tools/visualizer_preset_repair.py` to refresh curated preset JSON/SST payloads whenever defaults change. The tool reads `DEFAULT_SETTINGS`, applies `_migrate_preset_settings()` + `_filter_settings_for_mode()`, fills missing keys, strips retired authored compat keys, writes `.bak` backups, and keeps an in-session undo stack. The shipped curated tree is now regression-audited so modernized preset authoring cannot silently drift back toward duplicate/backup/compat-laden payloads.
 
 #### Spotify Visualizer — Bubble Mode
 | Key | Default | Notes |

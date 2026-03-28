@@ -14,9 +14,13 @@ Section by date and type.
   - stale-session or stale-owner detection
   - different rules for installed HKCU Run watcher vs preview/script bootstrap
 - **Progress landed (Mar 28 2026):**
-  - installed ProgramData helper is now explicitly persistent
-  - repo/source helper launches are now session-scoped (`owner-pid` + idle-exit)
+  - MC builds now skip helper bootstrap entirely instead of pointlessly carrying the queue watcher model into a direct-open path
+  - installed helper launches can now be either persistent or session-scoped depending on the runtime ownership request
+  - session-scoped launches now pass `owner-pid` + idle-exit even when the installed helper binary is the command we launch
   - worker exits once the owner is gone and the queue stays idle long enough
+  - normal graceful app shutdown now writes an explicit session-owned helper shutdown request so runtime does not have to wait out the whole idle-exit grace window
+  - watcher mode now has a per-session singleton guard, so duplicate launches exit instead of stacking multiple lingering helpers
+  - stale helper heartbeat pids are now reaped by the user-session runtime before relaunch, so a wedged watcher cannot block recovery forever
 - **What is still pending:** real installed SCR validation that the persistent watcher behavior is acceptable and does not create a worse long-lived process problem than the preview/script linger we already fixed.
 - **Anti-pattern warning:** do not paper over this with fragile one-shot cleanup hooks that only work when Windows allows a graceful exit path.
 

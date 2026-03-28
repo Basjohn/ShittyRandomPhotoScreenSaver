@@ -345,6 +345,118 @@ def test_blob_pulse_release_slows_decay_without_slowing_attack(qt_app):
     assert slow_release > fast_release
 
 
+def test_blob_negative_stage_bias_softens_stage_without_flattening_valid_bass_support():
+    from widgets.spotify_visualizer.blob_math import compute_stage_progress
+
+    vals = dict(
+        bass_energy=0.1494,
+        mid_energy=0.0314,
+        high_energy=0.0189,
+        overall_energy=0.1580,
+        smoothed_energy=0.1750,
+    )
+
+    neutral = compute_stage_progress(**vals, stage_bias=0.0)
+    softened = compute_stage_progress(**vals, stage_bias=-0.16)
+
+    assert neutral[0] > 0.04
+    assert softened[0] > 0.0
+    assert softened[0] < neutral[0]
+    assert softened[1] == pytest.approx(0.0)
+    assert softened[2] == pytest.approx(0.0)
+
+
+def test_blob_stage_progress_ladder_keeps_headroom_above_stage1():
+    from widgets.spotify_visualizer.blob_math import compute_stage_progress
+
+    moderate = compute_stage_progress(
+        bass_energy=0.24,
+        mid_energy=0.03,
+        high_energy=0.02,
+        overall_energy=0.18,
+        smoothed_energy=0.19,
+        stage_bias=-0.17,
+    )
+    strong = compute_stage_progress(
+        bass_energy=0.38,
+        mid_energy=0.08,
+        high_energy=0.05,
+        overall_energy=0.28,
+        smoothed_energy=0.29,
+        stage_bias=-0.17,
+    )
+    chorus = compute_stage_progress(
+        bass_energy=0.50,
+        mid_energy=0.14,
+        high_energy=0.09,
+        overall_energy=0.36,
+        smoothed_energy=0.35,
+        stage_bias=-0.17,
+    )
+
+    assert 0.10 < moderate[0] < 0.95
+    assert strong[0] > moderate[0]
+    assert strong[1] > moderate[1]
+    assert chorus[1] > strong[1]
+    assert chorus[2] > strong[2]
+    assert chorus[2] > 0.05
+
+
+@pytest.mark.qt
+def test_blob_stage1_decay_does_not_leave_size_parked(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._blob_stage_progress_ready = True
+    overlay._blob_stage_progress_filtered = (0.92, 0.0, 0.0)
+
+    decayed = overlay._filter_stage_progress((0.18, 0.0, 0.0), 0.10)
+
+    assert decayed[0] < 0.70
+    assert decayed[0] > 0.18
+
+
+@pytest.mark.qt
+def test_blob_preset1_stage_branch_still_answers_moderate_kick_support(qt_app):
+    from core.settings.visualizer_presets import get_preset_settings
+    from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+    from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._vis_mode = "blob"
+    apply_vis_mode_kwargs(overlay, get_preset_settings("blob", 0))
+
+    overlay._blob_kick_event_strength = 0.72
+    overlay._blob_snare_event_strength = 0.0
+    overlay._transient_energy = TransientEnergyBands(
+        bass_transient=0.40,
+        mid_transient=0.0,
+        high_transient=0.0,
+    )
+
+    phrase = SimpleNamespace(bass=0.106, mid=0.159, high=0.118, overall=0.136)
+    live = overlay._compute_blob_live_bands(phrase)
+
+    stage = overlay._blob_stage_input_bass, overlay._blob_stage_input_mid, overlay._blob_stage_input_high, overlay._blob_stage_input_overall
+    stage_progress = overlay._blob_stage_progress_raw = (0.0, 0.0, 0.0)
+    from widgets.spotify_visualizer.blob_math import compute_stage_progress
+
+    stage_progress = compute_stage_progress(
+        bass_energy=stage[0],
+        mid_energy=stage[1],
+        high_energy=stage[2],
+        overall_energy=stage[3],
+        smoothed_energy=live[3],
+        stage_bias=overlay._blob_stage_bias,
+    )
+
+    assert live[0] < 0.30
+    assert stage[0] >= live[0]
+    assert stage[3] >= live[3]
+    assert stage_progress[0] > 0.10
+
+
 def test_spectrum_lane_isolation_survives_long_run():
     import numpy as np
 

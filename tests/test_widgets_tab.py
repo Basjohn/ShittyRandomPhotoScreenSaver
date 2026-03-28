@@ -796,6 +796,8 @@ def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_man
 def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:
+        from tools import visualizer_preset_repair as repair
+
         mode = "bubble"
         custom_index = tab._bubble_preset_slider.custom_index()
         widgets_cfg = settings_manager.get("widgets", {}) or {}
@@ -815,6 +817,8 @@ def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settin
         assert payload
 
         snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        assert payload["visualizer_preset_override"] is True
+        assert payload["visualizer_preset_mode"] == mode
         assert snapshot["bubble_manual_floor"] == pytest.approx(0.28)
         assert snapshot["bubble_input_gain"] == pytest.approx(0.81)
         assert snapshot["bubble_growth"] == pytest.approx(3.4)
@@ -822,6 +826,34 @@ def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settin
         assert snapshot["bubble_rainbow_speed"] == pytest.approx(0.62)
         assert "manual_floor" not in snapshot
         assert "input_gain" not in snapshot
+        assert "settings" not in payload
+        assert "custom_preset_backup" not in payload["snapshot"]
+        assert "bubble_use_raw_energy" not in snapshot
+        assert "bubble_energy_boost" not in snapshot
+
+        report = repair.audit_payload(mode, payload)
+        assert report["problem_count"] == 0
+    finally:
+        tab.deleteLater()
+
+
+def test_build_visualizer_preset_payload_uses_shared_missing_preset_fallback(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        mode = "bubble"
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": mode,
+            "bubble_gradient_direction": "right",
+            "bubble_growth": 2.8,
+        }
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+        payload = tab.build_visualizer_preset_payload(mode)
+
+        assert payload
+        assert payload["preset_index"] == 0
     finally:
         tab.deleteLater()
 

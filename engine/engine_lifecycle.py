@@ -99,6 +99,14 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
         # exit_app parameter intentionally unused in debug log
         logger.debug("Engine stop requested (exit_app=%s)", exit_app)
 
+        if exit_app:
+            try:
+                from core.windows import reddit_helper_runtime
+
+                reddit_helper_runtime.request_session_helper_shutdown(source="engine_stop")
+            except Exception as e:
+                logger.debug("Session-scoped Reddit helper shutdown request failed: %s", e, exc_info=True)
+
         # Signal RSS coordinator to abort any in-progress waits immediately
         if engine.rss_coordinator:
             try:

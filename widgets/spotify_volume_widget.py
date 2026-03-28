@@ -24,6 +24,7 @@ from shiboken6 import Shiboken
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.spotify_volume import SpotifyVolumeController
 from core.threading.manager import ThreadManager
+from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 
 logger = get_logger(__name__)
@@ -143,22 +144,19 @@ class SpotifyVolumeWidget(QWidget):
         Called when the media widget visibility changes to keep the
         volume widget in sync.
         """
-        anchor = self._anchor_media
-        if anchor is None:
-            return
-        
+        if is_verbose_logging():
+            logger.debug("[SPOTIFY_VOL] Syncing visibility with anchor")
         try:
-            anchor_visible = anchor.isVisible()
-            if anchor_visible and not self.isVisible() and self._enabled:
-                # Media widget became visible - show volume widget
-                if is_verbose_logging():
-                    logger.debug("[SPOTIFY_VOL] Anchor visible, requesting fade-in")
-                self._start_widget_fade_in()
-            elif not anchor_visible and self.isVisible():
-                # Media widget hidden - hide volume widget
-                if is_verbose_logging():
-                    logger.debug("[SPOTIFY_VOL] Anchor hidden, hiding volume widget")
-                self.hide()
+            visible = sync_anchor_dependent_visibility(
+                self,
+                anchor=self._anchor_media,
+                enabled=self._enabled,
+                has_faded_in=self._has_faded_in,
+                start_fade_in=self._start_widget_fade_in,
+                missing_anchor_visible=None,
+            )
+            if not visible and self._anchor_media is not None and is_verbose_logging():
+                logger.debug("[SPOTIFY_VOL] Anchor hidden or widget disabled; volume widget hidden")
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 

@@ -1,4 +1,4 @@
-"""
+r"""
 User-session Reddit helper worker.
 
 This script runs inside the interactive user session (started via HKCU\Run
@@ -30,7 +30,7 @@ from urllib.parse import urlparse
 
 from core.logging.logger import get_logger
 from core.constants.timing import RETRY_BASE_DELAY_MS, RETRY_MAX_ATTEMPTS, RETRY_MAX_DELAY_MS
-from core.windows.reddit_helper_runtime import HEARTBEAT_FILE_NAME
+from core.windows.reddit_helper_runtime import HEARTBEAT_FILE_NAME, SESSION_HELPER_SHUTDOWN_PREFIX
 
 logger = get_logger(__name__)
 
@@ -46,6 +46,8 @@ BROWSER_FOREGROUND_TIMEOUT = 5.0
 _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 OPEN_URL_MAX_AGE_SECONDS = 3600.0
 OPEN_SETTINGS_MAX_AGE_SECONDS = 900.0
+WATCHER_MUTEX_NAME = r"Local\SRPSS_RedditHelper_Watcher"
+_ERROR_ALREADY_EXISTS = 183
 
 BROWSER_WINDOW_CLASSES = {
     "chrome_widgetwin_1",
@@ -169,6 +171,11 @@ def _heartbeat_path(signal_dir: Path) -> Path:
     return signal_dir / HEARTBEAT_FILE_NAME
 
 
+def _shutdown_request_path(signal_dir: Path, owner_pid: int) -> Path:
+    owner_pid = max(0, int(owner_pid or 0))
+    return signal_dir / f"{SESSION_HELPER_SHUTDOWN_PREFIX}{owner_pid}.json"
+
+
 def _write_heartbeat(signal_dir: Path, queue_dir: Path, poll_interval: float) -> None:
     _write_heartbeat_with_lifecycle(
         signal_dir,
@@ -214,6 +221,41 @@ def _write_entry_payload(target_path: Path, payload: Dict[str, Any]) -> None:
     tmp_path = target_path.with_suffix(".tmp")
     tmp_path.write_text(json.dumps(payload), encoding="utf-8")
     tmp_path.replace(target_path)
+
+
+def _acquire_watcher_singleton(name: str = WATCHER_MUTEX_NAME) -> tuple[object | None, bool]:
+    """Acquire the watcher singleton for this user session.
+
+    Returns ``(handle, acquired)``. If singleton acquisition fails unexpectedly
+    we allow the watcher to continue rather than breaking URL handling.
+    """
+    if os.name != "nt":
+        return None, True
+
+    try:
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.CreateMutexW(None, False, name)
+        if not handle:
+            logging.warning("Watcher singleton creation failed; continuing without mutex")
+            return None, True
+
+        already_exists = kernel32.GetLastError() == _ERROR_ALREADY_EXISTS
+        if already_exists:
+            kernel32.CloseHandle(handle)
+            return None, False
+        return handle, True
+    except Exception:
+        logging.warning("Watcher singleton acquisition failed; continuing without mutex", exc_info=True)
+        return None, True
+
+
+def _release_watcher_singleton(handle: object | None) -> None:
+    if handle is None or os.name != "nt":
+        return
+    try:
+        ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]
+    except Exception:
+        logging.debug("Watcher singleton release failed", exc_info=True)
 
 
 def _schedule_retry(entry_path: Path, data: Dict[str, Any], *, error: str) -> None:
@@ -303,6 +345,23 @@ def _evaluate_owner_idle_exit(
     now = time.time() if now is None else now
     idle_since = idle_since or now
     return (now - idle_since) >= idle_exit_seconds, idle_since
+
+
+def _consume_shutdown_request(signal_dir: Path, *, owner_pid: int, persistent: bool) -> bool:
+    if persistent or owner_pid <= 0:
+        return False
+
+    request_path = _shutdown_request_path(signal_dir, owner_pid)
+    if not request_path.exists():
+        return False
+
+    try:
+        request_path.unlink(missing_ok=True)
+    except Exception:
+        logging.debug("Failed to clear helper shutdown request: %s", request_path, exc_info=True)
+
+    logging.info("Watcher received explicit session shutdown request (owner_pid=%s)", owner_pid)
+    return True
 
 
 def _action_error(action: str) -> str:
@@ -442,6 +501,10 @@ def _run_watcher(
     global _watcher_running
     poll_interval = max(0.5, poll_interval)
     idle_exit_seconds = max(0.0, float(idle_exit_seconds or 0.0))
+    singleton_handle, acquired = _acquire_watcher_singleton()
+    if not acquired:
+        logging.info("Watcher singleton already active; exiting duplicate watcher")
+        return 0
     logging.info(
         "Watcher started (queue=%s, poll=%.1fs, persistent=%s, owner_pid=%s, idle_exit=%.1fs)",
         queue_dir,
@@ -452,41 +515,46 @@ def _run_watcher(
     )
     owner_idle_since: float | None = None
 
-    while _watcher_running:
-        try:
-            _write_heartbeat_with_lifecycle(
-                signal_dir,
-                queue_dir,
-                poll_interval=poll_interval,
-                persistent=persistent,
-                owner_pid=owner_pid,
-            )
-            processed = process_queue(queue_dir, max_batch, signal_dir)
-            if processed > 0:
-                logging.info("Watcher cycle: processed %d entries", processed)
-            should_exit, owner_idle_since = _evaluate_owner_idle_exit(
-                queue_dir,
-                owner_pid=owner_pid,
-                idle_exit_seconds=idle_exit_seconds,
-                idle_since=owner_idle_since,
-                persistent=persistent,
-            )
-            if should_exit:
-                logging.info(
-                    "Watcher exiting after owner %s disappeared and queue stayed idle for %.1fs",
-                    owner_pid,
-                    idle_exit_seconds,
+    try:
+        while _watcher_running:
+            try:
+                _write_heartbeat_with_lifecycle(
+                    signal_dir,
+                    queue_dir,
+                    poll_interval=poll_interval,
+                    persistent=persistent,
+                    owner_pid=owner_pid,
                 )
-                break
-        except Exception:
-            logging.error("Watcher cycle error", exc_info=True)
+                processed = process_queue(queue_dir, max_batch, signal_dir)
+                if processed > 0:
+                    logging.info("Watcher cycle: processed %d entries", processed)
+                if _consume_shutdown_request(signal_dir, owner_pid=owner_pid, persistent=persistent):
+                    break
+                should_exit, owner_idle_since = _evaluate_owner_idle_exit(
+                    queue_dir,
+                    owner_pid=owner_pid,
+                    idle_exit_seconds=idle_exit_seconds,
+                    idle_since=owner_idle_since,
+                    persistent=persistent,
+                )
+                if should_exit:
+                    logging.info(
+                        "Watcher exiting after owner %s disappeared and queue stayed idle for %.1fs",
+                        owner_pid,
+                        idle_exit_seconds,
+                    )
+                    break
+            except Exception:
+                logging.error("Watcher cycle error", exc_info=True)
 
-        # Sleep in small increments so we respond to shutdown quickly
-        slept = 0.0
-        while slept < poll_interval and _watcher_running:
-            chunk = min(0.5, poll_interval - slept)
-            time.sleep(chunk)
-            slept += chunk
+            # Sleep in small increments so we respond to shutdown quickly
+            slept = 0.0
+            while slept < poll_interval and _watcher_running:
+                chunk = min(0.5, poll_interval - slept)
+                time.sleep(chunk)
+                slept += chunk
+    finally:
+        _release_watcher_singleton(singleton_handle)
 
     logging.info("Watcher stopped cleanly")
     return 0

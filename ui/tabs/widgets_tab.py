@@ -36,6 +36,11 @@ from core.settings.visualizer_presets import (
     MODE_KEY_PREFIXES,
     apply_preset_to_config,
     get_custom_preset_index,
+    resolve_preset_index_from_mapping,
+)
+from core.settings.visualizer_mode_registry import (
+    get_default_visualizer_mode_id,
+    get_preset_slider_attr,
 )
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
@@ -112,6 +117,15 @@ class _RainbowGlowLabel(QWidget):
 
 
 _VISUALIZER_CUSTOM_STORAGE_KEY = "visualizer_custom_presets"
+_DEFAULT_VISUALIZER_MODE = get_default_visualizer_mode_id()
+_DEPRECATED_VISUALIZER_EXPORT_SUFFIXES = ("energy_boost", "use_raw_energy")
+_VISUALIZER_ADVANCED_ROOT_ATTRS = {
+    "spectrum": ("_spectrum_advanced",),
+    "oscilloscope": ("_osc_advanced",),
+    "sine_wave": ("_sine_advanced", "_sine_advanced_host"),
+    "blob": ("_blob_advanced",),
+    "bubble": ("_bubble_advanced",),
+}
 
 
 class WidgetsTab(QWidget):
@@ -860,7 +874,7 @@ class WidgetsTab(QWidget):
         return snapshot
 
     def build_visualizer_preset_payload(self, mode_key: str) -> dict[str, Any]:
-        """Construct a curated-preset style payload from current Custom settings."""
+        """Construct a lean curated-preset payload from current settings."""
         widgets_cfg = self._settings.get('widgets', {})
         if not isinstance(widgets_cfg, dict):
             return {}
@@ -875,18 +889,15 @@ class WidgetsTab(QWidget):
         )
         snapshot = self._extract_visualizer_snapshot(mode_key, normalized_live)
         snapshot = normalize_visualizer_mode_payload(mode_key, snapshot)
+        prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
+        for prefix in prefixes:
+            for suffix in _DEPRECATED_VISUALIZER_EXPORT_SUFFIXES:
+                snapshot.pop(f"{prefix}{suffix}", None)
         if not snapshot:
             return {}
 
-        preset_index = int(spotify_vis_config.get(
-            f"preset_{mode_key}",
-            get_custom_preset_index(mode_key),
-        ))
+        preset_index = self._resolve_visualizer_preset_index(mode_key, normalized_live)
         snapshot_copy = deepcopy(snapshot)
-        backup = {
-            f"widgets.spotify_visualizer.{key}": deepcopy(value)
-            for key, value in snapshot.items()
-        }
 
         payload: dict[str, Any] = {
             "mode": mode_key,
@@ -899,12 +910,7 @@ class WidgetsTab(QWidget):
                     "spotify_visualizer": snapshot_copy,
                 },
             },
-            "settings": {
-                "spotify_visualizer": deepcopy(snapshot_copy),
-            },
         }
-        if backup:
-            payload["snapshot"]["custom_preset_backup"] = backup
         return payload
 
     @staticmethod
@@ -958,14 +964,45 @@ class WidgetsTab(QWidget):
         """Cycle the preset slider for *mode_key* by *direction* (+1/-1)."""
         if not direction:
             return
-        slider_attr = f"_{mode_key}_preset_slider"
-        slider = getattr(self, slider_attr, None)
+        slider = self._get_visualizer_preset_slider(mode_key)
         if slider is None:
             return
         if direction > 0:
             slider.cycle_next()
         else:
             slider.cycle_previous()
+
+    def _get_active_visualizer_mode(self) -> str:
+        """Return the active visualizer mode using the shared registry fallback."""
+        try:
+            mode = self.vis_mode_combo.currentData()
+        except Exception:
+            mode = None
+        if isinstance(mode, str) and mode:
+            return mode
+        return _DEFAULT_VISUALIZER_MODE
+
+    def _get_visualizer_preset_slider(self, mode: str):
+        """Return the preset slider widget for *mode* using the shared registry."""
+        try:
+            slider_attr = get_preset_slider_attr(str(mode))
+        except Exception:
+            return None
+        return getattr(self, slider_attr, None)
+
+    def _get_visualizer_advanced_roots(self, mode: str) -> list[QWidget]:
+        """Return advanced container roots for *mode*."""
+        roots: list[QWidget] = []
+        for attr in _VISUALIZER_ADVANCED_ROOT_ATTRS.get(mode, ()):
+            root = getattr(self, attr, None)
+            if isinstance(root, QWidget):
+                roots.append(root)
+        return roots
+
+    @staticmethod
+    def _resolve_visualizer_preset_index(mode: str, config: Mapping[str, Any] | None) -> int:
+        """Resolve a mode preset index through the shared visualizer preset contract."""
+        return resolve_preset_index_from_mapping(mode, config)
 
     def _on_global_border_width_changed(self, value: int) -> None:
         self._global_card_border_width = int(value)
@@ -1254,13 +1291,9 @@ class WidgetsTab(QWidget):
         existing_widgets['reddit'] = reddit_config
         existing_widgets['reddit2'] = reddit2_config
 
-        current_vis_mode = str(spotify_vis_config.get('mode', 'spectrum') or 'spectrum')
-        current_preset_key = f"preset_{current_vis_mode}"
+        current_vis_mode = str(spotify_vis_config.get('mode', _DEFAULT_VISUALIZER_MODE) or _DEFAULT_VISUALIZER_MODE)
+        current_preset_index = self._resolve_visualizer_preset_index(current_vis_mode, spotify_vis_config)
         current_custom_index = get_custom_preset_index(current_vis_mode)
-        try:
-            current_preset_index = int(spotify_vis_config.get(current_preset_key, current_custom_index))
-        except (TypeError, ValueError):
-            current_preset_index = current_custom_index
         if current_preset_index == current_custom_index:
             snapshot = self._extract_visualizer_snapshot(current_vis_mode, spotify_vis_config)
             cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
@@ -1307,38 +1340,10 @@ class WidgetsTab(QWidget):
         if getattr(self, '_loading', False):
             return
 
-        # Identify the sender and the current mode's advanced container
-        _adv_map = {
-            'spectrum': ('_spectrum_advanced',),
-            'oscilloscope': ('_osc_advanced',),
-            'sine_wave': ('_sine_advanced', '_sine_advanced_host'),
-            'blob': ('_blob_advanced',),
-            'bubble': ('_bubble_advanced',),
-        }
-        _slider_map = {
-            'spectrum': '_spectrum_preset_slider',
-            'oscilloscope': '_osc_preset_slider',
-            'sine_wave': '_sine_preset_slider',
-            'blob': '_blob_preset_slider',
-            'bubble': '_bubble_preset_slider',
-        }
-
-        try:
-            mode = self.vis_mode_combo.currentData() or 'spectrum'
-        except Exception:
-            return
-
-        adv_attrs = _adv_map.get(mode)
-        slider_attr = _slider_map.get(mode)
-        if not adv_attrs or not slider_attr:
-            return
-
-        adv_roots = [
-            getattr(self, attr, None)
-            for attr in adv_attrs
-            if getattr(self, attr, None) is not None
-        ]
-        slider = getattr(self, slider_attr, None)
+        # Identify the sender and the current mode's advanced container.
+        mode = self._get_active_visualizer_mode()
+        adv_roots = self._get_visualizer_advanced_roots(mode)
+        slider = self._get_visualizer_preset_slider(mode)
         if not adv_roots or slider is None:
             return
 
@@ -1378,24 +1383,10 @@ class WidgetsTab(QWidget):
         if getattr(self, '_loading', False):
             return
 
-        _slider_map = {
-            'spectrum': '_spectrum_preset_slider',
-            'oscilloscope': '_osc_preset_slider',
-            'sine_wave': '_sine_preset_slider',
-            'blob': '_blob_preset_slider',
-            'bubble': '_bubble_preset_slider',
-        }
-
         if mode is None:
-            try:
-                mode = self.vis_mode_combo.currentData() or 'spectrum'
-            except Exception:
-                return
+            mode = self._get_active_visualizer_mode()
 
-        slider_attr = _slider_map.get(mode)
-        if not slider_attr:
-            return
-        slider = getattr(self, slider_attr, None)
+        slider = self._get_visualizer_preset_slider(mode)
         if slider is None:
             return
 
@@ -1409,8 +1400,7 @@ class WidgetsTab(QWidget):
         if getattr(self, '_loading', False):
             return
 
-        slider_attr = f"_{mode_key}_preset_slider"
-        slider = getattr(self, slider_attr, None)
+        slider = self._get_visualizer_preset_slider(mode_key)
         if slider is None:
             return
 
@@ -1421,7 +1411,7 @@ class WidgetsTab(QWidget):
         if not isinstance(spotify_vis_config, dict):
             spotify_vis_config = {}
 
-        prev_index = int(spotify_vis_config.get(f"preset_{mode_key}", custom_index))
+        prev_index = self._resolve_visualizer_preset_index(mode_key, spotify_vis_config)
         move_to_custom_pending = bool(getattr(slider, "_pending_move_to_custom", False))
 
         if preset_index == custom_index:
@@ -1487,9 +1477,9 @@ class WidgetsTab(QWidget):
     def _update_vis_mode_sections(self) -> None:
         """Show/hide per-mode settings containers based on selected visualizer type."""
         try:
-            mode = self.vis_mode_combo.currentData() or 'spectrum'
+            mode = self._get_active_visualizer_mode()
         except Exception:
-            mode = 'spectrum'
+            mode = _DEFAULT_VISUALIZER_MODE
 
         # Save scroll position for the previous mode before switching
         prev_mode = getattr(self, '_last_vis_mode_section', None)

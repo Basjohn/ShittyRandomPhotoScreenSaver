@@ -1,7 +1,7 @@
 {
   "mode": "bubble",
-  "name": "Preset 7 (Lava Flow)",
-  "preset_index": 6,
+  "name": "Preset 6 (Lava Flow)",
+  "preset_index": 5,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -44,13 +44,13 @@
           255
         ],
         "bubble_gradient_direction": "bottom",
-        "bubble_gradient_semantics_version": 2,
         "bubble_gradient_light": [
           255,
           100,
           20,
           255
         ],
+        "bubble_gradient_semantics_version": 2,
         "bubble_growth": 5.5,
         "bubble_input_gain": 0.4,
         "bubble_kick_lane_gain": 1.3,

@@ -2,27 +2,27 @@
   "description": "Deterministic synthetic preset-1 metrics captured before further visualizer refactors. Use these as a migration guard for preset plumbing and per-mode runtime feel.",
   "modes": {
     "blob": {
-      "calm_live_overall": 0.0975,
-      "kick_live_overall": 0.201907,
-      "kick_stage_primary": 0.787235,
+      "calm_live_overall": 0.0955,
+      "kick_live_overall": 0.190416,
+      "kick_stage_primary": 0.574264,
       "preset_name": "Preset 1",
-      "release_stage_primary": 0.762327,
+      "release_stage_primary": 0.53598,
       "vocal_stage_overall": 0.11
     },
     "bubble": {
       "calm_burst": 0.044827,
       "calm_speed_energy": 0.053524,
-      "kick_max_radius": 0.06263,
+      "kick_max_radius": 0.056948,
       "preset_name": "Preset 1",
       "vocal_burst": 0.277678,
-      "vocal_max_radius": 0.053573,
+      "vocal_max_radius": 0.058439,
       "vocal_speed_energy": 0.402759
     },
     "oscilloscope": {
-      "calm_sensitivity": 4.7,
+      "calm_sensitivity": 4.8,
       "hit_bass_energy": 0.112,
       "hit_overall_energy": 0.26,
-      "hit_sensitivity": 5.389584,
+      "hit_sensitivity": 5.504256,
       "preset_name": "Preset 1",
       "waveform_count": 24
     },
@@ -37,12 +37,12 @@
     },
     "spectrum": {
       "bar_count": 33,
-      "bass_center_mean": 0.022237,
-      "bass_outer_mean": 0.020811,
+      "bass_center_mean": 0.02231,
+      "bass_outer_mean": 0.020694,
       "calm_mean": 0.0,
       "preset_name": "Preset 1",
-      "vocal_center_mean": 0.020151,
-      "vocal_outer_mean": 0.000054
+      "vocal_center_mean": 0.020559,
+      "vocal_outer_mean": 2.9e-05
     }
   },
   "schema_version": 1

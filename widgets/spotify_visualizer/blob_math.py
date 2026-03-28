@@ -13,19 +13,25 @@ def _smoothstep(edge0: float, edge1: float, x: float) -> float:
     return t * t * (3.0 - 2.0 * t)
 
 
-def _apply_stage_bias(
-    stage1_t: float,
-    stage2_t: float,
-    stage3_t: float,
+def _apply_stage_bias_to_drives(
+    weighted_stage1: float,
+    stage2_drive: float,
+    chorus_drive: float,
     stage_bias: float,
 ) -> tuple[float, float, float]:
+    """Apply Blob stage bias as a pre-smooth drive nudge, not a blunt cutoff.
+
+    Negative bias should make stages harder to enter, but it should not erase
+    modest valid stage motion by subtracting directly from already-smoothed
+    progress values.
+    """
     if abs(stage_bias) <= 1e-6:
-        return (stage1_t, stage2_t, stage3_t)
+        return (weighted_stage1, stage2_drive, chorus_drive)
     bias = _clamp(stage_bias, -0.60, 0.60)
     return (
-        _clamp(stage1_t + bias, 0.0, 1.0),
-        _clamp(stage2_t + bias, 0.0, 1.0),
-        _clamp(stage3_t + bias, 0.0, 1.0),
+        _clamp(weighted_stage1 + bias * 0.12, 0.0, 1.0),
+        _clamp(stage2_drive + bias * 0.10, 0.0, 1.0),
+        _clamp(chorus_drive + bias * 0.08, 0.0, 1.0),
     )
 
 
@@ -53,10 +59,20 @@ def compute_stage_progress(
     chorus_drive = _clamp(max(stage2_drive, high * 0.65 + mid * 0.10 + bass * 0.25), 0.0, 1.0)
     chorus_drive = _clamp(max(chorus_drive, se * 0.55 + overall * 0.45), 0.0, 1.0)
 
-    stage1_t = _smoothstep(0.10, 0.32, weighted_stage1)
-    stage2_t = _smoothstep(0.58, 0.86, stage2_drive)
-    stage3_t = _smoothstep(0.68, 0.94, chorus_drive)
-    return _apply_stage_bias(stage1_t, stage2_t, stage3_t, stage_bias)
+    weighted_stage1, stage2_drive, chorus_drive = _apply_stage_bias_to_drives(
+        weighted_stage1,
+        stage2_drive,
+        chorus_drive,
+        stage_bias,
+    )
+    # Blob should climb a ladder, not park on stage 1 forever.
+    # Keep stage 1 reachable on ordinary musical support, but leave room for
+    # stage 2/3 to appear on stronger passages instead of making the first rung
+    # saturate immediately while the later rungs stay effectively unreachable.
+    stage1_t = _smoothstep(0.10, 0.40, weighted_stage1)
+    stage2_t = _smoothstep(0.20, 0.48, stage2_drive)
+    stage3_t = _smoothstep(0.30, 0.58, chorus_drive)
+    return (stage1_t, stage2_t, stage3_t)
 
 
 def compute_stage_floor_fraction(

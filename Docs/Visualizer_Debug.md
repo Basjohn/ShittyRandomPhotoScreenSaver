@@ -100,6 +100,18 @@ When debugging, always verify these steps in order:
   - `kick_lane_gain` now applies to Blob too: `0%` disables scheduler kick assist for Blob without disabling continuous/transient support or snare-driven deformation
   - Guardrail: Blob control reads in the live-band path must preserve valid zero values. Avoid `... or default` when reading `kick_lane_gain`, `blob_pulse_cap`, or transient mixes, or the mode will appear to ignore “off” settings.
   - if Blob starts doing sudden giant pulses again, inspect whether event energy has leaked back into the same live bass/overall channels that feed `u_bass_energy` / `u_overall_energy`
+- **Reaction ownership quick map (Mar 2026):**
+  - continuous `bass` + `overall` -> whole-body support, stage entry, scalar size
+  - continuous/live `mid` + `high` -> wobble character and vocal-side shape motion
+  - transient `bass` -> reinforces pulse/stage support, but stays clamped
+  - transient `mid/high` -> reinforces wobble/stretch-side motion, not fake whole-body pulses
+  - kick scheduler -> stage-first assist
+  - snare scheduler -> wobble/stretch-first assist
+  - if the Blob looks alive but always roughly the same size, inspect stage-driving support first
+- **Preset authoring guard (Mar 2026):**
+  - curated Blob preset JSON is authored source of truth
+  - preset save/export/repair no longer emits retired compat flags such as `blob_energy_boost` / `blob_use_raw_energy`
+  - if a preset feels wrong after runtime changes, decide explicitly whether the runtime contract is wrong or the authored preset should be retuned; do not silently revive older compat payloads
 - **Curated pack guardrail (Mar 2026):** Blob now participates in a six-slot curated primary-mode pack. Do not allow duplicate `preset_index` values in shipped curated JSON. Regression coverage lives in `tests/test_visualizer_presets.py`.
 - Debug tip: "Tearing" occurs when `blob_growth>5` without card height increase.
 

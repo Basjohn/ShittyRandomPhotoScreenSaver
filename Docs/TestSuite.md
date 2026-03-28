@@ -192,7 +192,8 @@ It also guards the honesty of the shared fade API: explicit `duration_ms` overri
 | `test_media_display_update.py` | Retained-display policy, alternate-provider snapshot handoff, and media-card re-entry after a real hide | Media lifecycle / retained-metadata behavior changes |
 | `test_media_provider_runtime.py` | Shared runtime provider rebinding and persisted auto-fallback path in WidgetManager | Media provider failover / rebinding changes |
 | `test_media_widget_runtime_methods.py` | Canonical MediaWidget poll-stage helper behavior and track-identity composition | Media polling cadence / dead-duplicate cleanup |
-| `test_media_artwork_layout.py` | Aspect-preserving artwork box sizing plus decode normalization for Spotify video-frame thumbnails | Media artwork distortion fixes |
+| `test_media_artwork_layout.py` | Artwork-box layout contract plus decode normalization: square art stays square, wide Spotify video-frame thumbnails cover-crop the square box without stretch/letterbox | Media artwork distortion fixes |
+| `test_media_dependent_visibility.py` | Shared anchor-visibility contract for media-dependent widgets (volume/mute satellites) | Media retained-display dependent-widget lifecycle changes |
 | `test_reddit_widget.py` | RedditWidget, fetch, display, clicks | Reddit widget issues |
 | `test_spotify_visualizer_widget.py` | SpotifyVisualizerWidget, BeatEngine, bar rendering | Visualizer widget changes |
 Startup staging coverage here now explicitly guards Spotify secondary-stage deferral, widget self-registration into that stage, first-fresh-frame reveal completion, exact ready-driven reveal after the minimum hidden warmup delay, anchor-visibility release, anchor-sync obedience to the centralized parent secondary-stage deadline, overlay prewarm before reveal, deferred pre-stage wake routing, and the rule that staged hot start must not immediately re-run the normal `engine.wake()` restart path.
@@ -201,6 +202,7 @@ It also now guards the retained-media lifecycle boundary on the visualizer side:
 | `test_visualizer_startup_contract.py` | Shared visualizer staged-startup contract derivation | Visualizer startup contract changes |
 | `test_display_image_ops.py` | Display image ops visualizer prewarm pipeline | Startup prewarm regressions |
 This suite now directly guards that visualizer shader-source preload happens before hidden overlay prewarm, so shader file IO stays out of the first visible startup window.
+| `test_reddit_helper_watcher.py` | Queue watcher retry/expiry plus owner-idle exit, explicit session-shutdown requests, and duplicate-watcher singleton guard | Reddit helper watcher lifecycle / linger regressions |
 | `test_spotify_visualizer_integration.py` | Visualizer integration with DisplayWidget | Visualizer integration |
 | `test_imgur_cache.py` | Imgur LRU disk cache, GIF conversion | Imgur cache changes |
 | `test_imgur_scraper.py` | Imgur web scraping, rate limiting | Imgur scraper changes |
@@ -313,7 +315,7 @@ This suite now directly guards that visualizer shader-source preload happens bef
 | `test_reddit_progressive_loading.py` | Progressive post loading | Loading performance |
 | `test_reddit_paint_caching.py` | Reddit widget paint caching | Paint performance |
 | `test_reddit_helper_runtime.py` | User-session helper heartbeat/bootstrap self-heal plus persistent-vs-session-scoped command shaping | Reddit helper lifecycle changes |
-| `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry, and owner-idle self-exit for session-scoped launches | Reddit helper worker changes |
+| `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry, owner-idle self-exit, and explicit session-shutdown requests for session-scoped launches | Reddit helper worker changes |
 
 ---
 
@@ -367,10 +369,11 @@ This suite now also guards that WidgetManager mirrors expected overlays back to 
 | `test_visualizer_playback_gating.py` | Visualizer playback state gating | Bars when paused |
 | `test_visualizer_modes.py` | Visualizer direction/swirl/converge modes | Mode switching |
 | `test_visualizer_architecture_split.py` | Focused architecture split guard: required extracted exports, widget delegation, monolith threshold | Architecture split regressions |
-| `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity | New uniform/kwarg additions |
-| `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering, canonical mode-payload normalization | Preset file changes |
+| `test_visualizer_overlay_kwargs.py` | `build_gpu_push_extra_kwargs()` ↔ `set_state()` key parity plus shared continuous-energy contract guards (`use_raw_energy` only switches to pre-AGC when explicitly enabled) | New uniform/kwarg additions |
+| `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering, canonical mode-payload normalization, and full curated-tree audit via `tools/visualizer_preset_repair.audit_payload()` | Preset file changes |
 Line of intent: keep this suite schema/contract-focused. It should guard payload shape, filtering, repair-tool behavior, and direct transient-key preservation, not freeze artistic tuning choices for curated presets.
 It also guards curated slot normalization through `tools/visualizer_preset_repair.py --reindex-curated`: gap-filling, canonical filename rewrite, recovery when the earliest remaining preset is no longer slot 1, duplicate-slot detection, and Preset 1 presence per primary mode without freezing the rest of the artistic pack size.
+| `test_visualizer_preset_manifest.py` | Shipped curated-preset manifest parity and stale-file sync behavior | Stable onefile extraction / stale curated preset cleanup |
 | `test_visualizer_preset1_baselines.py` | Deterministic synthetic preset-1 baseline fence for active shipped modes | Structural migrations, curated preset-1 reauthoring, before/after regression checks |
 | `test_visualizer_settings_plumbing.py` | Behavior-first settings plumbing (model → creator/applier → frame push → overlay state contract), plus direct adapter coverage for Spectrum / Blob / Bubble / Oscilloscope / Sine mode-owned WidgetsTab bindings and the shared visualizer settings contract/snapshot helpers | New visualizer settings, adapter extraction regressions, and sparse-mapping contract drift |
 | `test_visualizer_preset_cycling_runtime.py` | Runtime preset cycling API (`WidgetManager`), SpotifyVisualizerWidget middle/XButton shortcuts, InputHandler routing hit-tests, preset wrap-around | Runtime preset shortcut regressions |
@@ -524,6 +527,9 @@ When writing tests that create `DisplayWidget` or start transitions:
 - `tests/test_visualizer_presets.py`
   Guards curated preset schema, repair-tool behavior, and payload hygiene only. Do not use it to freeze aesthetic tuning decisions.
   It is also the regression fence for curated reindex behavior (`--reindex-curated`) so slot repair stays metadata-only and deterministic, while tolerating authored artistic pack changes outside the rigid Preset 1 baseline fence.
+- `tests/test_visualizer_reactivity_quality.py`
+  Guards Blob/Spectrum behavior-level reactivity contracts. It now includes a representative Blob Preset 1-style moderate-kick stage regression so future fixes do not drift back toward the over-damped “live bands move but stage stays asleep” failure.
+  It also guards the Blob stage ladder directly: stage 1 must keep headroom, stage 2/3 must be reachable on stronger phrases, and stage-1 decay must not leave the silhouette parked in one size.
 - `tests/test_visualizer_settings_plumbing.py`
   This suite should prefer real model/applier/creator/frame-push behavior checks over source-text assertions. A few static contract checks remain where GL/shader runtime surfaces are impractical.
   It is also now the direct regression fence for extracted WidgetsTab adapters (`spectrum_settings_binding.py`, `blob_settings_binding.py`, `bubble_settings_binding.py`, `oscilloscope_settings_binding.py`, `sine_wave_settings_binding.py`) and for `core/settings/visualizer_settings_contract.py` plus `core/settings/visualizer_settings_snapshot.py`, so coordinator-shrinking refactors and sparse-mapping/SST contract work stay behavior-safe.

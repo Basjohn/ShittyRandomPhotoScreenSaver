@@ -1,7 +1,7 @@
 {
   "mode": "bubble",
-  "name": "Preset 3 (Sideway Swish)",
-  "preset_index": 2,
+  "name": "Preset 2 (Sideway Swish)",
+  "preset_index": 1,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -44,13 +44,13 @@
           255
         ],
         "bubble_gradient_direction": "right",
-        "bubble_gradient_semantics_version": 2,
         "bubble_gradient_light": [
           0,
           179,
           255,
           255
         ],
+        "bubble_gradient_semantics_version": 2,
         "bubble_growth": 5.0,
         "bubble_input_gain": 0.32,
         "bubble_kick_lane_gain": 1.0,

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from helpers.reddit_helper_worker import (
     HEARTBEAT_FILE_NAME,
+    SESSION_HELPER_SHUTDOWN_PREFIX,
     _evaluate_owner_idle_exit,
     iter_queue_files,
     process_queue,
@@ -233,3 +234,81 @@ class TestWatcherMode:
         heartbeat = json.loads((signal_dir / HEARTBEAT_FILE_NAME).read_text(encoding="utf-8"))
         assert heartbeat["persistent"] is False
         assert heartbeat["owner_pid"] == 777
+
+    def test_watcher_exits_when_singleton_already_exists(self, tmp_path: Path):
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+
+        with patch(
+            "helpers.reddit_helper_worker._acquire_watcher_singleton",
+            return_value=(None, False),
+        ), patch("helpers.reddit_helper_worker.process_queue") as mock_process:
+            rc = _run_watcher(
+                tmp_path,
+                max_batch=10,
+                signal_dir=signal_dir,
+                poll_interval=0.5,
+            )
+
+        assert rc == 0
+        mock_process.assert_not_called()
+
+    def test_watcher_releases_singleton_on_exit(self, tmp_path: Path):
+        import helpers.reddit_helper_worker as worker
+
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+        releases: list[object] = []
+
+        original_running = worker._watcher_running
+        try:
+            worker._watcher_running = True
+            with patch(
+                "helpers.reddit_helper_worker._acquire_watcher_singleton",
+                return_value=("watch-handle", True),
+            ), patch(
+                "helpers.reddit_helper_worker._release_watcher_singleton",
+                side_effect=lambda handle: releases.append(handle),
+            ), patch(
+                "helpers.reddit_helper_worker._evaluate_owner_idle_exit",
+                return_value=(True, 100.0),
+            ), patch("helpers.reddit_helper_worker.time.sleep", return_value=None):
+                rc = _run_watcher(
+                    tmp_path,
+                    max_batch=10,
+                    signal_dir=signal_dir,
+                    poll_interval=0.5,
+                )
+        finally:
+            worker._watcher_running = original_running
+
+        assert rc == 0
+        assert releases == ["watch-handle"]
+
+    def test_watcher_exits_on_explicit_session_shutdown_request(self, tmp_path: Path):
+        import helpers.reddit_helper_worker as worker
+
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+        (signal_dir / f"{SESSION_HELPER_SHUTDOWN_PREFIX}777.json").write_text("{}", encoding="utf-8")
+
+        original_running = worker._watcher_running
+        try:
+            worker._watcher_running = True
+            with patch(
+                "helpers.reddit_helper_worker._evaluate_owner_idle_exit",
+                return_value=(False, None),
+            ), patch("helpers.reddit_helper_worker.time.sleep", return_value=None):
+                rc = _run_watcher(
+                    tmp_path,
+                    max_batch=10,
+                    signal_dir=signal_dir,
+                    poll_interval=0.5,
+                    owner_pid=777,
+                    idle_exit_seconds=45.0,
+                )
+        finally:
+            worker._watcher_running = original_running
+
+        assert rc == 0
+        assert not (signal_dir / f"{SESSION_HELPER_SHUTDOWN_PREFIX}777.json").exists()

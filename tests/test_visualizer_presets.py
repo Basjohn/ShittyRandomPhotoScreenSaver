@@ -149,7 +149,7 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
 
 
 def test_curated_bubble_preset_is_pre_filtered_and_tracks_gradient_direction():
-    preset_path = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "bubble" / "preset_3_sideway_swish.json"
+    preset_path = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "bubble" / "preset_2_sideway_swish.json"
     payload = json.loads(preset_path.read_text(encoding="utf-8"))
     sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
 
@@ -354,6 +354,33 @@ def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
 
     assert lean["visualizer_preset_override"] is True
     assert lean["visualizer_preset_mode"] == mode
+
+
+def test_curated_payload_parser_drops_retired_compat_keys():
+    payload = {
+        "mode": "blob",
+        "preset_index": 0,
+        "visualizer_preset_override": True,
+        "visualizer_preset_mode": "blob",
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_use_raw_energy": True,
+                    "blob_energy_boost": 0.91,
+                    "blob_stage_bias": -0.16,
+                }
+            }
+        },
+    }
+
+    parsed = vp._parse_preset_payload(Path("preset_1_blob.json"), payload, "blob")
+
+    assert parsed is not None
+    _index, preset = parsed
+    assert "blob_use_raw_energy" not in preset.settings
+    assert "blob_energy_boost" not in preset.settings
+    assert preset.settings["blob_stage_bias"] == pytest.approx(-0.16)
 
 
 def test_repair_tool_audit_flags_duplicate_prefixes_and_backup_blocks():
@@ -600,3 +627,20 @@ def test_curated_presets_have_unique_slot_numbers_per_mode():
                     f"{seen[preset_index].name} and {preset_path.name}"
                 )
             seen[preset_index] = preset_path
+
+
+def test_curated_visualizer_tree_audits_clean():
+    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
+    problems: list[str] = []
+
+    for mode_dir in sorted(presets_root.iterdir()):
+        if not mode_dir.is_dir():
+            continue
+        mode = mode_dir.name
+        for preset_path in sorted(mode_dir.glob("*.json")):
+            payload = json.loads(preset_path.read_text(encoding="utf-8"))
+            audit = repair.audit_payload(mode, payload)
+            if audit["problem_count"]:
+                problems.append(f"{preset_path}: {audit}")
+
+    assert not problems, "\n".join(problems)

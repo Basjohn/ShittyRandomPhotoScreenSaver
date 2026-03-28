@@ -17,13 +17,13 @@ class _StubEngine:
         return [0.0] * 256
 
     def get_energy_bands(self):
-        return EnergyBands()
+        return EnergyBands(bass=0.11, mid=0.22, high=0.33, overall=0.44)
 
     def get_raw_energy_bands(self):
         return EnergyBands()
 
     def get_pre_agc_energy_bands(self):
-        return EnergyBands()
+        return EnergyBands(bass=0.71, mid=0.72, high=0.73, overall=0.74)
 
     def get_transient_energy_bands(self):
         return TransientEnergyBands()
@@ -92,5 +92,37 @@ def test_spectrum_gpu_kwargs_include_shared_engine_signal_snapshot(qt_app):
     assert isinstance(extras["transient_energy"], TransientEnergyBands)
     assert "waveform" in extras
     assert "waveform_count" in extras
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_blob_gpu_kwargs_use_shared_smoothed_energy_when_raw_toggle_is_off(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+
+    stub_engine = _StubEngine()
+    widget._use_raw_energy = False
+    widget.set_visualization_mode(VisualizerMode.BLOB)
+
+    extras = build_gpu_push_extra_kwargs(widget, "blob", stub_engine)
+
+    assert extras["energy_bands"] == stub_engine.get_energy_bands()
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_raw_energy_toggle_still_uses_pre_agc_snapshot(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+
+    stub_engine = _StubEngine()
+    widget._use_raw_energy = True
+    widget.set_visualization_mode(VisualizerMode.BLOB)
+
+    extras = build_gpu_push_extra_kwargs(widget, "blob", stub_engine)
+
+    assert extras["energy_bands"] == stub_engine.get_pre_agc_energy_bands()
 
     widget.deleteLater()

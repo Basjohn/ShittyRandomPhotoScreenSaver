@@ -553,6 +553,14 @@ def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
     }
 
 
+def _resolve_continuous_energy_bands(widget: Any, mode_str: str, engine: Any):
+    """Return the canonical continuous energy source for the active mode."""
+    use_raw = getattr(widget, '_use_raw_energy', False)
+    if use_raw:
+        return engine.get_pre_agc_energy_bands()
+    return engine.get_energy_bands()
+
+
 def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_str: str, engine: Any) -> None:
     """Attach waveform, continuous energy, transient bus, and scheduler peeks."""
     if engine is None:
@@ -564,11 +572,7 @@ def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_st
     except Exception:
         extra['waveform_count'] = len(extra['waveform'])
 
-    use_raw = getattr(widget, '_use_raw_energy', False)
-    if use_raw:
-        extra['energy_bands'] = engine.get_pre_agc_energy_bands()
-    else:
-        extra['energy_bands'] = engine.get_energy_bands()
+    extra['energy_bands'] = _resolve_continuous_energy_bands(widget, mode_str, engine)
     extra['transient_energy'] = engine.get_transient_energy_bands()
 
     try:
