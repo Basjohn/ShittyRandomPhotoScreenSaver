@@ -20,6 +20,7 @@ from ui.tabs.media.builder_scaffold import (
 from ui.tabs.shared_styles import (
     add_aligned_row_widget as shared_add_aligned_row_widget,
 )
+from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -234,6 +235,23 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     glow_react_layout.addWidget(tab.blob_glow_reactivity)
     glow_react_layout.addWidget(tab.blob_glow_reactivity_label)
     adv_layout.addWidget(glow_react_row)
+
+    glow_drive_row, glow_drive_layout = _aligned_row("Glow Drive:")
+    tab.blob_glow_drive_mode = StyledComboBox(size_variant="compact")
+    tab.blob_glow_drive_mode.addItems(["Bass Driven", "Vocal Driven"])
+    default_glow_drive = tab._default_str(
+        'spotify_visualizer',
+        'blob_glow_drive_mode',
+        'bass',
+    ).strip().lower()
+    tab.blob_glow_drive_mode.setCurrentIndex(1 if default_glow_drive == "vocal" else 0)
+    tab.blob_glow_drive_mode.setToolTip(
+        "Choose whether reactive glow follows bass/body support or vocal-side energy."
+    )
+    bind_setting_signal(tab, tab.blob_glow_drive_mode.currentIndexChanged)
+    glow_drive_layout.addWidget(tab.blob_glow_drive_mode)
+    glow_drive_layout.addStretch()
+    adv_layout.addWidget(glow_drive_row)
 
     # Glow Max Size (maximum glow spread radius)
     glow_max_row, glow_max_layout = _aligned_row("Glow Max Size:")
@@ -464,9 +482,9 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     pulse_cap_row, pulse_cap_layout = _aligned_row("Pulse Cap:")
     tab.blob_pulse_cap = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_pulse_cap.setMinimum(0)
-    tab.blob_pulse_cap.setMaximum(200)
+    tab.blob_pulse_cap.setMaximum(300)
     blob_pulse_cap_val = int(tab._default_float('spotify_visualizer', 'blob_pulse_cap', 1.0) * 100)
-    tab.blob_pulse_cap.setValue(max(0, min(200, blob_pulse_cap_val)))
+    tab.blob_pulse_cap.setValue(max(0, min(300, blob_pulse_cap_val)))
     tab.blob_pulse_cap.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_pulse_cap.setTickInterval(25)
     tab.blob_pulse_cap.setToolTip("Caps how much extra reactive lift Blob can add above the underlying support signal. Lower it to stop giant flickery pulses.")
@@ -483,9 +501,9 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     pulse_release_row, pulse_release_layout = _aligned_row("Pulse Release:")
     tab.blob_pulse_release_ms = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_pulse_release_ms.setMinimum(60)
-    tab.blob_pulse_release_ms.setMaximum(800)
+    tab.blob_pulse_release_ms.setMaximum(1500)
     blob_pulse_release_val = tab._default_int('spotify_visualizer', 'blob_pulse_release_ms', 220)
-    tab.blob_pulse_release_ms.setValue(max(60, min(800, blob_pulse_release_val)))
+    tab.blob_pulse_release_ms.setValue(max(60, min(1500, blob_pulse_release_val)))
     tab.blob_pulse_release_ms.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_pulse_release_ms.setTickInterval(50)
     tab.blob_pulse_release_ms.setToolTip("Controls how quickly reactive blob pulses fall away after a hit. Attack stays fast; this only shapes the release.")
@@ -523,12 +541,12 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     rw_row, rw_layout = _aligned_row("Reactive Wobble:")
     tab.blob_reactive_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_reactive_wobble.setMinimum(0)
-    tab.blob_reactive_wobble.setMaximum(200)
+    tab.blob_reactive_wobble.setMaximum(300)
     blob_rw_val = int(tab._default_float('spotify_visualizer', 'blob_reactive_wobble', 1.0) * 100)
-    tab.blob_reactive_wobble.setValue(max(0, min(200, blob_rw_val)))
+    tab.blob_reactive_wobble.setValue(max(0, min(300, blob_rw_val)))
     tab.blob_reactive_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_reactive_wobble.setTickInterval(25)
-    tab.blob_reactive_wobble.setToolTip("Energy-driven wobble amplitude.")
+    tab.blob_reactive_wobble.setToolTip("Energy-driven wobble amplitude, mostly for vocal-side motion.")
     tab.blob_reactive_wobble_label = QLabel(f"{tab.blob_reactive_wobble.value()}%")
     bind_setting_signal(
         tab,

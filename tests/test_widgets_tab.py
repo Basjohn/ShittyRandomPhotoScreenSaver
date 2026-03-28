@@ -729,24 +729,28 @@ def test_blob_pulse_controls_load_and_roundtrip(qt_app, settings_manager):
     try:
         widgets_cfg = settings_manager.get("widgets", {}) or {}
         spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
-        spotify_vis["blob_pulse_cap"] = 0.42
-        spotify_vis["blob_pulse_release_ms"] = 480
+        spotify_vis["blob_pulse_cap"] = 2.42
+        spotify_vis["blob_pulse_release_ms"] = 1280
+        spotify_vis["blob_glow_drive_mode"] = "vocal"
         settings_manager.set("widgets", widgets_cfg)
 
         tab._load_settings()
 
-        assert tab.blob_pulse_cap.value() == 42
-        assert tab.blob_pulse_cap_label.text() == "42%"
-        assert tab.blob_pulse_release_ms.value() == 480
-        assert tab.blob_pulse_release_ms_label.text() == "0.48s"
+        assert tab.blob_pulse_cap.value() == 242
+        assert tab.blob_pulse_cap_label.text() == "242%"
+        assert tab.blob_pulse_release_ms.value() == 1280
+        assert tab.blob_pulse_release_ms_label.text() == "1.28s"
+        assert tab.blob_glow_drive_mode.currentIndex() == 1
 
-        tab.blob_pulse_cap.setValue(65)
-        tab.blob_pulse_release_ms.setValue(260)
+        tab.blob_pulse_cap.setValue(265)
+        tab.blob_pulse_release_ms.setValue(1260)
+        tab.blob_glow_drive_mode.setCurrentIndex(0)
         tab._save_settings_now()
 
         saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
-        assert saved.get("blob_pulse_cap") == pytest.approx(0.65)
-        assert saved.get("blob_pulse_release_ms") == 260
+        assert saved.get("blob_pulse_cap") == pytest.approx(2.65)
+        assert saved.get("blob_pulse_release_ms") == 1260
+        assert saved.get("blob_glow_drive_mode") == "bass"
     finally:
         tab.deleteLater()
 

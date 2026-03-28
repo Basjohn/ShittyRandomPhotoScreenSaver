@@ -128,6 +128,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_reactivity: float = 1.0
         self._blob_glow_max_size: float = 1.0
         self._blob_reactive_glow: bool = True
+        self._blob_glow_drive_mode: str = "bass"
         self._blob_reactive_deformation: float = 1.0
         self._blob_stage_gain: float = 1.0
         self._blob_core_scale: float = 1.0
@@ -141,6 +142,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_inner: float = 0.5
         self._blob_stretch_outer: float = 0.5
         self._blob_smoothed_energy: float = 0.0
+        self._blob_glow_energy: float = 0.0
         self._blob_raw_bass_energy: float = 0.0
         self._blob_raw_mid_energy: float = 0.0
         self._blob_raw_high_energy: float = 0.0
@@ -357,6 +359,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_smoothed_energy = 0.0
         else:
             self._blob_smoothed_energy = 0.0
+        self._blob_glow_energy = 0.0
         self._blob_raw_bass_energy = 0.0
         self._blob_raw_mid_energy = 0.0
         self._blob_raw_high_energy = 0.0
@@ -421,6 +424,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_size: float = 1.0,
         blob_glow_intensity: float = 0.5,
         blob_reactive_glow: bool = True,
+        blob_glow_drive_mode: str = "bass",
         blob_reactive_deformation: float = 1.0,
         blob_stage_gain: float = 1.0,
         blob_core_scale: float = 1.0,
@@ -618,6 +622,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     else:
                         alpha = min(1.0, blob_dt / 0.35)
                     self._blob_smoothed_energy = prev + (se_input - prev) * alpha
+                    glow_prev = float(getattr(self, "_blob_glow_energy", prev) or 0.0)
+                    if getattr(self, "_blob_glow_drive_mode", "bass") == "vocal":
+                        glow_input = min(1.5, live_mid * 0.82 + live_high * 0.18 + live_overall * 0.06)
+                    else:
+                        glow_input = min(1.5, live_bass * 0.88 + live_overall * 0.16)
+                    if glow_input > glow_prev:
+                        glow_alpha = min(1.0, blob_dt / 0.040)
+                    else:
+                        glow_alpha = min(1.0, blob_dt / 0.44)
+                    self._blob_glow_energy = glow_prev + (glow_input - glow_prev) * glow_alpha
                     self._blob_live_bass_energy = live_bass
                     self._blob_live_mid_energy = live_mid
                     self._blob_live_high_energy = live_high
@@ -890,17 +904,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_reactivity = max(0.0, min(2.0, float(blob_glow_reactivity)))
         self._blob_glow_max_size = max(0.1, min(3.0, float(blob_glow_max_size)))
         self._blob_reactive_glow = bool(blob_reactive_glow)
-        self._blob_reactive_deformation = max(0.0, min(2.0, float(blob_reactive_deformation)))
+        _blob_glow_drive_mode = str(blob_glow_drive_mode).strip().lower()
+        self._blob_glow_drive_mode = _blob_glow_drive_mode if _blob_glow_drive_mode in {"bass", "vocal"} else "bass"
+        self._blob_reactive_deformation = max(0.0, min(3.0, float(blob_reactive_deformation)))
         self._blob_stage_gain = max(0.0, min(2.0, float(blob_stage_gain)))
         self._blob_core_scale = max(0.25, min(2.5, float(blob_core_scale)))
         self._blob_core_floor_bias = max(0.0, min(0.6, float(blob_core_floor_bias)))
         self._blob_stage_bias = max(-0.60, min(0.60, float(blob_stage_bias)))
         self._blob_stage2_release_ms = max(50.0, min(5000.0, float(blob_stage2_release_ms)))
         self._blob_stage3_release_ms = max(50.0, min(5000.0, float(blob_stage3_release_ms)))
-        self._blob_pulse_cap = max(0.0, min(2.0, float(blob_pulse_cap)))
-        self._blob_pulse_release_ms = max(60.0, min(800.0, float(blob_pulse_release_ms)))
+        self._blob_pulse_cap = max(0.0, min(3.0, float(blob_pulse_cap)))
+        self._blob_pulse_release_ms = max(60.0, min(1500.0, float(blob_pulse_release_ms)))
         self._blob_constant_wobble = max(0.0, min(2.0, float(blob_constant_wobble)))
-        self._blob_reactive_wobble = max(0.0, min(2.0, float(blob_reactive_wobble)))
+        self._blob_reactive_wobble = max(0.0, min(3.0, float(blob_reactive_wobble)))
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
         self._blob_stretch_inner = max(0.0, min(1.0, float(blob_stretch_inner)))
         self._blob_stretch_outer = max(0.0, min(1.0, float(blob_stretch_outer)))
@@ -1432,8 +1448,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 alpha = min(1.0, dt / rise_tau)
             else:
                 decay_tau = decay_taus[idx] if idx < len(decay_taus) else 0.65
+                if new_val <= 0.02:
+                    decay_tau *= (0.55, 0.72, 0.72)[idx]
                 alpha = min(1.0, dt / decay_tau)
             filtered.append(prev_val + (new_val - prev_val) * alpha)
+        filtered[1] = min(filtered[1], filtered[0])
+        filtered[2] = min(filtered[2], filtered[1])
         return (filtered[0], filtered[1], filtered[2])
 
     def _compute_blob_smoothing_dt(self, dt_seconds: float) -> float:
@@ -1880,7 +1900,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_sensitivity", "u_smoothing",
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
-                    "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_peak_energy",
+                    "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_glow_energy", "u_blob_peak_energy",
                     "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
                     "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
                     "u_blob_stretch_tendency", "u_blob_stretch_inner", "u_blob_stretch_outer",

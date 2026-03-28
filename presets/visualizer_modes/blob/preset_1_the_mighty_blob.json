@@ -1,19 +1,11 @@
 {
+  "description": "Saved from current Settings state.",
   "mode": "blob",
   "name": "Preset 1 (The Mighty Blob)",
   "preset_index": 0,
-  "visualizer_preset_override": true,
-  "visualizer_preset_mode": "blob",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "monitor": "ALL",
-        "bar_fill_color": [
-          0,
-          0,
-          0,
-          130
-        ],
         "bar_border_color": [
           255,
           255,
@@ -21,72 +13,81 @@
           255
         ],
         "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          0,
+          0,
+          0,
+          130
+        ],
+        "blob_adaptive_sensitivity": false,
+        "blob_agc_strength": 0.2,
+        "blob_audio_block_size": 128,
+        "blob_bar_count": 35,
         "blob_color": [
           0,
           105,
           243,
           230
         ],
-        "blob_glow_color": [
-          3,
-          104,
-          255,
-          180
-        ],
+        "blob_constant_wobble": 0.15,
+        "blob_core_floor_bias": 0.6,
+        "blob_core_scale": 1.1,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
         "blob_edge_color": [
           208,
           223,
           255,
           215
         ],
+        "blob_ghost_alpha": 0.15,
+        "blob_ghost_decay": 0.35,
+        "blob_ghosting_enabled": true,
+        "blob_glow_color": [
+          3,
+          104,
+          255,
+          180
+        ],
+        "blob_glow_drive_mode": "vocal",
+        "blob_glow_intensity": 0.6,
+        "blob_glow_max_size": 1.75,
+        "blob_glow_reactivity": 1.75,
+        "blob_growth": 5.0,
+        "blob_input_gain": 0.8,
+        "blob_kick_lane_gain": 1.25,
+        "blob_manual_floor": 0.15,
         "blob_outline_color": [
           84,
           150,
           255,
           225
         ],
-        "blob_pulse": 1.18,
-        "blob_width": 1.0,
-        "blob_size": 0.5,
-        "blob_glow_intensity": 0.7,
-        "blob_reactive_glow": true,
-        "blob_stage_gain": 0.67,
-        "blob_core_scale": 1.1,
-        "blob_core_floor_bias": 0.6,
-        "blob_stage_bias": -0.17,
-        "blob_stage2_release_ms": 603,
-        "blob_stage3_release_ms": 503,
-        "blob_growth": 5.0,
-        "blob_reactive_deformation": 1.23,
-        "blob_constant_wobble": 0.15,
-        "blob_reactive_wobble": 2.0,
-        "blob_stretch_tendency": 0.1,
-        "blob_stretch_inner": 0.0,
-        "blob_stretch_outer": 0.61,
-        "blob_glow_reactivity": 1.63,
-        "blob_glow_max_size": 1.65,
-        "blob_ghosting_enabled": true,
-        "blob_ghost_alpha": 0.15,
-        "blob_ghost_decay": 0.35,
-        "blob_dynamic_floor": true,
-        "blob_manual_floor": 0.15,
-        "blob_dynamic_range_enabled": false,
-        "blob_agc_strength": 0.2,
-        "blob_input_gain": 0.8,
-        "blob_kick_lane_gain": 1.25,
-        "blob_transient_pulse_gain": 1.0,
-        "blob_transient_clamp": 1.6,
-        "blob_audio_block_size": 128,
-        "blob_adaptive_sensitivity": false,
-        "blob_sensitivity": 0.42,
-        "blob_bar_count": 35,
-        "blob_transient_mix_bass": 0.35,
-        "blob_transient_mix_vocal": 0.3,
+        "blob_pulse": 0.43,
         "blob_rainbow_enabled": true,
         "blob_rainbow_speed": 0.15,
-        "mode": "blob"
+        "blob_reactive_deformation": 1.0,
+        "blob_reactive_glow": true,
+        "blob_reactive_wobble": 2.25,
+        "blob_sensitivity": 0.42,
+        "blob_size": 0.5,
+        "blob_stage2_release_ms": 603,
+        "blob_stage3_release_ms": 503,
+        "blob_stage_bias": -0.1,
+        "blob_stage_gain": 0.67,
+        "blob_stretch_inner": 0.0,
+        "blob_stretch_outer": 0.55,
+        "blob_stretch_tendency": 0.1,
+        "blob_transient_clamp": 1.6,
+        "blob_transient_mix_bass": 0.35,
+        "blob_transient_mix_vocal": 0.3,
+        "blob_transient_pulse_gain": 1.0,
+        "blob_width": 1.0,
+        "mode": "blob",
+        "monitor": "ALL"
       }
     }
   },
-  "description": "Saved from current Settings state."
+  "visualizer_preset_mode": "blob",
+  "visualizer_preset_override": true
 }

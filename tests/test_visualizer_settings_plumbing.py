@@ -419,6 +419,7 @@ class TestConfigApplier:
         class DummyWidget:
             _blob_pulse_cap = 1.0
             _blob_pulse_release_ms = 220.0
+            _blob_glow_drive_mode = "bass"
 
             def __getattr__(self, name):
                 if "color" in name or "tint" in name:
@@ -433,15 +434,18 @@ class TestConfigApplier:
 
         widget = DummyWidget()
         apply_vis_mode_kwargs(widget, {
-            "blob_pulse_cap": 0.75,
-            "blob_pulse_release_ms": 320.0,
+            "blob_pulse_cap": 2.45,
+            "blob_pulse_release_ms": 1320.0,
+            "blob_glow_drive_mode": "vocal",
         })
         extra = build_gpu_push_extra_kwargs(widget, "blob", None)
 
-        assert widget._blob_pulse_cap == pytest.approx(0.75)
-        assert widget._blob_pulse_release_ms == pytest.approx(320.0)
-        assert extra["blob_pulse_cap"] == pytest.approx(0.75)
-        assert extra["blob_pulse_release_ms"] == pytest.approx(320.0)
+        assert widget._blob_pulse_cap == pytest.approx(2.45)
+        assert widget._blob_pulse_release_ms == pytest.approx(1320.0)
+        assert widget._blob_glow_drive_mode == "vocal"
+        assert extra["blob_pulse_cap"] == pytest.approx(2.45)
+        assert extra["blob_pulse_release_ms"] == pytest.approx(1320.0)
+        assert extra["blob_glow_drive_mode"] == "vocal"
 
     def test_blob_gpu_push_includes_floor_snapshot_from_engine(self):
         from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
@@ -1831,6 +1835,13 @@ class TestBlobSettingsBinding:
             def setText(self, text):
                 self.text = text
 
+        class _Combo:
+            def __init__(self):
+                self.index = None
+
+            def setCurrentIndex(self, index):
+                self.index = index
+
         class _Tab:
             def __init__(self):
                 self.blob_ghost_enabled = _Check()
@@ -1844,6 +1855,7 @@ class TestBlobSettingsBinding:
                 self.blob_stage_bias_label = _Label()
                 self.blob_pulse_release_ms = _Slider()
                 self.blob_pulse_release_ms_label = _Label()
+                self.blob_glow_drive_mode = _Combo()
                 self.blob_growth = _Slider()
                 self.blob_growth_label = _Label()
 
@@ -1856,6 +1868,9 @@ class TestBlobSettingsBinding:
             def _config_int(self, _section, config, key, default):
                 return config.get(key, default)
 
+            def _config_str(self, _section, config, key, default):
+                return config.get(key, default)
+
         tab = _Tab()
         synced = []
         load_blob_mode_settings(
@@ -1866,7 +1881,8 @@ class TestBlobSettingsBinding:
                 "blob_ghost_decay": 0.44,
                 "blob_pulse": 1.23,
                 "blob_stage_bias": -0.18,
-                "blob_pulse_release_ms": 410,
+                "blob_pulse_release_ms": 1210,
+                "blob_glow_drive_mode": "vocal",
                 "blob_growth": 3.10,
                 "blob_color": [1, 2, 3, 4],
             },
@@ -1882,8 +1898,9 @@ class TestBlobSettingsBinding:
         assert tab.blob_pulse_label.text == "1.23x"
         assert tab.blob_stage_bias.value == -18
         assert tab.blob_stage_bias_label.text == "-0.18"
-        assert tab.blob_pulse_release_ms.value == 410
-        assert tab.blob_pulse_release_ms_label.text == "0.41s"
+        assert tab.blob_pulse_release_ms.value == 1210
+        assert tab.blob_pulse_release_ms_label.text == "1.21s"
+        assert tab.blob_glow_drive_mode.index == 1
         assert tab.blob_growth.value == 310
         assert tab.blob_growth_label.text == "3.1x"
         assert (tab._blob_color.red(), tab._blob_color.green(), tab._blob_color.blue(), tab._blob_color.alpha()) == (1, 2, 3, 4)
@@ -1911,6 +1928,13 @@ class TestBlobSettingsBinding:
             def value(self):
                 return self._value
 
+        class _Combo:
+            def __init__(self, index):
+                self._index = index
+
+            def currentIndex(self):
+                return self._index
+
         class _Tab:
             blob_ghost_enabled = _Check(True)
             blob_ghost_opacity = _Slider(45)
@@ -1920,11 +1944,12 @@ class TestBlobSettingsBinding:
             blob_size = _Slider(135)
             blob_glow_intensity = _Slider(67)
             blob_glow_reactivity = _Slider(123)
+            blob_glow_drive_mode = _Combo(1)
             blob_glow_max_size = _Slider(210)
             blob_reactive_glow = _Check(True)
             blob_reactive_deformation = _Slider(88)
-            blob_pulse_cap = _Slider(76)
-            blob_pulse_release_ms = _Slider(330)
+            blob_pulse_cap = _Slider(276)
+            blob_pulse_release_ms = _Slider(1330)
             blob_stage_gain = _Slider(111)
             blob_core_scale = _Slider(95)
             blob_core_floor_bias = _Slider(27)
@@ -1932,7 +1957,7 @@ class TestBlobSettingsBinding:
             blob_stage2_release_ms = _Slider(1200)
             blob_stage3_release_ms = _Slider(1500)
             blob_constant_wobble = _Slider(80)
-            blob_reactive_wobble = _Slider(90)
+            blob_reactive_wobble = _Slider(290)
             blob_stretch_tendency = _Slider(55)
             blob_stretch_inner = _Slider(62)
             blob_stretch_outer = _Slider(48)
@@ -1948,10 +1973,14 @@ class TestBlobSettingsBinding:
         assert payload["blob_ghost_alpha"] == pytest.approx(0.45)
         assert payload["blob_ghost_decay"] == pytest.approx(0.38)
         assert payload["blob_pulse"] == pytest.approx(1.4)
+        assert payload["blob_glow_drive_mode"] == "vocal"
         assert payload["blob_color"] == [10, 20, 30, 200]
         assert payload["blob_glow_color"] == [40, 50, 60, 210]
         assert payload["blob_edge_color"] == [70, 80, 90, 220]
         assert payload["blob_outline_color"] == [100, 110, 120, 230]
+        assert payload["blob_pulse_cap"] == pytest.approx(2.76)
+        assert payload["blob_pulse_release_ms"] == 1330
+        assert payload["blob_reactive_wobble"] == pytest.approx(2.90)
         assert payload["blob_stage_bias"] == pytest.approx(-0.14)
         assert payload["blob_growth"] == pytest.approx(2.75)
 

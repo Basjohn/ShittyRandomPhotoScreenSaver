@@ -75,6 +75,11 @@ def load_blob_mode_settings(
         blob_glow_reactivity = int(tab._config_float("spotify_visualizer", config, "blob_glow_reactivity", 1.0) * 100)
         tab.blob_glow_reactivity.setValue(max(0, min(200, blob_glow_reactivity)))
         tab.blob_glow_reactivity_label.setText(f"{blob_glow_reactivity}%")
+    if hasattr(tab, "blob_glow_drive_mode"):
+        glow_drive = str(
+            tab._config_str("spotify_visualizer", config, "blob_glow_drive_mode", "bass")
+        ).strip().lower()
+        tab.blob_glow_drive_mode.setCurrentIndex(1 if glow_drive == "vocal" else 0)
     if hasattr(tab, "blob_glow_max_size"):
         blob_glow_max_size = int(tab._config_float("spotify_visualizer", config, "blob_glow_max_size", 1.0) * 100)
         tab.blob_glow_max_size.setValue(max(10, min(300, blob_glow_max_size)))
@@ -91,11 +96,11 @@ def load_blob_mode_settings(
         tab.blob_reactive_deformation_label.setText(f"{blob_reactive_deformation}%")
     if hasattr(tab, "blob_pulse_cap"):
         blob_pulse_cap = int(tab._config_float("spotify_visualizer", config, "blob_pulse_cap", 1.0) * 100)
-        tab.blob_pulse_cap.setValue(max(0, min(200, blob_pulse_cap)))
+        tab.blob_pulse_cap.setValue(max(0, min(300, blob_pulse_cap)))
         tab.blob_pulse_cap_label.setText(f"{blob_pulse_cap}%")
     if hasattr(tab, "blob_pulse_release_ms"):
         blob_pulse_release_ms = tab._config_int("spotify_visualizer", config, "blob_pulse_release_ms", 220)
-        blob_pulse_release_ms = max(60, min(800, blob_pulse_release_ms))
+        blob_pulse_release_ms = max(60, min(1500, blob_pulse_release_ms))
         tab.blob_pulse_release_ms.setValue(blob_pulse_release_ms)
         tab.blob_pulse_release_ms_label.setText(f"{blob_pulse_release_ms / 1000:.2f}s")
     if hasattr(tab, "blob_core_scale"):
@@ -131,7 +136,7 @@ def load_blob_mode_settings(
         tab.blob_constant_wobble_label.setText(f"{blob_constant_wobble}%")
     if hasattr(tab, "blob_reactive_wobble"):
         blob_reactive_wobble = int(tab._config_float("spotify_visualizer", config, "blob_reactive_wobble", 1.0) * 100)
-        tab.blob_reactive_wobble.setValue(max(0, min(200, blob_reactive_wobble)))
+        tab.blob_reactive_wobble.setValue(max(0, min(300, blob_reactive_wobble)))
         tab.blob_reactive_wobble_label.setText(f"{blob_reactive_wobble}%")
     if hasattr(tab, "blob_stretch_tendency"):
         blob_stretch_tendency = int(tab._config_float("spotify_visualizer", config, "blob_stretch_tendency", 0.35) * 100)
@@ -169,6 +174,11 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
         "blob_size": (tab.blob_size.value() if hasattr(tab, "blob_size") else 100) / 100.0,
         "blob_glow_intensity": (tab.blob_glow_intensity.value() if hasattr(tab, "blob_glow_intensity") else 50) / 100.0,
         "blob_glow_reactivity": (tab.blob_glow_reactivity.value() if hasattr(tab, "blob_glow_reactivity") else 100) / 100.0,
+        "blob_glow_drive_mode": (
+            "vocal"
+            if hasattr(tab, "blob_glow_drive_mode") and tab.blob_glow_drive_mode.currentIndex() == 1
+            else "bass"
+        ),
         "blob_glow_max_size": (tab.blob_glow_max_size.value() if hasattr(tab, "blob_glow_max_size") else 100) / 100.0,
         "blob_reactive_glow": tab.blob_reactive_glow.isChecked() if hasattr(tab, "blob_reactive_glow") else False,
         "blob_reactive_deformation": (

@@ -49,6 +49,7 @@
           255,
           192
         ],
+        "blob_glow_drive_mode": "bass",
         "blob_glow_intensity": 0.42,
         "blob_glow_max_size": 0.8,
         "blob_glow_reactivity": 0.9,

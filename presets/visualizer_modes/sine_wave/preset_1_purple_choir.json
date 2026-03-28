@@ -1,8 +1,8 @@
 {
   "description": "Saved from Custom preset in Settings.",
   "mode": "sine_wave",
-  "name": "Preset 3 (Purple Choir)",
-  "preset_index": 2,
+  "name": "Preset 1 (Purple Choir)",
+  "preset_index": 0,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {

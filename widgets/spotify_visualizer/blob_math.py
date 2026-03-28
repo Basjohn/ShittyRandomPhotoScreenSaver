@@ -80,6 +80,8 @@ def compute_stage_progress(
     stage1_t = _smoothstep(0.08, 0.34, weighted_stage1)
     stage2_t = _smoothstep(0.16, 0.42, stage2_drive)
     stage3_t = _smoothstep(0.24, 0.52, chorus_drive)
+    stage2_t = min(stage2_t, stage1_t)
+    stage3_t = min(stage3_t, stage2_t)
     return (stage1_t, stage2_t, stage3_t)
 
 

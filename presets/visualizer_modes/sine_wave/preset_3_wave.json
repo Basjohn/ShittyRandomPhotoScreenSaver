@@ -1,8 +1,8 @@
 {
   "description": "Saved from Custom preset in Settings.",
   "mode": "sine_wave",
-  "name": "Preset 1 (Wave)",
-  "preset_index": 0,
+  "name": "Preset 3 (Wave)",
+  "preset_index": 2,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {

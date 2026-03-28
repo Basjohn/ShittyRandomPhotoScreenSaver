@@ -11,7 +11,7 @@ def get_uniform_names() -> list[str]:
         "u_blob_pulse", "u_blob_width", "u_blob_size",
         "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
         "u_blob_reactive_glow", "u_blob_outline_color",
-        "u_blob_smoothed_energy", "u_blob_peak_energy",
+        "u_blob_smoothed_energy", "u_blob_glow_energy", "u_blob_peak_energy",
         "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
         "u_blob_reactive_deformation", "u_blob_stage_gain",
         "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias",
@@ -55,6 +55,7 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_blob_peak_high", s._blob_peak_high)
     _set1f(gl, u, "u_blob_peak_overall", s._blob_peak_overall)
     _set1f(gl, u, "u_blob_reactive_deformation", s._blob_reactive_deformation)
+    _set1f(gl, u, "u_blob_glow_energy", getattr(s, "_blob_glow_energy", s._blob_smoothed_energy))
     _set1f(gl, u, "u_blob_stage_gain", s._blob_stage_gain)
     _set1f(gl, u, "u_blob_core_scale", s._blob_core_scale)
     _set1f(gl, u, "u_blob_core_floor_bias", s._blob_core_floor_bias)

@@ -17,6 +17,7 @@ def _push_blob_frame(
     snare: float = 0.0,
     blob_pulse_cap: float = 1.0,
     blob_pulse_release_ms: float = 220.0,
+    blob_glow_drive_mode: str = "bass",
 ) -> None:
     overlay._last_time_ts = time.time() - dt
     overlay.set_state(
@@ -35,6 +36,7 @@ def _push_blob_frame(
         blob_snare_event_strength=snare,
         blob_pulse_cap=blob_pulse_cap,
         blob_pulse_release_ms=blob_pulse_release_ms,
+        blob_glow_drive_mode=blob_glow_drive_mode,
     )
 
 
@@ -367,6 +369,26 @@ def test_blob_pulse_release_slows_decay_without_slowing_attack(qt_app):
     assert slow_release > fast_release
 
 
+@pytest.mark.qt
+def test_blob_glow_drive_mode_can_follow_vocal_energy(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    bass_overlay = SpotifyBarsGLOverlay(None)
+    bass_overlay._vis_mode = "blob"
+    vocal_overlay = SpotifyBarsGLOverlay(None)
+    vocal_overlay._vis_mode = "blob"
+
+    calm = SimpleNamespace(bass=0.05, mid=0.06, high=0.03, overall=0.05)
+    vocal_phrase = SimpleNamespace(bass=0.06, mid=0.36, high=0.20, overall=0.18)
+
+    _push_blob_frame(bass_overlay, dt=0.016, energy=calm, blob_glow_drive_mode="bass")
+    _push_blob_frame(vocal_overlay, dt=0.016, energy=calm, blob_glow_drive_mode="vocal")
+    _push_blob_frame(bass_overlay, dt=0.016, energy=vocal_phrase, blob_glow_drive_mode="bass")
+    _push_blob_frame(vocal_overlay, dt=0.016, energy=vocal_phrase, blob_glow_drive_mode="vocal")
+
+    assert vocal_overlay._blob_glow_energy > bass_overlay._blob_glow_energy * 1.35
+
+
 def test_blob_negative_stage_bias_softens_stage_without_flattening_valid_bass_support():
     from widgets.spotify_visualizer.blob_math import compute_stage_progress
 
@@ -436,6 +458,20 @@ def test_blob_stage1_decay_does_not_leave_size_parked(qt_app):
 
     assert decayed[0] < 0.70
     assert decayed[0] > 0.18
+
+
+@pytest.mark.qt
+def test_blob_stage_filter_keeps_ladder_order_during_decay(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._blob_stage_progress_ready = True
+    overlay._blob_stage_progress_filtered = (0.70, 0.80, 0.71)
+
+    decayed = overlay._filter_stage_progress((0.16, 0.0, 0.0), 0.020)
+
+    assert decayed[1] <= decayed[0]
+    assert decayed[2] <= decayed[1]
 
 
 @pytest.mark.qt

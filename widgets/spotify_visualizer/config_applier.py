@@ -37,6 +37,11 @@ def _normalize_direction(value: Any, default: str = "top_left") -> str:
     return val if val in valid else default
 
 
+def _normalize_blob_glow_drive_mode(value: Any, default: str = "bass") -> str:
+    val = str(value).strip().lower()
+    return val if val in {"bass", "vocal"} else default
+
+
 def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     """Apply per-mode keyword settings to *widget*.
 
@@ -122,12 +127,14 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_glow_max_size = max(0.1, min(3.0, float(kwargs['blob_glow_max_size'])))
     if 'blob_reactive_glow' in kwargs:
         widget._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
+    if 'blob_glow_drive_mode' in kwargs:
+        widget._blob_glow_drive_mode = _normalize_blob_glow_drive_mode(kwargs['blob_glow_drive_mode'])
     if 'blob_reactive_deformation' in kwargs:
         widget._blob_reactive_deformation = max(0.0, min(3.0, float(kwargs['blob_reactive_deformation'])))
     if 'blob_pulse_cap' in kwargs:
-        widget._blob_pulse_cap = max(0.0, min(2.0, float(kwargs['blob_pulse_cap'])))
+        widget._blob_pulse_cap = max(0.0, min(3.0, float(kwargs['blob_pulse_cap'])))
     if 'blob_pulse_release_ms' in kwargs:
-        widget._blob_pulse_release_ms = max(60.0, min(800.0, float(kwargs['blob_pulse_release_ms'])))
+        widget._blob_pulse_release_ms = max(60.0, min(1500.0, float(kwargs['blob_pulse_release_ms'])))
     if 'blob_stage_gain' in kwargs:
         widget._blob_stage_gain = max(0.0, min(2.0, float(kwargs['blob_stage_gain'])))
     if 'blob_core_scale' in kwargs:
@@ -143,7 +150,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'blob_constant_wobble' in kwargs:
         widget._blob_constant_wobble = max(0.0, min(2.0, float(kwargs['blob_constant_wobble'])))
     if 'blob_reactive_wobble' in kwargs:
-        widget._blob_reactive_wobble = max(0.0, min(2.0, float(kwargs['blob_reactive_wobble'])))
+        widget._blob_reactive_wobble = max(0.0, min(3.0, float(kwargs['blob_reactive_wobble'])))
     if 'blob_stretch_tendency' in kwargs:
         widget._blob_stretch_tendency = max(0.0, min(1.0, float(kwargs['blob_stretch_tendency'])))
     if 'blob_stretch_inner' in kwargs:
@@ -660,6 +667,9 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_glow_reactivity'] = getattr(widget, '_blob_glow_reactivity', 1.0)
     extra['blob_glow_max_size'] = getattr(widget, '_blob_glow_max_size', 1.0)
     extra['blob_reactive_glow'] = widget._blob_reactive_glow
+    extra['blob_glow_drive_mode'] = _normalize_blob_glow_drive_mode(
+        getattr(widget, '_blob_glow_drive_mode', 'bass')
+    )
     extra['blob_reactive_deformation'] = widget._blob_reactive_deformation
     extra['blob_pulse_cap'] = getattr(widget, '_blob_pulse_cap', 1.0)
     extra['blob_pulse_release_ms'] = getattr(widget, '_blob_pulse_release_ms', 220.0)

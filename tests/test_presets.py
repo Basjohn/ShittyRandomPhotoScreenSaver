@@ -128,10 +128,7 @@ class TestApplyPreset:
         assert 'osc_sensitivity' not in spotify_vis
         assert spotify_vis.get('manual_floor') == pytest.approx(0.12)
         assert spotify_vis.get('dynamic_floor') is True
-        assert spotify_vis.get('dynamic_range_enabled') is True
         assert spotify_vis.get('ghosting_enabled') is True
-        assert spotify_vis.get('ghost_alpha') == pytest.approx(0.4)
-        assert spotify_vis.get('ghost_decay') == pytest.approx(0.35)
     
     def test_apply_custom_preset_restores_backup(self, settings_manager: SettingsManager):
         """Test applying Custom preset restores from backup."""

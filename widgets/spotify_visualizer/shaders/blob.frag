@@ -24,6 +24,7 @@ uniform float u_blob_size;   // 0.3..2.0  relative blob scale (default 1.0)
 uniform float u_blob_glow_intensity;  // 0..1  glow size/strength (default 0.5)
 uniform int u_blob_reactive_glow;  // 0 = static glow, 1 = energy-reactive
 uniform float u_blob_smoothed_energy;  // CPU-side smoothed energy (reduces flicker)
+uniform float u_blob_glow_energy;  // CPU-side smoothed glow drive (bass or vocal depending on mode)
 uniform float u_blob_reactive_deformation;  // 0..2 scales outward energy growth (default 1.0)
 uniform float u_blob_stage_gain;  // 0..2 multiplier for staged core sizing
 uniform float u_blob_core_scale;  // 0.25..2.5 post-stage scaling of the core radius
@@ -116,6 +117,8 @@ vec3 compute_stage_progress_values(
     float stage1_t = smoothstep(0.08, 0.34, weighted_stage1);
     float stage2_t = smoothstep(0.16, 0.42, stage2_drive);
     float stage3_t = smoothstep(0.24, 0.52, chorus_drive);
+    stage2_t = min(stage2_t, stage1_t);
+    stage3_t = min(stage3_t, stage2_t);
 
     return vec3(stage1_t, stage2_t, stage3_t);
 }
@@ -204,7 +207,7 @@ float blob_sdf_ex(vec2 p, float time,
 
     float rd = clamp(u_blob_reactive_deformation, 0.0, 3.0);
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
-    float rw = clamp(u_blob_reactive_wobble, 0.0, 2.0);
+    float rw = clamp(u_blob_reactive_wobble, 0.0, 3.0);
     float st = clamp(u_blob_stretch_tendency, 0.0, 1.0);
     float s_inner = clamp(u_blob_stretch_inner, 0.0, 1.0);
     float s_outer = clamp(u_blob_stretch_outer, 0.0, 1.0);
@@ -219,15 +222,15 @@ float blob_sdf_ex(vec2 p, float time,
     wobble_component += sin(angle * 1.0 + time * 0.2)  * 0.040 * cw;
 
     // Reactive wobble — energy-driven shape distortion.
-    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.082 * e_mid * rw;
-    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.054 * e_mid * rw;
-    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.010 * e_high * rw;
-    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.005 * e_high * rw;
+    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.090 * e_mid * rw;
+    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.060 * e_mid * rw;
+    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.008 * e_high * rw;
+    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.004 * e_high * rw;
 
     // Vocal emphasis — mid-range creates broad amorphous lobes.
     float vocal = clamp(e_mid, 0.0, 1.0);
-    wobble_component += sin(angle * 2.0 + time * 0.9)  * 0.105 * vocal * rw;
-    wobble_component += sin(angle * 4.0 - time * 1.1)  * 0.074 * vocal * vocal * rw;
+    wobble_component += sin(angle * 2.0 + time * 0.9)  * 0.132 * vocal * rw;
+    wobble_component += sin(angle * 4.0 - time * 1.1)  * 0.092 * vocal * vocal * rw;
 
     float stretch_component = 0.0;
     if (st > 0.01) {
@@ -345,7 +348,7 @@ void main() {
     float g_max = clamp(u_blob_glow_max_size, 0.1, 3.0);
     if (u_blob_reactive_glow == 1) {
         // Use CPU-smoothed energy to prevent glow flickering
-        float e = u_blob_smoothed_energy;
+        float e = clamp(u_blob_glow_energy, 0.0, 1.5);
         // Reactivity scales the energy contribution; max_size scales the sigma cap.
         float e_scaled = e * g_react;
         glow_sigma = ((1.5 + gi * 5.0) + e_scaled * e_scaled * (20.0 + gi * 40.0)) * g_max;
