@@ -431,7 +431,13 @@ def _ensure_backup(path: Path) -> Path:
 
 
 def _reindex_preset_name(original_name: str, target_index: int) -> str:
-    """Update only the 'Preset N' prefix number; preserve everything else verbatim."""
+    """Update only the 'Preset N' prefix number; preserve everything else verbatim.
+
+    For names that already start with 'Preset N', only the number is replaced.
+    For markerless names (no 'Preset N' prefix), the name is wrapped as
+    'Preset N (OriginalName)' so the result is consistent with the canonical
+    format while keeping the original descriptive text intact.
+    """
     if not original_name:
         return f"Preset {target_index + 1}"
     updated = re.sub(
@@ -441,7 +447,7 @@ def _reindex_preset_name(original_name: str, target_index: int) -> str:
     )
     if updated != original_name:
         return updated
-    return original_name
+    return f"Preset {target_index + 1} ({original_name})"
 
 
 def _cleanup_suffix_text(value: str | None) -> str | None:
@@ -530,14 +536,22 @@ def _canonical_reindexed_payload(entry: ReindexEntry, target_index: int) -> Dict
 
 
 def _canonical_reindexed_path(mode_dir: Path, entry: ReindexEntry, target_index: int) -> Path:
-    """Build the target path for a reindexed preset, preserving the original file suffix verbatim."""
+    """Build the target path for a reindexed preset, preserving the original file suffix verbatim.
+
+    Three cases:
+    - ``preset_N_some_suffix.json``  → ``preset_M_some_suffix.json`` (suffix preserved verbatim)
+    - ``preset_N.json``              → ``preset_M.json``             (no suffix)
+    - ``markerless.json``            → ``preset_M_markerless.json``  (stem used as suffix)
+    """
     stem = entry.path.stem
     suffix_match = re.match(r"^preset[\s_-]*\d+[\s_-]+(.+)$", stem, flags=re.IGNORECASE)
     if suffix_match:
         file_suffix = suffix_match.group(1)
         filename = f"preset_{target_index + 1}_{file_suffix}.json"
-    else:
+    elif re.match(r"^preset[\s_-]*\d+$", stem, flags=re.IGNORECASE):
         filename = f"preset_{target_index + 1}.json"
+    else:
+        filename = f"preset_{target_index + 1}_{stem}.json"
     return mode_dir / filename
 
 
