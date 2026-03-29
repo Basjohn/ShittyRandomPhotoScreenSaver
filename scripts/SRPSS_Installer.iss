@@ -13,7 +13,7 @@
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
 AppName=ShittyRandomPhotoScreenSaver
-AppVersion=3.1.5
+AppVersion=3.2.0
 AppPublisher=Jayde Ver Elst
 DefaultDirName={commonpf}\SRPSS
 DefaultGroupName=ShittyRandomPhotoScreenSaver
@@ -26,7 +26,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=3.1.5
+VersionInfoVersion=3.2.0
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -44,6 +44,10 @@ Source: ".\..\images\icons8-musicbee-96.png"; DestDir: "{app}\images"; Flags: ig
 ; Reddit helper watcher (placed at install time, not runtime-extracted)
 Source: ".\..\release\helpers\SRPSS_RedditHelper.exe"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: ignoreversion
 
+; Authoritative curated visualizer presets shipped directly from the repository tree.
+; Delivered to a stable ProgramData path so upgrades always clean-replace them.
+Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+
 [InstallDelete]
 ; Remove any legacy SRPSS screen saver binaries that can cause duplicate
 ; entries in the Windows Screen Saver dropdown before installing the
@@ -51,13 +55,18 @@ Source: ".\..\release\helpers\SRPSS_RedditHelper.exe"; DestDir: "{commonappdata}
 Type: files; Name: "{sys}\\Sprss.scr"
 Type: files; Name: "{sys}\\PSrpss.scr"
 Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
+; Wipe old shipped curated presets before the new ones land so stale/renamed
+; files are never left behind alongside the authoritative replacement set.
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 
 [Registry]
 ; Set SRPSS.scr as the current user's active screensaver
 Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS.scr"; Flags: uninsdeletevalue
 
-; Start the Reddit helper watcher on user login
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; ValueType: string; ValueData: """{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"" --watch --queue ""{commonappdata}\SRPSS\url_queue"""; Flags: uninsdeletevalue
+; Start the Reddit helper watcher on user login.
+; --idle-exit-seconds 300: helper exits automatically 5 minutes after the queue
+; is empty, preventing indefinite lingering between screensaver sessions.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; ValueType: string; ValueData: """{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"" --watch --queue ""{commonappdata}\SRPSS\url_queue"" --idle-exit-seconds 300"; Flags: uninsdeletevalue
 
 [Icons]
 ; Desktop shortcut to open Screen Saver Settings (with SRPSS selected).
@@ -76,6 +85,9 @@ Filename: "taskkill"; Parameters: "/F /IM SRPSS_RedditHelper.exe"; Flags: runhid
 Type: files; Name: "{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"
 Type: dirifempty; Name: "{commonappdata}\SRPSS\helper"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
+; Remove shipped curated presets that were installed to ProgramData
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
+Type: dirifempty; Name: "{commonappdata}\SRPSS\presets"
 
 [Run]
 ; No post-install run step by default. The user can open Screen Saver

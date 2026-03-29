@@ -23,6 +23,7 @@ import os
 import subprocess
 import sys
 import time
+import webbrowser
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any, Dict
@@ -335,10 +336,12 @@ def _evaluate_owner_idle_exit(
     persistent: bool,
     now: float | None = None,
 ) -> tuple[bool, float | None]:
-    if persistent or owner_pid <= 0 or idle_exit_seconds <= 0.0:
+    if persistent or idle_exit_seconds <= 0.0:
         return False, None
-    if _is_process_alive(owner_pid):
+    # If an owner process is specified and still alive, keep running.
+    if owner_pid > 0 and _is_process_alive(owner_pid):
         return False, None
+    # Reset the idle countdown whenever the queue has pending work.
     if _queue_has_pending_entries(queue_dir):
         return False, None
 
@@ -386,7 +389,16 @@ def open_url(url: str) -> bool:
     try:
         os.startfile(url)  # type: ignore[attr-defined]
         return True
-    except OSError:
+    except Exception as exc:
+        logging.debug("os.startfile failed (%s), trying webbrowser fallback: %s", exc, url)
+    try:
+        result = webbrowser.open(url)
+        if result:
+            return True
+        logging.warning("webbrowser.open returned False for URL: %s", url)
+        return False
+    except Exception as exc:
+        logging.error("open_url failed for %s: %s", url, exc)
         return False
 
 

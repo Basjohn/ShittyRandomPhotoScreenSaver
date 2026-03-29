@@ -184,6 +184,70 @@ class TestWatcherMode:
         assert should_exit is False
         assert idle_since is None
 
+    def test_owner_idle_exit_no_owner_pid_queue_only_idle(self, tmp_path: Path):
+        """owner_pid=0 + idle_exit_seconds>0 exits after queue stays empty (global helper)."""
+        should_exit, idle_since = _evaluate_owner_idle_exit(
+            tmp_path,
+            owner_pid=0,
+            idle_exit_seconds=10.0,
+            idle_since=None,
+            persistent=False,
+            now=100.0,
+        )
+        assert should_exit is False
+        assert idle_since == 100.0
+
+        should_exit, idle_since = _evaluate_owner_idle_exit(
+            tmp_path,
+            owner_pid=0,
+            idle_exit_seconds=10.0,
+            idle_since=idle_since,
+            persistent=False,
+            now=111.0,
+        )
+        assert should_exit is True
+        assert idle_since == 100.0
+
+    def test_owner_idle_exit_no_owner_pid_zero_seconds_never_exits(self, tmp_path: Path):
+        """owner_pid=0 + idle_exit_seconds=0 never exits (legacy persistent behavior)."""
+        should_exit, idle_since = _evaluate_owner_idle_exit(
+            tmp_path,
+            owner_pid=0,
+            idle_exit_seconds=0.0,
+            idle_since=None,
+            persistent=False,
+            now=9999.0,
+        )
+        assert should_exit is False
+        assert idle_since is None
+
+    def test_owner_idle_exit_persistent_never_exits(self, tmp_path: Path):
+        """persistent=True prevents any idle exit regardless of other args."""
+        should_exit, idle_since = _evaluate_owner_idle_exit(
+            tmp_path,
+            owner_pid=0,
+            idle_exit_seconds=1.0,
+            idle_since=None,
+            persistent=True,
+            now=9999.0,
+        )
+        assert should_exit is False
+        assert idle_since is None
+
+    def test_owner_idle_exit_reset_when_queue_has_entries(self, tmp_path: Path):
+        """Queue entries reset the idle countdown even with no owner_pid."""
+        (tmp_path / "item.json").write_text("{}", encoding="utf-8")
+        should_exit, idle_since = _evaluate_owner_idle_exit(
+            tmp_path,
+            owner_pid=0,
+            idle_exit_seconds=10.0,
+            idle_since=50.0,
+            persistent=False,
+            now=9999.0,
+        )
+        assert should_exit is False
+        assert idle_since is None
+
     def test_owner_idle_exit_exits_after_owner_dead_and_queue_idle(self, tmp_path: Path):
         with patch("helpers.reddit_helper_worker._is_process_alive", return_value=False):
             should_exit, idle_since = _evaluate_owner_idle_exit(

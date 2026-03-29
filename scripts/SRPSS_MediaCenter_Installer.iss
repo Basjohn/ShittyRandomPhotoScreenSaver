@@ -13,7 +13,7 @@
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
-AppVersion=3.1.5
+AppVersion=3.2.0
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
@@ -30,7 +30,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=3.1.5
+VersionInfoVersion=3.2.0
 AllowUNCPath=False
 
 [Languages]
@@ -39,25 +39,18 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "startmenu"; Description: "Create Start Menu Shortcuts"; GroupDescription: "Additional options:"
 Name: "desktop"; Description: "Create Desktop Shortcuts"; GroupDescription: "Additional options:"
-Name: "replacevispresets"; Description: "Replace shipped visualizer presets (backs up replaced files)"; GroupDescription: "Visualizer presets:"; Flags: checkedonce
 Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-install option:"; Flags: unchecked
 
 [Files]
 ; Copy everything inside the Nuitka onedir output into {app}
 Source: "..\release\main_mc.dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
-; Visualizer presets are task-gated so upgrade installs can preserve user-tuned curated slots.
-Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion; Tasks: replacevispresets
+; Visualizer presets always replaced on every install — no backup, no task gate.
+; InstallDelete wipes the old tree first so stale/renamed files never linger.
+Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Include the EXE itself (for convenience when browsing install dir)
 Source: "..\release\main_mc.dist\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Installer icon for shortcuts / ARP entry
 Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
-
-; Reddit helper watcher (placed at install time, not runtime-extracted)
-Source: "..\release\helpers\SRPSS_RedditHelper.exe"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: ignoreversion
-
-[Registry]
-; Start the Reddit helper watcher on user login
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; ValueType: string; ValueData: """{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"" --watch --queue ""{commonappdata}\SRPSS\url_queue"""; Flags: uninsdeletevalue
 
 [Icons]
 Name: "{group}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Center.exe"; Tasks: startmenu
@@ -66,94 +59,13 @@ Name: "{commondesktop}\SRPSS - Media Center"; Filename: "{app}\SRPSS_Media_Cente
 [Run]
 Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Center"; Flags: nowait postinstall skipifsilent; Tasks: runafter
 
-[UninstallRun]
-; Kill watcher before uninstall
-Filename: "taskkill"; Parameters: "/F /IM SRPSS_RedditHelper.exe"; Flags: runhidden nowait; RunOnceId: "KillHelper"
-
 [UninstallDelete]
 ; Ensure the install directory is removed on uninstall (default behavior), but
 ; explicitly clean any residual dist folders if structure changes in future.
 Type: filesandordirs; Name: "{app}"
-; Clean up Reddit helper and queue
-Type: files; Name: "{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"
-Type: dirifempty; Name: "{commonappdata}\SRPSS\helper"
-Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
 
 [InstallDelete]
-; No legacy files to remove for MC yet, keep placeholder section for parity.
+; Wipe old shipped curated presets before the new ones land so stale/renamed
+; files are never left behind alongside the authoritative replacement set.
+Type: filesandordirs; Name: "{app}\presets\visualizer_modes"
 
-[Code]
-function BuildNextPresetBackupPath(const ExistingPath: String): String;
-var
-  Candidate: String;
-  Index: Integer;
-begin
-  Candidate := ExistingPath + '.bak';
-  Index := 1;
-  while FileExists(Candidate) do
-  begin
-    Candidate := ExistingPath + '.bak' + IntToStr(Index);
-    Index := Index + 1;
-  end;
-  Result := Candidate;
-end;
-
-procedure BackupPresetsForMode(const ModeName: String);
-var
-  ModeDir, ExistingPath, BackupPath: String;
-  FindRec: TFindRec;
-begin
-  ModeDir := ExpandConstant('{app}\presets\visualizer_modes\' + ModeName);
-  if not DirExists(ModeDir) then
-    Exit;
-
-  if FindFirst(ModeDir + '\preset_*.json', FindRec) then
-  begin
-    try
-      repeat
-        if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
-        begin
-          ExistingPath := ModeDir + '\' + FindRec.Name;
-          BackupPath := BuildNextPresetBackupPath(ExistingPath);
-          if RenameFile(ExistingPath, BackupPath) then
-            Log(Format('Backed up visualizer preset: %s -> %s', [ExistingPath, BackupPath]))
-          else
-            Log(Format('Failed to back up visualizer preset: %s', [ExistingPath]));
-        end;
-      until not FindNext(FindRec);
-    finally
-      FindClose(FindRec);
-    end;
-  end;
-end;
-
-procedure BackupAllVisualizerPresets();
-var
-  ModesDir: String;
-  FindRec: TFindRec;
-begin
-  ModesDir := ExpandConstant('{app}\presets\visualizer_modes');
-  if not DirExists(ModesDir) then
-    Exit;
-
-  if FindFirst(ModesDir + '\*', FindRec) then
-  begin
-    try
-      repeat
-        if ((FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0) and
-           (FindRec.Name <> '.') and (FindRec.Name <> '..') then
-        begin
-          BackupPresetsForMode(FindRec.Name);
-        end;
-      until not FindNext(FindRec);
-    finally
-      FindClose(FindRec);
-    end;
-  end;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if (CurStep = ssInstall) and WizardIsTaskSelected('replacevispresets') then
-    BackupAllVisualizerPresets();
-end;

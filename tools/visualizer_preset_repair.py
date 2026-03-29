@@ -430,6 +430,20 @@ def _ensure_backup(path: Path) -> Path:
     return candidate
 
 
+def _reindex_preset_name(original_name: str, target_index: int) -> str:
+    """Update only the 'Preset N' prefix number; preserve everything else verbatim."""
+    if not original_name:
+        return f"Preset {target_index + 1}"
+    updated = re.sub(
+        r"^[Pp]reset[\s_-]*\d+",
+        f"Preset {target_index + 1}",
+        original_name,
+    )
+    if updated != original_name:
+        return updated
+    return original_name
+
+
 def _cleanup_suffix_text(value: str | None) -> str | None:
     if not value:
         return None
@@ -510,15 +524,20 @@ def _ordered_reindex_entries(entries: List[ReindexEntry]) -> List[ReindexEntry]:
 def _canonical_reindexed_payload(entry: ReindexEntry, target_index: int) -> Dict[str, Any]:
     payload = deepcopy(entry.payload)
     payload["preset_index"] = target_index
-    payload["name"] = vp._friendly_name_from_suffix(target_index, entry.suffix)  # type: ignore[attr-defined]
+    original_name = str(entry.payload.get("name") or "").strip()
+    payload["name"] = _reindex_preset_name(original_name, target_index)
     return payload
 
 
-def _canonical_reindexed_path(mode_dir: Path, target_index: int, suffix: str | None) -> Path:
-    slug = _slugify_suffix(suffix)
-    filename = f"preset_{target_index + 1}.json"
-    if slug:
-        filename = f"preset_{target_index + 1}_{slug}.json"
+def _canonical_reindexed_path(mode_dir: Path, entry: ReindexEntry, target_index: int) -> Path:
+    """Build the target path for a reindexed preset, preserving the original file suffix verbatim."""
+    stem = entry.path.stem
+    suffix_match = re.match(r"^preset[\s_-]*\d+[\s_-]+(.+)$", stem, flags=re.IGNORECASE)
+    if suffix_match:
+        file_suffix = suffix_match.group(1)
+        filename = f"preset_{target_index + 1}_{file_suffix}.json"
+    else:
+        filename = f"preset_{target_index + 1}.json"
     return mode_dir / filename
 
 
@@ -535,7 +554,7 @@ def reindex_mode_presets(mode: str) -> List[Tuple[Path, Path, Path]]:
     plans: List[Tuple[ReindexEntry, Path, Dict[str, Any], str]] = []
     for target_index, entry in enumerate(ordered):
         final_payload = _canonical_reindexed_payload(entry, target_index)
-        final_path = _canonical_reindexed_path(mode_dir, target_index, entry.suffix)
+        final_path = _canonical_reindexed_path(mode_dir, entry, target_index)
         final_text = json.dumps(final_payload, indent=2, sort_keys=True) + "\n"
         plans.append((entry, final_path, final_payload, final_text))
 
