@@ -45,7 +45,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         advanced_helper_attr="_blob_adv_helper",
         advanced_attr="_blob_advanced",
     )
-    blob_layout = scaffold.layout
+    _blob_layout = scaffold.layout  # noqa: F841 — held by scaffold
     normal_layout = scaffold.normal_layout
     adv_layout = scaffold.advanced_layout
 
@@ -617,6 +617,136 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     so_layout.addWidget(tab.blob_stretch_outer_label)
     adv_layout.addWidget(so_row)
 
+    # === Blob Shaper Section ===
+    from ui.tabs.media.blob_shape_editor import BlobShapeEditor
+
+    shaper_header_row = QWidget()
+    shaper_header_layout = QHBoxLayout(shaper_header_row)
+    shaper_header_layout.setContentsMargins(0, 8, 0, 2)
+    shaper_header_layout.setSpacing(8)
+    tab.blob_shaper_enabled = QCheckBox("Blob Shaper")
+    tab.blob_shaper_enabled.setProperty("circleIndicator", True)
+    tab.blob_shaper_enabled.setStyleSheet("color: #dde; font-size: 11px;")
+    tab.blob_shaper_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'blob_shaper_enabled', False)
+    )
+    tab.blob_shaper_enabled.setToolTip("Enable the Blob Shaper spatial routing system.")
+    bind_setting_signal(tab, tab.blob_shaper_enabled.toggled, auto_switch=True)
+    shaper_header_layout.addWidget(tab.blob_shaper_enabled)
+    shaper_header_layout.addStretch()
+    adv_layout.addWidget(shaper_header_row)
+
+    # Shaper container (gated on enabled state)
+    tab._blob_shaper_container = QWidget()
+    shaper_container_layout = QVBoxLayout(tab._blob_shaper_container)
+    shaper_container_layout.setContentsMargins(0, 0, 0, 0)
+    shaper_container_layout.setSpacing(4)
+
+    def _shaper_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
+        row_widget, inner, _ = shared_add_aligned_row_widget(
+            shaper_container_layout,
+            label_text,
+            label_width=LABEL_WIDTH,
+        )
+        return row_widget, inner
+
+    # Base strength
+    bs_row, bs_layout = _shaper_row("Base Strength:")
+    tab.blob_shaper_base_strength = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_shaper_base_strength.setMinimum(0)
+    tab.blob_shaper_base_strength.setMaximum(100)
+    bs_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_base_strength', 0.5) * 100)
+    tab.blob_shaper_base_strength.setValue(max(0, min(100, bs_val)))
+    tab.blob_shaper_base_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_shaper_base_strength.setTickInterval(10)
+    tab.blob_shaper_base_strength.setToolTip("How strongly the base shape profile modulates the blob radius.")
+    tab.blob_shaper_base_strength_label = QLabel(f"{bs_val}%")
+    bind_setting_signal(
+        tab,
+        tab.blob_shaper_base_strength.valueChanged,
+        updater=lambda v: tab.blob_shaper_base_strength_label.setText(f"{v}%"),
+    )
+    bs_layout.addWidget(tab.blob_shaper_base_strength)
+    bs_layout.addWidget(tab.blob_shaper_base_strength_label)
+
+    # Reaction strength
+    rs_row, rs_layout = _shaper_row("React Strength:")
+    tab.blob_shaper_react_strength = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_shaper_react_strength.setMinimum(0)
+    tab.blob_shaper_react_strength.setMaximum(100)
+    rs_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_react_strength', 0.5) * 100)
+    tab.blob_shaper_react_strength.setValue(max(0, min(100, rs_val)))
+    tab.blob_shaper_react_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_shaper_react_strength.setTickInterval(10)
+    tab.blob_shaper_react_strength.setToolTip("How strongly the reaction profile limits deformation per-angle.")
+    tab.blob_shaper_react_strength_label = QLabel(f"{rs_val}%")
+    bind_setting_signal(
+        tab,
+        tab.blob_shaper_react_strength.valueChanged,
+        updater=lambda v: tab.blob_shaper_react_strength_label.setText(f"{v}%"),
+    )
+    rs_layout.addWidget(tab.blob_shaper_react_strength)
+    rs_layout.addWidget(tab.blob_shaper_react_strength_label)
+
+    # Topology combo
+    topo_row, topo_layout = _shaper_row("Topology:")
+    tab.blob_topology_combo = StyledComboBox()
+    tab.blob_topology_combo.addItems(["Circle (Filled)", "Ring (Hollow)"])
+    topo_default = tab._default_str('spotify_visualizer', 'blob_topology', 'circle')
+    tab.blob_topology_combo.setCurrentIndex(1 if str(topo_default).lower() == "ring" else 0)
+    tab.blob_topology_combo.setToolTip("Circle = filled blob, Ring = hollow ring shape.")
+    bind_setting_signal(tab, tab.blob_topology_combo.currentIndexChanged, auto_switch=True)
+    topo_layout.addWidget(tab.blob_topology_combo)
+
+    # Ring thickness (only relevant when topology = ring)
+    rt_row, rt_layout = _shaper_row("Ring Thickness:")
+    tab.blob_ring_thickness = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_ring_thickness.setMinimum(5)
+    tab.blob_ring_thickness.setMaximum(100)
+    rt_val = int(tab._default_float('spotify_visualizer', 'blob_ring_thickness', 0.3) * 100)
+    tab.blob_ring_thickness.setValue(max(5, min(100, rt_val)))
+    tab.blob_ring_thickness.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_ring_thickness.setTickInterval(10)
+    tab.blob_ring_thickness.setToolTip("Wall thickness of the ring as fraction of radius.")
+    tab.blob_ring_thickness_label = QLabel(f"{rt_val}%")
+    bind_setting_signal(
+        tab,
+        tab.blob_ring_thickness.valueChanged,
+        updater=lambda v: tab.blob_ring_thickness_label.setText(f"{v}%"),
+    )
+    rt_layout.addWidget(tab.blob_ring_thickness)
+    rt_layout.addWidget(tab.blob_ring_thickness_label)
+
+    # Shape editor widget
+    tab.blob_shape_editor = BlobShapeEditor()
+    bind_setting_signal(tab, tab.blob_shape_editor.nodes_changed, auto_switch=True)
+    shaper_container_layout.addWidget(tab.blob_shape_editor)
+
+    adv_layout.addWidget(tab._blob_shaper_container)
+
+    # Ring mode sync: update editor canvases + thickness row visibility
+    def _sync_ring_mode():
+        is_ring = tab.blob_topology_combo.currentIndex() == 1
+        thickness = tab.blob_ring_thickness.value() / 100.0
+        rt_row.setVisible(is_ring)
+        tab.blob_shape_editor.set_ring_mode(is_ring, thickness)
+
+    tab.blob_topology_combo.currentIndexChanged.connect(_sync_ring_mode)
+    tab.blob_ring_thickness.valueChanged.connect(lambda _v: _sync_ring_mode())
+    _sync_ring_mode()
+
+    # Shaper container gating + hide conflicting shape controls
+    def _update_shaper_gating():
+        enabled = tab.blob_shaper_enabled.isChecked()
+        tab._blob_shaper_container.setVisible(enabled)
+        # Stretch controls conflict with shaper — hide when shaper is active.
+        # Wobble rows stay: they add organic deformation that complements shaping.
+        st_row.setVisible(not enabled)
+        si_row.setVisible(not enabled)
+        so_row.setVisible(not enabled)
+
+    tab.blob_shaper_enabled.toggled.connect(_update_shaper_gating)
+    _update_shaper_gating()
 
 
 def build_blob_growth(tab: "WidgetsTab") -> None:

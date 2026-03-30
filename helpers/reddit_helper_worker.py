@@ -2,15 +2,15 @@ r"""
 User-session Reddit helper worker.
 
 This script runs inside the interactive user session (started via HKCU\Run
-registry entry placed by the Inno Setup installer).  It watches the
+registry entry placed by the Inno Setup installer). It watches the
 ProgramData queue populated by the Winlogon screensaver build and opens
 each deferred Reddit URL using the user's default browser.
 
 Modes:
-- ``--watch``  : Continuous polling loop (default when started at login).
-                 Polls every ``--poll-interval`` seconds, opens URLs, then
-                 sleeps.  Exits cleanly on SIGINT/SIGTERM.
-- One-shot     : Drains queue once and exits (legacy / manual invocation).
+- Default       : Continuous polling loop (watcher mode).
+                  Polls every ``--poll-interval`` seconds, opens URLs, then
+                  sleeps. Exits cleanly on SIGINT/SIGTERM.
+- ``--one-shot``: Drains queue once and exits.
 """
 
 from __future__ import annotations
@@ -26,12 +26,19 @@ import time
 import webbrowser
 from ctypes import wintypes
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
 from urllib.parse import urlparse
 
 from core.logging.logger import get_logger
-from core.constants.timing import RETRY_BASE_DELAY_MS, RETRY_MAX_ATTEMPTS, RETRY_MAX_DELAY_MS
-from core.windows.reddit_helper_runtime import HEARTBEAT_FILE_NAME, SESSION_HELPER_SHUTDOWN_PREFIX
+from core.constants.timing import (
+    RETRY_BASE_DELAY_MS,
+    RETRY_MAX_ATTEMPTS,
+    RETRY_MAX_DELAY_MS,
+)
+from core.windows.reddit_helper_runtime import (
+    HEARTBEAT_FILE_NAME,
+    SESSION_HELPER_SHUTDOWN_PREFIX,
+)
 
 logger = get_logger(__name__)
 
@@ -40,13 +47,19 @@ DEFAULT_BASE = DEFAULT_PROGRAM_DATA / "SRPSS"
 DEFAULT_QUEUE = DEFAULT_BASE / "url_queue"
 DEFAULT_LOG_DIR = DEFAULT_BASE / "logs"
 DEFAULT_SIGNAL_DIR = DEFAULT_BASE / "helper_signals"
+
 DEFAULT_MAX_BATCH = 50
 DEFAULT_POLL_INTERVAL = 2.0
+DEFAULT_IDLE_EXIT_SECONDS = 45.0
+
 WINDOW_POLL_INTERVAL = 0.25
 BROWSER_FOREGROUND_TIMEOUT = 5.0
+
 _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
 OPEN_URL_MAX_AGE_SECONDS = 3600.0
 OPEN_SETTINGS_MAX_AGE_SECONDS = 900.0
+
 WATCHER_MUTEX_NAME = r"Local\SRPSS_RedditHelper_Watcher"
 _ERROR_ALREADY_EXISTS = 183
 
@@ -74,7 +87,7 @@ def configure_logging(log_dir: Path, verbose: bool) -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "reddit_helper.log"
 
-    handlers = [
+    handlers: list[logging.Handler] = [
         logging.FileHandler(log_file, encoding="utf-8"),
     ]
     if verbose:
@@ -98,6 +111,7 @@ def _signal_handler(signum, frame):  # noqa: ARG001
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="SRPSS Reddit helper worker")
+
     parser.add_argument(
         "--queue",
         type=Path,
@@ -121,16 +135,24 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Enable verbose console logging",
     )
-    parser.add_argument(
+
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--watch",
         action="store_true",
-        help="Run in continuous watcher mode (poll queue directory)",
+        help="Run in continuous watcher mode (default)",
     )
+    mode_group.add_argument(
+        "--one-shot",
+        action="store_true",
+        help="Drain queue once and exit",
+    )
+
     parser.add_argument(
         "--poll-interval",
         type=float,
         default=DEFAULT_POLL_INTERVAL,
-        help="Seconds between queue polls in watch mode (default: %.1f)" % DEFAULT_POLL_INTERVAL,
+        help=f"Seconds between queue polls in watch mode (default: {DEFAULT_POLL_INTERVAL:.1f})",
     )
     parser.add_argument(
         "--persistent",
@@ -146,13 +168,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--idle-exit-seconds",
         type=float,
-        default=0.0,
+        default=DEFAULT_IDLE_EXIT_SECONDS,
         help="Seconds to stay alive after owner exit once the queue is idle",
     )
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    # Default mode is watcher mode unless --one-shot was explicitly requested.
+    if not args.watch and not args.one_shot:
+        args.watch = True
+
+    return args
 
 
-def iter_queue_files(queue_dir: Path):
+def iter_queue_files(queue_dir: Path) -> Iterator[Path]:
     paths = {
         path.name.lower(): path
         for pattern in ("*.json", "*.retry")
@@ -227,7 +256,7 @@ def _write_entry_payload(target_path: Path, payload: Dict[str, Any]) -> None:
 def _acquire_watcher_singleton(name: str = WATCHER_MUTEX_NAME) -> tuple[object | None, bool]:
     """Acquire the watcher singleton for this user session.
 
-    Returns ``(handle, acquired)``. If singleton acquisition fails unexpectedly
+    Returns ``(handle, acquired)``. If singleton acquisition fails unexpectedly,
     we allow the watcher to continue rather than breaking URL handling.
     """
     if os.name != "nt":
@@ -244,6 +273,7 @@ def _acquire_watcher_singleton(name: str = WATCHER_MUTEX_NAME) -> tuple[object |
         if already_exists:
             kernel32.CloseHandle(handle)
             return None, False
+
         return handle, True
     except Exception:
         logging.warning("Watcher singleton acquisition failed; continuing without mutex", exc_info=True)
@@ -283,6 +313,7 @@ def _schedule_retry(entry_path: Path, data: Dict[str, Any], *, error: str) -> No
     _write_entry_payload(retry_path, payload)
     if retry_path != entry_path:
         entry_path.unlink(missing_ok=True)
+
     logging.info(
         "Retry scheduled for %s in %.1fs (attempt=%d)",
         retry_path.name,
@@ -310,17 +341,46 @@ def _clear_retry_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _is_process_alive(pid: int) -> bool:
+    """Windows-safe process existence check.
+
+    Avoids os.kill(pid, 0) on Windows because that can raise WinError 6 /
+    SystemError in packaged/background contexts.
+    """
     if pid <= 0:
         return False
+
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        except OSError:
+            return True
+        return True
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    STILL_ACTIVE = 259
+
     try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+        handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not handle:
+            return False
+
+        try:
+            exit_code = wintypes.DWORD()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == STILL_ACTIVE
+        finally:
+            try:
+                kernel32.CloseHandle(handle)
+            except Exception:
+                pass
+    except Exception:
         return False
-    except PermissionError:
-        return True
-    except OSError:
-        return True
-    return True
 
 
 def _queue_has_pending_entries(queue_dir: Path) -> bool:
@@ -338,14 +398,22 @@ def _evaluate_owner_idle_exit(
 ) -> tuple[bool, float | None]:
     if persistent or idle_exit_seconds <= 0.0:
         return False, None
-    # If an owner process is specified and still alive, keep running.
-    if owner_pid > 0 and _is_process_alive(owner_pid):
+
+    now = time.time() if now is None else now
+
+    owner_alive = False
+    try:
+        if owner_pid > 0:
+            owner_alive = _is_process_alive(owner_pid)
+    except Exception:
+        owner_alive = False
+
+    if owner_alive:
         return False, None
-    # Reset the idle countdown whenever the queue has pending work.
+
     if _queue_has_pending_entries(queue_dir):
         return False, None
 
-    now = time.time() if now is None else now
     idle_since = idle_since or now
     return (now - idle_since) >= idle_exit_seconds, idle_since
 
@@ -386,11 +454,15 @@ def _entry_is_expired(data: Dict[str, Any], *, action: str) -> bool:
 def open_url(url: str) -> bool:
     if not url:
         return False
+
+    # Prefer the normal Windows shell path. This is the least surprising route.
     try:
         os.startfile(url)  # type: ignore[attr-defined]
         return True
     except Exception as exc:
         logging.debug("os.startfile failed (%s), trying webbrowser fallback: %s", exc, url)
+
+    # Keep fallback, but do not rely on it as the primary route.
     try:
         result = webbrowser.open(url)
         if result:
@@ -412,27 +484,56 @@ def _hide_own_window() -> None:
         hwnd = kernel32.GetConsoleWindow()
         if hwnd:
             user32.ShowWindow(hwnd, 0)  # SW_HIDE
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[REDDIT] Exception suppressed while hiding helper window: %s", exc)
 
 
 def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
     processed = 0
+    seen_tokens: set[str] = set()
+    seen_urls: set[str] = set()
+
     for entry_path in iter_queue_files(queue_dir):
         if processed >= max_batch:
             break
+
         try:
             data = json.loads(entry_path.read_text(encoding="utf-8"))
         except Exception as exc:
             logging.warning("Failed to parse %s: %s", entry_path.name, exc)
-            entry_path.rename(entry_path.with_suffix(".corrupt"))
+            try:
+                entry_path.rename(entry_path.with_suffix(".corrupt"))
+            except Exception:
+                logging.debug("Failed to rename corrupt queue entry: %s", entry_path, exc_info=True)
             continue
 
         if not _retry_ready(data):
             continue
 
         data = _clear_retry_metadata(data)
+
+        token = str(data.get("token") or "").strip()
+        url = str(data.get("url") or "").strip()
+
+        # Suppress duplicates within the same processing batch. Prefer token-based
+        # dedupe, then fall back to URL dedupe when token is missing.
+        if token:
+            if token in seen_tokens:
+                logging.info("Skipping duplicate queue token in batch: %s (%s)", token, entry_path.name)
+                entry_path.unlink(missing_ok=True)
+                processed += 1
+                continue
+            seen_tokens.add(token)
+        elif url:
+            if url in seen_urls:
+                logging.info("Skipping duplicate queue URL in batch: %s (%s)", url, entry_path.name)
+                entry_path.unlink(missing_ok=True)
+                processed += 1
+                continue
+            seen_urls.add(url)
+
         action = str(data.get("action") or "open_url").strip().lower()
+
         if _entry_is_expired(data, action=action):
             expired_path = entry_path.with_suffix(".expired")
             _write_entry_payload(expired_path, data)
@@ -441,8 +542,10 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
             logging.warning("Queue entry expired without being handled: %s", expired_path.name)
             processed += 1
             continue
+
         success = False
         error = _action_error(action)
+
         if action == "open_url":
             success = _handle_open_url(data)
         elif action == "open_settings":
@@ -455,7 +558,9 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
             entry_path.unlink(missing_ok=True)
         else:
             _schedule_retry(entry_path, data, error=error)
+
         processed += 1
+
     return processed
 
 
@@ -464,6 +569,7 @@ def main() -> int:
 
     args = parse_args()
     _hide_own_window()
+
     args.queue.mkdir(parents=True, exist_ok=True)
     configure_logging(args.log_dir, args.verbose)
 
@@ -472,6 +578,7 @@ def main() -> int:
         signal_dir.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
         logger.debug("[REDDIT] Failed to ensure signal dir %s: %s", signal_dir, exc)
+
     _write_heartbeat_with_lifecycle(
         signal_dir,
         args.queue,
@@ -511,12 +618,15 @@ def _run_watcher(
 ) -> int:
     """Continuous watcher loop — polls queue, opens URLs, sleeps."""
     global _watcher_running
-    poll_interval = max(0.5, poll_interval)
+
+    poll_interval = max(0.5, float(poll_interval or DEFAULT_POLL_INTERVAL))
     idle_exit_seconds = max(0.0, float(idle_exit_seconds or 0.0))
+
     singleton_handle, acquired = _acquire_watcher_singleton()
     if not acquired:
         logging.info("Watcher singleton already active; exiting duplicate watcher")
         return 0
+
     logging.info(
         "Watcher started (queue=%s, poll=%.1fs, persistent=%s, owner_pid=%s, idle_exit=%.1fs)",
         queue_dir,
@@ -525,6 +635,7 @@ def _run_watcher(
         owner_pid or 0,
         idle_exit_seconds,
     )
+
     owner_idle_since: float | None = None
 
     try:
@@ -537,11 +648,14 @@ def _run_watcher(
                     persistent=persistent,
                     owner_pid=owner_pid,
                 )
+
                 processed = process_queue(queue_dir, max_batch, signal_dir)
                 if processed > 0:
                     logging.info("Watcher cycle: processed %d entries", processed)
+
                 if _consume_shutdown_request(signal_dir, owner_pid=owner_pid, persistent=persistent):
                     break
+
                 should_exit, owner_idle_since = _evaluate_owner_idle_exit(
                     queue_dir,
                     owner_pid=owner_pid,
@@ -556,15 +670,16 @@ def _run_watcher(
                         idle_exit_seconds,
                     )
                     break
+
             except Exception:
                 logging.error("Watcher cycle error", exc_info=True)
 
-            # Sleep in small increments so we respond to shutdown quickly
             slept = 0.0
             while slept < poll_interval and _watcher_running:
                 chunk = min(0.5, poll_interval - slept)
                 time.sleep(chunk)
                 slept += chunk
+
     finally:
         _release_watcher_singleton(singleton_handle)
 
@@ -582,16 +697,21 @@ def _handle_open_url(data: Dict[str, Any]) -> bool:
     start = time.perf_counter()
     launched = open_url(url)
     duration = time.perf_counter() - start
+
     if launched:
         logging.info("Launch succeeded (%.2f ms): %s", duration * 1000.0, url)
+
+        # Best-effort only. A foreground failure must not turn a successful
+        # browser launch into a helper failure.
         try:
             if bring_browser_foreground(url):
                 logging.info("Browser foregrounded after helper launch: %s", url)
             else:
                 logging.debug("Browser foreground attempt skipped/failed: %s", url)
         except Exception as exc:
-            logger.debug("[REDDIT] Exception suppressed: %s", exc)
+            logger.debug("[REDDIT] Exception suppressed during foreground attempt: %s", exc)
             logging.debug("Browser foreground attempt errored: %s", url, exc_info=True)
+
         return True
 
     logging.error("Launch failed: %s", url)
@@ -649,33 +769,28 @@ def _handle_open_settings(data: Dict[str, Any], signal_dir: Path) -> bool:
         return False
 
     try:
-        completion_path.write_text(
-            f"completed {time.time():.0f}",
-            encoding="utf-8",
-        )
+        completion_path.write_text(f"completed {time.time():.0f}", encoding="utf-8")
         logging.info("Settings completion token written: %s", completion_path)
     except Exception as exc:
         logging.warning("Failed to write completion token %s: %s", completion_path, exc)
+
     return True
 
 
-
 def bring_browser_foreground(url: str) -> bool:
-    """Attempt to foreground the Reddit browser window for the launched URL."""
+    """Attempt to foreground the browser window for the launched URL."""
     if sys.platform != "win32":
         return False
 
     keywords = _build_keyword_list(url)
     deadline = time.perf_counter() + BROWSER_FOREGROUND_TIMEOUT
-    success = False
 
     while time.perf_counter() < deadline:
-        success = _foreground_first_matching_window(keywords)
-        if success:
-            break
+        if _foreground_first_matching_window(keywords):
+            return True
         time.sleep(WINDOW_POLL_INTERVAL)
 
-    return success
+    return False
 
 
 def _build_keyword_list(url: str) -> list[str]:
@@ -688,26 +803,27 @@ def _build_keyword_list(url: str) -> list[str]:
             host = host.split(":")[0]
             tokens = [part for part in host.replace("-", ".").split(".") if part]
             keywords.extend(token for token in tokens if token not in ("www", "m"))
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[REDDIT] Exception suppressed while building keywords: %s", exc)
 
     if "reddit" not in keywords:
         keywords.append("reddit")
-    # Deduplicate while preserving order
+
     seen = set()
     deduped: list[str] = []
     for kw in keywords:
         if kw and kw not in seen:
             deduped.append(kw)
             seen.add(kw)
+
     return deduped or ["reddit"]
 
 
 def _foreground_first_matching_window(keywords: list[str]) -> bool:
     try:
         user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[REDDIT] Exception suppressed while acquiring user32: %s", exc)
         return False
 
     EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -718,47 +834,52 @@ def _foreground_first_matching_window(keywords: list[str]) -> bool:
         try:
             if not user32.IsWindowVisible(hwnd):
                 return True
+
             length = user32.GetWindowTextLengthW(hwnd)
             if length <= 0:
                 return True
+
             buf = ctypes.create_unicode_buffer(length + 1)
             user32.GetWindowTextW(hwnd, buf, length + 1)
             title = (buf.value or "").lower()
+
             if any(kw in title for kw in keywords):
                 candidates.append(hwnd)
                 return False
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
+        except Exception as exc:
+            logger.debug("[REDDIT] Exception suppressed while enumerating windows: %s", exc)
             return True
+
         return True
 
     try:
         user32.EnumWindows(_enum_proc, 0)
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[REDDIT] Exception suppressed during EnumWindows: %s", exc)
         return False
 
     if not candidates:
         return False
 
     hwnd = candidates[0]
+
     try:
         if hasattr(user32, "AllowSetForegroundWindow"):
             user32.AllowSetForegroundWindow(0xFFFFFFFF)
 
-        # Only restore minimized windows; keep maximized windows maximized.
         SW_RESTORE = 9
         SW_SHOW = 5
         SW_SHOWMAXIMIZED = 3
 
         is_iconic = bool(user32.IsIconic(hwnd))
         show_cmd = 0
+
         try:
-            placement = wintypes.WINDOWPLACEMENT()  # type: ignore[attr-defined]
-            placement.length = ctypes.sizeof(placement)  # type: ignore[arg-type]
+            placement = WINDOWPLACEMENT()
+            placement.length = ctypes.sizeof(placement)
             if user32.GetWindowPlacement(hwnd, ctypes.byref(placement)):
                 show_cmd = placement.showCmd
-        except AttributeError:
+        except Exception:
             show_cmd = 0
 
         if is_iconic:
@@ -769,8 +890,8 @@ def _foreground_first_matching_window(keywords: list[str]) -> bool:
             user32.ShowWindow(hwnd, SW_SHOW)
 
         return bool(user32.SetForegroundWindow(hwnd))
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[REDDIT] Exception suppressed while foregrounding window: %s", exc)
         return False
 
 

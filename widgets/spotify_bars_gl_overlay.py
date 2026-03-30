@@ -141,6 +141,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_tendency: float = 0.35
         self._blob_stretch_inner: float = 0.5
         self._blob_stretch_outer: float = 0.5
+        # Blob Shaper
+        self._blob_shaper_enabled: bool = False
+        self._blob_shaper_base_strength: float = 0.5
+        self._blob_shaper_react_strength: float = 0.5
+        self._blob_topology: str = "circle"
+        self._blob_ring_thickness: float = 0.3
+        self._blob_shape_base_nodes: list = [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]]
+        self._blob_shape_reaction_nodes: list = [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]]
+        self._blob_shape_energy_nodes: list = []
         self._blob_smoothed_energy: float = 0.0
         self._blob_glow_energy: float = 0.0
         self._blob_raw_bass_energy: float = 0.0
@@ -510,6 +519,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_gradient_direction: str = "top",
         border_width_px: float = 0.0,
         transient_energy: TransientEnergyBands | None = None,
+        # Blob Shaper
+        blob_shaper_enabled: bool = False,
+        blob_shaper_base_strength: float = 0.5,
+        blob_shaper_react_strength: float = 0.5,
+        blob_topology: str = "circle",
+        blob_ring_thickness: float = 0.3,
+        blob_shape_base_nodes: list | None = None,
+        blob_shape_reaction_nodes: list | None = None,
+        blob_shape_energy_nodes: list | None = None,
         blob_kick_event_strength: float = 0.0,
         blob_snare_event_strength: float = 0.0,
         line_kick_event_strength: float = 0.0,
@@ -920,6 +938,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
         self._blob_stretch_inner = max(0.0, min(1.0, float(blob_stretch_inner)))
         self._blob_stretch_outer = max(0.0, min(1.0, float(blob_stretch_outer)))
+        # Blob Shaper
+        self._blob_shaper_enabled = bool(blob_shaper_enabled)
+        self._blob_shaper_base_strength = max(0.0, min(1.0, float(blob_shaper_base_strength)))
+        self._blob_shaper_react_strength = max(0.0, min(1.0, float(blob_shaper_react_strength)))
+        _topo = str(blob_topology).strip().lower()
+        self._blob_topology = _topo if _topo in {'circle', 'ring'} else 'circle'
+        self._blob_ring_thickness = max(0.05, min(1.0, float(blob_ring_thickness)))
+        if blob_shape_base_nodes is not None:
+            self._blob_shape_base_nodes = blob_shape_base_nodes
+        if blob_shape_reaction_nodes is not None:
+            self._blob_shape_reaction_nodes = blob_shape_reaction_nodes
+        if blob_shape_energy_nodes is not None:
+            self._blob_shape_energy_nodes = blob_shape_energy_nodes
         self._osc_speed = max(0.01, min(1.0, float(osc_speed)))
         self._osc_line_dim = bool(osc_line_dim)
         self._osc_line_offset_bias = max(0.0, min(1.0, float(osc_line_offset_bias)))
@@ -1933,6 +1964,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_gradient_light", "u_gradient_dark", "u_pop_color",
                     "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
                     "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
+                    # Blob Shaper uniforms
+                    "u_blob_shaper_enabled", "u_blob_shaper_base_strength",
+                    "u_blob_shaper_react_strength",
+                    "u_blob_ring_mode", "u_blob_ring_thickness",
+                    "u_blob_base_profile", "u_blob_react_profile",
+                    "u_blob_energy_bass", "u_blob_energy_mid", "u_blob_energy_vocals",
+                    "u_blob_energy_treble", "u_blob_energy_transient",
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
 

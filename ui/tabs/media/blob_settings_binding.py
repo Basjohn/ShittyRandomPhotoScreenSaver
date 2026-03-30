@@ -155,6 +155,46 @@ def load_blob_mode_settings(
         tab.blob_growth.setValue(max(100, min(500, blob_growth)))
         tab.blob_growth_label.setText(f"{blob_growth / 100.0:.1f}x")
 
+    # --- Blob Shaper ---
+    if hasattr(tab, "blob_shaper_enabled"):
+        tab.blob_shaper_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "blob_shaper_enabled", False)
+        )
+    if hasattr(tab, "blob_shaper_base_strength"):
+        val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_base_strength", 0.5) * 100)
+        tab.blob_shaper_base_strength.setValue(max(0, min(100, val)))
+        tab.blob_shaper_base_strength_label.setText(f"{val}%")
+    if hasattr(tab, "blob_shaper_react_strength"):
+        val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_react_strength", 0.5) * 100)
+        tab.blob_shaper_react_strength.setValue(max(0, min(100, val)))
+        tab.blob_shaper_react_strength_label.setText(f"{val}%")
+    if hasattr(tab, "blob_topology_combo"):
+        topo = str(config.get("blob_topology", "circle")).strip().lower()
+        tab.blob_topology_combo.setCurrentIndex(1 if topo == "ring" else 0)
+    if hasattr(tab, "blob_ring_thickness"):
+        val = int(tab._config_float("spotify_visualizer", config, "blob_ring_thickness", 0.3) * 100)
+        tab.blob_ring_thickness.setValue(max(5, min(100, val)))
+        tab.blob_ring_thickness_label.setText(f"{val}%")
+    # Shape editor nodes are loaded directly into the editor widget
+    if hasattr(tab, "blob_shape_editor"):
+        base_nodes = config.get("blob_shape_base_nodes", [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
+        react_nodes = config.get("blob_shape_reaction_nodes", [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
+        energy_nodes = config.get("blob_shape_energy_nodes", [])
+        tab.blob_shape_editor.set_nodes(base_nodes, react_nodes, energy_nodes)
+
+
+def _collect_blob_shape_editor(tab) -> dict[str, Any]:
+    """Collect shape editor node data from the tab's blob_shape_editor widget."""
+    if not hasattr(tab, "blob_shape_editor"):
+        return {}
+    editor = tab.blob_shape_editor
+    base_nodes, react_nodes, energy_nodes = editor.get_nodes()
+    return {
+        "blob_shape_base_nodes": base_nodes,
+        "blob_shape_reaction_nodes": react_nodes,
+        "blob_shape_energy_nodes": energy_nodes,
+    }
+
 
 def collect_blob_mode_settings(tab) -> dict[str, Any]:
     """Collect Blob-owned settings from the tab into a config mapping."""
@@ -206,4 +246,21 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
         "blob_stretch_inner": (tab.blob_stretch_inner.value() if hasattr(tab, "blob_stretch_inner") else 50) / 100.0,
         "blob_stretch_outer": (tab.blob_stretch_outer.value() if hasattr(tab, "blob_stretch_outer") else 50) / 100.0,
         "blob_growth": (tab.blob_growth.value() if hasattr(tab, "blob_growth") else 250) / 100.0,
+        # Blob Shaper
+        "blob_shaper_enabled": tab.blob_shaper_enabled.isChecked() if hasattr(tab, "blob_shaper_enabled") else False,
+        "blob_shaper_base_strength": (
+            tab.blob_shaper_base_strength.value() if hasattr(tab, "blob_shaper_base_strength") else 50
+        ) / 100.0,
+        "blob_shaper_react_strength": (
+            tab.blob_shaper_react_strength.value() if hasattr(tab, "blob_shaper_react_strength") else 50
+        ) / 100.0,
+        "blob_topology": (
+            "ring"
+            if hasattr(tab, "blob_topology_combo") and tab.blob_topology_combo.currentIndex() == 1
+            else "circle"
+        ),
+        "blob_ring_thickness": (
+            tab.blob_ring_thickness.value() if hasattr(tab, "blob_ring_thickness") else 30
+        ) / 100.0,
+        **(_collect_blob_shape_editor(tab)),
     }

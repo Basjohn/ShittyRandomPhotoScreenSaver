@@ -20,6 +20,22 @@ def set1i(gl, u, name, val):
         gl.glUniform1i(loc, int(val))
 
 
+def set1fv(gl, u, name, values, count):
+    """Upload a float array uniform if the location is valid."""
+    loc = u.get(name, -1)
+    if loc >= 0:
+        import ctypes
+        arr = (ctypes.c_float * count)(*[float(v) for v in values[:count]])
+        gl.glUniform1fv(loc, count, arr)
+
+
+def set4f(gl, u, name, x, y, z, w):
+    """Upload a vec4 uniform if the location is valid."""
+    loc = u.get(name, -1)
+    if loc >= 0:
+        gl.glUniform4f(loc, float(x), float(y), float(z), float(w))
+
+
 def set_color4(gl, u, name, qc):
     """Upload a QColor as a vec4 uniform if the location is valid."""
     loc = u.get(name, -1)

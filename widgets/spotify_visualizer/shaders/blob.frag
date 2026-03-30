@@ -47,6 +47,41 @@ uniform float u_blob_peak_overall;
 uniform float u_blob_glow_reactivity;  // 0..2 how strongly glow responds to energy (default 1.0)
 uniform float u_blob_glow_max_size;    // 0.1..3.0 maximum glow spread multiplier (default 1.0)
 
+// Blob Shaper
+uniform int u_blob_shaper_enabled;       // 0 = off, 1 = on
+uniform float u_blob_shaper_base_strength;   // 0..1 how strongly base profile shapes the blob
+uniform float u_blob_shaper_react_strength;  // 0..1 how strongly reaction profile limits deformation
+uniform int u_blob_ring_mode;            // 0 = circle (filled), 1 = ring (hollow)
+uniform float u_blob_ring_thickness;     // 0.05..1.0 ring wall thickness as fraction of radius
+
+const int SHAPER_N = 8;
+uniform float u_blob_base_profile[SHAPER_N];    // angular base radius multipliers
+uniform float u_blob_react_profile[SHAPER_N];   // angular reaction limit multipliers
+uniform float u_blob_energy_bass[SHAPER_N];     // per-sector bass routing weight
+uniform float u_blob_energy_mid[SHAPER_N];      // per-sector mid routing weight
+uniform float u_blob_energy_vocals[SHAPER_N];   // per-sector vocal routing weight
+uniform float u_blob_energy_treble[SHAPER_N];   // per-sector treble routing weight
+uniform float u_blob_energy_transient[SHAPER_N]; // per-sector transient routing weight
+
+float sample_profile(float angle_frac, float profile[SHAPER_N]) {
+    float idx_f = angle_frac * float(SHAPER_N);
+    int lo = int(floor(idx_f)) % SHAPER_N;
+    int hi = (lo + 1) % SHAPER_N;
+    float frac = fract(idx_f);
+    return mix(profile[lo], profile[hi], frac);
+}
+
+float sample_energy_at_angle(float angle_frac, float bass, float mid, float high, float overall) {
+    float bass_w = sample_profile(angle_frac, u_blob_energy_bass);
+    float mid_w = sample_profile(angle_frac, u_blob_energy_mid);
+    float vocal_w = sample_profile(angle_frac, u_blob_energy_vocals);
+    float treble_w = sample_profile(angle_frac, u_blob_energy_treble);
+    float transient_w = sample_profile(angle_frac, u_blob_energy_transient);
+    float total_w = bass_w + mid_w + vocal_w + treble_w + transient_w;
+    if (total_w < 0.001) return bass;
+    return (bass * bass_w + mid * mid_w + mid * vocal_w + high * treble_w + overall * transient_w) / total_w;
+}
+
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
 vec3 apply_rainbow_shift(vec3 rgb) {
     if (u_rainbow_hue_offset <= 0.001) {
@@ -205,12 +240,29 @@ float blob_sdf_ex(vec2 p, float time,
     float angle = atan(p.y, p.x);
     float dist = length(p);
 
+    // Blob Shaper: base profile modulates radius, energy routing drives per-angle energy
+    float angle_frac = (angle < 0.0 ? angle + 6.2831853 : angle) / 6.2831853;
+    float shaper_rd_scale = 1.0;
+    if (u_blob_shaper_enabled == 1) {
+        float base_mult = sample_profile(angle_frac, u_blob_base_profile);
+        float base_str = clamp(u_blob_shaper_base_strength, 0.0, 1.0);
+        r *= mix(1.0, base_mult, base_str);
+        staged_r = r;
+
+        float react_mult = sample_profile(angle_frac, u_blob_react_profile);
+        float react_str = clamp(u_blob_shaper_react_strength, 0.0, 1.0);
+        shaper_rd_scale = mix(1.0, react_mult, react_str);
+    }
+
     float rd = clamp(u_blob_reactive_deformation, 0.0, 3.0);
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
     float rw = clamp(u_blob_reactive_wobble, 0.0, 3.0);
-    float st = clamp(u_blob_stretch_tendency, 0.0, 1.0);
-    float s_inner = clamp(u_blob_stretch_inner, 0.0, 1.0);
-    float s_outer = clamp(u_blob_stretch_outer, 0.0, 1.0);
+    // When shaper is enabled, it owns the shape — suppress stretch controls
+    // so they don't fight with the shaper's base/reaction profiles.
+    // Wobble is kept: it adds organic deformation that complements shaping.
+    float st = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_tendency, 0.0, 1.0);
+    float s_inner = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_inner, 0.0, 1.0);
+    float s_outer = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_outer, 0.0, 1.0);
     float wobble_component = 0.0;
 
     // Constant wobble — always-present amorphous distortion.
@@ -255,6 +307,8 @@ float blob_sdf_ex(vec2 p, float time,
     // Scale total deformation by reactive deformation factor
     // Cubic scaling above 1.0 for truly dramatic stretching at high values
     float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
+    // Blob Shaper reaction profile attenuates deformation per-angle
+    rd_scale *= shaper_rd_scale;
     wobble_component *= rd_scale;
     stretch_component *= rd_scale;
 
@@ -323,6 +377,15 @@ void main() {
     );
 
     float d = blob_sdf(uv, u_time);
+
+    // Ring topology — carve out interior to create a hollow ring.
+    // Works independently of shaper; ring_mode is set by topology combo.
+    if (u_blob_ring_mode == 1) {
+        // Ring thickness is a fraction of the blob's visual radius (~0.44 * blob_size)
+        float ring_r = 0.44 * clamp(u_blob_size, 0.1, 2.5);
+        float thickness = clamp(u_blob_ring_thickness, 0.05, 1.0) * ring_r * 0.5;
+        d = abs(d) - thickness;
+    }
 
     // Multi-layer colouring from the SDF distance
     // Inner core: bright, slightly shifted hue

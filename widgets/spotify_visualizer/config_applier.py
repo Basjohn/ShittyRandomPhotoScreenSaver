@@ -157,6 +157,30 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_stretch_inner = max(0.0, min(1.0, float(kwargs['blob_stretch_inner'])))
     if 'blob_stretch_outer' in kwargs:
         widget._blob_stretch_outer = max(0.0, min(1.0, float(kwargs['blob_stretch_outer'])))
+    # Blob Shaper
+    if 'blob_shaper_enabled' in kwargs:
+        widget._blob_shaper_enabled = bool(kwargs['blob_shaper_enabled'])
+    if 'blob_shaper_base_strength' in kwargs:
+        widget._blob_shaper_base_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_base_strength'])))
+    if 'blob_shaper_react_strength' in kwargs:
+        widget._blob_shaper_react_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_react_strength'])))
+    if 'blob_topology' in kwargs:
+        val = str(kwargs['blob_topology']).strip().lower()
+        widget._blob_topology = val if val in {'circle', 'ring'} else 'circle'
+    if 'blob_ring_thickness' in kwargs:
+        widget._blob_ring_thickness = max(0.05, min(1.0, float(kwargs['blob_ring_thickness'])))
+    if 'blob_shape_base_nodes' in kwargs:
+        nodes = kwargs['blob_shape_base_nodes']
+        if isinstance(nodes, list):
+            widget._blob_shape_base_nodes = nodes
+    if 'blob_shape_reaction_nodes' in kwargs:
+        nodes = kwargs['blob_shape_reaction_nodes']
+        if isinstance(nodes, list):
+            widget._blob_shape_reaction_nodes = nodes
+    if 'blob_shape_energy_nodes' in kwargs:
+        nodes = kwargs['blob_shape_energy_nodes']
+        if isinstance(nodes, list):
+            widget._blob_shape_energy_nodes = nodes
 
 
     # --- Card + bar styling (global across modes) ---------------------
@@ -684,6 +708,15 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_stretch_tendency'] = widget._blob_stretch_tendency
     extra['blob_stretch_inner'] = getattr(widget, '_blob_stretch_inner', 0.5)
     extra['blob_stretch_outer'] = getattr(widget, '_blob_stretch_outer', 0.5)
+    # Blob Shaper
+    extra['blob_shaper_enabled'] = getattr(widget, '_blob_shaper_enabled', False)
+    extra['blob_shaper_base_strength'] = getattr(widget, '_blob_shaper_base_strength', 0.5)
+    extra['blob_shaper_react_strength'] = getattr(widget, '_blob_shaper_react_strength', 0.5)
+    extra['blob_topology'] = getattr(widget, '_blob_topology', 'circle')
+    extra['blob_ring_thickness'] = getattr(widget, '_blob_ring_thickness', 0.3)
+    extra['blob_shape_base_nodes'] = getattr(widget, '_blob_shape_base_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
+    extra['blob_shape_reaction_nodes'] = getattr(widget, '_blob_shape_reaction_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
+    extra['blob_shape_energy_nodes'] = getattr(widget, '_blob_shape_energy_nodes', [])
 
 
 def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
