@@ -30,8 +30,6 @@
           230
         ],
         "blob_constant_wobble": 0.15,
-        "blob_core_floor_bias": 0.6,
-        "blob_core_scale": 1.1,
         "blob_dynamic_floor": true,
         "blob_dynamic_range_enabled": false,
         "blob_edge_color": [
@@ -64,20 +62,57 @@
           225
         ],
         "blob_pulse": 0.43,
+        "blob_pulse_release_ms": 92,
         "blob_rainbow_enabled": true,
         "blob_rainbow_speed": 0.15,
         "blob_reactive_deformation": 1.0,
         "blob_reactive_glow": true,
         "blob_reactive_wobble": 2.25,
+        "blob_ring_thickness": 0.3,
         "blob_sensitivity": 0.42,
+        "blob_shape_base_nodes": [
+          [
+            0.0,
+            1.0
+          ],
+          [
+            0.25,
+            1.0
+          ],
+          [
+            0.5,
+            1.0
+          ],
+          [
+            0.75,
+            1.0
+          ]
+        ],
+        "blob_shape_energy_nodes": [],
+        "blob_shape_reaction_nodes": [
+          [
+            0.0,
+            1.0
+          ],
+          [
+            0.25,
+            1.0
+          ],
+          [
+            0.5,
+            1.0
+          ],
+          [
+            0.75,
+            1.0
+          ]
+        ],
+        "blob_shaper_base_strength": 0.5,
+        "blob_shaper_enabled": false,
+        "blob_shaper_react_strength": 0.5,
         "blob_size": 0.5,
-        "blob_stage2_release_ms": 603,
-        "blob_stage3_release_ms": 503,
-        "blob_stage_bias": -0.1,
-        "blob_stage_gain": 0.67,
-        "blob_stretch_inner": 0.0,
-        "blob_stretch_outer": 0.55,
-        "blob_stretch_tendency": 0.1,
+        "blob_stretch": 0.55,
+        "blob_topology": "circle",
         "blob_transient_clamp": 1.6,
         "blob_transient_mix_bass": 0.35,
         "blob_transient_mix_vocal": 0.3,

@@ -729,28 +729,116 @@ def test_blob_pulse_controls_load_and_roundtrip(qt_app, settings_manager):
     try:
         widgets_cfg = settings_manager.get("widgets", {}) or {}
         spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
-        spotify_vis["blob_pulse_cap"] = 2.42
+        spotify_vis["blob_pulse"] = 1.42
         spotify_vis["blob_pulse_release_ms"] = 1280
+        spotify_vis["blob_stretch"] = 0.48
         spotify_vis["blob_glow_drive_mode"] = "vocal"
         settings_manager.set("widgets", widgets_cfg)
 
         tab._load_settings()
 
-        assert tab.blob_pulse_cap.value() == 242
-        assert tab.blob_pulse_cap_label.text() == "242%"
+        assert tab.blob_pulse.value() == 142
+        assert tab.blob_pulse_label.text() == "1.42x"
         assert tab.blob_pulse_release_ms.value() == 1280
         assert tab.blob_pulse_release_ms_label.text() == "1.28s"
+        assert tab.blob_stretch.value() == 48
+        assert tab.blob_stretch_label.text() == "48%"
         assert tab.blob_glow_drive_mode.currentIndex() == 1
 
-        tab.blob_pulse_cap.setValue(265)
+        tab.blob_pulse.setValue(165)
         tab.blob_pulse_release_ms.setValue(1260)
+        tab.blob_stretch.setValue(63)
         tab.blob_glow_drive_mode.setCurrentIndex(0)
         tab._save_settings_now()
 
         saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
-        assert saved.get("blob_pulse_cap") == pytest.approx(2.65)
+        assert saved.get("blob_pulse") == pytest.approx(1.65)
         assert saved.get("blob_pulse_release_ms") == 1260
+        assert saved.get("blob_stretch") == pytest.approx(0.63)
         assert saved.get("blob_glow_drive_mode") == "bass"
+    finally:
+        tab.deleteLater()
+
+
+def test_blob_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        normal_layout = tab._blob_normal.layout()
+        normal_titles = []
+        for idx in range(normal_layout.count()):
+            widget = normal_layout.itemAt(idx).widget()
+            if widget is not None:
+                title = widget.property("bucketTitle")
+                if title:
+                    normal_titles.append(title)
+        assert normal_titles == ["Body", "Appearance", "Shaper", "Layout", "Glow"]
+
+        adv_layout = tab._blob_advanced.layout()
+        adv_titles = []
+        for idx in range(adv_layout.count()):
+            widget = adv_layout.itemAt(idx).widget()
+            if widget is not None:
+                title = widget.property("bucketTitle")
+                if title:
+                    adv_titles.append(title)
+        assert adv_titles == ["Motion", "Ghost"]
+    finally:
+        tab.deleteLater()
+
+
+def test_blob_builder_hides_redundant_controls_when_shaper_or_reactive_glow_are_disabled(
+    qt_app,
+    settings_manager,
+):
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._blob_adv_toggle.setChecked(True)
+        qt_app.processEvents()
+
+        assert tab._blob_shape_reactivity_row.isHidden() is False
+        assert tab._blob_stretch_row.isHidden() is False
+
+        tab.blob_shaper_enabled.setChecked(True)
+        qt_app.processEvents()
+
+        assert tab._blob_shape_reactivity_row.isHidden() is True
+        assert tab._blob_stretch_row.isHidden() is True
+        assert tab._blob_shape_reactivity_row.isEnabled() is False
+        assert tab._blob_stretch_row.isEnabled() is False
+
+        tab.blob_shaper_enabled.setChecked(False)
+        qt_app.processEvents()
+
+        assert tab._blob_shape_reactivity_row.isHidden() is False
+        assert tab._blob_stretch_row.isHidden() is False
+        assert tab._blob_shape_reactivity_row.isEnabled() is True
+        assert tab._blob_stretch_row.isEnabled() is True
+
+        tab.blob_reactive_glow.setChecked(False)
+        qt_app.processEvents()
+
+        for row in (
+            tab._blob_glow_color_row,
+            tab._blob_glow_intensity_row,
+            tab._blob_glow_reactivity_row,
+            tab._blob_glow_drive_row,
+            tab._blob_glow_max_size_row,
+        ):
+            assert row.isHidden() is True
+            assert row.isEnabled() is False
+
+        tab.blob_reactive_glow.setChecked(True)
+        qt_app.processEvents()
+
+        for row in (
+            tab._blob_glow_color_row,
+            tab._blob_glow_intensity_row,
+            tab._blob_glow_reactivity_row,
+            tab._blob_glow_drive_row,
+            tab._blob_glow_max_size_row,
+        ):
+            assert row.isHidden() is False
+            assert row.isEnabled() is True
     finally:
         tab.deleteLater()
 
@@ -871,7 +959,7 @@ def test_build_visualizer_preset_payload_uses_shared_missing_preset_fallback(qt_
     [
         ("spectrum", "_spectrum_preset_slider", "spectrum_growth", 2.9),
         ("bubble", "_bubble_preset_slider", "bubble_growth", 3.2),
-        ("blob", "_blob_preset_slider", "blob_stage_bias", -0.18),
+        ("blob", "_blob_preset_slider", "blob_stretch", 0.48),
         ("sine_wave", "_sine_preset_slider", "sine_wave_growth", 1.7),
         ("oscilloscope", "_osc_preset_slider", "osc_growth", 2.4),
     ],

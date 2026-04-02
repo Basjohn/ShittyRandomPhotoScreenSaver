@@ -805,8 +805,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._line_snare_event_envelope = line_snare_raw
         self._line_kick_event_strength = self._line_kick_event_envelope
         self._line_snare_event_strength = self._line_snare_event_envelope
-        self._blob_pulse_cap = max(0.0, min(2.0, float(blob_pulse_cap)))
-        self._blob_pulse_release_ms = max(60.0, min(800.0, float(blob_pulse_release_ms)))
+        self._blob_pulse_cap = max(0.0, min(3.0, float(blob_pulse_cap)))
+        self._blob_pulse_release_ms = max(60.0, min(1500.0, float(blob_pulse_release_ms)))
 
         # Store energy bands (all modes that need them)
         if energy_bands is not None:
@@ -829,10 +829,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     if seed_value > 0.0:
                         self._blob_smoothed_energy = seed_value
                         self._blob_seed_pending = False
-                stage_progress_bass = float(getattr(self, '_blob_stage_input_bass', bass_val) or bass_val)
-                stage_progress_mid = float(getattr(self, '_blob_stage_input_mid', mid_val) or mid_val)
-                stage_progress_high = float(getattr(self, '_blob_stage_input_high', high_val) or high_val)
-                stage_progress_overall = float(getattr(self, '_blob_stage_input_overall', overall_val) or overall_val)
+                stage_progress_bass_raw = getattr(self, '_blob_stage_input_bass', None)
+                stage_progress_mid_raw = getattr(self, '_blob_stage_input_mid', None)
+                stage_progress_high_raw = getattr(self, '_blob_stage_input_high', None)
+                stage_progress_overall_raw = getattr(self, '_blob_stage_input_overall', None)
+                stage_progress_bass = bass_val if stage_progress_bass_raw is None else float(stage_progress_bass_raw)
+                stage_progress_mid = mid_val if stage_progress_mid_raw is None else float(stage_progress_mid_raw)
+                stage_progress_high = high_val if stage_progress_high_raw is None else float(stage_progress_high_raw)
+                stage_progress_overall = (
+                    overall_val
+                    if stage_progress_overall_raw is None
+                    else float(stage_progress_overall_raw)
+                )
                 stage_progress_raw = compute_stage_progress(
                     bass_energy=stage_progress_bass,
                     mid_energy=stage_progress_mid,
@@ -1971,6 +1979,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_blob_base_profile", "u_blob_react_profile",
                     "u_blob_energy_bass", "u_blob_energy_mid", "u_blob_energy_vocals",
                     "u_blob_energy_treble", "u_blob_energy_transient",
+                    "u_blob_shaper_bass_energy", "u_blob_shaper_mid_energy",
+                    "u_blob_shaper_high_energy", "u_blob_shaper_overall_energy",
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
 

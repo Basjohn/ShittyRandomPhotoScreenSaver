@@ -37,6 +37,8 @@ _QUEUE_DIR = _BASE_DIR / "url_queue"
 _SIGNAL_DIR = _BASE_DIR / "helper_signals"
 _SPOOL_READY = False
 
+SECURE_DESKTOP_HANDOFF_DELAY_SECONDS = 12.0
+
 
 def get_queue_dir() -> Path:
     return _QUEUE_DIR
@@ -87,6 +89,23 @@ def _coerce_command(command: Iterable[str] | str) -> List[str]:
     return coerced
 
 
+def _default_not_before_delay_seconds(payload: Dict[str, Any]) -> float:
+    action = str(payload.get("action") or "").strip().lower()
+    if action not in {"open_url", "open_settings"}:
+        return 0.0
+
+    source = str(payload.get("source") or "").strip().lower()
+    session = str(payload.get("session") or "").strip().lower()
+
+    if session in {"winlogon", "services"}:
+        return SECURE_DESKTOP_HANDOFF_DELAY_SECONDS
+
+    if source in {"screensaver", "scr_click", "flush_safety_net"} or source.startswith("scr_"):
+        return SECURE_DESKTOP_HANDOFF_DELAY_SECONDS
+
+    return 0.0
+
+
 def _write_entry(entry: Dict[str, Any]) -> bool:
     if not is_bridge_available():
         return False
@@ -101,6 +120,11 @@ def _write_entry(entry: Dict[str, Any]) -> bool:
     if not token:
         token = f"{int(payload['timestamp'] * 1000)}_{payload['pid']}_{uuid.uuid4().hex}"
         payload["token"] = token
+
+    if payload.get("not_before_ts") is None:
+        delay_seconds = _default_not_before_delay_seconds(payload)
+        if delay_seconds > 0.0:
+            payload["not_before_ts"] = float(payload["timestamp"]) + delay_seconds
 
     tmp_path = _QUEUE_DIR / f"{token}.tmp"
     final_path = _QUEUE_DIR / f"{token}.json"

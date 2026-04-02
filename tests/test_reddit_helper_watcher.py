@@ -86,6 +86,48 @@ class TestQueueProcessing:
         assert payload["next_attempt_ts"] > time.time()
         assert not entry_path.exists()
 
+    def test_process_queue_skips_entries_until_not_before_timestamp(self, tmp_path: Path):
+        """Deferred entries should stay queued until their shell-handoff delay expires."""
+        entry = {
+            "action": "open_url",
+            "url": "https://example.com/later",
+            "not_before_ts": time.time() + 60.0,
+        }
+        entry_path = tmp_path / "later.json"
+        entry_path.write_text(json.dumps(entry), encoding="utf-8")
+
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+
+        with patch("helpers.reddit_helper_worker.open_url") as mock_open:
+            processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+
+        assert processed == 0
+        assert entry_path.exists()
+        mock_open.assert_not_called()
+
+    def test_process_queue_defers_shell_not_ready_without_spending_retry_budget(self, tmp_path: Path):
+        """Shell-not-ready waits should defer the entry instead of incrementing retries."""
+        entry = {
+            "action": "open_url",
+            "url": "https://example.com/winlogon",
+            "timestamp": time.time(),
+        }
+        entry_path = tmp_path / "shell_wait.json"
+        entry_path.write_text(json.dumps(entry), encoding="utf-8")
+
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+
+        with patch("helpers.reddit_helper_worker._wait_for_user_shell_ready", return_value=False):
+            processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+
+        assert processed == 1
+        payload = json.loads(entry_path.read_text(encoding="utf-8"))
+        assert payload["defer_reason"] == "shell_not_ready"
+        assert payload["not_before_ts"] > time.time()
+        assert "retry_count" not in payload
+
     def test_process_queue_expires_old_open_url_entries(self, tmp_path: Path):
         """Very old queued URLs should be quarantined instead of opening later."""
         entry = {

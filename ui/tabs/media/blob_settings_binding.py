@@ -94,42 +94,11 @@ def load_blob_mode_settings(
         )
         tab.blob_reactive_deformation.setValue(max(0, min(300, blob_reactive_deformation)))
         tab.blob_reactive_deformation_label.setText(f"{blob_reactive_deformation}%")
-    if hasattr(tab, "blob_pulse_cap"):
-        blob_pulse_cap = int(tab._config_float("spotify_visualizer", config, "blob_pulse_cap", 1.0) * 100)
-        tab.blob_pulse_cap.setValue(max(0, min(300, blob_pulse_cap)))
-        tab.blob_pulse_cap_label.setText(f"{blob_pulse_cap}%")
     if hasattr(tab, "blob_pulse_release_ms"):
         blob_pulse_release_ms = tab._config_int("spotify_visualizer", config, "blob_pulse_release_ms", 220)
         blob_pulse_release_ms = max(60, min(1500, blob_pulse_release_ms))
         tab.blob_pulse_release_ms.setValue(blob_pulse_release_ms)
         tab.blob_pulse_release_ms_label.setText(f"{blob_pulse_release_ms / 1000:.2f}s")
-    if hasattr(tab, "blob_core_scale"):
-        blob_core_scale = int(tab._config_float("spotify_visualizer", config, "blob_core_scale", 1.0) * 100)
-        tab.blob_core_scale.setValue(max(25, min(250, blob_core_scale)))
-        tab.blob_core_scale_label.setText(f"{blob_core_scale}%")
-    if hasattr(tab, "blob_stage_gain"):
-        blob_stage_gain = int(tab._config_float("spotify_visualizer", config, "blob_stage_gain", 1.0) * 100)
-        tab.blob_stage_gain.setValue(max(0, min(200, blob_stage_gain)))
-        tab.blob_stage_gain_label.setText(f"{blob_stage_gain}%")
-    if hasattr(tab, "blob_core_floor_bias"):
-        blob_core_floor_bias = int(tab._config_float("spotify_visualizer", config, "blob_core_floor_bias", 0.35) * 100)
-        tab.blob_core_floor_bias.setValue(max(0, min(60, blob_core_floor_bias)))
-        tab.blob_core_floor_bias_label.setText(f"{blob_core_floor_bias}%")
-    if hasattr(tab, "blob_stage_bias"):
-        blob_stage_bias = int(tab._config_float("spotify_visualizer", config, "blob_stage_bias", 0.0) * 100)
-        blob_stage_bias = max(-60, min(60, blob_stage_bias))
-        tab.blob_stage_bias.setValue(blob_stage_bias)
-        tab.blob_stage_bias_label.setText(f"{blob_stage_bias / 100.0:+.2f}")
-    if hasattr(tab, "blob_stage2_release_ms"):
-        blob_stage2_release_ms = tab._config_int("spotify_visualizer", config, "blob_stage2_release_ms", 900)
-        blob_stage2_release_ms = max(400, min(2000, blob_stage2_release_ms))
-        tab.blob_stage2_release_ms.setValue(blob_stage2_release_ms)
-        tab.blob_stage2_release_ms_label.setText(f"{blob_stage2_release_ms / 1000:.2f}s")
-    if hasattr(tab, "blob_stage3_release_ms"):
-        blob_stage3_release_ms = tab._config_int("spotify_visualizer", config, "blob_stage3_release_ms", 1200)
-        blob_stage3_release_ms = max(400, min(2000, blob_stage3_release_ms))
-        tab.blob_stage3_release_ms.setValue(blob_stage3_release_ms)
-        tab.blob_stage3_release_ms_label.setText(f"{blob_stage3_release_ms / 1000:.2f}s")
     if hasattr(tab, "blob_constant_wobble"):
         blob_constant_wobble = int(tab._config_float("spotify_visualizer", config, "blob_constant_wobble", 1.0) * 100)
         tab.blob_constant_wobble.setValue(max(0, min(200, blob_constant_wobble)))
@@ -138,18 +107,20 @@ def load_blob_mode_settings(
         blob_reactive_wobble = int(tab._config_float("spotify_visualizer", config, "blob_reactive_wobble", 1.0) * 100)
         tab.blob_reactive_wobble.setValue(max(0, min(300, blob_reactive_wobble)))
         tab.blob_reactive_wobble_label.setText(f"{blob_reactive_wobble}%")
-    if hasattr(tab, "blob_stretch_tendency"):
-        blob_stretch_tendency = int(tab._config_float("spotify_visualizer", config, "blob_stretch_tendency", 0.35) * 100)
-        tab.blob_stretch_tendency.setValue(max(0, min(100, blob_stretch_tendency)))
-        tab.blob_stretch_tendency_label.setText(f"{blob_stretch_tendency}%")
-    if hasattr(tab, "blob_stretch_inner"):
-        blob_stretch_inner = int(tab._config_float("spotify_visualizer", config, "blob_stretch_inner", 0.5) * 100)
-        tab.blob_stretch_inner.setValue(max(0, min(100, blob_stretch_inner)))
-        tab.blob_stretch_inner_label.setText(f"{blob_stretch_inner}%")
-    if hasattr(tab, "blob_stretch_outer"):
-        blob_stretch_outer = int(tab._config_float("spotify_visualizer", config, "blob_stretch_outer", 0.5) * 100)
-        tab.blob_stretch_outer.setValue(max(0, min(100, blob_stretch_outer)))
-        tab.blob_stretch_outer_label.setText(f"{blob_stretch_outer}%")
+    if hasattr(tab, "blob_stretch"):
+        blob_stretch = int(
+            tab._config_float(
+                "spotify_visualizer",
+                config,
+                "blob_stretch",
+                max(
+                    tab._config_float("spotify_visualizer", config, "blob_stretch_tendency", 0.0),
+                    tab._config_float("spotify_visualizer", config, "blob_stretch_outer", 0.35),
+                ),
+            ) * 100
+        )
+        tab.blob_stretch.setValue(max(0, min(100, blob_stretch)))
+        tab.blob_stretch_label.setText(f"{blob_stretch}%")
     if hasattr(tab, "blob_growth"):
         blob_growth = int(tab._config_float("spotify_visualizer", config, "blob_growth", 2.5) * 100)
         tab.blob_growth.setValue(max(100, min(500, blob_growth)))
@@ -177,8 +148,8 @@ def load_blob_mode_settings(
         tab.blob_ring_thickness_label.setText(f"{val}%")
     # Shape editor nodes are loaded directly into the editor widget
     if hasattr(tab, "blob_shape_editor"):
-        base_nodes = config.get("blob_shape_base_nodes", [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
-        react_nodes = config.get("blob_shape_reaction_nodes", [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
+        base_nodes = config.get("blob_shape_base_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])
+        react_nodes = config.get("blob_shape_reaction_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])
         energy_nodes = config.get("blob_shape_energy_nodes", [])
         tab.blob_shape_editor.set_nodes(base_nodes, react_nodes, energy_nodes)
 
@@ -224,27 +195,14 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
         "blob_reactive_deformation": (
             tab.blob_reactive_deformation.value() if hasattr(tab, "blob_reactive_deformation") else 100
         ) / 100.0,
-        "blob_pulse_cap": (tab.blob_pulse_cap.value() if hasattr(tab, "blob_pulse_cap") else 100) / 100.0,
         "blob_pulse_release_ms": tab.blob_pulse_release_ms.value() if hasattr(tab, "blob_pulse_release_ms") else 220,
-        "blob_stage_gain": (tab.blob_stage_gain.value() if hasattr(tab, "blob_stage_gain") else 100) / 100.0,
-        "blob_core_scale": (tab.blob_core_scale.value() if hasattr(tab, "blob_core_scale") else 100) / 100.0,
-        "blob_core_floor_bias": (
-            tab.blob_core_floor_bias.value() if hasattr(tab, "blob_core_floor_bias") else 35
-        ) / 100.0,
-        "blob_stage_bias": (tab.blob_stage_bias.value() if hasattr(tab, "blob_stage_bias") else 0) / 100.0,
-        "blob_stage2_release_ms": tab.blob_stage2_release_ms.value() if hasattr(tab, "blob_stage2_release_ms") else 900,
-        "blob_stage3_release_ms": tab.blob_stage3_release_ms.value() if hasattr(tab, "blob_stage3_release_ms") else 1200,
         "blob_constant_wobble": (
             tab.blob_constant_wobble.value() if hasattr(tab, "blob_constant_wobble") else 100
         ) / 100.0,
         "blob_reactive_wobble": (
             tab.blob_reactive_wobble.value() if hasattr(tab, "blob_reactive_wobble") else 100
         ) / 100.0,
-        "blob_stretch_tendency": (
-            tab.blob_stretch_tendency.value() if hasattr(tab, "blob_stretch_tendency") else 35
-        ) / 100.0,
-        "blob_stretch_inner": (tab.blob_stretch_inner.value() if hasattr(tab, "blob_stretch_inner") else 50) / 100.0,
-        "blob_stretch_outer": (tab.blob_stretch_outer.value() if hasattr(tab, "blob_stretch_outer") else 50) / 100.0,
+        "blob_stretch": (tab.blob_stretch.value() if hasattr(tab, "blob_stretch") else 35) / 100.0,
         "blob_growth": (tab.blob_growth.value() if hasattr(tab, "blob_growth") else 250) / 100.0,
         # Blob Shaper
         "blob_shaper_enabled": tab.blob_shaper_enabled.isChecked() if hasattr(tab, "blob_shaper_enabled") else False,

@@ -54,6 +54,7 @@ tests/
   - it is also the direct fence for the real authored overwrite flow: Custom -> save over curated filename -> reload preset registry must keep modern keys only across all primary modes.
   - it now explicitly audits forward-only authored schema too: no global ghost mirrors in curated/custom preset payloads, no retired Oscilloscope alias `osc_sensitivity`, and no re-entry of retired compat keys through repair/save flows.
   - it also now guards checked-in artifact parity: the shared `tests_tmp_appdata` visualizer fixture must stay on the modern schema, and `release/main_mc.dist/presets/visualizer_modes` must match the source curated preset tree when that release copy is present in the repo.
+  - it must not freeze non-baseline curated artistic choices such as filenames, pack size, slot labels, or payload tuning outside the explicit `Preset 1` baseline fence.
   - `tests/test_visualizer_preset1_baselines.py` is the intentional rigid synthetic feel fence.
   - if curated preset 1 is intentionally reauthored, refresh the checked-in baseline in the same change.
 
@@ -205,7 +206,7 @@ It also now guards the retained-media lifecycle boundary on the visualizer side:
 | `test_visualizer_startup_contract.py` | Shared visualizer staged-startup contract derivation | Visualizer startup contract changes |
 | `test_display_image_ops.py` | Display image ops visualizer prewarm pipeline | Startup prewarm regressions |
 This suite now directly guards that visualizer shader-source preload happens before hidden overlay prewarm, so shader file IO stays out of the first visible startup window.
-| `test_reddit_helper_watcher.py` | Queue watcher retry/expiry plus owner-idle exit, explicit session-shutdown requests, and duplicate-watcher singleton guard | Reddit helper watcher lifecycle / linger regressions |
+| `test_reddit_helper_watcher.py` | Queue watcher retry/expiry plus owner-idle exit, explicit session-shutdown requests, duplicate-watcher singleton guard, launch-not-before gating, and shell-not-ready deferral without retry-budget burn | Reddit helper watcher lifecycle / linger regressions |
 | `test_spotify_visualizer_integration.py` | Visualizer integration with DisplayWidget | Visualizer integration |
 | `test_imgur_cache.py` | Imgur LRU disk cache, GIF conversion | Imgur cache changes |
 | `test_imgur_scraper.py` | Imgur web scraping, rate limiting | Imgur scraper changes |
@@ -317,8 +318,8 @@ This suite now directly guards that visualizer shader-source preload happens bef
 | `test_reddit_rate_limiter.py` | Reddit API rate limiting | Rate limit handling |
 | `test_reddit_progressive_loading.py` | Progressive post loading | Loading performance |
 | `test_reddit_paint_caching.py` | Reddit widget paint caching | Paint performance |
-| `test_reddit_helper_runtime.py` | User-session helper heartbeat/bootstrap self-heal plus persistent-vs-session-scoped command shaping | Reddit helper lifecycle changes |
-| `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry, owner-idle self-exit, and explicit session-shutdown requests for session-scoped launches | Reddit helper worker changes |
+| `test_reddit_helper_runtime.py` | User-session helper heartbeat/bootstrap self-heal plus persistent-vs-session-scoped command shaping, secure-desktop queue-entry handoff stamping, and Windows-safe stale-helper PID probing | Reddit helper lifecycle changes |
+| `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry, owner-idle self-exit, explicit session-shutdown requests for session-scoped launches, launch-not-before gating, and shell-not-ready queue deferral | Reddit helper worker changes |
 
 ---
 
@@ -376,8 +377,10 @@ This suite now also guards that WidgetManager mirrors expected overlays back to 
 | `test_visualizer_presets.py` | Curated preset JSON hygiene, SST round-trip, key filtering, canonical mode-payload normalization, and full curated-tree audit via `tools/visualizer_preset_repair.audit_payload()` | Preset file changes |
 Line of intent: keep this suite schema/contract-focused. It should guard payload shape, filtering, repair-tool behavior, and direct transient-key preservation, not freeze artistic tuning choices for curated presets.
 | `test_widgets_tab.py` | WidgetsTab integration plus cross-mode visualizer save-over-preset payload fences so the real `curated -> Custom -> edit -> save` flow cannot reintroduce retired schema keys | UI save/preset workflow changes |
+It now also guards Blob builder bucket structure and gating directly: real bucket order (`Body`, `Appearance`, `Shaper`, `Layout`, `Glow`, then `Advanced`/`Technical`), shaper-mode hiding/disabling of generic deformation controls, and dependent Glow-row hiding when `Reactive Glow` is off.
 It also guards curated slot normalization through `tools/visualizer_preset_repair.py --reindex-curated`: gap-filling, canonical filename rewrite, recovery when the earliest remaining preset is no longer slot 1, duplicate-slot detection, and Preset 1 presence per primary mode without freezing the rest of the artistic pack size.
 | `test_visualizer_preset_manifest.py` | Shipped curated-preset manifest parity and stale-file sync behavior | Stable onefile extraction / stale curated preset cleanup |
+This suite now also guards source-tree reconciliation behavior: new shipped curated files missing from the manifest must still be accepted by source-aware replacement flows, stale manifest-only paths missing from the source tree must be ignored there instead of causing false failures, and replacement now rewrites the target manifest from the reconciled shipped-tree view.
 | `test_visualizer_preset1_baselines.py` | Deterministic synthetic preset-1 baseline fence for active shipped modes | Structural migrations, curated preset-1 reauthoring, before/after regression checks |
 | `test_visualizer_settings_plumbing.py` | Behavior-first settings plumbing (model → creator/applier → frame push → overlay state contract), plus direct adapter coverage for Spectrum / Blob / Bubble / Oscilloscope / Sine mode-owned WidgetsTab bindings and the shared visualizer settings contract/snapshot helpers | New visualizer settings, adapter extraction regressions, and sparse-mapping contract drift |
 | `test_visualizer_preset_cycling_runtime.py` | Runtime preset cycling API (`WidgetManager`), SpotifyVisualizerWidget middle/XButton shortcuts, InputHandler routing hit-tests, preset wrap-around | Runtime preset shortcut regressions |
@@ -533,6 +536,19 @@ When writing tests that create `DisplayWidget` or start transitions:
   It is also the regression fence for curated reindex behavior (`--reindex-curated`) so slot repair stays metadata-only and deterministic, while tolerating authored artistic pack changes outside the rigid Preset 1 baseline fence.
   It also now guards the real authored overwrite path end-to-end: `WidgetsTab.build_visualizer_preset_payload()` -> filename metadata application -> JSON write -> `reload_presets()` must not leak retired compat keys back into curated mode payloads.
   It also now guards checked-in schema mirrors: the shared APPDATA fixture and the MC release preset tree cannot silently drift back to retired compat keys or stale curated payloads.
+- `tests/test_blob_shaper_plumbing.py`
+  This is the direct non-visual contract fence for Blob Shaper authoring/runtime parity: model keys, preset/save payload seams, duplicate-angle wrap handling, top-origin angular routing (`0.0 = top`), reaction-canvas-authoritative runtime routing with legacy base fallback, dedicated shaper-drive band blending, broadened/smoothed routing fields, linear shader sampling for routing weights, moderate-energy shaper-drive visibility, base-resting drive behavior, and the rule that shaper idle/paused state must not keep wobbling the authored silhouette away from the GUI.
+- Active targeted suites for the current blob/preset/settings work:
+  - `python -m pytest tests/test_visualizer_presets.py tests/test_visualizer_preset_manifest.py tests/test_settings_dialog.py tests/test_settings_defaults_parity.py -q`
+  - `python -m pytest tests/test_blob_shaper_plumbing.py -q`
+  - `python -m pytest tests/test_blob_shaper_plumbing.py tests/test_visualizer_reactivity_quality.py -k "blob" -q`
+  - `python -m pytest tests/test_blob_shaper_plumbing.py tests/test_blob_intensity_reserve.py -q`
+  - `python -m pytest tests/test_visualizer_presets.py tests/test_visualizer_settings_plumbing.py tests/test_widgets_tab.py -k "blob_shaper or blob_pulse or blob_shape" -q`
+  - `python -m pytest tests/test_blob_shaper_plumbing.py tests/test_visualizer_reactivity_quality.py -k "blob_stage_inputs or blob_kick_assist or blob_vocal_phrase or blob_pulse_release" -q`
+  - `python -m pytest tests/test_visualizer_settings_plumbing.py tests/test_widgets_tab.py tests/test_visualizer_presets.py -k "blob" -q`
+  - `python -m pytest tests/test_visualizer_preset_manifest.py tests/test_settings_dialog.py tests/test_settings_defaults_parity.py -q`
+  - `python -m pytest tests/test_reddit_helper_watcher.py tests/test_reddit_helper_runtime.py tests/test_settings_defaults_parity.py -q`
+  - `python -m pytest tests/test_reddit_helper_watcher.py tests/test_reddit_helper_runtime.py -q`
 - `tests/test_visualizer_reactivity_quality.py`
   Guards Blob/Spectrum behavior-level reactivity contracts. It now includes a representative Blob Preset 1-style moderate-kick stage regression so future fixes do not drift back toward the over-damped “live bands move but stage stays asleep” failure.
   It also guards the Blob stage ladder directly: stage 1 must keep headroom, stage 2/3 must be reachable on stronger phrases, and stage-1 decay must not leave the silhouette parked in one size.

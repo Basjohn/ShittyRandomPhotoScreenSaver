@@ -12,6 +12,10 @@ uniform float u_bass_energy;
 uniform float u_mid_energy;
 uniform float u_high_energy;
 uniform float u_overall_energy;
+uniform float u_blob_shaper_bass_energy;
+uniform float u_blob_shaper_mid_energy;
+uniform float u_blob_shaper_high_energy;
+uniform float u_blob_shaper_overall_energy;
 
 // Blob configuration
 uniform vec4 u_blob_color;
@@ -54,7 +58,7 @@ uniform float u_blob_shaper_react_strength;  // 0..1 how strongly reaction profi
 uniform int u_blob_ring_mode;            // 0 = circle (filled), 1 = ring (hollow)
 uniform float u_blob_ring_thickness;     // 0.05..1.0 ring wall thickness as fraction of radius
 
-const int SHAPER_N = 8;
+const int SHAPER_N = 64;
 uniform float u_blob_base_profile[SHAPER_N];    // angular base radius multipliers
 uniform float u_blob_react_profile[SHAPER_N];   // angular reaction limit multipliers
 uniform float u_blob_energy_bass[SHAPER_N];     // per-sector bass routing weight
@@ -63,23 +67,67 @@ uniform float u_blob_energy_vocals[SHAPER_N];   // per-sector vocal routing weig
 uniform float u_blob_energy_treble[SHAPER_N];   // per-sector treble routing weight
 uniform float u_blob_energy_transient[SHAPER_N]; // per-sector transient routing weight
 
+const float SHAPER_REST_DEADZONE = 0.12;
+const float SHAPER_DRIVE_GAIN = 2.4;
+
 float sample_profile(float angle_frac, float profile[SHAPER_N]) {
     float idx_f = angle_frac * float(SHAPER_N);
-    int lo = int(floor(idx_f)) % SHAPER_N;
-    int hi = (lo + 1) % SHAPER_N;
-    float frac = fract(idx_f);
-    return mix(profile[lo], profile[hi], frac);
+    int i1 = int(floor(idx_f)) % SHAPER_N;
+    int i0 = (i1 - 1 + SHAPER_N) % SHAPER_N;
+    int i2 = (i1 + 1) % SHAPER_N;
+    int i3 = (i1 + 2) % SHAPER_N;
+    float t = fract(idx_f);
+    float t2 = t * t;
+    float t3 = t2 * t;
+    return 0.5 * (
+        (2.0 * profile[i1])
+        + (-profile[i0] + profile[i2]) * t
+        + (2.0 * profile[i0] - 5.0 * profile[i1] + 4.0 * profile[i2] - profile[i3]) * t2
+        + (-profile[i0] + 3.0 * profile[i1] - 3.0 * profile[i2] + profile[i3]) * t3
+    );
+}
+
+float sample_linear_series(float angle_frac, float profile[SHAPER_N]) {
+    float idx_f = angle_frac * float(SHAPER_N);
+    int i0 = int(floor(idx_f)) % SHAPER_N;
+    int i1 = (i0 + 1) % SHAPER_N;
+    float t = fract(idx_f);
+    return mix(profile[i0], profile[i1], t);
 }
 
 float sample_energy_at_angle(float angle_frac, float bass, float mid, float high, float overall) {
-    float bass_w = sample_profile(angle_frac, u_blob_energy_bass);
-    float mid_w = sample_profile(angle_frac, u_blob_energy_mid);
-    float vocal_w = sample_profile(angle_frac, u_blob_energy_vocals);
-    float treble_w = sample_profile(angle_frac, u_blob_energy_treble);
-    float transient_w = sample_profile(angle_frac, u_blob_energy_transient);
-    float total_w = bass_w + mid_w + vocal_w + treble_w + transient_w;
-    if (total_w < 0.001) return bass;
-    return (bass * bass_w + mid * mid_w + mid * vocal_w + high * treble_w + overall * transient_w) / total_w;
+    float bass_w = sample_linear_series(angle_frac, u_blob_energy_bass);
+    float mid_w = sample_linear_series(angle_frac, u_blob_energy_mid);
+    float vocal_w = sample_linear_series(angle_frac, u_blob_energy_vocals);
+    float treble_w = sample_linear_series(angle_frac, u_blob_energy_treble);
+    float transient_w = sample_linear_series(angle_frac, u_blob_energy_transient);
+    float total_w = abs(bass_w) + abs(mid_w) + abs(vocal_w) + abs(treble_w) + abs(transient_w);
+    if (total_w < 0.001) return 0.0;
+    return (
+        bass * bass_w +
+        mid * mid_w +
+        mid * vocal_w +
+        high * treble_w +
+        overall * transient_w
+    ) / total_w;
+}
+
+float remap_shaper_drive(float signed_energy) {
+    if (u_playing == 0) {
+        return 0.0;
+    }
+    signed_energy = clamp(signed_energy * SHAPER_DRIVE_GAIN, -1.0, 1.0);
+    float magnitude = abs(signed_energy);
+    if (magnitude <= SHAPER_REST_DEADZONE) {
+        return 0.0;
+    }
+    float t = clamp(
+        (magnitude - SHAPER_REST_DEADZONE) / max(0.0001, 1.0 - SHAPER_REST_DEADZONE),
+        0.0,
+        1.0
+    );
+    float eased = t * t * (3.0 - 2.0 * t);
+    return sign(signed_energy) * eased;
 }
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
@@ -215,12 +263,13 @@ float blob_sdf_ex(vec2 p, float time,
                   float e_bass, float e_mid, float e_high, float e_overall,
                   float smoothed_e) {
     float r = 0.44 * clamp(u_blob_size, 0.1, 2.5);
-    r += e_bass * e_bass * 0.066;
-    r += e_bass * 0.077 * u_blob_pulse;
+    float pulse_amt = clamp(u_blob_pulse, 0.0, 2.0);
+    r += e_bass * e_bass * 0.066 * pulse_amt;
+    r += e_bass * 0.077 * pulse_amt;
     float se = clamp(smoothed_e, 0.0, 1.0);
     float breath = max(e_bass, se * 0.82);
-    r += max(0.03, breath) * 0.020;
-    r -= (1.0 - se) * 0.028 * u_blob_pulse;
+    r += max(0.03, breath) * 0.020 * pulse_amt;
+    r -= (1.0 - se) * 0.028 * pulse_amt;
 
     vec3 stage_progress = vec3(0.0);
     r += compute_stage_offset(
@@ -229,9 +278,9 @@ float blob_sdf_ex(vec2 p, float time,
         u_blob_stage_gain,
         u_blob_core_scale,
         stage_progress
-    );
+    ) * pulse_amt;
 
-    if (u_playing == 0) {
+    if (u_playing == 0 && u_blob_shaper_enabled == 0) {
         r *= 0.45 + se * 0.25;
     }
 
@@ -241,22 +290,45 @@ float blob_sdf_ex(vec2 p, float time,
     float dist = length(p);
 
     // Blob Shaper: base profile modulates radius, energy routing drives per-angle energy
-    float angle_frac = (angle < 0.0 ? angle + 6.2831853 : angle) / 6.2831853;
-    float shaper_rd_scale = 1.0;
+    float angle_frac = fract(angle / 6.2831853 + 0.25);
+    float shaper_drive = 0.0;
     if (u_blob_shaper_enabled == 1) {
         float base_mult = sample_profile(angle_frac, u_blob_base_profile);
         float base_str = clamp(u_blob_shaper_base_strength, 0.0, 1.0);
-        r *= mix(1.0, base_mult, base_str);
-        staged_r = r;
-
         float react_mult = sample_profile(angle_frac, u_blob_react_profile);
         float react_str = clamp(u_blob_shaper_react_strength, 0.0, 1.0);
-        shaper_rd_scale = mix(1.0, react_mult, react_str);
+        float shaped_base_r = staged_r * mix(1.0, base_mult, base_str);
+        float shaped_react_r = staged_r * mix(1.0, react_mult, react_str);
+        shaper_drive = remap_shaper_drive(
+            clamp(
+                sample_energy_at_angle(
+                    angle_frac,
+                    u_blob_shaper_bass_energy,
+                    u_blob_shaper_mid_energy,
+                    u_blob_shaper_high_energy,
+                    u_blob_shaper_overall_energy
+                ),
+                -1.0,
+                1.0
+            )
+        );
+        r = shaped_base_r + (shaped_react_r - shaped_base_r) * shaper_drive;
+        // The authored shaper contour is the runtime silhouette source.
+        // Keeping staged_r on shaped_base_r would park runtime on the base
+        // contour forever even while shaper_drive changes.
+        staged_r = r;
     }
 
     float rd = clamp(u_blob_reactive_deformation, 0.0, 3.0);
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
     float rw = clamp(u_blob_reactive_wobble, 0.0, 3.0);
+    if (u_blob_shaper_enabled == 1) {
+        float shaper_motion = abs(shaper_drive);
+        // Authored shaper contours should own the silhouette. Keep wobble
+        // subordinate and let it disappear entirely at rest/paused.
+        cw *= shaper_motion * 0.03;
+        rw *= shaper_motion * 0.12;
+    }
     // When shaper is enabled, it owns the shape — suppress stretch controls
     // so they don't fight with the shaper's base/reaction profiles.
     // Wobble is kept: it adds organic deformation that complements shaping.
@@ -307,8 +379,6 @@ float blob_sdf_ex(vec2 p, float time,
     // Scale total deformation by reactive deformation factor
     // Cubic scaling above 1.0 for truly dramatic stretching at high values
     float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
-    // Blob Shaper reaction profile attenuates deformation per-angle
-    rd_scale *= shaper_rd_scale;
     wobble_component *= rd_scale;
     stretch_component *= rd_scale;
 

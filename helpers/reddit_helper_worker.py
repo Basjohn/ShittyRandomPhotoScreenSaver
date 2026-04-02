@@ -54,6 +54,9 @@ DEFAULT_IDLE_EXIT_SECONDS = 45.0
 
 WINDOW_POLL_INTERVAL = 0.25
 BROWSER_FOREGROUND_TIMEOUT = 5.0
+SHELL_READY_TIMEOUT = 20.0
+SHELL_READY_SETTLE_SECONDS = 1.5
+SHELL_NOT_READY_DEFER_SECONDS = 5.0
 
 _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -70,6 +73,10 @@ BROWSER_WINDOW_CLASSES = {
     "mozillawindowclass",
     "ieframe",
 }
+
+
+class ShellNotReadyError(RuntimeError):
+    """Raised when the helper is alive but the interactive shell is not ready yet."""
 
 
 class WINDOWPLACEMENT(ctypes.Structure):
@@ -340,6 +347,38 @@ def _clear_retry_metadata(data: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
+def _entry_not_before_ready(data: Dict[str, Any]) -> bool:
+    try:
+        not_before_ts = float(data.get("not_before_ts") or 0.0)
+    except Exception:
+        return True
+    if not_before_ts <= 0.0:
+        return True
+    return time.time() >= not_before_ts
+
+
+def _defer_entry(entry_path: Path, data: Dict[str, Any], *, delay_seconds: float, reason: str) -> None:
+    payload = dict(data)
+    payload["not_before_ts"] = max(
+        float(payload.get("not_before_ts") or 0.0),
+        time.time() + max(0.5, float(delay_seconds or 0.0)),
+    )
+    payload["defer_reason"] = reason or "deferred"
+    payload["deferred_at"] = time.time()
+
+    deferred_path = _canonical_json_path(entry_path)
+    _write_entry_payload(deferred_path, payload)
+    if deferred_path != entry_path:
+        entry_path.unlink(missing_ok=True)
+
+    logging.info(
+        "Deferred %s for %.1fs (%s)",
+        deferred_path.name,
+        max(0.5, float(delay_seconds or 0.0)),
+        reason or "deferred",
+    )
+
+
 def _is_process_alive(pid: int) -> bool:
     """Windows-safe process existence check.
 
@@ -455,12 +494,39 @@ def open_url(url: str) -> bool:
     if not url:
         return False
 
+    if not _wait_for_user_shell_ready():
+        raise ShellNotReadyError("user shell not ready")
+
     # Prefer the normal Windows shell path. This is the least surprising route.
     try:
         os.startfile(url)  # type: ignore[attr-defined]
         return True
     except Exception as exc:
         logging.debug("os.startfile failed (%s), trying webbrowser fallback: %s", exc, url)
+
+    # Qt DesktopServices is the same family of OS-shell launch path we already
+    # trust in the MC build, so keep it as the next fallback before webbrowser.
+    try:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices, QGuiApplication
+
+        app = QGuiApplication.instance()
+        created_app = False
+        if app is None:
+            app = QGuiApplication([sys.argv[0]])
+            created_app = True
+        opened = bool(QDesktopServices.openUrl(QUrl(url)))
+        if opened:
+            return True
+        logging.debug("QDesktopServices.openUrl returned False for URL: %s", url)
+    except Exception as exc:
+        logging.debug("QDesktopServices fallback failed for %s: %s", url, exc)
+    finally:
+        try:
+            if created_app and app is not None:
+                app.quit()
+        except Exception:
+            pass
 
     # Keep fallback, but do not rely on it as the primary route.
     try:
@@ -472,6 +538,42 @@ def open_url(url: str) -> bool:
     except Exception as exc:
         logging.error("open_url failed for %s: %s", url, exc)
         return False
+
+
+def _shell_window_present() -> bool:
+    if os.name != "nt":
+        return True
+    try:
+        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        shell_hwnd = user32.GetShellWindow()
+        shell_tray = user32.FindWindowW("Shell_TrayWnd", None)
+        progman = user32.FindWindowW("Progman", None)
+        worker_tray = user32.FindWindowW("WorkerW", None)
+        return bool(shell_hwnd or shell_tray or progman or worker_tray)
+    except Exception:
+        return False
+
+
+def _wait_for_user_shell_ready(
+    timeout_seconds: float = SHELL_READY_TIMEOUT,
+    *,
+    settle_seconds: float = SHELL_READY_SETTLE_SECONDS,
+) -> bool:
+    """Best-effort wait for Explorer/user shell readiness after secure-desktop exit."""
+    if os.name != "nt":
+        return True
+
+    deadline = time.time() + max(1.0, float(timeout_seconds))
+    stable_since: float | None = None
+    while time.time() < deadline:
+        if _shell_window_present():
+            stable_since = stable_since or time.time()
+            if (time.time() - stable_since) >= max(0.0, float(settle_seconds)):
+                return True
+        else:
+            stable_since = None
+        time.sleep(0.5)
+    return False
 
 
 def _hide_own_window() -> None:
@@ -510,6 +612,9 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
         if not _retry_ready(data):
             continue
 
+        if not _entry_not_before_ready(data):
+            continue
+
         data = _clear_retry_metadata(data)
 
         token = str(data.get("token") or "").strip()
@@ -545,9 +650,10 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
 
         success = False
         error = _action_error(action)
+        defer_seconds: float | None = None
 
         if action == "open_url":
-            success = _handle_open_url(data)
+            success, error, defer_seconds = _handle_open_url(data)
         elif action == "open_settings":
             success = _handle_open_settings(data, signal_dir)
         else:
@@ -556,6 +662,8 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
 
         if success:
             entry_path.unlink(missing_ok=True)
+        elif defer_seconds is not None:
+            _defer_entry(entry_path, data, delay_seconds=defer_seconds, reason=error)
         else:
             _schedule_retry(entry_path, data, error=error)
 
@@ -687,15 +795,19 @@ def _run_watcher(
     return 0
 
 
-def _handle_open_url(data: Dict[str, Any]) -> bool:
+def _handle_open_url(data: Dict[str, Any]) -> tuple[bool, str, float | None]:
     url = data.get("url")
     if not url:
         logging.warning("Queue entry missing URL")
-        return False
+        return False, "missing url", None
 
     logging.info("Launching deferred URL: %s", url)
     start = time.perf_counter()
-    launched = open_url(url)
+    try:
+        launched = open_url(url)
+    except ShellNotReadyError:
+        logging.info("Deferring URL launch until the interactive shell is ready: %s", url)
+        return False, "shell_not_ready", SHELL_NOT_READY_DEFER_SECONDS
     duration = time.perf_counter() - start
 
     if launched:
@@ -712,10 +824,10 @@ def _handle_open_url(data: Dict[str, Any]) -> bool:
             logger.debug("[REDDIT] Exception suppressed during foreground attempt: %s", exc)
             logging.debug("Browser foreground attempt errored: %s", url, exc_info=True)
 
-        return True
+        return True, "", None
 
     logging.error("Launch failed: %s", url)
-    return False
+    return False, "open_url failed", None
 
 
 def _handle_open_settings(data: Dict[str, Any], signal_dir: Path) -> bool:

@@ -419,6 +419,7 @@ class TestConfigApplier:
         class DummyWidget:
             _blob_pulse_cap = 1.0
             _blob_pulse_release_ms = 220.0
+            _blob_stage_gain = 1.0
             _blob_glow_drive_mode = "bass"
 
             def __getattr__(self, name):
@@ -434,16 +435,19 @@ class TestConfigApplier:
 
         widget = DummyWidget()
         apply_vis_mode_kwargs(widget, {
-            "blob_pulse_cap": 2.45,
+            "blob_pulse": 1.65,
             "blob_pulse_release_ms": 1320.0,
             "blob_glow_drive_mode": "vocal",
         })
         extra = build_gpu_push_extra_kwargs(widget, "blob", None)
 
-        assert widget._blob_pulse_cap == pytest.approx(2.45)
+        assert widget._blob_pulse == pytest.approx(1.65)
+        assert widget._blob_pulse_cap == pytest.approx(1.65)
         assert widget._blob_pulse_release_ms == pytest.approx(1320.0)
+        assert widget._blob_stage_gain == pytest.approx(1.65)
         assert widget._blob_glow_drive_mode == "vocal"
-        assert extra["blob_pulse_cap"] == pytest.approx(2.45)
+        assert extra["blob_pulse"] == pytest.approx(1.65)
+        assert extra["blob_pulse_cap"] == pytest.approx(1.65)
         assert extra["blob_pulse_release_ms"] == pytest.approx(1320.0)
         assert extra["blob_glow_drive_mode"] == "vocal"
 
@@ -1435,7 +1439,7 @@ class TestVisualizerSettingsContract:
                 "blob_energy_boost": 1.2,
                 "blob_use_raw_energy": True,
                 "blob_input_gain": 1.1,
-                "blob_stage_bias": -0.1,
+                "blob_stretch": 0.46,
             },
             apply_preset_overlay=False,
         )
@@ -1443,7 +1447,7 @@ class TestVisualizerSettingsContract:
         assert "blob_energy_boost" not in normalized
         assert "blob_use_raw_energy" not in normalized
         assert normalized["blob_input_gain"] == pytest.approx(1.1)
-        assert normalized["blob_stage_bias"] == pytest.approx(-0.1)
+        assert normalized["blob_stretch"] == pytest.approx(0.46)
 
 
 class TestVisualizerSettingsSnapshotNormalization:
@@ -1491,7 +1495,7 @@ class TestVisualizerSettingsSnapshotNormalization:
                 "blob_energy_boost": 1.4,
                 "blob_use_raw_energy": True,
                 "blob_input_gain": 1.2,
-                "blob_stage_bias": -0.2,
+                "blob_stretch": 0.52,
             },
             apply_preset_overlay=False,
         )
@@ -1501,7 +1505,7 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert "widgets.spotify_visualizer.blob_energy_boost" not in saved
         assert "widgets.spotify_visualizer.blob_use_raw_energy" not in saved
         assert saved["widgets.spotify_visualizer.blob_input_gain"] == pytest.approx(1.2)
-        assert saved["widgets.spotify_visualizer.blob_stage_bias"] == pytest.approx(-0.2)
+        assert saved["widgets.spotify_visualizer.blob_stretch"] == pytest.approx(0.52)
 
 
 class TestVisualizerModeBinding:
@@ -1851,10 +1855,10 @@ class TestBlobSettingsBinding:
                 self.blob_ghost_decay_label = _Label()
                 self.blob_pulse = _Slider()
                 self.blob_pulse_label = _Label()
-                self.blob_stage_bias = _Slider()
-                self.blob_stage_bias_label = _Label()
                 self.blob_pulse_release_ms = _Slider()
                 self.blob_pulse_release_ms_label = _Label()
+                self.blob_stretch = _Slider()
+                self.blob_stretch_label = _Label()
                 self.blob_glow_drive_mode = _Combo()
                 self.blob_growth = _Slider()
                 self.blob_growth_label = _Label()
@@ -1880,8 +1884,8 @@ class TestBlobSettingsBinding:
                 "blob_ghost_alpha": 0.37,
                 "blob_ghost_decay": 0.44,
                 "blob_pulse": 1.23,
-                "blob_stage_bias": -0.18,
                 "blob_pulse_release_ms": 1210,
+                "blob_stretch": 0.42,
                 "blob_glow_drive_mode": "vocal",
                 "blob_growth": 3.10,
                 "blob_color": [1, 2, 3, 4],
@@ -1896,10 +1900,10 @@ class TestBlobSettingsBinding:
         assert tab.blob_ghost_decay_label.text == "0.44x"
         assert tab.blob_pulse.value == 123
         assert tab.blob_pulse_label.text == "1.23x"
-        assert tab.blob_stage_bias.value == -18
-        assert tab.blob_stage_bias_label.text == "-0.18"
         assert tab.blob_pulse_release_ms.value == 1210
         assert tab.blob_pulse_release_ms_label.text == "1.21s"
+        assert tab.blob_stretch.value == 42
+        assert tab.blob_stretch_label.text == "42%"
         assert tab.blob_glow_drive_mode.index == 1
         assert tab.blob_growth.value == 310
         assert tab.blob_growth_label.text == "3.1x"
@@ -1948,19 +1952,10 @@ class TestBlobSettingsBinding:
             blob_glow_max_size = _Slider(210)
             blob_reactive_glow = _Check(True)
             blob_reactive_deformation = _Slider(88)
-            blob_pulse_cap = _Slider(276)
             blob_pulse_release_ms = _Slider(1330)
-            blob_stage_gain = _Slider(111)
-            blob_core_scale = _Slider(95)
-            blob_core_floor_bias = _Slider(27)
-            blob_stage_bias = _Slider(-14)
-            blob_stage2_release_ms = _Slider(1200)
-            blob_stage3_release_ms = _Slider(1500)
             blob_constant_wobble = _Slider(80)
             blob_reactive_wobble = _Slider(290)
-            blob_stretch_tendency = _Slider(55)
-            blob_stretch_inner = _Slider(62)
-            blob_stretch_outer = _Slider(48)
+            blob_stretch = _Slider(48)
             blob_growth = _Slider(275)
             _blob_color = QColor(10, 20, 30, 200)
             _blob_glow_color = QColor(40, 50, 60, 210)
@@ -1978,10 +1973,9 @@ class TestBlobSettingsBinding:
         assert payload["blob_glow_color"] == [40, 50, 60, 210]
         assert payload["blob_edge_color"] == [70, 80, 90, 220]
         assert payload["blob_outline_color"] == [100, 110, 120, 230]
-        assert payload["blob_pulse_cap"] == pytest.approx(2.76)
         assert payload["blob_pulse_release_ms"] == 1330
         assert payload["blob_reactive_wobble"] == pytest.approx(2.90)
-        assert payload["blob_stage_bias"] == pytest.approx(-0.14)
+        assert payload["blob_stretch"] == pytest.approx(0.48)
         assert payload["blob_growth"] == pytest.approx(2.75)
 
 
@@ -3118,7 +3112,7 @@ class TestVisualizerPresetRepair:
 
         repaired = json.loads(preset_path.read_text(encoding="utf-8"))
         sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
-        assert "blob_stretch_inner" in sv and "blob_stretch_outer" in sv
+        assert "blob_stretch" in sv
         assert "blob_stretch_x_bias" not in sv
         assert "blob_stretch_y_bias" not in sv
 

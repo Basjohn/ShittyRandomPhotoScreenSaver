@@ -149,18 +149,21 @@ def test_snapshot_override_fallback_without_marker(tmp_path, monkeypatch):
     assert slot.settings["spectrum_profile_floor"] == 0.2
 
 
-def test_curated_bubble_preset_is_pre_filtered_and_tracks_gradient_direction():
-    preset_path = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "bubble" / "preset_2_sideway_swish.json"
-    payload = json.loads(preset_path.read_text(encoding="utf-8"))
-    sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+def test_curated_bubble_presets_keep_direction_keys_when_present():
+    bubble_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "bubble"
 
-    assert sv["mode"] == "bubble"
-    assert "bubble_gradient_direction" in sv
-    assert "bubble_specular_direction" in sv
+    for preset_path in sorted(bubble_root.glob("*.json")):
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
 
-    # Curated payloads should already be filtered to allowed keys for the mode
-    filtered = vp._filter_settings_for_mode("bubble", sv)
-    assert filtered == sv
+        assert sv["mode"] == "bubble"
+
+        filtered = vp._filter_settings_for_mode("bubble", sv)
+        for key in ("bubble_gradient_direction", "bubble_specular_direction"):
+            if key in sv:
+                assert filtered.get(key) == sv[key], (
+                    f"{preset_path} should preserve {key} during preset filtering"
+                )
 
 
 def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
@@ -300,6 +303,58 @@ def test_sst_roundtrip_preserves_versioned_bubble_gradient_direction(tmp_path):
     assert round_tripped["bubble_gradient_semantics_version"] == 2
 
 
+def test_sst_roundtrip_preserves_blob_shaper_directional_nodes(tmp_path):
+    def _make_manager(suffix: str) -> SettingsManager:
+        base = tmp_path / suffix
+        base.mkdir(parents=True, exist_ok=True)
+        return SettingsManager(
+            organization="Test",
+            application=f"BlobShaperSST_{uuid.uuid4().hex}",
+            storage_base_dir=base,
+        )
+
+    source_mgr = _make_manager("src_blob")
+    energy_nodes = [
+        {
+            "type": "bass",
+            "x": 0.84,
+            "y": 0.22,
+            "strength": 0.95,
+            "canvas": "react",
+            "dir_x": -0.41,
+            "dir_y": 0.89,
+            "dir_len": 26.0,
+        }
+    ]
+    source_mgr.set(
+        "widgets.spotify_visualizer",
+        {
+            "mode": "blob",
+            "blob_shaper_enabled": True,
+            "blob_topology": "ring",
+            "blob_ring_thickness": 0.44,
+            "blob_shape_base_nodes": [[0.0, 0.92], [0.5, 1.08], [1.0, 0.92]],
+            "blob_shape_reaction_nodes": [[0.0, 1.25], [0.5, 0.74], [1.0, 1.18]],
+            "blob_shape_energy_nodes": energy_nodes,
+        },
+    )
+
+    export_path = tmp_path / "blob_shaper_roundtrip.sst"
+    assert sst_io.export_to_sst(source_mgr, str(export_path))
+
+    target_mgr = _make_manager("dst_blob")
+    assert sst_io.import_from_sst(target_mgr, str(export_path), merge=True)
+
+    round_tripped = target_mgr.get("widgets.spotify_visualizer")
+    assert round_tripped["mode"] == "blob"
+    assert round_tripped["blob_shaper_enabled"] is True
+    assert round_tripped["blob_topology"] == "ring"
+    assert round_tripped["blob_ring_thickness"] == pytest.approx(0.44)
+    assert round_tripped["blob_shape_base_nodes"] == [[0.0, 0.92], [0.5, 1.08], [1.0, 0.92]]
+    assert round_tripped["blob_shape_reaction_nodes"] == [[0.0, 1.25], [0.5, 0.74], [1.0, 1.18]]
+    assert round_tripped["blob_shape_energy_nodes"] == energy_nodes
+
+
 def test_all_curated_presets_have_unique_keys_and_filtered_settings():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
     known_modes = tuple(vp.MODES)
@@ -378,7 +433,7 @@ def test_curated_payload_parser_drops_retired_compat_keys():
                     "mode": "blob",
                     "blob_use_raw_energy": True,
                     "blob_energy_boost": 0.91,
-                    "blob_stage_bias": -0.16,
+                    "blob_stretch": 0.41,
                 }
             }
         },
@@ -390,7 +445,93 @@ def test_curated_payload_parser_drops_retired_compat_keys():
     _index, preset = parsed
     assert "blob_use_raw_energy" not in preset.settings
     assert "blob_energy_boost" not in preset.settings
-    assert preset.settings["blob_stage_bias"] == pytest.approx(-0.16)
+    assert preset.settings["blob_stretch"] == pytest.approx(0.41)
+
+
+def test_blob_curated_payload_parser_preserves_directional_shaper_nodes():
+    energy_nodes = [
+        {
+            "type": "bass",
+            "x": 0.82,
+            "y": 0.24,
+            "strength": 0.9,
+            "canvas": "react",
+            "dir_x": -0.35,
+            "dir_y": 0.91,
+            "dir_len": 28.0,
+        }
+    ]
+    payload = {
+        "mode": "blob",
+        "preset_index": 0,
+        "visualizer_preset_override": True,
+        "visualizer_preset_mode": "blob",
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_shaper_enabled": True,
+                    "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 1.0]],
+                    "blob_shape_reaction_nodes": [[0.0, 1.2], [0.5, 0.8]],
+                    "blob_shape_energy_nodes": energy_nodes,
+                }
+            }
+        },
+    }
+
+    parsed = vp._parse_preset_payload(Path("preset_1_blob.json"), payload, "blob")
+
+    assert parsed is not None
+    _, preset = parsed
+    assert preset.settings["blob_shape_energy_nodes"] == energy_nodes
+
+
+@pytest.mark.qt
+def test_widgets_tab_blob_preset_payload_preserves_directional_shaper_nodes(qt_app, tmp_path):
+    manager = SettingsManager(
+        organization="Test",
+        application=f"BlobShaperPreset_{uuid.uuid4().hex}",
+        storage_base_dir=tmp_path / "settings",
+    )
+    widgets_cfg = manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg["mode"] = "blob"
+    spotify_cfg["preset_blob"] = 0
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    manager.set("widgets", widgets_cfg)
+
+    tab = WidgetsTab(manager)
+    try:
+        blob_index = tab.vis_mode_combo.findData("blob")
+        assert blob_index >= 0
+        tab.vis_mode_combo.setCurrentIndex(blob_index)
+
+        base_nodes = [[0.0, 0.9], [0.5, 1.15], [1.0, 0.9]]
+        react_nodes = [[0.0, 1.3], [0.5, 0.7], [1.0, 1.2]]
+        energy_nodes = [
+            {
+                "type": "bass",
+                "x": 0.88,
+                "y": 0.22,
+                "strength": 1.0,
+                "canvas": "react",
+                "dir_x": -0.42,
+                "dir_y": 0.88,
+                "dir_len": 24.0,
+            }
+        ]
+        tab.blob_shape_editor.set_nodes(base_nodes, react_nodes, energy_nodes)
+
+        payload = tab.build_visualizer_preset_payload("blob")
+        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+
+        assert sv["mode"] == "blob"
+        assert sv["blob_shape_base_nodes"] == base_nodes
+        assert sv["blob_shape_reaction_nodes"] == react_nodes
+        assert sv["blob_shape_energy_nodes"] == energy_nodes
+    finally:
+        tab.deleteLater()
 
 
 @pytest.mark.parametrize(
@@ -398,7 +539,7 @@ def test_curated_payload_parser_drops_retired_compat_keys():
     [
         ("spectrum", "_spectrum_preset_slider", "spectrum_growth", 2.9),
         ("bubble", "_bubble_preset_slider", "bubble_growth", 3.2),
-        ("blob", "_blob_preset_slider", "blob_stage_bias", -0.18),
+        ("blob", "_blob_preset_slider", "blob_stretch", 0.48),
         ("sine_wave", "_sine_preset_slider", "sine_wave_growth", 1.7),
         ("oscilloscope", "_osc_preset_slider", "osc_growth", 2.4),
     ],
@@ -721,6 +862,41 @@ def test_reindex_curated_presets_normalizes_first_remaining_slot_to_preset_1(tmp
     assert second_payload["preset_index"] == 0
     assert second_payload["name"] == "Preset 1 (Second)"
     assert second_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 2.0
+
+
+def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "blob"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    preset_path = mode_dir / "preset_1_alpha.json"
+    preset_path.write_text(
+        json.dumps(
+            {
+                "name": "Preset 1 (Alpha)",
+                "preset_index": 0,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": mode,
+                            "blob_growth": 1.0,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
+
+    backup_path, _stats = repair.repair_file(preset_path, mode)
+
+    assert backup_path.exists()
+    assert backup_path.parent != preset_path.parent
+    assert backup_path.is_relative_to(root / "temp" / "visualizer_preset_backups")
+    assert not list(mode_dir.glob("*.bak*"))
 
 
 def test_primary_visualizer_modes_ship_at_least_one_curated_preset():

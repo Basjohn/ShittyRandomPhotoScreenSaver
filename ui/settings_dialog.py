@@ -7,7 +7,9 @@ Features gorgeous UI with:
 - Resizable window
 """
 import sys
+import builtins
 import time
+import os
 from typing import Dict, Optional, Any
 from pathlib import Path
 from PySide6.QtWidgets import (
@@ -19,6 +21,7 @@ from PySide6.QtCore import Qt, QPoint, QRect, Signal, QUrl, QTimer, QEvent, QObj
 from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPen, QGuiApplication
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.mc import is_mc_build
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, PresetsTab
@@ -1178,20 +1181,107 @@ class SettingsDialog(QDialog):
                 "Failed to reset settings to defaults.\nSee log for details.",
             )
 
-    def _on_reset_visualizers_clicked(self) -> None:
-        """Reset only the visualizer settings back to defaults."""
+    def _resolve_shipped_visualizer_source_root(self) -> tuple[Path | None, str]:
+        """Return the frozen-build source tree for shipped curated presets."""
+        if not (bool(getattr(sys, "frozen", False)) or bool(getattr(builtins, "__compiled__", False))):
+            return None, "script"
+
+        from core.settings.visualizer_presets import get_visualizer_presets_dir
+
+        target_root = get_visualizer_presets_dir()
+        if is_mc_build():
+            return target_root, "mc_install"
+
+        program_data = Path(os.getenv("PROGRAMDATA", r"C:\ProgramData"))
+        source_root = program_data / "SRPSS" / "presets" / "visualizer_modes"
+        if source_root.exists():
+            return source_root, "programdata"
+        return target_root, "frozen_fallback"
+
+    def _replace_visualizer_presets_from_shipped(self) -> int:
+        """Replace shipped curated preset files in the active frozen-build tree."""
+        from core.settings.visualizer_presets import get_visualizer_presets_dir, reload_presets
+        from core.visualizer_preset_manifest import (
+            resolve_curated_visualizer_manifest_entries,
+            sync_curated_preset_tree,
+            write_curated_visualizer_preset_manifest,
+        )
+
+        source_root, source_kind = self._resolve_shipped_visualizer_source_root()
+        if source_root is None:
+            return -1
+
+        target_root = get_visualizer_presets_dir()
+        manifest_entries = resolve_curated_visualizer_manifest_entries(source_root)
+        if not manifest_entries:
+            raise RuntimeError("No shipped visualizer preset manifest entries were available.")
+
+        payloads: dict[Path, bytes] = {}
+        missing_sources: list[str] = []
+        for entry in sorted(manifest_entries):
+            rel_path = Path(entry)
+            source_path = source_root / rel_path
+            if not source_path.exists():
+                missing_sources.append(rel_path.as_posix())
+                continue
+            payloads[rel_path] = source_path.read_bytes()
+
+        if missing_sources:
+            raise RuntimeError(
+                "Missing shipped preset source files: " + ", ".join(missing_sources[:5])
+            )
+
+        target_root.mkdir(parents=True, exist_ok=True)
+        sync_curated_preset_tree(
+            target_root,
+            manifest_entries=manifest_entries,
+            allow_non_frozen=True,
+        )
+
+        written = 0
+        for rel_path, data in payloads.items():
+            out_path = target_root / rel_path
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(data)
+            written += 1
+
+        # Persist the reconciled shipped view into the active target tree so a
+        # later frozen-build startup sync cannot silently delete newly accepted
+        # curated files just because the packaged manifest lagged behind.
+        write_curated_visualizer_preset_manifest(target_root, manifest_entries)
+
+        reload_presets()
+        logger.info(
+            "[SETTINGS] Replaced shipped visualizer presets from %s into %s (%d file(s))",
+            source_kind,
+            target_root,
+            written,
+        )
+        return written
+
+    def _on_replace_visualizers_clicked(self) -> None:
+        """Replace shipped curated visualizer presets in frozen builds only."""
         confirmed = StyledPopup.question(
             self,
-            "Reset Visualizers",
-            "Reset all Spotify visualizer settings to defaults?",
-            yes_text="Reset",
+            "Replace Visualizers",
+            "Replace the shipped curated visualizer presets with the packaged set?\n\n"
+            "This is intended for frozen SCR/MC builds. Script mode will not rewrite the repo tree.",
+            yes_text="Replace",
             no_text="Cancel",
         )
         if not confirmed:
             return
 
         try:
-            self._settings.reset_visualizers_to_defaults()
+            written = self._replace_visualizer_presets_from_shipped()
+            if written < 0:
+                StyledPopup.show_success(
+                    self,
+                    "Script Mode Safety",
+                    "Visualizer replacement is disabled in script mode.\n"
+                    "The repository preset tree was not modified.",
+                )
+                return
 
             try:
                 tab = self._get_tab_instance('widgets')
@@ -1203,17 +1293,17 @@ class SettingsDialog(QDialog):
             try:
                 notice = getattr(self, "reset_notice_label", None)
                 if notice is not None:
-                    notice.setText("Visualizer settings reset to defaults!")
+                    notice.setText(f"Replaced shipped visualizer presets ({written} files)!")
                     notice.setVisible(True)
                     QTimer.singleShot(2000, lambda: notice.setVisible(False))
             except Exception:
                 logger.debug("Failed to show visualizer reset notice label", exc_info=True)
         except Exception as exc:
-            logger.exception("Failed to reset visualizer settings: %s", exc)
+            logger.exception("Failed to replace shipped visualizer presets: %s", exc)
             StyledPopup.show_error(
                 self,
                 "Error",
-                "Failed to reset visualizer settings.\nSee log for details.",
+                "Failed to replace the shipped visualizer presets.\nSee log for details.",
             )
     
     def _show_more_options_menu(self) -> None:

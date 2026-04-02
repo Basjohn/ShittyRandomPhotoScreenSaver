@@ -114,7 +114,12 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if c is not None:
             widget._blob_outline_color = c
     if 'blob_pulse' in kwargs:
-        widget._blob_pulse = max(0.0, float(kwargs['blob_pulse']))
+        _blob_pulse = max(0.0, float(kwargs['blob_pulse']))
+        widget._blob_pulse = _blob_pulse
+        if 'blob_pulse_cap' not in kwargs:
+            widget._blob_pulse_cap = max(0.0, min(3.0, _blob_pulse))
+        if 'blob_stage_gain' not in kwargs:
+            widget._blob_stage_gain = max(0.0, min(2.0, _blob_pulse))
     if 'blob_width' in kwargs:
         widget._blob_width = max(0.1, min(1.0, float(kwargs['blob_width'])))
     if 'blob_size' in kwargs:
@@ -134,7 +139,12 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'blob_pulse_cap' in kwargs:
         widget._blob_pulse_cap = max(0.0, min(3.0, float(kwargs['blob_pulse_cap'])))
     if 'blob_pulse_release_ms' in kwargs:
-        widget._blob_pulse_release_ms = max(60.0, min(1500.0, float(kwargs['blob_pulse_release_ms'])))
+        _blob_release = max(60.0, min(1500.0, float(kwargs['blob_pulse_release_ms'])))
+        widget._blob_pulse_release_ms = _blob_release
+        if 'blob_stage2_release_ms' not in kwargs:
+            widget._blob_stage2_release_ms = max(200.0, min(4000.0, _blob_release * 4.1))
+        if 'blob_stage3_release_ms' not in kwargs:
+            widget._blob_stage3_release_ms = max(200.0, min(4000.0, _blob_release * 5.45))
     if 'blob_stage_gain' in kwargs:
         widget._blob_stage_gain = max(0.0, min(2.0, float(kwargs['blob_stage_gain'])))
     if 'blob_core_scale' in kwargs:
@@ -157,6 +167,11 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_stretch_inner = max(0.0, min(1.0, float(kwargs['blob_stretch_inner'])))
     if 'blob_stretch_outer' in kwargs:
         widget._blob_stretch_outer = max(0.0, min(1.0, float(kwargs['blob_stretch_outer'])))
+    if 'blob_stretch' in kwargs:
+        _blob_stretch = max(0.0, min(1.0, float(kwargs['blob_stretch'])))
+        widget._blob_stretch_tendency = _blob_stretch
+        widget._blob_stretch_inner = 0.0
+        widget._blob_stretch_outer = _blob_stretch
     # Blob Shaper
     if 'blob_shaper_enabled' in kwargs:
         widget._blob_shaper_enabled = bool(kwargs['blob_shaper_enabled'])
@@ -685,6 +700,7 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_edge_color'] = widget._blob_edge_color
     extra['blob_outline_color'] = widget._blob_outline_color
     extra['blob_pulse'] = widget._blob_pulse
+    extra['blob_pulse_release_ms'] = getattr(widget, '_blob_pulse_release_ms', 220.0)
     extra['blob_width'] = widget._blob_width
     extra['blob_size'] = widget._blob_size
     extra['blob_glow_intensity'] = widget._blob_glow_intensity
@@ -694,10 +710,10 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_glow_drive_mode'] = _normalize_blob_glow_drive_mode(
         getattr(widget, '_blob_glow_drive_mode', 'bass')
     )
-    extra['blob_reactive_deformation'] = widget._blob_reactive_deformation
-    extra['blob_pulse_cap'] = getattr(widget, '_blob_pulse_cap', 1.0)
-    extra['blob_pulse_release_ms'] = getattr(widget, '_blob_pulse_release_ms', 220.0)
-    extra['blob_stage_gain'] = widget._blob_stage_gain
+    _blob_shaper_enabled = getattr(widget, '_blob_shaper_enabled', False)
+    extra['blob_reactive_deformation'] = 0.0 if _blob_shaper_enabled else widget._blob_reactive_deformation
+    extra['blob_pulse_cap'] = getattr(widget, '_blob_pulse_cap', getattr(widget, '_blob_pulse', 1.0))
+    extra['blob_stage_gain'] = getattr(widget, '_blob_stage_gain', getattr(widget, '_blob_pulse', 1.0))
     extra['blob_core_scale'] = widget._blob_core_scale
     extra['blob_core_floor_bias'] = widget._blob_core_floor_bias
     extra['blob_stage_bias'] = getattr(widget, '_blob_stage_bias', 0.0)
@@ -709,7 +725,7 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_stretch_inner'] = getattr(widget, '_blob_stretch_inner', 0.5)
     extra['blob_stretch_outer'] = getattr(widget, '_blob_stretch_outer', 0.5)
     # Blob Shaper
-    extra['blob_shaper_enabled'] = getattr(widget, '_blob_shaper_enabled', False)
+    extra['blob_shaper_enabled'] = _blob_shaper_enabled
     extra['blob_shaper_base_strength'] = getattr(widget, '_blob_shaper_base_strength', 0.5)
     extra['blob_shaper_react_strength'] = getattr(widget, '_blob_shaper_react_strength', 0.5)
     extra['blob_topology'] = getattr(widget, '_blob_topology', 'circle')

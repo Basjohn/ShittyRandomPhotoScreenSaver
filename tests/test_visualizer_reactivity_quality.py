@@ -370,6 +370,50 @@ def test_blob_pulse_release_slows_decay_without_slowing_attack(qt_app):
 
 
 @pytest.mark.qt
+def test_blob_pulse_release_honors_full_ui_range_above_800ms(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    calm = SimpleNamespace(bass=0.10, mid=0.12, high=0.04, overall=0.09)
+    hit = SimpleNamespace(bass=0.16, mid=0.52, high=0.09, overall=0.20)
+
+    capped = SpotifyBarsGLOverlay(None)
+    capped._vis_mode = "blob"
+    extended = SpotifyBarsGLOverlay(None)
+    extended._vis_mode = "blob"
+
+    _push_blob_frame(capped, dt=0.016, energy=calm, blob_pulse_release_ms=800.0)
+    _push_blob_frame(extended, dt=0.016, energy=calm, blob_pulse_release_ms=1200.0)
+
+    _push_blob_frame(capped, dt=0.016, energy=hit, snare=1.0, blob_pulse_release_ms=800.0)
+    _push_blob_frame(extended, dt=0.016, energy=hit, snare=1.0, blob_pulse_release_ms=1200.0)
+
+    _push_blob_frame(capped, dt=0.016, energy=calm, blob_pulse_release_ms=800.0)
+    _push_blob_frame(extended, dt=0.016, energy=calm, blob_pulse_release_ms=1200.0)
+
+    assert extended._blob_live_mid_energy > capped._blob_live_mid_energy
+
+
+@pytest.mark.qt
+def test_blob_body_response_drives_derived_runtime_scalars(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+    from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+    overlay = SpotifyBarsGLOverlay(None)
+    apply_vis_mode_kwargs(overlay, {"blob_pulse": 0.45})
+    low_cap = overlay._blob_pulse_cap
+    low_stage_gain = overlay._blob_stage_gain
+
+    apply_vis_mode_kwargs(overlay, {"blob_pulse": 1.85})
+    high_cap = overlay._blob_pulse_cap
+    high_stage_gain = overlay._blob_stage_gain
+
+    assert low_cap == pytest.approx(0.45)
+    assert low_stage_gain == pytest.approx(0.45)
+    assert high_cap == pytest.approx(1.85)
+    assert high_stage_gain == pytest.approx(1.85)
+
+
+@pytest.mark.qt
 def test_blob_glow_drive_mode_can_follow_vocal_energy(qt_app):
     from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 

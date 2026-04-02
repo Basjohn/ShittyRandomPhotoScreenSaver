@@ -25,6 +25,44 @@ def get_visualizer_preset_manifest_path(root: Path | None = None) -> Path:
     return presets_root.parent / "visualizer_modes_manifest.json"
 
 
+def _normalize_manifest_entries(entries: object) -> set[str]:
+    if not isinstance(entries, list):
+        return set()
+    return {
+        Path(str(entry)).as_posix()
+        for entry in entries
+        if isinstance(entry, str) and entry.strip()
+    }
+
+
+def build_curated_visualizer_manifest_payload(entries: Collection[str]) -> dict[str, list[str]]:
+    """Build the canonical manifest payload for a curated preset tree."""
+    normalized = {
+        Path(str(entry)).as_posix()
+        for entry in entries
+        if str(entry).strip()
+    }
+    return {
+        "managed_curated_files": sorted(normalized),
+    }
+
+
+def scan_curated_visualizer_preset_tree(root: Path) -> set[str]:
+    """Return managed curated preset paths that currently exist under *root*."""
+    if not root.exists() or not root.is_dir():
+        return set()
+    discovered: set[str] = set()
+    for json_path in root.rglob("*.json"):
+        try:
+            relative_path = json_path.relative_to(root)
+        except Exception:
+            continue
+        if not is_managed_curated_preset_path(relative_path):
+            continue
+        discovered.add(relative_path.as_posix())
+    return discovered
+
+
 def load_curated_visualizer_preset_manifest(root: Path | None = None) -> set[str]:
     manifest_path = get_visualizer_preset_manifest_path(root)
     try:
@@ -34,13 +72,56 @@ def load_curated_visualizer_preset_manifest(root: Path | None = None) -> set[str
         return set()
 
     entries = payload.get("managed_curated_files") if isinstance(payload, dict) else payload
-    if not isinstance(entries, list):
-        return set()
-    return {
+    return _normalize_manifest_entries(entries)
+
+
+def write_curated_visualizer_preset_manifest(
+    root: Path,
+    entries: Collection[str] | None = None,
+) -> set[str]:
+    """Write a canonical manifest for the curated preset tree under *root*."""
+    resolved_entries = {
         Path(str(entry)).as_posix()
-        for entry in entries
-        if isinstance(entry, str) and entry.strip()
+        for entry in (entries if entries is not None else scan_curated_visualizer_preset_tree(root))
+        if str(entry).strip()
     }
+    manifest_path = get_visualizer_preset_manifest_path(root)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = build_curated_visualizer_manifest_payload(resolved_entries)
+    manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return resolved_entries
+
+
+def resolve_curated_visualizer_manifest_entries(root: Path) -> set[str]:
+    """Return manifest entries reconciled with the live curated source tree.
+
+    This is intended for source-tree aware operations such as replacement from
+    shipped assets. Missing manifest updates should not make freshly-authored
+    curated presets invisible, and stale manifest paths should not make those
+    operations fail.
+    """
+    manifest_entries = load_curated_visualizer_preset_manifest(root)
+    live_entries = scan_curated_visualizer_preset_tree(root)
+    if not manifest_entries:
+        return live_entries
+    if not live_entries:
+        return manifest_entries
+
+    stale_manifest = manifest_entries - live_entries
+    missing_manifest = live_entries - manifest_entries
+    if stale_manifest:
+        logger.info(
+            "[VIS_PRESET_MANIFEST] Ignoring %d stale manifest entrie(s) missing from %s",
+            len(stale_manifest),
+            root,
+        )
+    if missing_manifest:
+        logger.info(
+            "[VIS_PRESET_MANIFEST] Auto-accepting %d live curated preset file(s) missing from manifest under %s",
+            len(missing_manifest),
+            root,
+        )
+    return (manifest_entries & live_entries) | missing_manifest
 
 
 def is_managed_curated_preset_path(relative_path: Path) -> bool:

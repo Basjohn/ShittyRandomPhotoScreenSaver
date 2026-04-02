@@ -165,9 +165,11 @@ def compute_blob_radius_preview(
     bass = _clamp(bass_energy, 0.0, 1.0)
     blob_pulse = max(0.0, blob_pulse)
     r = 0.44 * blob_size
-    r += bass * bass * 0.066
+    r += bass * bass * 0.066 * blob_pulse
     r += bass * 0.077 * blob_pulse
     se = _clamp(smoothed_energy, 0.0, 1.0)
+    breath = max(bass, se * 0.82)
+    r += max(0.03, breath) * 0.020 * blob_pulse
     r -= (1.0 - se) * 0.028 * blob_pulse
     r += compute_stage_offset(
         blob_size=blob_size,
@@ -179,7 +181,7 @@ def compute_blob_radius_preview(
         core_scale=core_scale,
         smoothed_energy=smoothed_energy,
         stage_bias=0.0,
-    )
+    ) * blob_pulse
     return r
 
 

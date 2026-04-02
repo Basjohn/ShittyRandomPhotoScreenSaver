@@ -40,9 +40,11 @@ def _baseline_radius(**overrides: float) -> float:
     pulse = max(0.0, params["blob_pulse"])
     se = max(0.0, min(1.0, params["smoothed_energy"]))
     r = 0.44 * blob_size
-    r += bass * bass * 0.066
+    r += bass * bass * 0.066 * pulse
     r += bass * 0.077 * pulse
-    r -= (1.0 - se) * 0.053 * pulse
+    breath = max(bass, se * 0.82)
+    r += max(0.03, breath) * 0.020 * pulse
+    r -= (1.0 - se) * 0.028 * pulse
     return r
 
 
@@ -103,3 +105,47 @@ def test_stage_thresholds_increase_monotonically() -> None:
     stage2 = _radius(overall_energy=0.58, bass_energy=0.48, mid_energy=0.40, high_energy=0.45, **gain_params)
     stage3 = _radius(overall_energy=0.82, bass_energy=0.75, mid_energy=0.68, high_energy=0.9, **gain_params)
     assert stage0 < stage1 < stage2 < stage3
+
+
+def test_blob_pulse_zero_removes_body_radius_motion_when_stage_gain_is_zero() -> None:
+    calm = _radius(
+        blob_pulse=0.0,
+        stage_gain=0.0,
+        bass_energy=0.04,
+        mid_energy=0.03,
+        high_energy=0.02,
+        overall_energy=0.03,
+        smoothed_energy=0.05,
+    )
+    hit = _radius(
+        blob_pulse=0.0,
+        stage_gain=0.0,
+        bass_energy=0.80,
+        mid_energy=0.65,
+        high_energy=0.50,
+        overall_energy=0.72,
+        smoothed_energy=0.78,
+    )
+    assert hit == pytest.approx(calm)
+
+
+def test_blob_pulse_zero_also_disables_staged_size_growth() -> None:
+    calm = _radius(
+        blob_pulse=0.0,
+        stage_gain=1.0,
+        bass_energy=0.04,
+        mid_energy=0.03,
+        high_energy=0.02,
+        overall_energy=0.03,
+        smoothed_energy=0.05,
+    )
+    hit = _radius(
+        blob_pulse=0.0,
+        stage_gain=1.0,
+        bass_energy=0.80,
+        mid_energy=0.65,
+        high_energy=0.50,
+        overall_energy=0.72,
+        smoothed_energy=0.78,
+    )
+    assert hit == pytest.approx(calm)

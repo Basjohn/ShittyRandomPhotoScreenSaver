@@ -233,12 +233,13 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     dialog.reset_defaults_btn.clicked.connect(dialog._on_reset_to_defaults_clicked)
     button_row.addWidget(dialog.reset_defaults_btn)
 
-    dialog.reset_visualizers_btn = QPushButton("Reset Visualizers")
-    dialog.reset_visualizers_btn.setObjectName("resetVisualizersButton")
-    dialog.reset_visualizers_btn.setFixedHeight(24)
-    dialog.reset_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
-    dialog.reset_visualizers_btn.clicked.connect(dialog._on_reset_visualizers_clicked)
-    button_row.addWidget(dialog.reset_visualizers_btn)
+    dialog.replace_visualizers_btn = QPushButton("Replace Visualizers")
+    dialog.replace_visualizers_btn.setObjectName("resetVisualizersButton")
+    dialog.replace_visualizers_btn.setFixedHeight(24)
+    dialog.replace_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+    dialog.replace_visualizers_btn.clicked.connect(dialog._on_replace_visualizers_clicked)
+    dialog.reset_visualizers_btn = dialog.replace_visualizers_btn
+    button_row.addWidget(dialog.replace_visualizers_btn)
 
     button_row.addStretch()
 

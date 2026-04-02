@@ -268,6 +268,40 @@ class TestCustomPresetBackup:
         assert spotify_vis.get("bubble_gradient_direction") == "right"
         assert spotify_vis.get("bubble_gradient_semantics_version") == 2
 
+    def test_custom_backup_and_restore_preserve_blob_shaper_directional_nodes(self, settings_manager: SettingsManager):
+        energy_nodes = [
+            {
+                "type": "bass",
+                "x": 0.81,
+                "y": 0.24,
+                "strength": 1.0,
+                "canvas": "react",
+                "dir_x": -0.38,
+                "dir_y": 0.92,
+                "dir_len": 25.0,
+            }
+        ]
+        settings_manager.set("widgets", {
+            "spotify_visualizer": {
+                "mode": "blob",
+                "blob_shaper_enabled": True,
+                "blob_shape_base_nodes": [[0.0, 0.94], [0.5, 1.04], [1.0, 0.94]],
+                "blob_shape_reaction_nodes": [[0.0, 1.24], [0.5, 0.72], [1.0, 1.17]],
+                "blob_shape_energy_nodes": energy_nodes,
+            }
+        })
+
+        _save_custom_backup(settings_manager)
+        settings_manager.set("widgets", {})
+        _restore_custom_backup(settings_manager)
+
+        spotify_vis = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        assert spotify_vis.get("mode") == "blob"
+        assert spotify_vis.get("blob_shaper_enabled") is True
+        assert spotify_vis.get("blob_shape_base_nodes") == [[0.0, 0.94], [0.5, 1.04], [1.0, 0.94]]
+        assert spotify_vis.get("blob_shape_reaction_nodes") == [[0.0, 1.24], [0.5, 0.72], [1.0, 1.17]]
+        assert spotify_vis.get("blob_shape_energy_nodes") == energy_nodes
+
     def test_visualizer_normalization_forward_migrates_osc_alias(self):
         normalized = normalize_visualizer_section_mapping(
             {

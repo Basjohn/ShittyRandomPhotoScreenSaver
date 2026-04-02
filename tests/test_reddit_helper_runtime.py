@@ -6,6 +6,52 @@ from pathlib import Path
 
 
 class TestRedditHelperRuntime:
+    def test_enqueue_url_marks_secure_desktop_entries_with_not_before_timestamp(self, tmp_path, monkeypatch):
+        from core.windows import reddit_helper_bridge as bridge
+
+        queue_dir = tmp_path / "url_queue"
+        queue_dir.mkdir(parents=True)
+
+        monkeypatch.setattr(bridge, "_QUEUE_DIR", queue_dir)
+        monkeypatch.setattr(bridge, "_SPOOL_READY", True)
+        monkeypatch.setattr(bridge.os, "getpid", lambda: 4242)
+        monkeypatch.setattr(
+            bridge.os,
+            "getenv",
+            lambda key, default=None: "Winlogon" if key == "SESSIONNAME" else default,
+        )
+
+        assert bridge.enqueue_url("https://example.com/winlogon", source="scr_click") is True
+
+        queued_files = list(queue_dir.glob("*.json"))
+        assert len(queued_files) == 1
+        payload = json.loads(queued_files[0].read_text(encoding="utf-8"))
+        assert payload["session"] == "Winlogon"
+        assert payload["not_before_ts"] >= payload["timestamp"] + 11.0
+
+    def test_enqueue_url_leaves_normal_session_entries_immediate(self, tmp_path, monkeypatch):
+        from core.windows import reddit_helper_bridge as bridge
+
+        queue_dir = tmp_path / "url_queue"
+        queue_dir.mkdir(parents=True)
+
+        monkeypatch.setattr(bridge, "_QUEUE_DIR", queue_dir)
+        monkeypatch.setattr(bridge, "_SPOOL_READY", True)
+        monkeypatch.setattr(bridge.os, "getpid", lambda: 4242)
+        monkeypatch.setattr(
+            bridge.os,
+            "getenv",
+            lambda key, default=None: "Console" if key == "SESSIONNAME" else default,
+        )
+
+        assert bridge.enqueue_url("https://example.com/manual", source="manual_test") is True
+
+        queued_files = list(queue_dir.glob("*.json"))
+        assert len(queued_files) == 1
+        payload = json.loads(queued_files[0].read_text(encoding="utf-8"))
+        assert payload["session"] == "Console"
+        assert "not_before_ts" not in payload
+
     def test_resolve_helper_command_keeps_installed_helper_session_scoped_when_requested(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_runtime as runtime
 
@@ -292,3 +338,28 @@ class TestRedditHelperRuntime:
         assert runtime.request_session_helper_shutdown(source="test") is False
         shutdown_path = signal_dir / f"{runtime.SESSION_HELPER_SHUTDOWN_PREFIX}4242.json"
         assert not shutdown_path.exists()
+
+    def test_process_alive_uses_windows_kernel_exit_code(self, monkeypatch):
+        from core.windows import reddit_helper_runtime as runtime
+
+        class _Kernel32:
+            def __init__(self):
+                self.closed = []
+
+            def OpenProcess(self, access, inherit, pid):  # noqa: N802, ARG002
+                return 123 if pid == 999 else 0
+
+            def GetExitCodeProcess(self, handle, exit_code_ptr):  # noqa: N802
+                exit_code_ptr._obj.value = 259 if handle == 123 else 0
+                return 1
+
+            def CloseHandle(self, handle):  # noqa: N802
+                self.closed.append(handle)
+                return 1
+
+        fake_windll = type("Windll", (), {"kernel32": _Kernel32()})()
+        monkeypatch.setattr(runtime.ctypes, "windll", fake_windll)
+
+        assert runtime._process_alive(999) is True
+        assert runtime._process_alive(111) is False
+        assert fake_windll.kernel32.closed == [123]

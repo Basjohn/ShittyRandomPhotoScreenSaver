@@ -10,7 +10,7 @@ from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QSlider,
-    QFrame, QSizePolicy, QScrollArea, QPushButton,
+    QFrame, QSizePolicy, QScrollArea,
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
@@ -22,7 +22,6 @@ from core.settings.presets import (
     get_preset_by_index,
     apply_preset,
     get_current_preset_info,
-    reset_non_custom_presets,
 )
 from ui.tabs.shared_styles import (
     PAGE_TITLE_STYLE,
@@ -252,22 +251,6 @@ class PresetsTab(QScrollArea):
         # Stretch to push everything up
         main_layout.addStretch()
         
-        # Bottom right button row
-        button_row, _ = add_aligned_row(
-            main_layout,
-            "",
-            label_width=LABEL_WIDTH,
-            wrap=False,
-        )
-        button_row.addStretch()
-
-        self._reset_presets_btn = QPushButton("Reset Non-Custom Presets")
-        self._reset_presets_btn.setFixedHeight(24)
-        self._reset_presets_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
-        self._reset_presets_btn.setToolTip("Reset all preset definitions to defaults (preserves Custom preset)")
-        self._reset_presets_btn.clicked.connect(self._on_reset_presets_clicked)
-        button_row.addWidget(self._reset_presets_btn)
-
         self.setWidget(content)
     
     def _load_current_preset(self) -> None:
@@ -308,15 +291,3 @@ class PresetsTab(QScrollArea):
         """Refresh the tab to reflect current settings."""
         self._load_current_preset()
     
-    def _on_reset_presets_clicked(self) -> None:
-        """Reset all non-custom preset definitions to defaults."""
-        try:
-            reset_non_custom_presets(self._settings)
-            
-            # Reload current preset to reflect any changes
-            self._load_current_preset()
-            
-            logger.info("[PRESETS_TAB] Non-custom presets reset by user")
-            
-        except Exception as exc:
-            logger.exception("Failed to reset presets: %s", exc)

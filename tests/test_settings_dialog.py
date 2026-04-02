@@ -1,11 +1,14 @@
 """Tests for settings dialog."""
 import inspect
+import json
+
 import pytest
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
+from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
 
 
 @pytest.fixture
@@ -232,3 +235,65 @@ def test_settings_dialog_tab_button_clicks(qapp, settings_manager, animation_man
     dialog.widgets_tab_btn.click()
     qtbot.wait(200)  # Wait for animation
     assert dialog.widgets_tab_btn.isChecked() is True
+
+
+def test_about_tab_uses_replace_visualizers_button(qapp, settings_manager, animation_manager):
+    """About tab should expose the shipped-preset replacement action, not reset."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    dialog._switch_tab(6)
+
+    assert hasattr(dialog, "replace_visualizers_btn")
+    assert dialog.replace_visualizers_btn.text() == "Replace Visualizers"
+    assert dialog.reset_visualizers_btn is dialog.replace_visualizers_btn
+
+
+def test_replace_visualizers_source_root_is_script_safe(qapp, settings_manager, animation_manager):
+    """Script-mode tests must never point the replacement flow at the repo tree."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    root, source_kind = dialog._resolve_shipped_visualizer_source_root()
+    assert root is None
+    assert source_kind == "script"
+
+
+def test_replace_visualizers_refreshes_target_manifest_with_reconciled_entries(
+    qapp, settings_manager, animation_manager, tmp_path, monkeypatch
+):
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    source_root = tmp_path / "source" / "visualizer_modes"
+    target_root = tmp_path / "target" / "visualizer_modes"
+    source_mode = source_root / "blob"
+    source_mode.mkdir(parents=True)
+    (source_mode / "preset_1_alpha.json").write_text(
+        json.dumps({"name": "Preset 1 (Alpha)", "preset_index": 0}),
+        encoding="utf-8",
+    )
+    (source_mode / "preset_2_beta.json").write_text(
+        json.dumps({"name": "Preset 2 (Beta)", "preset_index": 1}),
+        encoding="utf-8",
+    )
+    (source_root.parent / "visualizer_modes_manifest.json").write_text(
+        '{"managed_curated_files":["blob/preset_1_alpha.json"]}',
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        dialog,
+        "_resolve_shipped_visualizer_source_root",
+        lambda: (source_root, "programdata"),
+    )
+    monkeypatch.setattr(
+        "core.settings.visualizer_presets.get_visualizer_presets_dir",
+        lambda mode=None: target_root if mode is None else target_root / str(mode),
+    )
+    monkeypatch.setattr("core.settings.visualizer_presets.reload_presets", lambda mode=None: None)
+
+    written = dialog._replace_visualizer_presets_from_shipped()
+
+    assert written == 2
+    assert (target_root / "blob" / "preset_1_alpha.json").exists()
+    assert (target_root / "blob" / "preset_2_beta.json").exists()
+    assert load_curated_visualizer_preset_manifest(target_root) == {
+        "blob/preset_1_alpha.json",
+        "blob/preset_2_beta.json",
+    }

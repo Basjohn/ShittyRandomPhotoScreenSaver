@@ -2,8 +2,8 @@
 
 This GUI utility lets us select a visualizer mode, pick a curated preset JSON or
 an SST snapshot, then prunes irrelevant keys and fills any missing defaults for
-that mode. Every repair writes a .bak copy next to the file and exposes an Undo
-button to revert the most recent change per session.
+that mode. Repairs keep a recoverable backup copy, but backups live under the
+repo temp area instead of polluting the curated preset tree itself.
 
 It also exposes a batch "Repair All" action (both via CLI and GUI button) that
 walks the curated preset tree, sanitising every JSON file automatically.
@@ -70,6 +70,18 @@ _DEPRECATED_AUTHORED_GLOBAL_KEYS: Tuple[str, ...] = (
 _DEPRECATED_MODE_ALIAS_KEYS: Dict[str, Tuple[str, ...]] = {
     "oscilloscope": ("osc_sensitivity",),
 }
+_DEPRECATED_BLOB_AUTHORED_KEYS: Tuple[str, ...] = (
+    "blob_pulse_cap",
+    "blob_stage_gain",
+    "blob_core_scale",
+    "blob_core_floor_bias",
+    "blob_stage_bias",
+    "blob_stage2_release_ms",
+    "blob_stage3_release_ms",
+    "blob_stretch_tendency",
+    "blob_stretch_inner",
+    "blob_stretch_outer",
+)
 
 _MANDATORY_MODE_TRANSIENT_MIX: Dict[str, Tuple[str, ...]] = {
     "spectrum": ("spectrum_lane_transient_mix",),
@@ -140,6 +152,8 @@ _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
         "color",
         "edge_color",
         "glow_color",
+        "outline_color",
+        "glow_drive_mode",
         "glow_intensity",
         "glow_reactivity",
         "glow_max_size",
@@ -147,9 +161,8 @@ _MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
         "reactive_deformation",
         "reactive_glow",
         "reactive_wobble",
-        "stretch_inner",
-        "stretch_outer",
-        "stretch_tendency",
+        "pulse_release_ms",
+        "stretch",
         "width",
         "size",
         "growth",
@@ -187,6 +200,8 @@ _MODE_TECH_PREFIXES: Dict[str, str] = {
     "sine_wave": "sine_wave_",
     "oscilloscope": "oscilloscope_",
 }
+
+_BACKUP_ROOT = ROOT / "temp" / "visualizer_preset_backups"
 
 
 @dataclass
@@ -254,6 +269,9 @@ def _strip_deprecated_curated_keys(mode: str, sanitized: Dict[str, Any]) -> None
     for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES:
         sanitized.pop(suffix, None)
         sanitized.pop(f"{prefix}{suffix}", None)
+    if mode == "blob":
+        for key in _DEPRECATED_BLOB_AUTHORED_KEYS:
+            sanitized.pop(key, None)
 
 
 def _collect_sections(payload: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]:
@@ -334,6 +352,8 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
             if any(prefix and key.startswith(f"{prefix}{prefix}") for prefix in prefixes):
                 issues["duplicate_prefixed_keys"].append(key)
             if any(key.endswith(suffix) for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES):
+                issues["deprecated_authored_keys"].append(key)
+            if mode == "blob" and key in _DEPRECATED_BLOB_AUTHORED_KEYS:
                 issues["deprecated_authored_keys"].append(key)
             if key in _DEPRECATED_AUTHORED_GLOBAL_KEYS:
                 issues["deprecated_global_keys"].append(key)
@@ -420,11 +440,17 @@ def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, clea
 
 
 def _ensure_backup(path: Path) -> Path:
-    base = path.with_suffix(path.suffix + ".bak")
+    try:
+        relative = path.resolve().relative_to(ROOT.resolve())
+        target_dir = (_BACKUP_ROOT / relative.parent).resolve()
+    except Exception:
+        target_dir = _BACKUP_ROOT.resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    base = target_dir / f"{path.name}.bak"
     candidate = base
     counter = 1
     while candidate.exists():
-        candidate = path.with_suffix(f"{path.suffix}.bak{counter}")
+        candidate = target_dir / f"{path.name}.bak{counter}"
         counter += 1
     shutil.copy2(path, candidate)
     return candidate

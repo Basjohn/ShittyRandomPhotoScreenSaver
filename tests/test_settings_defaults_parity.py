@@ -113,10 +113,15 @@ class TestDefaultsArtifactParity:
         snapshot_visualizer = build_defaults_snapshot()["widgets"]["spotify_visualizer"]
 
         assert snapshot_visualizer["mode"] == canonical_visualizer["mode"]
+        assert snapshot_visualizer["mode"] == "spectrum"
         assert snapshot_visualizer["bubble_gradient_direction"] == canonical_visualizer["bubble_gradient_direction"]
         assert snapshot_visualizer["bubble_gradient_semantics_version"] == canonical_visualizer[
             "bubble_gradient_semantics_version"
         ]
+
+    def test_transition_snapshot_keeps_burn_in_default_random_pool(self):
+        snapshot_transitions = build_defaults_snapshot()["transitions"]
+        assert snapshot_transitions["pool"]["Burn"] is True
 
     @pytest.mark.parametrize(
         "key",
