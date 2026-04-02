@@ -10,6 +10,7 @@ from core.settings.defaults import CANONICAL_DEFAULTS, PRESERVE_ON_RESET, get_de
 from core.settings.defaults_generated import DEFAULT_SETTINGS as GENERATED_DEFAULTS
 from core.settings.defaults_snapshot import DEFAULTS as SNAPSHOT_DEFAULTS
 from core.settings.defaults_snapshot_builder import build_defaults_snapshot
+from tools import visualizer_preset_repair as repair
 
 SNAPSHOT_JSON_PATH = Path(__file__).resolve().parents[1] / "core" / "settings" / "defaults_snapshot.json"
 
@@ -137,6 +138,17 @@ class TestDefaultsArtifactParity:
     def test_visualizer_snapshot_manual_floors_stay_on_current_contract(self, key: str):
         snapshot_visualizer = build_defaults_snapshot()["widgets"]["spotify_visualizer"]
         assert snapshot_visualizer[key] == pytest.approx(0.12)
+
+    def test_visualizer_preset_repair_only_requires_keys_that_exist_in_canonical_defaults(self):
+        defaults = get_default_settings()["widgets"]["spotify_visualizer"]
+
+        for mode in repair._MODE_TECH_PREFIXES:
+            required = repair._required_repair_default_keys_for_mode(mode)
+            assert required
+            assert required.issubset(defaults.keys()), (
+                "visualizer_preset_repair derived keys missing from canonical defaults "
+                f"for {mode}: {sorted(required - set(defaults.keys()))}"
+            )
 
 
 if __name__ == "__main__":

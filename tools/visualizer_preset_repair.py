@@ -41,22 +41,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.settings import visualizer_presets as vp  # noqa: E402
+from core.settings.visualizer_settings_snapshot import (  # noqa: E402
+    _TECHNICAL_GLOBAL_KEYS,
+    normalize_visualizer_mode_payload,
+)
+from core.visualizer_preset_manifest import regenerate_repo_shipped_visualizer_preset_artifacts  # noqa: E402
 
 _DEFAULTS_CACHE: Dict[str, Any] | None = None
-_MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = (
-    "manual_floor",
-    "dynamic_floor",
-    "adaptive_sensitivity",
-    "sensitivity",
-    "audio_block_size",
-    "dynamic_range_enabled",
-    "bar_count",
-    "agc_strength",
-    "input_gain",
-    "kick_lane_gain",
-    "transient_pulse_gain",
-    "transient_clamp",
-)
+_MANDATORY_TECH_SUFFIXES: Tuple[str, ...] = tuple(sorted(_TECHNICAL_GLOBAL_KEYS))
 
 _DEPRECATED_COMPAT_TECH_SUFFIXES: Tuple[str, ...] = (
     "energy_boost",
@@ -82,116 +74,6 @@ _DEPRECATED_BLOB_AUTHORED_KEYS: Tuple[str, ...] = (
     "blob_stretch_inner",
     "blob_stretch_outer",
 )
-
-_MANDATORY_MODE_TRANSIENT_MIX: Dict[str, Tuple[str, ...]] = {
-    "spectrum": ("spectrum_lane_transient_mix",),
-    "bubble": ("bubble_transient_mix_bass", "bubble_transient_mix_vocal"),
-    "blob": ("blob_transient_mix_bass", "blob_transient_mix_vocal"),
-    "sine_wave": ("sine_wave_transient_width_mix",),
-    "oscilloscope": ("oscilloscope_transient_width_mix",),
-}
-
-_MANDATORY_MODE_VISUAL_SUFFIXES: Dict[str, Tuple[str, ...]] = {
-    "oscilloscope": (
-        "glow_enabled",
-        "glow_intensity",
-        "glow_reactivity",
-        "glow_size",
-        "glow_color",
-        "reactive_glow",
-        "line_color",
-        "line2_color",
-        "line2_glow_color",
-        "ghost_line2_enabled",
-        "line3_color",
-        "line3_glow_color",
-        "ghost_line3_enabled",
-    ),
-    "sine_wave": (
-        "glow_enabled",
-        "glow_intensity",
-        "glow_reactivity",
-        "glow_size",
-        "glow_color",
-        "reactive_glow",
-        "line_color",
-        "line1_color",
-        "line2_color",
-        "line3_color",
-        "ghost_line2_enabled",
-        "ghost_line3_enabled",
-        "line2_glow_color",
-        "line3_glow_color",
-    ),
-    "bubble": (
-        "gradient_light",
-        "gradient_dark",
-        "gradient_direction",
-        "outline_color",
-        "pop_color",
-        "specular_color",
-        "specular_direction",
-        "stream_direction",
-        "stream_constant_speed",
-        "stream_speed_cap",
-        "stream_reactivity",
-        "rotation_amount",
-        "drift_amount",
-        "drift_speed",
-        "drift_frequency",
-        "drift_direction",
-        "big_bass_pulse",
-        "small_freq_pulse",
-        "big_count",
-        "small_count",
-        "ghosting_enabled",
-        "ghost_alpha",
-        "ghost_decay",
-    ),
-    "blob": (
-        "color",
-        "edge_color",
-        "glow_color",
-        "outline_color",
-        "glow_drive_mode",
-        "glow_intensity",
-        "glow_reactivity",
-        "glow_max_size",
-        "constant_wobble",
-        "reactive_deformation",
-        "reactive_glow",
-        "reactive_wobble",
-        "pulse_release_ms",
-        "stretch",
-        "width",
-        "size",
-        "growth",
-        "ghosting_enabled",
-        "ghost_alpha",
-        "ghost_decay",
-    ),
-    "spectrum": (
-        "growth",
-        "border_radius",
-        "glow_enabled",
-        "glow_intensity",
-        "glow_color",
-        "rainbow_per_bar",
-        "single_piece",
-        "mirrored",
-        "shape_nodes",
-    ),
-}
-
-_MANDATORY_SPECTRUM_SHAPING: Dict[str, Any] = {
-    "spectrum_bass_emphasis": 0.5,
-    "spectrum_vocal_position": 0.4,
-    "spectrum_mid_suppression": 0.5,
-    "spectrum_wave_amplitude": 0.5,
-    "spectrum_profile_floor": 0.12,
-    "spectrum_mirrored": True,
-    "spectrum_shape_nodes": [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
-}
 
 _MODE_TECH_PREFIXES: Dict[str, str] = {
     "spectrum": "spectrum_",
@@ -223,6 +105,21 @@ def _load_visualizer_defaults() -> Dict[str, Any]:
     return deepcopy(_DEFAULTS_CACHE)
 
 
+def _canonical_mode_defaults(mode: str) -> Dict[str, Any]:
+    defaults = _load_visualizer_defaults()
+    defaults["mode"] = mode
+    return normalize_visualizer_mode_payload(mode, defaults)
+
+
+def _required_repair_default_keys_for_mode(mode: str) -> set[str]:
+    raw_defaults = _load_visualizer_defaults()
+    return {
+        key
+        for key in _canonical_mode_defaults(mode).keys()
+        if key != "mode" and key in raw_defaults
+    }
+
+
 def _canonical_mode_prefix(mode: str) -> str:
     prefixes = vp.MODE_KEY_PREFIXES.get(mode)  # type: ignore[attr-defined]
     if prefixes:
@@ -235,19 +132,9 @@ def _ensure_mandatory_per_mode_defaults(
     sanitized: Dict[str, Any],
     defaults: Mapping[str, Any],
 ) -> None:
-    tech_prefix = _MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))
-    for suffix in _MANDATORY_TECH_SUFFIXES:
-        key = f"{tech_prefix}{suffix}"
+    for key in _required_repair_default_keys_for_mode(mode):
         if key not in sanitized and key in defaults:
-            sanitized[key] = defaults[key]
-    prefix = _canonical_mode_prefix(mode)
-    for suffix in _MANDATORY_MODE_VISUAL_SUFFIXES.get(mode, ()):
-        key = f"{prefix}{suffix}"
-        if key not in sanitized and key in defaults:
-            sanitized[key] = defaults[key]
-    for full_key in _MANDATORY_MODE_TRANSIENT_MIX.get(mode, ()):
-        if full_key not in sanitized and full_key in defaults:
-            sanitized[full_key] = defaults[full_key]
+            sanitized[key] = deepcopy(defaults[key])
 
 
 def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> None:
@@ -286,9 +173,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     if not sections:
         raise ValueError("File does not contain any spotify_visualizer settings block")
 
-    defaults = _load_visualizer_defaults()
-    defaults["mode"] = mode
-    filtered_defaults = vp._filter_settings_for_mode(mode, defaults)  # type: ignore[attr-defined]
+    filtered_defaults = _canonical_mode_defaults(mode)
 
     base: Dict[str, Any] = {}
 
@@ -303,10 +188,6 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     _promote_global_technical_settings(mode, sanitized)
     _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
     _strip_deprecated_curated_keys(mode, sanitized)
-    if mode == "spectrum":
-        for _sk, _sv in _MANDATORY_SPECTRUM_SHAPING.items():
-            if _sk not in sanitized:
-                sanitized[_sk] = _sv
 
     orig_keys = set(original_filtered.keys())
     new_keys = set(sanitized.keys())
@@ -654,6 +535,10 @@ def reindex_curated_presets(
             processed.append(entry)
             if on_result:
                 on_result(*entry)
+    if processed:
+        _regenerate_shipped_preset_artifacts_if_needed(
+            [old_path for _mode, old_path, _new_path, _backup in processed]
+        )
     return processed
 
 
@@ -680,6 +565,7 @@ def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
         "removed": stats["removed"],
         "changed": stats["changed"],
     }
+    _regenerate_shipped_preset_artifacts_if_needed([path])
     return backup_path, stats
 
 
@@ -693,6 +579,20 @@ def _discover_preset_files() -> List[Tuple[str, Path]]:
         for path in sorted(mode_dir.glob("*.json")):
             files.append((mode, path))
     return files
+
+
+def _is_curated_source_path(path: Path) -> bool:
+    try:
+        path.resolve().relative_to((ROOT / "presets" / "visualizer_modes").resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _regenerate_shipped_preset_artifacts_if_needed(mutated_paths: Iterable[Path]) -> None:
+    if not any(_is_curated_source_path(path) for path in mutated_paths):
+        return
+    regenerate_repo_shipped_visualizer_preset_artifacts(ROOT)
 
 
 def repair_all_presets(
@@ -714,6 +614,8 @@ def repair_all_presets(
         processed.append(entry)
         if on_result:
             on_result(*entry)
+    if processed:
+        _regenerate_shipped_preset_artifacts_if_needed([path for _mode, path, _backup, _stats in processed])
     return processed
 
 

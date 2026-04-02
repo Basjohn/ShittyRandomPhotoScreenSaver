@@ -899,6 +899,80 @@ def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkey
     assert not list(mode_dir.glob("*.bak*"))
 
 
+def test_repair_file_regenerates_shipped_artifacts_for_curated_source_paths(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "blob"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    preset_path = mode_dir / "preset_1_alpha.json"
+    preset_path.write_text(
+        json.dumps(
+            {
+                "name": "Preset 1 (Alpha)",
+                "preset_index": 0,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": mode,
+                            "blob_growth": 1.0,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls: list[Path] = []
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
+    monkeypatch.setattr(
+        repair,
+        "regenerate_repo_shipped_visualizer_preset_artifacts",
+        lambda repo_root: calls.append(Path(repo_root)),
+    )
+
+    repair.repair_file(preset_path, mode)
+
+    assert calls == [root]
+
+
+def test_reindex_curated_presets_regenerates_shipped_artifacts_once(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "spectrum"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    (mode_dir / "preset_2_second.json").write_text(
+        json.dumps(
+            {
+                "name": "Preset 2 (Second)",
+                "preset_index": 1,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": mode,
+                            "spectrum_growth": 2.0,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    calls: list[Path] = []
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(
+        repair,
+        "regenerate_repo_shipped_visualizer_preset_artifacts",
+        lambda repo_root: calls.append(Path(repo_root)),
+    )
+
+    repair.reindex_curated_presets()
+
+    assert calls == [root]
+
+
 def test_primary_visualizer_modes_ship_at_least_one_curated_preset():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
     required_modes = ("blob", "spectrum", "oscilloscope", "sine_wave")

@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Collection
@@ -177,3 +178,93 @@ def sync_curated_preset_tree(
     if removed:
         logger.info("[VIS_PRESET_MANIFEST] Removed %d stale shipped curated preset file(s)", len(removed))
     return removed
+
+
+def mirror_curated_visualizer_preset_tree(
+    source_root: Path,
+    target_root: Path,
+    *,
+    manifest_entries: Collection[str] | None = None,
+) -> set[str]:
+    """Mirror the authoritative curated preset tree into another managed tree.
+
+    The source tree is treated as authoritative. The target tree is pruned of
+    stale managed preset files, then rewritten from source, and finally gets a
+    canonical manifest generated from the mirrored result.
+    """
+    if not source_root.exists() or not source_root.is_dir():
+        raise FileNotFoundError(f"Curated preset source root does not exist: {source_root}")
+
+    resolved_entries = {
+        Path(str(entry)).as_posix()
+        for entry in (
+            manifest_entries if manifest_entries is not None else resolve_curated_visualizer_manifest_entries(source_root)
+        )
+        if str(entry).strip()
+    }
+    if not resolved_entries:
+        raise RuntimeError(f"No curated preset entries were discovered under {source_root}")
+
+    target_root.mkdir(parents=True, exist_ok=True)
+    sync_curated_preset_tree(
+        target_root,
+        manifest_entries=resolved_entries,
+        allow_non_frozen=True,
+    )
+
+    missing_sources: list[str] = []
+    for entry in sorted(resolved_entries):
+        rel_path = Path(entry)
+        source_path = source_root / rel_path
+        if not source_path.exists():
+            missing_sources.append(rel_path.as_posix())
+            continue
+        target_path = target_root / rel_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+
+    if missing_sources:
+        raise FileNotFoundError(
+            "Missing curated preset source files during mirror: " + ", ".join(missing_sources[:5])
+        )
+
+    write_curated_visualizer_preset_manifest(target_root, resolved_entries)
+    logger.info(
+        "[VIS_PRESET_MANIFEST] Mirrored %d curated preset file(s) from %s into %s",
+        len(resolved_entries),
+        source_root,
+        target_root,
+    )
+    return resolved_entries
+
+
+def regenerate_repo_shipped_visualizer_preset_artifacts(repo_root: Path | None = None) -> dict[str, object]:
+    """Regenerate repo-local visualizer preset artifacts from the source tree.
+
+    Source-of-truth:
+    - ``<repo>/presets/visualizer_modes``
+
+    Generated artifacts:
+    - ``<repo>/presets/visualizer_modes_manifest.json``
+    - ``<repo>/release/main_mc.dist/presets/visualizer_modes``
+    - ``<repo>/release/main_mc.dist/presets/visualizer_modes_manifest.json``
+    """
+    root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[1]
+    source_root = root / "presets" / "visualizer_modes"
+    release_root = root / "release" / "main_mc.dist" / "presets" / "visualizer_modes"
+
+    if not source_root.exists() or not source_root.is_dir():
+        raise FileNotFoundError(f"Authoritative visualizer preset source tree not found: {source_root}")
+
+    source_entries = write_curated_visualizer_preset_manifest(source_root)
+    mirrored_entries = mirror_curated_visualizer_preset_tree(
+        source_root,
+        release_root,
+        manifest_entries=source_entries,
+    )
+    return {
+        "source_root": source_root,
+        "release_root": release_root,
+        "entry_count": len(source_entries),
+        "entries": mirrored_entries,
+    }

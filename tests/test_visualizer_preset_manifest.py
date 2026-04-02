@@ -6,6 +6,8 @@ from core.visualizer_preset_manifest import (
     build_curated_visualizer_manifest_payload,
     is_managed_curated_preset_path,
     load_curated_visualizer_preset_manifest,
+    mirror_curated_visualizer_preset_tree,
+    regenerate_repo_shipped_visualizer_preset_artifacts,
     resolve_curated_visualizer_manifest_entries,
     scan_curated_visualizer_preset_tree,
     sync_curated_preset_tree,
@@ -140,6 +142,67 @@ def test_write_manifest_persists_reconciled_live_entries_for_future_sync(tmp_pat
     assert removed == []
     assert kept.exists()
     assert added.exists()
+
+
+def test_mirror_curated_visualizer_preset_tree_prunes_stale_targets_and_writes_manifest(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source" / "visualizer_modes"
+    target_root = tmp_path / "target" / "visualizer_modes"
+    source_mode = source_root / "blob"
+    target_mode = target_root / "blob"
+    source_mode.mkdir(parents=True)
+    target_mode.mkdir(parents=True)
+
+    (source_mode / "preset_1_alpha.json").write_text('{"name":"Alpha"}', encoding="utf-8")
+    (source_mode / "preset_2_beta.json").write_text('{"name":"Beta"}', encoding="utf-8")
+    (source_root.parent / "visualizer_modes_manifest.json").write_text(
+        '{"managed_curated_files":["blob/preset_1_alpha.json"]}',
+        encoding="utf-8",
+    )
+    (target_mode / "preset_1_alpha.json").write_text('{"name":"Old Alpha"}', encoding="utf-8")
+    (target_mode / "preset_9_stale.json").write_text('{"name":"Stale"}', encoding="utf-8")
+
+    mirrored = mirror_curated_visualizer_preset_tree(source_root, target_root)
+
+    assert mirrored == {
+        "blob/preset_1_alpha.json",
+        "blob/preset_2_beta.json",
+    }
+    assert (target_mode / "preset_1_alpha.json").read_text(encoding="utf-8") == '{"name":"Alpha"}'
+    assert (target_mode / "preset_2_beta.json").read_text(encoding="utf-8") == '{"name":"Beta"}'
+    assert not (target_mode / "preset_9_stale.json").exists()
+    assert load_curated_visualizer_preset_manifest(target_root) == mirrored
+
+
+def test_regenerate_repo_shipped_visualizer_preset_artifacts_rebuilds_release_tree_from_source(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "presets" / "visualizer_modes" / "spectrum"
+    release_root = tmp_path / "release" / "main_mc.dist" / "presets" / "visualizer_modes" / "spectrum"
+    source_root.mkdir(parents=True)
+    release_root.mkdir(parents=True)
+
+    (source_root / "preset_1_organs.json").write_text('{"name":"Organs"}', encoding="utf-8")
+    (source_root / "preset_2_bars.json").write_text('{"name":"Bars"}', encoding="utf-8")
+    (release_root / "preset_9_stale.json").write_text('{"name":"Stale"}', encoding="utf-8")
+
+    artifacts = regenerate_repo_shipped_visualizer_preset_artifacts(tmp_path)
+
+    assert artifacts["entry_count"] == 2
+    assert load_curated_visualizer_preset_manifest(tmp_path / "presets" / "visualizer_modes") == {
+        "spectrum/preset_1_organs.json",
+        "spectrum/preset_2_bars.json",
+    }
+    assert load_curated_visualizer_preset_manifest(
+        tmp_path / "release" / "main_mc.dist" / "presets" / "visualizer_modes"
+    ) == {
+        "spectrum/preset_1_organs.json",
+        "spectrum/preset_2_bars.json",
+    }
+    assert not (release_root / "preset_9_stale.json").exists()
+    assert (release_root / "preset_1_organs.json").read_text(encoding="utf-8") == '{"name":"Organs"}'
+    assert (release_root / "preset_2_bars.json").read_text(encoding="utf-8") == '{"name":"Bars"}'
 
 
 def test_is_managed_curated_preset_path_excludes_custom_slot_names() -> None:

@@ -58,6 +58,9 @@ tests/
   - it is also the direct fence for the real authored overwrite flow: Custom -> save over curated filename -> reload preset registry must keep modern keys only across all primary modes.
   - it now explicitly audits forward-only authored schema too: no global ghost mirrors in curated/custom preset payloads, no retired Oscilloscope alias `osc_sensitivity`, and no re-entry of retired compat keys through repair/save flows.
   - it also now guards checked-in artifact parity: the shared `tests_tmp_appdata` visualizer fixture must stay on the modern schema, and `release/main_mc.dist/presets/visualizer_modes` must match the source curated preset tree when that release copy is present in the repo.
+  - `tests/test_visualizer_preset_manifest.py` now also guards the generated-artifact workflow directly: source manifests, release manifests, and the MC release preset tree must be reproducibly regenerated from the authoritative source tree, with stale managed files pruned during mirror.
+  - `tests/test_settings_defaults_parity.py` is also part of that fence now: repair-tool mandatory key lists must only reference keys that still exist in canonical defaults, so preset repair/default drift cannot creep in silently.
+  - `tests/test_visualizer_presets.py` now also guards the repair-tool mutation workflow: curated-source repairs/reindexes must trigger shipped-artifact regeneration, and reindex must preserve authored suffix text instead of reviving old static names.
   - it must not freeze non-baseline curated artistic choices such as filenames, pack size, slot labels, or payload tuning outside the explicit `Preset 1` baseline fence.
   - `tests/test_visualizer_preset1_baselines.py` is the intentional rigid synthetic feel fence.
   - if curated preset 1 is intentionally reauthored, refresh the checked-in baseline in the same change.

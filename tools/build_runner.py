@@ -53,6 +53,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from versioning import APP_VERSION  # noqa: E402
+from core.visualizer_preset_manifest import (  # noqa: E402
+    regenerate_repo_shipped_visualizer_preset_artifacts,
+)
 
 LOG_DIR = REPO_ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -315,6 +318,21 @@ class BuildRunnerApp:
         pf = self._preflight or PreflightResult()
         all_ok = True
 
+        try:
+            artifacts = regenerate_repo_shipped_visualizer_preset_artifacts(REPO_ROOT)
+            self._queue.put(
+                (
+                    "footer",
+                    f"Regenerated shipped visualizer preset artifacts "
+                    f"({artifacts['entry_count']} curated files mirrored).",
+                )
+            )
+        except Exception as exc:
+            self._queue.put(("header", "Preset artifact regeneration failed."))
+            self._queue.put(("footer", f"Build aborted before pipeline start: {exc}"))
+            self._queue.put(("pipeline_done", False))
+            return
+
         for idx, job in enumerate(JOBS):
             # Skip helper build if user chose to skip (job index 2)
             if idx == 2 and self._skip_helper and job.name == "Reddit Helper Build":
@@ -433,6 +451,14 @@ class BuildRunnerApp:
 
         if kind == "preflight_done":
             self._handle_preflight(msg[1])
+
+        elif kind == "header":
+            _, text = msg
+            self._header["text"] = text
+
+        elif kind == "footer":
+            _, text = msg
+            self._footer["text"] = text
 
         elif kind == "status":
             _, idx, text = msg

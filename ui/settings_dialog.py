@@ -1202,9 +1202,7 @@ class SettingsDialog(QDialog):
         """Replace shipped curated preset files in the active frozen-build tree."""
         from core.settings.visualizer_presets import get_visualizer_presets_dir, reload_presets
         from core.visualizer_preset_manifest import (
-            resolve_curated_visualizer_manifest_entries,
-            sync_curated_preset_tree,
-            write_curated_visualizer_preset_manifest,
+            mirror_curated_visualizer_preset_tree,
         )
 
         source_root, source_kind = self._resolve_shipped_visualizer_source_root()
@@ -1212,52 +1210,16 @@ class SettingsDialog(QDialog):
             return -1
 
         target_root = get_visualizer_presets_dir()
-        manifest_entries = resolve_curated_visualizer_manifest_entries(source_root)
-        if not manifest_entries:
-            raise RuntimeError("No shipped visualizer preset manifest entries were available.")
-
-        payloads: dict[Path, bytes] = {}
-        missing_sources: list[str] = []
-        for entry in sorted(manifest_entries):
-            rel_path = Path(entry)
-            source_path = source_root / rel_path
-            if not source_path.exists():
-                missing_sources.append(rel_path.as_posix())
-                continue
-            payloads[rel_path] = source_path.read_bytes()
-
-        if missing_sources:
-            raise RuntimeError(
-                "Missing shipped preset source files: " + ", ".join(missing_sources[:5])
-            )
-
-        target_root.mkdir(parents=True, exist_ok=True)
-        sync_curated_preset_tree(
-            target_root,
-            manifest_entries=manifest_entries,
-            allow_non_frozen=True,
-        )
-
-        written = 0
-        for rel_path, data in payloads.items():
-            out_path = target_root / rel_path
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            out_path.write_bytes(data)
-            written += 1
-
-        # Persist the reconciled shipped view into the active target tree so a
-        # later frozen-build startup sync cannot silently delete newly accepted
-        # curated files just because the packaged manifest lagged behind.
-        write_curated_visualizer_preset_manifest(target_root, manifest_entries)
+        mirrored_entries = mirror_curated_visualizer_preset_tree(source_root, target_root)
 
         reload_presets()
         logger.info(
             "[SETTINGS] Replaced shipped visualizer presets from %s into %s (%d file(s))",
             source_kind,
             target_root,
-            written,
+            len(mirrored_entries),
         )
-        return written
+        return len(mirrored_entries)
 
     def _on_replace_visualizers_clicked(self) -> None:
         """Replace shipped curated visualizer presets in frozen builds only."""
