@@ -132,9 +132,8 @@ def load_blob_mode_settings(
             tab._config_bool("spotify_visualizer", config, "blob_shaper_enabled", False)
         )
     if hasattr(tab, "blob_shaper_base_strength"):
-        val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_base_strength", 0.5) * 100)
-        tab.blob_shaper_base_strength.setValue(max(0, min(100, val)))
-        tab.blob_shaper_base_strength_label.setText(f"{val}%")
+        tab.blob_shaper_base_strength.setValue(100)
+        tab.blob_shaper_base_strength_label.setText("100%")
     if hasattr(tab, "blob_shaper_react_strength"):
         val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_react_strength", 0.5) * 100)
         tab.blob_shaper_react_strength.setValue(max(0, min(100, val)))
@@ -206,9 +205,7 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
         "blob_growth": (tab.blob_growth.value() if hasattr(tab, "blob_growth") else 250) / 100.0,
         # Blob Shaper
         "blob_shaper_enabled": tab.blob_shaper_enabled.isChecked() if hasattr(tab, "blob_shaper_enabled") else False,
-        "blob_shaper_base_strength": (
-            tab.blob_shaper_base_strength.value() if hasattr(tab, "blob_shaper_base_strength") else 50
-        ) / 100.0,
+        "blob_shaper_base_strength": 1.0,
         "blob_shaper_react_strength": (
             tab.blob_shaper_react_strength.value() if hasattr(tab, "blob_shaper_react_strength") else 50
         ) / 100.0,

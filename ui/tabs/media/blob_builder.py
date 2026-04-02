@@ -291,6 +291,8 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     bs_layout.addWidget(tab.blob_shaper_base_strength)
     bs_layout.addWidget(tab.blob_shaper_base_strength_label)
+    bs_row.setVisible(False)
+    bs_row.setEnabled(False)
 
     rs_row, rs_layout = _shaper_row("React Strength:")
     tab.blob_shaper_react_strength = NoWheelSlider(Qt.Orientation.Horizontal)

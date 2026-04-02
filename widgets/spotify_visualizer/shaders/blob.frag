@@ -61,14 +61,14 @@ uniform float u_blob_ring_thickness;     // 0.05..1.0 ring wall thickness as fra
 const int SHAPER_N = 64;
 uniform float u_blob_base_profile[SHAPER_N];    // angular base radius multipliers
 uniform float u_blob_react_profile[SHAPER_N];   // angular reaction limit multipliers
+uniform float u_blob_runtime_profile[SHAPER_N]; // CPU-solved runtime contour multipliers
 uniform float u_blob_energy_bass[SHAPER_N];     // per-sector bass routing weight
 uniform float u_blob_energy_mid[SHAPER_N];      // per-sector mid routing weight
 uniform float u_blob_energy_vocals[SHAPER_N];   // per-sector vocal routing weight
 uniform float u_blob_energy_treble[SHAPER_N];   // per-sector treble routing weight
 uniform float u_blob_energy_transient[SHAPER_N]; // per-sector transient routing weight
 
-const float SHAPER_REST_DEADZONE = 0.12;
-const float SHAPER_DRIVE_GAIN = 2.4;
+const float SHAPER_ANGLE_SMOOTH_STEP = 1.0 / float(SHAPER_N);
 
 float sample_profile(float angle_frac, float profile[SHAPER_N]) {
     float idx_f = angle_frac * float(SHAPER_N);
@@ -79,12 +79,15 @@ float sample_profile(float angle_frac, float profile[SHAPER_N]) {
     float t = fract(idx_f);
     float t2 = t * t;
     float t3 = t2 * t;
-    return 0.5 * (
+    float raw = 0.5 * (
         (2.0 * profile[i1])
         + (-profile[i0] + profile[i2]) * t
         + (2.0 * profile[i0] - 5.0 * profile[i1] + 4.0 * profile[i2] - profile[i3]) * t2
         + (-profile[i0] + 3.0 * profile[i1] - 3.0 * profile[i2] + profile[i3]) * t3
     );
+    float lo = min(min(profile[i0], profile[i1]), min(profile[i2], profile[i3]));
+    float hi = max(max(profile[i0], profile[i1]), max(profile[i2], profile[i3]));
+    return clamp(raw, max(0.08, lo), hi);
 }
 
 float sample_linear_series(float angle_frac, float profile[SHAPER_N]) {
@@ -95,39 +98,11 @@ float sample_linear_series(float angle_frac, float profile[SHAPER_N]) {
     return mix(profile[i0], profile[i1], t);
 }
 
-float sample_energy_at_angle(float angle_frac, float bass, float mid, float high, float overall) {
-    float bass_w = sample_linear_series(angle_frac, u_blob_energy_bass);
-    float mid_w = sample_linear_series(angle_frac, u_blob_energy_mid);
-    float vocal_w = sample_linear_series(angle_frac, u_blob_energy_vocals);
-    float treble_w = sample_linear_series(angle_frac, u_blob_energy_treble);
-    float transient_w = sample_linear_series(angle_frac, u_blob_energy_transient);
-    float total_w = abs(bass_w) + abs(mid_w) + abs(vocal_w) + abs(treble_w) + abs(transient_w);
-    if (total_w < 0.001) return 0.0;
-    return (
-        bass * bass_w +
-        mid * mid_w +
-        mid * vocal_w +
-        high * treble_w +
-        overall * transient_w
-    ) / total_w;
-}
-
-float remap_shaper_drive(float signed_energy) {
-    if (u_playing == 0) {
-        return 0.0;
-    }
-    signed_energy = clamp(signed_energy * SHAPER_DRIVE_GAIN, -1.0, 1.0);
-    float magnitude = abs(signed_energy);
-    if (magnitude <= SHAPER_REST_DEADZONE) {
-        return 0.0;
-    }
-    float t = clamp(
-        (magnitude - SHAPER_REST_DEADZONE) / max(0.0001, 1.0 - SHAPER_REST_DEADZONE),
-        0.0,
-        1.0
-    );
-    float eased = t * t * (3.0 - 2.0 * t);
-    return sign(signed_energy) * eased;
+float sample_smoothed_linear_series(float angle_frac, float profile[SHAPER_N]) {
+    return
+        sample_linear_series(angle_frac, profile) * 0.50 +
+        sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, profile) * 0.25 +
+        sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, profile) * 0.25;
 }
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
@@ -289,33 +264,15 @@ float blob_sdf_ex(vec2 p, float time,
     float angle = atan(p.y, p.x);
     float dist = length(p);
 
-    // Blob Shaper: base profile modulates radius, energy routing drives per-angle energy
+    // Blob Shaper: CPU uploads one solved runtime contour profile and the shader
+    // simply renders that contour cleanly.
     float angle_frac = fract(angle / 6.2831853 + 0.25);
-    float shaper_drive = 0.0;
     if (u_blob_shaper_enabled == 1) {
-        float base_mult = sample_profile(angle_frac, u_blob_base_profile);
-        float base_str = clamp(u_blob_shaper_base_strength, 0.0, 1.0);
-        float react_mult = sample_profile(angle_frac, u_blob_react_profile);
-        float react_str = clamp(u_blob_shaper_react_strength, 0.0, 1.0);
-        float shaped_base_r = staged_r * mix(1.0, base_mult, base_str);
-        float shaped_react_r = staged_r * mix(1.0, react_mult, react_str);
-        shaper_drive = remap_shaper_drive(
-            clamp(
-                sample_energy_at_angle(
-                    angle_frac,
-                    u_blob_shaper_bass_energy,
-                    u_blob_shaper_mid_energy,
-                    u_blob_shaper_high_energy,
-                    u_blob_shaper_overall_energy
-                ),
-                -1.0,
-                1.0
-            )
-        );
-        r = shaped_base_r + (shaped_react_r - shaped_base_r) * shaper_drive;
-        // The authored shaper contour is the runtime silhouette source.
-        // Keeping staged_r on shaped_base_r would park runtime on the base
-        // contour forever even while shaper_drive changes.
+        float runtime_mult =
+            sample_profile(angle_frac, u_blob_runtime_profile) * 0.50 +
+            sample_profile(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25 +
+            sample_profile(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25;
+        r = staged_r * runtime_mult;
         staged_r = r;
     }
 
@@ -323,11 +280,8 @@ float blob_sdf_ex(vec2 p, float time,
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
     float rw = clamp(u_blob_reactive_wobble, 0.0, 3.0);
     if (u_blob_shaper_enabled == 1) {
-        float shaper_motion = abs(shaper_drive);
-        // Authored shaper contours should own the silhouette. Keep wobble
-        // subordinate and let it disappear entirely at rest/paused.
-        cw *= shaper_motion * 0.03;
-        rw *= shaper_motion * 0.12;
+        cw = 0.0;
+        rw = 0.0;
     }
     // When shaper is enabled, it owns the shape — suppress stretch controls
     // so they don't fight with the shaper's base/reaction profiles.
@@ -336,25 +290,29 @@ float blob_sdf_ex(vec2 p, float time,
     float s_inner = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_inner, 0.0, 1.0);
     float s_outer = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_outer, 0.0, 1.0);
     float wobble_component = 0.0;
+    float motion_angle = angle;
 
     // Constant wobble — always-present amorphous distortion.
     // Low harmonics give broad lobes, high harmonics add fine detail.
-    wobble_component += sin(angle * 2.0 + time * 0.4)  * 0.035 * cw;
-    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.030 * cw;
-    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.020 * cw;
-    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.012 * cw;
-    wobble_component += sin(angle * 1.0 + time * 0.2)  * 0.040 * cw;
+    wobble_component += sin(motion_angle * 2.0 + time * 0.4)  * 0.035 * cw;
+    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.030 * cw;
+    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.020 * cw;
+    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.012 * cw;
+    wobble_component += sin(motion_angle * 1.0 + time * 0.2)  * 0.040 * cw;
+
+    float reactive_mid = (u_blob_shaper_enabled == 1) ? max(e_mid, u_blob_shaper_mid_energy) : e_mid;
+    float reactive_high = (u_blob_shaper_enabled == 1) ? max(e_high, u_blob_shaper_high_energy) : e_high;
 
     // Reactive wobble — energy-driven shape distortion.
-    wobble_component += sin(angle * 3.0 + time * 1.5)  * 0.090 * e_mid * rw;
-    wobble_component += sin(angle * 5.0 - time * 2.3)  * 0.060 * e_mid * rw;
-    wobble_component += sin(angle * 7.0 + time * 3.1)  * 0.008 * e_high * rw;
-    wobble_component += sin(angle * 11.0 - time * 4.7) * 0.004 * e_high * rw;
+    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.090 * reactive_mid * rw;
+    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.060 * reactive_mid * rw;
+    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.008 * reactive_high * rw;
+    wobble_component += sin(motion_angle * 11.0 - time * 4.7) * 0.004 * reactive_high * rw;
 
     // Vocal emphasis — mid-range creates broad amorphous lobes.
-    float vocal = clamp(e_mid, 0.0, 1.0);
-    wobble_component += sin(angle * 2.0 + time * 0.9)  * 0.132 * vocal * rw;
-    wobble_component += sin(angle * 4.0 - time * 1.1)  * 0.092 * vocal * vocal * rw;
+    float vocal = clamp((u_blob_shaper_enabled == 1) ? max(e_mid, u_blob_shaper_mid_energy) : e_mid, 0.0, 1.0);
+    wobble_component += sin(motion_angle * 2.0 + time * 0.9)  * 0.132 * vocal * rw;
+    wobble_component += sin(motion_angle * 4.0 - time * 1.1)  * 0.092 * vocal * vocal * rw;
 
     float stretch_component = 0.0;
     if (st > 0.01) {
@@ -367,12 +325,12 @@ float blob_sdf_ex(vec2 p, float time,
         float impact2 = impact * impact;
         float impact3 = impact2 * impact;
         float stretch = 0.0;
-        stretch += sin(angle * 2.0 + time * 0.7)  * impact3 * 1.18;
-        stretch += sin(angle * 1.0 + time * 0.15) * impact2 * 0.82;
-        stretch += sin(angle * 4.0 - time * 1.0)  * vocal_impact * vocal_impact * 1.02;
-        stretch += sin(angle * 5.0 + time * 2.1)  * vocal_impact * 0.62;
-        stretch += sin(angle * 3.0 - time * 1.3)  * bass_support * bass_support * 0.26;
-        stretch += sin(angle * 7.0 - time * 0.5)  * e_high * 0.10;
+        stretch += sin(motion_angle * 2.0 + time * 0.7)  * impact3 * 1.18;
+        stretch += sin(motion_angle * 1.0 + time * 0.15) * impact2 * 0.82;
+        stretch += sin(motion_angle * 4.0 - time * 1.0)  * vocal_impact * vocal_impact * 1.02;
+        stretch += sin(motion_angle * 5.0 + time * 2.1)  * vocal_impact * 0.62;
+        stretch += sin(motion_angle * 3.0 - time * 1.3)  * bass_support * bass_support * 0.26;
+        stretch += sin(motion_angle * 7.0 - time * 0.5)  * e_high * 0.10;
         stretch_component += stretch * st;
     }
 
@@ -446,16 +404,23 @@ void main() {
         (fc.y - margin_y) / inner_height - 0.5
     );
 
-    float d = blob_sdf(uv, u_time);
+    float d_signed = blob_sdf(uv, u_time);
+    float d_base = d_signed;
+    float d_glow = d_signed;
+    float ring_thickness = 0.0;
 
     // Ring topology — carve out interior to create a hollow ring.
     // Works independently of shaper; ring_mode is set by topology combo.
     if (u_blob_ring_mode == 1) {
         // Ring thickness is a fraction of the blob's visual radius (~0.44 * blob_size)
         float ring_r = 0.44 * clamp(u_blob_size, 0.1, 2.5);
-        float thickness = clamp(u_blob_ring_thickness, 0.05, 1.0) * ring_r * 0.5;
-        d = abs(d) - thickness;
+        ring_thickness = clamp(u_blob_ring_thickness, 0.05, 1.0) * ring_r * 0.5;
+        d_base = abs(d_signed) - ring_thickness;
+        d_glow = d_signed - ring_thickness;
     }
+
+    float d_fill = d_base;
+    float d_shell = d_fill;
 
     // Multi-layer colouring from the SDF distance
     // Inner core: bright, slightly shifted hue
@@ -463,10 +428,10 @@ void main() {
     // Glow: soft falloff outside the blob
 
     // Inner fill
-    float fill_alpha = 1.0 - smoothstep(-0.02, 0.0, d);
+    float fill_alpha = 1.0 - smoothstep(-0.02, 0.0, d_fill);
 
     // Edge highlight (respects edge colour alpha channel)
-    float edge_alpha = 1.0 - smoothstep(0.0, 0.008, abs(d));
+    float edge_alpha = 1.0 - smoothstep(0.0, 0.008, abs(d_shell));
     edge_alpha *= 0.8 * u_blob_edge_color.a;
 
     float outline_a = u_blob_outline_color.a;
@@ -490,9 +455,9 @@ void main() {
         glow_sigma = (4.0 + gi * 25.0) * g_max;
         glow_strength = 0.15 + gi * 0.6;
     }
-    float d_px = d * inner_height;
+    float d_px = d_glow * inner_height;
     float glow_alpha = 0.0;
-    if (d > 0.0 && glow_sigma > 0.0) {
+    if (d_glow > 0.0 && glow_sigma > 0.0) {
         glow_alpha = exp(-(d_px * d_px) / (2.0 * glow_sigma * glow_sigma));
         glow_alpha *= glow_strength;
     }
@@ -500,8 +465,8 @@ void main() {
     // Outline band alpha: ensures the outline zone has solid coverage
     // so there's no transparent gap between the fill edge and glow
     float outline_band_alpha = 0.0;
-    if (d >= 0.0 && d < 0.015 && outline_a > 0.01) {
-        outline_band_alpha = (1.0 - smoothstep(0.0, 0.015, d)) * outline_a;
+    if (d_shell >= 0.0 && d_shell < 0.015 && outline_a > 0.01) {
+        outline_band_alpha = (1.0 - smoothstep(0.0, 0.015, d_shell)) * outline_a;
     }
 
     // Ghost shape: re-evaluate blob SDF at peak per-band energies so the
@@ -509,13 +474,17 @@ void main() {
     // CPU side enforces a minimum peak offset so ghost is always visible.
     float ghost_ring_alpha = 0.0;
     if (u_ghost_alpha > 0.001) {
-        float ghost_d = blob_sdf_ex(uv, u_time,
+        float ghost_signed_d = blob_sdf_ex(uv, u_time,
             u_blob_peak_bass, u_blob_peak_mid, u_blob_peak_high,
             u_blob_peak_overall, u_blob_peak_energy);
+        float ghost_d = ghost_signed_d;
+        if (u_blob_ring_mode == 1) {
+            ghost_d = abs(ghost_signed_d) - ring_thickness;
+        }
 
         // outside_current: 1.0 when pixel is outside the current blob
         // Wide transition zone so ghost fill extends well past the edge
-        float outside_current = smoothstep(-0.01, 0.02, d);
+        float outside_current = smoothstep(-0.01, 0.02, d_fill);
         // inside_peak: 1.0 when pixel is inside the peak shape
         // Wide fade so the ghost doesn't clip abruptly at the peak boundary
         float inside_peak = 1.0 - smoothstep(-0.02, 0.04, ghost_d);
@@ -553,20 +522,20 @@ void main() {
     // Outline band colour (the dark/grey area between fill edge and glow)
 
     vec3 final_rgb;
-    if (d < -0.02) {
+    if (d_fill < -0.02) {
         // Deep inside: core colour with energy-reactive brightening
-        float depth = clamp(-d / 0.15, 0.0, 1.0);
+        float depth = clamp(-d_fill / 0.15, 0.0, 1.0);
         final_rgb = mix(blob_rgb, core_rgb, depth * (0.3 + u_blob_smoothed_energy * 0.4));
-    } else if (d < 0.0) {
+    } else if (d_fill < 0.0) {
         // Near edge: transition from fill to edge highlight colour
-        float t = 1.0 - clamp(-d / 0.02, 0.0, 1.0);
+        float t = 1.0 - clamp(-d_fill / 0.02, 0.0, 1.0);
         final_rgb = mix(blob_rgb, edge_rgb, t);
     } else if (ghost_ring_alpha > 0.01 && ghost_ring_alpha >= glow_alpha) {
         // Ghost shape zone: use glow colour blended toward outline for depth
         final_rgb = mix(glow_rgb, outline_rgb, 0.5);
-    } else if (d < 0.015 && outline_a > 0.01) {
+    } else if (d_shell < 0.015 && outline_a > 0.01) {
         // Outline band: thin region just outside the fill, before glow takes over
-        float band_t = clamp(d / 0.015, 0.0, 1.0);
+        float band_t = clamp(d_shell / 0.015, 0.0, 1.0);
         final_rgb = mix(edge_rgb, outline_rgb, band_t * outline_a);
     } else {
         // Outside: glow colour

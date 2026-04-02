@@ -25,6 +25,37 @@ from widgets.spotify_visualizer.blob_math import (
 
 logger = get_logger(__name__)
 
+_ARRAY_UNIFORM_NAMES = {
+    "u_bars",
+    "u_peaks",
+    "u_waveform",
+    "u_prev_waveform",
+    "u_bubbles_pos",
+    "u_bubbles_extra",
+    "u_bubbles_trail",
+    "u_blob_base_profile",
+    "u_blob_react_profile",
+    "u_blob_runtime_profile",
+    "u_blob_energy_bass",
+    "u_blob_energy_mid",
+    "u_blob_energy_vocals",
+    "u_blob_energy_treble",
+    "u_blob_energy_transient",
+}
+
+
+def _uniform_lookup_name(uniform_name: str) -> str:
+    """Return the GL lookup token for a uniform name.
+
+    Array uniforms must be queried by their first element on real drivers.
+    Querying the bare array name often works in mocks/tests but returns -1 in
+    live GL, which silently drops uploads and can collapse authored shapes back
+    to fallback circles.
+    """
+    if uniform_name in _ARRAY_UNIFORM_NAMES:
+        return f"{uniform_name}[0]"
+    return uniform_name
+
 
 class SpotifyBarsGLOverlay(QOpenGLWidget):
     """Small GL surface that renders the Spotify bar field.
@@ -1976,13 +2007,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_blob_shaper_enabled", "u_blob_shaper_base_strength",
                     "u_blob_shaper_react_strength",
                     "u_blob_ring_mode", "u_blob_ring_thickness",
-                    "u_blob_base_profile", "u_blob_react_profile",
+                    "u_blob_base_profile", "u_blob_react_profile", "u_blob_runtime_profile",
                     "u_blob_energy_bass", "u_blob_energy_mid", "u_blob_energy_vocals",
                     "u_blob_energy_treble", "u_blob_energy_transient",
                     "u_blob_shaper_bass_energy", "u_blob_shaper_mid_energy",
                     "u_blob_shaper_high_energy", "u_blob_shaper_overall_energy",
                 ):
-                    uniforms[uname] = _gl.glGetUniformLocation(prog, uname)
+                    uniforms[uname] = _gl.glGetUniformLocation(prog, _uniform_lookup_name(uname))
 
                 self._gl_programs[mode] = prog
                 self._gl_uniforms[mode] = uniforms

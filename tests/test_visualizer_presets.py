@@ -938,6 +938,32 @@ def test_curated_presets_have_unique_slot_numbers_per_mode():
             seen[preset_index] = preset_path
 
 
+def test_curated_blob_presets_do_not_ship_retired_blob_keys():
+    blob_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
+    retired_keys = {
+        "blob_pulse_cap",
+        "blob_stage_gain",
+        "blob_core_scale",
+        "blob_core_floor_bias",
+        "blob_stage_bias",
+        "blob_stage2_release_ms",
+        "blob_stage3_release_ms",
+        "blob_stretch_tendency",
+        "blob_stretch_inner",
+        "blob_stretch_outer",
+        "blob_stretch_x_bias",
+        "blob_stretch_y_bias",
+        "blob_energy_boost",
+        "blob_use_raw_energy",
+    }
+
+    for preset_path in sorted(blob_root.glob("*.json")):
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        unexpected = retired_keys.intersection(sv.keys())
+        assert not unexpected, f"{preset_path.name} ships retired blob keys: {sorted(unexpected)}"
+
+
 def test_curated_visualizer_tree_audits_clean():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
     problems: list[str] = []

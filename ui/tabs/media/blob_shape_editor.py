@@ -37,7 +37,9 @@ _ARROW_DEFAULT_LENGTH = 22.0
 _ARROW_MIN_LENGTH = 14.0
 _ARROW_MAX_LENGTH = 42.0
 _EDITOR_SIZE = 338
-_CIRCLE_RADIUS = 90
+_CIRCLE_RADIUS = 45
+_PROFILE_RADIUS_MIN = 0.1
+_PROFILE_RADIUS_MAX = 4.0
 _BORDER_COLOR = QColor(255, 255, 255, 45)
 _RING_INNER_COLOR = QColor(20, 20, 26)
 _SNAP_DISTANCE_PX = 14
@@ -192,7 +194,7 @@ class _PolarEditorCanvas(QWidget):
 
     def _node_to_screen(self, angle_frac: float, radius_mult: float) -> QPointF:
         c = self._center()
-        r = self._radius() * max(0.1, min(2.0, radius_mult))
+        r = self._radius() * max(_PROFILE_RADIUS_MIN, min(_PROFILE_RADIUS_MAX, radius_mult))
         angle = angle_frac * 2.0 * math.pi - math.pi / 2.0
         return QPointF(c.x() + r * math.cos(angle), c.y() + r * math.sin(angle))
 
@@ -205,7 +207,7 @@ class _PolarEditorCanvas(QWidget):
             angle += 2.0 * math.pi
         angle_frac = angle / (2.0 * math.pi)
         dist = math.hypot(dx, dy)
-        radius_mult = max(0.1, min(2.0, dist / max(1.0, self._radius())))
+        radius_mult = max(_PROFILE_RADIUS_MIN, min(_PROFILE_RADIUS_MAX, dist / max(1.0, self._radius())))
         return (angle_frac % 1.0, radius_mult)
 
     def _energy_node_to_screen(self, node: dict) -> QPointF:
@@ -336,8 +338,8 @@ class _PolarEditorCanvas(QWidget):
                 for i in range(_INTERP_STEPS):
                     t = i / _INTERP_STEPS
                     rm = _sample_profile_smooth(sorted_nodes, t)
-                    rm_o = min(2.0, rm + ring_half_width)
-                    rm_i = max(0.1, rm - ring_half_width)
+                    rm_o = min(_PROFILE_RADIUS_MAX, rm + ring_half_width)
+                    rm_i = max(_PROFILE_RADIUS_MIN, rm - ring_half_width)
                     outer_pts.append(self._node_to_screen(t, rm_o))
                     inner_pts.append(self._node_to_screen(t, rm_i))
                 donut_pts = outer_pts + list(reversed(inner_pts))
@@ -426,7 +428,7 @@ class _PolarEditorCanvas(QWidget):
     def mousePressEvent(self, event: QMouseEvent) -> None:
         pos = event.position()
         if event.button() == Qt.MouseButton.RightButton:
-            # Right-click: cancel placement or delete energy node
+            # Right-click: cancel placement or delete a node under the cursor.
             if self._placement_type:
                 self.set_placement_type(None)
                 self.update()
@@ -434,6 +436,12 @@ class _PolarEditorCanvas(QWidget):
             eidx = self._hit_test_energy(pos)
             if eidx >= 0:
                 self._energy_nodes.pop(eidx)
+                self.nodes_changed.emit()
+                self.update()
+                return
+            pidx = self._hit_test_profile(pos)
+            if pidx >= 0 and len(self._nodes) > 3:
+                self._nodes.pop(pidx)
                 self.nodes_changed.emit()
                 self.update()
             return

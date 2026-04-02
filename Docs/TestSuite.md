@@ -49,6 +49,10 @@ tests/
 - **Integration/regression tests**: may use Qt, real component interactions, and targeted synthetic scenarios.
 - **Policy tests**: static architectural checks in `tests/unit/test_policy_compliance.py`.
 - **Visual/runtime bugfixes**: keep a behavior-level regression where possible, but do not confuse source-level or contract-level assertions with real visual validation.
+- **Blob Shaper guardrail note**:
+  - `tests/test_blob_shaper_plumbing.py` is now also the fence for two easy-to-miss cross-system regressions: live GL array-uniform lookup must use `name[0]` semantics for shaper profile uploads, and the shape editor's right-click contract must still remove authored profile nodes.
+  - it also now guards the ring-specific hollow-center contract: ring glow/ghost handling must not reuse the filled signed distance in a way that paints the inner void back in like a filled blob.
+  - it also now guards the shaper-specific release feel contract at a non-visual level: after a strong authored pull, the solved contour should return toward base gradually rather than snapping back immediately once energy drops.
 - **Visualizer preset tests**:
   - `tests/test_visualizer_presets.py` should stay schema/repair/filter focused.
   - it is also the direct fence for the real authored overwrite flow: Custom -> save over curated filename -> reload preset registry must keep modern keys only across all primary modes.
@@ -537,10 +541,13 @@ When writing tests that create `DisplayWidget` or start transitions:
   It also now guards the real authored overwrite path end-to-end: `WidgetsTab.build_visualizer_preset_payload()` -> filename metadata application -> JSON write -> `reload_presets()` must not leak retired compat keys back into curated mode payloads.
   It also now guards checked-in schema mirrors: the shared APPDATA fixture and the MC release preset tree cannot silently drift back to retired compat keys or stale curated payloads.
 - `tests/test_blob_shaper_plumbing.py`
-  This is the direct non-visual contract fence for Blob Shaper authoring/runtime parity: model keys, preset/save payload seams, duplicate-angle wrap handling, top-origin angular routing (`0.0 = top`), reaction-canvas-authoritative runtime routing with legacy base fallback, dedicated shaper-drive band blending, broadened/smoothed routing fields, linear shader sampling for routing weights, moderate-energy shaper-drive visibility, base-resting drive behavior, and the rule that shaper idle/paused state must not keep wobbling the authored silhouette away from the GUI.
+  This is the direct non-visual contract fence for Blob Shaper authoring/runtime parity: model keys, preset/save payload seams, duplicate-angle wrap handling, top-origin angular routing (`0.0 = top`), reaction-canvas-authoritative runtime routing with legacy base fallback, dedicated shaper-drive band blending, broadened/smoothed routing fields, moderate-energy shaper-drive visibility, base-resting drive behavior, and the rule that shaper idle/paused state must not keep wobbling the authored silhouette away from the GUI.
+  It also now guards the latest solved-contour contract directly: overlapping local signed contributors must not numerically average the shaper back toward base just because different authored nodes are active together. Arrow direction is interpreted relative to the authored local reaction direction (so inward-authored dips can be driven inward correctly), opposite-direction travel is clamped to a tighter safe inward target instead of mirroring large outward deltas through the center, larger authored gaps require more local energy to fully reach/hold, positive drive can overshoot slightly beyond the authored reaction contour on kicks, and shaper-active playback resolves to one CPU-solved runtime profile that the shader renders directly. The suite now includes deterministic continuity checks on the solved contour itself, a tougher inward-directed angular continuity scenario, a direct shader-contract check for `u_blob_runtime_profile`, and a time-series motion fence with a meaningful minimum delta so "Blob still moves smoothly under shaper playback" is reproducible without relying only on screenshots.
 - Active targeted suites for the current blob/preset/settings work:
   - `python -m pytest tests/test_visualizer_presets.py tests/test_visualizer_preset_manifest.py tests/test_settings_dialog.py tests/test_settings_defaults_parity.py -q`
   - `python -m pytest tests/test_blob_shaper_plumbing.py -q`
+  - `python -m pytest tests/test_visualizer_reactivity_quality.py -k "blob" -q`
+  - `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "blob" -q`
   - `python -m pytest tests/test_blob_shaper_plumbing.py tests/test_visualizer_reactivity_quality.py -k "blob" -q`
   - `python -m pytest tests/test_blob_shaper_plumbing.py tests/test_blob_intensity_reserve.py -q`
   - `python -m pytest tests/test_visualizer_presets.py tests/test_visualizer_settings_plumbing.py tests/test_widgets_tab.py -k "blob_shaper or blob_pulse or blob_shape" -q`

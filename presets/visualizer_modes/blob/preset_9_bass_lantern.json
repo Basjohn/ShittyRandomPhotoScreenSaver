@@ -1,8 +1,8 @@
 {
   "description": "Saved from current Settings state.",
   "mode": "blob",
-  "name": "Preset 5 (Neon Derp)",
-  "preset_index": 4,
+  "name": "Preset 9 (Bass Lantern)",
+  "preset_index": 8,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -20,141 +20,151 @@
           130
         ],
         "blob_adaptive_sensitivity": false,
-        "blob_agc_strength": 0.56,
+        "blob_agc_strength": 0.45,
         "blob_audio_block_size": 128,
-        "blob_bar_count": 30,
+        "blob_bar_count": 32,
         "blob_color": [
-          134,
-          51,
-          116,
+          88,
+          232,
+          184,
           226
         ],
-        "blob_constant_wobble": 0.2,
+        "blob_constant_wobble": 0.1,
         "blob_dynamic_floor": true,
         "blob_dynamic_range_enabled": false,
         "blob_edge_color": [
+          200,
           255,
-          180,
-          220,
-          210
+          236,
+          214
         ],
-        "blob_ghost_alpha": 0.15,
-        "blob_ghost_decay": 0.46,
+        "blob_ghost_alpha": 0.14,
+        "blob_ghost_decay": 0.42,
         "blob_ghosting_enabled": true,
         "blob_glow_color": [
+          63,
           255,
-          128,
-          244,
-          176
+          198,
+          170
         ],
         "blob_glow_drive_mode": "vocal",
-        "blob_glow_intensity": 0.65,
-        "blob_glow_max_size": 1.11,
-        "blob_glow_reactivity": 1.45,
-        "blob_growth": 4.8,
-        "blob_input_gain": 0.74,
-        "blob_kick_lane_gain": 0.48,
+        "blob_glow_intensity": 0.66,
+        "blob_glow_max_size": 1.42,
+        "blob_glow_reactivity": 1.6,
+        "blob_growth": 5.0,
+        "blob_input_gain": 0.82,
+        "blob_kick_lane_gain": 1.08,
         "blob_manual_floor": 0.15,
         "blob_outline_color": [
+          169,
           255,
-          132,
-          205,
-          220
+          221,
+          222
         ],
-        "blob_pulse": 0.41,
-        "blob_pulse_release_ms": 95,
+        "blob_pulse": 0.26,
+        "blob_pulse_release_ms": 88,
         "blob_rainbow_enabled": false,
         "blob_rainbow_speed": 0.15,
-        "blob_reactive_deformation": 1.0,
+        "blob_reactive_deformation": 1.18,
         "blob_reactive_glow": true,
-        "blob_reactive_wobble": 1.35,
-        "blob_ring_thickness": 0.09,
-        "blob_sensitivity": 0.45,
+        "blob_reactive_wobble": 1.1,
+        "blob_ring_thickness": 0.14,
+        "blob_sensitivity": 0.46,
         "blob_shape_base_nodes": [
           [
-            0.9576770755828631,
-            0.986527907048483
+            0.0,
+            0.92
           ],
           [
             0.25,
-            1.0
+            0.96
           ],
           [
-            0.5058379286879761,
-            0.4039754437117247
+            0.5,
+            1.08
           ],
           [
             0.75,
-            1.0
+            0.94
           ]
         ],
         "blob_shape_energy_nodes": [
           {
             "canvas": "react",
+            "type": "bass",
+            "x": 0.5,
+            "y": 0.8,
             "strength": 1.0,
-            "type": "transient",
-            "x": 0.4901380670611439,
-            "y": 0.4339250493096646,
+            "dir_x": 0.0,
+            "dir_y": 1.0,
+            "dir_len": 26.0
+          },
+          {
+            "canvas": "react",
+            "type": "bass",
+            "x": 0.8,
+            "y": 0.66,
+            "strength": 1.0,
+            "dir_x": 0.78,
+            "dir_y": 0.62,
+            "dir_len": 24.0
+          },
+          {
+            "canvas": "react",
+            "type": "bass",
+            "x": 0.2,
+            "y": 0.66,
+            "strength": 1.0,
+            "dir_x": -0.78,
+            "dir_y": 0.62,
+            "dir_len": 24.0
+          },
+          {
+            "canvas": "react",
+            "type": "vocals",
+            "x": 0.5,
+            "y": 0.36,
+            "strength": 1.0,
             "dir_x": 0.0,
             "dir_y": -1.0,
-            "dir_len": 22.0
-          },
-          {
-            "canvas": "react",
-            "strength": 1.0,
-            "type": "bass",
-            "x": 0.5512820512820511,
-            "y": 0.7337278106508875,
-            "dir_x": 0.18,
-            "dir_y": 0.98,
-            "dir_len": 28.0
-          },
-          {
-            "canvas": "react",
-            "strength": 1.0,
-            "type": "bass",
-            "x": 0.8802673733763073,
-            "y": 0.12717264045062032,
-            "dir_x": 0.68,
-            "dir_y": -0.74,
-            "dir_len": 26.0
+            "dir_len": 20.0
           }
         ],
         "blob_shape_reaction_nodes": [
           [
-            0.12657228088930297,
-            2.0
+            0.0,
+            1.42
           ],
           [
-            0.258555205359231,
-            2.0
+            0.16,
+            1.82
           ],
           [
-            0.465624634936843,
-            0.8986577401224728
+            0.34,
+            1.18
           ],
           [
-            0.742278778960486,
-            2.0
+            0.5,
+            2.22
           ],
           [
-            0.75,
-            1.0
+            0.66,
+            1.2
           ],
           [
-            0.9764196003319311,
-            0.25089688228799967
+            0.84,
+            1.82
           ]
         ],
         "blob_shaper_base_strength": 1.0,
         "blob_shaper_enabled": true,
-        "blob_shaper_react_strength": 1.0,
+        "blob_shaper_react_strength": 0.98,
         "blob_size": 0.5,
-        "blob_stretch": 0.56,
+        "blob_stretch": 0.28,
         "blob_topology": "ring",
         "blob_transient_clamp": 1.5,
         "blob_transient_mix_bass": 0.28,
-        "blob_transient_mix_vocal": 0.2,
+        "blob_transient_mix_vocal": 0.22,
         "blob_transient_pulse_gain": 1.0,
         "blob_width": 1.0,
         "mode": "blob",

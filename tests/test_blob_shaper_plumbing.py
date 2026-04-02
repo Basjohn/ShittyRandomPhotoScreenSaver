@@ -1,9 +1,12 @@
 """Regression tests for Blob Shaper plumbing — persistence, runtime, renderer."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 import pytest
 from unittest.mock import MagicMock
+from PySide6.QtCore import QEvent, QPointF, Qt
+from PySide6.QtGui import QMouseEvent
 
 
 class TestBlobShaperModels:
@@ -65,6 +68,54 @@ class TestBlobShaperModels:
 class TestBlobShaperRenderer:
     """Verify renderer helper functions."""
 
+    @staticmethod
+    def _simulate_runtime_profile_series(
+        *,
+        base_profile: list[float],
+        react_profile: list[float],
+        weights: list[list[float]],
+        times: list[float],
+        bass_energy: float = 0.0,
+        mid_energy: float = 0.0,
+        high_energy: float = 0.0,
+        overall_energy: float = 0.0,
+        constant_wobble: float = 1.0,
+        reactive_wobble: float = 1.0,
+        react_strength: float = 1.0,
+        playing: bool = True,
+    ) -> list[list[float]]:
+        from widgets.spotify_visualizer.renderers.blob import _solve_runtime_shaper_profile_step
+
+        current = list(base_profile)
+        velocity = [0.0] * len(base_profile)
+        target_profile = list(base_profile)
+        frames: list[list[float]] = []
+        last_t = 0.0
+        for idx, t in enumerate(times):
+            dt = (t - last_t) if idx > 0 else 0.016
+            current, velocity, target_profile = _solve_runtime_shaper_profile_step(
+                base_profile=base_profile,
+                react_profile=react_profile,
+                weights=weights,
+                previous_profile=current,
+                previous_velocity=velocity,
+                previous_target_profile=target_profile,
+                dt=dt,
+                time_value=t,
+                bass=bass_energy,
+                mid=mid_energy,
+                high=high_energy,
+                overall=overall_energy,
+                react_strength=react_strength,
+                constant_wobble=constant_wobble,
+                reactive_wobble=reactive_wobble,
+                playing=playing,
+                seed=0.37,
+            )
+            frames.append(list(current))
+            last_t = t
+        return frames
+
     def test_resample_nodes_flat(self):
         from widgets.spotify_visualizer.renderers.blob import _resample_nodes
         result = _resample_nodes([[0.0, 1.0], [1.0, 1.0]], 8)
@@ -103,6 +154,22 @@ class TestBlobShaperRenderer:
         weights = _build_energy_routing(nodes, 8)
         assert len(weights) == 5
         assert min(weights[0]) < 0
+
+    def test_build_energy_routing_treats_inward_arrow_on_inward_react_dip_as_toward_reaction(self):
+        from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
+
+        nodes = [{"type": "vocals", "x": 0.5, "y": 0.0, "strength": 1.0, "dir_x": 0.0, "dir_y": 1.0}]
+        base_profile = [1.0] * 8
+        react_profile = [0.62, 0.70, 0.88, 1.0, 1.0, 1.0, 0.88, 0.70]
+        weights = _build_energy_routing(
+            nodes,
+            8,
+            base_profile=base_profile,
+            react_profile=react_profile,
+        )
+
+        assert max(weights[2]) > 0.0
+        assert weights[2][0] > 0.0
 
     def test_build_energy_routing_uses_editor_top_zero_angle_convention(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
@@ -162,11 +229,23 @@ class TestBlobShaperRenderer:
         result = _resample_nodes([[0.0, 0.6], [0.0, 1.2], [0.5, 1.0]], 16)
         assert result[0] == pytest.approx(1.2, rel=1e-5)
 
+    def test_resample_nodes_clamp_catmull_overshoot_inside_local_authored_bounds(self):
+        from widgets.spotify_visualizer.renderers.blob import _resample_nodes
+
+        result = _resample_nodes([[0.0, 1.0], [0.2, 0.25], [0.4, 1.0], [0.6, 1.0], [0.8, 1.0]], 64)
+        assert min(result) >= 0.25 - 1e-6
+
     def test_shaper_drive_deadzone_keeps_low_idle_energy_on_base_shape(self):
         from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
 
         radius = _resolve_shaper_radius(1.0, 1.6, 0.04, playing=True)
         assert radius == pytest.approx(1.0)
+
+    def test_shaper_base_shape_stays_authoritative_even_if_base_strength_is_low(self):
+        from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
+
+        radius = _resolve_shaper_radius(1.35, 1.9, 0.0, base_strength=0.0, playing=True)
+        assert radius == pytest.approx(1.35)
 
     def test_shaper_drive_returns_to_base_shape_when_paused(self):
         from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
@@ -187,32 +266,351 @@ class TestBlobShaperRenderer:
         assert inward < 1.0
         assert outward_from_inward > 1.0
 
+    def test_inward_opposite_push_is_clamped_to_safe_target_for_large_outward_shapes(self):
+        from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
+
+        radius = _resolve_shaper_radius(1.0, 2.0, -1.0, playing=True)
+        assert radius == pytest.approx(0.82)
+
+    def test_positive_shaper_drive_can_slightly_overshoot_reaction_limit_on_kicks(self):
+        from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
+
+        resting = _resolve_shaper_radius(1.0, 1.6, 1.0, playing=True)
+        kicked = _resolve_shaper_radius(
+            1.0,
+            1.6,
+            1.0,
+            bass_energy=1.0,
+            overall_energy=1.0,
+            playing=True,
+        )
+
+        assert kicked > resting
+        assert kicked < 1.65
+
     def test_shaper_drive_gives_visible_motion_on_moderate_signed_energy(self):
         from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
 
         radius = _resolve_shaper_radius(1.0, 1.5, 0.20, playing=True)
-        assert radius > 1.10
+        assert radius > 1.17
 
-    def test_blob_shader_uses_interpolated_shaper_radius_as_runtime_core_radius(self):
+    def test_larger_authored_gap_needs_more_energy_to_reach_same_fraction_of_target(self):
+        from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius, _resolve_shaper_targets
+
+        small_gap = _resolve_shaper_radius(1.0, 1.25, 0.45, playing=True)
+        large_gap = _resolve_shaper_radius(1.0, 1.90, 0.45, playing=True)
+        small_base, small_target, _ = _resolve_shaper_targets(1.0, 1.25)
+        large_base, large_target, _ = _resolve_shaper_targets(1.0, 1.90)
+        small_fraction = (small_gap - small_base) / (small_target - small_base)
+        large_fraction = (large_gap - large_base) / (large_target - large_base)
+
+        assert small_fraction > large_fraction
+
+    def test_routed_shaper_energy_prefers_strongest_local_signed_contributor(self):
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _sample_routed_shaper_energy,
+        )
+
+        nodes = [
+            {"type": "bass", "x": 0.5, "y": 0.0, "strength": 1.0, "dir_x": 0.0, "dir_y": -1.0},
+            {"type": "mid", "x": 0.5, "y": 0.0, "strength": 1.0, "dir_x": 0.0, "dir_y": 1.0},
+        ]
+        weights = _build_energy_routing(nodes, 32)
+
+        signed = _sample_routed_shaper_energy(
+            0.0,
+            weights,
+            bass=0.82,
+            mid=0.41,
+            high=0.0,
+            overall=0.0,
+        )
+
+        assert signed > 0.75
+
+    def test_routed_shaper_energy_does_not_collapse_to_base_when_opposing_bands_overlap(self):
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _sample_routed_shaper_energy,
+        )
+
+        nodes = [
+            {"type": "bass", "x": 0.5, "y": 0.0, "strength": 1.0, "dir_x": 0.0, "dir_y": -1.0},
+            {"type": "mid", "x": 0.56, "y": 0.04, "strength": 1.0, "dir_x": 0.0, "dir_y": 1.0},
+        ]
+        weights = _build_energy_routing(nodes, 64)
+
+        signed = _sample_routed_shaper_energy(
+            0.0,
+            weights,
+            bass=0.66,
+            mid=0.61,
+            high=0.0,
+            overall=0.0,
+        )
+
+        assert abs(signed) > 0.50
+
+    def test_shaper_react_strength_scales_reachable_reaction_limit_without_flattening_base(self):
+        from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
+
+        half = _resolve_shaper_radius(1.0, 1.8, 1.0, react_strength=0.5, playing=True)
+        full = _resolve_shaper_radius(1.0, 1.8, 1.0, react_strength=1.0, playing=True)
+
+        assert half == pytest.approx(1.4)
+        assert full == pytest.approx(1.8)
+
+    def test_blob_shader_uses_cpu_solved_runtime_profile(self):
         shader_path = Path(
             r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob.frag"
         )
         shader_source = shader_path.read_text(encoding="utf-8")
 
-        assert "staged_r = r;" in shader_source
-        assert "staged_r = shaped_base_r;" not in shader_source
+        assert "u_blob_runtime_profile" in shader_source
+        assert "sample_profile(angle_frac, u_blob_runtime_profile)" in shader_source
+        assert "shaper_contour_and_shell_motion(" not in shader_source
 
-    def test_shaper_wobble_scales_drop_to_zero_at_rest(self):
-        from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_wobble_scales
+    def test_contour_residual_motion_is_quiet_when_motion_sliders_are_zero(self):
+        from widgets.spotify_visualizer.blob_shaper_solver import build_contour_residual_profile
 
-        paused = _resolve_shaper_wobble_scales(1.0, 1.0, 1.0, playing=False)
-        idle = _resolve_shaper_wobble_scales(1.0, 1.0, 0.05, playing=True)
-        active = _resolve_shaper_wobble_scales(1.0, 1.0, 1.0, playing=True)
+        residual = build_contour_residual_profile(
+            sample_count=64,
+            time_value=1.2,
+            idle_motion=0.0,
+            audio_motion=0.0,
+            overall_energy=0.9,
+            vocal_energy=0.9,
+            high_energy=0.4,
+            playing=True,
+        )
+        assert max(abs(value) for value in residual) < 1e-6
 
-        assert paused == pytest.approx((0.0, 0.0))
-        assert idle == pytest.approx((0.0, 0.0))
-        assert 0.0 < active[0] < 1.0
-        assert 0.0 < active[1] < 1.0
+    def test_shaper_runtime_profile_moves_toward_reaction_shape_and_keeps_temporal_motion(self):
+        from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
+
+        base_profile = [1.0] * 64
+        react_profile = [1.0] * 64
+        react_profile[0] = 1.48
+        react_profile[1] = 1.42
+        react_profile[-1] = 1.42
+        weights = _build_energy_routing(
+            [{"type": "bass", "x": 0.5, "y": 0.0, "strength": 1.0, "dir_x": 0.0, "dir_y": -1.0}],
+            64,
+            base_profile=base_profile,
+            react_profile=react_profile,
+        )
+        frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=[i * 0.10 for i in range(40)],
+            bass_energy=1.0,
+            mid_energy=0.95,
+            high_energy=0.34,
+            overall_energy=0.96,
+            constant_wobble=1.2,
+            reactive_wobble=2.4,
+            react_strength=0.9,
+            playing=True,
+        )
+        leading_edge = [frame[0] for frame in frames]
+
+        assert max(leading_edge) > 1.24
+        assert max(leading_edge) - min(leading_edge) > 0.035
+
+    def test_shaper_runtime_profile_releases_back_toward_base_slowly_instead_of_snapping(self):
+        from widgets.spotify_visualizer.renderers.blob import _build_energy_routing, _solve_runtime_shaper_profile_step
+
+        base_profile = [1.0] * 64
+        react_profile = [1.0] * 64
+        react_profile[0] = 1.58
+        react_profile[1] = 1.46
+        react_profile[-1] = 1.46
+        weights = _build_energy_routing(
+            [{"type": "bass", "x": 0.5, "y": 0.0, "strength": 1.0, "dir_x": 0.0, "dir_y": -1.0}],
+            64,
+            base_profile=base_profile,
+            react_profile=react_profile,
+        )
+
+        profile = list(base_profile)
+        velocity = [0.0] * 64
+        target = list(base_profile)
+        time_value = 0.0
+
+        for _ in range(18):
+            time_value += 0.05
+            profile, velocity, target = _solve_runtime_shaper_profile_step(
+                base_profile=base_profile,
+                react_profile=react_profile,
+                weights=weights,
+                previous_profile=profile,
+                previous_velocity=velocity,
+                previous_target_profile=target,
+                dt=0.05,
+                time_value=time_value,
+                bass=1.0,
+                mid=0.92,
+                high=0.28,
+                overall=0.94,
+                react_strength=1.0,
+                constant_wobble=0.5,
+                reactive_wobble=1.0,
+                playing=True,
+                seed=0.37,
+            )
+        peak = profile[0]
+        assert peak > 1.30
+
+        releases = []
+        for _ in range(8):
+            time_value += 0.05
+            profile, velocity, target = _solve_runtime_shaper_profile_step(
+                base_profile=base_profile,
+                react_profile=react_profile,
+                weights=weights,
+                previous_profile=profile,
+                previous_velocity=velocity,
+                previous_target_profile=target,
+                dt=0.05,
+                time_value=time_value,
+                bass=0.0,
+                mid=0.0,
+                high=0.0,
+                overall=0.0,
+                react_strength=1.0,
+                constant_wobble=0.0,
+                reactive_wobble=0.0,
+                playing=True,
+                seed=0.37,
+            )
+            releases.append(profile[0])
+
+        assert releases[0] > 1.18
+        assert releases[-1] > 1.04
+        assert releases[-1] < peak
+
+    def test_shaper_runtime_profile_stays_angularly_smooth_inward_case(self):
+        from widgets.spotify_visualizer.renderers.blob import _build_energy_routing, _resample_nodes
+
+        base_nodes = [[0.0, 1.0], [0.16, 0.98], [0.34, 1.02], [0.56, 1.0], [0.80, 1.01]]
+        react_nodes = [[0.0, 0.62], [0.12, 1.28], [0.34, 0.72], [0.56, 1.18], [0.78, 0.68]]
+        base_profile = _resample_nodes(base_nodes, 64)
+        react_profile = _resample_nodes(react_nodes, 64)
+        weights = _build_energy_routing(
+            [
+                {"type": "bass", "x": 0.85, "y": 0.50, "strength": 1.0, "dir_x": -1.0, "dir_y": 0.0},
+                {"type": "vocals", "x": 0.50, "y": 0.20, "strength": 1.0, "dir_x": 0.0, "dir_y": 1.0},
+                {"type": "mid", "x": 0.22, "y": 0.54, "strength": 1.0, "dir_x": 1.0, "dir_y": 0.0},
+            ],
+            64,
+            base_profile=base_profile,
+            react_profile=react_profile,
+        )
+        frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=[i * 0.08 for i in range(30)],
+            bass_energy=0.88,
+            mid_energy=0.82,
+            high_energy=0.30,
+            overall_energy=0.72,
+            constant_wobble=1.0,
+            reactive_wobble=2.0,
+            react_strength=0.9,
+            playing=True,
+        )
+        runtime_profile = frames[-1]
+        max_neighbor_jump = max(abs(runtime_profile[i] - runtime_profile[(i + 1) % 64]) for i in range(64))
+        assert max_neighbor_jump < 0.09
+
+    def test_routed_shaper_energy_series_stays_angularly_smooth_without_blade_cut(self):
+        from widgets.spotify_visualizer.renderers.blob import _build_energy_routing, _sample_routed_shaper_energy
+
+        nodes = [
+            {"type": "mid", "x": 0.85, "y": 0.45, "strength": 1.0, "dir_x": 1.0, "dir_y": 0.0},
+            {"type": "mid", "x": 0.88, "y": 0.32, "strength": 1.0, "dir_x": 0.8, "dir_y": -0.6},
+        ]
+        weights = _build_energy_routing(nodes, 64)
+        signed = [
+            _sample_routed_shaper_energy(i / 64.0, weights, bass=0.0, mid=0.85, high=0.0, overall=0.0)
+            for i in range(64)
+        ]
+        max_neighbor_jump = max(abs(signed[i] - signed[(i + 1) % 64]) for i in range(64))
+        assert max_neighbor_jump < 0.30
+
+    def test_final_shaper_radius_series_stays_angularly_smooth_without_radial_blades(self):
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _resample_nodes,
+            _resolve_shaper_radius_at_angle,
+        )
+
+        base_nodes = [[0.0, 1.0], [0.18, 1.02], [0.35, 0.96], [0.55, 0.98], [0.78, 1.01]]
+        react_nodes = [[0.0, 1.42], [0.18, 1.06], [0.28, 1.28], [0.42, 0.98], [0.62, 1.20], [0.82, 1.05]]
+        base_profile = _resample_nodes(base_nodes, 64)
+        react_profile = _resample_nodes(react_nodes, 64)
+        nodes = [
+            {"type": "bass", "x": 0.84, "y": 0.46, "strength": 1.0, "dir_x": 1.0, "dir_y": 0.0},
+            {"type": "mid", "x": 0.80, "y": 0.32, "strength": 1.0, "dir_x": 0.8, "dir_y": -0.6},
+        ]
+        weights = _build_energy_routing(nodes, 64, base_profile=base_profile, react_profile=react_profile)
+        radii = [
+            _resolve_shaper_radius_at_angle(
+                i / 64.0,
+                base_profile=base_profile,
+                react_profile=react_profile,
+                weights=weights,
+                staged_radius=1.0,
+                bass=0.78,
+                mid=0.82,
+                high=0.20,
+                overall=0.65,
+                react_strength=0.7,
+                playing=True,
+            )
+            for i in range(64)
+        ]
+        max_neighbor_jump = max(abs(radii[i] - radii[(i + 1) % 64]) for i in range(64))
+        assert max_neighbor_jump < 0.16
+
+    def test_inward_directed_radius_series_stays_angularly_smooth_without_sector_cuts(self):
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _resample_nodes,
+            _resolve_shaper_radius_at_angle,
+        )
+
+        base_nodes = [[0.0, 1.0], [0.16, 0.98], [0.34, 1.02], [0.56, 1.0], [0.80, 1.01]]
+        react_nodes = [[0.0, 0.62], [0.12, 1.28], [0.34, 0.72], [0.56, 1.18], [0.78, 0.68]]
+        base_profile = _resample_nodes(base_nodes, 64)
+        react_profile = _resample_nodes(react_nodes, 64)
+        nodes = [
+            {"type": "bass", "x": 0.85, "y": 0.50, "strength": 1.0, "dir_x": -1.0, "dir_y": 0.0},
+            {"type": "vocals", "x": 0.50, "y": 0.20, "strength": 1.0, "dir_x": 0.0, "dir_y": 1.0},
+            {"type": "mid", "x": 0.22, "y": 0.54, "strength": 1.0, "dir_x": 1.0, "dir_y": 0.0},
+        ]
+        weights = _build_energy_routing(nodes, 64, base_profile=base_profile, react_profile=react_profile)
+        radii = [
+            _resolve_shaper_radius_at_angle(
+                i / 64.0,
+                base_profile=base_profile,
+                react_profile=react_profile,
+                weights=weights,
+                staged_radius=1.0,
+                bass=0.88,
+                mid=0.82,
+                high=0.30,
+                overall=0.72,
+                react_strength=0.9,
+                playing=True,
+            )
+            for i in range(64)
+        ]
+        max_neighbor_jump = max(abs(radii[i] - radii[(i + 1) % 64]) for i in range(64))
+        assert max_neighbor_jump < 0.14
 
     def test_shaper_energy_bands_prefer_stage_inputs_over_calm_live_bands(self):
         from types import SimpleNamespace
@@ -232,13 +630,17 @@ class TestBlobShaperRenderer:
 
         bands = _get_shaper_energy_bands(state)
         assert bands[0] > state._blob_live_bass_energy
-        assert bands[0] < state._blob_stage_input_bass
+        assert bands[0] <= state._blob_stage_input_bass
+        assert bands[0] > 0.28
         assert bands[1] > state._blob_live_mid_energy
-        assert bands[1] < state._blob_stage_input_mid
+        assert bands[1] <= state._blob_stage_input_mid
+        assert bands[1] > 0.35
         assert bands[2] > state._blob_live_high_energy
-        assert bands[2] < state._blob_stage_input_high
+        assert bands[2] <= state._blob_stage_input_high
+        assert bands[2] > 0.16
         assert bands[3] > state._blob_live_overall_energy
-        assert bands[3] < state._blob_stage_input_overall
+        assert bands[3] <= state._blob_stage_input_overall
+        assert bands[3] > 0.30
 
     def test_shaper_energy_bands_fall_back_to_live_bands_when_stage_inputs_missing(self):
         from types import SimpleNamespace
@@ -272,13 +674,27 @@ class TestBlobShaperRenderer:
 
         assert _get_shaper_energy_bands(state) == pytest.approx((0.12, 0.18, 0.10, 0.14))
 
-    def test_blob_shader_samples_shaper_energy_routing_linearly_to_avoid_overshoot(self):
+    def test_blob_shader_renders_shaper_mode_from_runtime_profile_not_per_fragment_energy_resolution(self):
         shader_path = Path(
             r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob.frag"
         )
         shader_source = shader_path.read_text(encoding="utf-8")
 
-        assert "sample_linear_series(angle_frac, u_blob_energy_bass)" in shader_source
+        assert "sample_smoothed_shaper_energy(" not in shader_source
+        assert "shape_shaper_energy_for_gap(" not in shader_source
+        assert "float d_fill = d_base;" in shader_source
+        assert "float d_shell = d_fill;" in shader_source
+
+    def test_blob_ring_shader_keeps_hollow_center_out_of_outer_glow_and_ghost_fill(self):
+        shader_path = Path(
+            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob.frag"
+        )
+        shader_source = shader_path.read_text(encoding="utf-8")
+
+        assert "d_glow = d_signed - ring_thickness;" in shader_source
+        assert "if (d_glow > 0.0 && glow_sigma > 0.0)" in shader_source
+        assert "ghost_d = abs(ghost_signed_d) - ring_thickness;" in shader_source
+        assert "float outside_current = smoothstep(-0.01, 0.02, d_fill);" in shader_source
 
     def test_editor_profile_sampler_handles_duplicate_wrap_point_without_seam_spike(self):
         from ui.tabs.media.blob_shape_editor import _sample_profile_smooth
@@ -305,6 +721,7 @@ class TestBlobShaperRenderer:
             "u_blob_ring_thickness",
             "u_blob_base_profile",
             "u_blob_react_profile",
+            "u_blob_runtime_profile",
             "u_blob_energy_bass",
             "u_blob_energy_mid",
             "u_blob_energy_vocals",
@@ -316,6 +733,73 @@ class TestBlobShaperRenderer:
             "u_blob_shaper_overall_energy",
         ):
             assert u in names, f"Uniform {u} missing from get_uniform_names()"
+
+    def test_overlay_uniform_lookup_uses_array_element_zero_for_gl_arrays(self):
+        from widgets.spotify_bars_gl_overlay import _uniform_lookup_name
+
+        assert _uniform_lookup_name("u_blob_base_profile") == "u_blob_base_profile[0]"
+        assert _uniform_lookup_name("u_blob_runtime_profile") == "u_blob_runtime_profile[0]"
+        assert _uniform_lookup_name("u_waveform") == "u_waveform[0]"
+        assert _uniform_lookup_name("u_bars") == "u_bars[0]"
+        assert _uniform_lookup_name("u_blob_ring_mode") == "u_blob_ring_mode"
+
+    def test_overlay_shader_manifest_includes_runtime_profile_uniform(self):
+        overlay_path = Path(
+            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_bars_gl_overlay.py"
+        )
+        source = overlay_path.read_text(encoding="utf-8")
+        assert '"u_blob_runtime_profile"' in source
+
+    @staticmethod
+    def _mouse_event(event_type, x, y, button, buttons=None):
+        if buttons is None:
+            buttons = button
+        return QMouseEvent(
+            event_type,
+            QPointF(x, y),
+            QPointF(x, y),
+            QPointF(x, y),
+            button,
+            buttons,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+    @pytest.mark.qt
+    def test_blob_shape_editor_right_click_removes_profile_node(self, qt_app):
+        from ui.tabs.media.blob_shape_editor import _PolarEditorCanvas
+
+        canvas = _PolarEditorCanvas("Test")
+        try:
+            canvas.show()
+            canvas.set_profile_nodes([
+                [0.0, 1.0],
+                [0.25, 1.0],
+                [0.50, 1.0],
+                [0.75, 1.0],
+                [0.125, 1.35],
+            ])
+            initial_nodes = canvas.get_profile_nodes()
+            assert len(initial_nodes) == 5
+
+            remove_target = canvas._node_to_screen(0.125, 1.35)
+            canvas.mousePressEvent(
+                self._mouse_event(
+                    QEvent.Type.MouseButtonPress,
+                    remove_target.x(),
+                    remove_target.y(),
+                    Qt.MouseButton.RightButton,
+                )
+            )
+            qt_app.processEvents()
+
+            updated_nodes = canvas.get_profile_nodes()
+            assert len(updated_nodes) == 4
+            assert not any(
+                abs(float(node[0]) - 0.125) < 1e-4 and abs(float(node[1]) - 1.35) < 1e-4
+                for node in updated_nodes
+            )
+        finally:
+            canvas.deleteLater()
 
 
 class TestBlobShaperConfigApplier:

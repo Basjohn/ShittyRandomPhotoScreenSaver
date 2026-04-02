@@ -107,7 +107,7 @@
             1.0
           ]
         ],
-        "blob_shaper_base_strength": 0.5,
+        "blob_shaper_base_strength": 1.0,
         "blob_shaper_enabled": false,
         "blob_shaper_react_strength": 0.5,
         "blob_size": 0.5,
