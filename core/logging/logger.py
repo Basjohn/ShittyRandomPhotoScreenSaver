@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import threading
+from fnmatch import fnmatch
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
@@ -602,6 +603,65 @@ def get_log_dir() -> Path:
     if _FORCED_LOG_DIR is not None:
         return _FORCED_LOG_DIR
     return _BASE_DIR / "logs"
+
+
+def _resolve_runtime_log_dir() -> Path:
+    """Resolve the log directory using the same rules as setup_logging()."""
+    base_dir = _BASE_DIR
+    forced_dir = _FORCED_LOG_DIR
+
+    try:
+        import builtins as _builtins
+
+        frozen = bool(getattr(sys, "frozen", False))  # type: ignore[attr-defined]
+        nuitka_compiled = bool(getattr(_builtins, "__compiled__", False))
+
+        exe_path = Path(getattr(sys, "executable", "") or "")
+        exe_path_valid: Path | None = exe_path if exe_path.exists() else None
+
+        if (frozen or nuitka_compiled) and exe_path_valid is not None:
+            base_dir = exe_path_valid.parent
+            if forced_dir is None:
+                try:
+                    log_cfg_name = exe_path_valid.stem + ".logdir.cfg"
+                    log_cfg_path = exe_path_valid.parent / log_cfg_name
+                    if log_cfg_path.exists():
+                        raw_dir = log_cfg_path.read_text(encoding="utf-8").strip()
+                        if raw_dir:
+                            candidate = Path(raw_dir).expanduser()
+                            if not candidate.is_absolute():
+                                candidate = candidate.resolve()
+                            forced_dir = candidate
+                except Exception:
+                    forced_dir = forced_dir
+    except Exception:
+        pass
+
+    return _select_log_dir(forced_dir, base_dir)
+
+
+def clear_logs_for_fresh_start() -> tuple[Path, int]:
+    """Delete log-folder contents before startup, preserving worker logs.
+
+    Returns:
+        tuple[path, deleted_count]: resolved log dir and number of deleted files
+    """
+    log_dir = _resolve_runtime_log_dir()
+    deleted = 0
+    skip_patterns = ("worker_*.log",)
+
+    for path in log_dir.iterdir():
+        if not path.is_file():
+            continue
+        if any(fnmatch(path.name, pattern) for pattern in skip_patterns):
+            continue
+        try:
+            path.unlink(missing_ok=True)
+            deleted += 1
+        except Exception:
+            continue
+
+    return log_dir, deleted
 
 
 def _candidate_programdata_dir() -> Path | None:

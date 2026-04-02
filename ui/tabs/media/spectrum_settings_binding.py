@@ -7,6 +7,7 @@ from typing import Any, Callable
 from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
+from core.settings.visualizer_settings_contract import resolve_spectrum_render_mode
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 
 logger = get_logger(__name__)
@@ -32,13 +33,16 @@ def load_spectrum_mode_settings(
         spectrum_growth = int(tab._config_float("spotify_visualizer", config, "spectrum_growth", 1.0) * 100)
         tab.spectrum_growth.setValue(max(100, min(500, spectrum_growth)))
         tab.spectrum_growth_label.setText(f"{spectrum_growth / 100.0:.1f}x")
-    if hasattr(tab, "spectrum_single_piece"):
-        tab.spectrum_single_piece.setChecked(
-            tab._config_bool("spotify_visualizer", config, "spectrum_single_piece", False)
-        )
+    spectrum_render_mode = resolve_spectrum_render_mode(lambda key, default=None: config.get(key, default))
+    if hasattr(tab, "_set_spectrum_render_mode"):
+        tab._set_spectrum_render_mode(spectrum_render_mode, save=False)
+    elif hasattr(tab, "spectrum_render_mode_buttons"):
+        tab._spectrum_render_mode = spectrum_render_mode
+        for key, button in getattr(tab, "spectrum_render_mode_buttons", {}).items():
+            button.setChecked(key == spectrum_render_mode)
     if hasattr(tab, "spectrum_rainbow_per_bar"):
         tab.spectrum_rainbow_per_bar.setChecked(
-            tab._config_bool("spotify_visualizer", config, "spectrum_rainbow_per_bar", False)
+            bool(config.get("spectrum_unique_colors", config.get("spectrum_rainbow_per_bar", False)))
         )
     if hasattr(tab, "spectrum_bass_emphasis"):
         spectrum_bass_emphasis = int(tab._config_float("spotify_visualizer", config, "spectrum_bass_emphasis", 0.50) * 100)
@@ -137,10 +141,8 @@ def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
         "spectrum_ghost_alpha": tab.vis_ghost_opacity_slider.value() / 100.0,
         "spectrum_ghost_decay": max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
         "spectrum_growth": (tab.spectrum_growth.value() if hasattr(tab, "spectrum_growth") else 100) / 100.0,
-        "spectrum_single_piece": (
-            tab.spectrum_single_piece.isChecked() if hasattr(tab, "spectrum_single_piece") else False
-        ),
-        "spectrum_rainbow_per_bar": (
+        "spectrum_render_mode": getattr(tab, "_spectrum_render_mode", "bars"),
+        "spectrum_unique_colors": (
             tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, "spectrum_rainbow_per_bar") else False
         ),
         "spectrum_border_radius": (

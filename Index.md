@@ -36,7 +36,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 | File | Purpose |
 |------|---------|
-| main.py | Screensaver entry point (SRPSS.scr/SRPSS.exe) |
+| main.py | Screensaver entry point (SRPSS.scr/SRPSS.exe); script/debug launches accept `--fresh` to clear the runtime log folder before logging starts (preserving `worker_*.log`) |
 | main_mc.py | Manual Controller entry point (SRPSS_MC) |
 
 ## Environment Variables
@@ -79,7 +79,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Bubble Gradient Semantics | core/settings/bubble_gradient_semantics.py | resolve_bubble_gradient_direction(), get_bubble_gradient_shader_mode(), get_bubble_gradient_shader_vector() | Canonical Bubble gradient semantics contract: legacy-label migration, persisted semantics versioning, and brightest-point label -> shader mapping |
 | Settings | core/settings/json_store.py | JsonSettingsStore | JSON persistence layer (structured roots: widgets, transitions, custom_preset_backup, ui) |
 | Storage Paths | core/settings/storage_paths.py | get_app_data_dir(), get_cache_dir(), get_rss_cache_dir(), get_feed_health_file(), run_all_migrations() | Canonical path resolver for all app data (settings, cache, state, logs). Replaces scattered %TEMP% paths. |
-| Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled() | Centralized logging |
+| Logging | core/logging/logger.py | get_logger(), is_perf_metrics_enabled(), clear_logs_for_fresh_start() | Centralized logging + pre-start `--fresh` log cleanup |
 | Media | core/media/media_controller.py | WindowsGlobalMediaController, create_media_controller(app_filter) | GSMTC media state; app_filter selects provider session (spotify/musicbee) |
 | Media | core/media/spotify_volume.py | SpotifyVolumeController(provider=) | pycaw per-session volume control; provider-aware (spotify/musicbee process filter) |
 | Media Runtime State | widgets/media/runtime_state.py | MediaWidgetRuntimeState, cache_retained_display_info(), build_retained_display_info(), should_probe_provider_failover() | Shared runtime-only retained-display contract for the media card: cached metadata/artwork, missing-session tracking, paused/non-reactive downgrade, and provider auto-fallback cooldown/state |
@@ -99,6 +99,7 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Blob Shape Editor | ui/tabs/media/blob_shape_editor.py | BlobShapeEditor, _PolarEditorCanvas, _EnergyChip | Spatial energy routing editor: two side-by-side polar canvases (base shape + reaction limit) with draggable profile nodes, copy-on-drag energy source palette (bass/mid/vocals/treble/transient), per-energy directional arrow handles used to route inward vs outward live response, top-origin angular authoring (`0.0 = top`) that runtime must mirror exactly, and a ring preview that now mirrors the runtime contract (single authored contour plus derived thickness band) instead of a fake independently-authored inner contour. Runtime routing now treats reaction-canvas energy nodes as authoritative, with base/unqualified nodes retained only as legacy fallback when no react routing exists. The editor reference circle is intentionally smaller now and the outer authoring radius ceiling is larger so stretched reaction silhouettes have materially more editing room inside the same box. Right-click profile-node deletion is part of the editor contract again. |
 | Bubble Binding | ui/tabs/media/bubble_settings_binding.py | load_bubble_mode_settings(), collect_bubble_mode_settings() | Bubble-owned WidgetsTab load/save adapter so Bubble direction/color/state work does not expand the central media-tab coordinator; routes gradient labels through the shared semantics helper instead of local direction math |
 | Spectrum Binding | ui/tabs/media/spectrum_settings_binding.py | load_spectrum_mode_settings(), collect_spectrum_mode_settings() | Spectrum-owned WidgetsTab load/save adapter, including shape-editor state and spectrum ghost/glow translation |
+| Spectrum Builder | ui/tabs/media/spectrum_builder.py | build_spectrum_ui() | Spectrum-authored UI builder. Owns the real collapsible bucket surface (`Appearance -> Shape` and `Render -> Audio -> Ghost`) plus the explicit `SEGMENTS` / `BAR` render-mode buttons that author canonical `spectrum_render_mode` |
 | Oscilloscope Binding | ui/tabs/media/oscilloscope_settings_binding.py | load_oscilloscope_mode_settings(), collect_oscilloscope_mode_settings() | Oscilloscope-owned WidgetsTab load/save adapter, including multi-line color binding and ghost state translation |
 | Sine Binding | ui/tabs/media/sine_wave_settings_binding.py | load_sine_wave_mode_settings(), collect_sine_wave_mode_settings() | Sine-owned WidgetsTab load/save adapter, including multi-line travel/offset state and ghost state translation |
 | Vis Preset Slider | ui/tabs/media/preset_slider.py | VisualizerPresetSlider | Reusable 4-notch slider widget with Advanced toggle for per-mode presets |

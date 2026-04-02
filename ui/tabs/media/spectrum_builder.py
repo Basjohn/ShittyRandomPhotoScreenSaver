@@ -6,6 +6,9 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QCheckBox, QSlider, QWidget,
+    QPushButton,
+    QButtonGroup,
+    QToolButton,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
@@ -56,6 +59,84 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     LABEL_WIDTH = 150
 
+    def _make_bucket(
+        target_layout: QVBoxLayout,
+        title: str,
+        *,
+        helper_text: str,
+        expanded: bool = True,
+    ) -> tuple[QWidget, QVBoxLayout]:
+        host = QWidget()
+        host.setObjectName(f"spectrum_bucket_{title.lower().replace(' ', '_')}")
+        host.setProperty("bucketTitle", title)
+        host_layout = QVBoxLayout(host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        host_layout.setSpacing(8)
+
+        toggle_row = QHBoxLayout()
+        toggle_row.setContentsMargins(0, 0, 0, 0)
+        toggle_row.setSpacing(8)
+
+        toggle = QToolButton()
+        toggle.setText(title)
+        toggle.setCheckable(True)
+        toggle.setChecked(expanded)
+        toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        toggle.setAutoRaise(True)
+        toggle_row.addWidget(toggle)
+        toggle_row.addStretch()
+        host_layout.addLayout(toggle_row)
+
+        helper = QLabel(helper_text)
+        helper.setProperty("class", "adv-helper")
+        helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+        helper.setWordWrap(True)
+        host_layout.addWidget(helper)
+
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(12)
+        host_layout.addWidget(body)
+
+        def _apply_state(checked: bool) -> None:
+            toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+            body.setVisible(checked)
+            helper.setVisible(not checked)
+
+        toggle.toggled.connect(_apply_state)
+        _apply_state(expanded)
+
+        target_layout.addWidget(host)
+        return host, body_layout
+
+    _, appearance_bucket = _make_bucket(
+        _normal_layout,
+        "Appearance",
+        helper_text="Spectrum colors and rim-glow styling still apply when hidden.",
+    )
+    _, shape_bucket = _make_bucket(
+        _normal_layout,
+        "Shape",
+        helper_text="Spectrum layout and authored silhouette still apply when hidden.",
+    )
+    _, render_bucket = _make_bucket(
+        _adv_layout,
+        "Render",
+        helper_text="Render-style controls still apply when hidden.",
+    )
+    _, audio_bucket = _make_bucket(
+        _adv_layout,
+        "Audio",
+        helper_text="Audio weighting and falloff controls still apply when hidden.",
+    )
+    _, ghost_bucket = _make_bucket(
+        _adv_layout,
+        "Ghost",
+        helper_text="Ghost controls still apply when hidden.",
+    )
+
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):
         row_widget, content, _ = shared_add_aligned_row_widget(
             parent_layout,
@@ -80,7 +161,30 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return content
 
-    spotify_vis_fill_row = _swatch_row(_normal_layout, "Bar Fill Color:")
+    _mode_button_style = """
+        QPushButton {
+            background-color: #232323;
+            color: #ffffff;
+            border: 2px solid #f1f1f1;
+            border-radius: 18px;
+            padding: 10px 20px;
+            font-weight: 600;
+            min-height: 18px;
+        }
+        QPushButton:hover {
+            background-color: #2a2a2a;
+        }
+        QPushButton:checked {
+            background-color: #4a4a4a;
+            border-color: #f7f7f7;
+        }
+        QPushButton:disabled {
+            color: #7a7a7a;
+            border-color: #6a6a6a;
+        }
+    """
+
+    spotify_vis_fill_row = _swatch_row(appearance_bucket, "Bar Fill Color:")
     tab.vis_fill_color_btn = ColorSwatchButton(title="Choose Beat Bar Fill Color")
     bind_color_button(
         tab,
@@ -91,7 +195,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_fill_row.addWidget(tab.vis_fill_color_btn)
     spotify_vis_fill_row.addStretch()
 
-    spotify_vis_border_color_row = _swatch_row(_normal_layout, "Bar Border Color:")
+    spotify_vis_border_color_row = _swatch_row(appearance_bucket, "Bar Border Color:")
     tab.vis_border_color_btn = ColorSwatchButton(title="Choose Beat Bar Border Color")
     bind_color_button(
         tab,
@@ -102,7 +206,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_border_color_row.addWidget(tab.vis_border_color_btn)
     spotify_vis_border_color_row.addStretch()
 
-    glow_toggle_row = _aligned_row(_normal_layout, "")
+    glow_toggle_row = _aligned_row(appearance_bucket, "")
     tab.spectrum_glow_enabled = QCheckBox("Enable Rim Glow")
     tab.spectrum_glow_enabled.setProperty("circleIndicator", True)
     tab.spectrum_glow_enabled.setChecked(
@@ -117,7 +221,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._spectrum_glow_widgets: list[QWidget] = []
 
-    spectrum_glow_color_widget, spectrum_glow_color_row = _aligned_row_widget(_normal_layout, "Glow Color:")
+    spectrum_glow_color_widget, spectrum_glow_color_row = _aligned_row_widget(appearance_bucket, "Glow Color:")
     tab._spectrum_glow_widgets.append(spectrum_glow_color_widget)
     _spectrum_glow_default = getattr(tab, "_settings", {}).get("widgets", {}).get(
         "spotify_visualizer", {}
@@ -136,7 +240,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spectrum_glow_color_row.addWidget(tab.spectrum_glow_color_btn)
     spectrum_glow_color_row.addStretch()
 
-    spectrum_glow_intensity_widget, spectrum_glow_intensity_row = _aligned_row_widget(_normal_layout, "Glow Intensity:")
+    spectrum_glow_intensity_widget, spectrum_glow_intensity_row = _aligned_row_widget(appearance_bucket, "Glow Intensity:")
     tab._spectrum_glow_widgets.append(spectrum_glow_intensity_widget)
     tab.spectrum_glow_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_glow_intensity.setMinimum(0)
@@ -165,7 +269,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_glow_enabled.stateChanged.connect(_update_spectrum_glow_visibility)
     _update_spectrum_glow_visibility()
 
-    spotify_vis_border_opacity_row = _aligned_row(_normal_layout, "Bar Border Opacity:")
+    spotify_vis_border_opacity_row = _aligned_row(appearance_bucket, "Bar Border Opacity:")
     tab.vis_border_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.vis_border_opacity.setMinimum(0)
     tab.vis_border_opacity.setMaximum(100)
@@ -185,7 +289,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spotify_vis_border_opacity_row.addWidget(tab.vis_border_opacity_label)
 
     # Ghosting controls
-    ghost_toggle_row = _aligned_row(_adv_layout, "")
+    ghost_toggle_row = _aligned_row(ghost_bucket, "")
     tab.vis_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.vis_ghost_enabled.setProperty("circleIndicator", True)
     tab.vis_ghost_enabled.setChecked(
@@ -240,27 +344,48 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_decay_label = QLabel(f"{tab.vis_ghost_decay_slider.value() / 100.0:.2f}x")
     spotify_vis_ghost_decay_row.addWidget(tab.vis_ghost_decay_label)
 
-    _adv_layout.addWidget(tab._ghost_sub_container)
+    ghost_bucket.addWidget(tab._ghost_sub_container)
     tab.vis_ghost_enabled.stateChanged.connect(lambda: _update_ghost_visibility(tab))
     _update_ghost_visibility(tab)
 
-    # Single Piece Mode (solid bars, no segment gaps)
-    single_piece_row = _aligned_row(_adv_layout, "")
-    tab.spectrum_single_piece = QCheckBox("Single Piece Mode")
-    tab.spectrum_single_piece.setProperty("circleIndicator", True)
-    tab.spectrum_single_piece.setChecked(
-        tab._default_bool('spotify_visualizer', 'spectrum_single_piece', False)
-    )
-    tab.spectrum_single_piece.setToolTip(
-        "Render solid continuous bars instead of segmented blocks. "
-        "Produces a clean pillar look while keeping all other bar behaviour."
-    )
-    bind_setting_signal(tab, tab.spectrum_single_piece.stateChanged)
-    single_piece_row.addWidget(tab.spectrum_single_piece)
-    single_piece_row.addStretch()
+    render_mode_row = _aligned_row(render_bucket, "Render Mode:")
+    tab.spectrum_render_mode_group = QButtonGroup(tab)
+    tab.spectrum_render_mode_group.setExclusive(True)
+    tab.spectrum_render_mode_buttons = {}
+
+    def _make_render_mode_button(text: str, mode: str) -> QPushButton:
+        button = QPushButton(text)
+        button.setCheckable(True)
+        button.setStyleSheet(_mode_button_style)
+        button.setProperty("renderMode", mode)
+        button.clicked.connect(lambda _checked=False, selected=mode: _set_render_mode(selected))
+        tab.spectrum_render_mode_group.addButton(button)
+        tab.spectrum_render_mode_buttons[mode] = button
+        return button
+
+    def _set_render_mode(mode: str, *, save: bool = True) -> None:
+        for key, button in tab.spectrum_render_mode_buttons.items():
+            button.blockSignals(True)
+            button.setChecked(key == mode)
+            button.blockSignals(False)
+        changed = getattr(tab, "_spectrum_render_mode", None) != mode
+        if changed:
+            tab._spectrum_render_mode = mode
+            if save:
+                tab._force_visualizer_preset_to_custom()
+        if save:
+            tab._save_settings()
+
+    tab._set_spectrum_render_mode = _set_render_mode
+    tab._spectrum_render_mode = str(tab._default_str('spotify_visualizer', 'spectrum_render_mode', 'bars') or 'bars').lower()
+    render_mode_row.addWidget(_make_render_mode_button("SEGMENTS", "segment"))
+    render_mode_row.addWidget(_make_render_mode_button("BAR", "bars"))
+    render_mode_row.addStretch()
+    for key, button in tab.spectrum_render_mode_buttons.items():
+        button.setChecked(key == ("segment" if tab._spectrum_render_mode == "segment" else "bars"))
 
     # Unique Colours Per Bar (rainbow per-bar mode, only relevant when rainbow is on)
-    rainbow_row = _aligned_row(_adv_layout, "")
+    rainbow_row = _aligned_row(render_bucket, "")
     tab.spectrum_rainbow_per_bar = QCheckBox("Unique Colours Per Bar")
     tab.spectrum_rainbow_per_bar.setProperty("circleIndicator", True)
     tab.spectrum_rainbow_per_bar.setChecked(
@@ -275,7 +400,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     rainbow_row.addStretch()
 
     # Border Radius
-    _br_row = _aligned_row(_adv_layout, "Border Radius:")
+    _br_row = _aligned_row(render_bucket, "Border Radius:")
     tab.spectrum_border_radius = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_border_radius.setMinimum(0)
     tab.spectrum_border_radius.setMaximum(12)
@@ -292,7 +417,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _br_row.addWidget(tab.spectrum_border_radius_label)
 
     # Mirrored Layout
-    _mirror_row = _aligned_row(_adv_layout, "Mirrored Layout:")
+    _mirror_row = _aligned_row(shape_bucket, "Mirrored Layout:")
     tab.spectrum_mirrored = QCheckBox("Center-out (mirrored shape)")
     tab.spectrum_mirrored.setProperty("circleIndicator", True)
     _mirror_default = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
@@ -306,16 +431,13 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _mirror_row.addStretch()
 
     # --- Spectrum Shaping section ---
-    _shape_header = QLabel("Spectrum Shaping")
-    _shape_header.setStyleSheet("font-weight: 600; margin-top: 8px; margin-bottom: 2px;")
-    _adv_layout.addWidget(_shape_header)
     _shape_hint = QLabel(
         "Left-click to add a control node (max 5). "
         "Right-click a node to remove it. Drag to reshape."
     )
     _shape_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
     _shape_hint.setWordWrap(True)
-    _adv_layout.addWidget(_shape_hint)
+    shape_bucket.addWidget(_shape_hint)
 
     # Visual shape editor
     from ui.tabs.media.spectrum_shape_editor import SpectrumShapeEditor
@@ -325,22 +447,19 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     tab.spectrum_shape_editor.nodes_changed.connect(tab._save_settings)
     tab.spectrum_shape_editor.notch_positions_changed.connect(tab._save_settings)
-    _adv_layout.addWidget(tab.spectrum_shape_editor)
+    shape_bucket.addWidget(tab.spectrum_shape_editor)
     # Connect mirrored checkbox to update editor display
     tab.spectrum_mirrored.stateChanged.connect(
         lambda state: tab.spectrum_shape_editor.set_mirrored(bool(state))
     )
 
     # --- Audio Influence sliders (control energy zone weights, not shape) ---
-    _influence_header = QLabel("Audio Influence")
-    _influence_header.setStyleSheet("font-weight: 600; margin-top: 8px; margin-bottom: 2px;")
-    _adv_layout.addWidget(_influence_header)
     _influence_hint = QLabel("How much each frequency band drives bar height.")
     _influence_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
-    _adv_layout.addWidget(_influence_hint)
+    audio_bucket.addWidget(_influence_hint)
 
     # Bass Influence (0–100 → 0.0–1.0)
-    _bass_row = _aligned_row(_adv_layout, "Bass Influence:")
+    _bass_row = _aligned_row(audio_bucket, "Bass Influence:")
     tab.spectrum_bass_emphasis = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_bass_emphasis.setMinimum(0)
     tab.spectrum_bass_emphasis.setMaximum(100)
@@ -367,7 +486,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_vocal_position.hide()
 
     # Mid Dampening (0–100 → 0.0–1.0)
-    _mid_row = _aligned_row(_adv_layout, "Mid Dampening:")
+    _mid_row = _aligned_row(audio_bucket, "Mid Dampening:")
     tab.spectrum_mid_suppression = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_mid_suppression.setMinimum(0)
     tab.spectrum_mid_suppression.setMaximum(100)
@@ -386,7 +505,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _mid_row.addWidget(tab.spectrum_mid_suppression_label)
 
     # Reactivity (0–100 → 0.0–1.0)
-    _wave_row = _aligned_row(_adv_layout, "Reactivity:")
+    _wave_row = _aligned_row(audio_bucket, "Reactivity:")
     tab.spectrum_wave_amplitude = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_wave_amplitude.setMinimum(0)
     tab.spectrum_wave_amplitude.setMaximum(100)
@@ -405,7 +524,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _wave_row.addWidget(tab.spectrum_wave_amplitude_label)
 
     # Profile Floor (5–30 → 0.05–0.30)
-    _floor_row = _aligned_row(_adv_layout, "Profile Floor:")
+    _floor_row = _aligned_row(audio_bucket, "Profile Floor:")
     tab.spectrum_profile_floor = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_profile_floor.setMinimum(5)
     tab.spectrum_profile_floor.setMaximum(30)
@@ -427,7 +546,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _floor_row.addWidget(tab.spectrum_profile_floor_label)
 
     # Drop Speed (50–300 → 0.5–3.0)
-    _drop_row = _aligned_row(_adv_layout, "Drop Speed:")
+    _drop_row = _aligned_row(audio_bucket, "Drop Speed:")
     tab.spectrum_drop_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_drop_speed.setMinimum(50)
     tab.spectrum_drop_speed.setMaximum(300)
@@ -448,7 +567,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _drop_row.addWidget(tab.spectrum_drop_speed_label)
 
     # Spectrum card height growth slider (1.0 .. 3.0)
-    spectrum_growth_row = _aligned_row(_adv_layout, "Card Height:")
+    spectrum_growth_row = _aligned_row(audio_bucket, "Card Height:")
     tab.spectrum_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_growth.setMinimum(100)
     tab.spectrum_growth.setMaximum(500)

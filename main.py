@@ -19,7 +19,12 @@ from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
-from core.logging.logger import setup_logging, get_logger, get_log_dir
+from core.logging.logger import (
+    clear_logs_for_fresh_start,
+    setup_logging,
+    get_logger,
+    get_log_dir,
+)
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from engine.screensaver_engine import ScreensaverEngine
@@ -106,7 +111,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
         tuple: (ScreensaverMode, preview_window_handle)
     """
     # Filter out debug/viz flags
-    _filtered = {"--debug", "-d", "--viz", "--viz-diagnostics", "--viz-diag"}
+    _filtered = {"--debug", "-d", "--viz", "--viz-diagnostics", "--viz-diag", "--fresh"}
     args = [arg for arg in sys.argv if arg not in _filtered]
     
     logger.debug(f"Command-line arguments: {sys.argv}")
@@ -385,12 +390,24 @@ def run_config(app: QApplication) -> int:
 
 def main():
     """Main entry point for the screensaver application."""
+    fresh_mode = '--fresh' in sys.argv
+    fresh_result: tuple[Path, int] | None = None
+    if fresh_mode:
+        fresh_result = clear_logs_for_fresh_start()
+
     # Setup logging first
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
     viz_mode = '--viz' in sys.argv
     viz_diag_mode = '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
     setup_logging(debug=debug_mode, verbose=verbose_mode, viz=viz_mode, viz_diag=viz_diag_mode)
+    if fresh_result is not None:
+        fresh_log_dir, fresh_deleted = fresh_result
+        logger.info(
+            "[FRESH] Cleared %s log files from %s before startup (worker logs preserved)",
+            fresh_deleted,
+            fresh_log_dir,
+        )
     
     # GC tracking for performance debugging
     if os.environ.get('SRPSS_PERF_METRICS') == '1':

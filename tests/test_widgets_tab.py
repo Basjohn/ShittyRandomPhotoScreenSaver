@@ -485,7 +485,7 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
             "mode": mode,
             "preset_spectrum": custom_index,
             "spectrum_growth": 3.1,
-            "spectrum_single_piece": False,
+            "spectrum_render_mode": "segment",
             "spectrum_border_radius": 1.0,
             "spectrum_glow_enabled": False,
             "spectrum_glow_intensity": 0.55,
@@ -509,7 +509,7 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         tab.vis_ghost_opacity_slider.setValue(33)
         tab.vis_ghost_decay_slider.setValue(71)
         tab.spectrum_growth.setValue(370)
-        tab.spectrum_single_piece.setChecked(True)
+        tab._set_spectrum_render_mode("bars")
         tab.spectrum_rainbow_per_bar.setChecked(True)
         tab.spectrum_border_radius.setValue(7)
         tab.spectrum_glow_enabled.setChecked(True)
@@ -543,7 +543,7 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         assert snapshot["bar_fill_color"] == [12, 122, 210, 211]
         assert snapshot["bar_border_color"] == [220, 180, 80, 255]
         assert snapshot["spectrum_growth"] == pytest.approx(3.7)
-        assert snapshot["spectrum_single_piece"] is True
+        assert snapshot["spectrum_render_mode"] == "bars"
         assert snapshot["spectrum_border_radius"] == pytest.approx(7.0)
         assert snapshot["spectrum_glow_enabled"] is True
         assert snapshot["spectrum_glow_intensity"] == pytest.approx(0.94)
@@ -564,7 +564,7 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         assert restored.get("bar_fill_color") == [12, 122, 210, 211]
         assert restored.get("bar_border_color") == [220, 180, 80, 255]
         assert restored.get("spectrum_growth") == pytest.approx(3.7)
-        assert restored.get("spectrum_single_piece") is True
+        assert restored.get("spectrum_render_mode") == "bars"
         assert restored.get("spectrum_border_radius") == pytest.approx(7.0)
         assert restored.get("spectrum_glow_enabled") is True
         assert restored.get("spectrum_glow_intensity") == pytest.approx(0.94)
@@ -782,6 +782,43 @@ def test_blob_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, se
                 if title:
                     adv_titles.append(title)
         assert adv_titles == ["Motion", "Ghost"]
+    finally:
+        tab.deleteLater()
+
+
+def test_spectrum_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        normal_layout = tab._spectrum_normal.layout()
+        normal_titles = []
+        for idx in range(normal_layout.count()):
+            widget = normal_layout.itemAt(idx).widget()
+            if widget is not None:
+                title = widget.property("bucketTitle")
+                if title:
+                    normal_titles.append(title)
+        assert normal_titles == ["Appearance", "Shape"]
+
+        adv_layout = tab._spectrum_advanced.layout()
+        adv_titles = []
+        for idx in range(adv_layout.count()):
+            widget = adv_layout.itemAt(idx).widget()
+            if widget is not None:
+                title = widget.property("bucketTitle")
+                if title:
+                    adv_titles.append(title)
+        assert adv_titles == ["Render", "Audio", "Ghost"]
+    finally:
+        tab.deleteLater()
+
+
+def test_spectrum_builder_uses_explicit_bar_segment_render_mode_buttons(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        assert set(tab.spectrum_render_mode_buttons.keys()) == {"segment", "bars"}
+        assert tab.spectrum_render_mode_buttons["bars"].text() == "BAR"
+        assert tab.spectrum_render_mode_buttons["segment"].text() == "SEGMENTS"
+        assert tab._spectrum_render_mode in {"bars", "segment"}
     finally:
         tab.deleteLater()
 

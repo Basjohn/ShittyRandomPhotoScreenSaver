@@ -28,9 +28,10 @@ Rules:
   - [~] The user's live roaming `%APPDATA%` snapshot still contains older visualizer-era state from before this patch, so the log watch stays open until the user reruns defaults on the fixed build
 - Immediate work order:
   - [x] Baseline stabilization and documentation
-  - [ ] Spectrum conservative cleanup task 1: reclaim side space in `BARS` / `SEGMENTS`
-  - [ ] Spectrum conservative cleanup task 2: replace `Single Piece Mode` with `SEGMENTS` / `BAR`
-  - [ ] Spectrum conservative cleanup task 3: rebuild Spectrum into real buckets
+  - [x] Add conservative `--fresh` startup switch for script/log debugging
+  - [x] Spectrum conservative cleanup task 1: reclaim side space in `BARS` / `SEGMENTS`
+  - [x] Spectrum conservative cleanup task 3: rebuild Spectrum into real buckets
+  - [x] Spectrum conservative cleanup task 2: replace `Single Piece Mode` with `SEGMENTS` / `BAR`
   - [ ] Commit after 1/2/3
   - [ ] Only then continue with border-colour participation, energy arrows, and final consolidation
 
@@ -127,6 +128,24 @@ What has to remain true moving forward:
 
 ---
 
+## 1.1 Startup / Logging Guardrails
+
+Status:
+- [x] `--fresh` startup switch landed
+
+Contract:
+- [x] `--fresh` clears the resolved runtime log folder before `setup_logging()` attaches handlers
+- [x] worker logs are preserved during `--fresh` cleanup:
+  - [x] `worker_*.log`
+- [x] `--fresh` coexists with other script/debug switches and is ignored by screensaver mode parsing
+- [x] cleanup is startup-only and does not alter normal launches when the switch is absent
+
+Validation:
+- [x] `python -m pytest tests/test_fresh_start_logging.py -q`
+- [x] `python -m py_compile main.py main_mc.py core/logging/logger.py tests/test_fresh_start_logging.py`
+
+---
+
 ## 2. Spectrum Conservative Pass
 
 Status:
@@ -139,34 +158,61 @@ Approved order:
 - [x] First prerequisite fixed before width work:
   - [x] defaults now actually start the Beat Visualizer on Spectrum `Preset 1` / slot `0`
   - [x] fresh startup no longer depends on post-merge repair to turn the visualizer back on
-- [ ] Reclaim wasted horizontal side space for `BARS`
-- [ ] Reclaim wasted horizontal side space for `SEGMENTS`
-- [ ] Do **not** overshoot into the border again
-- [ ] Keep Organs synthetic green before/after
-- [ ] Add a concrete non-visual regression for the layout math, not just a screenshot hope
+- [x] Reclaim wasted horizontal side space for `BARS`
+- [x] Reclaim wasted horizontal side space for `SEGMENTS`
+- [x] Do **not** overshoot into the border again
+- [x] Keep Organs synthetic green before/after
+- [x] Add a concrete non-visual regression for the layout math, not just a screenshot hope
 
 Success criteria:
-- [ ] Spectrum uses more of the card width
-- [ ] Outer bars/segments sit naturally inside the frame
-- [ ] No half-bar overlap past the border
+- [x] Spectrum uses more of the card width
+- [x] Outer bars/segments sit naturally inside the frame
+- [x] No half-bar overlap past the border
+
+Historical notes:
+- [x] First reclaim pass overshot by roughly half a bar per side
+- [x] Final contract uses more of the card width without crossing the frame
+- [x] Regression coverage now lives in `tests/test_spectrum_shaping.py`
 
 ### 2.2 Replace `Single Piece Mode`
 
-- [ ] Remove `Single Piece Mode`
-- [ ] Add two explicit toggle buttons:
-  - [ ] `SEGMENTS`
-  - [ ] `BAR`
-- [ ] `BAR` is default
-- [ ] `BAR` exactly matches old single-piece-on behavior
-- [ ] No render-path change is allowed here; this is a UI/settings contract change only
-- [ ] Migrate presets/settings safely through canonical model/schema instead of ad-hoc aliases where possible
+- [x] Remove `Single Piece Mode`
+- [x] Add two explicit toggle buttons:
+  - [x] `SEGMENTS`
+  - [x] `BAR`
+- [x] `BAR` is default
+- [x] `BAR` exactly matches old single-piece-on behavior
+- [x] No render-path change is allowed here; this is a UI/settings contract change only
+- [x] Migrate presets/settings safely through canonical model/schema instead of ad-hoc aliases where possible
+
+Landed contract:
+- [x] Spectrum UI now authors canonical `spectrum_render_mode`
+- [x] Runtime bridge still translates that canonical mode into the older widget boolean seam, so renderer behavior stays stable
+- [x] `spectrum_unique_colors` remains the canonical unique-colour key; the existing checkbox now edits that key instead of reviving `spectrum_rainbow_per_bar`
+
+Validation:
+- [x] `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py tests/test_spectrum_shaping.py -k "spectrum" -q`
+- [x] `43 passed, 1 skipped`
 
 ### 2.3 Proper Spectrum Buckets
 
-- [ ] Replace loose section headings with real collapsible buckets
-- [ ] Order buckets intelligently for Spectrum
-- [ ] Keep row alignment consistent with the shared settings chrome
-- [ ] Keep Organs behavior unchanged while reorganizing controls
+- [x] Replace loose section headings with real collapsible buckets
+- [x] Order buckets intelligently for Spectrum
+- [x] Keep row alignment consistent with the shared settings chrome
+- [x] Keep Organs behavior unchanged while reorganizing controls
+
+Landed bucket order:
+- [x] Normal surface:
+  - [x] `Appearance`
+  - [x] `Shape`
+- [x] Advanced surface:
+  - [x] `Render`
+  - [x] `Audio`
+  - [x] `Ghost`
+
+Validation:
+- [x] `python -m pytest tests/test_widgets_tab.py -k "spectrum_builder_uses_real_bucket_order or blob_builder_uses_real_bucket_order or visualizer_bucket_toggles" -q`
+- [x] `python -m pytest tests/test_visualizer_preset1_baselines.py tests/test_visualizer_settings_plumbing.py -k "preset1 or spectrum" -q`
 
 ### 2.4 Commit Gate
 

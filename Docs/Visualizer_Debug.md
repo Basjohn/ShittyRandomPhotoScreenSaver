@@ -39,15 +39,19 @@ When debugging, always verify these steps in order:
    - The creator path must also seed first-frame style from the resolved settings model, not the raw config dict. If launch colors/ghost/glow feel different from the same state after settings re-entry, compare creator-time `model.*` values against any direct raw-dict reads.
 6. **Shader output** – enable `[PERF] [GL COMPOSITOR]` metrics and screensaver_perf.log to catch dt spikes.
 
+Log hygiene tip:
+- For script/debug sessions, prefer launching with `--fresh` when you want a clean per-run log slice. It clears the resolved runtime log folder before logging initializes, while intentionally preserving `worker_*.log` files so active worker handles do not hang startup.
+
 ---
 
 ## 2. Per-Mode Defaults & Controls
 
 ### 2.1 Spectrum (default view)
 - Shader: `widgets/spotify_visualizer/shaders/spectrum.frag`
-- Defaults: `spectrum_single_piece=True`, `spectrum_border_radius=3.0`, `spectrum_glow_enabled=False`, `spectrum_glow_intensity=0.55`, `spectrum_glow_color=[110,220,255,235]`, `bar_fill_color=[255,255,255,230]`, `bar_border_color=[255,255,255,220]`
+- Defaults: `spectrum_render_mode="bars"`, `spectrum_unique_colors=True`, `spectrum_border_radius=3.0`, `spectrum_glow_enabled=False`, `spectrum_glow_intensity=0.55`, `spectrum_glow_color=[110,220,255,235]`, `bar_fill_color=[255,255,255,230]`, `bar_border_color=[255,255,255,220]`
 - Uniforms: `u_bars[64]`, `u_peaks[64]`, `u_bar_count`, `u_segments`, `u_single_piece`, `u_fill_color`, `u_border_color`, `u_spectrum_glow_enabled`, `u_spectrum_glow_intensity`, `u_spectrum_glow_color`, `u_ghost_alpha`, `u_fade`, `u_time`, `u_resolution`
 - Behaviour: geometry cache builds mirrored pillars; ghost peaks follow decaying envelope; segment count = `clamp(inner_height//5, 8, 64)`.
+- Authoring note: current UI/save paths should emit canonical Spectrum keys (`spectrum_render_mode`, `spectrum_unique_colors`) rather than the older bools (`spectrum_single_piece`, `spectrum_rainbow_per_bar`). Runtime still translates the canonical values into the older widget seam internally so renderer behavior does not drift.
 - Debug tip: If curved profile looks flat, confirm multiplication `profile_shape[i] * zone_energy` still occurs before smoothing.
 - Rim-glow guardrail: Spectrum glow is intentionally a tiny inward bleed on the fill side of the bar edge (about 1–2 px), not a post-process bloom or outside halo. If it starts looking smeary or invisible, inspect the shader's fill-only edge-distance math first; do not bolt on time-reactive bloom just because Spectrum already moves quickly.
 - Rim-glow plumbing guardrail: if Spectrum glow is invisible in live use, check the GL overlay uniform query list before touching preset values or shader math. A missing overlay uniform query can make the shader path look "subtle" when it is actually never receiving the setting at all.
