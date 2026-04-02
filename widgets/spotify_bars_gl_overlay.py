@@ -4,7 +4,7 @@ from typing import List, Sequence, Optional, Set
 
 import numpy as np
 import time
-from PySide6.QtCore import Qt, QRect
+from PySide6.QtCore import Qt, QRect, QRectF
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -21,6 +21,7 @@ from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 from widgets.spotify_visualizer.blob_math import (
     compute_stage_progress,
 )
+from widgets.spotify_visualizer.renderers.spectrum import compute_bar_layout
 
 
 logger = get_logger(__name__)
@@ -2300,13 +2301,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if inner.width() <= 0 or inner.height() <= 0:
             return
 
-        gap = 2
-        total_gap = gap * (count - 1) if count > 1 else 0
-        bar_width = int((inner.width() - total_gap) / max(1, count))
-        if bar_width <= 0:
+        layout = compute_bar_layout(float(inner.width()), int(count), gap=2.0, bars_inset=2.0)
+        if not layout:
             return
-
-        x0 = inner.left() + 5
+        bar_width = float(layout["bar_width"])
+        gap = float(layout["gap"])
+        x0 = float(inner.left()) + float(layout["left"])
         bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
 
         seg_gap = 1
@@ -2361,7 +2361,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # Solid bar: one rectangle from bottom to active height
                     bar_h = max(1, int(round(value * inner.height())))
                     bar_y = base_bottom - bar_h + 1
-                    painter.drawRect(QRect(x, bar_y, bar_width, bar_h))
+                    painter.drawRect(QRectF(x, bar_y, bar_width, bar_h))
                 else:
                     active = int(round(value * segments))
                     if active <= 0:
@@ -2373,6 +2373,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         active = max_segments
                     for s in range(active):
                         y = seg_y[s]
-                        painter.drawRect(QRect(x, y, bar_width, seg_height))
+                        painter.drawRect(QRectF(x, y, bar_width, seg_height))
         finally:
             painter.end()

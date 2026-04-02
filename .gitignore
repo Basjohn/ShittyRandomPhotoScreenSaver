@@ -23,6 +23,7 @@ __pycache__/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+cache/reddit/*.json
 temp/
 settings/
 docs/

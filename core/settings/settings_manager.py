@@ -333,7 +333,14 @@ class SettingsManager(QObject):
                     widgets[section_name] = section_dict
                 else:
                     # Entire section missing or invalid – adopt defaults.
-                    widgets[section_name] = dict(section_defaults)
+                    section_dict = dict(section_defaults)
+                    if section_name == 'spotify_visualizer':
+                        section_dict = normalize_visualizer_section_mapping(
+                            section_dict,
+                            apply_preset_overlay=False,
+                            resolve_preset_indices=False,
+                        )
+                    widgets[section_name] = section_dict
                     changed = True
 
             if changed or not isinstance(raw_widgets, Mapping):

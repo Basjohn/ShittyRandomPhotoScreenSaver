@@ -235,6 +235,19 @@ class TestSettingsManagerDefaults:
         assert vis == expected
         assert "obsolete_custom_key" not in vis
 
+    def test_fresh_defaults_keep_visualizer_enabled_without_repair(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+
+        widgets = manager.get("widgets")
+        vis = widgets["spotify_visualizer"]
+
+        assert vis["enabled"] is True
+        assert vis["mode"] == "spectrum"
+        assert vis["preset_spectrum"] == 0
+
+        repairs = manager.validate_and_repair()
+        assert "widgets.spotify_visualizer" not in repairs
+
     def test_existing_visualizer_section_does_not_gain_bubble_semantics_marker_during_default_merge(
         self,
         tmp_path: Path,

@@ -23,7 +23,9 @@ Rules:
   - [x] Shipped MC preset tree regeneration is working again
   - [x] Canonical runtime creator bridge is accepting the current authored Spectrum schema again
   - [x] Organs synthetic baseline now matches the actual authored `Preset 1`
-  - [~] One live AppData/settings normalization path still leaves a visible repair line in logs until the user's roaming snapshot is resaved on the modern schema
+  - [x] Canonical defaults now expose a normalized `widgets.spotify_visualizer` section with `enabled=True`, `mode=spectrum`, and `preset_spectrum=0`
+  - [x] Fresh/default settings-manager startup now keeps `widgets.spotify_visualizer` repair-free in targeted probes/tests
+  - [~] The user's live roaming `%APPDATA%` snapshot still contains older visualizer-era state from before this patch, so the log watch stays open until the user reruns defaults on the fixed build
 - Immediate work order:
   - [x] Baseline stabilization and documentation
   - [ ] Spectrum conservative cleanup task 1: reclaim side space in `BARS` / `SEGMENTS`
@@ -70,15 +72,26 @@ Latest concrete findings:
   - regression coverage added so this does not quietly come back
 
 Still open / watch:
-- [~] Latest logs still show `Settings validation repaired 1 issues: ['widgets.spotify_visualizer']`
-- [x] This is now understood as live roaming AppData drift, not source-preset drift
-- [ ] Confirm whether one user-side save/reset/replace fully rewrites the roaming visualizer section to the modern schema so the repair line disappears on subsequent launches
+- [x] Latest pre-fix logs showed `Settings validation repaired 1 issues: ['widgets.spotify_visualizer']`
+- [x] Root cause was split across two seams:
+  - [x] startup default-merge seeded the visualizer section from a non-canonical nested defaults payload
+  - [x] that nested payload omitted `enabled`, so the model resolved the Beat Visualizer to off on defaults
+- [x] Landed repo fix:
+  - [x] `core/settings/defaults.py` now returns a normalized visualizer default section
+  - [x] `SettingsManager._ensure_widgets_defaults()` now canonicalizes fresh/default visualizer insertion without rewriting existing user-authored sections
+- [~] Live roaming AppData still needs one post-fix user run to prove the old repair line is gone for good
 
 Validation history that matters:
 - [x] `python tools/visualizer_preset_repair.py --audit-curated`
 - [x] `python tools/regenerate_visualizer_shipped_presets.py`
 - [x] `python -m pytest tests/test_visualizer_presets.py tests/test_visualizer_preset_manifest.py tests/test_settings_defaults_parity.py tests/test_settings_dialog.py tests/test_visualizer_preset1_baselines.py -q`
 - [x] `python -m pytest tests/test_visualizer_settings_plumbing.py -k "CreatorKwargs or critical_settings_passed_through or canonical_spectrum_fields or LiveConfigGuard" -q`
+- [x] `python -m pytest tests/test_settings_manager.py tests/test_settings_defaults_parity.py tests/test_visualizer_settings_plumbing.py -k "visualizer or defaults or CreatorKwargs or critical_settings_passed_through or canonical_spectrum_fields or LiveConfigGuard" -q`
+- [x] Fresh settings-manager probe after the fix now reports:
+  - [x] `enabled=True`
+  - [x] `mode=spectrum`
+  - [x] `preset_spectrum=0`
+  - [x] `validate_and_repair() == {}`
 
 ---
 
@@ -110,6 +123,7 @@ What has to remain true moving forward:
 - [x] The build-linked regeneration path stays the standard path, not manual drift chasing
 - [x] `tools/visualizer_preset_repair.py` must remain flexible with evolving authored schema
 - [x] Curated preset names/content must not be hardcoded in tests beyond the explicit `Preset 1` feel fence
+- [x] Runtime cache payloads such as `cache/reddit/*.json` are generated state, not authored repo content
 
 ---
 
@@ -122,6 +136,9 @@ Approved order:
 
 ### 2.1 Width Reclaim For `BARS` / `SEGMENTS`
 
+- [x] First prerequisite fixed before width work:
+  - [x] defaults now actually start the Beat Visualizer on Spectrum `Preset 1` / slot `0`
+  - [x] fresh startup no longer depends on post-merge repair to turn the visualizer back on
 - [ ] Reclaim wasted horizontal side space for `BARS`
 - [ ] Reclaim wasted horizontal side space for `SEGMENTS`
 - [ ] Do **not** overshoot into the border again
@@ -234,8 +251,6 @@ Before `Baseline Pre-Spectrum Clean`:
 - [x] Settings-tab live-config guard fixed
 - [ ] Rewrite/align living docs with the recovery lessons and the conservative Spectrum focus
 - [ ] Remove tracked personal/runtime junk from the commit
-  - [ ] `cache/reddit/reddit_posts.json`
-  - [ ] `cache/reddit/reddit2_posts.json`
+  - [x] `cache/reddit/*.json` removed from tracked repo content and ignored going forward
 - [ ] Stage only repo-relevant files
 - [ ] Create commit: `Baseline Pre-Spectrum Clean`
-

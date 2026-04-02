@@ -9,6 +9,46 @@ from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set
 logger = get_logger(__name__)
 
 
+def compute_bar_layout(
+    inner_width: float,
+    count: int,
+    *,
+    gap: float = 2.0,
+    bars_inset: float = 2.0,
+) -> dict[str, float] | None:
+    """Compute the horizontal Spectrum bar field layout.
+
+    This mirrors the intended shader contract for `BARS` / `SEGMENTS`:
+    use the full usable width inside a small fixed inset, rather than flooring
+    the bar width and centering the leftover slack as visible wasted space.
+    """
+    try:
+        bar_count = int(count)
+    except Exception:
+        return None
+
+    if inner_width <= 0.0 or bar_count <= 0:
+        return None
+
+    bar_region_width = float(inner_width) - float(bars_inset) * 2.0
+    total_gap = float(gap) * float(max(0, bar_count - 1))
+    usable_width = bar_region_width - total_gap
+    if bar_region_width <= 0.0 or usable_width <= 0.0:
+        return None
+
+    bar_width = usable_width / float(bar_count)
+    span = bar_width * float(bar_count) + total_gap
+    right_padding = max(0.0, float(inner_width) - (float(bars_inset) + span))
+    return {
+        "bar_width": bar_width,
+        "span": span,
+        "left": float(bars_inset),
+        "right_padding": right_padding,
+        "gap": float(gap),
+        "bar_region_width": bar_region_width,
+    }
+
+
 def get_uniform_names() -> list[str]:
     return [
         "u_bar_count", "u_segments", "u_bar_height_scale", "u_single_piece",

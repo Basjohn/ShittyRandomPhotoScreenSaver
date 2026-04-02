@@ -76,6 +76,21 @@ class TestSpectrumShapeConfig:
         assert vals[0] == pytest.approx(vals[-1], abs=1e-6)
         assert vals[1] == pytest.approx(vals[-2], abs=1e-6)
 
+    def test_bar_layout_reclaims_width_without_centering_waste(self):
+        from widgets.spotify_visualizer.renderers.spectrum import compute_bar_layout
+
+        layout = compute_bar_layout(884.0, 33, gap=2.0, bars_inset=2.0)
+        assert layout is not None
+        assert layout["left"] == pytest.approx(2.0)
+        assert layout["right_padding"] == pytest.approx(2.0, abs=1e-6)
+        assert layout["span"] == pytest.approx(880.0, abs=1e-6)
+        assert layout["bar_width"] > 24.0
+
+    def test_shader_uses_full_span_bar_width_contract(self):
+        src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "spectrum.frag").read_text(encoding="utf-8")
+        assert "float bars_inset = 2.0;" in src
+        assert "float bar_width = usable_width / bar_count;" in src
+
 
 class TestSpectrumShapeEditorNotches:
     @staticmethod
@@ -156,7 +171,6 @@ class TestConfigApplierShaping:
     def _make_widget_mock(self) -> MagicMock:
         widget = MagicMock()
         widget._spectrum_bass_emphasis = 0.50
-        widget._spectrum_vocal_position = 0.40
         widget._spectrum_mid_suppression = 0.50
         widget._spectrum_wave_amplitude = 0.50
         widget._spectrum_profile_floor = 0.12
@@ -170,8 +184,6 @@ class TestConfigApplierShaping:
         apply_vis_mode_kwargs(widget, {'spectrum_bass_emphasis': 0.80, 'spectrum_mid_suppression': 0.30})
         assert widget._spectrum_bass_emphasis == 0.80
         assert widget._spectrum_mid_suppression == 0.30
-        # Unchanged
-        assert widget._spectrum_vocal_position == 0.40
 
     def test_shaping_clamped_to_bounds(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
@@ -233,7 +245,6 @@ class TestPresetShapingKeys:
         from core.settings.visualizer_presets import MODE_KEY_PREFIXES
         expected = {
             "spectrum_bass_emphasis",
-            "spectrum_vocal_position",
             "spectrum_mid_suppression",
             "spectrum_wave_amplitude",
             "spectrum_profile_floor",
@@ -255,7 +266,6 @@ class TestPresetShapingKeys:
         settings = {
             "mode": "spectrum",
             "spectrum_bass_emphasis": 0.80,
-            "spectrum_vocal_position": 0.35,
             "spectrum_mid_suppression": 0.60,
             "spectrum_wave_amplitude": 0.40,
             "spectrum_profile_floor": 0.10,
@@ -285,7 +295,6 @@ class TestSettingsModelShaping:
         from core.settings.models import SpotifyVisualizerSettings
         mapping: Dict[str, Any] = {
             "spectrum_bass_emphasis": 0.70,
-            "spectrum_vocal_position": 0.55,
             "spectrum_mid_suppression": 0.25,
             "spectrum_wave_amplitude": 0.80,
             "spectrum_profile_floor": 0.20,
@@ -295,7 +304,6 @@ class TestSettingsModelShaping:
         }
         model = SpotifyVisualizerSettings.from_mapping(mapping)
         assert model.spectrum_bass_emphasis == 0.70
-        assert model.spectrum_vocal_position == 0.55
         assert model.spectrum_mid_suppression == 0.25
         assert model.spectrum_wave_amplitude == 0.80
         assert model.spectrum_profile_floor == 0.20
@@ -307,12 +315,10 @@ class TestSettingsModelShaping:
         from core.settings.models import SpotifyVisualizerSettings
         model = SpotifyVisualizerSettings(
             spectrum_bass_emphasis=0.60,
-            spectrum_vocal_position=0.45,
         )
         flat = model.to_dict()
         prefix = "widgets.spotify_visualizer"
         assert flat[f"{prefix}.spectrum_bass_emphasis"] == 0.60
-        assert flat[f"{prefix}.spectrum_vocal_position"] == 0.45
         assert flat[f"{prefix}.spectrum_mid_suppression"] == 0.50  # default
         assert flat[f"{prefix}.spectrum_glow_enabled"] is False
         assert flat[f"{prefix}.spectrum_glow_intensity"] == pytest.approx(0.55)
