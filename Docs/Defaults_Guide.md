@@ -200,6 +200,18 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 
 The shipped curated tree is now regression-audited so modernized preset authoring cannot silently drift back toward duplicate/backup/compat-laden payloads. The checked-in MC release preset tree must stay synced to `presets/visualizer_modes`, and even the shared `tests_tmp_appdata` visualizer fixtures are now expected to stay on the same modern schema so stale compat keys cannot hide in maintenance artifacts.
 
+**Authoritative-tree contract (Apr 2026):**
+- `presets/visualizer_modes` is the only authored source tree.
+- `release/main_mc.dist/presets/visualizer_modes*` is generated output only; never hand-maintain it or treat it as the git source of truth.
+- Hard resets/reverts do **not** guarantee generated release artifacts or roaming `%APPDATA%` visualizer state return to the same moment as source code.
+- Before blessing a preset/settings baseline commit, verify all of:
+  - source curated tree
+  - shipped-tree regeneration
+  - defaults snapshot parity
+  - runtime creator/apply bridge
+  - the `Preset 1` synthetic fence
+  - any known roaming AppData drift noted in `Current_Plan.md`
+
 #### Spotify Visualizer — Bubble Mode
 | Key | Default | Notes |
 |-----|---------|-------|

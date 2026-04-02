@@ -949,6 +949,20 @@ class WidgetsTab(QWidget):
         if isinstance(base_config, Mapping):
             config.update(deepcopy(dict(base_config)))
 
+        # This helper is used by stack-status/live-preview paths before every
+        # lazy-built Media/Visualizer control necessarily exists. In that case,
+        # preserve the stored visualizer config instead of logging a misleading
+        # preset/runtime failure.
+        required_attrs = (
+            'media_enabled',
+            'media_position',
+            'media_font_combo',
+            'vis_enabled_checkbox',
+            'vis_mode_combo',
+        )
+        if any(getattr(self, attr, None) is None for attr in required_attrs):
+            return config
+
         try:
             from ui.tabs.widgets_tab_media import save_media_settings
 

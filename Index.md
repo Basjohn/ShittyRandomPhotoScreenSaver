@@ -18,7 +18,7 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/Visualizer_Signal_Contract.md | Canonical contract for continuous energy, transient bus, micro-scheduler events, and per-mode smoothing ownership |
 | Docs/Visualizer_Reset_Matrix.md | Canonical reset/freshness matrix for cold start, mode switches, same-mode apply, preset cycling, and waveform gates |
 | Docs/Visualizer_Baseline_Tuning_Matrix.md | Cross-mode baseline tuning sheet: floor/AGC strategy, transient vs scheduler roles, compat-key policy, validation guardrails, and the checked-in preset-1 synthetic migration fence (`tests/data/visualizer_preset1_baselines.json`) |
-| Current_Plan.md | Live project plan. For visualizers it is the canonical status board for Blob/Sine/Osc validation, audit follow-through, release backlog, and explicit design backlog items such as the future Sine Crawl redesign. |
+| Current_Plan.md | Live project plan and recovery ledger. For visualizers it is the canonical status board for baseline verification, source-vs-generated preset guardrails, runtime drift notes, and the approved Spectrum cleanup backlog. |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
 | Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines and tuning notes. **Spectrum “Cake” preset is exempt from bar-count changes** per 2026 audit. |
 | Docs/Visualizer_Mode_Consolidation_Mental_Model.md | Reusable playbook for consolidating visualizer-mode settings, presets, runtime contracts, and validation without freezing artistic content |

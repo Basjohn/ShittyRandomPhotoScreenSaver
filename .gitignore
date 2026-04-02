@@ -33,7 +33,6 @@ audits/
 htmlcov/
 .coverage
 .coverage.*
-Current_Plan.md
 /logs
 agent.md
 *.bak

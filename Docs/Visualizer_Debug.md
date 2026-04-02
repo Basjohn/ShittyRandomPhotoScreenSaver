@@ -226,6 +226,12 @@ Each mode has contextual transient mix sliders controlling how much transient en
   - Before checking in curated preset edits, to guarantee they only contain allowed keys.
   - As part of doc refreshes so editors see only one copy of each control.
   - After deleting/renaming curated presets manually, or after dropping in a markerless preset file that should become the next logical curated slot.
+- Recovery guardrail:
+  - if runtime suddenly stops respecting presets after a revert/recovery, inspect three seams together instead of assuming the authored tree is wrong:
+    - authored `presets/visualizer_modes`
+    - generated shipped tree under `release/main_mc.dist/presets/visualizer_modes*`
+    - live `%APPDATA%/SRPSS/settings_v2.json` / settings-dialog cache drift
+  - a repo revert can leave generated release artifacts and roaming state out of sync with source, so treat those as separate recovery surfaces.
 - Guardrails:
   - `tools/rebuild_visualizer_presets.py` is retired on purpose and must not be revived or referenced as the active workflow.
   - `tests/test_visualizer_presets.py` should stay contract-level: schema, filtering, duplicate-prefix cleanup, direct transient-key handling, SST shape.

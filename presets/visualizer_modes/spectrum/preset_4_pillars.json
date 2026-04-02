@@ -90,8 +90,8 @@
         ],
         "spectrum_profile_floor": 0.1,
         "spectrum_rainbow_enabled": true,
-        "spectrum_rainbow_per_bar": true,
         "spectrum_rainbow_speed": 0.6,
+        "spectrum_render_mode": "segment",
         "spectrum_sensitivity": 0.55,
         "spectrum_shape_nodes": [
           [
@@ -111,10 +111,9 @@
             1.0
           ]
         ],
-        "spectrum_single_piece": false,
         "spectrum_transient_clamp": 1.8,
         "spectrum_transient_pulse_gain": 1.0,
-        "spectrum_vocal_position": 0.4,
+        "spectrum_unique_colors": true,
         "spectrum_wave_amplitude": 0.19
       }
     }

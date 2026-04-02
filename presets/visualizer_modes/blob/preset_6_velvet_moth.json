@@ -95,53 +95,53 @@
         "blob_shape_energy_nodes": [
           {
             "canvas": "react",
-            "type": "vocals",
-            "x": 0.5,
-            "y": 0.34,
-            "strength": 1.0,
+            "dir_len": 26.0,
             "dir_x": 0.0,
             "dir_y": -1.0,
-            "dir_len": 26.0
+            "strength": 1.0,
+            "type": "vocals",
+            "x": 0.5,
+            "y": 0.34
           },
           {
             "canvas": "react",
-            "type": "bass",
-            "x": 0.83,
-            "y": 0.72,
-            "strength": 1.0,
+            "dir_len": 28.0,
             "dir_x": 0.82,
             "dir_y": 0.57,
-            "dir_len": 28.0
+            "strength": 1.0,
+            "type": "bass",
+            "x": 0.83,
+            "y": 0.72
           },
           {
             "canvas": "react",
-            "type": "bass",
-            "x": 0.18,
-            "y": 0.7,
-            "strength": 1.0,
+            "dir_len": 28.0,
             "dir_x": -0.82,
             "dir_y": 0.57,
-            "dir_len": 28.0
+            "strength": 1.0,
+            "type": "bass",
+            "x": 0.18,
+            "y": 0.7
           },
           {
             "canvas": "react",
-            "type": "mid",
-            "x": 0.27,
-            "y": 0.5,
-            "strength": 1.0,
+            "dir_len": 22.0,
             "dir_x": -1.0,
             "dir_y": 0.0,
-            "dir_len": 22.0
+            "strength": 1.0,
+            "type": "mid",
+            "x": 0.27,
+            "y": 0.5
           },
           {
             "canvas": "react",
-            "type": "mid",
-            "x": 0.73,
-            "y": 0.5,
-            "strength": 1.0,
+            "dir_len": 22.0,
             "dir_x": 1.0,
             "dir_y": 0.0,
-            "dir_len": 22.0
+            "strength": 1.0,
+            "type": "mid",
+            "x": 0.73,
+            "y": 0.5
           }
         ],
         "blob_shape_reaction_nodes": [

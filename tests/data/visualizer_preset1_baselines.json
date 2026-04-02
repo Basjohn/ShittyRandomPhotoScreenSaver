@@ -1,49 +1,49 @@
 {
+  "schema_version": 1,
   "description": "Deterministic synthetic preset-1 metrics captured before further visualizer refactors. Use these as a migration guard for preset plumbing and per-mode runtime feel.",
   "modes": {
+    "spectrum": {
+      "preset_name": "Preset 1",
+      "bar_count": 35,
+      "calm_mean": 0.0,
+      "bass_outer_mean": 0.015335,
+      "bass_center_mean": 0.020244,
+      "vocal_outer_mean": 0.00234,
+      "vocal_center_mean": 0.023352
+    },
+    "oscilloscope": {
+      "preset_name": "Preset 1",
+      "waveform_count": 24,
+      "calm_sensitivity": 4.8,
+      "hit_sensitivity": 5.504256,
+      "hit_bass_energy": 0.112,
+      "hit_overall_energy": 0.26
+    },
+    "sine_wave": {
+      "preset_name": "Preset 1",
+      "calm_width_reaction": 0.113487,
+      "hit_width_reaction": 0.152413,
+      "release_width_reaction": 0.151984,
+      "calm_wave_effect_gate": 0.06,
+      "hit_wave_effect_gate": 0.307965,
+      "hit_sensitivity": 0.537048
+    },
     "blob": {
+      "preset_name": "Preset 1",
       "calm_live_overall": 0.0955,
       "kick_live_overall": 0.190416,
-      "kick_stage_primary": 0.761289,
-      "preset_name": "Preset 1",
-      "release_stage_primary": 0.71127,
+      "kick_stage_primary": 0.748913,
+      "release_stage_primary": 0.702458,
       "vocal_stage_overall": 0.11
     },
     "bubble": {
-      "calm_burst": 0.044827,
+      "preset_name": "Preset 1",
       "calm_speed_energy": 0.053524,
-      "kick_max_radius": 0.056948,
-      "preset_name": "Preset 1",
+      "calm_burst": 0.044827,
+      "vocal_speed_energy": 0.402759,
       "vocal_burst": 0.277678,
-      "vocal_max_radius": 0.058439,
-      "vocal_speed_energy": 0.402759
-    },
-    "oscilloscope": {
-      "calm_sensitivity": 4.8,
-      "hit_bass_energy": 0.112,
-      "hit_overall_energy": 0.26,
-      "hit_sensitivity": 5.504256,
-      "preset_name": "Preset 1",
-      "waveform_count": 24
-    },
-    "sine_wave": {
-      "calm_wave_effect_gate": 0.06,
-      "calm_width_reaction": 0.113487,
-      "hit_sensitivity": 0.537048,
-      "hit_wave_effect_gate": 0.307965,
-      "hit_width_reaction": 0.152413,
-      "preset_name": "Preset 1",
-      "release_width_reaction": 0.151984
-    },
-    "spectrum": {
-      "bar_count": 33,
-      "bass_center_mean": 0.02231,
-      "bass_outer_mean": 0.020694,
-      "calm_mean": 0.0,
-      "preset_name": "Preset 1",
-      "vocal_center_mean": 0.020559,
-      "vocal_outer_mean": 2.9e-05
+      "vocal_max_radius": 0.045187,
+      "kick_max_radius": 0.063655
     }
-  },
-  "schema_version": 1
+  }
 }

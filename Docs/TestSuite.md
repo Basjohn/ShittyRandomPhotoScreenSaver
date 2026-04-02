@@ -64,6 +64,7 @@ tests/
   - it must not freeze non-baseline curated artistic choices such as filenames, pack size, slot labels, or payload tuning outside the explicit `Preset 1` baseline fence.
   - `tests/test_visualizer_preset1_baselines.py` is the intentional rigid synthetic feel fence.
   - if curated preset 1 is intentionally reauthored, refresh the checked-in baseline in the same change.
+  - baseline/recovery work is only considered safe when the curated audit, shipped-tree regeneration, runtime creator-bridge fence, and the `Preset 1` synthetic fence are all green together. Do not use one passing suite to assume the others are implicitly safe.
 
 ### Stability Rules
 

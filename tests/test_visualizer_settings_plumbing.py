@@ -10,6 +10,7 @@ surface without a live GL context (mainly shader-source contracts).
 """
 import os
 import inspect
+from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -310,6 +311,47 @@ class TestCreatorKwargs:
         assert captured["spectrum_glow_color"] == [12, 34, 200, 255]
         assert captured["osc_ghost_line2_enabled"] is True
         assert captured["osc_ghost_line3_enabled"] is False
+
+    def test_apply_spotify_vis_model_config_translates_canonical_spectrum_fields(self):
+        from core.settings.models import SpotifyVisualizerSettings
+        from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+
+        captured = {}
+
+        class FakeVis:
+            def apply_vis_mode_config(self, **kwargs):
+                captured.update(kwargs)
+
+        model = SpotifyVisualizerSettings(
+            mode="spectrum",
+            spectrum_render_mode="segment",
+            spectrum_unique_colors=False,
+        )
+
+        apply_spotify_vis_model_config(FakeVis(), model)
+
+        assert captured["mode"] == "spectrum"
+        assert captured["spectrum_single_piece"] is False
+        assert captured["spectrum_rainbow_per_bar"] is False
+        assert captured["spectrum_vocal_position"] == pytest.approx(0.40)
+
+
+class TestWidgetsTabLiveConfigGuard:
+    def test_build_current_spotify_visualizer_config_preserves_base_when_media_controls_missing(self):
+        from ui.tabs.widgets_tab import WidgetsTab
+
+        base_config = {
+            "mode": "spectrum",
+            "spectrum_bar_count": 35,
+            "spectrum_glow_enabled": True,
+        }
+        dummy_tab = SimpleNamespace()
+
+        result = WidgetsTab._build_current_spotify_visualizer_config(dummy_tab, base_config)
+
+        assert result == base_config
+        assert result is not base_config
+        assert result == deepcopy(base_config)
 
 
 class TestPresetOverlayRuntimeOverrides:

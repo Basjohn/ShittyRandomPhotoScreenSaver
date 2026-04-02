@@ -32,6 +32,10 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
     """
     if not hasattr(vis, 'apply_vis_mode_config'):
         return
+    spectrum_render_mode = str(getattr(model, "spectrum_render_mode", "bars") or "bars").lower()
+    spectrum_single_piece = spectrum_render_mode != "segment"
+    spectrum_unique_colors = bool(getattr(model, "spectrum_unique_colors", True))
+    spectrum_vocal_position = float(getattr(model, "spectrum_vocal_position", 0.40))
     vis.apply_vis_mode_config(
         mode=str(model.mode),
         bar_fill_color=model.bar_fill_color,
@@ -62,11 +66,11 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         osc_ghost_line2_enabled=model.osc_ghost_line2_enabled,
         osc_ghost_line3_enabled=model.osc_ghost_line3_enabled,
         spectrum_growth=model.spectrum_growth,
-        spectrum_single_piece=model.spectrum_single_piece,
+        spectrum_single_piece=spectrum_single_piece,
         spectrum_glow_enabled=model.spectrum_glow_enabled,
         spectrum_glow_intensity=model.spectrum_glow_intensity,
         spectrum_glow_color=model.spectrum_glow_color,
-        spectrum_rainbow_per_bar=model.spectrum_rainbow_per_bar,
+        spectrum_rainbow_per_bar=spectrum_unique_colors,
         blob_growth=model.blob_growth,
         osc_speed=model.osc_speed,
         osc_line_dim=model.osc_line_dim,
@@ -100,7 +104,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         spectrum_mirrored=model.spectrum_mirrored,
         spectrum_shape_nodes=model.spectrum_shape_nodes,
         spectrum_bass_emphasis=model.spectrum_bass_emphasis,
-        spectrum_vocal_position=model.spectrum_vocal_position,
+        spectrum_vocal_position=spectrum_vocal_position,
         spectrum_mid_suppression=model.spectrum_mid_suppression,
         spectrum_wave_amplitude=model.spectrum_wave_amplitude,
         spectrum_profile_floor=model.spectrum_profile_floor,

@@ -91,33 +91,33 @@
         "blob_shape_energy_nodes": [
           {
             "canvas": "react",
+            "dir_len": 22.0,
+            "dir_x": 0.0,
+            "dir_y": -1.0,
             "strength": 1.0,
             "type": "transient",
             "x": 0.4901380670611439,
-            "y": 0.4339250493096646,
-            "dir_x": 0.0,
-            "dir_y": -1.0,
-            "dir_len": 22.0
+            "y": 0.4339250493096646
           },
           {
             "canvas": "react",
+            "dir_len": 28.0,
+            "dir_x": 0.18,
+            "dir_y": 0.98,
             "strength": 1.0,
             "type": "bass",
             "x": 0.5512820512820511,
-            "y": 0.7337278106508875,
-            "dir_x": 0.18,
-            "dir_y": 0.98,
-            "dir_len": 28.0
+            "y": 0.7337278106508875
           },
           {
             "canvas": "react",
+            "dir_len": 26.0,
+            "dir_x": 0.68,
+            "dir_y": -0.74,
             "strength": 1.0,
             "type": "bass",
             "x": 0.8802673733763073,
-            "y": 0.12717264045062032,
-            "dir_x": 0.68,
-            "dir_y": -0.74,
-            "dir_len": 26.0
+            "y": 0.12717264045062032
           }
         ],
         "blob_shape_reaction_nodes": [

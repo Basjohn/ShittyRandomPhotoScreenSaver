@@ -39,14 +39,7 @@
         "sine_glow_enabled": true,
         "sine_glow_intensity": 0.4,
         "sine_glow_reactivity": 1.25,
-        "sine_glow_size": 1.0,
         "sine_heartbeat": 0.0,
-        "sine_line1_color": [
-          255,
-          255,
-          255,
-          230
-        ],
         "sine_line1_shift": 0.0,
         "sine_line2_color": [
           198,

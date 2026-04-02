@@ -742,6 +742,9 @@ class WidgetManager:
             # Fallback: apply_vis_mode_config directly if helper not available
             try:
                 if hasattr(vis, 'apply_vis_mode_config'):
+                    spectrum_render_mode = str(getattr(model, "spectrum_render_mode", "bars") or "bars").lower()
+                    spectrum_single_piece = spectrum_render_mode != "segment"
+                    spectrum_vocal_position = float(getattr(model, "spectrum_vocal_position", 0.40))
                     vis.apply_vis_mode_config(
                         mode=str(model.mode),
                         sine_micro_wobble=model.sine_micro_wobble,
@@ -763,10 +766,11 @@ class WidgetManager:
                         spectrum_mirrored=model.spectrum_mirrored,
                         spectrum_shape_nodes=model.spectrum_shape_nodes,
                         spectrum_bass_emphasis=model.spectrum_bass_emphasis,
-                        spectrum_vocal_position=model.spectrum_vocal_position,
+                        spectrum_vocal_position=spectrum_vocal_position,
                         spectrum_mid_suppression=model.spectrum_mid_suppression,
                         spectrum_wave_amplitude=model.spectrum_wave_amplitude,
                         spectrum_profile_floor=model.spectrum_profile_floor,
+                        spectrum_single_piece=spectrum_single_piece,
                     )
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply vis mode config", exc_info=True)
