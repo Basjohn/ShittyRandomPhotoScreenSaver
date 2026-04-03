@@ -22,7 +22,7 @@ Rules:
   - [x] Preset source tree recovered and re-stabilized after revert damage
   - [x] Shipped MC preset tree regeneration is working again
   - [x] Canonical runtime creator bridge is accepting the current authored Spectrum schema again
-  - [x] Organs synthetic baseline now matches the actual authored `Preset 1`
+  - [!] Organs synthetic baseline now matches the actual authored `Preset 1` !!! IMPORTANT CHANGE !!! I updated and improved Preset 1 - Organs record the result and tune the synthetic for this modified version.
   - [x] Canonical defaults now expose a normalized `widgets.spotify_visualizer` section with `enabled=True`, `mode=spectrum`, and `preset_spectrum=0`
   - [x] Fresh/default settings-manager startup now keeps `widgets.spotify_visualizer` repair-free in targeted probes/tests
   - [~] The user's live roaming `%APPDATA%` snapshot still contains older visualizer-era state from before this patch, so the log watch stays open until the user reruns defaults on the fixed build
@@ -32,7 +32,8 @@ Rules:
   - [x] Spectrum conservative cleanup task 1: reclaim side space in `BARS` / `SEGMENTS`
   - [x] Spectrum conservative cleanup task 3: rebuild Spectrum into real buckets
   - [x] Spectrum conservative cleanup task 2: replace `Single Piece Mode` with `SEGMENTS` / `BAR`
-  - [ ] Commit after 1/2/3
+  - [x] Commit after 1/2/3
+  - [x] Investigate first-pass Spectrum `Move To Custom` / rim-glow fallback incident from fresh logs
   - [ ] Only then continue with border-colour participation, energy arrows, and final consolidation
 
 ---
@@ -71,6 +72,20 @@ Latest concrete findings:
   - root cause: `WidgetsTab._build_current_spotify_visualizer_config()` called `save_media_settings(self)` before lazy Media controls necessarily existed
   - landed fix: return the stored visualizer config unchanged when required Media/Visualizer controls do not exist yet
   - regression coverage added so this does not quietly come back
+- [x] Fresh-log Spectrum custom-mode incident is now explained:
+  - [x] the first `Move To Custom` path could still rely on the debounced save window
+  - [x] a follow-up Spectrum edit in that window could persist a sparse `spotify_visualizer` block
+  - [x] live `%APPDATA%` confirmed the bad shape:
+    - [x] `spectrum_glow_enabled=true`
+    - [x] default white `spectrum_glow_color`
+    - [x] missing `spectrum_render_mode`
+    - [x] missing `spectrum_unique_colors`
+  - [x] landed fixes:
+    - [x] explicit `Move To Custom` now flushes immediately through `_save_settings_now()`
+    - [x] `_save_settings_now()` normalizes the visualizer section before writing it to settings
+  - [x] regression coverage added for:
+    - [x] `Move To Custom` followed by an immediate Spectrum glow edit
+    - [x] sparse Spectrum payloads being normalized before persistence
 
 Still open / watch:
 - [x] Latest pre-fix logs showed `Settings validation repaired 1 issues: ['widgets.spotify_visualizer']`
@@ -216,7 +231,8 @@ Validation:
 
 ### 2.4 Commit Gate
 
-- [ ] After 2.1 / 2.2 / 2.3 are complete and validated, make a git commit
+- [x] After 2.1 / 2.2 / 2.3 are complete and validated, make a git commit
+  - [x] landed commit: `ad63b29` `Spectrum cleanup baseline`
 
 Guardrails for 2.1–2.4:
 - [ ] Use the Organs synthetic just before changes and again after changes
@@ -281,6 +297,10 @@ Keep watching for:
 Current known watch item:
 - [~] `%APPDATA%/SRPSS/settings_v2.json` still appears to contain older visualizer-era state that SettingsManager heals on load
 - [ ] Confirm whether a user-side save or reset/replace permanently clears that repair path
+- [~] Blob `Preset 1` synthetic still shows the previously-known drift:
+  - [~] `root.modes.blob.kick_stage_primary`
+  - [~] expected `0.748913`, got `0.665242`
+  - [~] treated as separate from this Spectrum custom-save fix until Blob is revisited intentionally
 
 ---
 

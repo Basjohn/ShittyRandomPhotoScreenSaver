@@ -51,7 +51,7 @@
         "blob_glow_intensity": 0.42,
         "blob_glow_max_size": 0.8,
         "blob_glow_reactivity": 0.9,
-        "blob_growth": 3.9,
+        "blob_growth": 5.0,
         "blob_input_gain": 0.86,
         "blob_kick_lane_gain": 0.18,
         "blob_manual_floor": 0.14,

@@ -923,6 +923,86 @@ def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_man
         tab.deleteLater()
 
 
+def test_move_to_custom_spectrum_flushes_custom_state_before_followup_edit(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._load_settings()
+        mode = "spectrum"
+        slider = tab._spectrum_preset_slider
+        custom_index = slider.custom_index()
+
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+        spotify_vis.update({
+            "mode": mode,
+            "preset_spectrum": 0,
+            "spectrum_render_mode": "bars",
+            "spectrum_unique_colors": True,
+            "spectrum_glow_enabled": False,
+            "spectrum_glow_color": [110, 220, 255, 235],
+        })
+        settings_manager.set("widgets", widgets_cfg)
+        settings_manager.set("visualizer_custom_presets", {
+            mode: {
+                "mode": mode,
+                "spectrum_render_mode": "segment",
+                "spectrum_unique_colors": False,
+                "spectrum_glow_enabled": False,
+            }
+        })
+
+        tab._load_settings()
+
+        slider.set_preset_index(0)
+        slider._move_to_custom()
+        tab.spectrum_glow_enabled.setChecked(True)
+        tab._save_settings_now()
+
+        saved_widgets = settings_manager.get("widgets", {}) or {}
+        saved_vis = saved_widgets.get("spotify_visualizer", {})
+        custom_cache = settings_manager.get("visualizer_custom_presets", {})
+
+        assert saved_vis.get("preset_spectrum") == custom_index
+        assert saved_vis.get("spectrum_glow_enabled") is True
+        assert saved_vis.get("spectrum_render_mode") == "bars"
+        assert saved_vis.get("spectrum_unique_colors") is True
+        assert custom_cache[mode]["spectrum_render_mode"] == "bars"
+        assert custom_cache[mode]["spectrum_unique_colors"] is True
+    finally:
+        tab.deleteLater()
+
+
+def test_save_settings_now_normalizes_sparse_visualizer_payload(qt_app, settings_manager, monkeypatch):
+    tab = WidgetsTab(settings_manager)
+    try:
+        from ui.tabs import widgets_tab_media as media_module
+
+        tab._load_settings()
+
+        def _fake_save_media_settings(_tab):
+            return {}, {
+                "enabled": True,
+                "mode": "spectrum",
+                "preset_spectrum": 0,
+                "spectrum_glow_enabled": True,
+                "spectrum_glow_color": [255, 255, 255, 235],
+            }
+
+        monkeypatch.setattr(media_module, "save_media_settings", _fake_save_media_settings)
+
+        tab._save_settings_now()
+
+        saved_widgets = settings_manager.get("widgets", {}) or {}
+        saved_vis = saved_widgets.get("spotify_visualizer", {})
+        assert saved_vis.get("mode") == "spectrum"
+        assert saved_vis.get("preset_spectrum") == 0
+        assert saved_vis.get("spectrum_glow_enabled") is True
+        assert saved_vis.get("spectrum_render_mode") == "bars"
+        assert saved_vis.get("spectrum_unique_colors") is True
+    finally:
+        tab.deleteLater()
+
+
 def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:

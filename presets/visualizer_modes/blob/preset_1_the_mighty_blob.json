@@ -1,11 +1,19 @@
 {
-  "description": "Saved from current Settings state.",
   "mode": "blob",
   "name": "Preset 1 (The Mighty Blob)",
   "preset_index": 0,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "blob",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
+        "monitor": "ALL",
+        "bar_fill_color": [
+          0,
+          0,
+          0,
+          130
+        ],
         "bar_border_color": [
           255,
           255,
@@ -13,63 +21,48 @@
           255
         ],
         "bar_border_opacity": 1.0,
-        "bar_fill_color": [
-          0,
-          0,
-          0,
-          130
-        ],
-        "blob_adaptive_sensitivity": false,
-        "blob_agc_strength": 0.2,
-        "blob_audio_block_size": 128,
-        "blob_bar_count": 35,
         "blob_color": [
           0,
           105,
           243,
           230
         ],
-        "blob_constant_wobble": 0.15,
-        "blob_dynamic_floor": true,
-        "blob_dynamic_range_enabled": false,
-        "blob_edge_color": [
-          208,
-          223,
-          255,
-          215
-        ],
-        "blob_ghost_alpha": 0.15,
-        "blob_ghost_decay": 0.35,
-        "blob_ghosting_enabled": true,
         "blob_glow_color": [
           3,
           104,
           255,
           180
         ],
-        "blob_glow_drive_mode": "vocal",
-        "blob_glow_intensity": 0.6,
-        "blob_glow_max_size": 1.75,
-        "blob_glow_reactivity": 1.75,
-        "blob_growth": 5.0,
-        "blob_input_gain": 0.8,
-        "blob_kick_lane_gain": 1.25,
-        "blob_manual_floor": 0.15,
+        "blob_edge_color": [
+          208,
+          223,
+          255,
+          215
+        ],
         "blob_outline_color": [
           84,
           150,
           255,
           225
         ],
-        "blob_pulse": 0.43,
+        "blob_pulse": 0.05,
         "blob_pulse_release_ms": 92,
-        "blob_rainbow_enabled": true,
-        "blob_rainbow_speed": 0.15,
-        "blob_reactive_deformation": 1.0,
+        "blob_width": 1.0,
+        "blob_size": 0.5,
+        "blob_glow_intensity": 0.5,
         "blob_reactive_glow": true,
+        "blob_glow_drive_mode": "vocal",
+        "blob_growth": 5.0,
+        "blob_reactive_deformation": 1.0,
+        "blob_constant_wobble": 0.15,
         "blob_reactive_wobble": 2.25,
-        "blob_ring_thickness": 0.3,
-        "blob_sensitivity": 0.42,
+        "blob_stretch": 0.55,
+        "blob_glow_reactivity": 1.25,
+        "blob_glow_max_size": 1.3,
+        "blob_ghosting_enabled": true,
+        "blob_ghost_alpha": 0.15,
+        "blob_ghost_decay": 0.35,
+        "blob_shaper_enabled": false,
         "blob_shape_base_nodes": [
           [
             0.0,
@@ -88,7 +81,6 @@
             1.0
           ]
         ],
-        "blob_shape_energy_nodes": [],
         "blob_shape_reaction_nodes": [
           [
             0.0,
@@ -107,22 +99,30 @@
             1.0
           ]
         ],
+        "blob_shape_energy_nodes": [],
         "blob_shaper_base_strength": 1.0,
-        "blob_shaper_enabled": false,
         "blob_shaper_react_strength": 0.5,
-        "blob_size": 0.5,
-        "blob_stretch": 0.55,
         "blob_topology": "circle",
-        "blob_transient_clamp": 1.6,
-        "blob_transient_mix_bass": 0.35,
-        "blob_transient_mix_vocal": 0.3,
+        "blob_ring_thickness": 0.3,
+        "blob_dynamic_floor": false,
+        "blob_manual_floor": 0.15,
+        "blob_dynamic_range_enabled": false,
+        "blob_agc_strength": 0.65,
+        "blob_input_gain": 0.35,
+        "blob_kick_lane_gain": 1.25,
         "blob_transient_pulse_gain": 1.0,
-        "blob_width": 1.0,
-        "mode": "blob",
-        "monitor": "ALL"
+        "blob_transient_clamp": 1.7,
+        "blob_audio_block_size": 128,
+        "blob_adaptive_sensitivity": false,
+        "blob_sensitivity": 0.42,
+        "blob_bar_count": 35,
+        "blob_transient_mix_bass": 0.16,
+        "blob_transient_mix_vocal": 0.2,
+        "blob_rainbow_enabled": true,
+        "blob_rainbow_speed": 0.15,
+        "mode": "blob"
       }
     }
   },
-  "visualizer_preset_mode": "blob",
-  "visualizer_preset_override": true
+  "description": "Saved from current Settings state."
 }

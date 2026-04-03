@@ -90,7 +90,7 @@
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 0.3,
-        "sine_wave_growth": 3.6,
+        "sine_wave_growth": 4.0,
         "sine_wave_input_gain": 0.74,
         "sine_wave_kick_lane_gain": 0.85,
         "sine_wave_manual_floor": 0.12,

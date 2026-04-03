@@ -1279,6 +1279,11 @@ class WidgetsTab(QWidget):
         media_config, spotify_vis_config = save_media_settings(self)
         reddit_config, reddit2_config = save_reddit_settings(self)
 
+        spotify_vis_config = normalize_visualizer_section_mapping(
+            spotify_vis_config,
+            apply_preset_overlay=False,
+        )
+
         existing_widgets = self._settings.get('widgets', {})
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
@@ -1450,7 +1455,10 @@ class WidgetsTab(QWidget):
                     load_per_mode_technical_controls(self, spotify_vis_config)
                 finally:
                     self._loading = False
-            self._save_settings()
+            if move_to_custom_pending:
+                self._save_settings_now()
+            else:
+                self._save_settings()
             return
 
         if move_to_custom_pending:

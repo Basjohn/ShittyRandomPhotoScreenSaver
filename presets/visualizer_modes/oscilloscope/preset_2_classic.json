@@ -34,7 +34,7 @@
         "osc_glow_enabled": true,
         "osc_glow_intensity": 0.6,
         "osc_glow_reactivity": 1.0,
-        "osc_growth": 3.01,
+        "osc_growth": 3.0,
         "osc_line2_color": [
           21,
           21,

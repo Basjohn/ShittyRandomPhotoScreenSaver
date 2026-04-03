@@ -41,6 +41,7 @@ When debugging, always verify these steps in order:
 
 Log hygiene tip:
 - For script/debug sessions, prefer launching with `--fresh` when you want a clean per-run log slice. It clears the resolved runtime log folder before logging initializes, while intentionally preserving `worker_*.log` files so active worker handles do not hang startup.
+- For Spectrum preset/custom issues, inspect the saved `widgets.spotify_visualizer` payload before assuming shader or renderer failure. A bad first-pass custom save will usually show up as missing canonical keys such as `spectrum_render_mode` / `spectrum_unique_colors`, often alongside a stray `spectrum_glow_enabled=true` + default white glow state.
 
 ---
 
