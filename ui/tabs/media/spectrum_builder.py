@@ -399,6 +399,21 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     rainbow_row.addWidget(tab.spectrum_rainbow_per_bar)
     rainbow_row.addStretch()
 
+    # Rainbow Border Participation
+    rb_border_row = _aligned_row(render_bucket, "")
+    tab.spectrum_rainbow_border = QCheckBox("Rainbow Borders")
+    tab.spectrum_rainbow_border.setProperty("circleIndicator", True)
+    tab.spectrum_rainbow_border.setChecked(
+        tab._default_bool('spotify_visualizer', 'spectrum_rainbow_border', False)
+    )
+    tab.spectrum_rainbow_border.setToolTip(
+        "When rainbow/unique colours are active: bar borders also participate "
+        "in the colour shift. Off = borders keep their configured border colour."
+    )
+    bind_setting_signal(tab, tab.spectrum_rainbow_border.stateChanged)
+    rb_border_row.addWidget(tab.spectrum_rainbow_border)
+    rb_border_row.addStretch()
+
     # Border Radius
     _br_row = _aligned_row(render_bucket, "Border Radius:")
     tab.spectrum_border_radius = NoWheelSlider(Qt.Orientation.Horizontal)

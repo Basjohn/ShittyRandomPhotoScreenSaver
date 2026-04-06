@@ -57,6 +57,7 @@ def get_uniform_names() -> list[str]:
         "u_fill_color", "u_border_color",
         "u_spectrum_glow_enabled", "u_spectrum_glow_intensity", "u_spectrum_glow_color",
         "u_rainbow_per_bar",
+        "u_rainbow_border",
     ]
 
 

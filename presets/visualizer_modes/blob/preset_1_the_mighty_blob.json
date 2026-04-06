@@ -9,10 +9,10 @@
       "spotify_visualizer": {
         "monitor": "ALL",
         "bar_fill_color": [
-          0,
-          0,
-          0,
-          130
+          12,
+          12,
+          12,
+          230
         ],
         "bar_border_color": [
           255,
@@ -28,10 +28,10 @@
           230
         ],
         "blob_glow_color": [
-          3,
-          104,
-          255,
-          180
+          74,
+          124,
+          205,
+          255
         ],
         "blob_edge_color": [
           208,
@@ -45,20 +45,20 @@
           255,
           225
         ],
-        "blob_pulse": 0.05,
-        "blob_pulse_release_ms": 92,
+        "blob_pulse": 0.28,
+        "blob_pulse_release_ms": 520,
         "blob_width": 1.0,
         "blob_size": 0.5,
-        "blob_glow_intensity": 0.5,
+        "blob_glow_intensity": 0.85,
         "blob_reactive_glow": true,
-        "blob_glow_drive_mode": "vocal",
+        "blob_glow_drive_mode": "bass",
         "blob_growth": 5.0,
         "blob_reactive_deformation": 1.0,
         "blob_constant_wobble": 0.15,
         "blob_reactive_wobble": 2.25,
         "blob_stretch": 0.55,
-        "blob_glow_reactivity": 1.25,
-        "blob_glow_max_size": 1.3,
+        "blob_glow_reactivity": 1.7,
+        "blob_glow_max_size": 1.75,
         "blob_ghosting_enabled": true,
         "blob_ghost_alpha": 0.15,
         "blob_ghost_decay": 0.35,
@@ -104,7 +104,7 @@
         "blob_shaper_react_strength": 0.5,
         "blob_topology": "circle",
         "blob_ring_thickness": 0.3,
-        "blob_dynamic_floor": false,
+        "blob_dynamic_floor": true,
         "blob_manual_floor": 0.15,
         "blob_dynamic_range_enabled": false,
         "blob_agc_strength": 0.65,
@@ -112,7 +112,7 @@
         "blob_kick_lane_gain": 1.25,
         "blob_transient_pulse_gain": 1.0,
         "blob_transient_clamp": 1.7,
-        "blob_audio_block_size": 128,
+        "blob_audio_block_size": 256,
         "blob_adaptive_sensitivity": false,
         "blob_sensitivity": 0.42,
         "blob_bar_count": 35,

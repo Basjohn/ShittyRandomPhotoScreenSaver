@@ -211,6 +211,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._rainbow_enabled: bool = False
         self._rainbow_speed: float = 0.5
         self._rainbow_per_bar: bool = False
+        self._spectrum_rainbow_border: bool = False
 
         # Oscilloscope ghost trail
         self._osc_ghosting_enabled: bool = False

@@ -126,6 +126,7 @@ class _VisualizerPresetState:
         self._rainbow_enabled = False
         self._rainbow_speed = 0.5
         self._rainbow_per_bar = False
+        self._spectrum_rainbow_border = False
         self._spectrum_ghosting_enabled = True
         self._spectrum_ghost_alpha = 0.4
         self._spectrum_ghost_decay = 0.4
@@ -304,6 +305,7 @@ def _apply_shared_preset_keys(state: _VisualizerPresetState, settings: dict[str,
         "_rainbow_enabled": "rainbow_enabled",
         "_rainbow_speed": "rainbow_speed",
         "_rainbow_per_bar": "spectrum_rainbow_per_bar",
+        "_spectrum_rainbow_border": "spectrum_rainbow_border",
         "_spectrum_ghosting_enabled": "spectrum_ghosting_enabled",
         "_spectrum_ghost_alpha": "spectrum_ghost_alpha",
         "_spectrum_ghost_decay": "spectrum_ghost_decay",

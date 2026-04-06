@@ -44,6 +44,10 @@ def load_spectrum_mode_settings(
         tab.spectrum_rainbow_per_bar.setChecked(
             bool(config.get("spectrum_unique_colors", config.get("spectrum_rainbow_per_bar", False)))
         )
+    if hasattr(tab, "spectrum_rainbow_border"):
+        tab.spectrum_rainbow_border.setChecked(
+            bool(config.get("spectrum_rainbow_border", False))
+        )
     if hasattr(tab, "spectrum_bass_emphasis"):
         spectrum_bass_emphasis = int(tab._config_float("spotify_visualizer", config, "spectrum_bass_emphasis", 0.50) * 100)
         tab.spectrum_bass_emphasis.setValue(max(0, min(100, spectrum_bass_emphasis)))
@@ -144,6 +148,9 @@ def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
         "spectrum_render_mode": getattr(tab, "_spectrum_render_mode", "bars"),
         "spectrum_unique_colors": (
             tab.spectrum_rainbow_per_bar.isChecked() if hasattr(tab, "spectrum_rainbow_per_bar") else False
+        ),
+        "spectrum_rainbow_border": (
+            tab.spectrum_rainbow_border.isChecked() if hasattr(tab, "spectrum_rainbow_border") else False
         ),
         "spectrum_border_radius": (
             float(tab.spectrum_border_radius.value()) if hasattr(tab, "spectrum_border_radius") else 0.0

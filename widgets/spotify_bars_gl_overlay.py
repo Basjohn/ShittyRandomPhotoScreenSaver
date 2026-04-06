@@ -257,6 +257,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._rainbow_enabled: bool = False
         self._rainbow_speed: float = 0.5
         self._rainbow_per_bar: bool = False
+        self._spectrum_rainbow_border: bool = False
 
         # Bubble settings
         self._bubble_count: int = 0
@@ -512,6 +513,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         rainbow_enabled: bool = False,
         rainbow_speed: float = 0.5,
         rainbow_per_bar: bool = False,
+        spectrum_rainbow_border: bool = False,
         spectrum_glow_enabled: bool = False,
         spectrum_glow_intensity: float = 0.55,
         spectrum_glow_color: QColor | None = None,
@@ -1019,6 +1021,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._rainbow_enabled = bool(rainbow_enabled)
         self._rainbow_speed = max(0.01, min(5.0, float(rainbow_speed)))
         self._rainbow_per_bar = bool(rainbow_per_bar)
+        self._spectrum_rainbow_border = bool(spectrum_rainbow_border)
         self._spectrum_glow_enabled = bool(spectrum_glow_enabled)
         self._spectrum_glow_intensity = max(0.0, min(1.5, float(spectrum_glow_intensity)))
         if spectrum_glow_color is not None:
@@ -1993,7 +1996,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_line3_color", "u_line3_glow_color",
                     "u_slanted", "u_border_radius",
                     "u_spectrum_glow_enabled", "u_spectrum_glow_intensity", "u_spectrum_glow_color",
-                    "u_rainbow_hue_offset", "u_rainbow_per_bar",
+                    "u_rainbow_hue_offset", "u_rainbow_per_bar", "u_rainbow_border",
                     "u_prev_waveform", "u_osc_ghost_alpha",
                     "u_ghost_line2_enabled", "u_ghost_line3_enabled",
                     "u_heartbeat", "u_heartbeat_intensity",
@@ -2233,6 +2236,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             loc_pb = u.get("u_rainbow_per_bar", -1)
             if loc_pb >= 0:
                 _gl.glUniform1i(loc_pb, 1 if self._rainbow_per_bar else 0)
+
+            # --- Rainbow border flag (spectrum only) ---
+            loc_rb = u.get("u_rainbow_border", -1)
+            if loc_rb >= 0:
+                _gl.glUniform1i(loc_rb, 1 if self._spectrum_rainbow_border else 0)
 
             # --- Rainbow hue offset (all modes) ---
             loc = u.get("u_rainbow_hue_offset", -1)

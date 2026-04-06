@@ -222,6 +222,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._spectrum_single_piece = bool(kwargs['spectrum_single_piece'])
     if 'spectrum_rainbow_per_bar' in kwargs:
         widget._rainbow_per_bar = bool(kwargs['spectrum_rainbow_per_bar'])
+    if 'spectrum_rainbow_border' in kwargs:
+        widget._spectrum_rainbow_border = bool(kwargs['spectrum_rainbow_border'])
 
     if 'spectrum_border_radius' in kwargs:
         widget._spectrum_border_radius = max(0.0, min(20.0, float(kwargs['spectrum_border_radius'])))
@@ -568,6 +570,7 @@ def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
         'rainbow_enabled': getattr(widget, '_rainbow_enabled', False),
         'rainbow_speed': getattr(widget, '_rainbow_speed', 0.5),
         'rainbow_per_bar': getattr(widget, '_rainbow_per_bar', False),
+        'spectrum_rainbow_border': getattr(widget, '_spectrum_rainbow_border', False),
         'spectrum_glow_enabled': getattr(widget, '_spectrum_glow_enabled', False),
         'spectrum_glow_intensity': getattr(widget, '_spectrum_glow_intensity', 0.55),
         'spectrum_glow_color': getattr(widget, '_spectrum_glow_color', None),

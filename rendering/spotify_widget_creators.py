@@ -71,6 +71,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         spectrum_glow_intensity=model.spectrum_glow_intensity,
         spectrum_glow_color=model.spectrum_glow_color,
         spectrum_rainbow_per_bar=spectrum_unique_colors,
+        spectrum_rainbow_border=bool(getattr(model, "spectrum_rainbow_border", False)),
         blob_growth=model.blob_growth,
         osc_speed=model.osc_speed,
         osc_line_dim=model.osc_line_dim,

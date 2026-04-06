@@ -22,6 +22,7 @@ uniform float u_spectrum_glow_intensity;
 uniform vec4 u_spectrum_glow_color;
 uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 uniform int u_rainbow_per_bar;      // 1 = unique colour per bar, 0 = single shifting colour
+uniform int u_rainbow_border;       // 1 = borders participate in rainbow, 0 = borders keep base colour
 
 // Apply rainbow hue shift to a colour. Returns the shifted colour.
 // Called from both single-piece and segmented code paths.
@@ -389,8 +390,9 @@ void main() {
         if (!sp_is_border) {
             sp_color = blend_spectrum_rim_glow(sp_color, rim_alpha);
         }
-        // Border and ghost pixels keep their original colour (white stays white).
-        fragColor = sp_is_border ? sp_color : apply_spectrum_rainbow(sp_color, bar_index);
+        // Border pixels participate in rainbow only when u_rainbow_border is set.
+        bool sp_apply_rainbow = !sp_is_border || (u_rainbow_border == 1);
+        fragColor = sp_apply_rainbow ? apply_spectrum_rainbow(sp_color, bar_index) : sp_color;
         return;
     }
 
@@ -571,6 +573,7 @@ void main() {
         out_color = blend_spectrum_rim_glow(out_color, seg_rim_alpha);
     }
 
-    // Border and ghost pixels keep their original colour (white stays white).
-    fragColor = seg_is_border ? out_color : apply_spectrum_rainbow(out_color, bar_index);
+    // Border pixels participate in rainbow only when u_rainbow_border is set.
+    bool seg_apply_rainbow = !seg_is_border || (u_rainbow_border == 1);
+    fragColor = seg_apply_rainbow ? apply_spectrum_rainbow(out_color, bar_index) : out_color;
 }

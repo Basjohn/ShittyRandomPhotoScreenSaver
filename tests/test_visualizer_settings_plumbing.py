@@ -2557,6 +2557,7 @@ class TestSpectrumSettingsBinding:
                 self.spectrum_growth_label = _Label()
                 self._spectrum_render_mode = None
                 self.spectrum_rainbow_per_bar = _Check()
+                self.spectrum_rainbow_border = _Check()
                 self.spectrum_bass_emphasis = _Slider()
                 self.spectrum_bass_emphasis_label = _Label()
                 self.spectrum_vocal_position = _Slider()
@@ -2600,6 +2601,7 @@ class TestSpectrumSettingsBinding:
                 "spectrum_growth": 2.4,
                 "spectrum_render_mode": "bars",
                 "spectrum_unique_colors": True,
+                "spectrum_rainbow_border": True,
                 "spectrum_bass_emphasis": 0.63,
                 "spectrum_vocal_position": 0.46,
                 "spectrum_mid_suppression": 0.28,
@@ -2626,6 +2628,7 @@ class TestSpectrumSettingsBinding:
         assert tab.spectrum_growth_label.text == "2.4x"
         assert tab._spectrum_render_mode == "bars"
         assert tab.spectrum_rainbow_per_bar.checked is True
+        assert tab.spectrum_rainbow_border.checked is True
         assert tab.spectrum_bass_emphasis.value == 63
         assert tab.spectrum_vocal_position.value == 46
         assert tab.spectrum_mid_suppression.value == 28
@@ -2682,6 +2685,7 @@ class TestSpectrumSettingsBinding:
             spectrum_growth = _Slider(260)
             _spectrum_render_mode = "bars"
             spectrum_rainbow_per_bar = _Check(False)
+            spectrum_rainbow_border = _Check(True)
             spectrum_border_radius = _Slider(6)
             spectrum_glow_enabled = _Check(True)
             spectrum_glow_intensity = _Slider(120)
@@ -2703,6 +2707,7 @@ class TestSpectrumSettingsBinding:
         assert payload["spectrum_growth"] == pytest.approx(2.6)
         assert payload["spectrum_render_mode"] == "bars"
         assert payload["spectrum_unique_colors"] is False
+        assert payload["spectrum_rainbow_border"] is True
         assert payload["spectrum_border_radius"] == pytest.approx(6.0)
         assert payload["spectrum_glow_enabled"] is True
         assert payload["spectrum_glow_intensity"] == pytest.approx(1.2)
