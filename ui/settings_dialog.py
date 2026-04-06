@@ -15,10 +15,10 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QPushButton,
     QLabel, QStackedWidget, QGraphicsDropShadowEffect, QSizeGrip,
-    QFileDialog, QMenu, QScrollArea, QApplication,
+    QFileDialog, QMenu, QScrollArea,
 )
-from PySide6.QtCore import Qt, QPoint, QRect, Signal, QUrl, QTimer, QEvent, QObject
-from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPen, QGuiApplication
+from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer
+from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPainterPath, QPen, QGuiApplication
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.mc import is_mc_build
@@ -460,6 +460,7 @@ class SettingsDialog(QDialog):
         self._styled_tabs: set[int] = set()
         self._background_build_scheduled = False
         self._background_tab_queue: list[int] = []
+        self._acrylic_applied = False
         self._presets_signal_connected = False
         cache = get_settings_dialog_cache()
         self._ordered_presets = cache.ordered_presets
@@ -586,8 +587,7 @@ class SettingsDialog(QDialog):
         # Main container (for rounded corners and shadow)
         container = QWidget()
         container.setObjectName("dialogContainer")
-        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
-        container.setGraphicsEffect(self._shell_shadow)
+        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._dialog_container = container
         
         main_layout = QVBoxLayout(container)
@@ -647,6 +647,7 @@ class SettingsDialog(QDialog):
         # Right content area with stacked widget
         self.content_stack = QStackedWidget()
         self.content_stack.setObjectName("contentArea")
+        self.content_stack.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         
         # Create actual tabs lazily
         cache = get_settings_dialog_cache()
@@ -1555,6 +1556,14 @@ class SettingsDialog(QDialog):
     
     def showEvent(self, event):
         super().showEvent(event)
+        # Enable Windows acrylic blur-behind on first show
+        if not self._acrylic_applied:
+            self._acrylic_applied = True
+            try:
+                from core.windows.dwm_blur import enable_acrylic_blur
+                enable_acrylic_blur(int(self.winId()))
+            except Exception:
+                logger.debug("Acrylic blur not available", exc_info=True)
         # Reset cached width so images rescale on every show
         try:
             self._about_last_card_width = 0
@@ -1590,6 +1599,50 @@ class SettingsDialog(QDialog):
                 pass
         self._move_timer.start(500)  # Save 500ms after move stops
     
+    def paintEvent(self, event):
+        """Paint a soft shadow around the dialog container.
+
+        Replaces QGraphicsDropShadowEffect which renders the widget tree
+        to an intermediate pixmap, breaking the per-pixel alpha chain
+        required for DWM acrylic blur-behind to show through.
+        """
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        m = self._outer_margin
+        cr = QRectF(m, m, self.width() - 2 * m, self.height() - 2 * m)
+        r = 10.0  # matches #dialogContainer border-radius
+
+        # Clip to the margin area only (exclude container interior)
+        full = QPainterPath()
+        full.addRect(QRectF(self.rect()))
+        inner = QPainterPath()
+        inner.addRoundedRect(cr, r, r)
+        painter.setClipPath(full - inner)
+
+        # Concentric ring fills: (outer_expand, inner_expand, alpha)
+        rings = [
+            (10, 7, 10),
+            (7, 4, 22),
+            (4, 2, 42),
+            (2, 0, 68),
+        ]
+        for o_exp, i_exp, alpha in rings:
+            outer = QPainterPath()
+            outer.addRoundedRect(
+                cr.adjusted(-o_exp, -o_exp, o_exp, o_exp),
+                r + o_exp * 0.3, r + o_exp * 0.3,
+            )
+            inn = QPainterPath()
+            inn.addRoundedRect(
+                cr.adjusted(-i_exp, -i_exp, i_exp, i_exp),
+                r + i_exp * 0.3, r + i_exp * 0.3,
+            )
+            painter.fillPath(outer - inn, QColor(0, 0, 0, alpha))
+
+        painter.end()
+
     def keyPressEvent(self, event):
         """Intercept Enter/Return so it closes the dialog instead of minimizing."""
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):

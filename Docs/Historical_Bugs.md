@@ -5,7 +5,7 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
-## PENDING RUNTIME / LIFECYCLE BUG: Reddit Helper Process Lingering After App Close
+## ~PENDING RUNTIME / LIFECYCLE BUG: Reddit Helper Process Lingering After App Close
 
 - **Current symptom:** `SRPSS_RedditHelper` can remain alive long after the main application path has closed.
 - **Why this is tricky:** secure-desktop / SYSTEM screensaver runs cannot rely on polite cleanup or normal process-lifetime ownership, so “just exit the helper when the app exits” is not a sufficient model by itself.
@@ -131,7 +131,7 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - Gate GPU pushes on fresh FFT generations whenever smoothing state is invalidated.
 - Keep regression tests that cover the exact gating contract so future plumbing changes cannot reintroduce stale-state persistence.
 
-## 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved)
+## 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.
 
 **Symptoms**
 - Opening Settings from the screensaver/MC flow could produce a bad Windows placeholder/flicker moment while the dialog came up.
@@ -155,7 +155,7 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - Do not reintroduce shield-style masking as a first response.
 - Keep the settings launch path explicit and test-guarded: hide displays cleanly, paint Settings quickly, and avoid event-loop race hacks.
 
-## 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch)
+## 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch) - COMPLETELY UNRESOLVED, ALL KEYS CURRENTLY NEVER WORK, APPROACH IS FLAWED, DO NOT TOUCH WITHOUT HEAVY RESEARCH.
 
 **Symptoms**
 - MC hotkeys and media keys could stop working after interaction clicks.

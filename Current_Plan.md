@@ -13,6 +13,7 @@ Update this after every significant change.
 - Do not treat passing tests as visual sign-off.
 - Do not make global/shared math changes unless explicitly requested.
 - Do not reduce FPS caps below current configured values.
+- Whenever you come across dead/dirty/messy/violating/architecturally poor code while working on other things make a note of it in the current plan for later improvements. This is a general policy rule.
 - Keep checkboxes honest:
   - `[x]` landed and validated
   - `[~]` partially proven / still needs runtime eyes
@@ -66,12 +67,13 @@ Replace redundant Spectrum energy-strength sliders with vertical strength arrows
 - [ ] This does **not** replace all Spectrum controls — time-behavior (Drop Speed, Profile Floor) stays outside the editor
 - [ ] Preserve Organs behavior by measuring against the synthetic fence before/after
 - [ ] Record planning/mental-model rationale in docs
-- [ ] Open question: Should Transient have a lane? (Pros: explicit control. Cons: transient is a time-domain concept, not a frequency band)
+
 
 Design guardrails:
 - This is not a Blob transplant
 - Spatial ownership stays in the Spectrum editor
 - Time-behavior controls still belong outside the editor
+- Make sure to check for other redundant/overlapping controls simultaneously and propose consolidation where helpful into 2.2
 
 ### 2. Spectrum Consolidation Pass (was §3.3)
 
@@ -84,7 +86,7 @@ Design guardrails:
 - [ ] Focus on shimmer-at-mid-height as a future tuning target, not gut feel
 
 Design notes:
-- Mid-height shimmer ≠ quiet-floor jitter. Stabilise mid-height shimmer on 60fps without losing big high/low movements.
+- Mid-height shimmer ≠ quiet-floor jitter. Stabilise mid-height shimmer on 60fps without losing big high/low movements. (Consider why this is worse on 60hz displays than 165hz displays, if this change should be relevant only to one or if both would improve)
 - `drop_speed` alone is too blunt — Spectrum wants big rises and big falls.
 - Likely fix area: smarter gating/hysteresis once bars are materially elevated.
 

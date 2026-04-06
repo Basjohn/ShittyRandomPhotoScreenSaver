@@ -30,13 +30,13 @@ def load_theme(widget) -> None:
                 }
                 
                 #dialogContainer {
-                    background-color: rgba(34, 34, 34, 0.5);
+                    background-color: rgba(0, 0, 0, 0);
                     border: 3px solid #ffffff;
                     border-radius: 10px;
                 }
                 
                 #customTitleBar {
-                    background-color: rgba(24, 24, 24, 0.5);
+                    background-color: rgba(12, 12, 12, 0.82);
                     border-top-left-radius: 10px;
                     border-top-right-radius: 10px;
                 }
@@ -73,13 +73,13 @@ def load_theme(widget) -> None:
                 }
                 
                 #sidebar {
-                    background-color: #232323;
+                    background-color: rgba(20, 20, 20, 0.68);
                     border: 1px solid #ffffff;
                     border-radius: 8px;
                 }
                 
                 #tabButton {
-                    background-color: #2B2B2B;
+                    background-color: rgba(43, 43, 43, 0.75);
                     color: #cccccc;
                     border: none;
                     text-align: left;
@@ -94,18 +94,18 @@ def load_theme(widget) -> None:
                 }
                 
                 #tabButton:hover {
-                    background-color: #3E3E3E;
+                    background-color: rgba(62, 62, 62, 0.80);
                     color: #ffffff;
                 }
                 
                 #tabButton:checked {
-                    background-color: #3E3E3E;
+                    background-color: rgba(62, 62, 62, 0.85);
                     color: #ffffff;
                     font-weight: 700;
                 }
                 
                 #contentArea {
-                    background-color: #1E1E1E;
+                    background-color: rgba(0, 0, 0, 0);
                     border: 1px solid #ffffff;
                     border-radius: 8px;
                     padding: 20px;
@@ -157,7 +157,7 @@ def load_theme(widget) -> None:
                 }
                 
                 QGroupBox {
-                    background-color: rgba(40, 40, 40, 0.8);
+                    background-color: rgba(35, 35, 35, 0.90);
                     border: 1px solid rgba(255, 255, 255, 0.8);
                     border-radius: 18px;
                     margin-top: 20px;
