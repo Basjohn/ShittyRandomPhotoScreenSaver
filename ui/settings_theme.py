@@ -153,28 +153,17 @@ def load_theme(widget) -> None:
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-weight: 500;
                     font-size: 12px;
-                    border-top: 1px solid rgba(90, 90, 90, 160);
-                    border-left: 1px solid rgba(90, 90, 90, 160);
-                    border-right: 2px solid rgba(0, 0, 0, 140);
-                    border-bottom: 2px solid rgba(0, 0, 0, 160);
+                    border: 1px solid #ffffff;
                 }
                 
                 QPushButton:hover {
                     background-color: rgba(60, 60, 60, 220);
-                    border-top: 1px solid rgba(110, 110, 110, 180);
-                    border-left: 1px solid rgba(110, 110, 110, 180);
-                    border-right: 2px solid rgba(0, 0, 0, 160);
-                    border-bottom: 2px solid rgba(0, 0, 0, 170);
+                    border: 1px solid #ffffff;
                 }
                 
                 QPushButton:pressed {
                     background-color: rgba(35, 35, 35, 220);
-                    border-top: 1px solid rgba(60, 60, 60, 160);
-                    border-left: 1px solid rgba(60, 60, 60, 160);
-                    border-right: 1px solid rgba(0, 0, 0, 140);
-                    border-bottom: 1px solid rgba(0, 0, 0, 140);
-                    margin-top: 1px;
-                    margin-left: 1px;
+                    border: 1px solid rgba(200, 200, 200, 200);
                 }
                 
                 QGroupBox {

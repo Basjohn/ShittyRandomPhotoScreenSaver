@@ -499,7 +499,7 @@ class SettingsDialog(QDialog):
         self._shell_shadow.setXOffset(0)
         self._shell_shadow.setYOffset(0)
         self._shell_shadow.setColor(QColor(0, 0, 0, 180))
-        self._outer_margin = 0
+        self._shadow_size = 0
 
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
@@ -575,7 +575,7 @@ class SettingsDialog(QDialog):
         self._shell_shadow.setXOffset(0)
         self._shell_shadow.setYOffset(0)
         self._shell_shadow.setColor(QColor(0, 0, 0, 180))
-        self._outer_margin = 0
+        self._shadow_size = 0
 
         # Improve text antialiasing (smoother rendering without changing fonts)
         font = self.font()
@@ -693,7 +693,7 @@ class SettingsDialog(QDialog):
         
         # Set main layout
         self._outer_layout = QVBoxLayout(self)
-        self._outer_layout.setContentsMargins(self._outer_margin, self._outer_margin, self._outer_margin, self._outer_margin)
+        self._outer_layout.setContentsMargins(0, 0, 0, 0)
         self._outer_layout.addWidget(container)
         
         self.tab_buttons[self._initial_tab_index].setChecked(True)
@@ -1520,9 +1520,8 @@ class SettingsDialog(QDialog):
 
     def _update_shell_chrome(self) -> None:
         """Adjust layout margins and shadow visibility for current state."""
-        margin = 0 if self._is_maximized else self._outer_margin
         if hasattr(self, "_outer_layout"):
-            self._outer_layout.setContentsMargins(margin, margin, margin, margin)
+            self._outer_layout.setContentsMargins(0, 0, 0, 0)
         if hasattr(self, "_shell_shadow"):
             self._shell_shadow.setEnabled(not self._is_maximized)
         if hasattr(self, "size_grip"):
@@ -1620,15 +1619,10 @@ class SettingsDialog(QDialog):
         self._move_timer.start(500)  # Save 500ms after move stops
     
     def paintEvent(self, event):
-        """Paint a white border at the dialog edge.
-
-        With zero outer margin the container fills the entire dialog,
-        so no shadow rings are needed — only the border.
-        """
+        """Paint a white border at the dialog edge."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # ── White SQUARE border at the WINDOW edge ──
         border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         border_pen = QPen(QColor(255, 255, 255, 255), 2.5)
         border_pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
