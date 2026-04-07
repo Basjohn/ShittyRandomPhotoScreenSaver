@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMenu, QScrollArea,
 )
 from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer
-from PySide6.QtGui import QFont, QColor, QDesktopServices, QPainter, QPainterPath, QPen, QGuiApplication
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.mc import is_mc_build
@@ -499,7 +499,7 @@ class SettingsDialog(QDialog):
         self._shell_shadow.setXOffset(0)
         self._shell_shadow.setYOffset(0)
         self._shell_shadow.setColor(QColor(0, 0, 0, 180))
-        self._outer_margin = 10
+        self._outer_margin = 0
 
         shared_styles.ensure_custom_fonts()
         self._apply_application_font()
@@ -575,11 +575,15 @@ class SettingsDialog(QDialog):
         self._shell_shadow.setXOffset(0)
         self._shell_shadow.setYOffset(0)
         self._shell_shadow.setColor(QColor(0, 0, 0, 180))
-        self._outer_margin = 10
+        self._outer_margin = 0
 
         # Improve text antialiasing (smoother rendering without changing fonts)
         font = self.font()
         font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+        font.setStyleStrategy(
+            QFont.StyleStrategy.PreferAntialias
+            | QFont.StyleStrategy.PreferQuality
+        )
         self.setFont(font)
 
     def _load_theme(self) -> None:
@@ -639,13 +643,13 @@ class SettingsDialog(QDialog):
             self.about_tab_btn
         ]
         
-        sidebar_layout.addWidget(self.sources_tab_btn)
-        sidebar_layout.addWidget(self.display_tab_btn)
-        sidebar_layout.addWidget(self.transitions_tab_btn)
-        sidebar_layout.addWidget(self.widgets_tab_btn)
-        sidebar_layout.addWidget(self.accessibility_tab_btn)
-        sidebar_layout.addWidget(self.presets_tab_btn)
-        sidebar_layout.addWidget(self.about_tab_btn)
+        for btn in self.tab_buttons:
+            shadow = QGraphicsDropShadowEffect(btn)
+            shadow.setBlurRadius(6)
+            shadow.setOffset(1, 2)
+            shadow.setColor(QColor(0, 0, 0, 120))
+            btn.setGraphicsEffect(shadow)
+            sidebar_layout.addWidget(btn)
         sidebar_layout.addStretch()
         
         # Right content area with stacked widget
@@ -1528,15 +1532,6 @@ class SettingsDialog(QDialog):
         """Handle resize event to position size grip and save geometry."""
         super().resizeEvent(event)
 
-        # Clip container children to rounded rect so corners don't bleed
-        # outside the white outer border. QSS border-radius only clips the
-        # widget's own background, not its children.
-        if hasattr(self, '_dialog_container'):
-            from PySide6.QtGui import QRegion
-            c = self._dialog_container
-            path = QPainterPath()
-            path.addRoundedRect(QRectF(c.rect()), 10.0, 10.0)
-            c.setMask(QRegion(path.toFillPolygon().toPolygon()))
 
         # Position size grip in bottom-right corner
         if hasattr(self, 'size_grip'):
@@ -1625,55 +1620,21 @@ class SettingsDialog(QDialog):
         self._move_timer.start(500)  # Save 500ms after move stops
     
     def paintEvent(self, event):
-        """Paint a soft shadow and white border around the dialog.
+        """Paint a white border at the dialog edge.
 
-        Replaces QGraphicsDropShadowEffect which renders the widget tree
-        to an intermediate pixmap, breaking the per-pixel alpha chain
-        required for DWM acrylic blur-behind to show through.
+        With zero outer margin the container fills the entire dialog,
+        so no shadow rings are needed — only the border.
         """
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
 
-        m = self._outer_margin
-        cr = QRectF(m, m, self.width() - 2 * m, self.height() - 2 * m)
-        r = 10.0
-
-        # Clip to the margin area only (exclude container interior)
-        full = QPainterPath()
-        full.addRect(QRectF(self.rect()))
-        inner = QPainterPath()
-        inner.addRoundedRect(cr, r, r)
-        painter.setClipPath(full - inner)
-
-        # Concentric ring fills: (outer_expand, inner_expand, alpha)
-        rings = [
-            (10, 7, 10),
-            (7, 4, 22),
-            (4, 2, 42),
-            (2, 0, 68),
-        ]
-        for o_exp, i_exp, alpha in rings:
-            outer = QPainterPath()
-            outer.addRoundedRect(
-                cr.adjusted(-o_exp, -o_exp, o_exp, o_exp),
-                r + o_exp * 0.3, r + o_exp * 0.3,
-            )
-            inn = QPainterPath()
-            inn.addRoundedRect(
-                cr.adjusted(-i_exp, -i_exp, i_exp, i_exp),
-                r + i_exp * 0.3, r + i_exp * 0.3,
-            )
-            painter.fillPath(outer - inn, QColor(0, 0, 0, alpha))
-
-        # ── White curved border at the WINDOW edge ──
-        painter.setClipping(False)
+        # ── White SQUARE border at the WINDOW edge ──
         border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        border_pen = QPen(QColor(255, 255, 255, 255), 1.5)
-        border_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        border_pen = QPen(QColor(255, 255, 255, 255), 2.5)
+        border_pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         painter.setPen(border_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRoundedRect(border_rect, 8.0, 8.0)
+        painter.drawRect(border_rect)
 
         painter.end()
 

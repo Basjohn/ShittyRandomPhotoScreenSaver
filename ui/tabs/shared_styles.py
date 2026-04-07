@@ -621,7 +621,7 @@ SWATCH_LABEL_STYLE = (
 )
 
 SUBSECTION_DIVIDER_STYLE = (
-    "background-color: rgba(60, 60, 60, 100);"
+    "background-color: rgba(60, 60, 60, 115);"
     "border: 2px solid #ffffff;"
     "border-radius: 19px;"
 )

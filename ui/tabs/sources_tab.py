@@ -163,9 +163,9 @@ class SourcesTab(QWidget):
         self.ratio_frame.setObjectName("ratioFrame")
         self.ratio_frame.setStyleSheet("""
             #ratioFrame {
-                background-color: #2a2a2a;
-                border: 1px solid #3a3a3a;
-                border-radius: 6px;
+                background-color: rgba(35, 35, 35, 200);
+                border: 1px solid rgba(80, 80, 80, 130);
+                border-radius: 8px;
                 padding: 6px 10px;
             }
         """)
@@ -231,13 +231,13 @@ class SourcesTab(QWidget):
         )
         self.rss_input.setStyleSheet(
             "QLineEdit#rssFeedInput {"
-            " border: 1px solid rgba(70,70,70,0.6);"
-            " border-radius: 6px;"
-            " padding: 8px 10px;"
-            " background-color: #111111;"
+            " border: 1px solid rgba(80, 80, 80, 153);"
+            " border-radius: 8px;"
+            " padding: 8px 12px;"
+            " background-color: rgba(20, 20, 20, 220);"
             " }"
             "QLineEdit#rssFeedInput:focus {"
-            " border-color: rgba(180,180,180,0.85);"
+            " border-color: rgba(200, 200, 200, 200);"
             " }"
         )
         self.add_rss_btn = QPushButton("Add Feed")
@@ -311,20 +311,20 @@ class SourcesTab(QWidget):
         return (
             "QPushButton {"
             " font-family: 'Jost'; font-size: 12px; font-weight: 500;"
-            " background-color: #2a2a2a; color: #ffffff;"
-            " border-radius: 7px; padding: 6px 16px; min-width: 90px;"
-            " border-top: 1px solid rgba(110,110,110,0.8);"
-            " border-left: 1px solid rgba(110,110,110,0.8);"
-            " border-right: 2px solid rgba(0,0,0,0.75);"
-            " border-bottom: 2px solid rgba(0,0,0,0.8);"
+            " background-color: rgba(45, 45, 45, 215); color: #ffffff;"
+            " border-radius: 8px; padding: 7px 18px; min-width: 90px;"
+            " border-top: 1px solid rgba(90, 90, 90, 160);"
+            " border-left: 1px solid rgba(90, 90, 90, 160);"
+            " border-right: 2px solid rgba(0, 0, 0, 140);"
+            " border-bottom: 2px solid rgba(0, 0, 0, 160);"
             " }"
-            "QPushButton:hover { background-color: #343434; }"
+            "QPushButton:hover { background-color: rgba(60, 60, 60, 220); }"
             "QPushButton:pressed {"
-            " background-color: #3a3a3a;"
-            " border-top: 2px solid rgba(0,0,0,0.75);"
-            " border-left: 2px solid rgba(0,0,0,0.75);"
-            " border-right: 1px solid rgba(140,140,140,0.85);"
-            " border-bottom: 1px solid rgba(140,140,140,0.85);"
+            " background-color: rgba(35, 35, 35, 220);"
+            " border-top: 2px solid rgba(0, 0, 0, 140);"
+            " border-left: 2px solid rgba(0, 0, 0, 140);"
+            " border-right: 1px solid rgba(110, 110, 110, 170);"
+            " border-bottom: 1px solid rgba(110, 110, 110, 170);"
             " }"
         )
     

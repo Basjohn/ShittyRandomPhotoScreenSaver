@@ -28,19 +28,15 @@ def load_theme(widget) -> None:
                 QDialog {
                     background-color: transparent;
                     border: none;
-                    border-radius: 12px;
                 }
                 
                 #dialogContainer {
                     background-color: rgba(0, 0, 0, 10);
                     border: none;
-                    border-radius: 10px;
                 }
                 
                 #customTitleBar {
                     background-color: rgba(12, 12, 12, 209);
-                    border-top-left-radius: 10px;
-                    border-top-right-radius: 10px;
                 }
                 
                 #titleBarLabel {
@@ -52,58 +48,73 @@ def load_theme(widget) -> None:
                     background-color: rgba(0, 0, 0, 0);
                     color: #ffffff;
                     border: none;
+                    border-radius: 4px;
+                    padding: 0px;
+                    margin: 0px;
                     font-size: 16px;
                     font-weight: bold;
                 }
                 
                 #titleBarButton:hover {
                     background-color: rgba(62, 62, 62, 204);
-                    border-radius: 4px;
+                }
+                
+                #titleBarButton:pressed {
+                    background-color: rgba(50, 50, 50, 220);
+                    margin-top: 0px;
+                    margin-left: 0px;
                 }
                 
                 #titleBarCloseButton {
                     background-color: rgba(0, 0, 0, 0);
                     color: #ffffff;
                     border: none;
+                    border-radius: 4px;
+                    padding: 0px;
+                    margin: 0px;
                     font-size: 18px;
                     font-weight: bold;
                 }
                 
                 #titleBarCloseButton:hover {
                     background-color: rgba(232, 17, 35, 204);
-                    border-radius: 4px;
+                }
+                
+                #titleBarCloseButton:pressed {
+                    margin-top: 0px;
+                    margin-left: 0px;
                 }
                 
                 #sidebar {
-                    background-color: rgba(20, 20, 20, 150);
+                    background-color: rgba(60, 60, 60, 115);
                     border: 1px solid #ffffff;
                     border-radius: 8px;
                 }
                 
                 #tabButton {
-                    background-color: rgba(43, 43, 43, 80);
+                    background-color: rgba(43, 43, 43, 90);
                     color: #cccccc;
-                    border: none;
                     text-align: left;
                     padding: 10px 20px;
                     margin: 3px 5px 5px 3px;
                     border-radius: 6px;
-                    border-bottom: 2px solid rgba(0, 0, 0, 80);
-                    border-right: 2px solid rgba(0, 0, 0, 100);
+                    border: 1px solid #ffffff;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-weight: 600;
                     font-size: 13px;
                 }
                 
                 #tabButton:hover {
-                    background-color: rgba(62, 62, 62, 110);
+                    background-color: rgba(62, 62, 62, 120);
                     color: #ffffff;
+                    border: 1px solid #ffffff;
                 }
                 
                 #tabButton:checked {
-                    background-color: rgba(62, 62, 62, 130);
+                    background-color: rgba(62, 62, 62, 140);
                     color: #ffffff;
                     font-weight: 700;
+                    border: 1px solid #ffffff;
                 }
                 
                 #contentArea {
@@ -118,52 +129,56 @@ def load_theme(widget) -> None:
                 }
                 
                 QListWidget {
-                    background-color: rgba(35, 35, 35, 204);
+                    background-color: rgba(30, 30, 30, 215);
                     color: #ffffff;
-                    border: 1px solid rgba(90, 90, 90, 204);
-                    border-radius: 4px;
+                    border: 1px solid rgba(80, 80, 80, 153);
+                    border-radius: 8px;
+                    padding: 4px;
                 }
                 
                 QListWidget::item:selected {
                     background-color: rgba(70, 70, 70, 204);
-                    border-left: 3px solid rgba(120, 120, 120, 230);
+                    border-left: 3px solid rgba(255, 255, 255, 180);
                 }
                 
                 QListWidget::item:hover {
-                    background-color: rgba(62, 62, 62, 204);
+                    background-color: rgba(55, 55, 55, 204);
                 }
                 
                 QPushButton {
-                    background-color: rgba(60, 60, 60, 204);
+                    background-color: rgba(45, 45, 45, 215);
                     color: #ffffff;
-                    border-radius: 4px;
-                    padding: 8px 16px;
-                    border-top: 1px solid rgba(80, 80, 80, 179);
-                    border-left: 1px solid rgba(80, 80, 80, 179);
-                    border-right: 2px solid rgba(0, 0, 0, 166);
-                    border-bottom: 2px solid rgba(0, 0, 0, 179);
+                    border-radius: 8px;
+                    padding: 7px 18px;
+                    font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+                    font-weight: 500;
+                    font-size: 12px;
+                    border-top: 1px solid rgba(90, 90, 90, 160);
+                    border-left: 1px solid rgba(90, 90, 90, 160);
+                    border-right: 2px solid rgba(0, 0, 0, 140);
+                    border-bottom: 2px solid rgba(0, 0, 0, 160);
                 }
                 
                 QPushButton:hover {
-                    background-color: rgba(75, 75, 75, 204);
-                    border-top: 1px solid rgba(96, 96, 96, 204);
-                    border-left: 1px solid rgba(96, 96, 96, 204);
-                    border-right: 2px solid rgba(0, 0, 0, 179);
-                    border-bottom: 2px solid rgba(0, 0, 0, 191);
+                    background-color: rgba(60, 60, 60, 220);
+                    border-top: 1px solid rgba(110, 110, 110, 180);
+                    border-left: 1px solid rgba(110, 110, 110, 180);
+                    border-right: 2px solid rgba(0, 0, 0, 160);
+                    border-bottom: 2px solid rgba(0, 0, 0, 170);
                 }
                 
                 QPushButton:pressed {
-                    background-color: rgba(50, 50, 50, 204);
-                    border-top: 1px solid rgba(60, 60, 60, 191);
-                    border-left: 1px solid rgba(60, 60, 60, 191);
-                    border-right: 1px solid rgba(0, 0, 0, 166);
-                    border-bottom: 1px solid rgba(0, 0, 0, 166);
+                    background-color: rgba(35, 35, 35, 220);
+                    border-top: 1px solid rgba(60, 60, 60, 160);
+                    border-left: 1px solid rgba(60, 60, 60, 160);
+                    border-right: 1px solid rgba(0, 0, 0, 140);
+                    border-bottom: 1px solid rgba(0, 0, 0, 140);
                     margin-top: 1px;
                     margin-left: 1px;
                 }
                 
                 QGroupBox {
-                    background-color: rgba(60, 60, 60, 100);
+                    background-color: rgba(60, 60, 60, 115);
                     border: 1px solid #ffffff;
                     border-radius: 18px;
                     margin-top: 20px;
