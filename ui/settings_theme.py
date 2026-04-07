@@ -87,7 +87,7 @@ def load_theme(widget) -> None:
                 
                 #sidebar {
                     background-color: rgba(60, 60, 60, 115);
-                    border: 1px solid #ffffff;
+                    border: 1.75px solid #ffffff;
                     border-radius: 8px;
                 }
                 
@@ -98,28 +98,28 @@ def load_theme(widget) -> None:
                     padding: 10px 20px;
                     margin: 3px 5px 5px 3px;
                     border-radius: 6px;
-                    border: 1px solid #ffffff;
+                    border: 1.5px solid #ffffff;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-weight: 600;
-                    font-size: 13px;
+                    font-size: 15px;
                 }
                 
                 #tabButton:hover {
                     background-color: rgba(62, 62, 62, 120);
                     color: #ffffff;
-                    border: 1px solid #ffffff;
+                    border: 1.5px solid #ffffff;
                 }
                 
                 #tabButton:checked {
                     background-color: rgba(62, 62, 62, 140);
                     color: #ffffff;
                     font-weight: 700;
-                    border: 1px solid #ffffff;
+                    border: 1.5px solid #ffffff;
                 }
                 
                 #contentArea {
                     background-color: transparent;
-                    border: 1px solid #ffffff;
+                    border: 1.75px solid #ffffff;
                     border-radius: 8px;
                     padding: 20px;
                 }
@@ -152,18 +152,18 @@ def load_theme(widget) -> None:
                     padding: 7px 18px;
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-weight: 500;
-                    font-size: 12px;
-                    border: 1px solid #ffffff;
+                    font-size: 14px;
+                    border: 1.25px solid #ffffff;
                 }
                 
                 QPushButton:hover {
                     background-color: rgba(60, 60, 60, 220);
-                    border: 1px solid #ffffff;
+                    border: 1.25px solid #ffffff;
                 }
                 
                 QPushButton:pressed {
                     background-color: rgba(35, 35, 35, 220);
-                    border: 1px solid rgba(200, 200, 200, 200);
+                    border: 1.25px solid rgba(200, 200, 200, 200);
                 }
                 
                 QGroupBox {

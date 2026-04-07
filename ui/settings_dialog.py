@@ -608,7 +608,7 @@ class SettingsDialog(QDialog):
         
         # Content area
         content_layout = QHBoxLayout()
-        content_layout.setContentsMargins(10, 10, 10, 10)
+        content_layout.setContentsMargins(10, 10, 10, 9)
         content_layout.setSpacing(10)
         
         # Left sidebar with tabs
@@ -629,9 +629,7 @@ class SettingsDialog(QDialog):
         self.accessibility_tab_btn = TabButton("Accessibility", "♿")
         # Presets icon: sliders/controls symbol for configuration presets
         self.presets_tab_btn = TabButton("Presets", "🎚")
-        # Use a circled information glyph for About so the icon's
-        # bounding box and spacing match the other emoji-style icons.
-        self.about_tab_btn = TabButton("About", "ⓘ")
+        self.about_tab_btn = TabButton("About", "ℹ")
         
         self.tab_buttons = [
             self.sources_tab_btn,
@@ -684,6 +682,16 @@ class SettingsDialog(QDialog):
         content_layout.addWidget(self.content_stack, 1)
 
         main_layout.addLayout(content_layout)
+
+        # White bottom divider line for visual closure
+        bottom_line_wrapper = QHBoxLayout()
+        bottom_line_wrapper.setContentsMargins(10, 0, 10, 0)
+        bottom_line_widget = QWidget()
+        bottom_line_widget.setFixedHeight(1)
+        bottom_line_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        bottom_line_widget.setStyleSheet("background-color: #ffffff;")
+        bottom_line_wrapper.addWidget(bottom_line_widget)
+        main_layout.addLayout(bottom_line_wrapper)
 
         self._style_tab_widget(self.content_stack.widget(self._initial_tab_index))
 
@@ -801,6 +809,17 @@ class SettingsDialog(QDialog):
             return
         try:
             apply_shadows_to_inputs(widget)
+            from ui.widgets.control_shadow import attach_control_shadow, ShadowConfig
+            from PySide6.QtCore import QPointF
+            btn_shadow_cfg = ShadowConfig(
+                blur_radius=6.0,
+                offset=QPointF(1.0, 2.0),
+                color=QColor(0, 0, 0, 120),
+            )
+            for btn in widget.findChildren(QPushButton):
+                if btn.objectName() in ("tabButton", "titleBarButton", "titleBarCloseButton"):
+                    continue
+                attach_control_shadow(btn, btn_shadow_cfg)
         except Exception:
             logger.debug("Failed to apply tab control shadows", exc_info=True)
             return
@@ -1624,7 +1643,7 @@ class SettingsDialog(QDialog):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        border_pen = QPen(QColor(255, 255, 255, 255), 2.5)
+        border_pen = QPen(QColor(255, 255, 255, 255), 4.0)
         border_pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
         painter.setPen(border_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
