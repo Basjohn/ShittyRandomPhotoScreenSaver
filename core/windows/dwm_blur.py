@@ -55,7 +55,7 @@ def enable_acrylic_blur(
     tint_r: int = 24,
     tint_g: int = 24,
     tint_b: int = 24,
-    tint_alpha: int = 176,
+    tint_alpha: int = 80,
 ) -> bool:
     """Enable acrylic blur-behind on a window.
 

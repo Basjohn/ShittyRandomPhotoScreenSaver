@@ -577,6 +577,11 @@ class SettingsDialog(QDialog):
         self._shell_shadow.setColor(QColor(0, 0, 0, 180))
         self._outer_margin = 10
 
+        # Improve text antialiasing (smoother rendering without changing fonts)
+        font = self.font()
+        font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+        self.setFont(font)
+
     def _load_theme(self) -> None:
         """Delegates to ui.settings_theme."""
         from ui.settings_theme import load_theme
@@ -587,7 +592,6 @@ class SettingsDialog(QDialog):
         # Main container (for rounded corners and shadow)
         container = QWidget()
         container.setObjectName("dialogContainer")
-        container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._dialog_container = container
         
         main_layout = QVBoxLayout(container)
@@ -647,7 +651,6 @@ class SettingsDialog(QDialog):
         # Right content area with stacked widget
         self.content_stack = QStackedWidget()
         self.content_stack.setObjectName("contentArea")
-        self.content_stack.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         
         # Create actual tabs lazily
         cache = get_settings_dialog_cache()
@@ -693,6 +696,7 @@ class SettingsDialog(QDialog):
         self.content_stack.setCurrentIndex(self._initial_tab_index)
 
 
+
     def _create_about_tab(self) -> QWidget:
         """Create about tab. Delegates to ui.settings_about_tab."""
         from ui.settings_about_tab import build_about_tab
@@ -736,6 +740,11 @@ class SettingsDialog(QDialog):
         self.content_stack.insertWidget(index, widget)
         self._register_tab_scroll_area(index, widget)
         setattr(self, f"{key}_tab", widget)
+
+        # Disable opaque auto-fill on scroll area viewports so the acrylic
+        # blur-behind can show through semi-transparent backgrounds.
+        for scroll in widget.findChildren(QScrollArea):
+            scroll.viewport().setAutoFillBackground(False)
 
         if key == "presets" and not self._presets_signal_connected and hasattr(widget, "settings_reloaded"):
             try:
@@ -1061,6 +1070,12 @@ class SettingsDialog(QDialog):
         except Exception:
             logger.debug("Failed to save dialog geometry on close", exc_info=True)
         
+        # Disable acrylic blur
+        try:
+            from core.windows.dwm_blur import disable_blur
+            disable_blur(int(self.winId()))
+        except Exception:
+            pass
         super().closeEvent(event)
 
     def _schedule_shell_shadow_refresh(self) -> None:
@@ -1512,7 +1527,17 @@ class SettingsDialog(QDialog):
     def resizeEvent(self, event):
         """Handle resize event to position size grip and save geometry."""
         super().resizeEvent(event)
-        
+
+        # Clip container children to rounded rect so corners don't bleed
+        # outside the white outer border. QSS border-radius only clips the
+        # widget's own background, not its children.
+        if hasattr(self, '_dialog_container'):
+            from PySide6.QtGui import QRegion
+            c = self._dialog_container
+            path = QPainterPath()
+            path.addRoundedRect(QRectF(c.rect()), 10.0, 10.0)
+            c.setMask(QRegion(path.toFillPolygon().toPolygon()))
+
         # Position size grip in bottom-right corner
         if hasattr(self, 'size_grip'):
             try:
@@ -1600,7 +1625,7 @@ class SettingsDialog(QDialog):
         self._move_timer.start(500)  # Save 500ms after move stops
     
     def paintEvent(self, event):
-        """Paint a soft shadow around the dialog container.
+        """Paint a soft shadow and white border around the dialog.
 
         Replaces QGraphicsDropShadowEffect which renders the widget tree
         to an intermediate pixmap, breaking the per-pixel alpha chain
@@ -1612,7 +1637,7 @@ class SettingsDialog(QDialog):
 
         m = self._outer_margin
         cr = QRectF(m, m, self.width() - 2 * m, self.height() - 2 * m)
-        r = 10.0  # matches #dialogContainer border-radius
+        r = 10.0
 
         # Clip to the margin area only (exclude container interior)
         full = QPainterPath()
@@ -1640,6 +1665,15 @@ class SettingsDialog(QDialog):
                 r + i_exp * 0.3, r + i_exp * 0.3,
             )
             painter.fillPath(outer - inn, QColor(0, 0, 0, alpha))
+
+        # ── White curved border at the WINDOW edge ──
+        painter.setClipping(False)
+        border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        border_pen = QPen(QColor(255, 255, 255, 255), 1.5)
+        border_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(border_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(border_rect, 8.0, 8.0)
 
         painter.end()
 

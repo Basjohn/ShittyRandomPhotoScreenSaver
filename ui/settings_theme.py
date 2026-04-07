@@ -22,21 +22,23 @@ def load_theme(widget) -> None:
                 
                 # Add custom styles for settings dialog
                 custom_styles = """
-                /* Settings Dialog Custom Styles */
+                /* Settings Dialog Custom Styles
+                   NOTE: Qt QSS rgba() alpha MUST be integer 0-255.
+                   Float values (e.g. 0.8) are truncated to 0! */
                 QDialog {
                     background-color: transparent;
-                    border: 3px solid #ffffff;
+                    border: none;
                     border-radius: 12px;
                 }
                 
                 #dialogContainer {
-                    background-color: rgba(0, 0, 0, 0);
-                    border: 3px solid #ffffff;
+                    background-color: rgba(0, 0, 0, 10);
+                    border: none;
                     border-radius: 10px;
                 }
                 
                 #customTitleBar {
-                    background-color: rgba(12, 12, 12, 0.82);
+                    background-color: rgba(12, 12, 12, 209);
                     border-top-left-radius: 10px;
                     border-top-right-radius: 10px;
                 }
@@ -47,7 +49,7 @@ def load_theme(widget) -> None:
                 }
                 
                 #titleBarButton {
-                    background-color: transparent;
+                    background-color: rgba(0, 0, 0, 0);
                     color: #ffffff;
                     border: none;
                     font-size: 16px;
@@ -55,12 +57,12 @@ def load_theme(widget) -> None:
                 }
                 
                 #titleBarButton:hover {
-                    background-color: rgba(62, 62, 62, 0.8);
+                    background-color: rgba(62, 62, 62, 204);
                     border-radius: 4px;
                 }
                 
                 #titleBarCloseButton {
-                    background-color: transparent;
+                    background-color: rgba(0, 0, 0, 0);
                     color: #ffffff;
                     border: none;
                     font-size: 18px;
@@ -68,97 +70,101 @@ def load_theme(widget) -> None:
                 }
                 
                 #titleBarCloseButton:hover {
-                    background-color: rgba(232, 17, 35, 0.8);
+                    background-color: rgba(232, 17, 35, 204);
                     border-radius: 4px;
                 }
                 
                 #sidebar {
-                    background-color: rgba(20, 20, 20, 0.68);
+                    background-color: rgba(20, 20, 20, 150);
                     border: 1px solid #ffffff;
                     border-radius: 8px;
                 }
                 
                 #tabButton {
-                    background-color: rgba(43, 43, 43, 0.75);
+                    background-color: rgba(43, 43, 43, 80);
                     color: #cccccc;
                     border: none;
                     text-align: left;
                     padding: 10px 20px;
-                    margin: 3px 5px 5px 3px; /* extra space for bottom-right shadow */
+                    margin: 3px 5px 5px 3px;
                     border-radius: 6px;
-                    border-bottom: 2px solid rgba(0, 0, 0, 0.6);
-                    border-right: 2px solid rgba(0, 0, 0, 0.7);
+                    border-bottom: 2px solid rgba(0, 0, 0, 80);
+                    border-right: 2px solid rgba(0, 0, 0, 100);
                     font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
                     font-weight: 600;
                     font-size: 13px;
                 }
                 
                 #tabButton:hover {
-                    background-color: rgba(62, 62, 62, 0.80);
+                    background-color: rgba(62, 62, 62, 110);
                     color: #ffffff;
                 }
                 
                 #tabButton:checked {
-                    background-color: rgba(62, 62, 62, 0.85);
+                    background-color: rgba(62, 62, 62, 130);
                     color: #ffffff;
                     font-weight: 700;
                 }
                 
                 #contentArea {
-                    background-color: rgba(0, 0, 0, 0);
+                    background-color: transparent;
                     border: 1px solid #ffffff;
                     border-radius: 8px;
                     padding: 20px;
                 }
                 
+                #contentArea > QWidget {
+                    background: transparent;
+                }
+                
                 QListWidget {
-                    background-color: rgba(35, 35, 35, 0.8);
+                    background-color: rgba(35, 35, 35, 204);
                     color: #ffffff;
-                    border: 1px solid rgba(90, 90, 90, 0.8);
+                    border: 1px solid rgba(90, 90, 90, 204);
                     border-radius: 4px;
                 }
                 
                 QListWidget::item:selected {
-                    background-color: rgba(70, 70, 70, 0.8);
-                    border-left: 3px solid rgba(120, 120, 120, 0.9);
+                    background-color: rgba(70, 70, 70, 204);
+                    border-left: 3px solid rgba(120, 120, 120, 230);
                 }
                 
                 QListWidget::item:hover {
-                    background-color: rgba(62, 62, 62, 0.8);
+                    background-color: rgba(62, 62, 62, 204);
                 }
                 
                 QPushButton {
-                    background-color: rgba(60, 60, 60, 0.8);
+                    background-color: rgba(60, 60, 60, 204);
                     color: #ffffff;
                     border-radius: 4px;
                     padding: 8px 16px;
-                    border-top: 1px solid rgba(80, 80, 80, 0.7);
-                    border-left: 1px solid rgba(80, 80, 80, 0.7);
-                    border-right: 2px solid rgba(0, 0, 0, 0.65);
-                    border-bottom: 2px solid rgba(0, 0, 0, 0.7);
+                    border-top: 1px solid rgba(80, 80, 80, 179);
+                    border-left: 1px solid rgba(80, 80, 80, 179);
+                    border-right: 2px solid rgba(0, 0, 0, 166);
+                    border-bottom: 2px solid rgba(0, 0, 0, 179);
                 }
                 
                 QPushButton:hover {
-                    background-color: rgba(75, 75, 75, 0.8);
-                    border-top: 1px solid rgba(96, 96, 96, 0.8);
-                    border-left: 1px solid rgba(96, 96, 96, 0.8);
-                    border-right: 2px solid rgba(0, 0, 0, 0.7);
-                    border-bottom: 2px solid rgba(0, 0, 0, 0.75);
+                    background-color: rgba(75, 75, 75, 204);
+                    border-top: 1px solid rgba(96, 96, 96, 204);
+                    border-left: 1px solid rgba(96, 96, 96, 204);
+                    border-right: 2px solid rgba(0, 0, 0, 179);
+                    border-bottom: 2px solid rgba(0, 0, 0, 191);
                 }
                 
                 QPushButton:pressed {
-                    background-color: rgba(50, 50, 50, 0.8);
-                    border-top: 1px solid rgba(60, 60, 60, 0.75);
-                    border-left: 1px solid rgba(60, 60, 60, 0.75);
-                    border-right: 1px solid rgba(0, 0, 0, 0.65);
-                    border-bottom: 1px solid rgba(0, 0, 0, 0.65);
+                    background-color: rgba(50, 50, 50, 204);
+                    border-top: 1px solid rgba(60, 60, 60, 191);
+                    border-left: 1px solid rgba(60, 60, 60, 191);
+                    border-right: 1px solid rgba(0, 0, 0, 166);
+                    border-bottom: 1px solid rgba(0, 0, 0, 166);
                     margin-top: 1px;
                     margin-left: 1px;
                 }
                 
                 QGroupBox {
-                    background-color: rgba(35, 35, 35, 0.90);
-                    border: 1px solid rgba(255, 255, 255, 0.8);
+                    background-color: rgba(60, 60, 60, 100);
+                    border: 1px solid #ffffff;
                     border-radius: 18px;
                     margin-top: 20px;
                     margin-bottom: 12px;
@@ -186,24 +192,25 @@ def load_theme(widget) -> None:
                 QCheckBox::indicator {
                     width: 18px;
                     height: 18px;
-                    background-color: rgba(45, 45, 45, 0.8);
+                    background-color: rgba(45, 45, 45, 204);
                     border-radius: 3px;
-                    border-top: 1px solid rgba(90, 90, 90, 0.75);
-                    border-left: 1px solid rgba(90, 90, 90, 0.75);
-                    border-right: 2px solid rgba(0, 0, 0, 0.7);
-                    border-bottom: 2px solid rgba(0, 0, 0, 0.75);
+                    border-top: 1px solid rgba(90, 90, 90, 191);
+                    border-left: 1px solid rgba(90, 90, 90, 191);
+                    border-right: 2px solid rgba(0, 0, 0, 179);
+                    border-bottom: 2px solid rgba(0, 0, 0, 191);
                 }
                 
                 QCheckBox::indicator:checked {
-                    background-color: rgba(210, 210, 210, 0.85);
-                    border-top: 1px solid rgba(200, 200, 200, 0.8);
-                    border-left: 1px solid rgba(200, 200, 200, 0.8);
-                    border-right: 2px solid rgba(60, 60, 60, 0.7);
-                    border-bottom: 2px solid rgba(60, 60, 60, 0.75);
+                    background-color: rgba(210, 210, 210, 217);
+                    border-top: 1px solid rgba(200, 200, 200, 204);
+                    border-left: 1px solid rgba(200, 200, 200, 204);
+                    border-right: 2px solid rgba(60, 60, 60, 179);
+                    border-bottom: 2px solid rgba(60, 60, 60, 191);
                 }
                 
                 QLabel {
                     color: #ffffff;
+                    background-color: rgba(0, 0, 0, 0);
                 }
                 """
                 
