@@ -99,14 +99,6 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
         # exit_app parameter intentionally unused in debug log
         logger.debug("Engine stop requested (exit_app=%s)", exit_app)
 
-        if exit_app:
-            try:
-                from core.windows import reddit_helper_runtime
-
-                reddit_helper_runtime.request_session_helper_shutdown(source="engine_stop")
-            except Exception as e:
-                logger.debug("Session-scoped Reddit helper shutdown request failed: %s", e, exc_info=True)
-
         # Signal RSS coordinator to abort any in-progress waits immediately
         if engine.rss_coordinator:
             try:
@@ -185,6 +177,12 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
 
         # Stop any pending image loads
         engine._loading_in_progress = False
+
+        try:
+            from core.windows import reddit_helper_runtime
+            reddit_helper_runtime.clear_session_ticket(source="engine_stop")
+        except Exception as e:
+            logger.debug("Helper session ticket cleanup skipped: %s", e)
 
         # Force-stop shared beat engine audio worker to release audio threads
         if exit_app:

@@ -15,11 +15,11 @@ from ui.tabs.media.builder_scaffold import (
     add_builder_swatch_row,
     bind_color_button,
     bind_setting_signal,
+    build_collapsible_bucket,
     build_mode_scaffold,
 )
 from ui.tabs.shared_styles import (
     add_aligned_row_widget as shared_add_aligned_row_widget,
-    ADV_HELPER_LABEL_STYLE,
 )
 from ui.widgets import StyledComboBox
 
@@ -50,57 +50,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     normal_layout = scaffold.normal_layout
     adv_layout = scaffold.advanced_layout
 
-    def _make_bucket(
-        target_layout: QVBoxLayout,
-        title: str,
-        *,
-        helper_text: str,
-        expanded: bool = True,
-    ) -> tuple[QWidget, QVBoxLayout]:
-        host = QWidget()
-        host.setObjectName(f"blob_bucket_{title.lower().replace(' ', '_')}")
-        host.setProperty("bucketTitle", title)
-        host_layout = QVBoxLayout(host)
-        host_layout.setContentsMargins(0, 0, 0, 0)
-        host_layout.setSpacing(8)
-
-        toggle_row = QHBoxLayout()
-        toggle_row.setContentsMargins(0, 0, 0, 0)
-        toggle_row.setSpacing(8)
-
-        toggle = QToolButton()
-        toggle.setText(title)
-        toggle.setCheckable(True)
-        toggle.setChecked(expanded)
-        toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
-        toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        toggle.setAutoRaise(True)
-        toggle_row.addWidget(toggle)
-        toggle_row.addStretch()
-        host_layout.addLayout(toggle_row)
-
-        helper = QLabel(helper_text)
-        helper.setProperty("class", "adv-helper")
-        helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
-        host_layout.addWidget(helper)
-
-        body = QWidget()
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(12)
-        host_layout.addWidget(body)
-
-        def _apply_state(checked: bool) -> None:
-            toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-            body.setVisible(checked)
-            helper.setVisible(not checked)
-
-        toggle.toggled.connect(_apply_state)
-        _apply_state(expanded)
-
-        target_layout.addWidget(host)
-        return host, body_layout
-
     def _make_aligned_row(target_layout: QVBoxLayout, label_text: str) -> tuple[QWidget, QHBoxLayout]:
         row_widget, inner, _ = shared_add_aligned_row_widget(
             target_layout,
@@ -117,40 +66,68 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return row_widget, inner
 
-    _, body_bucket = _make_bucket(
+    _, body_bucket = build_collapsible_bucket(
+        tab,
         normal_layout,
-        "Body",
+        mode_key="blob",
+        bucket_key="body",
+        title="Body",
         helper_text="Body size response controls still apply when hidden.",
+        default_expanded=True,
     )
-    _, appearance_bucket = _make_bucket(
+    _, appearance_bucket = build_collapsible_bucket(
+        tab,
         normal_layout,
-        "Appearance",
+        mode_key="blob",
+        bucket_key="appearance",
+        title="Appearance",
         helper_text="Blob fill and edge colors still apply when hidden.",
+        default_expanded=True,
     )
-    _, shaper_bucket = _make_bucket(
+    _, shaper_bucket = build_collapsible_bucket(
+        tab,
         normal_layout,
-        "Shaper",
+        mode_key="blob",
+        bucket_key="shaper",
+        title="Shaper",
         helper_text="Blob Shaper controls still apply when hidden.",
+        default_expanded=True,
     )
-    _, layout_bucket = _make_bucket(
+    _, layout_bucket = build_collapsible_bucket(
+        tab,
         normal_layout,
-        "Layout",
+        mode_key="blob",
+        bucket_key="layout",
+        title="Layout",
         helper_text="Blob card/layout sizing still applies when hidden.",
+        default_expanded=True,
     )
-    _, glow_bucket = _make_bucket(
+    _, glow_bucket = build_collapsible_bucket(
+        tab,
         normal_layout,
-        "Glow",
+        mode_key="blob",
+        bucket_key="glow",
+        title="Glow",
         helper_text="Glow controls still apply when hidden.",
+        default_expanded=True,
     )
-    _, motion_bucket = _make_bucket(
+    _, motion_bucket = build_collapsible_bucket(
+        tab,
         adv_layout,
-        "Motion",
+        mode_key="blob",
+        bucket_key="motion",
+        title="Motion",
         helper_text="Motion controls still apply when hidden.",
+        default_expanded=True,
     )
-    _, ghost_bucket = _make_bucket(
+    _, ghost_bucket = build_collapsible_bucket(
+        tab,
         adv_layout,
-        "Ghost",
+        mode_key="blob",
+        bucket_key="ghost",
+        title="Ghost",
         helper_text="Ghost controls still apply when hidden.",
+        default_expanded=True,
     )
 
     def _body_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:

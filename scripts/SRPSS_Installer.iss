@@ -63,10 +63,9 @@ Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 ; Set SRPSS.scr as the current user's active screensaver
 Root: HKCU; Subkey: "Control Panel\Desktop"; ValueType: string; ValueName: "SCRNSAVE.EXE"; ValueData: "{sys}\SRPSS.scr"; Flags: uninsdeletevalue
 
-; Start the Reddit helper watcher on user login.
-; --idle-exit-seconds 300: helper exits automatically 5 minutes after the queue
-; is empty, preventing indefinite lingering between screensaver sessions.
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; ValueType: string; ValueData: """{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"" --watch --queue ""{commonappdata}\SRPSS\url_queue"" --idle-exit-seconds 300"; Flags: uninsdeletevalue
+; Remove the legacy login-start helper entry. The helper is now launched by
+; the actual screensaver session and must not live as a background startup app.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "SRPSS_RedditHelper"; Flags: deletevalue
 
 [Icons]
 ; Desktop shortcut to open Screen Saver Settings (with SRPSS selected).
@@ -79,6 +78,8 @@ Name: "{group}\Configure SRPSS"; Filename: "{sys}\control.exe"; Parameters: "des
 [UninstallRun]
 ; Kill watcher before uninstall
 Filename: "taskkill"; Parameters: "/F /IM SRPSS_RedditHelper.exe"; Flags: runhidden nowait; RunOnceId: "KillHelper"
+; Remove the interactive on-demand scheduled task used to launch the helper.
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""SRPSS\RedditHelper"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteHelperTask"
 
 [UninstallDelete]
 ; Clean up Reddit helper and queue
@@ -90,6 +91,12 @@ Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 Type: dirifempty; Name: "{commonappdata}\SRPSS\presets"
 
 [Run]
+; Register the helper as an on-demand interactive scheduled task for the
+; installing user. This avoids a 24/7 startup helper while still giving the
+; secure-desktop saver a clean Windows authority to request a user-session
+; helper launch when needed.
+Filename: "{cmd}"; Parameters: "/C schtasks /Delete /TN ""SRPSS\RedditHelper"" /F >nul 2>&1"; Flags: runhidden waituntilterminated runasoriginaluser
+Filename: "{sys}\schtasks.exe"; Parameters: "/Create /TN ""SRPSS\RedditHelper"" /TR ""{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe --watch --queue {commonappdata}\SRPSS\url_queue --log-dir {commonappdata}\SRPSS\logs --signal-dir {commonappdata}\SRPSS\helper_signals --session-ticket {commonappdata}\SRPSS\helper_signals\reddit_helper_session.json --idle-exit-seconds 20"" /SC ONCE /SD 01/01/2099 /ST 00:00 /IT /RL LIMITED /F"; Flags: runhidden waituntilterminated runasoriginaluser
 ; No post-install run step by default. The user can open Screen Saver
 ; Settings via the standard control panel entry.
 Filename: "{sys}\control.exe"; Parameters: "desk.cpl,,1"; Description: "Open Screen Saver Settings now"; Flags: postinstall nowait skipifsilent

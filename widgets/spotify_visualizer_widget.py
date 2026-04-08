@@ -110,7 +110,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._spectrum_mirrored: bool = True
         self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
         self._spectrum_notch_positions_mirrored: list = [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
-        self._spectrum_notch_positions_linear: list = [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]]
+        self._spectrum_notch_positions_linear: list = [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]
         # Spectrum shaping config (pushed to audio worker DSP pipeline)
         self._spectrum_bass_emphasis: float = 0.50
         self._spectrum_vocal_position: float = 0.40

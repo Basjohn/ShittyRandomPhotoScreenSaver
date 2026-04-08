@@ -14,6 +14,7 @@ from ui.tabs.media.builder_scaffold import (
     add_builder_swatch_row,
     bind_color_button,
     bind_setting_signal,
+    build_collapsible_bucket,
     build_mode_scaffold,
 )
 from ui.tabs.shared_styles import (
@@ -44,6 +45,61 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     _normal_layout = scaffold.normal_layout
     _adv_layout = scaffold.advanced_layout
+
+    _, appearance_bucket = build_collapsible_bucket(
+        tab,
+        _normal_layout,
+        mode_key="bubble",
+        bucket_key="appearance",
+        title="Appearance",
+        helper_text="Bubble shading, gradient direction, and color styling still apply when hidden.",
+        default_expanded=True,
+    )
+    _, motion_bucket = build_collapsible_bucket(
+        tab,
+        _normal_layout,
+        mode_key="bubble",
+        bucket_key="motion",
+        title="Motion",
+        helper_text="Streaming, drift, swirl, and motion-tail controls still apply when hidden.",
+        default_expanded=True,
+    )
+    _, reactivity_bucket = build_collapsible_bucket(
+        tab,
+        _adv_layout,
+        mode_key="bubble",
+        bucket_key="reactivity",
+        title="Reactivity",
+        helper_text="Audio-driven pulse behavior still applies when hidden.",
+        default_expanded=False,
+    )
+    _, population_bucket = build_collapsible_bucket(
+        tab,
+        _adv_layout,
+        mode_key="bubble",
+        bucket_key="population",
+        title="Population",
+        helper_text="Bubble counts, size limits, and lifecycle controls still apply when hidden.",
+        default_expanded=False,
+    )
+    _, layout_bucket = build_collapsible_bucket(
+        tab,
+        _adv_layout,
+        mode_key="bubble",
+        bucket_key="layout",
+        title="Layout",
+        helper_text="Card sizing still applies when hidden.",
+        default_expanded=False,
+    )
+    _, ghost_bucket = build_collapsible_bucket(
+        tab,
+        _adv_layout,
+        mode_key="bubble",
+        bucket_key="ghost",
+        title="Ghost",
+        helper_text="Bubble ghosting still applies when hidden.",
+        default_expanded=False,
+    )
 
     LABEL_WIDTH = 150
 
@@ -78,10 +134,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return content
 
-    # ── Audio Reactivity ──────────────────────────────────────────────
-    _adv_layout.addWidget(QLabel("<b>Audio Reactivity</b>"))
-
-    bubble_bass_row = _aligned_row(_adv_layout, "Big Bubble Bass Pulse:")
+    bubble_bass_row = _aligned_row(reactivity_bucket, "Big Bubble Bass Pulse:")
     tab.bubble_big_bass_pulse = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_bass_pulse.setMinimum(0)
     tab.bubble_big_bass_pulse.setMaximum(200)
@@ -98,7 +151,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_bass_pulse_label = QLabel(f"{val}%")
     bubble_bass_row.addWidget(tab.bubble_big_bass_pulse_label)
 
-    bubble_freq_row = _aligned_row(_adv_layout, "Small Bubble Freq Pulse:")
+    bubble_freq_row = _aligned_row(reactivity_bucket, "Small Bubble Freq Pulse:")
     tab.bubble_small_freq_pulse = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_small_freq_pulse.setMinimum(0)
     tab.bubble_small_freq_pulse.setMaximum(200)
@@ -115,10 +168,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_freq_pulse_label = QLabel(f"{val}%")
     bubble_freq_row.addWidget(tab.bubble_small_freq_pulse_label)
 
-    # ── Stream Controls ───────────────────────────────────────────
-    _adv_layout.addWidget(QLabel("<b>Stream Controls</b>"))
-
-    stream_dir_row = _aligned_row(_adv_layout, "Stream Direction:")
+    stream_dir_row = _aligned_row(motion_bucket, "Stream Direction:")
     tab.bubble_stream_direction = StyledComboBox(size_variant="compact")
     tab.bubble_stream_direction.addItems(["None", "Up", "Down", "Left", "Right", "Diagonal", "Random"])
     saved_dir = tab._default_str('spotify_visualizer', 'bubble_stream_direction', 'up').lower()
@@ -128,7 +178,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     stream_dir_row.addWidget(tab.bubble_stream_direction)
     stream_dir_row.addStretch()
 
-    stream_constant_row = _aligned_row(_adv_layout, "Stream Constant Speed:")
+    stream_constant_row = _aligned_row(motion_bucket, "Stream Constant Speed:")
     tab.bubble_stream_constant_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_constant_speed.setMinimum(0)
     tab.bubble_stream_constant_speed.setMaximum(200)
@@ -145,7 +195,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_stream_constant_speed_label = QLabel(f"{val}%")
     stream_constant_row.addWidget(tab.bubble_stream_constant_speed_label)
 
-    stream_cap_row = _aligned_row(_adv_layout, "Stream Speed Cap:")
+    stream_cap_row = _aligned_row(motion_bucket, "Stream Speed Cap:")
     tab.bubble_stream_speed_cap = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_speed_cap.setMinimum(50)
     tab.bubble_stream_speed_cap.setMaximum(400)
@@ -162,7 +212,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_stream_speed_cap_label = QLabel(f"{val}%")
     stream_cap_row.addWidget(tab.bubble_stream_speed_cap_label)
 
-    stream_react_row = _aligned_row(_adv_layout, "Speed Reactivity:")
+    stream_react_row = _aligned_row(motion_bucket, "Speed Reactivity:")
     tab.bubble_stream_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_stream_reactivity.setMinimum(0)
     tab.bubble_stream_reactivity.setMaximum(200)
@@ -179,10 +229,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_stream_reactivity_label = QLabel(f"{val}%")
     stream_react_row.addWidget(tab.bubble_stream_reactivity_label)
 
-    # ── Drift & Rotation ──────────────────────────────────────────
-    _adv_layout.addWidget(QLabel("<b>Drift & Rotation</b>"))
-
-    rotation_row = _aligned_row(_adv_layout, "Rotation Amount:")
+    rotation_row = _aligned_row(motion_bucket, "Rotation Amount:")
     tab.bubble_rotation_amount = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_rotation_amount.setMinimum(0)
     tab.bubble_rotation_amount.setMaximum(100)
@@ -197,7 +244,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_rotation_amount_label = QLabel(f"{val}%")
     rotation_row.addWidget(tab.bubble_rotation_amount_label)
 
-    drift_amount_row = _aligned_row(_adv_layout, "Drift Amount:")
+    drift_amount_row = _aligned_row(motion_bucket, "Drift Amount:")
     tab.bubble_drift_amount = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_drift_amount.setMinimum(0)
     tab.bubble_drift_amount.setMaximum(100)
@@ -212,7 +259,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_amount_label = QLabel(f"{val}%")
     drift_amount_row.addWidget(tab.bubble_drift_amount_label)
 
-    drift_speed_row = _aligned_row(_adv_layout, "Drift Speed:")
+    drift_speed_row = _aligned_row(motion_bucket, "Drift Speed:")
     tab.bubble_drift_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_drift_speed.setMinimum(0)
     tab.bubble_drift_speed.setMaximum(100)
@@ -227,7 +274,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_speed_label = QLabel(f"{val}%")
     drift_speed_row.addWidget(tab.bubble_drift_speed_label)
 
-    drift_frequency_row = _aligned_row(_adv_layout, "Drift Frequency:")
+    drift_frequency_row = _aligned_row(motion_bucket, "Drift Frequency:")
     tab.bubble_drift_frequency = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_drift_frequency.setMinimum(0)
     tab.bubble_drift_frequency.setMaximum(100)
@@ -242,7 +289,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_frequency_label = QLabel(f"{val}%")
     drift_frequency_row.addWidget(tab.bubble_drift_frequency_label)
 
-    drift_direction_row = _aligned_row(_adv_layout, "Drift Direction:")
+    drift_direction_row = _aligned_row(motion_bucket, "Drift Direction:")
     tab.bubble_drift_direction = StyledComboBox(size_variant="compact")
     drift_options = [
         ("None", "none"),
@@ -268,15 +315,14 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     drift_direction_row.addWidget(tab.bubble_drift_direction)
     drift_direction_row.addStretch()
 
-    # ── Swirl Mode ────────────────────────────────────────────────
-    swirl_row = _aligned_row(_adv_layout, "Swirl Mode:")
+    swirl_row = _aligned_row(motion_bucket, "Swirl Mode:")
     tab.bubble_swirl_enabled = QCheckBox("Enable")
     tab.bubble_swirl_enabled.setProperty("circleIndicator", True)
     tab.bubble_swirl_enabled.setChecked(saved_dd in ('swirl_cw', 'swirl_ccw'))
     swirl_row.addWidget(tab.bubble_swirl_enabled)
     swirl_row.addStretch()
 
-    _, swirl_combo_row = _aligned_row_widget(_adv_layout, "", wrap=False)
+    _, swirl_combo_row = _aligned_row_widget(motion_bucket, "", wrap=False)
     tab.bubble_swirl_direction = StyledComboBox(size_variant="compact")
     tab.bubble_swirl_direction.addItem("Clockwise", "swirl_cw")
     tab.bubble_swirl_direction.addItem("Counter-Clockwise", "swirl_ccw")
@@ -299,10 +345,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # Apply initial enable/disable state
     _on_swirl_toggled(tab.bubble_swirl_enabled.isChecked())
 
-    # ── Bubble Count & Lifecycle ──────────────────────────────────
-    _adv_layout.addWidget(QLabel("<b>Bubble Count & Lifecycle</b>"))
-
-    big_size_row = _aligned_row(_adv_layout, "Big Bubble Size:")
+    big_size_row = _aligned_row(population_bucket, "Big Bubble Size:")
     tab.bubble_big_size_max = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_size_max.setMinimum(10)
     tab.bubble_big_size_max.setMaximum(60)
@@ -320,7 +363,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_size_max_label = QLabel(f"{val}")
     big_size_row.addWidget(tab.bubble_big_size_max_label)
 
-    small_size_row = _aligned_row(_adv_layout, "Small Bubble Size:")
+    small_size_row = _aligned_row(population_bucket, "Small Bubble Size:")
     tab.bubble_small_size_max = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_small_size_max.setMinimum(4)
     tab.bubble_small_size_max.setMaximum(30)
@@ -338,7 +381,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_size_max_label = QLabel(f"{val}")
     small_size_row.addWidget(tab.bubble_small_size_max_label)
 
-    specular_max_row = _aligned_row(_adv_layout, "Specular Max Size:")
+    specular_max_row = _aligned_row(population_bucket, "Specular Max Size:")
     tab.bubble_big_specular_max_size = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_specular_max_size.setMinimum(50)
     tab.bubble_big_specular_max_size.setMaximum(500)
@@ -359,7 +402,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_specular_max_size_label = QLabel(f"{val / 100.0:.1f}x")
     specular_max_row.addWidget(tab.bubble_big_specular_max_size_label)
 
-    clamp_row = _aligned_row(_adv_layout, "Max Pulse Clamp:")
+    clamp_row = _aligned_row(population_bucket, "Max Pulse Clamp:")
     tab.bubble_big_size_clamp = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_size_clamp.setMinimum(150)
     tab.bubble_big_size_clamp.setMaximum(800)
@@ -380,7 +423,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_size_clamp_label = QLabel(f"{val / 100.0:.1f}x")
     clamp_row.addWidget(tab.bubble_big_size_clamp_label)
 
-    contraction_row = _aligned_row(_adv_layout, "Contraction Bias:")
+    contraction_row = _aligned_row(population_bucket, "Contraction Bias:")
     tab.bubble_big_contraction_bias = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_contraction_bias.setMinimum(0)
     tab.bubble_big_contraction_bias.setMaximum(100)
@@ -401,7 +444,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_contraction_bias_label = QLabel(f"{val}%")
     contraction_row.addWidget(tab.bubble_big_contraction_bias_label)
 
-    big_count_row = _aligned_row(_adv_layout, "Big Bubbles:")
+    big_count_row = _aligned_row(population_bucket, "Big Bubbles:")
     tab.bubble_big_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_big_count.setMinimum(1)
     tab.bubble_big_count.setMaximum(30)
@@ -416,7 +459,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_big_count_label = QLabel(str(val))
     big_count_row.addWidget(tab.bubble_big_count_label)
 
-    small_count_row = _aligned_row(_adv_layout, "Small Bubbles:")
+    small_count_row = _aligned_row(population_bucket, "Small Bubbles:")
     tab.bubble_small_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_small_count.setMinimum(5)
     tab.bubble_small_count.setMaximum(80)
@@ -431,7 +474,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_count_label = QLabel(str(val))
     small_count_row.addWidget(tab.bubble_small_count_label)
 
-    surface_reach_row = _aligned_row(_adv_layout, "Surface Reach:")
+    surface_reach_row = _aligned_row(population_bucket, "Surface Reach:")
     tab.bubble_surface_reach = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_surface_reach.setMinimum(0)
     tab.bubble_surface_reach.setMaximum(100)
@@ -446,12 +489,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_surface_reach_label = QLabel(f"{val}%")
     surface_reach_row.addWidget(tab.bubble_surface_reach_label)
 
-    # ── Styling ───────────────────────────────────────────────────
-    _styling_label = QLabel("<b>Styling</b>")
-    _styling_label.setContentsMargins(0, 12, 0, 0)
-    _normal_layout.addWidget(_styling_label)
-
-    specular_row = _aligned_row(_normal_layout, "Specular Direction:")
+    specular_row = _aligned_row(appearance_bucket, "Specular Direction:")
     tab.bubble_specular_direction = StyledComboBox(size_variant="mini")
     tab.bubble_gradient_direction = StyledComboBox(size_variant="mini")
     direction_options = [
@@ -478,7 +516,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_specular_direction.currentIndexChanged.connect(tab._save_settings)
     specular_row.addWidget(tab.bubble_specular_direction)
 
-    gradient_row = _aligned_row(_normal_layout, "Gradient Direction:")
+    gradient_row = _aligned_row(appearance_bucket, "Gradient Direction:")
     saved_gd = tab._default_str('spotify_visualizer', 'bubble_gradient_direction', 'top').lower()
     gidx = tab.bubble_gradient_direction.findData(saved_gd)
     if gidx < 0:
@@ -498,7 +536,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         ("bubble_gradient_dark_btn", "Gradient Dark", "_bubble_gradient_dark", "Choose Bubble Gradient Dark"),
         ("bubble_pop_color_btn", "Pop Colour", "_bubble_pop_color", "Choose Bubble Pop Color"),
     ):
-        color_row = _swatch_row(_normal_layout, f"{label_text}:")
+        color_row = _swatch_row(appearance_bucket, f"{label_text}:")
         btn = ColorSwatchButton(title=title)
         bind_color_button(
             tab,
@@ -510,8 +548,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         color_row.addWidget(btn)
         color_row.addStretch()
 
-    # ── Card Height ─────────────────────────────────────────────────
-    bubble_growth_row = _aligned_row(_adv_layout, "Card Height:")
+    bubble_growth_row = _aligned_row(layout_bucket, "Card Height:")
     tab.bubble_growth = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_growth.setMinimum(100)
     tab.bubble_growth.setMaximum(500)
@@ -529,8 +566,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_growth_label = QLabel(f"{bubble_growth_val / 100.0:.1f}x")
     bubble_growth_row.addWidget(tab.bubble_growth_label)
 
-    # ── Motion Tails ─────────────────────────────────────────────────
-    tail_len_row = _aligned_row(_adv_layout, "Tail Length:")
+    tail_len_row = _aligned_row(motion_bucket, "Tail Length:")
     tab.bubble_trail_strength = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_trail_strength.setMinimum(0)
     tab.bubble_trail_strength.setMaximum(150)
@@ -549,7 +585,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_trail_strength_label = QLabel("0%")
     tail_len_row.addWidget(tab.bubble_trail_strength_label)
 
-    tail_opa_row = _aligned_row(_adv_layout, "Tail Opacity:")
+    tail_opa_row = _aligned_row(motion_bucket, "Tail Opacity:")
     tab.bubble_tail_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_tail_opacity.setMinimum(0)
     tab.bubble_tail_opacity.setMaximum(85)
@@ -568,10 +604,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_tail_opacity_label = QLabel("0%")
     tail_opa_row.addWidget(tab.bubble_tail_opacity_label)
 
-    # ── Ghosting ─────────────────────────────────────────────────
-    _adv_layout.addWidget(QLabel("<b>Ghosting</b>"))
-
-    bubble_ghost_toggle_row = _aligned_row(_adv_layout, "")
+    bubble_ghost_toggle_row = _aligned_row(ghost_bucket, "")
     tab.bubble_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.bubble_ghost_enabled.setProperty("circleIndicator", True)
     tab.bubble_ghost_enabled.setChecked(
@@ -623,7 +656,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_ghost_decay_label = QLabel(f"{tab.bubble_ghost_decay_slider.value() / 100.0:.2f}x")
     bg_dec_row.addWidget(tab.bubble_ghost_decay_label)
 
-    _adv_layout.addWidget(tab._bubble_ghost_sub)
+    ghost_bucket.addWidget(tab._bubble_ghost_sub)
 
     def _update_bubble_ghost_vis(_s=None):
         tab._bubble_ghost_sub.setVisible(tab.bubble_ghost_enabled.isChecked())

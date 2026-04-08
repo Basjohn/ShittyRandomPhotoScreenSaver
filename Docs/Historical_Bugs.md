@@ -5,26 +5,125 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
-## ~PENDING RUNTIME / LIFECYCLE BUG: Reddit Helper Process Lingering After App Close. No longer lingers, but still fails to open urls, ever.
+## 2026-04-08 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Unresolved)
 
-- **Current symptom:** `SRPSS_RedditHelper` can remain alive long after the main application path has closed.
-- **Why this is tricky:** secure-desktop / SYSTEM screensaver runs cannot rely on polite cleanup or normal process-lifetime ownership, so “just exit the helper when the app exits” is not a sufficient model by itself.
-- **Architecture note:** this should be solved through explicit helper-lifecycle ownership rules:
-  - heartbeat/singleton semantics
-  - stale-session or stale-owner detection
-  - different rules for installed HKCU Run watcher vs preview/script bootstrap
-- **Progress landed (Mar 28 2026):**
-  - MC builds now skip helper bootstrap entirely instead of pointlessly carrying the queue watcher model into a direct-open path
-  - installed helper launches can now be either persistent or session-scoped depending on the runtime ownership request
-  - session-scoped launches now pass `owner-pid` + idle-exit even when the installed helper binary is the command we launch
-  - worker exits once the owner is gone and the queue stays idle long enough
-  - normal graceful app shutdown now writes an explicit session-owned helper shutdown request so runtime does not have to wait out the whole idle-exit grace window
-  - watcher mode now has a per-session singleton guard, so duplicate launches exit instead of stacking multiple lingering helpers
-  - stale helper heartbeat pids are now reaped by the user-session runtime before relaunch, so a wedged watcher cannot block recovery forever
-- **What is still pending:** real installed SCR validation that the persistent watcher behavior is acceptable and does not create a worse long-lived process problem than the preview/script linger we already fixed.
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current symptom:** major improvement landed: a packaged real screensaver run has now successfully opened a Reddit link back in normal Windows. The unresolved part is launch authority and lifetime behavior under real SCR runtime, plus timing polish.
+- **Latest diagnosis (Apr 8 evening):** queued `scr_click` entries in `C:\ProgramData\SRPSS\url_queue` proved the real screensaver path was writing work, but no helper artefacts appeared until the installed helper EXE was launched manually. That manual launch then opened all queued URLs, drained the queue, and created both `reddit_helper.log` and `reddit_helper_heartbeat.json`. So the helper binary itself is viable; the broken piece was automatic launch authority, not the worker's queue-processing logic.
+- **Regression learned immediately after that:** moving launch authority onto the same `scr_click` exit path was a mistake. Live breadcrumbs showed the helper watcher did start, but then logged `shell not ready` deferrals while the user was trapped on a black/dark-grey cursor-only screen. That makes click-path spawn an explicit anti-pattern for this bug family.
+- **Latest follow-up after backing that out:** a clean-exit installed SCR run still queued the `scr_click` URL but produced no helper log, no heartbeat, and no `scr_helper.log` breadcrumb even after the user waited roughly 20 real seconds before clicking. That rules out the simple "clicked too fast for preload" theory. The current theory is that the first settled-preload scheduling mechanism itself failed to fire in packaged runtime.
+- **Latest concrete finding:** a later run finally produced `scr_helper.log` and showed `settled preload scheduled delay_ms=1800` followed by `settled preload callback exception`. Deeper code inspection found a real Python scoping bug in the preload callback: the exception handler re-imported `_log_helper_event`, which made `_log_helper_event` a local variable for the whole callback and could trigger an `UnboundLocalError` before the helper launch path even began. This is now fixed.
+- **Later regression after that fix:** the helper preload did launch successfully in a real installed run, wrote heartbeat/log artefacts, and stayed alive independently. But the subsequent Reddit click still circled back to the black-screen/cursor-only failure while the helper deferred the queued URL with `shell_not_ready`. That proved the remaining problem was no longer "helper failed to launch" but "helper launch authority was still wrong because the helper was being born from the active saver desktop."
+- **Latest concrete failure before the new pivot:** fresh ProgramData evidence showed `scr_helper.log` lines for preload accepted and helper launch accepted, while `reddit_helper.log` stopped at `Launching deferred URL:` and the queue entry remained untouched. So "launch accepted" was only process-creation success, not real browser-handoff success.
+- **Why this is tricky:** secure-desktop / SYSTEM screensaver runs cannot safely rely on direct browser launch tricks, but users also do not want a 24/7 resident helper or stacked orphan processes.
+- **Current architecture target:** one session-lived helper per real screensaver run, but launched by Windows Task Scheduler into the logged-in user desktop rather than directly by the saver desktop.
+  - saver writes queue entries and refreshes a benign ProgramData session ticket while active
+  - saver exit remains unconditional and normal
+  - saver requests an on-demand interactive scheduled task, not a direct helper child process
+  - helper waits for shell readiness independently, opens the link, and exits itself
+  - helper self-expires after successful handoff or when the session ticket stops refreshing and the queue stays idle
+- **Strategy lock so we do not drift again:**
+  - the saver is allowed to request helper launch, but that does **not** make helper state part of saver shutdown logic
+  - saver exit must never wait on helper health, shell readiness, browser readiness, or payload launch outcome
+  - saver-side responsibilities stop at: refresh session ticket, queue URL, optionally copy URL to clipboard, request normal exit
+  - helper-side responsibilities start at: watch queue, wait for shell, launch payload, optionally foreground browser, self-exit
+  - helper/browser success or failure must be observable in helper logs and queue state, not by mutating saver teardown behavior
+  - click-path bootstrap is forbidden for this bug family because it directly regressed into the black-screen/cursor-only trap
+  - persistent Windows-login helper is also forbidden as the primary answer because it violates the product's session-scoped behavior and user expectations
+  - saver-desktop preload/spawn is now also retired for this bug family; even detached saver-owned preload still regressed into black-screen/dead-Winlogon behavior
+  - use a pre-registered interactive scheduled task as the user-desktop authority instead of token tricks or resident startup helpers
+  - green tests are useful only for contract coverage; they are not sufficient evidence that real SCR / Winlogon behavior is fixed
+- **Last-resort fallback now landed:** the clicked Reddit URL is also copied to the clipboard at click time as a best-effort recovery path.
+  - This is not a replacement for helper/browser handoff.
+  - It is only a benign recovery path if real browser launch still fails.
+  - Clipboard copy failure is non-fatal and must not block SCR exit or queueing.
+- **Failed / retired directions:**
+  - persistent login helper as the primary answer; user rejected this because it keeps the helper alive outside actual screensaver use
+  - click-path helper bootstrap on the same Reddit exit click; this regressed into a black/dark-grey cursor-only trap while the helper waited for shell readiness
+  - trusting "launch succeeded" logs from preview/script environments; these are not equivalent to real SCR behavior
+- **Progress landed:**
+  - MC builds skip helper bootstrap entirely and keep using direct open behavior
+  - app-driven shutdown no longer kills a session helper while queued work still exists
+  - helper logging now reports launch requests more honestly instead of overstating success
+  - the installed helper EXE was manually validated in live ProgramData state and proved able to open queued links, drain the queue, and write helper artefacts
+  - click-time helper bootstrap has now been retired as an explicit anti-pattern
+  - watcher mode already has singleton protection to avoid stacking duplicate helpers
+  - watcher exits after successful deferred handoff once the saver owner is gone and the queue is empty
+  - saver-desktop preload has now also been retired as the primary authority model after it still produced black-screen regressions in real runs
+  - runtime now pivots to an on-demand interactive scheduled task plus saver-owned session ticket
+  - secure-desktop queue delay was trimmed again from `11.0s` to `3.0s`
+  - shell-settle wait was trimmed from `1.0s` to `0.75s`
+  - installer/runtime now remove the legacy `HKCU\Run` helper startup path
+  - legacy ownerless startup watchers now self-exit once their queue is drained or empty
+  - ProgramData breadcrumb logging now records helper bootstrap attempts/skips/failures even when frozen main logs are disabled
+  - the saver now uses the project's `ThreadManager` only for session-ticket keepalive, not for helper preload/spawn
+  - helper URL launch moved back toward shell-native launch from the real user desktop (`os.startfile` first) instead of depending primarily on Qt shell helpers inside the packaged helper EXE
+  - the fallback clipboard copy now rides the saver click path as a best-effort side action only and is explicitly non-authoritative
+- **Observed working runtime log (Apr 8 2026):**
+  - helper launched deferred URL
+  - `os.startfile` accepted the launch request
+  - launch request completed in about `1535.81 ms`
+  - browser foreground succeeded
+  - watcher processed the queue entry
+- **What is still pending:** rebuilt/reinstalled packaged validation that:
+  - the installed scheduled task is created correctly for the actual user during install/reinstall
+  - saver startup can request that task without causing any black-screen/cursor-only regression
+  - the scheduled task really launches the helper into the correct logged-in user desktop/session
+  - the helper no longer starts on Windows login
+  - the helper now closes itself after successful handoff
+  - no-click sessions do not leave a lingering helper behind
+  - the reduced delay still remains reliable across repeated runs
+  - scheduled-task request breadcrumbs in `scr_helper.log` make authority failures obvious when they happen
+
+## 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)
+
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current symptom:** the task was marked landed, but user runtime/editor validation shows no visible `Vocal` lane at all in non-mirrored mode.
+- **Observed evidence:** the notch labels still appear effectively as `Bass / Low / Mid / Hi-Mid / Treble`, matching the old five-band linear presentation rather than the intended `Bass / Low-Mid / Vocal / Hi-Mid / Treble` layout.
+- **Why this matters:** it means the migration/defaulting work may exist in code but is not actually surfacing in the UI the user touches, which is a failed product outcome even if plumbing tests passed.
+- **Latest root cause:** the original migration only promoted one exact stock old linear layout. If a user's old `Bass / Low / Mid / Hi-Mid / Treble` family had been nudged even slightly, it bypassed migration and kept surfacing the stale labels. A stale runtime/widget default also still carried the old linear label family.
+- **Latest code correction:** migration now promotes legacy-shaped five-lane linear layouts lacking `Vocal` even when the user previously moved the boundaries, preserving those user positions while renaming the old `Low`/`Mid` family into `Low-Mid`/`Vocal`. Widget/model defaults were also updated so fresh/runtime paths stop reintroducing the stale labels.
+- **Validation needed:** determine whether the repaired migration now fixes the real editor UI the user sees and whether runtime behavior also follows the upgraded linear lane layout.
 - **Anti-pattern warning:** do not paper over this with fragile one-shot cleanup hooks that only work when Windows allows a graceful exit path.
 
+## 2026-04-08 — Settings Dialog Flicker / Placeholder Regression Follow-Up (Unresolved, Low Priority)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current symptom:** the main resolved entry records this as fixed, but the user later re-raised it as unresolved in some form, albeit lower priority than before.
+- **Current understanding:** the worst historical flicker regression was fixed, but this bug family is not considered permanently closed until future runtime use keeps holding.
+- **Why this lives here:** the archived resolved entry is still valuable, but the ledger also needs an unresolved marker so future recurrences are tracked without rewriting history.
+- **Validation needed:** confirm current builds no longer show the old bad placeholder/flicker behavior in the settings handoff path across the same monitor/layout combinations that previously reproduced it.
+
+## 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)
+
+- [x] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current symptom:** user note says all keys currently never work again except `S` in real screensaver Winlogon runtime, which is an important clue and makes the previously "partially resolved" archive entry unsafe to treat as the present truth.
+- **Why this is important:** it suggests the current approach is flawed at a deeper routing/focus/runtime-boundary level rather than being only a small Halo follow-up.
+- **Constraint note:** do not casually tweak this family without heavy research; keep the archived resolved sub-contracts intact unless a replacement model is clearly better.
+- **Validation needed:** isolate why Winlogon runtime still accepts `S` while the broader key family fails, and distinguish script-mode, MC, and real screensaver input behavior instead of treating them as one environment.
+
 ## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 - **User later confirmed this issue is resolved in live use (Mar 22 2026).**
 - The investigation record is retained below because several failed approaches are still useful anti-patterns. The final working state is summarized in the resolved entry dated **2026-03-22**.
@@ -67,6 +166,11 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 
 ## 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Resolved)
 
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
 **Symptoms**
 - Primary overlays could sit behind a compositor-only dead gap and then appear too abruptly instead of following a coordinated fade wave.
 - The Spotify visualizer could enter later than before but still in a bad state: jittery first frames, fallback-timer reveal, and occasional startup-side audio restart noise.
@@ -107,6 +211,11 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 
 ## 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)
 
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
 **Symptoms**
 - Starting the session in Blob mode behaved normally, but switching into Blob from any other mode (or re-applying Blob via Settings) left radius/glow muted for 5–8 s despite healthy energy readings (`stage_filtered ≈ (1.00,0.03–0.08,0.00)`, radius stuck ~0.27–0.32 while `overall` > 0.6).
 - Cold starts (Settings exit) immediately restored reactivity, confirming stale state carried across crossovers rather than shader issues.
@@ -133,6 +242,11 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 
 ## 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.
 
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
 **Symptoms**
 - Opening Settings from the screensaver/MC flow could produce a bad Windows placeholder/flicker moment while the dialog came up.
 - The regression was especially visible in mixed monitor setups and became tied to the settings invocation path rather than image rendering itself.
@@ -156,6 +270,11 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - Keep the settings launch path explicit and test-guarded: hide displays cleanly, paint Settings quickly, and avoid event-loop race hacks.
 
 ## 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch) - COMPLETELY UNRESOLVED, ALL KEYS (Except S in Screensaver build Winlogon runtime! Vital Clue!) CURRENTLY NEVER WORK, APPROACH IS FLAWED, DO NOT TOUCH WITHOUT HEAVY RESEARCH.
+
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
 
 **Symptoms**
 - MC hotkeys and media keys could stop working after interaction clicks.
@@ -190,6 +309,11 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - When a bug family only partly resolves, keep the resolved sub-contracts documented separately so later work does not accidentally unwind them while chasing the remaining visual issue.
 
 ## 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 **Symptoms**
 - Blob spent a long period oscillating between several failure classes:
@@ -232,6 +356,11 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 
 ## 2026-02-26 / 2026-03-05 — Pixel Shift Visualizer Bleed-Through (Resolved)
 
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
 **Symptoms**
 - Visualizer bar content briefly flashed inside the weather widget every pixel shift tick.
 - Earlier investigation (Feb 26) found no code delta in the pixel shift subsystem itself; the bug was architectural.
@@ -265,6 +394,11 @@ Both were registered with `PixelShiftManager` (PSM), but they are **dependent wi
 - The volume widget was already excluded from PSM for the same reason (comment in `display_setup.py`). The vis card and GL overlay should have followed the same pattern from the start.
 
 ## 2026-03-05 — Settings Spinbox/LineEdit Fill Regression (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 **Symptoms**
 - Every `QSpinBox` and `QLineEdit` inside the settings dialog rendered with the container gray instead of the intended `#282828` fill.
@@ -300,6 +434,11 @@ This descendant selector has **specificity 002** (two type selectors), which bea
 
 ## 2026-03-06 — Widget C++ Object Already Deleted on Provider Switch (Resolved)
 
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
 **Symptoms**
 - `RuntimeError: Internal C++ object (SpotifyVisualizerWidget) already deleted` when switching Spotify provider in settings GUI and returning to the application.
 - Same error for `MuteButtonWidget` and `SpotifyVolumeWidget`.
@@ -327,6 +466,11 @@ except RuntimeError:
 - This is distinct from the `Shiboken.isValid()` pattern used for background-thread callbacks — deferred main-thread timers need the same protection.
 
 ## 2026-03-14 — Visualizer Preset Tooling Regression (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 **Symptoms**
 - Running `visualizer_preset_repair.py` on new Spectrum presets (e.g., `preset_2_cake.json`) shrank the JSON but silently reset `spectrum_shape_nodes` and all shaping sliders back to defaults. The GUI then loaded "Preset 2" with the default curve, ignoring the user-authored shape entirely.

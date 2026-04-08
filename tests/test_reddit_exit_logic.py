@@ -362,7 +362,6 @@ class TestDeferredRedditFlow:
         from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
 
         bridge_calls: list[tuple[str, str]] = []
-
         class _Bridge:
             def is_bridge_available(self) -> bool:
                 return True
@@ -429,6 +428,165 @@ class TestDeferredRedditFlow:
             widget.mousePressEvent(event)
 
             assert widget._pending_reddit_url == target_url
+            assert widget._pending_reddit_url_prequeued is True
+        finally:
+            MultiMonitorCoordinator.reset()
+
+    @pytest.mark.qt
+    def test_primary_covered_click_copies_url_to_clipboard_best_effort(
+        self, qt_app, qtbot, settings_manager, monkeypatch
+    ):
+        """Primary-covered SCR clicks should copy the URL without blocking queue+exit flow."""
+        from PySide6.QtGui import QGuiApplication
+        from rendering.display_widget import DisplayWidget
+        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+
+        bridge_calls: list[tuple[str, str]] = []
+        clipboard_calls: list[str] = []
+
+        class _Bridge:
+            def is_bridge_available(self) -> bool:
+                return True
+
+            def enqueue_url(self, url: str, source: str = "") -> bool:
+                bridge_calls.append((url, source))
+                return True
+
+        class _Clipboard:
+            def setText(self, text: str) -> None:
+                clipboard_calls.append(text)
+
+        monkeypatch.setattr(
+            "core.windows.reddit_helper_bridge.is_bridge_available",
+            _Bridge().is_bridge_available,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "core.windows.reddit_helper_bridge.enqueue_url",
+            _Bridge().enqueue_url,
+            raising=False,
+        )
+        monkeypatch.setattr(QGuiApplication, "clipboard", staticmethod(lambda: _Clipboard()))
+
+        MultiMonitorCoordinator.reset()
+        try:
+            widget = DisplayWidget(screen_index=0, settings_manager=settings_manager)
+            widget.resize(400, 300)
+            widget.show()
+            qt_app.processEvents()
+
+            assert widget._screen is not None
+            handler = widget._input_handler
+            assert handler is not None
+
+            target_url = "https://example.com/copied"
+
+            def _fake_route(*_args, **_kwargs):
+                return True, True, target_url
+
+            monkeypatch.setattr(handler, "route_widget_click", _fake_route)
+            monkeypatch.setattr(
+                QGuiApplication,
+                "primaryScreen",
+                staticmethod(lambda: widget._screen),
+            )
+
+            widget._ctrl_held = True
+
+            event = QMouseEvent(
+                QEvent.Type.MouseButtonPress,
+                QPointF(5, 5),
+                QPointF(5, 5),
+                QPointF(5, 5),
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+
+            widget.mousePressEvent(event)
+
+            assert clipboard_calls == [target_url]
+            assert bridge_calls == [(target_url, "scr_click")]
+            assert widget._pending_reddit_url_prequeued is True
+        finally:
+            MultiMonitorCoordinator.reset()
+
+    @pytest.mark.qt
+    def test_primary_covered_click_still_exits_when_clipboard_copy_fails(
+        self, qt_app, qtbot, settings_manager, monkeypatch
+    ):
+        """Clipboard errors should not block SCR queueing or exit sequencing."""
+        from PySide6.QtGui import QGuiApplication
+        from rendering.display_widget import DisplayWidget
+        from rendering.multi_monitor_coordinator import MultiMonitorCoordinator
+
+        bridge_calls: list[tuple[str, str]] = []
+        exit_calls: list[str] = []
+
+        class _Bridge:
+            def is_bridge_available(self) -> bool:
+                return True
+
+            def enqueue_url(self, url: str, source: str = "") -> bool:
+                bridge_calls.append((url, source))
+                return True
+
+        class _Clipboard:
+            def setText(self, _text: str) -> None:
+                raise RuntimeError("clipboard unavailable")
+
+        monkeypatch.setattr(
+            "core.windows.reddit_helper_bridge.is_bridge_available",
+            _Bridge().is_bridge_available,
+            raising=False,
+        )
+        monkeypatch.setattr(
+            "core.windows.reddit_helper_bridge.enqueue_url",
+            _Bridge().enqueue_url,
+            raising=False,
+        )
+        monkeypatch.setattr(QGuiApplication, "clipboard", staticmethod(lambda: _Clipboard()))
+
+        MultiMonitorCoordinator.reset()
+        try:
+            widget = DisplayWidget(screen_index=0, settings_manager=settings_manager)
+            widget.resize(400, 300)
+            widget.show()
+            qt_app.processEvents()
+
+            assert widget._screen is not None
+            handler = widget._input_handler
+            assert handler is not None
+
+            target_url = "https://example.com/failure-still-exits"
+
+            def _fake_route(*_args, **_kwargs):
+                return True, True, target_url
+
+            monkeypatch.setattr(handler, "route_widget_click", _fake_route)
+            monkeypatch.setattr(
+                QGuiApplication,
+                "primaryScreen",
+                staticmethod(lambda: widget._screen),
+            )
+            widget.exit_requested.connect(lambda: exit_calls.append("exit"))
+
+            widget._ctrl_held = True
+
+            event = QMouseEvent(
+                QEvent.Type.MouseButtonPress,
+                QPointF(5, 5),
+                QPointF(5, 5),
+                QPointF(5, 5),
+                Qt.MouseButton.LeftButton,
+                Qt.MouseButton.LeftButton,
+                Qt.KeyboardModifier.NoModifier,
+            )
+
+            widget.mousePressEvent(event)
+
+            assert bridge_calls == [(target_url, "scr_click")]
+            assert exit_calls == ["exit"]
             assert widget._pending_reddit_url_prequeued is True
         finally:
             MultiMonitorCoordinator.reset()

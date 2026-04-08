@@ -186,6 +186,7 @@ class WidgetsTab(QWidget):
         self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
         self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
         self._visualizer_tech_bucket_state: Dict[str, bool] = self._load_tech_bucket_states()
+        self._visualizer_bucket_state: Dict[str, bool] = self._load_bucket_states()
         self._loading = True
         self._save_coalesce_pending = False
         _ui_start = time.perf_counter()
@@ -295,6 +296,7 @@ class WidgetsTab(QWidget):
     _ADV_STATE_KEY = "ui.visualizer_adv_states"
     _TECH_STATE_KEY = "ui.visualizer_tech_states"
     _TECH_BUCKET_STATE_KEY = "ui.visualizer_tech_bucket_states"
+    _BUCKET_STATE_KEY = "ui.visualizer_bucket_states"
     _SCROLL_POS_KEY = "ui.visualizer_scroll_positions"
 
     def _load_adv_states(self) -> Dict[str, bool]:
@@ -314,6 +316,13 @@ class WidgetsTab(QWidget):
     def _load_tech_bucket_states(self) -> Dict[str, bool]:
         """Load persisted per-mode Technical subsection visibility states."""
         raw = self._settings.get(self._TECH_BUCKET_STATE_KEY, {})
+        if isinstance(raw, dict):
+            return {str(k): bool(v) for k, v in raw.items()}
+        return {}
+
+    def _load_bucket_states(self) -> Dict[str, bool]:
+        """Load persisted per-mode visualizer bucket states."""
+        raw = self._settings.get(self._BUCKET_STATE_KEY, {})
         if isinstance(raw, dict):
             return {str(k): bool(v) for k, v in raw.items()}
         return {}
@@ -357,6 +366,24 @@ class WidgetsTab(QWidget):
         states[f"{mode}:{bucket}"] = bool(visible)
         try:
             self._settings.set(self._TECH_BUCKET_STATE_KEY, dict(states))
+        except Exception:
+            pass
+
+    def get_visualizer_bucket_state(self, mode: str, bucket: str, default: bool = False) -> bool:
+        """Return remembered expanded state for a visualizer bucket."""
+        states = getattr(self, "_visualizer_bucket_state", {})
+        key = f"{mode}:{bucket}"
+        return bool(states.get(key, default))
+
+    def set_visualizer_bucket_state(self, mode: str, bucket: str, expanded: bool) -> None:
+        """Persist expanded/collapsed state for a visualizer bucket."""
+        states = getattr(self, "_visualizer_bucket_state", None)
+        if not isinstance(states, dict):
+            states = {}
+            self._visualizer_bucket_state = states
+        states[f"{mode}:{bucket}"] = bool(expanded)
+        try:
+            self._settings.set(self._BUCKET_STATE_KEY, dict(states))
         except Exception:
             pass
 

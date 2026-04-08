@@ -37,7 +37,7 @@ _QUEUE_DIR = _BASE_DIR / "url_queue"
 _SIGNAL_DIR = _BASE_DIR / "helper_signals"
 _SPOOL_READY = False
 
-SECURE_DESKTOP_HANDOFF_DELAY_SECONDS = 12.0
+SECURE_DESKTOP_HANDOFF_DELAY_SECONDS = 3.0
 
 
 def get_queue_dir() -> Path:

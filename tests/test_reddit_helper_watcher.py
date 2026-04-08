@@ -24,6 +24,28 @@ from helpers.reddit_helper_worker import (
 class TestQueueProcessing:
     """Test one-shot queue processing logic."""
 
+    @patch("helpers.reddit_helper_worker._wait_for_user_shell_ready", return_value=True)
+    def test_open_url_prefers_os_startfile_before_qdesktopservices(self, _mock_wait, monkeypatch, qt_app):
+        import helpers.reddit_helper_worker as worker
+        from PySide6.QtGui import QDesktopServices
+
+        calls: list[str] = []
+
+        monkeypatch.setattr(
+            worker.os,
+            "startfile",
+            lambda _url: calls.append("startfile"),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            QDesktopServices,
+            "openUrl",
+            staticmethod(lambda _url: calls.append("qt") or True),
+        )
+
+        assert worker.open_url("https://example.com/test") is True
+        assert calls == ["startfile"]
+
     def test_iter_queue_files_returns_json_and_retry_sorted(self, tmp_path: Path):
         """iter_queue_files yields canonical queue files in sorted order."""
         (tmp_path / "b.json").write_text("{}", encoding="utf-8")
@@ -47,9 +69,10 @@ class TestQueueProcessing:
         with patch("helpers.reddit_helper_worker.open_url") as mock_open, \
              patch("helpers.reddit_helper_worker.bring_browser_foreground", return_value=False):
             mock_open.side_effect = lambda url: (opened.append(url) or True)
-            processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+            processed, opened_url = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
 
         assert processed == 1
+        assert opened_url is True
         assert opened == ["https://example.com/test"]
         assert not (tmp_path / "entry.json").exists()
 
@@ -60,9 +83,10 @@ class TestQueueProcessing:
         signal_dir = tmp_path / "signals"
         signal_dir.mkdir()
 
-        processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+        processed, opened_url = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
 
         assert processed == 0
+        assert opened_url is False
         assert not (tmp_path / "bad.json").exists()
         assert (tmp_path / "bad.corrupt").exists()
 
@@ -76,9 +100,10 @@ class TestQueueProcessing:
         signal_dir.mkdir()
 
         with patch("helpers.reddit_helper_worker.open_url", return_value=False):
-            processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+            processed, opened_url = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
 
         assert processed == 1
+        assert opened_url is False
         retried_path = tmp_path / "entry.json"
         assert retried_path.exists()
         payload = json.loads(retried_path.read_text(encoding="utf-8"))
@@ -100,9 +125,10 @@ class TestQueueProcessing:
         signal_dir.mkdir()
 
         with patch("helpers.reddit_helper_worker.open_url") as mock_open:
-            processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+            processed, opened_url = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
 
         assert processed == 0
+        assert opened_url is False
         assert entry_path.exists()
         mock_open.assert_not_called()
 
@@ -120,13 +146,44 @@ class TestQueueProcessing:
         signal_dir.mkdir()
 
         with patch("helpers.reddit_helper_worker._wait_for_user_shell_ready", return_value=False):
-            processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+            processed, opened_url = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
 
         assert processed == 1
+        assert opened_url is False
         payload = json.loads(entry_path.read_text(encoding="utf-8"))
         assert payload["defer_reason"] == "shell_not_ready"
         assert payload["not_before_ts"] > time.time()
         assert "retry_count" not in payload
+
+    def test_process_queue_defers_while_session_ticket_is_active_without_spending_retry_budget(self, tmp_path: Path):
+        entry = {
+            "action": "open_url",
+            "url": "https://example.com/ticket-wait",
+            "timestamp": time.time(),
+        }
+        entry_path = tmp_path / "ticket_wait.json"
+        entry_path.write_text(json.dumps(entry), encoding="utf-8")
+
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+        session_ticket = signal_dir / "reddit_helper_session.json"
+        session_ticket.write_text(json.dumps({"expires_at": time.time() + 60.0}), encoding="utf-8")
+
+        with patch("helpers.reddit_helper_worker.open_url") as mock_open:
+            processed, opened_url = process_queue(
+                tmp_path,
+                max_batch=10,
+                signal_dir=signal_dir,
+                session_ticket_path=session_ticket,
+            )
+
+        assert processed == 1
+        assert opened_url is False
+        payload = json.loads(entry_path.read_text(encoding="utf-8"))
+        assert payload["defer_reason"] == "session_active"
+        assert payload["not_before_ts"] > time.time()
+        assert "retry_count" not in payload
+        mock_open.assert_not_called()
 
     def test_process_queue_expires_old_open_url_entries(self, tmp_path: Path):
         """Very old queued URLs should be quarantined instead of opening later."""
@@ -142,9 +199,10 @@ class TestQueueProcessing:
         signal_dir.mkdir()
 
         with patch("helpers.reddit_helper_worker.open_url") as mock_open:
-            processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+            processed, opened_url = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
 
         assert processed == 1
+        assert opened_url is False
         assert not entry_path.exists()
         assert (tmp_path / "old.expired").exists()
         mock_open.assert_not_called()
@@ -160,9 +218,10 @@ class TestQueueProcessing:
 
         with patch("helpers.reddit_helper_worker.open_url", return_value=True), \
              patch("helpers.reddit_helper_worker.bring_browser_foreground", return_value=False):
-            processed = process_queue(tmp_path, max_batch=3, signal_dir=signal_dir)
+            processed, opened_url = process_queue(tmp_path, max_batch=3, signal_dir=signal_dir)
 
         assert processed == 3
+        assert opened_url is True
         remaining = list(tmp_path.glob("*.json"))
         assert len(remaining) == 2
 
@@ -171,8 +230,9 @@ class TestQueueProcessing:
         signal_dir = tmp_path / "signals"
         signal_dir.mkdir()
 
-        processed = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
+        processed, opened_url = process_queue(tmp_path, max_batch=10, signal_dir=signal_dir)
         assert processed == 0
+        assert opened_url is False
 
 
 class TestWatcherMode:
@@ -260,6 +320,23 @@ class TestWatcherMode:
             persistent=False,
             now=9999.0,
         )
+        assert should_exit is False
+        assert idle_since is None
+
+    def test_owner_idle_exit_keeps_helper_alive_while_session_ticket_is_active(self, tmp_path: Path):
+        ticket = tmp_path / "session.json"
+        ticket.write_text(json.dumps({"expires_at": 500.0}), encoding="utf-8")
+
+        should_exit, idle_since = _evaluate_owner_idle_exit(
+            tmp_path,
+            owner_pid=0,
+            idle_exit_seconds=10.0,
+            idle_since=None,
+            persistent=False,
+            session_ticket_path=ticket,
+            now=100.0,
+        )
+
         assert should_exit is False
         assert idle_since is None
 
@@ -418,3 +495,38 @@ class TestWatcherMode:
 
         assert rc == 0
         assert not (signal_dir / f"{SESSION_HELPER_SHUTDOWN_PREFIX}777.json").exists()
+
+    def test_legacy_ownerless_watcher_exits_immediately_when_queue_is_empty(self, tmp_path: Path):
+        import helpers.reddit_helper_worker as worker
+
+        signal_dir = tmp_path / "signals"
+        signal_dir.mkdir()
+
+        original_running = worker._watcher_running
+        try:
+            worker._watcher_running = True
+            with patch(
+                "helpers.reddit_helper_worker._acquire_watcher_singleton",
+                return_value=("watch-handle", True),
+            ), patch(
+                "helpers.reddit_helper_worker._release_watcher_singleton",
+                return_value=None,
+            ), patch(
+                "helpers.reddit_helper_worker._queue_has_pending_entries",
+                return_value=False,
+            ), patch(
+                "helpers.reddit_helper_worker.process_queue",
+                return_value=(0, False),
+            ):
+                rc = _run_watcher(
+                    tmp_path,
+                    max_batch=10,
+                    signal_dir=signal_dir,
+                    poll_interval=0.5,
+                    owner_pid=0,
+                    idle_exit_seconds=300.0,
+                )
+        finally:
+            worker._watcher_running = original_running
+
+        assert rc == 0

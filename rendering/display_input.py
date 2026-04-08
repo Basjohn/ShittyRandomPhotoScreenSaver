@@ -11,7 +11,7 @@ import time
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QTimer, Qt, QPoint
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QGuiApplication, QMouseEvent
 
 from core.logging.logger import get_logger
 from widgets.cursor_halo import CursorHaloWidget
@@ -23,6 +23,24 @@ logger = get_logger(__name__)
 
 
 HALO_MOVE_THRESHOLD_DEFAULT = 1.25  # px, prevent redundant window moves
+
+
+def _copy_reddit_url_to_clipboard(url: str) -> bool:
+    """Best-effort clipboard fallback for Reddit clicks without affecting exit flow."""
+    if not url:
+        return False
+    try:
+        app = QGuiApplication.instance()
+        clipboard = app.clipboard() if app is not None else None
+        if clipboard is None:
+            logger.warning("[REDDIT] Clipboard unavailable; URL not copied: %s", url)
+            return False
+        clipboard.setText(url)
+        logger.info("[REDDIT] URL copied to clipboard: %s", url)
+        return True
+    except Exception:
+        logger.warning("[REDDIT] Failed to copy URL to clipboard", exc_info=True)
+        return False
 
 
 def _ctrl_interaction_active(widget) -> bool:
@@ -375,6 +393,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                         if reddit_url:
                             widget._pending_reddit_url = reddit_url
                             widget._pending_reddit_url_prequeued = False
+                            _copy_reddit_url_to_clipboard(reddit_url)
                             try:
                                 from core.windows import reddit_helper_bridge
                                 if reddit_helper_bridge is not None and reddit_helper_bridge.is_bridge_available():

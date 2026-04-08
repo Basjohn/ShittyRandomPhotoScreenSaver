@@ -76,9 +76,9 @@ _NOTCHES_MIRRORED = [
 ]
 _NOTCHES_LINEAR = [
     (0.0, "Bass"),
-    (0.25, "Low"),
-    (0.50, "Mid"),
-    (0.75, "Hi-Mid"),
+    (0.24, "Low-Mid"),
+    (0.46, "Vocal"),
+    (0.72, "Hi-Mid"),
     (1.0, "Treble"),
 ]
 

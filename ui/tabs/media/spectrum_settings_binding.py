@@ -16,7 +16,55 @@ _SPECTRUM_GLOW_DEFAULT = [110, 220, 255, 235]
 _SPECTRUM_LOAD_DEFAULT_NODES = [[0.0, 0.45], [0.4, 0.62], [1.0, 0.70]]
 _SPECTRUM_SAVE_DEFAULT_NODES = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
 _SPECTRUM_DEFAULT_NOTCHES_MIRRORED = [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
-_SPECTRUM_DEFAULT_NOTCHES_LINEAR = [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]]
+_SPECTRUM_LEGACY_NOTCHES_LINEAR = [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]]
+_SPECTRUM_DEFAULT_NOTCHES_LINEAR = [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]
+
+
+def _promote_legacy_linear_notch_family(normalized: list[list]) -> list[list]:
+    """Promote old non-mirrored notch families into an explicit vocal lane.
+
+    The original linear layout used `Bass / Low / Mid / Hi-Mid / Treble`.
+    Users may have slightly moved those boundaries over time, so we should
+    not require an exact positional match before upgrading the labels.
+    """
+    if len(normalized) != 5:
+        return normalized
+
+    labels = [str(label).strip().lower() for _, label in normalized]
+    if labels == ["bass", "low", "mid", "hi-mid", "treble"]:
+        if normalized == _SPECTRUM_LEGACY_NOTCHES_LINEAR:
+            return [list(n) for n in _SPECTRUM_DEFAULT_NOTCHES_LINEAR]
+        return [
+            [float(normalized[0][0]), "Bass"],
+            [float(normalized[1][0]), "Low-Mid"],
+            [float(normalized[2][0]), "Vocal"],
+            [float(normalized[3][0]), "Hi-Mid"],
+            [float(normalized[4][0]), "Treble"],
+        ]
+
+    if labels == ["bass", "low-mid", "mid", "hi-mid", "treble"]:
+        return [
+            [float(normalized[0][0]), "Bass"],
+            [float(normalized[1][0]), "Low-Mid"],
+            [float(normalized[2][0]), "Vocal"],
+            [float(normalized[3][0]), "Hi-Mid"],
+            [float(normalized[4][0]), "Treble"],
+        ]
+
+    return normalized
+
+
+def _normalize_linear_notches(positions: Any) -> list[list]:
+    """Promote untouched legacy linear defaults into the vocal-lane layout."""
+    if not isinstance(positions, list) or len(positions) < 2:
+        return [list(n) for n in _SPECTRUM_DEFAULT_NOTCHES_LINEAR]
+
+    try:
+        normalized = [[float(x), str(label)] for x, label in positions]
+    except Exception:
+        return [list(n) for n in _SPECTRUM_DEFAULT_NOTCHES_LINEAR]
+
+    return _promote_legacy_linear_notch_family(normalized)
 
 
 def load_spectrum_mode_settings(
@@ -107,8 +155,10 @@ def load_spectrum_mode_settings(
         notch_positions_mirrored = config.get("spectrum_notch_positions_mirrored", None)
         if isinstance(notch_positions_mirrored, list) and len(notch_positions_mirrored) >= 2:
             tab.spectrum_shape_editor.set_notch_positions(notch_positions_mirrored, mirrored=True)
-        notch_positions_linear = config.get("spectrum_notch_positions_linear", None)
-        if isinstance(notch_positions_linear, list) and len(notch_positions_linear) >= 2:
+        notch_positions_linear = _normalize_linear_notches(
+            config.get("spectrum_notch_positions_linear", _SPECTRUM_DEFAULT_NOTCHES_LINEAR)
+        )
+        if len(notch_positions_linear) >= 2:
             tab.spectrum_shape_editor.set_notch_positions(notch_positions_linear, mirrored=False)
 
     ghost_enabled = config.get(

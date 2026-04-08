@@ -34,7 +34,7 @@
         "osc_glow_enabled": true,
         "osc_glow_intensity": 0.35,
         "osc_glow_reactivity": 0.95,
-        "osc_growth": 3.0,
+        "osc_growth": 2.5,
         "osc_line2_color": [
           246,
           240,
@@ -75,7 +75,7 @@
         "osc_vertical_shift": 22,
         "oscilloscope_adaptive_sensitivity": true,
         "oscilloscope_agc_strength": 0.58,
-        "oscilloscope_audio_block_size": 0,
+        "oscilloscope_audio_block_size": 256,
         "oscilloscope_bar_count": 32,
         "oscilloscope_dynamic_floor": true,
         "oscilloscope_dynamic_range_enabled": false,

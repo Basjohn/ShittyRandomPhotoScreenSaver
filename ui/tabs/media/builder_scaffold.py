@@ -82,6 +82,78 @@ def add_builder_swatch_row(
     return row_widget, content, label
 
 
+def build_collapsible_bucket(
+    tab: "WidgetsTab",
+    target_layout: QVBoxLayout,
+    *,
+    mode_key: str,
+    bucket_key: str,
+    title: str,
+    helper_text: str,
+    default_expanded: bool = False,
+) -> tuple[QWidget, QVBoxLayout]:
+    """Create a persisted collapsible bucket for a visualizer mode."""
+    host = QWidget()
+    host.setObjectName(f"{mode_key}_bucket_{bucket_key}")
+    host.setProperty("bucketTitle", title)
+
+    host_layout = QVBoxLayout(host)
+    host_layout.setContentsMargins(0, 0, 0, 0)
+    host_layout.setSpacing(8)
+
+    toggle_row = QHBoxLayout()
+    toggle_row.setContentsMargins(0, 0, 0, 0)
+    toggle_row.setSpacing(8)
+
+    getter = getattr(tab, "get_visualizer_bucket_state", None)
+    expanded = default_expanded
+    if callable(getter):
+        try:
+            expanded = bool(getter(mode_key, bucket_key, default_expanded))
+        except Exception:
+            expanded = default_expanded
+
+    toggle = QToolButton()
+    toggle.setText(title)
+    toggle.setCheckable(True)
+    toggle.setChecked(expanded)
+    toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+    toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    toggle.setAutoRaise(True)
+    toggle_row.addWidget(toggle)
+    toggle_row.addStretch()
+    host_layout.addLayout(toggle_row)
+
+    helper = QLabel(helper_text)
+    helper.setProperty("class", "adv-helper")
+    helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    helper.setWordWrap(True)
+    host_layout.addWidget(helper)
+
+    body = QWidget()
+    body_layout = QVBoxLayout(body)
+    body_layout.setContentsMargins(0, 0, 0, 0)
+    body_layout.setSpacing(12)
+    host_layout.addWidget(body)
+
+    def _apply_state(checked: bool) -> None:
+        toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        body.setVisible(checked)
+        helper.setVisible(not checked)
+        setter = getattr(tab, "set_visualizer_bucket_state", None)
+        if callable(setter):
+            try:
+                setter(mode_key, bucket_key, checked)
+            except Exception:
+                pass
+
+    toggle.toggled.connect(_apply_state)
+    _apply_state(expanded)
+
+    target_layout.addWidget(host)
+    return host, body_layout
+
+
 def build_mode_scaffold(
     tab: "WidgetsTab",
     parent_layout: QVBoxLayout,

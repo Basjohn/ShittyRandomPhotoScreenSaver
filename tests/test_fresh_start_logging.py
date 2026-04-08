@@ -39,3 +39,14 @@ def test_parse_screensaver_args_ignores_fresh_flag(monkeypatch) -> None:
 
     assert mode is main.ScreensaverMode.CONFIG
     assert preview_hwnd is None
+
+
+def test_is_frozen_build_detects_srpss_executable_without_sys_frozen(monkeypatch) -> None:
+    monkeypatch.setattr(main.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(main.sys, "executable", r"C:\Windows\System32\SRPSS.scr")
+    monkeypatch.setattr(main.sys, "argv", [r"C:\Windows\System32\SRPSS.scr", "/s"])
+    if main._builtins is not None:
+        monkeypatch.setattr(main._builtins, "__compiled__", False, raising=False)
+
+    assert main._is_frozen_build() is True
+    assert main.is_script_mode() is False

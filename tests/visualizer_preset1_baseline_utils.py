@@ -448,7 +448,7 @@ def _make_spectrum_worker(settings: dict[str, Any], *, bar_count: int) -> Spotif
     )
     worker._spectrum_notch_positions_linear = settings.get(
         "spectrum_notch_positions_linear",
-        [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]],
+        [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]],
     )
     worker._spectrum_notch_positions = (
         worker._spectrum_notch_positions_mirrored

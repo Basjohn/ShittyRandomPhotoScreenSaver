@@ -1,10 +1,10 @@
 r"""
 User-session Reddit helper worker.
 
-This script runs inside the interactive user session (started via HKCU\Run
-registry entry placed by the Inno Setup installer). It watches the
-ProgramData queue populated by the Winlogon screensaver build and opens
-each deferred Reddit URL using the user's default browser.
+This script runs inside the interactive user session (started on demand via a
+registered Windows scheduled task). It watches the ProgramData queue populated
+by the Winlogon screensaver build and opens each deferred Reddit URL using the
+user's default browser.
 
 Modes:
 - Default       : Continuous polling loop (watcher mode).
@@ -38,6 +38,7 @@ from core.constants.timing import (
 from core.windows.reddit_helper_runtime import (
     HEARTBEAT_FILE_NAME,
     SESSION_HELPER_SHUTDOWN_PREFIX,
+    remove_helper_run_entry,
 )
 
 logger = get_logger(__name__)
@@ -54,9 +55,11 @@ DEFAULT_IDLE_EXIT_SECONDS = 45.0
 
 WINDOW_POLL_INTERVAL = 0.25
 BROWSER_FOREGROUND_TIMEOUT = 5.0
-SHELL_READY_TIMEOUT = 20.0
-SHELL_READY_SETTLE_SECONDS = 1.5
-SHELL_NOT_READY_DEFER_SECONDS = 5.0
+SHELL_READY_TIMEOUT = 12.0
+SHELL_READY_SETTLE_SECONDS = 0.75
+SHELL_NOT_READY_DEFER_SECONDS = 2.0
+SESSION_ACTIVE_DEFER_SECONDS = 1.0
+DEFAULT_SESSION_TICKET = DEFAULT_SIGNAL_DIR / "reddit_helper_session.json"
 
 _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -132,6 +135,12 @@ def parse_args() -> argparse.Namespace:
         help="Directory for helper logs",
     )
     parser.add_argument(
+        "--signal-dir",
+        type=Path,
+        default=DEFAULT_SIGNAL_DIR,
+        help="Directory for helper heartbeat/session signal files",
+    )
+    parser.add_argument(
         "--max-batch",
         type=int,
         default=DEFAULT_MAX_BATCH,
@@ -177,6 +186,12 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=DEFAULT_IDLE_EXIT_SECONDS,
         help="Seconds to stay alive after owner exit once the queue is idle",
+    )
+    parser.add_argument(
+        "--session-ticket",
+        type=Path,
+        default=DEFAULT_SESSION_TICKET,
+        help="ProgramData session ticket file refreshed by the saver while active",
     )
 
     args = parser.parse_args()
@@ -252,6 +267,28 @@ def _write_heartbeat_with_lifecycle(
                 tmp_path.unlink()
         except Exception:
             pass
+
+
+def _read_session_ticket(path: Path) -> Dict[str, Any] | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _session_ticket_active(path: Path | None, *, now: float | None = None) -> bool:
+    if path is None or not path.exists():
+        return False
+    payload = _read_session_ticket(path)
+    if not isinstance(payload, dict):
+        return False
+    try:
+        expires_at = float(payload.get("expires_at") or 0.0)
+    except Exception:
+        return False
+    if expires_at <= 0.0:
+        return False
+    return expires_at > (time.time() if now is None else float(now))
 
 
 def _write_entry_payload(target_path: Path, payload: Dict[str, Any]) -> None:
@@ -433,12 +470,16 @@ def _evaluate_owner_idle_exit(
     idle_exit_seconds: float,
     idle_since: float | None,
     persistent: bool,
+    session_ticket_path: Path | None = None,
     now: float | None = None,
 ) -> tuple[bool, float | None]:
     if persistent or idle_exit_seconds <= 0.0:
         return False, None
 
     now = time.time() if now is None else now
+
+    if _session_ticket_active(session_ticket_path, now=now):
+        return False, None
 
     owner_alive = False
     try:
@@ -497,15 +538,16 @@ def open_url(url: str) -> bool:
     if not _wait_for_user_shell_ready():
         raise ShellNotReadyError("user shell not ready")
 
-    # Prefer the normal Windows shell path. This is the least surprising route.
+    # Prefer the native Windows shell association path in the helper.
+    # The packaged helper intentionally avoids Qt runtime baggage, while MC
+    # already has its own direct QDesktopServices path inside the main app.
     try:
         os.startfile(url)  # type: ignore[attr-defined]
+        logging.info("Shell launch request accepted via os.startfile: %s", url)
         return True
     except Exception as exc:
-        logging.debug("os.startfile failed (%s), trying webbrowser fallback: %s", exc, url)
+        logging.debug("os.startfile failed (%s), trying QDesktopServices fallback: %s", exc, url)
 
-    # Qt DesktopServices is the same family of OS-shell launch path we already
-    # trust in the MC build, so keep it as the next fallback before webbrowser.
     try:
         from PySide6.QtCore import QUrl
         from PySide6.QtGui import QDesktopServices, QGuiApplication
@@ -517,6 +559,7 @@ def open_url(url: str) -> bool:
             created_app = True
         opened = bool(QDesktopServices.openUrl(QUrl(url)))
         if opened:
+            logging.info("Shell launch request accepted via QDesktopServices: %s", url)
             return True
         logging.debug("QDesktopServices.openUrl returned False for URL: %s", url)
     except Exception as exc:
@@ -528,10 +571,11 @@ def open_url(url: str) -> bool:
         except Exception:
             pass
 
-    # Keep fallback, but do not rely on it as the primary route.
+    # Keep webbrowser as the last-resort fallback only.
     try:
         result = webbrowser.open(url)
         if result:
+            logging.info("Shell launch request accepted via webbrowser.open: %s", url)
             return True
         logging.warning("webbrowser.open returned False for URL: %s", url)
         return False
@@ -590,8 +634,14 @@ def _hide_own_window() -> None:
         logger.debug("[REDDIT] Exception suppressed while hiding helper window: %s", exc)
 
 
-def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
+def process_queue(
+    queue_dir: Path,
+    max_batch: int,
+    signal_dir: Path,
+    session_ticket_path: Path | None = None,
+) -> tuple[int, bool]:
     processed = 0
+    opened_url = False
     seen_tokens: set[str] = set()
     seen_urls: set[str] = set()
 
@@ -639,6 +689,20 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
 
         action = str(data.get("action") or "open_url").strip().lower()
 
+        if action == "open_url" and _session_ticket_active(session_ticket_path):
+            _defer_entry(
+                entry_path,
+                data,
+                delay_seconds=SESSION_ACTIVE_DEFER_SECONDS,
+                reason="session_active",
+            )
+            logging.info(
+                "Deferring URL launch while saver session ticket is still active: %s",
+                data.get("url") or "",
+            )
+            processed += 1
+            continue
+
         if _entry_is_expired(data, action=action):
             expired_path = entry_path.with_suffix(".expired")
             _write_entry_payload(expired_path, data)
@@ -654,6 +718,8 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
 
         if action == "open_url":
             success, error, defer_seconds = _handle_open_url(data)
+            if success:
+                opened_url = True
         elif action == "open_settings":
             success = _handle_open_settings(data, signal_dir)
         else:
@@ -669,7 +735,7 @@ def process_queue(queue_dir: Path, max_batch: int, signal_dir: Path) -> int:
 
         processed += 1
 
-    return processed
+    return processed, opened_url
 
 
 def main() -> int:
@@ -681,7 +747,14 @@ def main() -> int:
     args.queue.mkdir(parents=True, exist_ok=True)
     configure_logging(args.log_dir, args.verbose)
 
-    signal_dir = DEFAULT_SIGNAL_DIR
+    if args.watch and not args.persistent and args.owner_pid <= 0:
+        try:
+            if remove_helper_run_entry(source="legacy_startup_watcher"):
+                logging.info("Removed legacy login-start helper registration")
+        except Exception:
+            logging.debug("Legacy HKCU Run cleanup failed inside helper", exc_info=True)
+
+    signal_dir = args.signal_dir
     try:
         signal_dir.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
@@ -706,10 +779,11 @@ def main() -> int:
             persistent=args.persistent,
             owner_pid=args.owner_pid,
             idle_exit_seconds=args.idle_exit_seconds,
+            session_ticket_path=args.session_ticket,
         )
 
     logging.info("Helper started one-shot (queue=%s)", args.queue)
-    processed = process_queue(args.queue, args.max_batch, signal_dir)
+    processed, _opened_url = process_queue(args.queue, args.max_batch, signal_dir)
     logging.info("Helper finished (processed=%d)", processed)
     return 0
 
@@ -723,6 +797,7 @@ def _run_watcher(
     persistent: bool = False,
     owner_pid: int = 0,
     idle_exit_seconds: float = 0.0,
+    session_ticket_path: Path | None = None,
 ) -> int:
     """Continuous watcher loop — polls queue, opens URLs, sleeps."""
     global _watcher_running
@@ -736,12 +811,13 @@ def _run_watcher(
         return 0
 
     logging.info(
-        "Watcher started (queue=%s, poll=%.1fs, persistent=%s, owner_pid=%s, idle_exit=%.1fs)",
+        "Watcher started (queue=%s, poll=%.1fs, persistent=%s, owner_pid=%s, idle_exit=%.1fs, session_ticket=%s)",
         queue_dir,
         poll_interval,
         persistent,
         owner_pid or 0,
         idle_exit_seconds,
+        session_ticket_path,
     )
 
     owner_idle_since: float | None = None
@@ -757,9 +833,43 @@ def _run_watcher(
                     owner_pid=owner_pid,
                 )
 
-                processed = process_queue(queue_dir, max_batch, signal_dir)
+                processed, opened_url = process_queue(
+                    queue_dir,
+                    max_batch,
+                    signal_dir,
+                    session_ticket_path=session_ticket_path,
+                )
                 if processed > 0:
                     logging.info("Watcher cycle: processed %d entries", processed)
+
+                if (
+                    not persistent
+                    and owner_pid <= 0
+                    and session_ticket_path is None
+                    and not _queue_has_pending_entries(queue_dir)
+                ):
+                    if processed > 0:
+                        logging.info("Legacy ownerless watcher exiting after queue drained")
+                    else:
+                        logging.info("Legacy ownerless watcher exiting because queue is empty")
+                    break
+
+                if (
+                    opened_url
+                    and not persistent
+                    and not _queue_has_pending_entries(queue_dir)
+                ):
+                    if owner_pid > 0:
+                        if not _is_process_alive(owner_pid):
+                            logging.info(
+                                "Watcher exiting immediately after successful deferred URL handoff "
+                                "(owner_pid=%s)",
+                                owner_pid,
+                            )
+                            break
+                    else:
+                        logging.info("Watcher exiting immediately after successful deferred URL handoff")
+                        break
 
                 if _consume_shutdown_request(signal_dir, owner_pid=owner_pid, persistent=persistent):
                     break
@@ -770,6 +880,7 @@ def _run_watcher(
                     idle_exit_seconds=idle_exit_seconds,
                     idle_since=owner_idle_since,
                     persistent=persistent,
+                    session_ticket_path=session_ticket_path,
                 )
                 if should_exit:
                     logging.info(
@@ -811,7 +922,7 @@ def _handle_open_url(data: Dict[str, Any]) -> tuple[bool, str, float | None]:
     duration = time.perf_counter() - start
 
     if launched:
-        logging.info("Launch succeeded (%.2f ms): %s", duration * 1000.0, url)
+        logging.info("Launch request completed (%.2f ms): %s", duration * 1000.0, url)
 
         # Best-effort only. A foreground failure must not turn a successful
         # browser launch into a helper failure.
@@ -819,7 +930,7 @@ def _handle_open_url(data: Dict[str, Any]) -> tuple[bool, str, float | None]:
             if bring_browser_foreground(url):
                 logging.info("Browser foregrounded after helper launch: %s", url)
             else:
-                logging.debug("Browser foreground attempt skipped/failed: %s", url)
+                logging.warning("Browser foreground not confirmed after launch request: %s", url)
         except Exception as exc:
             logger.debug("[REDDIT] Exception suppressed during foreground attempt: %s", exc)
             logging.debug("Browser foreground attempt errored: %s", url, exc_info=True)

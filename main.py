@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import Qt, QCoreApplication
+from PySide6.QtCore import Qt, QCoreApplication, QTimer
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
 from core.logging.logger import (
     clear_logs_for_fresh_start,
@@ -88,8 +88,18 @@ def _is_frozen_build() -> bool:
     """Return True when running from a compiled/frozen executable."""
     if bool(getattr(sys, "frozen", False)):
         return True
+    if globals().get("__compiled__", False):
+        return True
     if _builtins is not None and bool(getattr(_builtins, "__compiled__", False)):
         return True
+    main_mod = sys.modules.get("__main__")
+    if main_mod is not None and bool(getattr(main_mod, "__compiled__", False)):
+        return True
+    exe_path = Path(getattr(sys, "executable", "") or "")
+    exe_name = exe_path.name.lower()
+    if exe_name and exe_name not in ("python.exe", "pythonw.exe"):
+        if exe_name.startswith("srpss") or exe_name.endswith(".scr"):
+            return True
     return False
 
 
@@ -221,6 +231,103 @@ def cleanup_pycache(root_path: Path) -> int:
     return removed_count
 
 
+def _schedule_runtime_reddit_helper_session(engine) -> bool:
+    """Keep a saver-session ticket fresh and request task-owned helper launch.
+
+    The saver does not spawn the helper directly anymore. It only refreshes a
+    benign ProgramData ticket and asks Windows Task Scheduler to start the
+    already-registered interactive helper task when needed.
+    """
+    try:
+        from core.mc import is_mc_build
+        from core.windows.reddit_helper_installer import _log_helper_event
+        from core.windows import reddit_helper_runtime
+
+        script_mode = bool(is_script_mode())
+        mc_mode = bool(is_mc_build())
+        if script_mode or mc_mode:
+            _log_helper_event(
+                "session helper skipped "
+                f"script={int(script_mode)} mc={int(mc_mode)} "
+                f"argv0={Path(str(getattr(sys, 'argv', [''])[0] or '')).name} "
+                f"exe={Path(str(getattr(sys, 'executable', '') or '')).name}"
+            )
+            return False
+    except Exception:
+        logger.debug("[REDDIT-HELPER] Failed to resolve session-helper environment", exc_info=True)
+        return False
+
+    timer = getattr(engine, "_reddit_helper_session_timer", None)
+    if timer is not None:
+        try:
+            timer.stop()
+            timer.deleteLater()
+        except Exception:
+            logger.debug("[REDDIT-HELPER] Failed to reset previous session timer", exc_info=True)
+
+    thread_manager = getattr(engine, "thread_manager", None)
+    if thread_manager is None:
+        _log_helper_event("session helper skipped no-thread-manager")
+        logger.info("[REDDIT-HELPER] Session helper skipped because ThreadManager is unavailable")
+        return False
+
+    if not reddit_helper_runtime.refresh_session_ticket(source="run_session_start"):
+        _log_helper_event("session helper ticket-refresh-failed source=run_session_start")
+
+    launched = reddit_helper_runtime.ensure_helper_runtime(
+        source="run_session_start",
+        persistent=False,
+        allow_system=True,
+    )
+    _log_helper_event(
+        "session helper start "
+        f"launched={int(bool(launched))}"
+    )
+
+    interval_ms = int(max(1000, reddit_helper_runtime.SESSION_TICKET_REFRESH_SECONDS * 1000.0))
+
+    def _session_tick() -> None:
+        try:
+            if not bool(getattr(engine, "_running", False)):
+                reddit_helper_runtime.clear_session_ticket(source="run_session_stop")
+                timer_ref = getattr(engine, "_reddit_helper_session_timer", None)
+                if timer_ref is not None:
+                    try:
+                        timer_ref.stop()
+                        timer_ref.deleteLater()
+                    except Exception:
+                        logger.debug("[REDDIT-HELPER] Failed to stop session timer", exc_info=True)
+                    finally:
+                        engine._reddit_helper_session_timer = None
+                _log_helper_event("session helper stopped engine-not-running")
+                return
+
+            reddit_helper_runtime.refresh_session_ticket(source="run_session_keepalive")
+            if not reddit_helper_runtime.is_helper_healthy():
+                relaunched = reddit_helper_runtime.ensure_helper_runtime(
+                    source="run_session_keepalive",
+                    persistent=False,
+                    allow_system=True,
+                )
+                _log_helper_event(f"session helper keepalive launch={int(bool(relaunched))}")
+        except Exception as exc:
+            try:
+                from core.windows.reddit_helper_installer import _log_helper_event as _fallback_log_helper_event
+                _fallback_log_helper_event(f"session helper callback exception: {exc!r}")
+            except Exception:
+                pass
+            logger.debug("[REDDIT-HELPER] Session helper keepalive failed", exc_info=True)
+
+    timer = thread_manager.schedule_recurring(
+        interval_ms,
+        _session_tick,
+        description="Reddit helper session keepalive",
+    )
+    engine._reddit_helper_session_timer = timer
+    logger.info("[REDDIT-HELPER] Scheduled session ticket keepalive every %sms", interval_ms)
+    return True
+
+
 def run_screensaver(app: QApplication) -> int:
     """
     Run the screensaver.
@@ -340,6 +447,7 @@ def run_screensaver(app: QApplication) -> int:
                 tray_icon.exit_requested.connect(_on_tray_exit)
 
         logger.info("Screensaver engine started - entering event loop")
+        _schedule_runtime_reddit_helper_session(engine)
         return app.exec()
         
     except Exception as e:
@@ -480,21 +588,6 @@ def main():
             app.setWindowIcon(QIcon(str(icon_path)))
         except Exception:
             logger.debug("Failed to set application icon from SRPSS.ico", exc_info=True)
-
-    # Keep the Reddit queue watcher alive from normal user-session entrypoints
-    # (config / script / preview / standard desktop runs). Secure-desktop
-    # SYSTEM runs intentionally no-op inside the helper runtime module.
-    try:
-        from core.mc import is_mc_build
-        from core.windows import reddit_helper_runtime
-
-        if mode == ScreensaverMode.RUN and not is_mc_build():
-            reddit_helper_runtime.ensure_helper_runtime(
-                source=f"main:{mode.value}",
-                persistent=not is_script_mode(),
-            )
-    except Exception:
-        logger.debug("[REDDIT-HELPER] Best-effort runtime bootstrap failed", exc_info=True)
 
     # Increase Qt image allocation limit from 256MB to 1GB for high-res images
     # This is per-image when loaded, not total memory for all images

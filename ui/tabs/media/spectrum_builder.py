@@ -18,6 +18,7 @@ from ui.tabs.media.builder_scaffold import (
     add_builder_swatch_row,
     bind_color_button,
     bind_setting_signal,
+    build_collapsible_bucket,
     build_mode_scaffold,
 )
 from ui.tabs.shared_styles import (
@@ -59,82 +60,50 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     LABEL_WIDTH = 150
 
-    def _make_bucket(
-        target_layout: QVBoxLayout,
-        title: str,
-        *,
-        helper_text: str,
-        expanded: bool = True,
-    ) -> tuple[QWidget, QVBoxLayout]:
-        host = QWidget()
-        host.setObjectName(f"spectrum_bucket_{title.lower().replace(' ', '_')}")
-        host.setProperty("bucketTitle", title)
-        host_layout = QVBoxLayout(host)
-        host_layout.setContentsMargins(0, 0, 0, 0)
-        host_layout.setSpacing(8)
-
-        toggle_row = QHBoxLayout()
-        toggle_row.setContentsMargins(0, 0, 0, 0)
-        toggle_row.setSpacing(8)
-
-        toggle = QToolButton()
-        toggle.setText(title)
-        toggle.setCheckable(True)
-        toggle.setChecked(expanded)
-        toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
-        toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        toggle.setAutoRaise(True)
-        toggle_row.addWidget(toggle)
-        toggle_row.addStretch()
-        host_layout.addLayout(toggle_row)
-
-        helper = QLabel(helper_text)
-        helper.setProperty("class", "adv-helper")
-        helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
-        helper.setWordWrap(True)
-        host_layout.addWidget(helper)
-
-        body = QWidget()
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 0, 0)
-        body_layout.setSpacing(12)
-        host_layout.addWidget(body)
-
-        def _apply_state(checked: bool) -> None:
-            toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-            body.setVisible(checked)
-            helper.setVisible(not checked)
-
-        toggle.toggled.connect(_apply_state)
-        _apply_state(expanded)
-
-        target_layout.addWidget(host)
-        return host, body_layout
-
-    _, appearance_bucket = _make_bucket(
+    _, appearance_bucket = build_collapsible_bucket(
+        tab,
         _normal_layout,
-        "Appearance",
+        mode_key="spectrum",
+        bucket_key="appearance",
+        title="Appearance",
         helper_text="Spectrum colors and rim-glow styling still apply when hidden.",
+        default_expanded=True,
     )
-    _, shape_bucket = _make_bucket(
+    _, shape_bucket = build_collapsible_bucket(
+        tab,
         _normal_layout,
-        "Shape",
+        mode_key="spectrum",
+        bucket_key="shape",
+        title="Shape",
         helper_text="Spectrum layout and authored silhouette still apply when hidden.",
+        default_expanded=True,
     )
-    _, render_bucket = _make_bucket(
+    _, render_bucket = build_collapsible_bucket(
+        tab,
         _adv_layout,
-        "Render",
+        mode_key="spectrum",
+        bucket_key="render",
+        title="Render",
         helper_text="Render-style controls still apply when hidden.",
+        default_expanded=True,
     )
-    _, audio_bucket = _make_bucket(
+    _, audio_bucket = build_collapsible_bucket(
+        tab,
         _adv_layout,
-        "Audio",
+        mode_key="spectrum",
+        bucket_key="audio",
+        title="Audio",
         helper_text="Audio weighting and falloff controls still apply when hidden.",
+        default_expanded=True,
     )
-    _, ghost_bucket = _make_bucket(
+    _, ghost_bucket = build_collapsible_bucket(
+        tab,
         _adv_layout,
-        "Ghost",
+        mode_key="spectrum",
+        bucket_key="ghost",
+        title="Ghost",
         helper_text="Ghost controls still apply when hidden.",
+        default_expanded=True,
     )
 
     def _aligned_row_widget(parent_layout: QVBoxLayout, label_text: str):

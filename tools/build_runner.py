@@ -112,6 +112,21 @@ def _find_pwsh() -> Path | None:
     return Path(p) if (p := shutil.which("pwsh")) else None
 
 
+def _windows_subprocess_kwargs() -> dict:
+    """Best-effort child-process window suppression for Windows build tools."""
+    if os.name != "nt":
+        return {}
+
+    kwargs: dict = {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    }
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = 6  # SW_MINIMIZE
+    kwargs["startupinfo"] = startupinfo
+    return kwargs
+
+
 @dataclass
 class PreflightResult:
     """Collects warnings and errors from pre-flight checks."""
@@ -219,21 +234,38 @@ class BuildRunnerApp:
         self._root.title(f"SRPSS Build Runner  (v{APP_VERSION})")
         self._root.resizable(True, False)
         self._queue: queue.Queue[tuple] = queue.Queue()
-        self._skip_helper = False
+        self._pipeline_started = False
 
         # -- Header --
         self._header = ttk.Label(root, text="Running pre-flight checks…")
         self._header.pack(padx=16, pady=(12, 4))
 
         # -- Job rows --
+        self._job_vars: list[tk.BooleanVar] = []
         self._status_labels: list[ttk.Label] = []
         for idx, job in enumerate(JOBS, start=1):
             frame = ttk.Frame(root)
             frame.pack(fill="x", padx=16, pady=2)
-            ttk.Label(frame, text=f"  {idx}. {job.name}").pack(side="left")
+            var = tk.BooleanVar(value=True)
+            chk = ttk.Checkbutton(frame, text=f"{idx}. {job.name}", variable=var)
+            chk.pack(side="left")
+            self._job_vars.append(var)
             lbl = ttk.Label(frame, text="Pending")
             lbl.pack(side="right", padx=(8, 0))
             self._status_labels.append(lbl)
+
+        # -- Actions --
+        actions = ttk.Frame(root)
+        actions.pack(fill="x", padx=16, pady=(8, 0))
+        self._start_button = ttk.Button(actions, text="Start Selected Builds", command=self._on_start_pressed)
+        self._start_button.pack(side="left")
+        self._start_button.state(["disabled"])
+
+        self._select_all_button = ttk.Button(actions, text="All", command=lambda: self._set_all_jobs(True))
+        self._select_all_button.pack(side="left", padx=(8, 0))
+
+        self._select_none_button = ttk.Button(actions, text="None", command=lambda: self._set_all_jobs(False))
+        self._select_none_button.pack(side="left", padx=(8, 0))
 
         # -- Footer --
         self._footer = ttk.Label(root, text="")
@@ -254,35 +286,9 @@ class BuildRunnerApp:
 
     def _handle_preflight(self, result: PreflightResult) -> None:
         if result.ok:
-            # Check if we should skip the helper build
-            helper_exe = REPO_ROOT / "release" / "helpers" / "SRPSS_RedditHelper.exe"
-            helper_source = REPO_ROOT / "helpers" / "reddit_helper_worker.py"
-            
-            should_prompt_skip = helper_exe.exists() and helper_source.exists()
-            if should_prompt_skip:
-                try:
-                    exe_time = helper_exe.stat().st_mtime
-                    src_time = helper_source.stat().st_mtime
-                    should_prompt_skip = exe_time >= src_time
-                except Exception:
-                    should_prompt_skip = False
-            
-            if should_prompt_skip:
-                title = "Reddit Helper Build"
-                msg = (
-                    f"Helper EXE exists and is up-to-date:\n{helper_exe.name}\n\n"
-                    "Rebuild the helper? (Usually not needed unless you modified reddit_helper_worker.py)"
-                )
-                rebuild = messagebox.askyesno(title, msg, parent=self._root, default="no")
-                if not rebuild:
-                    # Mark helper step as skipped
-                    self._skip_helper = True
-                    self._header["text"] = "Pre-flight OK. Building (helper skipped)…"
-                    self._start_pipeline()
-                    return
-            
-            self._header["text"] = "Pre-flight OK.  Building…"
-            self._start_pipeline()
+            self._header["text"] = "Pre-flight OK. Select the jobs you want, then press Start."
+            self._footer["text"] = "Tip: for SCR-only testing, Standard Build + Standard Installer is usually enough."
+            self._start_button.state(["!disabled"])
             return
 
         summary = result.summary()
@@ -303,20 +309,45 @@ class BuildRunnerApp:
 
         proceed = messagebox.askyesno(title, msg, parent=self._root)
         if proceed:
-            self._header["text"] = "Building (with warnings)…"
-            self._start_pipeline()
+            self._header["text"] = "Proceeding with warnings. Select the jobs you want, then press Start."
+            self._footer["text"] = "Unchecked jobs will be skipped."
+            self._start_button.state(["!disabled"])
         else:
             self._header["text"] = "Aborted by user."
             self._footer["text"] = "Close this window when ready."
 
     # -- Pipeline -----------------------------------------------------------
 
+    def _selected_job_indices(self) -> list[int]:
+        return [idx for idx, var in enumerate(self._job_vars) if bool(var.get())]
+
+    def _set_all_jobs(self, value: bool) -> None:
+        if self._pipeline_started:
+            return
+        for var in self._job_vars:
+            var.set(value)
+
+    def _on_start_pressed(self) -> None:
+        if self._pipeline_started:
+            return
+        if not self._selected_job_indices():
+            messagebox.showwarning("Nothing Selected", "Select at least one build step first.", parent=self._root)
+            return
+        self._header["text"] = "Building selected jobs…"
+        self._footer["text"] = "Running selected pipeline steps in order."
+        self._start_pipeline()
+
     def _start_pipeline(self) -> None:
+        self._pipeline_started = True
+        self._start_button.state(["disabled"])
+        self._select_all_button.state(["disabled"])
+        self._select_none_button.state(["disabled"])
         threading.Thread(target=self._run_pipeline, daemon=True).start()
 
     def _run_pipeline(self) -> None:
         pf = self._preflight or PreflightResult()
         all_ok = True
+        selected = set(self._selected_job_indices())
 
         try:
             artifacts = regenerate_repo_shipped_visualizer_preset_artifacts(REPO_ROOT)
@@ -334,9 +365,8 @@ class BuildRunnerApp:
             return
 
         for idx, job in enumerate(JOBS):
-            # Skip helper build if user chose to skip (job index 2)
-            if idx == 2 and self._skip_helper and job.name == "Reddit Helper Build":
-                self._queue.put(("status", idx, "Skipped (up-to-date)"))
+            if idx not in selected:
+                self._queue.put(("status", idx, "Skipped"))
                 continue
 
             self._queue.put(("status", idx, "Running…"))
@@ -402,6 +432,7 @@ class BuildRunnerApp:
                 capture_output=True,
                 text=True,
                 check=False,
+                **_windows_subprocess_kwargs(),
             )
             # Write combined stdout+stderr to log file.
             with open(log_path, "w", encoding="utf-8") as f:
@@ -428,7 +459,10 @@ class BuildRunnerApp:
         """Run a command, return exit code.  Stdout/stderr go to console."""
         try:
             return subprocess.run(
-                cmd, cwd=str(REPO_ROOT), check=False,
+                cmd,
+                cwd=str(REPO_ROOT),
+                check=False,
+                **_windows_subprocess_kwargs(),
             ).returncode
         except FileNotFoundError:
             return 1

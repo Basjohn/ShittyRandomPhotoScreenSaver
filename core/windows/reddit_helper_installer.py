@@ -1,15 +1,12 @@
 """
-Reddit helper installer utilities (gutted).
+Minimal Reddit helper installer/runtime utilities.
 
-Previously contained token manipulation, privilege escalation, EXE payload
-extraction, and scheduled-task registration code.  All of that has been
-removed to eliminate AV triggers.  The helper EXE is now placed at install
-time by the Inno Setup installer and started via a standard HKCU\\Run
-registry entry.
+The old token-manipulation and runtime extraction paths were removed to avoid
+AV-hostile behavior. The current shipped design keeps only two low-risk
+utilities here while the installer owns scheduled-task registration:
 
-Retained utilities:
 - ``_running_as_system()`` — detect Winlogon SYSTEM context
-- ``_log_helper_event()`` — append diagnostic line to helper log
+- ``_log_helper_event()`` — append breadcrumb lines to ProgramData helper logs
 """
 
 from __future__ import annotations
