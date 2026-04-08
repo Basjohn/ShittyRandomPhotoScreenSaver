@@ -629,7 +629,7 @@ class SettingsDialog(QDialog):
         self.accessibility_tab_btn = TabButton("Accessibility", "♿")
         # Presets icon: sliders/controls symbol for configuration presets
         self.presets_tab_btn = TabButton("Presets", "🎚")
-        self.about_tab_btn = TabButton("About", "ℹ")
+        self.about_tab_btn = TabButton("About", "ℹ️")
         
         self.tab_buttons = [
             self.sources_tab_btn,
@@ -683,15 +683,10 @@ class SettingsDialog(QDialog):
 
         main_layout.addLayout(content_layout)
 
-        # White bottom divider line for visual closure
-        bottom_line_wrapper = QHBoxLayout()
-        bottom_line_wrapper.setContentsMargins(10, 0, 10, 0)
-        bottom_line_widget = QWidget()
-        bottom_line_widget.setFixedHeight(1)
-        bottom_line_widget.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        bottom_line_widget.setStyleSheet("background-color: #ffffff;")
-        bottom_line_wrapper.addWidget(bottom_line_widget)
-        main_layout.addLayout(bottom_line_wrapper)
+        # Bottom margin placeholder (separator line painted in paintEvent)
+        bottom_spacer = QWidget()
+        bottom_spacer.setFixedHeight(9)
+        main_layout.addWidget(bottom_spacer)
 
         self._style_tab_widget(self.content_stack.widget(self._initial_tab_index))
 

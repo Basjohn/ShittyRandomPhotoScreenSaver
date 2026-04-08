@@ -42,6 +42,7 @@ def load_theme(widget) -> None:
                 #titleBarLabel {
                     color: #ffffff;
                     padding-left: 10px;
+                    padding-top: 3px;
                 }
                 
                 #titleBarButton {

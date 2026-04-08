@@ -13,7 +13,7 @@ Update this after every significant change.
 - Do not treat passing tests as visual sign-off.
 - Do not make global/shared math changes unless explicitly requested.
 - Do not reduce FPS caps below current configured values.
-- Whenever you come across dead/dirty/messy/violating/architecturally poor code while working on other things make a note of it in the current plan for later improvements. This is a general policy rule.
+- Whenever dead/dirty/messy/violating/architecturally poor code is discovered during unrelated work, note it here for later cleanup.
 - Keep checkboxes honest:
   - `[x]` landed and validated
   - `[~]` partially proven / still needs runtime eyes
@@ -23,10 +23,10 @@ Update this after every significant change.
 
 ## Snapshot
 
-- **Date:** `2026-04-06`
-- **Status:** Spectrum cleanup complete through 3.1. Oscilloscope and Sine Wave UI neatening is next priority alongside remaining Spectrum follow-on tasks.
+- **Date:** `2026-04-08`
+- **Status:** Spectrum cleanup through 3.1 remains complete. Immediate next work is still UI cleanup/consolidation around Oscilloscope and Sine Wave, with planning now expanded to include helper reliability, settings-shell polish, and remaining visualizer follow-on items.
 - **Organs synthetic:** Green against current authored `Preset 1` (user-modified version).
-- **Preset pipeline:** Source tree → repair tool → shipped regeneration → all green.
+- **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
 ---
 
@@ -48,7 +48,7 @@ Removed `Single Piece Mode`, replaced with explicit `SEGMENTS` / `BAR` toggle bu
 Replaced loose section headings with real collapsible buckets. Normal: `Appearance`, `Shape`. Advanced: `Render`, `Audio`, `Ghost`. Commit: `ad63b29`.
 
 ### H6. Border Colour Participation (§3.1)
-Audited why borders were excluded from rainbow. Added `spectrum_rainbow_border` (bool, default `False`) with UI checkbox "Rainbow Borders" in Render bucket. Wired through all 8 layers + shader uniform `u_rainbow_border` in both SINGLE PIECE and SEGMENTED paths. Tests: 92 passed in plumbing suite.
+Audited why borders were excluded from rainbow. Added `spectrum_rainbow_border` (bool, default `False`) with UI checkbox `Rainbow Borders` in Render bucket. Wired through all 8 layers + shader uniform `u_rainbow_border` in both SINGLE PIECE and SEGMENTED paths. Tests: 92 passed in plumbing suite.
 
 ---
 
@@ -61,36 +61,66 @@ Audited why borders were excluded from rainbow. Added `spectrum_rainbow_border` 
 
 Replace redundant Spectrum energy-strength sliders with vertical strength arrows above the energy lanes in the Spectrum Shaper.
 
-- [ ] Design arrow interaction model (drag length = energy weight, visual direction = up/down)
-- [ ] Identify exactly which sliders become redundant once arrows exist (Bass Influence, Mid Dampening, Reactivity are candidates)
-- [ ] Arrow length controls energy contribution strength only
-- [ ] This does **not** replace all Spectrum controls — time-behavior (Drop Speed, Profile Floor) stays outside the editor
-- [ ] Preserve Organs behavior by measuring against the synthetic fence before/after
-- [ ] Record planning/mental-model rationale in docs
-
+- [ ] Design arrow interaction model so drag length controls energy weight and the visual direction communicates up/down influence
+- [ ] Identify exactly which existing sliders become redundant once arrows exist
+- [ ] Keep arrow length scoped to contribution strength only
+- [ ] Keep time-behavior controls such as `drop_speed` and `profile_floor` outside the editor
+- [ ] Preserve Organs behavior by measuring against the synthetic fence before and after
+- [ ] Record the interaction rationale and mental model in docs
+- [ ] Review adjacent Spectrum controls at the same time and feed overlap/redundancy findings into Task 2
 
 Design guardrails:
-- This is not a Blob transplant
+- This is not a Blob-shaper transplant
 - Spatial ownership stays in the Spectrum editor
 - Time-behavior controls still belong outside the editor
-- Make sure to check for other redundant/overlapping controls simultaneously and propose consolidation where helpful into 2.2
 
 ### 2. Spectrum Consolidation Pass (was §3.3)
 
 **Status:** `[ ]` Not started
 **Priority:** Medium
 
-- [ ] Prepare an exact proposed list of Spectrum control merges/removals
+- [ ] Prepare an exact proposed list of Spectrum control merges, removals, and deprecations
 - [ ] Confirm each merge/removal with the user before editing
 - [ ] Preserve Organs behavior directly or through automatic remapping
-- [ ] Focus on shimmer-at-mid-height as a future tuning target, not gut feel
+- [ ] Keep shimmer-at-mid-height as a defined tuning target rather than a vibe-based cleanup
+- [ ] Defer shimmer assessment/fix until the rest of this plan has landed cleanly, but do not defer ordinary consolidation work that can proceed safely now
 
-Design notes:
-- Mid-height shimmer ≠ quiet-floor jitter. Stabilise mid-height shimmer on 60fps without losing big high/low movements. (Consider why this is worse on 60hz displays than 165hz displays, if this change should be relevant only to one or if both would improve)
-- `drop_speed` alone is too blunt — Spectrum wants big rises and big falls.
-- Likely fix area: smarter gating/hysteresis once bars are materially elevated.
+Captured tuning notes:
+- Mid-height shimmer is not the same problem as quiet-floor jitter
+- The target is steadier mid-height motion at 60 fps without flattening large high/low movements
+- Compare behavior on `<=60 Hz` displays versus `165 Hz` displays and decide whether the eventual fix should improve one, both, or both differently
+- `drop_speed` alone is too blunt; Spectrum needs room for large rises and large falls
 
-### 3. Oscilloscope UI Bucket Cleanup
+User guidance to preserve:
+- Research whether optional interpolation, motion blur, or related display-side presentation techniques are standard for reducing shimmer on lower-refresh displays
+- The problem is most noticeable on Spectrum because it is visually rigid, but some shimmer is still visible even at `165 Hz`
+- A promising direction is per-lane hysteresis once a lane reaches a materially stable height, requiring more visual movement before it visibly shifts again
+- Important guardrail: do not further smooth the underlying music/math signal; only improve the visual motion presented to the user
+- Drops should be encouraged through a less flickery presentation method than simply increasing `drop_speed`
+- Higher internal resolution appears to reduce shimmer but increases latency and does not eliminate the issue
+
+### 3. Reddit Helper Reliability / Link Handoff
+
+**Status:** `[ ]` Not started
+**Priority:** Medium-High
+
+Reddit Helper link opening is still unreliable and has reportedly been "fixed" multiple times without holding. Treat this as a real reliability task, not a cosmetic cleanup.
+
+- [ ] Audit the current secure-desktop -> helper -> browser handoff flow end to end
+- [ ] Review `C:\\ProgramData\\SRPSS\\` state, queues, and related runtime clues before changing behavior
+- [ ] Re-read the Winlogon / session-handoff assumptions that justified the current design
+- [ ] Evaluate whether the helper can safely wait/poll for confirmed screensaver shutdown before launching URLs
+- [ ] Compare the current helper path against the simpler MC-build approach using `QDesktopServices` and browser-foreground handoff
+- [ ] Reduce needless complexity only if it does not weaken cleanup, security posture, or AV trust
+- [ ] Investigate whether screensaver closure itself can be made faster without risking threads, memory cleanup, or shutdown ordering
+- [ ] Validate with repeated real-world link launches, not a single happy-path test
+
+Design guardrails:
+- Avoid solutions likely to look suspicious to antivirus or OS trust systems
+- Do not replace robust shutdown guarantees with a race-prone "seems fast enough" handoff
+- Prefer the simplest proven launch path once session ownership and shutdown timing are genuinely understood
+
+### 4. Oscilloscope UI Bucket Cleanup
 
 **Status:** `[ ]` Not started
 **Priority:** Medium-High
@@ -104,21 +134,21 @@ The Oscilloscope builder (`ui/tabs/media/oscilloscope_builder.py`, 438 lines) us
 **Proposed bucket structure:**
 
 Normal surface:
-- **Appearance** — Line Color, Glow Color, Glow toggle + intensity + reactivity + reactive checkbox
-- **Behavior** — Amplitude, Smoothing, Speed, Ghost toggle + intensity
+- **Appearance** - Line Color, Glow Color, Glow toggle + intensity + reactivity + reactive checkbox
+- **Behavior** - Amplitude, Smoothing, Speed, Ghost toggle + intensity
 
 Advanced surface:
-- **Multi-Line** — Multi-line toggle, Line Count, Line 2/3 colors + glow colors + ghost per-line, Dim Lines 2/3
-- **Layout** — Line Offset Bias, Vertical Shift, Card Height
+- **Multi-Line** - Multi-line toggle, Line Count, Line 2/3 colors + glow colors + ghost per-line, Dim Lines 2/3
+- **Layout** - Line Offset Bias, Vertical Shift, Card Height
 
 Tasks:
 - [ ] Refactor `oscilloscope_builder.py` to use `_make_bucket()` pattern (same as Spectrum/Blob)
-- [ ] Group controls into proposed buckets above (refine if needed during implementation)
-- [ ] Keep all control attribute names unchanged (UI binding tests must stay green)
-- [ ] Keep default expanded state for Normal buckets, collapsed for Advanced
+- [ ] Group controls into the proposed buckets above, refining only if implementation reveals a better fit
+- [ ] Keep all control attribute names unchanged so binding tests remain valid
+- [ ] Keep default expanded state for Normal buckets and collapsed state for Advanced buckets
 - [ ] Validate: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "osc" -q`
 
-### 4. Sine Wave UI Bucket Cleanup
+### 5. Sine Wave UI Bucket Cleanup
 
 **Status:** `[ ]` Not started
 **Priority:** Medium-High
@@ -132,60 +162,109 @@ The Sine Wave builder (`ui/tabs/media/sine_wave_builder.py`, 706 lines) uses a f
 **Proposed bucket structure:**
 
 Normal surface:
-- **Appearance** — Line Color, Glow (toggle + intensity + reactivity + color + reactive), Ghost (toggle + opacity + decay)
-- **Motion** — Speed, Travel, Wave Effect, Crawl, Micro Wobble (legacy, consider hiding behind toggle or deprecating in §2)
-- **Response** — Sensitivity, Width Reaction, Heartbeat (promote from Advanced — it's a user-facing feel control)
+- **Appearance** - Line Color, Glow (toggle + intensity + reactivity + color + reactive), Ghost (toggle + opacity + decay)
+- **Motion** - Speed, Travel, Wave Effect, Crawl, Micro Wobble (legacy; review whether it should stay visible)
+- **Response** - Sensitivity, Width Reaction, Heartbeat (candidate to promote from Advanced because it is a user-facing feel control)
 
 Advanced surface:
-- **Multi-Line** — Multi-line toggle, Line Count, Line 2/3 (colors, glow colors, travel, ghost, horizontal shift), Displacement
-- **Layout** — Density, Vertical Shift, Line 1 Shift, Line Offset Bias, Card Adaptation, Card Height
+- **Multi-Line** - Multi-line toggle, Line Count, Line 2/3 colors + glow colors + travel + ghost + horizontal shift, Displacement
+- **Layout** - Density, Vertical Shift, Line 1 Shift, Line Offset Bias, Card Adaptation, Card Height
 
 Tasks:
 - [ ] Refactor `sine_wave_builder.py` to use `_make_bucket()` pattern
-- [ ] Group controls into proposed buckets (refine during implementation)
-- [ ] Consider promoting Heartbeat from Advanced → Normal (it's a feel control users want easy access to)
-- [ ] Consider whether Micro Wobble should be hidden/deprecated (legacy, superseded by Crawl)
+- [ ] Group controls into the proposed buckets, refining during implementation if needed
+- [ ] Evaluate promoting Heartbeat from Advanced -> Normal
+- [ ] Evaluate whether Micro Wobble should be hidden, deprecated, or left alone as a legacy control
 - [ ] Keep all control attribute names unchanged
 - [ ] Validate: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "sine" -q`
 
-### 5. Bucket State Persistence (was IDEA BOX #1)
+### 6. Bucket State Persistence (was IDEA BOX #1)
 
 **Status:** `[ ]` Not started
 **Priority:** Medium
 
-Bucket collapsed/open state does not persist across settings dialog open/close. Default should be all buckets collapsed.
+Bucket collapsed/open state does not persist across settings dialog open/close.
 
-- [ ] Audit how buckets are created (`_make_bucket()` in each builder) and whether they use a shared widget class or are ad-hoc
-- [ ] Design persistence approach:
-  - Option A: Store bucket states in `SettingsManager` under `ui.bucket_states` dict (keyed by objectName)
-  - Option B: Store in a lightweight UI-only cache file (avoids polluting settings)
-- [ ] Implement save-on-collapse/expand signal
+- [ ] Audit how buckets are created via `_make_bucket()` and whether they already share enough structure for centralized persistence
+- [ ] Choose a persistence approach:
+  - Option A: store bucket states in `SettingsManager` under `ui.bucket_states` keyed by `objectName`
+  - Option B: store states in a lightweight UI-only cache file to avoid polluting primary settings
+- [ ] Implement save-on-collapse/expand signal handling
 - [ ] Implement restore-on-build
-- [ ] Default: all buckets collapsed on first encounter
-- [ ] Applies to all modes with buckets: Spectrum, Blob, and (after §3/§4) Oscilloscope, Sine Wave
+- [ ] Default first-encounter behavior to all buckets collapsed unless a mode-specific UX reason justifies otherwise
+- [ ] Apply the solution to all bucketed modes: Spectrum, Blob, and after Tasks 4 and 5, Oscilloscope and Sine Wave
 
-### 6. Non-Mirrored Spectrum Shaper Vocal Lane (was IDEA BOX #2)
+### 7. Non-Mirrored Spectrum Shaper Vocal Lane (was IDEA BOX #2)
 
 **Status:** `[ ]` Not started
 **Priority:** Low
 
 Non-mirrored Spectrum Shaper currently lacks a vocal lane. In mirrored mode, the center region naturally maps to vocals. In linear mode, there is no equivalent.
 
-- [x] Decide if linear mode should auto-insert a vocal notch or if the user should place it manually (User: AUTO - Vocal is critical to music.)
-- [ ] If auto-insert: determine default vocal position in linear mode (likely ~0.4–0.5 normalized)
-- [ ] If manual: ensure the notch label system supports "Vocal" as a user-placeable label
-- [ ] Update Spectrum Shaper editor to handle this
+Decision already captured:
+- [x] Linear mode should auto-insert a vocal region rather than require manual placement
+
+Remaining tasks:
+- [ ] Determine the default vocal position in linear mode (likely around `0.4-0.5` normalized, but verify)
+- [ ] Define whether the auto-inserted vocal region should remain user-adjustable after insertion
+- [ ] If manual placement is still supported in any form, ensure the notch label system supports `Vocal`
+- [ ] Update the Spectrum Shaper editor and runtime contract accordingly
 - [ ] Update docs
 
-### 7. Bubble UI Bucket Cleanup
+### 8. Settings Shell Outer Border Radius
 
 **Status:** `[ ]` Not started
 **Priority:** Low
 
-The Bubble builder (`ui/tabs/media/bubble_builder.py`) currently has no collapsible buckets. Lower priority since Bubble is the newest mode and less control-dense, but should be bucketed for consistency.
+Explore a very light rounded outer edge for the settings shell without introducing corner bleed, masking regressions, or collateral QSS breakage.
 
-- [ ] Audit current Bubble builder layout
-- [ ] Propose bucket groupings (likely: Appearance, Behavior, Layout)
+- [ ] Fully understand the current custom styling stack before attempting changes, including QSS, SVG assets, frame layering, clipping, and any mask behavior
+- [ ] Investigate whether a radius of `2` or `3` is safer/easier; prefer `3` only if it is genuinely equal-risk
+- [ ] Prototype the outermost shell rounding only
+- [ ] Validate specifically for corner bleed, border artifacts, and theme regressions
+- [ ] Do not proceed to "done" until user validation confirms no bleed
+
+Design guardrails:
+- This is a polish task, not a styling-system rewrite
+- Do not endanger any other custom styling behavior to gain rounded corners
+- Analysis must be deep before implementation; this task is deliberately risk-averse
+
+### 9. Settings Dialog Close / Teardown Polish
+
+**Status:** `[ ]` Not started
+**Priority:** Low
+
+When closing the settings dialog, some elements visibly deconstruct before the shell is gone. The goal is for the close to feel atomic, or at least visually shell-first.
+
+- [ ] Audit current shutdown ordering for the settings dialog shell and child elements
+- [ ] Determine whether the visible deconstruction comes from fade timing, layout teardown, QWidget destruction order, or delayed shell close
+- [ ] Prefer a solution where everything appears to vanish together; second-best is shell-first disappearance
+- [ ] Confirm no cleanup, memory, or shutdown correctness regressions are introduced
+
+### 10. Blob Energy Balance / Glow Drive Follow-up
+
+**Status:** `[ ]` Not started
+**Priority:** Low
+
+Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-shaped Blob path and likely needs retuning there only. There is also a product question around Glow Drive inputs.
+
+- [ ] Audit the current non-shaped `Body Response` balance for constant, reactive, and vocal energy
+- [ ] Confirm the shaped Blob path is unaffected before making any tuning changes
+- [ ] Try a first tuning pass on the non-shaped path that halves constant energy and increases reactive/vocal energy by roughly `20%`
+- [ ] Validate whether that ratio is directionally right rather than assuming the first guess is final
+- [ ] Review the `Glow Drive` selection list for useful additions such as `Transient`
+- [ ] Preserve Blob identity and do not accidentally make it behave like another mode
+- [ ] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
+
+### 11. Bubble UI Bucket Cleanup
+
+**Status:** `[ ]` Not started
+**Priority:** Low
+
+The Bubble builder (`ui/tabs/media/bubble_builder.py`) currently has no collapsible buckets. Lower priority since Bubble is newer and less control-dense, but it should still be bucketed for consistency.
+
+- [ ] Audit the current Bubble builder layout
+- [ ] Propose bucket groupings, likely around Appearance, Behavior, and Layout
 - [ ] Implement using `_make_bucket()` pattern
 - [ ] Validate tests
 
@@ -201,10 +280,12 @@ Keep watching for:
 - [ ] Source curated tree vs generated shipped tree drift
 - [ ] Stale defaults snapshot drift
 - [ ] UI preview/live-config helper paths throwing misleading exceptions
+- [ ] Reddit Helper queue/heartbeat/state drift that could mask the actual link-handoff failure mode
+- [ ] Settings dialog shutdown logs that indicate shell/child teardown ordering regressions
 
 Known items:
-- [~] `%APPDATA%/SRPSS/settings_v2.json` may contain older visualizer-era state that SettingsManager heals on load. Confirm whether a user-side save permanently clears the repair path.
-- [~] Blob `Preset 1` synthetic drift is expected — user personally modified Blob Preset 1. That baseline test should only run just before/after Blob work, not continuously.
+- [~] `%APPDATA%/SRPSS/settings_v2.json` may contain older visualizer-era state that `SettingsManager` heals on load. Confirm whether a user-side save permanently clears the repair path.
+- [~] Blob `Preset 1` synthetic drift is expected because the user personally modified Blob Preset 1. That baseline test should only run immediately before/after Blob work, not continuously.
 
 ---
 
@@ -224,8 +305,8 @@ Known items:
 
 ---
 
-## IDEA / PROBLEM BOX
+## Idea Box
 
-> Promoted items move into numbered Active Tasks above. Keep this box for raw ideas that haven't been shaped yet.
+> Raw ideas that have not yet been shaped into active tasks. Promote them once they have a concrete goal, scope, and guardrails.
 
-_(empty — all items promoted)_
+- Empty for now. New raw ideas should be captured here before they become numbered tasks above.

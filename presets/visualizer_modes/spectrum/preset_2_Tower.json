@@ -1,0 +1,129 @@
+{
+  "mode": "spectrum",
+  "name": "Preset 2 (Tower)",
+  "preset_index": 1,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "spectrum",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "monitor": "ALL",
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "spectrum_growth": 5.0,
+        "spectrum_render_mode": "segment",
+        "spectrum_unique_colors": true,
+        "spectrum_rainbow_border": true,
+        "spectrum_border_radius": 1.0,
+        "spectrum_link_fill_border": false,
+        "spectrum_glow_enabled": false,
+        "spectrum_glow_intensity": 0.15,
+        "spectrum_glow_color": [
+          255,
+          255,
+          255,
+          235
+        ],
+        "spectrum_ghosting_enabled": true,
+        "spectrum_ghost_alpha": 0.59,
+        "spectrum_ghost_decay": 0.18,
+        "spectrum_mirrored": true,
+        "spectrum_shape_nodes": [
+          [
+            0.0,
+            1.0
+          ],
+          [
+            0.17452006980802812,
+            0.8611111111111112
+          ],
+          [
+            0.23909249563699836,
+            0.24074074074074073
+          ],
+          [
+            0.3420593368237349,
+            1.0
+          ],
+          [
+            1.0,
+            1.0
+          ]
+        ],
+        "spectrum_notch_positions_mirrored": [
+          [
+            0.09424083769633508,
+            "Vocal"
+          ],
+          [
+            0.29144851657940674,
+            "Mid"
+          ],
+          [
+            0.6861603375527427,
+            "Low-Mid"
+          ],
+          [
+            1.0,
+            "Bass"
+          ]
+        ],
+        "spectrum_notch_positions_linear": [
+          [
+            0.0,
+            "Bass"
+          ],
+          [
+            0.25,
+            "Low"
+          ],
+          [
+            0.5022879267863428,
+            "Mid"
+          ],
+          [
+            0.6261879619852164,
+            "Hi-Mid"
+          ],
+          [
+            1.0,
+            "Treble"
+          ]
+        ],
+        "spectrum_bass_emphasis": 0.15,
+        "spectrum_mid_suppression": 0.82,
+        "spectrum_wave_amplitude": 0.15,
+        "spectrum_profile_floor": 0.2,
+        "spectrum_drop_speed": 0.72,
+        "spectrum_dynamic_floor": true,
+        "spectrum_manual_floor": 0.4,
+        "spectrum_dynamic_range_enabled": true,
+        "spectrum_agc_strength": 0.45,
+        "spectrum_input_gain": 0.9,
+        "spectrum_kick_lane_gain": 1.75,
+        "spectrum_transient_pulse_gain": 1.0,
+        "spectrum_transient_clamp": 1.85,
+        "spectrum_audio_block_size": 128,
+        "spectrum_adaptive_sensitivity": false,
+        "spectrum_sensitivity": 1.4,
+        "spectrum_bar_count": 35,
+        "spectrum_lane_transient_mix": 0.95,
+        "spectrum_rainbow_enabled": true,
+        "spectrum_rainbow_speed": 0.6,
+        "mode": "spectrum"
+      }
+    }
+  },
+  "description": "Saved from current Settings state."
+}
