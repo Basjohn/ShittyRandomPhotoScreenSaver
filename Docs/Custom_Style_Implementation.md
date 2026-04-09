@@ -232,6 +232,16 @@ The only reliable way to prevent corner bleed in Qt's QSS system is to use **no 
 
 **Resolution**: Keep the outer shell square unless a future approach can clearly justify why the documented historical failures no longer apply. If rounded polish is revisited, prefer investigating an inner framed-card illusion or a Windows-native system-corner opt-in first, and only after validating that the dialog architecture actually qualifies for those paths.
 
+### ❌ Inset Inner-Shell Margin Around The Acrylic Window
+
+**Goal**: Leave the real top-level acrylic window square, but inset the visible border onto an inner shell/card so rounded polish comes from a child surface instead of the true window edge.
+
+**What happened**: Live runtime showed an additional sharp black strip outside the visible border. The margin exposed the acrylic-tinted top-level window and looked worse than the baseline square shell.
+
+**Root cause**: `enable_acrylic_blur()` applies to the whole top-level HWND. Any margin between the true window edge and the visible inner shell exposes those tinted acrylic pixels directly.
+
+**Resolution**: If an inner-shell illusion is ever revisited, it must not reveal any top-level margin at all. A simple inset border/card approach is not sufficient under the current acrylic dialog architecture.
+
 ### ✅ Acrylic Widget Background Assessment
 
 Frosted glass effect for in-engine overlay widgets was assessed and determined not viable due to transition artifacts and architectural complexity. See `Docs/Acrylic_Widget_Background_Assessment.md` for the full analysis.

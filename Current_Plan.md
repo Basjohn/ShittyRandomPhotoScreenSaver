@@ -172,7 +172,7 @@ Landed:
 
 ### 5. Settings Shell Outer Border Radius
 
-**Status:** `[ ]` Open again after failed live attempt
+**Status:** `[ ]` Still blocked / live attempts reverted
 **Priority:** Medium
 
 Explore a very light rounded outer edge for the settings shell without introducing corner bleed, masking regressions, or collateral QSS breakage.
@@ -180,7 +180,9 @@ Explore a very light rounded outer edge for the settings shell without introduci
 - [x] Audit the real shell stack and identify the square top-level `paintEvent()` border as the primary seam fighting any rounded shell attempt
 - [x] Try one tightly scoped outer-shell experiment only
 - [x] Roll that experiment back after live runtime validation showed all four corners bleeding and the custom title-bar/top segment visually broken
-- [ ] Re-evaluate whether this should be attempted through shell paint at all, or whether the correct seam is an inner framed card instead of the true outer window chrome
+- [x] Re-evaluate the seam and move the visible chrome onto an inset inner shell card instead of the true outer window chrome
+- [x] Keep the true top-level window edge square/transparent while the inset `dialogContainer` owns the border + radius + title-bar surface
+- [x] Validate the inset-shell version in live runtime and roll it back after it exposed an additional sharp black acrylic margin outside the border
 - [ ] If another attempt is made, treat live runtime validation as primary and hidden render/offscreen capture as advisory only
 - [ ] Do not proceed to "done" until user validation confirms no bleed
 
@@ -196,6 +198,7 @@ Failure notes to preserve:
 - Repo architecture note: `Docs/Custom_Style_Implementation.md` already records rounded outer-border attempts, mask-based clipping, and dialog-shadow work as rejected for this acrylic/translucent frameless dialog family; any new attempt must start by explaining why those historical failure reasons no longer apply
 - Windows guidance note: Microsoft documents that apps with heavily customized frames can miss automatic rounding, and apps using per-pixel alpha layering or window regions cannot be rounded by the system at all. This makes a true outer-window radius a high-risk path here, not a routine QSS polish task
 - Current safest theory: if rounded polish is revisited, the more realistic seam is probably an inner framed-card illusion inside the square outer window rather than rounding the true outer shell chrome itself
+- Second-seam failure note: the inset-shell experiment proved that exposing even a tiny margin of the acrylic top-level window produces a sharp black outer strip, so any inner-shell illusion must avoid revealing top-level window pixels entirely
 
 ### 6. Settings Dialog Close / Teardown Polish
 
