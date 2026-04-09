@@ -78,6 +78,22 @@ _PULSE_GAIN_TIP = (
     "0% = disabled, 100% = default, 300% = triple."
 )
 
+_MODE_LABELS: Dict[str, str] = {
+    "spectrum": "Spectrum",
+    "oscilloscope": "Oscilloscope",
+    "sine_wave": "Sine Wave",
+    "blob": "Blob",
+    "bubble": "Bubble",
+}
+
+_MODE_RECOMMENDED_BLOCK_SIZE: Dict[str, int] = {
+    "spectrum": 128,
+    "oscilloscope": 128,
+    "sine_wave": 128,
+    "blob": 256,
+    "bubble": 256,
+}
+
 
 @dataclass(frozen=True)
 class _ControlDef:
@@ -124,6 +140,76 @@ def _format_multiplier(value: float) -> str:
 
 def _format_floor(value: float) -> str:
     return f"{value:.2f}"
+
+
+def _mode_display_name(mode_key: str) -> str:
+    return _MODE_LABELS.get(mode_key, mode_key.replace("_", " ").title())
+
+
+def _recommended_block_size(mode_key: str) -> int:
+    return int(_MODE_RECOMMENDED_BLOCK_SIZE.get(mode_key, 256))
+
+
+def _audio_block_tooltip(mode_key: str) -> str:
+    recommended = _recommended_block_size(mode_key)
+    mode_name = _mode_display_name(mode_key)
+    return (
+        "How many PCM samples the visualizer groups into each FFT update.\n"
+        f"Lower = faster, twitchier reaction with more jitter risk.\n"
+        f"Higher = steadier bars with more latency and softer kick pickup.\n"
+        f"Recommended for {mode_name}: {recommended} samples."
+    )
+
+
+def _recommended_sensitivity_tooltip(mode_key: str) -> str:
+    mode_name = _mode_display_name(mode_key)
+    return (
+        f"Use the curated fixed sensitivity target for {mode_name}.\n"
+        "This is not live adaptive analysis; it simply uses the tuned recommended multiplier.\n"
+        "Turn it off to author the manual Sensitivity slider directly."
+    )
+
+
+def _sensitivity_tooltip(mode_key: str) -> str:
+    mode_name = _mode_display_name(mode_key)
+    return (
+        f"Manual FFT sensitivity multiplier for {mode_name}.\n"
+        "Lower = calmer bars and more headroom.\n"
+        "Higher = stronger motion but easier clipping/noise pickup.\n"
+        "This only takes ownership when 'Use Recommended Sensitivity' is off."
+    )
+
+
+def _dynamic_floor_tooltip(mode_key: str) -> str:
+    mode_name = _mode_display_name(mode_key)
+    return (
+        f"Let {mode_name} move its technical noise floor with the incoming signal.\n"
+        "On = better resilience across quiet/loud tracks.\n"
+        "Off = use the fixed Noise Floor Baseline slider exactly."
+    )
+
+
+def _manual_floor_tooltip(dynamic_enabled: bool) -> str:
+    if dynamic_enabled:
+        return (
+            "Baseline technical noise floor feeding Dynamic Noise Floor.\n"
+            "Lower = more low-level pickup and more jitter risk.\n"
+            "Higher = calmer floor and stronger noise rejection."
+        )
+    return (
+        "Fixed technical noise floor when Dynamic Noise Floor is off.\n"
+        "Lower = more low-level pickup and more jitter risk.\n"
+        "Higher = calmer floor and stronger noise rejection."
+    )
+
+
+def _dynamic_range_tooltip(mode_key: str) -> str:
+    mode_name = _mode_display_name(mode_key)
+    return (
+        f"Apply a small output lift to {mode_name}'s post-FFT bar energy.\n"
+        "Off = calmer default headroom.\n"
+        "On = a brighter, slightly louder visual read without changing the authored shaper."
+    )
 
 
 _BUCKET_DEFS: tuple[_BucketDef, ...] = (
@@ -178,7 +264,7 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         widget_kind="checkbox",
         default_type="bool",
         base_default=True,
-        checkbox_text="Adaptive Sensitivity",
+        checkbox_text="Use Recommended Sensitivity",
         circle_indicator=True,
     ),
     _ControlDef(
@@ -203,7 +289,7 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         widget_kind="checkbox",
         default_type="bool",
         base_default=False,
-        checkbox_text="Dynamic Range Boost",
+        checkbox_text="Output Lift",
         circle_indicator=True,
     ),
     _ControlDef(
@@ -320,9 +406,8 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         widget_kind="slider",
         default_type="float",
         base_default=0.12,
-        label_text="Manual Floor\nBaseline:",
+        label_text="Noise Floor\nBaseline:",
         label_key="manual_label",
-        tooltip="Sets the baseline noise floor used by both Manual and Dynamic modes.",
         minimum=MANUAL_FLOOR_MIN,
         maximum=MANUAL_FLOOR_MAX,
         tick_interval=10,
@@ -675,6 +760,11 @@ def _build_control(tab, parent_layout: QVBoxLayout, mode_key: str, defn: _Contro
         widget.blockSignals(True)
         widget.setCurrentIndex(idx)
         widget.blockSignals(False)
+        tooltip = defn.tooltip
+        if defn.control_key == "block_size":
+            tooltip = _audio_block_tooltip(mode_key)
+        if tooltip:
+            widget.setToolTip(tooltip)
         row.addWidget(widget)
         row.addStretch()
         _connect_setting(widget.currentIndexChanged, tab)
@@ -686,8 +776,15 @@ def _build_control(tab, parent_layout: QVBoxLayout, mode_key: str, defn: _Contro
         widget = QCheckBox(defn.checkbox_text)
         if defn.circle_indicator:
             widget.setProperty("circleIndicator", True)
-        if defn.tooltip:
-            widget.setToolTip(defn.tooltip)
+        tooltip = defn.tooltip
+        if defn.control_key == "adaptive":
+            tooltip = _recommended_sensitivity_tooltip(mode_key)
+        elif defn.control_key == "dynamic_floor":
+            tooltip = _dynamic_floor_tooltip(mode_key)
+        elif defn.control_key == "dynamic_range":
+            tooltip = _dynamic_range_tooltip(mode_key)
+        if tooltip:
+            widget.setToolTip(tooltip)
         widget.blockSignals(True)
         widget.setChecked(bool(default_value))
         widget.blockSignals(False)
@@ -705,8 +802,13 @@ def _build_control(tab, parent_layout: QVBoxLayout, mode_key: str, defn: _Contro
         widget.setTickPosition(QSlider.TickPosition.TicksBelow)
         if defn.tick_interval:
             widget.setTickInterval(defn.tick_interval)
-        if defn.tooltip:
-            widget.setToolTip(defn.tooltip)
+        tooltip = defn.tooltip
+        if defn.control_key == "sensitivity_slider":
+            tooltip = _sensitivity_tooltip(mode_key)
+        elif defn.control_key == "manual_floor":
+            tooltip = _manual_floor_tooltip(True)
+        if tooltip:
+            widget.setToolTip(tooltip)
         widget.blockSignals(True)
         widget.setValue(_slider_value_from_actual(default_value, defn))
         widget.blockSignals(False)
@@ -834,6 +936,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
             return
         visible = not adaptive_checkbox.isChecked()
         sensitivity_slider.setEnabled(visible)
+        sensitivity_slider.setToolTip(_sensitivity_tooltip(mode_key))
         if sensitivity_label is not None:
             sensitivity_label.setEnabled(visible)
 
@@ -842,14 +945,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
         manual_floor = controls.get("manual_floor")
         if dynamic_floor is None or manual_floor is None:
             return
-        if dynamic_floor.isChecked():
-            manual_floor.setToolTip(
-                "Baseline floor (0.12–1.0) feeding the dynamic algorithm. Lower = more reactive."
-            )
-        else:
-            manual_floor.setToolTip(
-                "Absolute manual floor (0.12–1.0) when Dynamic Noise Floor is disabled."
-            )
+        manual_floor.setToolTip(_manual_floor_tooltip(dynamic_floor.isChecked()))
 
     adaptive_checkbox = controls.get("adaptive")
     if adaptive_checkbox is not None:

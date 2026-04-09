@@ -24,8 +24,7 @@ Update this after every significant change.
 ## Snapshot
 
 - **Date:** `2026-04-09`
-- **Status:** Spectrum cleanup through 3.1 remains complete. Bubble now has the same shared bucketing treatment as Spectrum, Blob, Oscilloscope, and Sine Wave, and the bucket work has runtime user validation for logic, neatness, and persistence. Reddit Helper link handoff is now runtime-proven with a reusable scheduled-task authority and harness coverage. The non-mirrored Spectrum vocal lane is now user-validated and closed. The first Spectrum Energy Arrows pass is landed in code, with the old lane-power sliders removed in favor of lane-native arrows, and now awaits real runtime/feel validation before consolidation decisions are finalized. Preset follow-up also moved forward: frozen SCR and MC now target one shared ProgramData curated preset tree, and the repair/audit flow now explicitly catches and repairs stale non-mirrored Spectrum linear lane families.
-- **Organs synthetic:** Green against current authored `Preset 1` (user-modified version).
+- **Status:** Spectrum cleanup through 3.1 remains complete. Bubble now has the same shared bucketing treatment as Spectrum, Blob, Oscilloscope, and Sine Wave, and the bucket work has runtime user validation for logic, neatness, and persistence. Reddit Helper link handoff is now runtime-proven with a reusable scheduled-task authority and harness coverage. The non-mirrored Spectrum vocal lane is user-validated and closed. Spectrum Energy Arrows are also now user-validated, with lane-native arrows replacing the old scalar lane sliders and the remaining scalar/dead-key cleanup completed across settings, presets, repair, and docs. Preset follow-up also moved forward: frozen SCR and MC now target one shared ProgramData curated preset tree, and the repair/audit flow now explicitly catches and repairs stale non-mirrored Spectrum linear lane families while keeping only small rotating backups plus persistent undo state. Spectrum consolidation is now partially landed too: authored Audio copy now distinguishes creative Reactivity/Shape Floor from Technical sensitivity/noise-floor tuning, the fake-adaptive checkbox is now honestly presented as a recommended fixed sensitivity path, and per-mode audio-block guidance now calls out lower-vs-higher tradeoffs plus a mode recommendation.
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
 ---
@@ -53,63 +52,36 @@ Audited why borders were excluded from rainbow. Added `spectrum_rainbow_border` 
 ### H7. Reddit Helper Scheduled-Task Authority
 Reddit handoff is now working in real runtime through a durable interactive scheduled task plus session-lived helper model. Final shape: saver queues URL and exits normally; helper launch authority comes from a reusable Task Scheduler task; helper waits for shell readiness, opens the URL, and self-exits. The winning registration path uses native Task Scheduler COM XML with `InteractiveToken`, with the XML owning the principal and the COM registration call passing empty user/password variants. Repo harness coverage now exists for register/query/run/delete of that authority layer.
 
+### H8. Spectrum Energy Arrows / Lane Contract Cleanup
+Spectrum now uses lane-native vertical energy arrows in the shaper as the real authored lane-power surface. The old scalar lane controls are retired from live settings/presets/runtime, the shaper persists label-driven mirrored/non-mirrored lane-strength maps, curated Spectrum presets were rewritten onto that contract, and the repair tool now does one-time scalar-to-lane promotion only when cleaning genuinely old authored payloads. User runtime validation confirmed the arrows are working better than expected.
+
 ---
 
 ## Active Tasks
 
-### 1. Spectrum Energy Arrows (was §3.2)
+### 1. Spectrum Consolidation Pass (was §3.3)
 
-**Status:** `[~]` First pass landed in code; runtime/user validation still needed
+**Status:** `[~]` Partially landed / deeper cleanup still open
 **Priority:** Medium
 
-Replace redundant Spectrum energy-strength sliders with vertical strength arrows above the energy lanes in the Spectrum Shaper.
-
-- [x] Kept the node/notch editor as the owner of spatial placement and lane ownership
-- [x] Moved lane-contribution authoring into the editor without smuggling timing/smoothing controls into it
-- [x] Defined the persisted lane-power contract as label-driven mirrored/non-mirrored maps stored on a real `0.0-1.0` scale
-- [x] Made mirrored and non-mirrored semantics equivalent while still letting mirrored use four arrows and linear use five
-- [x] Removed the redundant authored lane-power sliders from the Spectrum Audio bucket
-- [x] Retired the stale authored/runtime `spectrum_vocal_position` seam from the live contract during the same cleanup
-- [x] Recorded the interaction/runtime contract in code, tests, and repo docs
-- [~] Preserve Organs behavior and current authored feel through synthetic/runtime validation, not assumption
-- [~] Decide whether the current editor height increase is enough or whether the shaper still feels cramped in real use
-- [~] Feed any remaining overlap/redundancy findings into Task 2 after real usage
-
-Landed in code:
-- The Spectrum editor now draws one vertical energy arrow above each active lane, centered over the current lane span derived from the notch layout
-- Arrow travel maps directly to real lane power on a `0-100%` mental model, with stored values persisted as normalized strengths
-- Moving notch boundaries reanchors the arrows with the lane while keeping stored meaning attached to lane identity rather than stale pixel position
-- Mirrored layouts now persist `Mid / Vocal / Low-Mid / Bass` strengths separately from linear `Bass / Low-Mid / Vocal / Hi-Mid / Treble`
-- Spectrum runtime now consumes those lane-strength maps directly in `bar_computation.py` instead of relying on authored scalar fields such as `spectrum_bass_emphasis` or `spectrum_mid_suppression`
-- `spectrum_wave_amplitude` and `profile_floor` remain explicit global controls outside the editor
-- Spectrum builder cleanup removed redundant lane sliders and updated the bucket helper copy so the shaper is the obvious lane-power surface
-- The editor height/padding was increased to make room for arrows without collapsing the authored silhouette area
-
-Testing / validation fence:
-- [x] Added structural tests for arrow persistence, mirrored/non-mirrored save/load, and notch-motion ownership
-- [x] Added runtime math tests proving lane strengths affect the intended lanes instead of acting like renamed global sliders
-- [x] Kept `Preset 1 (Organs)` synthetic baselines in the loop during the contract migration work
-- [ ] Manually validate that the arrows are readable, not cramped, and clearly better than the old scalar sliders in real UI use
-- [ ] Validate that current authored presets, especially Organs-like Spectrum motion, still feel right under the new lane-power contract
-- [ ] Decide whether hover-only percentage feedback is enough or whether persistent text/value affordances are still needed
-- [ ] Treat passing tests as schema/math proof only, not interaction sign-off
-
-Design guardrails:
-- This is not a Blob-shaper transplant
-- Spatial ownership stays in the Spectrum editor
-- Time-behavior controls still belong outside the editor
-- If the first pass does not clearly beat the old scalar controls in real use, stop and reassess instead of forcing arrows forward for elegance alone
-
-### 2. Spectrum Consolidation Pass (was §3.3)
-
-**Status:** `[ ]` Not started
-**Priority:** Medium
-
-- [ ] Prepare an exact proposed list of Spectrum control merges, removals, and deprecations
-- [ ] Confirm each merge/removal with the user before editing
-- [ ] Preserve Organs behavior directly or through automatic remapping
+- [x] Clarify the highest-confusion Spectrum overlaps without changing the runtime math contract
+- [x] Separate authored `Reactivity` / `Shape Floor` copy from Technical sensitivity/noise-floor copy
+- [x] Replace misleading `Adaptive Sensitivity` wording with an explicit recommended fixed-sensitivity path
+- [x] Add mode-aware audio block size guidance with lower/higher tradeoffs and a Spectrum recommendation
+- [ ] Decide whether `Output Lift`, `AGC Strength`, and `Input Gain` can be reduced further without removing genuinely useful expert tuning
+- [ ] Decide whether Spectrum should keep the recommended/manual sensitivity toggle at all or collapse fully to a single manual slider path
 - [ ] Keep shimmer-at-mid-height as a defined tuning target rather than a vibe-based cleanup
 - [ ] Defer shimmer assessment/fix until the rest of this plan has landed cleanly, but do not defer ordinary consolidation work that can proceed safely now
+
+What landed in this pass:
+- Spectrum authored Audio copy now explicitly separates creative motion controls from Technical signal tuning
+- `Profile Floor` is now presented as `Shape Floor` so it stops reading like the same thing as Technical noise floor
+- Shared Technical UI now calls the checkbox `Use Recommended Sensitivity` because the underlying worker path is a fixed tuned multiplier, not live adaptive analysis
+- Shared Technical audio-block tooltip now explains lower-vs-higher tradeoffs and shows a per-mode recommendation (`128` for Spectrum/Oscilloscope/Sine Wave, `256` for Blob/Bubble)
+
+Why the task stays open:
+- Spectrum still has a real expert-layer overlap question around `Output Lift`, `AGC Strength`, and `Input Gain`
+- The shimmer work is still intentionally deferred and should not get bundled into these copy/ownership cleanups by accident
 
 Captured tuning notes:
 - Mid-height shimmer is not the same problem as quiet-floor jitter
@@ -125,7 +97,7 @@ User guidance to preserve:
 - Drops should be encouraged through a less flickery presentation method than simply increasing `drop_speed`
 - Higher internal resolution appears to reduce shimmer but increases latency and does not eliminate the issue
 
-### 3. Oscilloscope UI Bucket Cleanup
+### 2. Oscilloscope UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Medium-High
@@ -153,7 +125,7 @@ Landed:
 - [x] Normal buckets default expanded; Advanced buckets default collapsed
 - [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "osc" -q`
 
-### 4. Sine Wave UI Bucket Cleanup
+### 3. Sine Wave UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Medium-High
@@ -183,7 +155,7 @@ Landed:
 - [x] Kept control attribute names unchanged
 - [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "sine" -q`
 
-### 5. Bucket State Persistence (was IDEA BOX #1)
+### 4. Bucket State Persistence (was IDEA BOX #1)
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Medium
@@ -198,7 +170,7 @@ Landed:
 - [x] Preserved existing UX defaults where they were already established instead of forcing a surprise global-collapse reset
 - [x] Validated via targeted widget/plumbing suites for `osc`, `sine`, `spectrum`, and `blob`
 
-### 6. Settings Shell Outer Border Radius
+### 5. Settings Shell Outer Border Radius
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -216,7 +188,7 @@ Design guardrails:
 - Do not endanger any other custom styling behavior to gain rounded corners
 - Analysis must be deep before implementation; this task is deliberately risk-averse
 
-### 7. Settings Dialog Close / Teardown Polish
+### 6. Settings Dialog Close / Teardown Polish
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -228,7 +200,7 @@ When closing the settings dialog, some elements visibly deconstruct before the s
 - [ ] Prefer a solution where everything appears to vanish together; second-best is shell-first disappearance
 - [ ] Confirm no cleanup, memory, or shutdown correctness regressions are introduced
 
-### 8. Blob Energy Balance / Glow Drive Follow-up
+### 7. Blob Energy Balance / Glow Drive Follow-up
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -243,7 +215,7 @@ Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-sh
 - [ ] Preserve Blob identity and do not accidentally make it behave like another mode
 - [ ] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
 
-### 9. Bubble UI Bucket Cleanup
+### 8. Bubble UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Low
@@ -256,7 +228,7 @@ Landed:
 - [x] Implemented Bubble using the shared bucket helper/persistence path
 - [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "bubble" -q`
 
-### 10. Shared Preset Install / Save Location Across SCR and MC
+### 9. Shared Preset Install / Save Location Across SCR and MC
 
 **Status:** `[~]` Landed in code / awaiting dual-install runtime validation
 **Priority:** Medium
@@ -284,33 +256,6 @@ Implementation notes to preserve:
 - `Replace Visualizers` must keep restoring from packaged assets, not from the already-active shared target
 - We still do not have a separate on-disk custom visualizer preset library; the trailing `Custom` slot remains settings-backed rather than file-backed
 
-### 11. Preset Repair Tool Follow-Up For Spectrum Vocal Lanes And Energy Arrows
-
-**Status:** `[~]` Vocal-lane follow-up landed / post-arrow repair pass still pending
-**Priority:** Medium
-
-The preset repair tool is heavily relied on and must stay aligned with current authored/runtime contracts, especially after the now-landed non-mirrored vocal-lane work and the new Energy Arrows lane-strength contract.
-
-- [x] Validated the repair tool against the landed non-mirrored vocal-lane migration rules
-- [x] Ensured repaired presets preserve legitimate user-authored boundary drift while still promoting stale legacy linear label families
-- [x] Added explicit audit reporting for stale Spectrum linear label families so they fail loudly instead of drifting silently
-- [x] Repaired the current curated Spectrum preset pack so shipped presets no longer keep the old non-mirrored `Low / Mid` family alive
-- [x] Confirmed the tool does not flatten Organs or other authored presets while healing schema drift, at least at the current structural/schema fence level
-- [x] Added/refreshed focused tests so future Spectrum contract changes cannot silently break repair behavior
-- [ ] Add an explicit post-Energy-Arrows follow-up pass now that the new lane-power contract has landed, so stale scalar-lane keys and repaired preset naming/migration edge cases are re-audited together
-
-Design guardrails:
-- The repair tool must remain permissive enough to preserve user-authored variation
-- Do not hardcode brittle exact-shape assumptions that will break as Spectrum evolves
-- Treat this tool as infrastructure, not cleanup glue; it needs the same care as runtime code
-
-Implementation notes to preserve:
-- The repair tool now uses the same linear-notch promotion logic as runtime/model loading for stale non-mirrored Spectrum families
-- The new audit seam should remain structural: it is meant to catch legacy lane-family drift, not to freeze authored Spectrum shapes
-- The explicit post-Energy-Arrows follow-up still belongs here now that lane-power arrows replaced the old scalar lane controls, because repair/remap edge cases are easiest to miss after the runtime migration is already green
-
----
-
 ## Runtime / Log Watchlist
 
 **Status:** `[~]` Ongoing
@@ -326,7 +271,6 @@ Keep watching for:
 
 Known items:
 - [~] `%APPDATA%/SRPSS/settings_v2.json` may contain older visualizer-era state that `SettingsManager` heals on load. Confirm whether a user-side save permanently clears the repair path.
-- [~] Blob `Preset 1` synthetic drift is expected because the user personally modified Blob Preset 1. That baseline test should only run immediately before/after Blob work, not continuously.
 - [~] Spectrum lane-strength arrows are now the live contract; keep watching for any remaining legacy scalar-lane drift or preset remap edge cases that would make runtime behavior disagree with the editor
 
 ---

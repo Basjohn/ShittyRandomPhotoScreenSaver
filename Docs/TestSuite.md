@@ -63,10 +63,9 @@ tests/
   - `tests/test_settings_defaults_parity.py` is also part of that fence now: repair-tool mandatory key lists must only reference keys that still exist in canonical defaults, so preset repair/default drift cannot creep in silently.
   - `tests/test_visualizer_presets.py` now also guards the repair-tool mutation workflow: curated-source repairs/reindexes must trigger shipped-artifact regeneration, and reindex must preserve authored suffix text instead of reviving old static names.
   - `tests/test_visualizer_settings_plumbing.py` now also carries the Spectrum lane-contract fence: drifted legacy `Bass / Low / Mid / Hi-Mid / Treble` linear families must be promoted to `Bass / Low-Mid / Vocal / Hi-Mid / Treble` without flattening the user's boundary positions, and the new mirrored/linear lane-strength arrow maps must persist cleanly through model -> creator/applier -> runtime bridge without reviving retired scalar lane keys.
-  - it must not freeze non-baseline curated artistic choices such as filenames, pack size, slot labels, or payload tuning outside the explicit `Preset 1` baseline fence.
-  - `tests/test_visualizer_preset1_baselines.py` is the intentional rigid synthetic feel fence.
-  - if curated preset 1 is intentionally reauthored, refresh the checked-in baseline in the same change.
-  - baseline/recovery work is only considered safe when the curated audit, shipped-tree regeneration, runtime creator-bridge fence, and the `Preset 1` synthetic fence are all green together. Do not use one passing suite to assume the others are implicitly safe.
+  - it must not freeze curated artistic choices such as filenames, pack size, slot labels, or payload tuning; those remain authored content, not rigid regression targets.
+  - the old temporary `Preset 1` synthetic migration fence has been retired. Keep preset regression structural: schema hygiene, repair/reindex correctness, source/release parity, and runtime bridge agreement.
+  - baseline/recovery work is only considered safe when the curated audit, shipped-tree regeneration, and runtime creator-bridge fence are all green together. Do not use one passing suite to assume the others are implicitly safe.
 
 ### Stability Rules
 
@@ -393,7 +392,6 @@ It also now guards the explicit Spectrum `Move To Custom` path more directly: th
 It also guards curated slot normalization through `tools/visualizer_preset_repair.py --reindex-curated`: gap-filling, canonical filename rewrite, recovery when the earliest remaining preset is no longer slot 1, duplicate-slot detection, and Preset 1 presence per primary mode without freezing the rest of the artistic pack size.
 | `test_visualizer_preset_manifest.py` | Shipped curated-preset manifest parity and stale-file sync behavior | Stable onefile extraction / stale curated preset cleanup |
 This suite now also guards source-tree reconciliation behavior: new shipped curated files missing from the manifest must still be accepted by source-aware replacement flows, stale manifest-only paths missing from the source tree must be ignored there instead of causing false failures, and replacement now rewrites the target manifest from the reconciled shipped-tree view.
-| `test_visualizer_preset1_baselines.py` | Deterministic synthetic preset-1 baseline fence for active shipped modes | Structural migrations, curated preset-1 reauthoring, before/after regression checks |
 | `test_spectrum_shaping.py` | Spectrum shape-editor/runtime contract fence: notch families, mirrored vs linear lane identities, lane-strength arrow defaults/promotion, and label-driven Spectrum DSP routing | Spectrum shaper contract or DSP migration changes |
 | `test_visualizer_settings_plumbing.py` | Behavior-first settings plumbing (model → creator/applier → frame push → overlay state contract), plus direct adapter coverage for Spectrum / Blob / Bubble / Oscilloscope / Sine mode-owned WidgetsTab bindings and the shared visualizer settings contract/snapshot helpers. Spectrum coverage now includes non-mirrored vocal-lane promotion and mirrored/linear lane-strength arrow persistence. | New visualizer settings, adapter extraction regressions, and sparse-mapping contract drift |
 | `test_visualizer_preset_cycling_runtime.py` | Runtime preset cycling API (`WidgetManager`), SpotifyVisualizerWidget middle/XButton shortcuts, InputHandler routing hit-tests, preset wrap-around | Runtime preset shortcut regressions |
@@ -573,8 +571,6 @@ When writing tests that create `DisplayWidget` or start transitions:
 It is also now the direct regression fence for extracted WidgetsTab adapters (`spectrum_settings_binding.py`, `blob_settings_binding.py`, `bubble_settings_binding.py`, `oscilloscope_settings_binding.py`, `sine_wave_settings_binding.py`) and for `core/settings/visualizer_settings_contract.py` plus `core/settings/visualizer_settings_snapshot.py`, so coordinator-shrinking refactors and sparse-mapping/SST contract work stay behavior-safe.
 It is also now a direct guard for the Spectrum Energy Arrows contract: the lane-native maps emitted by `spectrum_settings_binding.py` must survive save/load and creator/applier translation without leaking `spectrum_bass_emphasis`, `spectrum_mid_suppression`, or `spectrum_vocal_position` back into authored runtime state.
   Bubble gradient semantics coverage also lives here now: legacy-label migration, `center_out_reverse`, and canonical shader-vector/mode mapping are tested without relying on visual inspection alone.
-- `tests/test_visualizer_preset1_baselines.py`
-  This is the intentional rigid fence for curated preset feel. If preset 1 is deliberately reauthored, refresh the checked-in baseline in the same change.
 - `tests/test_s_hotkey_workflow.py` and `tests/test_flicker_fix_integration.py`
   Minimum regression bar for the now-resolved settings flicker / settings-launch workflow.
 

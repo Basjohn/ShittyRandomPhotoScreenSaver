@@ -47,25 +47,24 @@ This is the canonical cross-mode baseline sheet for:
 - Sine/Osc:
   - validate both mode switch behavior and steady-state feel, not just isolated beats
 
-### 2.4 Preset-1 Synthetic Migration Guard
+### 2.4 Structural Preset Guard
 
-- The repo now carries a deterministic preset-1 baseline snapshot for all active modes:
-  - data: [tests/data/visualizer_preset1_baselines.json](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\data\visualizer_preset1_baselines.json)
-  - generator: [tests/visualizer_preset1_baseline_utils.py](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\visualizer_preset1_baseline_utils.py)
-  - regression test: [tests/test_visualizer_preset1_baselines.py](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\tests\test_visualizer_preset1_baselines.py)
-- Primary use:
-  - record current curated preset-1 behavior before structural refactors such as `VIZ-AUD-015`
-  - rerun after the refactor to confirm preset plumbing and per-mode reactions still match the recorded baseline within tolerance
-- Governance rule:
-  - if a curated preset 1 is intentionally reauthored, update the recorded baseline snapshot in the same change
-  - do not "fix" a failing baseline test by loosening tolerances unless the generated metrics are genuinely too noisy to act as a migration fence
-  - do not treat older `HEAD` preset JSON as more authoritative than the current curated file; authored preset content in the working tree is the source of truth
+- The temporary preset-1 synthetic migration fence has been retired.
+- Preset safety is now judged structurally:
+  - curated source tree stays on the modern schema
+  - repair/reindex keeps names, slot numbering, and payload shape sane
+  - frozen shipped trees regenerate from source cleanly
+  - runtime creator/apply paths agree with what the editor authored
+- If a preset feels wrong after a runtime/schema change, validate it with real UI/runtime behavior and current authored JSON, not with an old frozen synthetic snapshot.
 
 ## 3. Retired Authored Keys
 
 These keys are no longer canonical authored outputs:
 - `energy_boost`
 - `use_raw_energy`
+- `spectrum_bass_emphasis`
+- `spectrum_mid_suppression`
+- `spectrum_vocal_position`
 
 Policy:
 - curated repair, preset save/export, and the shipped preset tree must stay free of them

@@ -93,7 +93,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         mode_key="spectrum",
         bucket_key="audio",
         title="Audio",
-        helper_text="Audio weighting and falloff controls still apply when hidden.",
+        helper_text="Creative motion controls live here. Technical noise-floor and signal tuning live in Technical.",
         default_expanded=True,
     )
     _, ghost_bucket = build_collapsible_bucket(
@@ -441,7 +441,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     # --- Audio controls that remain global instead of lane-authored ---
     _influence_hint = QLabel(
         "Lane strength now lives in the top arrows inside the shaper. "
-        "These controls only handle global reactivity and floor behavior."
+        "These controls only handle global reactivity, shape-floor support, and falloff."
     )
     _influence_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
     _influence_hint.setWordWrap(True)
@@ -456,7 +456,12 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_wave_amplitude.setValue(max(0, min(100, _wave_default)))
     tab.spectrum_wave_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_wave_amplitude.setTickInterval(25)
-    tab.spectrum_wave_amplitude.setToolTip("Overall audio reactivity scaling. 0 = calm, 100 = intense.")
+    tab.spectrum_wave_amplitude.setToolTip(
+        "Overall Spectrum motion scaling after lane routing.\n"
+        "Lower = calmer, more reserved movement.\n"
+        "Higher = punchier motion and stronger lane response.\n"
+        "This is creative reactivity, not the Technical sensitivity/noise-floor path."
+    )
     bind_setting_signal(
         tab,
         tab.spectrum_wave_amplitude.valueChanged,
@@ -467,7 +472,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _wave_row.addWidget(tab.spectrum_wave_amplitude_label)
 
     # Profile Floor (5–30 → 0.05–0.30)
-    _floor_row = _aligned_row(audio_bucket, "Profile Floor:")
+    _floor_row = _aligned_row(audio_bucket, "Shape Floor:")
     tab.spectrum_profile_floor = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.spectrum_profile_floor.setMinimum(5)
     tab.spectrum_profile_floor.setMaximum(30)
@@ -476,8 +481,10 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_profile_floor.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_profile_floor.setTickInterval(5)
     tab.spectrum_profile_floor.setToolTip(
-        "Minimum profile-shape floor (visual floor, not technical Manual Floor/noise floor). "
-        "Lower = bars can shrink more according to the shape profile."
+        "Minimum visual shape floor for the authored Spectrum silhouette.\n"
+        "Lower = bars can collapse more deeply into the drawn profile.\n"
+        "Higher = bars keep more body even when a lane is quiet.\n"
+        "This is separate from the Technical noise-floor controls."
     )
     bind_setting_signal(
         tab,
@@ -498,7 +505,10 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_drop_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_drop_speed.setTickInterval(25)
     tab.spectrum_drop_speed.setToolTip(
-        "How fast bars fall after a peak. 1.0x = default, higher = snappier drops, lower = sticky bars."
+        "How fast Spectrum bars fall after a peak.\n"
+        "Lower = stickier sustain and softer release.\n"
+        "Higher = sharper, snappier drops.\n"
+        "1.0x is the current neutral baseline."
     )
     bind_setting_signal(
         tab,
@@ -518,7 +528,12 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.spectrum_growth.setValue(max(100, min(500, spectrum_growth_val)))
     tab.spectrum_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.spectrum_growth.setTickInterval(50)
-    tab.spectrum_growth.setToolTip("Height multiplier for the spectrum card. 100% = current default height.")
+    tab.spectrum_growth.setToolTip(
+        "Height multiplier for the Spectrum card.\n"
+        "Lower = tighter card with denser motion.\n"
+        "Higher = taller card with more vertical breathing room.\n"
+        "100% = current authored baseline."
+    )
     bind_setting_signal(
         tab,
         tab.spectrum_growth.valueChanged,

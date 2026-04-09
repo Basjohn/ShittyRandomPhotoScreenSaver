@@ -24,7 +24,7 @@ The Spotify Beat Visualizer consists of a shared pipeline (audio capture → FFT
 
 Global settings (defaults from `core/settings/defaults.py`):
 
-- `adaptive_sensitivity=True`, `sensitivity=1.0` (UI label: **Suggest Sensitivity**. When checked we hide the manual slider and use the curated auto multiplier; uncheck to expose the slider and honor `sensitivity`.)
+- `adaptive_sensitivity=True`, `sensitivity=1.0` (UI label: **Use Recommended Sensitivity**. This is a curated fixed multiplier path, not live adaptive learning. Turn it off to author the manual `sensitivity` slider directly.)
 - `dynamic_floor=True`, `manual_floor=0.12`, `ghosting_enabled=True`, `ghost_alpha=0.34`, `ghost_decay=0.35`
 - Per-mode technical slots now own `bar_count`, `<mode>_audio_block_size` (0 = Auto), `<mode>_manual_floor`, etc. There is **no** legacy global `audio_block_size` anymore; presets/repairs must reference the per-mode keys only. The visualizer now always renders through the GPU overlay — the legacy `software_visualizer_enabled` flag and QWidget fallback have been removed entirely.
 - Technical controls are metadata-driven in `ui/tabs/media/technical_controls.py`. When adding or debugging a technical control, update the shared control registry first; do not hand-wire separate build/load/save branches for one mode.
@@ -53,6 +53,8 @@ Log hygiene tip:
 - Uniforms: `u_bars[64]`, `u_peaks[64]`, `u_bar_count`, `u_segments`, `u_single_piece`, `u_fill_color`, `u_border_color`, `u_spectrum_glow_enabled`, `u_spectrum_glow_intensity`, `u_spectrum_glow_color`, `u_ghost_alpha`, `u_fade`, `u_time`, `u_resolution`
 - Behaviour: geometry cache builds mirrored pillars; ghost peaks follow decaying envelope; segment count = `clamp(inner_height//5, 8, 64)`.
 - Authoring note: current UI/save paths should emit canonical Spectrum keys (`spectrum_render_mode`, `spectrum_unique_colors`) rather than the older bools (`spectrum_single_piece`, `spectrum_rainbow_per_bar`). Runtime still translates the canonical values into the older widget seam internally so renderer behavior does not drift.
+- Energy-arrow contract: the shaper now owns per-lane energy authoring directly. Vertical arrows sit just above the active lane notches, and persisted values are label-driven lane-strength maps (`Mid/Vocal/Low-Mid/Bass` mirrored, `Bass/Low-Mid/Vocal/Hi-Mid/Treble` linear). Old scalar lane controls such as `spectrum_bass_emphasis`, `spectrum_mid_suppression`, and `spectrum_vocal_position` are retired authored/runtime keys and should not reappear in saved presets/settings.
+- Consolidation note: Spectrum's authored Audio bucket is now intentionally distinct from the shared Technical bucket. `Reactivity` is the creative post-routing motion scalar, `Shape Floor` is the authored minimum silhouette support, while Technical `Sensitivity` / `Noise Floor Baseline` / `Output Lift` remain expert signal-tuning controls.
 - Debug tip: If curved profile looks flat, confirm multiplication `profile_shape[i] * zone_energy` still occurs before smoothing.
 - Rim-glow guardrail: Spectrum glow is intentionally a tiny inward bleed on the fill side of the bar edge (about 1–2 px), not a post-process bloom or outside halo. If it starts looking smeary or invisible, inspect the shader's fill-only edge-distance math first; do not bolt on time-reactive bloom just because Spectrum already moves quickly.
 - Rim-glow plumbing guardrail: if Spectrum glow is invisible in live use, check the GL overlay uniform query list before touching preset values or shader math. A missing overlay uniform query can make the shader path look "subtle" when it is actually never receiving the setting at all.
@@ -215,11 +217,12 @@ Each mode has contextual transient mix sliders controlling how much transient en
 - Key behaviour changes:
   - `_build_clean_payload()` now emits a single `spotify_visualizer` block; `snapshot.custom_preset_backup` + top-level `widgets.spotify_visualizer` are stripped.
   - Mandatory technical suffixes drive optional backfill logic; at present we only prune junk and preserve provided values (no auto backfill unless explicitly enabled).
-  - `--repair-all` CLI flag + GUI “Repair All Presets” button batch-process every JSON under `presets/visualizer_modes/**`. Each file gets a `.bakN` backup before rewrite.
+  - `--repair-all` CLI flag + GUI “Repair All Presets” button batch-process every JSON under `presets/visualizer_modes/**`. Backups are kept under `temp/visualizer_preset_backups`, rotate through `.bak` + `.bak1`, and stale numbered spillover is pruned on the next write for that preset.
   - `--reindex-curated` and the GUI `Reindex Curated Presets` button normalize slot numbering after manual deletes/adds. Guardrails:
     - if `Preset 1` is missing, the earliest remaining preset is moved to slot 1
     - markerless files such as `thunder.json` fill the earliest open gap before higher explicit slots are compressed down
     - payload content is preserved; only metadata/filenames are normalized
+  - Spectrum repair now performs a one-time scalar-to-lane promotion when genuinely old presets still carry `spectrum_bass_emphasis` / `spectrum_mid_suppression`, then strips those dead keys from the repaired payload.
 - Usage:
   1. Launch `python tools/visualizer_preset_repair.py` (GUI) or run `python tools/visualizer_preset_repair.py --repair-all` for CLI batch.
   2. Pick the mode/preset. Inspect the stats log (added/removed/changed keys). GUI keeps an undo stack per session.
@@ -242,7 +245,7 @@ Each mode has contextual transient mix sliders controlling how much transient en
   - `tests/test_visualizer_presets.py` should stay contract-level: schema, filtering, duplicate-prefix cleanup, direct transient-key handling, SST shape.
   - `tests/test_visualizer_presets.py` also guards the curated reindex rules: gap fill, canonical filename rewrite, and `Preset 1` normalization.
   - Duplicate-prefix cleanup must cover alternate accepted mode prefixes too (`osc_` and `oscilloscope_`, `sine_` and `sine_wave_`, etc.), not only the first canonical prefix.
-  - `tests/test_visualizer_preset1_baselines.py` is the only intentionally rigid preset-feel fence. If curated preset 1 is intentionally reauthored, refresh that baseline in the same change instead of forcing artistic values into general preset tests.
+  - Do not rebuild a rigid preset-feel fence around curated artistic content. Use runtime validation plus structural preset tests instead.
 
 ---
 

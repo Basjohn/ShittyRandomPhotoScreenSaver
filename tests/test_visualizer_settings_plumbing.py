@@ -1231,6 +1231,17 @@ class TestPerModeTechnicalControlsCollection:
         assert "kick_lane_gain" in config_keys
         assert "transient_pulse_gain" not in config_keys
 
+    def test_shared_technical_copy_clarifies_recommended_sensitivity_and_noise_floor(self):
+        from ui.tabs.media import technical_controls as tc
+
+        defs = {defn.control_key: defn for defn in tc._control_defs_for_mode("spectrum")}
+
+        assert defs["adaptive"].checkbox_text == "Use Recommended Sensitivity"
+        assert defs["dynamic_range"].checkbox_text == "Output Lift"
+        assert defs["manual_floor"].label_text == "Noise Floor\nBaseline:"
+        assert "Recommended for Spectrum: 128 samples." in tc._audio_block_tooltip("spectrum")
+        assert "not live adaptive analysis" in tc._recommended_sensitivity_tooltip("spectrum")
+
     def test_load_per_mode_controls_reads_direct_transient_keys(self):
         from ui.tabs.media import technical_controls as tc
 

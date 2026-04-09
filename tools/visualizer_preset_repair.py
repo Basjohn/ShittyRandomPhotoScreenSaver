@@ -442,6 +442,14 @@ def _ensure_backup(path: Path) -> Path:
     target_dir.mkdir(parents=True, exist_ok=True)
     primary = target_dir / f"{path.name}.bak"
     secondary = target_dir / f"{path.name}.bak1"
+    for stale in sorted(target_dir.glob(f"{path.name}.bak*")):
+        if stale in (primary, secondary):
+            continue
+        if stale.name.endswith(".bak"):
+            continue
+        if stale.name.endswith(".bak1"):
+            continue
+        stale.unlink(missing_ok=True)
     if secondary.exists():
         secondary.unlink()
     if primary.exists():
