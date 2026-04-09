@@ -1,6 +1,8 @@
 # Spec
 
-Single source of truth for architecture and key decisions.
+Single source of truth for current architecture and key decisions.
+
+Use `Current_Plan.md` for active rollout and validation state, and `Docs/Historical_Bugs.md` for dated regressions, failed approaches, and final fix summaries. `Spec.md` should stay focused on the current contract.
 
 ## Goals
 - Smooth, flicker-free image transitions on multi-monitor setups.
@@ -9,12 +11,13 @@ Single source of truth for architecture and key decisions.
 
 ## UI Component Specifications
 - **Custom Styling (checkboxes/combos/sliders)**: `Docs/Custom_Style_Implementation.md` now captures the full asset pipeline, helper usage, and the March 2026 “parity pass” contract. Consult it for circle indicator geometry, combo shell QSS, shared `_aligned_row` helpers, and the checklist used to keep settings tabs visually aligned. Any new control chrome must be documented there before shipping.
+- **Settings Shell Outer Border**: `ui/settings_dialog.py` uses the current paint-based rounded-edge treatment for the settings shell. Acrylic, the custom title bar, and inner styling are part of that contract.
 - **Styled ComboBox / Font ComboBox**: All dropdowns in settings tabs must use `ui/widgets/styled_combo_box.py` plus the shared `COMBOBOX_STYLE` appended at the dialog level. Font pickers must instantiate `ui/widgets/styled_font_combo_box.py` so the preview rows stay intact while inheriting the same chrome. `WidgetsTab` and TransitionsTab both import `COMBOBOX_STYLE`, so every dropdown inherits the skin without per-tab QSS; DisplayTab remains the reference for standalone dialogs.
 - **Rounded Input Fields**: `SPINBOX_STYLE` in `ui/tabs/shared_styles.py` now defines the shared rounded border/hover/focus state for `QSpinBox`, `QDoubleSpinBox`, and `QLineEdit`. Append that stylesheet alongside `COMBOBOX_STYLE` in any dialog so numeric/text inputs keep parity with the combo box chrome.
 - **Slider Style**: `SLIDER_STYLE` in `ui/tabs/shared_styles.py` provides a dark glass indented groove with a pill-shaped notch handle (16×10px, dark gradient, `#444` border). Applied at the tab level so all `NoWheelSlider`/`QSlider` instances inherit it. Includes hover, pressed, and disabled states. Never use inline slider QSS — always inherit from the centralized constant.
 - **Section vs Swatch Labels**: `add_section_label()` (34 px) is the default helper for combo/spin/text rows. Color swatch rows **must** use `add_swatch_label()` (28 px, `SWATCH_LABEL_STYLE`) so their shorter labels sit lower and align with `ColorSwatchButton` shadows. Mirror this via local `_swatch_row` helpers instead of duplicating QSS tweaks per tab.
 - **CSS Specificity Warning**: Never use `QScrollArea QWidget { background: transparent; }` — specificity 002 overrides type-only selectors (001). Use `QScrollArea > QWidget > QWidget` (direct-child) instead. See `Docs/Custom_Style_Implementation.md` for details and `SCROLL_AREA_STYLE` for the safe pattern.
-- **Rollout Tracking**: `Current_Plan.md` maintains a live, auto-generated checklist of every checkbox/combobox across the UI. Any new widget must be added to this manifest before implementation and marked complete only after verifying styling + runtime behavior.
+- **Rollout Tracking**: Track active implementation status and validation in `Current_Plan.md`. Record dated regressions and final fix notes in `Docs/Historical_Bugs.md`.
 - **Visualizer buckets (ordering + persistence)**: For Spectrum, Bubble, Blob, Sine Wave, and Oscilloscope, each mode layout presents an **Advanced** collapsible group first, followed immediately by a **Technical** collapsible group. Both buckets are top-level siblings (not nested) and use the shared helper styles (toolbutton + helper label). Expanded/collapsed state persists per mode via `WidgetsTab._visualizer_adv_state` / `_visualizer_tech_state`. **Helix and Starfield are officially deprecated** (kept dev-only for archive/back-compat) and may omit UI buckets entirely.
   - Blob authored cleanup now follows `Docs/Visualizer_Mode_Consolidation_Mental_Model.md`: simplify the main control surface around user outcomes, keep color/glow basics, hide controls that fight the active mode/state, and preserve `Technical` as an expert/runtime layer instead of overflow for authored controls.
 
@@ -121,7 +124,6 @@ Single source of truth for architecture and key decisions.
   - Case B: Primary covered + Ctrl held → Exit immediately
   - Case C: MC mode (primary NOT covered) → Stay open, bring browser to foreground
 - System-agnostic: Uses `QGuiApplication.primaryScreen()` for detection, not screen index assumptions.
-- Dedicated investigation doc: `audits/PHASE_E_ROOT_CAUSE_ANALYSIS.md`.
 
 ## Developer Feature Gate (SRPSS_ENABLE_DEV)
 
@@ -355,7 +357,7 @@ The table below lists all transitions. All are GL-only, running on the composito
   - Empty/invalid JSON logs `[VIS_PRESETS]` warnings without interrupting other presets.
 - UI/Settings interplay:
   - `widgets.spotify_visualizer.preset_<mode>` stores the active slot index. Values clamp between 0 and `custom_index` so corrupted settings never crash the slider.
-- `VisualizerPresetSlider` lists the friendly names, auto-hiding the Advanced container whenever a curated slot is active and surfacing it only for Custom. Current preset/audit references live in `Docs/Visualizer_System_Audit/`.
+- `VisualizerPresetSlider` lists the friendly names, auto-hiding the Advanced container whenever a curated slot is active and surfacing it only for Custom. Track active preset validation and follow-up in `Current_Plan.md`.
 - Advanced buckets follow the Always-Apply rule: hidden controls remain in force, and SST exports/imports preserve every key (including split gradient/specular directions) even when the UI is collapsed.
 - `timing.interval`: int seconds (default 45). The Display tab now always loads this canonical 45 s value when the key is missing so UI defaults match `SettingsManager`. Regression test `tests/test_display_tab.py::TestDisplayTab::test_display_tab_default_values` guards this.
 - `display.same_image_all_monitors`: bool
@@ -406,6 +408,7 @@ The table below lists all transitions. All are GL-only, running on the composito
 - Settings dialog:
   - Palette: app-owned dark theme without Windows accent bleed.
   - Geometry: 60%-of-screen, clamped geometry for the configuration window.
+  - Outer shell: subtle forged rounded-border paint only. This is intentionally conservative and may retain tiny compositor-dependent caveats; do not trade acrylic/title-bar stability for stronger radius styling without fresh research and live runtime checks.
 
 ### Settings snapshots (SST) and About-tab import/export
 
@@ -439,10 +442,6 @@ The table below lists all transitions. All are GL-only, running on the composito
 - **Shiboken validity guards**: All widget callbacks dispatched from background threads via `run_on_ui_thread()` must check `Shiboken.isValid(self)` before touching Qt objects, preventing crashes when widgets are destroyed during shutdown while deferred callbacks are still queued. All overlay widgets audited and guarded (Feb 2026).
 - **Deferred lambda C++ deletion guards**: `QTimer.singleShot` lambdas that capture widget references must guard against the widget being destroyed before the timer fires. Pattern: wrap `widget.objectName()` in `try/except RuntimeError` at the top of the closure and bail out if the C++ object is deleted. Applied in `widget_manager.py` `_register_spotify_secondary_fade` closures (Mar 2026).
 - Qt objects registered with `ResourceManager` where appropriate.
-
-## Semantics Audit
-
-- See `audits/SEMANTICS_AUDIT_2025_12_18.md` for the live checklist of semantics/naming changes and doc/comment updates required for long-term sanity.
 
 ## OpenGL Overlay Lifecycle
 - Persistent overlays per transition type for legacy GL paths (including Blinds and Diffuse), plus a single per-display `GLCompositorWidget` that renders the base image and compositor-backed transitions (Crossfade, Slide, Wipe, Block Puzzle Flip). Reuse prevents reallocation churn across both overlays and compositor surfaces.
@@ -521,7 +520,7 @@ The monolithic `SpotifyVisualizerWidget` and `SpotifyBarsGLOverlay` have been de
 
 ### Spotify Visualizer lifecycle & debugging checklist
 
-Canonical reset/freshness behavior now lives in `Docs/Visualizer_Reset_Matrix.md`, the authoritative signal-routing contract lives in `Docs/Visualizer_Signal_Contract.md`, and the cross-mode tuning baseline lives in `Docs/Visualizer_Baseline_Tuning_Matrix.md`. Use those alongside `Docs/Visualizer_System_Audit/` and the current tests.
+Canonical reset/freshness behavior now lives in `Docs/Visualizer_Reset_Matrix.md`, the authoritative signal-routing contract lives in `Docs/Visualizer_Signal_Contract.md`, and the cross-mode tuning baseline lives in `Docs/Visualizer_Baseline_Tuning_Matrix.md`. Use those alongside the current tests and `Current_Plan.md` when rollout validation is still active.
 
 #### Bubble gradient vs specular direction
 
@@ -668,7 +667,6 @@ bars, or popping), debug in this order:
 
 ## Diagnostics & Telemetry
 - Structured logging captures overlay readiness stages, swap behavior, and watchdog activity.
-- `audits/ARCHITECTURE_AND_MULTIPROCESSING_PLAN_2026.md` plus the Phase detailed planners are the live checklists for OpenGL stability, multiprocessing, widgets/settings, and documentation work; mirror any significant GL/compositor or telemetry changes there alongside this Spec.
 - High-verbosity debug sessions require log rotation (size/time bound) to avoid disk pressure. A dedicated rotating `screensaver_perf.log` file, configured via a PERF-only logging filter in `core.logging.logger`, mirrors all `[PERF]` lines (including `[PERF] [SPOTIFY_VIS]`, `[PERF] [ANIM]`, and `[PERF] [GL COMPOSITOR]` summaries) so performance telemetry remains easy to inspect across rotated main logs.
  - Telemetry counters record transition type requested vs. instantiated, cache hits/misses, and transition skips while in progress.
  - Animation timing for **all** transitions (CPU and GL/compositor) is centralised through per-display `AnimationManager` instances driven by a `PreciseTimer`-backed loop; transitions use `[PERF] [ANIM]` metrics (duration, frames, avg_fps, dt_min/max, fps_target) as the canonical timing signal rather than ad-hoc timers.

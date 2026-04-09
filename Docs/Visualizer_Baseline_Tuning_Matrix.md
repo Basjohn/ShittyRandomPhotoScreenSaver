@@ -84,4 +84,4 @@ update all of:
 - [Spec.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Spec.md)
 - [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Current_Plan.md)
 - [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md)
-- [Docs/Visualizer_System_Audit/00_Audit_Index.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_System_Audit\00_Audit_Index.md)
+- [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Current_Plan.md) for active rollout and temporary validation state

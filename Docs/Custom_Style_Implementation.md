@@ -40,7 +40,13 @@ QDialog (transparent, frameless, margins 0,0,0,0)
 
 ### Outer Border
 
-The dialog has a **square** 2.5px white border painted in `paintEvent`. The border is square (no `border-radius`) which eliminates corner bleed permanently.
+The dialog now uses a **forged rounded outer border** painted in `paintEvent`, not a genuinely rounded top-level window. The live shell stays acrylic + frameless, and the visible chrome is created by:
+
+- a white outer border stroke
+- a slightly larger dark backing stroke under it
+- a dark forged-corner cover path that hides compositor fringe at the extreme corners
+
+This is an intentionally conservative compromise. The accepted radius is small because stronger rounding reintroduced live Windows bleed and title-bar regressions.
 
 ---
 
@@ -172,7 +178,7 @@ border: 1px solid rgba(110, 110, 110, 204);
 
 **Root cause**: PySide6's `QBitmap` 1-bit painting path doesn't reliably produce the expected color0/color1 output on Windows.
 
-**Resolution**: Abandoned rounded outer border. Switched to **square outer border** which eliminates corner bleed by definition.
+**Resolution**: This remains a failed approach. Do not use masks for the settings shell.
 
 ### ❌ Polygon Mask for Corner Clipping
 
@@ -180,7 +186,7 @@ border: 1px solid rgba(110, 110, 110, 204);
 
 **What happened**: Polygon conversion loses sub-pixel precision at corners, producing visible jagged bleed.
 
-**Resolution**: Same — square border.
+**Resolution**: Same — do not use polygon-based clipping for the settings shell.
 
 ### ❌ QGraphicsDropShadowEffect on Dialog
 
@@ -208,9 +214,22 @@ border: 1px solid rgba(110, 110, 110, 204);
 
 **Resolution**: All buttons use uniform `border: 1px solid #ffffff`. Depth is achieved via `QGraphicsDropShadowEffect` on individual child widgets only (tab buttons).
 
-### ✅ Square Outer Border
+### ✅ Forged Rounded Outer Border (Accepted Compromise)
 
-The only reliable way to prevent corner bleed in Qt's QSS system is to use **no border-radius on the outer container**. This works because there are no sub-pixel edges to expose.
+The currently accepted settings-shell solution is a **paint-only forged rounded border** on the outer dialog edge. It does not truly round the acrylic HWND and does not change the inner shell styling. Instead, it paints:
+
+- a dark cover path at the extreme corners
+- a dark backing stroke
+- the normal white border on top
+
+Why this is the accepted compromise:
+
+- it preserves acrylic
+- it preserves the custom title bar
+- it avoids exposing top-level acrylic margins
+- it reduced live corner bleed to a near-imperceptible level without reintroducing the earlier regressions
+
+Important caveat: this is not a guarantee of mathematically perfect corners on every machine/compositor combination. It is the best low-risk compromise found under the current architecture.
 
 ### ❌ Hidden Render / Offscreen Validation As Sign-off
 
@@ -230,7 +249,7 @@ The only reliable way to prevent corner bleed in Qt's QSS system is to use **no 
 
 **Root cause**: This dialog is a frameless translucent acrylic window with a custom title bar and custom-painted outer border. Qt's parent-background propagation plus Windows compositor behavior make the true outer shell the worst possible seam for a casual radius tweak.
 
-**Resolution**: Keep the outer shell square unless a future approach can clearly justify why the documented historical failures no longer apply. If rounded polish is revisited, prefer investigating an inner framed-card illusion or a Windows-native system-corner opt-in first, and only after validating that the dialog architecture actually qualifies for those paths.
+**Resolution**: This remains a failed approach. Do not return to true outer-window rounding casually; the accepted solution is the forged paint-only border compromise instead.
 
 ### ❌ Inset Inner-Shell Margin Around The Acrylic Window
 

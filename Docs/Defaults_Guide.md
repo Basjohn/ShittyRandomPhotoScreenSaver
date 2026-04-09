@@ -422,9 +422,9 @@ Plus UI creation, UI save, and shader uniform if applicable.
 - `ui/tabs/media/technical_controls.py` owns per-mode technical control metadata and combo coercion.
 - If a change requires adding fresh mode-specific fallback logic to `widgets_tab_media.py`, treat that as a structural smell and look for the owning adapter/contract layer first.
 
-### Widget Factory Default Drift (Mar 2026 Audit)
+### Widget Factory Default Drift Guardrail
 
-The Settings Persistence Audit (`Audits/settings_persistence_audit.md`) found that `ClockWidgetFactory` and `WeatherWidgetFactory` in `rendering/widget_factories.py` had hardcoded defaults that drifted from `defaults.py`. Both now use `canonical = get_default_settings().get('widgets', {}).get(section, {})` as fallback. If you add or change a widget default, verify the factory reads from canonical — never hardcode a fallback value directly.
+`ClockWidgetFactory` and `WeatherWidgetFactory` in `rendering/widget_factories.py` must read fallback defaults from `defaults.py` via `canonical = get_default_settings().get('widgets', {}).get(section, {})`. If you add or change a widget default, verify the factory reads from canonical rather than hardcoding a fallback value directly. Track any active rollout work for this seam in `Current_Plan.md`; keep dated regression details in `Docs/Historical_Bugs.md`.
 
 ---
 

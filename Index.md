@@ -14,15 +14,16 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/TestSuite.md | Test matrix, fixtures, execution order |
 | Docs/Historical_Bugs.md | Chronological archive of resolved bugs + regression coverage |
 | Docs/Visualizer_Debug.md | Spotify visualizer architecture, diagnostics, per-mode notes |
-| Docs/Visualizer_System_Audit/00_Audit_Index.md | Master visualizer audit set: runtime, modes, presets/UI, tests/docs, live checklists |
 | Docs/Visualizer_Signal_Contract.md | Canonical contract for continuous energy, transient bus, micro-scheduler events, and per-mode smoothing ownership |
 | Docs/Visualizer_Reset_Matrix.md | Canonical reset/freshness matrix for cold start, mode switches, same-mode apply, preset cycling, and waveform gates |
 | Docs/Visualizer_Baseline_Tuning_Matrix.md | Cross-mode baseline tuning sheet: floor/AGC strategy, transient vs scheduler roles, retired compat-key policy, and the current structural preset-validation guardrails |
-| Current_Plan.md | Live project plan and recovery ledger. For visualizers it is the canonical status board for baseline verification, source-vs-generated preset guardrails, runtime drift notes, and the approved Spectrum cleanup backlog. |
-| Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls (checkbox, combobox, slider, spinbox, fonts) + CSS specificity notes |
+| Current_Plan.md | Live project plan, rollout status, open validation items, and current implementation backlog |
+| Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls, settings-shell styling, and CSS specificity notes |
 | Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines and tuning notes. **Spectrum “Cake” preset is exempt from bar-count changes** per 2026 audit. |
 | Docs/Visualizer_Mode_Consolidation_Mental_Model.md | Reusable playbook for consolidating visualizer-mode settings, presets, runtime contracts, and validation without freezing artistic content |
 | Spec.md (Visualizer buckets) | Advanced then Technical collapsible buckets per mode (Spectrum/Bubble/Blob/Sine/Osc); state persisted via `_visualizer_adv_state`/`_visualizer_tech_state`. **Helix/Starfield are deprecated** (dev-only remnants kept for backwards compatibility). |
+
+`Index.md` should stay focused on the current map. Use `Current_Plan.md` for active rollout and validation state, and `Docs/Historical_Bugs.md` for dated regressions, failed approaches, and final fix summaries.
 
 ## Tooling
 
@@ -421,7 +422,7 @@ value = settings.get("display.mode", "fill")
 
 | Module | File | Key Classes/Functions | Purpose |
 |--------|------|-----------------------|---------|
-| SettingsDialog | ui/settings_dialog.py | SettingsDialog | Main settings dialog container (1595 LOC, refactored from ~1957). Transitions tab (Feb 2026) now runs **every checkbox/slider row through `_aligned_row()`** so the shared gutter is honored and the `QLayout::addChildLayout` spam is gone; follow this helper whenever adding controls to transitions or media tabs. |
+| SettingsDialog | ui/settings_dialog.py | SettingsDialog | Main settings dialog container (1595 LOC, refactored from ~1957). Transitions tab (Feb 2026) now runs **every checkbox/slider row through `_aligned_row()`** so the shared gutter is honored and the `QLayout::addChildLayout` spam is gone; follow this helper whenever adding controls to transitions or media tabs. The outer shell uses the current paint-based rounded-edge treatment so acrylic/title-bar behavior remains stable. |
 | SettingsAboutTab | ui/settings_about_tab.py | build_about_tab(), update_about_header_images() | About tab UI, header image scaling, and shipped visualizer replacement action (`Replace Visualizers`) with script-safe no-op behavior |
 | Preset Artifact Tool | tools/regenerate_visualizer_shipped_presets.py | main() | Repo helper that regenerates both shipped visualizer preset trees/manifests from the authoritative source preset tree before parity-sensitive tests or packaging |
 | WidgetsTab | ui/tabs/widgets_tab.py | WidgetsTab, _RainbowGlowLabel, NoWheelSlider | Widget config orchestrator; `_RainbowGlowLabel` uses QPainter for per-letter rainbow glow (Qt has no text-shadow CSS support). Settings-tab rainbow UI still caches per-mode checkbox/slider state for instant swaps, while live runtime mode changes now resync rainbow from persisted mode+preset config in the visualizer widget itself. |
@@ -447,24 +448,6 @@ value = settings.get("display.mode", "fill")
 |---------|---------|-------------|
 | `utils/` | Runtime utilities (image, audio, monitors, lock-free) | `image_cache.py`, `image_loader.py`, `image_prefetcher.py`, `audio_capture.py`, `monitors.py`, `text_utils.py`, `profiler.py`, `lockfree/spsc_queue.py`, `lockfree/triple_buffer.py` |
 | `core/utils/` | Framework utilities (decorators) | `decorators.py` (retry, throttle, etc.) |
-
-## Audits
-
-| Document | Purpose |
-|----------|---------|
-| audits/ARCHITECTURE_AUDIT_2026_02.md | Master architecture audit (210 files, 55K LOC) |
-| audits/AUDIT_MONOLITH_REFACTORS.md | Refactoring plans for 8 files over 1500 lines |
-| audits/AUDIT_THREADING.md | time.sleep, raw QTimer, untracked deleteLater sites |
-| audits/AUDIT_DEAD_CODE.md | Dead/retired modules to clean up |
-| audits/AUDIT_THREADING_RACE_CONDITIONS_2026_02.md | Widget Shiboken guard audit, ThreadPoolExecutor fix |
-| audits/AUDIT_SETTINGS_GUI.md | Settings GUI audit: visibility gating, defaults, healing, hardcoded violations |
-| audits/AUDIT_SETTINGS_SYSTEM.md | Settings system audit: models.py sync, migration, healing, hardcoded paths |
-| audits/AUDIT_RESOURCE_VRAM.md | ResourceManager/VRAM/memory audit: GL handles, QTimer lifecycle, leak risks |
-| audits/AUDIT_CODE_HYGIENE.md | Code hygiene: monoliths, unused imports, dead code, QTimer policy, bare exceptions, naming, save pattern bugs |
-| Audits/pixel_shift_regression_audit.md | Pixel shift double-shifting regression root cause + fix |
-| Audits/settings_persistence_audit.md | Settings persistence consistency: hardcoded defaults vs canonical defaults.py (live checklist) |
-| Audits/threading_resource_audit.md | ThreadManager/ResourceManager async path coverage: raw QTimer/Thread usage, injection, singleton (live checklist) |
-| Audits/duplication_memory_audit.md | Code duplication, memory/resource cleanup, GL helpers extraction, resolve_easing, shadow guards, bak/archive cleanup (live checklist) |
 
 ## Test Organization
 

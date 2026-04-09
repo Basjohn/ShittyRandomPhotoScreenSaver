@@ -306,6 +306,7 @@ Settings shell border-radius note:
 - The first hidden-render/offscreen validation attempt produced a false positive and did not reproduce the live Windows corner/title-bar bleed.
 - Treat live runtime inspection as the primary validation path for any future outer-shell radius experiment.
 - The repo's own styling history in `Docs/Custom_Style_Implementation.md` should be consulted before retrying this task; it already documents prior mask/clipping/shadow failures for the same acrylic/translucent dialog family.
+- The accepted fix is now the paint-only forged-corner compromise in `ui/settings_dialog.py`, not true HWND rounding. Tests here are only sanity fences (`test_settings_dialog.py` for structure/title-bar/no shell-shadow churn); they do not prove the live Windows edge is visually perfect.
 
 ### Interaction Modes
 

@@ -2,6 +2,15 @@
 
 This document introduces the SRPSS codebase. Treat it as the top-level landing page before diving into `Spec.md`, `Index.md`, or any of the focused guides under `Docs/`.
 
+## Documentation Scope Policy
+
+- `Index.md` is the current map: where code and ownership live now.
+- `Spec.md` is the current contract: architecture, behavior, schema, and guardrails that still apply now.
+- `Current_Plan.md` is the active rollout log: current work, validation state, temporary checklists, and temporary audit references.
+- `Docs/Historical_Bugs.md` is the historical ledger: dated regressions, failed approaches, final fixes, and regression coverage notes.
+- Audits are temporary working documents. Stable docs should not depend on them directly; if an audit still matters, route readers through `Current_Plan.md` instead of linking the audit from `Index.md` or `Spec.md`.
+- Regression warnings may remain in `Spec.md` only when they are still active contract guardrails because the same class of regression has reappeared more than once.
+
 ## 1. Mission Statement
 
 Deliver a modern Windows screensaver and media controller that blends curated imagery, GPU transitions, and rich overlay widgets while honoring strict thread/resource policies. Every subsystem (sources, rendering, widgets, visualizers) routes through centralized managers so behavior stays deterministic and debuggable.

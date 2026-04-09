@@ -32,7 +32,7 @@ from ui.settings_dialog_cache import get_settings_dialog_cache
 
 logger = get_logger(__name__)
 
-SETTINGS_OUTER_CORNER_RADIUS = 6.75
+SETTINGS_OUTER_CORNER_RADIUS = 6.5
 SETTINGS_OUTER_BORDER_WIDTH = 4.0
 SETTINGS_OUTER_BORDER_BACKING_WIDTH = 6.0
 SETTINGS_OUTER_BORDER_BACKING_COLOR = QColor(12, 12, 12, 255)

@@ -6,7 +6,7 @@ This is the canonical contract for how Spotify visualizer modes consume:
 - micro-scheduler events
 - smoothing ownership
 
-Use this alongside [Visualizer_Reset_Matrix.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Reset_Matrix.md), [Visualizer_Baseline_Tuning_Matrix.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Baseline_Tuning_Matrix.md), [Visualizer_Debug.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Debug.md), and the audit set in [Visualizer_System_Audit/00_Audit_Index.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_System_Audit\00_Audit_Index.md).
+Use this alongside [Visualizer_Reset_Matrix.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Reset_Matrix.md), [Visualizer_Baseline_Tuning_Matrix.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Baseline_Tuning_Matrix.md), and [Visualizer_Debug.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Debug.md). If temporary validation or investigation is still active, route through [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Current_Plan.md) instead of depending on audit documents here.
 
 ## 1. Shared Buses
 

@@ -2,7 +2,7 @@
 
 This is the canonical reset/freshness matrix for the Spotify visualizer runtime.
 
-Use it with [Visualizer_Signal_Contract.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Signal_Contract.md) and the active audit set in [Visualizer_System_Audit/00_Audit_Index.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_System_Audit\00_Audit_Index.md).
+Use it with [Visualizer_Signal_Contract.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Signal_Contract.md). If rollout validation or temporary investigation is still active, use [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Current_Plan.md) for the live checklist rather than depending on audit documents here.
 
 ## 1. Reset Surfaces
 

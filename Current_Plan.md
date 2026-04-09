@@ -24,7 +24,7 @@ Update this after every significant change.
 ## Snapshot
 
 - **Date:** `2026-04-09`
-- **Status:** Reddit Helper scheduled-task authority remains runtime-proven, Spectrum vocal-lane and Energy Arrow work are user-validated, and the shared preset/repair flow is now on the modern lane-map contract. The latest settings-shell outer-radius attempt has been explicitly rolled back after live runtime validation showed corner bleed on all four corners plus a broken top/title-bar segment. Spectrum consolidation remains partially open for deeper control-pruning decisions, and the settings-shell polish task remains open but back in investigation mode rather than implementation mode.
+- **Status:** Reddit Helper scheduled-task authority remains runtime-proven, Spectrum vocal-lane and Energy Arrow work are user-validated, the shared preset/repair flow is now on the modern lane-map contract, and the settings shell now uses an accepted forged-corner outer-border compromise that is visually almost bleed-free without disturbing acrylic or the custom title bar. Spectrum consolidation remains partially open for deeper control-pruning decisions.
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
 ---
@@ -170,37 +170,7 @@ Landed:
 - [x] Preserved existing UX defaults where they were already established instead of forcing a surprise global-collapse reset
 - [x] Validated via targeted widget/plumbing suites for `osc`, `sine`, `spectrum`, and `blob`
 
-### 5. Settings Shell Outer Border Radius
-
-**Status:** `[ ]` Still blocked / live attempts reverted
-**Priority:** Medium
-
-Explore a very light rounded outer edge for the settings shell without introducing corner bleed, masking regressions, or collateral QSS breakage.
-
-- [x] Audit the real shell stack and identify the square top-level `paintEvent()` border as the primary seam fighting any rounded shell attempt
-- [x] Try one tightly scoped outer-shell experiment only
-- [x] Roll that experiment back after live runtime validation showed all four corners bleeding and the custom title-bar/top segment visually broken
-- [x] Re-evaluate the seam and move the visible chrome onto an inset inner shell card instead of the true outer window chrome
-- [x] Keep the true top-level window edge square/transparent while the inset `dialogContainer` owns the border + radius + title-bar surface
-- [x] Validate the inset-shell version in live runtime and roll it back after it exposed an additional sharp black acrylic margin outside the border
-- [ ] If another attempt is made, treat live runtime validation as primary and hidden render/offscreen capture as advisory only
-- [ ] Do not proceed to "done" until user validation confirms no bleed
-
-Design guardrails:
-- This is a polish task, not a styling-system rewrite
-- Do not endanger any other custom styling behavior to gain rounded corners
-- Analysis must be deep before implementation; this task is deliberately risk-averse
-
-Failure notes to preserve:
-- The reverted attempt touched both the top-level shell border and the custom title bar; the top segment regression was part of the failure, not a separate issue
-- The hidden render/offscreen path produced a false positive: it did not reproduce the live Windows/compositor bleed that appeared immediately in runtime
-- Do not mark any future border-radius attempt as landed from offscreen rendering alone
-- Repo architecture note: `Docs/Custom_Style_Implementation.md` already records rounded outer-border attempts, mask-based clipping, and dialog-shadow work as rejected for this acrylic/translucent frameless dialog family; any new attempt must start by explaining why those historical failure reasons no longer apply
-- Windows guidance note: Microsoft documents that apps with heavily customized frames can miss automatic rounding, and apps using per-pixel alpha layering or window regions cannot be rounded by the system at all. This makes a true outer-window radius a high-risk path here, not a routine QSS polish task
-- Current safest theory: if rounded polish is revisited, the more realistic seam is probably an inner framed-card illusion inside the square outer window rather than rounding the true outer shell chrome itself
-- Second-seam failure note: the inset-shell experiment proved that exposing even a tiny margin of the acrylic top-level window produces a sharp black outer strip, so any inner-shell illusion must avoid revealing top-level window pixels entirely
-
-### 6. Settings Dialog Close / Teardown Polish
+### 5. Settings Dialog Close / Teardown Polish
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -212,7 +182,7 @@ When closing the settings dialog, some elements visibly deconstruct before the s
 - [ ] Prefer a solution where everything appears to vanish together; second-best is shell-first disappearance
 - [ ] Confirm no cleanup, memory, or shutdown correctness regressions are introduced
 
-### 7. Blob Energy Balance / Glow Drive Follow-up
+### 6. Blob Energy Balance / Glow Drive Follow-up
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -227,7 +197,7 @@ Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-sh
 - [ ] Preserve Blob identity and do not accidentally make it behave like another mode
 - [ ] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
 
-### 8. Bubble UI Bucket Cleanup
+### 7. Bubble UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Low
