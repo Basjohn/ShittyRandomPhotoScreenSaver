@@ -23,8 +23,8 @@ Update this after every significant change.
 
 ## Snapshot
 
-- **Date:** `2026-04-08`
-- **Status:** Spectrum cleanup through 3.1 remains complete. Bubble now has the same shared bucketing treatment as Spectrum, Blob, Oscilloscope, and Sine Wave, and the bucket work has runtime user validation for logic, neatness, and persistence. Reddit Helper remains a real runtime validation problem, while authored planning focus has now shifted back to Spectrum Energy Arrows and related Spectrum cleanup.
+- **Date:** `2026-04-09`
+- **Status:** Spectrum cleanup through 3.1 remains complete. Bubble now has the same shared bucketing treatment as Spectrum, Blob, Oscilloscope, and Sine Wave, and the bucket work has runtime user validation for logic, neatness, and persistence. Reddit Helper link handoff is now runtime-proven with a reusable scheduled-task authority, so authored planning focus is back on Spectrum cleanup plus preset-location/preset-repair follow-up.
 - **Organs synthetic:** Green against current authored `Preset 1` (user-modified version).
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
@@ -49,6 +49,9 @@ Replaced loose section headings with real collapsible buckets. Normal: `Appearan
 
 ### H6. Border Colour Participation (§3.1)
 Audited why borders were excluded from rainbow. Added `spectrum_rainbow_border` (bool, default `False`) with UI checkbox `Rainbow Borders` in Render bucket. Wired through all 8 layers + shader uniform `u_rainbow_border` in both SINGLE PIECE and SEGMENTED paths. Tests: 92 passed in plumbing suite.
+
+### H7. Reddit Helper Scheduled-Task Authority
+Reddit handoff is now working in real runtime through a durable interactive scheduled task plus session-lived helper model. Final shape: saver queues URL and exits normally; helper launch authority comes from a reusable Task Scheduler task; helper waits for shell readiness, opens the URL, and self-exits. The winning registration path uses native Task Scheduler COM XML with `InteractiveToken`, with the XML owning the principal and the COM registration call passing empty user/password variants. Repo harness coverage now exists for register/query/run/delete of that authority layer.
 
 ---
 
@@ -160,114 +163,7 @@ User guidance to preserve:
 - Drops should be encouraged through a less flickery presentation method than simply increasing `drop_speed`
 - Higher internal resolution appears to reduce shimmer but increases latency and does not eliminate the issue
 
-### 3. Reddit Helper Reliability / Link Handoff
-
-**Status:** `[~]` In progress / awaiting runtime validation
-**Priority:** Medium-High
-
-Reddit Helper link opening is still unreliable and has reportedly been "fixed" multiple times without holding. Treat this as a real reliability task, not a cosmetic cleanup. The major breakthrough remains real: packaged screensaver-runtime link opening has been observed working. The sharper diagnosis now is this: queue writing works, the helper EXE can consume the queue, but **launch authority from the active saver desktop keeps dragging the flow back into black-screen / dead-Winlogon regressions**. The current direction is no longer saver-owned preload at all. The saver now owns only queueing plus a benign ProgramData session ticket, while Windows Task Scheduler is the launch authority for an on-demand interactive helper task in the logged-in user's desktop session.
-
-Strategy now explicitly locked:
-- The screensaver and helper are separate responsibilities
-- Saver-side Reddit flow must remain: queue URL -> request normal saver exit -> continue normal teardown
-- Saver exit must never wait on helper state, shell-readiness state, browser state, or helper success/failure
-- Helper responsibilities begin only after launch: poll for shell readiness, open queued payload when safe, foreground browser best-effort, then self-exit
-- Do not spawn the helper directly from the active saver desktop again; use a pre-registered on-demand interactive scheduled task instead
-- The saver may refresh a ProgramData session ticket while active, but that ticket must never gate or delay saver exit
-- The helper should prefer simple shell-native launch from the real user desktop; do not overcomplicate helper launch with GUI-framework baggage unless it is clearly proven necessary
-- Clipboard copy is only a last-resort recovery aid and must stay non-blocking
-- Green tests are useful contract coverage only; they do **not** count as proof that real SCR / Winlogon runtime is fixed
-
-- [ ] Audit the current secure-desktop -> helper -> browser handoff flow end to end
-- [ ] Review `C:\\ProgramData\\SRPSS\\` state, queues, and related runtime clues before changing behavior
-- [ ] Re-read the Winlogon / session-handoff assumptions that justified the current design
-- [ ] Validate the scheduled-task authority path in a rebuilt/reinstalled package, not only in repo tests
-- [ ] Evaluate whether the helper can safely wait/poll for confirmed screensaver shutdown before launching URLs
-- [ ] Keep MC direct-open logic separate from helper launch logic instead of trying to force both environments through one shell path
-- [ ] Reduce needless complexity only if it does not weaken cleanup, security posture, or AV trust
-- [ ] Investigate whether screensaver closure itself can be made faster without risking threads, memory cleanup, or shutdown ordering
-- [ ] Validate with repeated real-world link launches, not a single happy-path test
-
-Progress landed so far:
-- [x] Removed the app-driven shutdown race that could kill the session helper before deferred URLs were eligible to open
-- [x] Tightened helper logging so launch requests are not overstated as proven user-visible success
-- [x] Switched real non-script `RUN` bootstrap toward a saver-owned session-scoped watcher instead of a persistent background watcher
-- [x] Kept MC and script-environment runs off the helper bootstrap path
-- [x] Added regression coverage for session-scoped owner-pid bootstrap and the updated watcher queue-processing contract
-- [x] Real packaged screensaver-runtime link opening has now been observed working for a Reddit URL
-- [x] Reduced the secure-desktop handoff timing slightly (`12.0s -> 11.0s`) and shell-settle timing slightly (`1.5s -> 1.0s`) to trim delay without getting reckless
-- [x] Removed the installer-driven helper startup path and replaced it with explicit cleanup of the legacy `HKCU\\Run` entry
-- [x] Added legacy ownerless-watcher self-exit behavior so old startup-launched helpers do not linger forever once their queue is empty
-- [x] Confirmed by live manual execution that the installed helper EXE can drain queued URLs, open them, clean the queue, and write heartbeat/log files
-- [x] Confirmed by live log evidence that click-time helper bootstrap was the wrong place to launch: it could leave the user trapped on a black/dark-grey screen while the helper waited for shell readiness
-- [x] Retired the click-time bootstrap experiment and moved to a settled post-start preload tied to the shared startup fade policy instead
-- [x] Added ProgramData breadcrumb logging for helper bootstrap attempts/skips/failures so packaged SCR runs can be diagnosed even when frozen main logs are disabled
-- [x] Replaced the banned raw-`QTimer` preload experiment with a `ThreadManager`-scheduled preload path
-- [x] Proved from fresh ProgramData evidence that saver-owned preload still violated the intended separation in practice: helper launch accepted, helper began processing, then real runtime still black-screened and never completed browser handoff
-- [x] Retired saver-desktop helper preload as an architectural dead end for this bug family
-- [x] Replaced direct helper spawn from secure-desktop runtime with an on-demand interactive scheduled-task authority model
-- [x] Added a saver-owned ProgramData session ticket so the helper can stay session-lived without becoming a 24/7 startup process
-- [x] Switched the helper back toward shell-native open behavior (`os.startfile` first) instead of depending primarily on Qt shell helpers inside the packaged helper EXE
-- [x] Shortened secure-desktop queue delay (`11.0s -> 3.0s`) and helper shell-settle wait (`1.0s -> 0.75s`) under the new authority model
-
-Latest real-user validation snapshot:
-- A packaged real screensaver run successfully opened a Reddit link back in normal Windows
-- The launch still feels slightly slower than ideal, but is now functional rather than broken
-- An old startup path still caused the helper to run at Windows login and never close; this has now been removed in code and installer logic, but still needs validation on a rebuilt/reinstalled copy
-- Fresh live ProgramData evidence later showed queued `scr_click` entries with `session: "Console"` and no helper artefacts until the helper EXE was launched manually
-- Manual execution of the installed helper EXE then opened all queued Reddit URLs, drained the queue, and created both `reddit_helper.log` and `reddit_helper_heartbeat.json`
-- That proves the helper binary itself is healthy; the unresolved piece was automatic bootstrap from the real screensaver path
-- A later click-time bootstrap experiment regressed badly: the helper did launch, but the saver could strand the user on a black/dark-grey cursor-only screen while the helper logged repeated `shell not ready` deferrals
-- A later settled-preload attempt exited cleanly but still produced no browser handoff, no helper heartbeat, and no helper breadcrumbs even after the user waited ~20 real seconds before clicking
-- A later run finally produced `scr_helper.log` preload breadcrumbs showing the preload *did* schedule, but the callback crashed before handoff with a `settled preload callback exception`
-- The latest black-screen regression proved something deeper: even detached saver-owned preload was still the wrong authority. Fresh logs showed preload accepted and the helper watcher started, but the real run black-screened and `reddit_helper.log` stopped at `Launching deferred URL:` with the queue entry still untouched. That means "launch accepted" was only process-creation success, not real user-visible handoff success.
-- Recent helper log from the working handoff:
-  - `2026-04-08 19:31:11,407 [helper] INFO - Launching deferred URL: ...`
-  - `2026-04-08 19:31:12,942 [helper] INFO - Shell launch request accepted via os.startfile: ...`
-  - `2026-04-08 19:31:12,943 [helper] INFO - Launch request completed (1535.81 ms): ...`
-  - `2026-04-08 19:31:13,946 [helper] INFO - Browser foregrounded after helper launch: ...`
-  - `2026-04-08 19:31:13,946 [helper] INFO - Watcher cycle: processed 1 entries`
-
-Current hypothesis from live ProgramData evidence:
-- Real installed/runtime queue writes are happening reliably
-- The helper EXE is capable of consuming those entries when launched directly
-- Therefore the remaining failure was not "URL launch is broken" but "automatic helper launch authority was in the wrong place"
-- Launching the helper on the same click that requests saver exit is too invasive for the real runtime path
-- Launching the helper earlier from the active saver desktop also proved wrong in practice, even when detached
-- The new working rule is stricter now: the saver may request helper startup, but the helper must be created by a separate Windows authority in the real user desktop session
-- The chosen authority is a pre-registered on-demand interactive scheduled task, requested at saver startup
-- The saver now refreshes only a benign ProgramData session ticket while active; when that refresh stops, the helper is free to self-expire after queue idle
-- The remaining unknown is no longer "will preload fire" but "will the installed scheduled task reliably start the helper in the correct user desktop without prompts, black screens, or lingering processes"
-
-Fallback note under consideration:
-- [x] Added a best-effort click-time clipboard copy of the clicked Reddit URL as a last-resort recovery path
-- [x] This remains explicitly secondary to real helper/browser handoff; it is not a strategy pivot
-- [x] The copy is best-effort only and must not block SCR queueing or exit if clipboard access fails
-
-Validation still needed on the next rebuilt/reinstalled package:
-- [ ] The installed scheduled task is created correctly during install/reinstall for the logged-in user
-- [ ] Saver startup now requests the helper task without causing any black-screen / dead-Winlogon regression
-- [ ] The scheduled task launches the helper into the real user desktop/session with no repeated UAC prompts and no suspicious AV behavior
-- [ ] The helper still exits itself after successful deferred handoff
-- [ ] No no-click session leaves a lingering helper behind after the session ticket expires and idle timeout passes
-- [ ] `scr_helper.log` breadcrumb lines now make scheduled-task requests and accept/fail states obvious in packaged runtime if anything still fails
-- The old installed/login helper path was one real source of bad behavior: it could start the helper at Windows login and keep it alive outside actual screensaver use
-- Script/preview logs can also mislead because they may exercise MC-style direct open or session-scoped watcher behavior instead of the true shipped SCR path
-
-Design guardrails:
-- Avoid solutions likely to look suspicious to antivirus or OS trust systems
-- Do not replace robust shutdown guarantees with a race-prone "seems fast enough" handoff
-- Prefer the simplest proven launch path once session ownership and shutdown timing are genuinely understood
-- Do not treat "URL opened" log lines or preview/script-environment success as proof; only real screensaver-runtime user success counts
-
-Still awaiting validation:
-- [ ] Confirm the rebuilt/reinstalled product no longer starts `SRPSS_RedditHelper` at Windows login
-- [ ] Confirm the helper now closes itself after a successful link handoff in real screensaver runtime
-- [ ] Confirm the helper does not linger forever after a no-click screensaver session
-- [ ] Decide whether the current shaved delay is good enough or whether another conservative ~`1000ms` reduction is still safe after more live testing
-- [ ] Validate with repeated real-world link launches, not a single happy-path test
-
-### 4. Oscilloscope UI Bucket Cleanup
+### 3. Oscilloscope UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Medium-High
@@ -295,7 +191,7 @@ Landed:
 - [x] Normal buckets default expanded; Advanced buckets default collapsed
 - [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "osc" -q`
 
-### 5. Sine Wave UI Bucket Cleanup
+### 4. Sine Wave UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Medium-High
@@ -325,7 +221,7 @@ Landed:
 - [x] Kept control attribute names unchanged
 - [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "sine" -q`
 
-### 6. Bucket State Persistence (was IDEA BOX #1)
+### 5. Bucket State Persistence (was IDEA BOX #1)
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Medium
@@ -340,7 +236,7 @@ Landed:
 - [x] Preserved existing UX defaults where they were already established instead of forcing a surprise global-collapse reset
 - [x] Validated via targeted widget/plumbing suites for `osc`, `sine`, `spectrum`, and `blob`
 
-### 7. Non-Mirrored Spectrum Shaper Vocal Lane (was IDEA BOX #2)
+### 6. Non-Mirrored Spectrum Shaper Vocal Lane (was IDEA BOX #2)
 
 **Status:** `[~]` Reworked after failure / awaiting visual validation
 **Priority:** Low
@@ -373,7 +269,7 @@ Runtime validation failure:
 - [x] Explicit rule: do not validate/remove this task until the emitted notch family is confirmed from the same build context the user actually tested
 - [ ] Verify whether the lane is now visibly correct in the real editor UI and whether runtime behavior also follows the upgraded layout
 
-### 8. Settings Shell Outer Border Radius
+### 7. Settings Shell Outer Border Radius
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -391,7 +287,7 @@ Design guardrails:
 - Do not endanger any other custom styling behavior to gain rounded corners
 - Analysis must be deep before implementation; this task is deliberately risk-averse
 
-### 9. Settings Dialog Close / Teardown Polish
+### 8. Settings Dialog Close / Teardown Polish
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -403,7 +299,7 @@ When closing the settings dialog, some elements visibly deconstruct before the s
 - [ ] Prefer a solution where everything appears to vanish together; second-best is shell-first disappearance
 - [ ] Confirm no cleanup, memory, or shutdown correctness regressions are introduced
 
-### 10. Blob Energy Balance / Glow Drive Follow-up
+### 9. Blob Energy Balance / Glow Drive Follow-up
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -418,7 +314,7 @@ Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-sh
 - [ ] Preserve Blob identity and do not accidentally make it behave like another mode
 - [ ] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
 
-### 11. Bubble UI Bucket Cleanup
+### 10. Bubble UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Low
@@ -430,6 +326,42 @@ Landed:
 - [x] Grouped Bubble into `Appearance`, `Motion`, `Reactivity`, `Population`, `Layout`, and `Ghost`
 - [x] Implemented Bubble using the shared bucket helper/persistence path
 - [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "bubble" -q`
+
+### 11. Shared Preset Install / Save Location Across SCR and MC
+
+**Status:** `[ ]` Not started
+**Priority:** Medium
+
+MC and SCR/NORMAL builds should use the same shipped/user preset location so dual-install users are not split across two preset worlds.
+
+- [ ] Audit where SCR/NORMAL currently installs shipped presets and where MC currently installs shipped presets
+- [ ] Move MC install placement onto the same durable preset location used by SCR/NORMAL
+- [ ] Ensure MC custom preset saves also target that same shared location
+- [ ] Confirm both builds can coexist without overwriting each other's runtime-only generated artefacts
+- [ ] Validate install, upgrade, and save behavior with both builds present on one machine
+
+Design guardrails:
+- Use one reliable preset location for authored/shipped/user preset state where possible
+- Do not break existing user custom presets during migration
+- Keep authored source tree vs generated release artefacts clearly separated in repo semantics even if installed locations converge
+
+### 12. Preset Repair Tool Follow-Up For Spectrum Vocal Lanes And Energy Arrows
+
+**Status:** `[ ]` Not started
+**Priority:** Medium
+
+The preset repair tool is heavily relied on and must stay aligned with current authored/runtime contracts, especially after the non-mirrored vocal-lane work and the upcoming Energy Arrows refactor.
+
+- [ ] Validate the repair tool against the landed non-mirrored vocal-lane migration rules
+- [ ] Ensure repaired presets preserve legitimate user-authored boundary drift while still promoting stale legacy linear label families
+- [ ] Add an explicit post-Energy-Arrows follow-up pass once the new lane-power contract lands
+- [ ] Confirm the tool does not flatten Organs or other authored presets while healing schema drift
+- [ ] Add/refresh focused tests so future Spectrum contract changes cannot silently break repair behavior
+
+Design guardrails:
+- The repair tool must remain permissive enough to preserve user-authored variation
+- Do not hardcode brittle exact-shape assumptions that will break as Spectrum evolves
+- Treat this tool as infrastructure, not cleanup glue; it needs the same care as runtime code
 
 ---
 

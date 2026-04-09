@@ -2,82 +2,57 @@ In this document neatly arrange, date and detail significant bugs that were fixe
 Include failed solutions and reasoning why the final solution worked. Never remove from this document unless asked, use it as a guide to avoid falling back into bad habbits.
 Section by date and type.
 
-######                        ######
-#### UNRESOLVED BELOW THIS LINE ####
-
-## 2026-04-08 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Unresolved)
+## 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)
 
 - [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
-- **Current symptom:** major improvement landed: a packaged real screensaver run has now successfully opened a Reddit link back in normal Windows. The unresolved part is launch authority and lifetime behavior under real SCR runtime, plus timing polish.
-- **Latest diagnosis (Apr 8 evening):** queued `scr_click` entries in `C:\ProgramData\SRPSS\url_queue` proved the real screensaver path was writing work, but no helper artefacts appeared until the installed helper EXE was launched manually. That manual launch then opened all queued URLs, drained the queue, and created both `reddit_helper.log` and `reddit_helper_heartbeat.json`. So the helper binary itself is viable; the broken piece was automatic launch authority, not the worker's queue-processing logic.
-- **Regression learned immediately after that:** moving launch authority onto the same `scr_click` exit path was a mistake. Live breadcrumbs showed the helper watcher did start, but then logged `shell not ready` deferrals while the user was trapped on a black/dark-grey cursor-only screen. That makes click-path spawn an explicit anti-pattern for this bug family.
-- **Latest follow-up after backing that out:** a clean-exit installed SCR run still queued the `scr_click` URL but produced no helper log, no heartbeat, and no `scr_helper.log` breadcrumb even after the user waited roughly 20 real seconds before clicking. That rules out the simple "clicked too fast for preload" theory. The current theory is that the first settled-preload scheduling mechanism itself failed to fire in packaged runtime.
-- **Latest concrete finding:** a later run finally produced `scr_helper.log` and showed `settled preload scheduled delay_ms=1800` followed by `settled preload callback exception`. Deeper code inspection found a real Python scoping bug in the preload callback: the exception handler re-imported `_log_helper_event`, which made `_log_helper_event` a local variable for the whole callback and could trigger an `UnboundLocalError` before the helper launch path even began. This is now fixed.
-- **Later regression after that fix:** the helper preload did launch successfully in a real installed run, wrote heartbeat/log artefacts, and stayed alive independently. But the subsequent Reddit click still circled back to the black-screen/cursor-only failure while the helper deferred the queued URL with `shell_not_ready`. That proved the remaining problem was no longer "helper failed to launch" but "helper launch authority was still wrong because the helper was being born from the active saver desktop."
-- **Latest concrete failure before the new pivot:** fresh ProgramData evidence showed `scr_helper.log` lines for preload accepted and helper launch accepted, while `reddit_helper.log` stopped at `Launching deferred URL:` and the queue entry remained untouched. So "launch accepted" was only process-creation success, not real browser-handoff success.
-- **Why this is tricky:** secure-desktop / SYSTEM screensaver runs cannot safely rely on direct browser launch tricks, but users also do not want a 24/7 resident helper or stacked orphan processes.
-- **Current architecture target:** one session-lived helper per real screensaver run, but launched by Windows Task Scheduler into the logged-in user desktop rather than directly by the saver desktop.
-  - saver writes queue entries and refreshes a benign ProgramData session ticket while active
-  - saver exit remains unconditional and normal
-  - saver requests an on-demand interactive scheduled task, not a direct helper child process
-  - helper waits for shell readiness independently, opens the link, and exits itself
-  - helper self-expires after successful handoff or when the session ticket stops refreshing and the queue stays idle
-- **Strategy lock so we do not drift again:**
-  - the saver is allowed to request helper launch, but that does **not** make helper state part of saver shutdown logic
-  - saver exit must never wait on helper health, shell readiness, browser readiness, or payload launch outcome
-  - saver-side responsibilities stop at: refresh session ticket, queue URL, optionally copy URL to clipboard, request normal exit
-  - helper-side responsibilities start at: watch queue, wait for shell, launch payload, optionally foreground browser, self-exit
-  - helper/browser success or failure must be observable in helper logs and queue state, not by mutating saver teardown behavior
-  - click-path bootstrap is forbidden for this bug family because it directly regressed into the black-screen/cursor-only trap
-  - persistent Windows-login helper is also forbidden as the primary answer because it violates the product's session-scoped behavior and user expectations
-  - saver-desktop preload/spawn is now also retired for this bug family; even detached saver-owned preload still regressed into black-screen/dead-Winlogon behavior
-  - use a pre-registered interactive scheduled task as the user-desktop authority instead of token tricks or resident startup helpers
-  - green tests are useful only for contract coverage; they are not sufficient evidence that real SCR / Winlogon behavior is fixed
-- **Last-resort fallback now landed:** the clicked Reddit URL is also copied to the clipboard at click time as a best-effort recovery path.
-  - This is not a replacement for helper/browser handoff.
-  - It is only a benign recovery path if real browser launch still fails.
-  - Clipboard copy failure is non-fatal and must not block SCR exit or queueing.
-- **Failed / retired directions:**
-  - persistent login helper as the primary answer; user rejected this because it keeps the helper alive outside actual screensaver use
-  - click-path helper bootstrap on the same Reddit exit click; this regressed into a black/dark-grey cursor-only trap while the helper waited for shell readiness
-  - trusting "launch succeeded" logs from preview/script environments; these are not equivalent to real SCR behavior
-- **Progress landed:**
-  - MC builds skip helper bootstrap entirely and keep using direct open behavior
-  - app-driven shutdown no longer kills a session helper while queued work still exists
-  - helper logging now reports launch requests more honestly instead of overstating success
-  - the installed helper EXE was manually validated in live ProgramData state and proved able to open queued links, drain the queue, and write helper artefacts
-  - click-time helper bootstrap has now been retired as an explicit anti-pattern
-  - watcher mode already has singleton protection to avoid stacking duplicate helpers
-  - watcher exits after successful deferred handoff once the saver owner is gone and the queue is empty
-  - saver-desktop preload has now also been retired as the primary authority model after it still produced black-screen regressions in real runs
-  - runtime now pivots to an on-demand interactive scheduled task plus saver-owned session ticket
-  - secure-desktop queue delay was trimmed again from `11.0s` to `3.0s`
-  - shell-settle wait was trimmed from `1.0s` to `0.75s`
-  - installer/runtime now remove the legacy `HKCU\Run` helper startup path
-  - legacy ownerless startup watchers now self-exit once their queue is drained or empty
-  - ProgramData breadcrumb logging now records helper bootstrap attempts/skips/failures even when frozen main logs are disabled
-  - the saver now uses the project's `ThreadManager` only for session-ticket keepalive, not for helper preload/spawn
-  - helper URL launch moved back toward shell-native launch from the real user desktop (`os.startfile` first) instead of depending primarily on Qt shell helpers inside the packaged helper EXE
-  - the fallback clipboard copy now rides the saver click path as a best-effort side action only and is explicitly non-authoritative
-- **Observed working runtime log (Apr 8 2026):**
-  - helper launched deferred URL
-  - `os.startfile` accepted the launch request
-  - launch request completed in about `1535.81 ms`
-  - browser foreground succeeded
-  - watcher processed the queue entry
-- **What is still pending:** rebuilt/reinstalled packaged validation that:
-  - the installed scheduled task is created correctly for the actual user during install/reinstall
-  - saver startup can request that task without causing any black-screen/cursor-only regression
-  - the scheduled task really launches the helper into the correct logged-in user desktop/session
-  - the helper no longer starts on Windows login
-  - the helper now closes itself after successful handoff
-  - no-click sessions do not leave a lingering helper behind
-  - the reduced delay still remains reliable across repeated runs
-  - scheduled-task request breadcrumbs in `scr_helper.log` make authority failures obvious when they happen
+- **Final resolved state:** real runtime success now holds with a durable reusable scheduled task named `SRPSS_RedditHelper`, interactive-only launch authority, normal saver exit, helper-side shell polling, and post-handoff self-exit. The queue/clipboard fallback behavior remains secondary.
+- **What finally worked:** the winning launch-authority model is:
+  - saver writes queue entries and exits normally
+  - saver may refresh a benign ProgramData session ticket while active, but that ticket never gates saver shutdown
+  - Windows Task Scheduler owns helper launch authority in the logged-in user desktop
+  - the task definition is durable and reusable; only the helper process is ephemeral
+  - helper waits for shell readiness independently, opens the URL, and exits itself
+- **Actual final technical solution:** Task Scheduler registration uses native COM XML registration with `InteractiveToken`.
+  - the XML owns the principal `UserId`
+  - the COM registration call passes empty user/password variants
+  - runtime starts the task with `schtasks /Run`
+  - helper/browser launch remains shell-native (`os.startfile` first)
+- **Why the final solution worked:** it cleanly separated responsibilities.
+  - saver no longer tries to birth or manage the helper from the active saver desktop
+  - helper no longer influences saver exit timing
+  - Task Scheduler provides the user-desktop launch authority without a 24/7 resident process, token tricks, or repeated runtime prompts
+- **Key failed methods worth preserving:**
+  - persistent Windows-login helper: rejected because it kept the helper alive outside actual screensaver use
+  - click-path helper bootstrap on the same Reddit exit click: regressed into a black/dark-grey cursor-only trap while helper waited for shell readiness
+  - saver-desktop preload/spawn, even detached: still regressed into black-screen/dead-Winlogon behavior
+  - `schtasks /Create` as the registration authority: kept pulling user-task registration back toward password-oriented semantics and failed for this product shape
+  - COM XML registration with `encoding="UTF-8"` in the XML declaration: failed because the XML was being passed as a Unicode COM string
+  - COM XML registration while also passing user/password args into `RegisterTask(..., TASK_LOGON_INTERACTIVE_TOKEN)`: failed with credential/logon errors because the XML already owned the principal
+- **Useful supporting work that remained part of the fix:**
+  - removed the app-driven shutdown race that could kill the session helper before deferred URLs became eligible
+  - removed the legacy `HKCU\Run` startup helper path
+  - kept MC direct-open behavior separate from real SCR helper authority
+  - added ProgramData breadcrumb logging for packaged diagnosis
+  - added a best-effort clipboard copy of clicked Reddit URLs as a non-blocking fallback only
+  - shortened secure-desktop queue delay from `11.0s` to `3.0s`
+  - shortened helper shell-settle wait from `1.0s` to `0.75s`
+- **Repo-side proof/harness now available:** `python tools\reddit_helper_task_harness.py --action smoke-test --task-name SRPSS_TaskHarness_Test`
+  - this locally proved register/query/run/delete of the same native task-authority layer used by the installer/runtime
+- **Observed final validation evidence:**
+  - installed task now queries successfully as `\SRPSS_RedditHelper`
+  - task is `Interactive only`
+  - real runtime success has been observed
+- **Takeaways:**
+  - do not let helper state leak back into saver teardown logic
+  - do not trust preview/script success as proof of real SCR behavior
+  - for this feature family, Windows launch authority matters more than queue semantics once queueing already works
+
+######                        ######
+#### UNRESOLVED BELOW THIS LINE ####
 
 ## 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)
 

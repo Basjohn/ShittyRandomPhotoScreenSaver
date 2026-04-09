@@ -39,7 +39,8 @@ HELPER_LAUNCH_COOLDOWN_SECONDS = 15.0
 SESSION_HELPER_IDLE_EXIT_SECONDS = 45.0
 SESSION_HELPER_SHUTDOWN_PREFIX = "reddit_helper_shutdown_"
 SESSION_TICKET_FILE_NAME = "reddit_helper_session.json"
-SCHEDULED_TASK_NAME = r"SRPSS\RedditHelper"
+SCHEDULED_TASK_NAME = r"SRPSS_RedditHelper"
+LEGACY_SCHEDULED_TASK_NAMES = (r"\SRPSS\RedditHelper", r"SRPSS\RedditHelper")
 SESSION_TICKET_REFRESH_SECONDS = 10.0
 SESSION_TICKET_VALID_FOR_SECONDS = 25.0
 
@@ -476,13 +477,16 @@ def remove_helper_run_entry(*, source: str = "runtime_cleanup") -> bool:
         return False
 
 
+def _scheduled_task_names_for_run() -> tuple[str, ...]:
+    return (SCHEDULED_TASK_NAME, *LEGACY_SCHEDULED_TASK_NAMES)
+
+
 def _run_helper_scheduled_task(*, source: str) -> bool:
     """Ask Task Scheduler to start the interactive helper task on demand."""
     if os.name != "nt":
         return False
 
     schtasks_path = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32" / "schtasks.exe"
-    command = [str(schtasks_path), "/Run", "/TN", SCHEDULED_TASK_NAME]
     kwargs: dict[str, object] = {
         "capture_output": True,
         "text": True,
@@ -491,31 +495,62 @@ def _run_helper_scheduled_task(*, source: str) -> bool:
     if os.name == "nt":
         kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-    try:
-        _log_helper_event(f"task run request source={source} command={command!r}")
-        result = subprocess.run(command, **kwargs)
-        stdout = (result.stdout or "").strip()
-        stderr = (result.stderr or "").strip()
-        if result.returncode == 0:
-            logger.info("[REDDIT-HELPER] Scheduled task run accepted (%s)", source)
-            _log_helper_event(f"task run accepted source={source}")
-            return True
+    last_failure: tuple[int | None, str, str] | None = None
+    for task_name in _scheduled_task_names_for_run():
+        command = [str(schtasks_path), "/Run", "/TN", task_name]
+        try:
+            _log_helper_event(
+                f"task run request source={source} task={task_name!r} command={command!r}"
+            )
+            result = subprocess.run(command, **kwargs)
+            stdout = (result.stdout or "").strip()
+            stderr = (result.stderr or "").strip()
+            if result.returncode == 0:
+                logger.info(
+                    "[REDDIT-HELPER] Scheduled task run accepted (%s via %s)",
+                    source,
+                    task_name,
+                )
+                _log_helper_event(
+                    f"task run accepted source={source} task={task_name!r} stdout={stdout!r}"
+                )
+                return True
 
+            last_failure = (result.returncode, stdout, stderr)
+            logger.warning(
+                "[REDDIT-HELPER] Scheduled task run failed (%s via %s) rc=%s stdout=%s stderr=%s",
+                source,
+                task_name,
+                result.returncode,
+                stdout,
+                stderr,
+            )
+            _log_helper_event(
+                f"task run failed source={source} task={task_name!r} rc={result.returncode} stdout={stdout!r} stderr={stderr!r}"
+            )
+        except Exception as exc:
+            last_failure = (None, "", repr(exc))
+            logger.warning(
+                "[REDDIT-HELPER] Scheduled task run errored (%s via %s): %s",
+                source,
+                task_name,
+                exc,
+                exc_info=True,
+            )
+            _log_helper_event(
+                f"task run exception source={source} task={task_name!r} error={exc!r}"
+            )
+
+    if last_failure:
+        rc, stdout, stderr = last_failure
         logger.warning(
-            "[REDDIT-HELPER] Scheduled task run failed (%s) rc=%s stdout=%s stderr=%s",
+            "[REDDIT-HELPER] Scheduled task run failed for all known task names (%s) rc=%s stdout=%s stderr=%s",
             source,
-            result.returncode,
+            rc,
             stdout,
             stderr,
         )
-        _log_helper_event(
-            f"task run failed source={source} rc={result.returncode} stdout={stdout!r} stderr={stderr!r}"
-        )
-        return False
-    except Exception as exc:
-        logger.warning("[REDDIT-HELPER] Scheduled task run errored (%s): %s", source, exc, exc_info=True)
-        _log_helper_event(f"task run exception source={source} error={exc!r}")
-        return False
+    return False
 
 
 def _should_prefer_scheduled_task(*, source: str, running_as_system: bool) -> bool:
