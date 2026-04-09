@@ -1220,16 +1220,16 @@ class SettingsDialog(QDialog):
         if not (bool(getattr(sys, "frozen", False)) or bool(getattr(builtins, "__compiled__", False))):
             return None, "script"
 
-        from core.settings.visualizer_presets import get_visualizer_presets_dir
+        from core.settings.visualizer_presets import (
+            get_packaged_visualizer_presets_dir,
+            get_visualizer_presets_dir,
+        )
+
+        packaged_root = get_packaged_visualizer_presets_dir()
+        if packaged_root.exists():
+            return packaged_root, "packaged"
 
         target_root = get_visualizer_presets_dir()
-        if is_mc_build():
-            return target_root, "mc_install"
-
-        program_data = Path(os.getenv("PROGRAMDATA", r"C:\ProgramData"))
-        source_root = program_data / "SRPSS" / "presets" / "visualizer_modes"
-        if source_root.exists():
-            return source_root, "programdata"
         return target_root, "frozen_fallback"
 
     def _replace_visualizer_presets_from_shipped(self) -> int:

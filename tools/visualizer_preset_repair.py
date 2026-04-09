@@ -41,6 +41,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.settings import visualizer_presets as vp  # noqa: E402
+from core.settings.models import _normalize_spectrum_linear_notches  # noqa: E402
 from core.settings.visualizer_settings_snapshot import (  # noqa: E402
     _TECHNICAL_GLOBAL_KEYS,
     normalize_visualizer_mode_payload,
@@ -84,6 +85,73 @@ _MODE_TECH_PREFIXES: Dict[str, str] = {
 }
 
 _BACKUP_ROOT = ROOT / "temp" / "visualizer_preset_backups"
+_UNDO_STATE_PATH = _BACKUP_ROOT / "undo_state.json"
+
+
+@dataclass
+class UndoEntry:
+    restore_path: Path
+    backup_path: Path
+    cleanup_path: Path | None = None
+
+
+def _load_undo_history() -> list[UndoEntry]:
+    try:
+        payload = json.loads(_UNDO_STATE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(payload, list):
+        return []
+
+    history: list[UndoEntry] = []
+    for item in payload:
+        if not isinstance(item, Mapping):
+            continue
+        restore_raw = item.get("restore_path")
+        backup_raw = item.get("backup_path")
+        cleanup_raw = item.get("cleanup_path")
+        if not isinstance(restore_raw, str) or not isinstance(backup_raw, str):
+            continue
+        restore_path = Path(restore_raw)
+        backup_path = Path(backup_raw)
+        cleanup_path = Path(cleanup_raw) if isinstance(cleanup_raw, str) and cleanup_raw.strip() else None
+        if not backup_path.exists():
+            continue
+        history.append(UndoEntry(restore_path=restore_path, backup_path=backup_path, cleanup_path=cleanup_path))
+    return history
+
+
+def _save_undo_history(history: Sequence[UndoEntry]) -> None:
+    _UNDO_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = [
+        {
+            "restore_path": str(entry.restore_path),
+            "backup_path": str(entry.backup_path),
+            "cleanup_path": str(entry.cleanup_path) if entry.cleanup_path is not None else "",
+        }
+        for entry in history
+        if entry.backup_path.exists()
+    ]
+    _UNDO_STATE_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+
+def _record_undo_entry(entry: UndoEntry, history: list[UndoEntry] | None = None) -> list[UndoEntry]:
+    resolved = list(history) if history is not None else _load_undo_history()
+    resolved = [existing for existing in resolved if existing.restore_path != entry.restore_path]
+    resolved.append(entry)
+    _save_undo_history(resolved)
+    return resolved
+
+
+def _pop_undo_entry(history: list[UndoEntry] | None = None) -> tuple[UndoEntry | None, list[UndoEntry]]:
+    resolved = list(history) if history is not None else _load_undo_history()
+    while resolved:
+        entry = resolved.pop()
+        if entry.backup_path.exists():
+            _save_undo_history(resolved)
+            return entry, resolved
+    _save_undo_history([])
+    return None, []
 
 
 @dataclass
@@ -168,6 +236,36 @@ def _collect_sections(payload: Mapping[str, Any]) -> Iterable[Mapping[str, Any]]
     return sections
 
 
+def _promote_legacy_spectrum_lane_scalars(section: Mapping[str, Any]) -> Dict[str, Any]:
+    promoted = dict(section)
+    if (
+        "spectrum_lane_strengths_mirrored" in promoted
+        and "spectrum_lane_strengths_linear" in promoted
+    ):
+        return promoted
+
+    try:
+        bass_emphasis = float(promoted.get("spectrum_bass_emphasis", 0.50))
+        mid_suppression = float(promoted.get("spectrum_mid_suppression", 0.50))
+    except Exception:
+        return promoted
+
+    bass = max(0.0, min(1.0, bass_emphasis * 1.6))
+    mid = max(0.0, min(1.0, 1.0 - mid_suppression * 0.8))
+    low_mid = max(0.0, min(1.0, bass * 0.55 + mid * 0.45))
+    vocal = max(0.0, min(1.0, mid * 0.9 + 0.1))
+    hi_mid = max(0.0, min(1.0, mid * 0.5 + 0.5))
+    promoted.setdefault(
+        "spectrum_lane_strengths_mirrored",
+        {"Mid": mid, "Vocal": vocal, "Low-Mid": low_mid, "Bass": bass},
+    )
+    promoted.setdefault(
+        "spectrum_lane_strengths_linear",
+        {"Bass": bass, "Low-Mid": low_mid, "Vocal": vocal, "Hi-Mid": hi_mid, "Treble": 1.0},
+    )
+    return promoted
+
+
 def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str, Any], Dict[str, list[str]]]:
     sections = _collect_sections(payload)
     if not sections:
@@ -179,12 +277,19 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
 
     original_filtered: Dict[str, Any] = {}
     for section in sections:
-        migrated = vp._migrate_preset_settings(mode, dict(section))  # type: ignore[attr-defined]
+        section_payload = dict(section)
+        if mode == "spectrum":
+            section_payload = _promote_legacy_spectrum_lane_scalars(section_payload)
+        migrated = vp._migrate_preset_settings(mode, section_payload)  # type: ignore[attr-defined]
         filtered = vp._filter_settings_for_mode(mode, migrated)  # type: ignore[attr-defined]
         original_filtered.update(filtered)
         base.update(filtered)
 
     sanitized = vp.normalize_visualizer_mode_payload(mode, base)  # type: ignore[attr-defined]
+    if mode == "spectrum" and "spectrum_notch_positions_linear" in sanitized:
+        sanitized["spectrum_notch_positions_linear"] = _normalize_spectrum_linear_notches(
+            sanitized["spectrum_notch_positions_linear"]
+        )
     _promote_global_technical_settings(mode, sanitized)
     _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
     _strip_deprecated_curated_keys(mode, sanitized)
@@ -212,6 +317,7 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         "deprecated_authored_keys": [],
         "deprecated_global_keys": [],
         "deprecated_mode_alias_keys": [],
+        "legacy_spectrum_linear_notch_family": False,
         "top_level_visualizer_duplication": False,
     }
     prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
@@ -230,6 +336,12 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         for key in section.keys():
             if not isinstance(key, str):
                 continue
+            if (
+                mode == "spectrum"
+                and key == "spectrum_notch_positions_linear"
+                and _normalize_spectrum_linear_notches(section.get(key)) != section.get(key)
+            ):
+                issues["legacy_spectrum_linear_notch_family"] = True
             if any(prefix and key.startswith(f"{prefix}{prefix}") for prefix in prefixes):
                 issues["duplicate_prefixed_keys"].append(key)
             if any(key.endswith(suffix) for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES):
@@ -250,6 +362,7 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         + len(issues["deprecated_authored_keys"])
         + len(issues["deprecated_global_keys"])
         + len(issues["deprecated_mode_alias_keys"])
+        + int(bool(issues["legacy_spectrum_linear_notch_family"]))
         + int(bool(issues["has_custom_preset_backup"]))
         + int(bool(issues["top_level_visualizer_duplication"]))
     )
@@ -327,34 +440,31 @@ def _ensure_backup(path: Path) -> Path:
     except Exception:
         target_dir = _BACKUP_ROOT.resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
-    base = target_dir / f"{path.name}.bak"
-    candidate = base
-    counter = 1
-    while candidate.exists():
-        candidate = target_dir / f"{path.name}.bak{counter}"
-        counter += 1
-    shutil.copy2(path, candidate)
-    return candidate
+    primary = target_dir / f"{path.name}.bak"
+    secondary = target_dir / f"{path.name}.bak1"
+    if secondary.exists():
+        secondary.unlink()
+    if primary.exists():
+        primary.replace(secondary)
+    shutil.copy2(path, primary)
+    return primary
 
 
 def _reindex_preset_name(original_name: str, target_index: int) -> str:
-    """Update only the 'Preset N' prefix number; preserve everything else verbatim.
-
-    For names that already start with 'Preset N', only the number is replaced.
-    For markerless names (no 'Preset N' prefix), the name is wrapped as
-    'Preset N (OriginalName)' so the result is consistent with the canonical
-    format while keeping the original descriptive text intact.
-    """
+    """Canonicalize a preset display name to ``Preset N`` plus one clean suffix."""
     if not original_name:
         return f"Preset {target_index + 1}"
-    updated = re.sub(
-        r"^[Pp]reset[\s_-]*\d+",
-        f"Preset {target_index + 1}",
-        original_name,
-    )
-    if updated != original_name:
-        return updated
-    return f"Preset {target_index + 1} ({original_name})"
+
+    suffix = _suffix_from_payload_name(original_name)
+    while isinstance(suffix, str) and re.match(r"^preset[\s_-]*\d+", suffix, flags=re.IGNORECASE):
+        nested = _suffix_from_payload_name(suffix)
+        if not nested or nested == suffix:
+            break
+        suffix = nested
+
+    if suffix:
+        return f"Preset {target_index + 1} ({suffix})"
+    return f"Preset {target_index + 1}"
 
 
 def _cleanup_suffix_text(value: str | None) -> str | None:
@@ -698,7 +808,8 @@ class VisualizerPresetRepairApp(QWidget):
         self.log.setReadOnly(True)
         main_layout.addWidget(self.log, stretch=1)
 
-        self._history: list[Tuple[Path, Path]] = []
+        self._history: list[UndoEntry] = _load_undo_history()
+        self.undo_btn.setEnabled(bool(self._history))
 
     def _current_mode(self) -> str:
         item = self.mode_list.currentItem()
@@ -735,8 +846,11 @@ class VisualizerPresetRepairApp(QWidget):
             self._show_error(str(exc))
             return
 
-        self._history.append((path, backup))
-        self.undo_btn.setEnabled(True)
+        self._history = _record_undo_entry(
+            UndoEntry(restore_path=path, backup_path=backup),
+            self._history,
+        )
+        self.undo_btn.setEnabled(bool(self._history))
 
         msg = (
             f"Repaired {path.name} ({mode}). Updated {', '.join(stats['updated_paths'])}.\n"
@@ -759,7 +873,10 @@ class VisualizerPresetRepairApp(QWidget):
         def _handle_result(mode: str, path: Path, backup: Path, stats: Dict[str, Any]) -> None:
             nonlocal repaired
             repaired += 1
-            self._history.append((path, backup))
+            self._history = _record_undo_entry(
+                UndoEntry(restore_path=path, backup_path=backup),
+                self._history,
+            )
             rel = path.relative_to(ROOT)
             msg = (
                 f"Repaired {rel} ({mode}). Updated {', '.join(stats['updated_paths'])}. "
@@ -795,7 +912,11 @@ class VisualizerPresetRepairApp(QWidget):
         def _handle_result(mode: str, old_path: Path, new_path: Path, backup: Path) -> None:
             nonlocal updated
             updated += 1
-            self._history.append((old_path, backup))
+            cleanup_path = new_path if new_path != old_path else None
+            self._history = _record_undo_entry(
+                UndoEntry(restore_path=old_path, backup_path=backup, cleanup_path=cleanup_path),
+                self._history,
+            )
             old_rel = old_path.relative_to(ROOT)
             new_rel = new_path.relative_to(ROOT)
             self._append_log(
@@ -824,15 +945,21 @@ class VisualizerPresetRepairApp(QWidget):
     def _on_undo_clicked(self) -> None:
         if not self._history:
             return
-        path, backup = self._history.pop()
+        entry, self._history = _pop_undo_entry(self._history)
+        if entry is None:
+            self.undo_btn.setEnabled(False)
+            return
         try:
-            shutil.copy2(backup, path)
+            if entry.cleanup_path is not None and entry.cleanup_path.exists():
+                entry.cleanup_path.unlink()
+            entry.restore_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(entry.backup_path, entry.restore_path)
         except Exception as exc:
             self._show_error(f"Failed to restore backup: {exc}")
             return
 
-        self._append_log(f"Restored {path.name} from {backup.name}.")
-        self.status_label.setText(f"Undo complete for {path.name}.")
+        self._append_log(f"Restored {entry.restore_path.name} from {entry.backup_path.name}.")
+        self.status_label.setText(f"Undo complete for {entry.restore_path.name}.")
         if not self._history:
             self.undo_btn.setEnabled(False)
 
@@ -900,6 +1027,12 @@ def main(argv: Sequence[str] | None = None) -> None:
                 summary.append("has_custom_preset_backup=True")
             if report.get("deprecated_authored_keys"):
                 summary.append(f"deprecated_authored_keys={report['deprecated_authored_keys']}")
+            if report.get("deprecated_global_keys"):
+                summary.append(f"deprecated_global_keys={report['deprecated_global_keys']}")
+            if report.get("deprecated_mode_alias_keys"):
+                summary.append(f"deprecated_mode_alias_keys={report['deprecated_mode_alias_keys']}")
+            if report.get("legacy_spectrum_linear_notch_family"):
+                summary.append("legacy_spectrum_linear_notch_family=True")
             if report.get("top_level_visualizer_duplication"):
                 summary.append("top_level_visualizer_duplication=True")
             print(f"{rel} ({mode}): {'; '.join(summary)}", flush=True)

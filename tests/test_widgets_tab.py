@@ -516,14 +516,15 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         tab.spectrum_glow_intensity.setValue(94)
         tab._spectrum_glow_color = QColor(15, 230, 255, 210)
         tab.spectrum_mirrored.setChecked(False)
-        tab.spectrum_bass_emphasis.setValue(81)
-        tab.spectrum_vocal_position.setValue(57)
-        tab.spectrum_mid_suppression.setValue(22)
         tab.spectrum_wave_amplitude.setValue(93)
         tab.spectrum_profile_floor.setValue(17)
         tab.spectrum_drop_speed.setValue(241)
         if hasattr(tab, "spectrum_shape_editor"):
             tab.spectrum_shape_editor.set_nodes([[0.0, 0.10], [0.4, 0.85], [1.0, 0.65]])
+            tab.spectrum_shape_editor.set_lane_strengths(
+                {"Bass": 0.81, "Low-Mid": 0.62, "Vocal": 0.57, "Hi-Mid": 0.78, "Treble": 0.94},
+                mirrored=False,
+            )
 
         controls = get_per_mode_controls_for_mode(tab, mode)
         assert controls is not None
@@ -571,6 +572,13 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         assert restored.get("spectrum_glow_color") == [15, 230, 255, 210]
         assert restored.get("spectrum_mirrored") is False
         assert restored.get("spectrum_shape_nodes") == [[0.0, 0.10], [0.4, 0.85], [1.0, 0.65]]
+        assert restored.get("spectrum_lane_strengths_linear") == {
+            "Bass": pytest.approx(0.81),
+            "Low-Mid": pytest.approx(0.62),
+            "Vocal": pytest.approx(0.57),
+            "Hi-Mid": pytest.approx(0.78),
+            "Treble": pytest.approx(0.94),
+        }
         assert restored.get("spectrum_bar_count") == 44
         assert restored.get("spectrum_sensitivity") == pytest.approx(0.77)
         assert restored.get("spectrum_manual_floor") == pytest.approx(0.26)

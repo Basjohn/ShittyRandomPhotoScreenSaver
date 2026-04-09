@@ -15,7 +15,7 @@ pipeline — the old parametric wave / gaussian math is removed.
 """
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple
 
 from PySide6.QtCore import Qt, Signal, QPointF, QRectF
 from PySide6.QtGui import (
@@ -23,6 +23,19 @@ from PySide6.QtGui import (
     QLinearGradient, QRadialGradient, QMouseEvent, QPaintEvent,
 )
 from PySide6.QtWidgets import QWidget
+
+
+def _desaturate_with_alpha(color: QColor, *, saturation_scale: float, alpha: int) -> QColor:
+    h, s, l, _a = color.getHsl()
+    if h < 0:
+        h = 0
+    desaturated = QColor.fromHsl(
+        int(h),
+        int(max(0, min(255, round(s * saturation_scale)))),
+        int(l),
+        int(max(0, min(255, alpha))),
+    )
+    return desaturated
 
 # ── Colours matching the settings dark-glass theme ──────────────────
 _BG_COLOR = QColor(18, 18, 18, 240)
@@ -43,17 +56,25 @@ _LABEL_COLOR = QColor(255, 255, 255, 100)
 _NOTCH_COLOR = QColor(255, 255, 255, 55)
 _ZONE_LABEL_COLOR = QColor(255, 255, 255, 70)
 _NOTCH_DRAG_COLOR = QColor(180, 200, 255, 180)
+_ARROW_TRACK_COLOR = QColor(255, 255, 255, 38)
+_ARROW_COLOR = _desaturate_with_alpha(QColor(190, 214, 255), saturation_scale=0.8, alpha=204)
+_ARROW_HOVER_COLOR = _desaturate_with_alpha(QColor(230, 240, 255), saturation_scale=0.8, alpha=204)
+_ARROW_DRAG_COLOR = _desaturate_with_alpha(QColor(150, 205, 255), saturation_scale=0.8, alpha=204)
+_ARROW_TEXT_COLOR = QColor(255, 255, 255, 150)
 _NOTCH_HIT_WIDTH = 28
 _NOTCH_MIN_SPACING = 0.06
 
 _NODE_RADIUS = 7
 _HIT_RADIUS = 14
+_ARROW_HIT_HALF_WIDTH = 16
+_ARROW_HEAD_HALF_WIDTH = 5
+_ARROW_HEAD_HEIGHT = 8
 _MAX_NODES = 5
 _MIN_NODES = 1
 
 _PADDING_LEFT = 32
 _PADDING_RIGHT = 12
-_PADDING_TOP = 12
+_PADDING_TOP = 44
 _PADDING_BOTTOM = 30  # extra room for notch labels
 
 # Default nodes — these directly define bar-height profile.
@@ -81,6 +102,34 @@ _NOTCHES_LINEAR = [
     (0.72, "Hi-Mid"),
     (1.0, "Treble"),
 ]
+_LANE_STRENGTHS_MIRRORED = {
+    "Mid": 0.60,
+    "Vocal": 0.64,
+    "Low-Mid": 0.70,
+    "Bass": 0.80,
+}
+_LANE_STRENGTHS_LINEAR = {
+    "Bass": 0.80,
+    "Low-Mid": 0.70,
+    "Vocal": 0.64,
+    "Hi-Mid": 0.80,
+    "Treble": 1.00,
+}
+
+
+def _normalize_lane_strengths(
+    strengths: Optional[Mapping[str, float]],
+    defaults: Mapping[str, float],
+) -> Dict[str, float]:
+    normalized: Dict[str, float] = {}
+    source = strengths if isinstance(strengths, Mapping) else {}
+    for label, default in defaults.items():
+        try:
+            value = float(source.get(label, default))
+        except Exception:
+            value = float(default)
+        normalized[label] = max(0.0, min(1.0, value))
+    return normalized
 
 
 # ── Interpolation (public, used by DSP pipeline) ────────────────────
@@ -170,6 +219,7 @@ class SpectrumShapeEditor(QWidget):
 
     nodes_changed = Signal(list)
     notch_positions_changed = Signal(list)
+    lane_strengths_changed = Signal(dict)
 
     def __init__(self, parent: Optional[QWidget] = None, mirrored: bool = True) -> None:
         super().__init__(parent)
@@ -182,15 +232,20 @@ class SpectrumShapeEditor(QWidget):
         self._notch_hover_index: int = -1
         self._notches_mirrored: List[List] = [[x, lbl] for x, lbl in _NOTCHES_MIRRORED]
         self._notches_linear: List[List] = [[x, lbl] for x, lbl in _NOTCHES_LINEAR]
-        self.setMinimumHeight(150)
-        self.setMaximumHeight(190)
+        self._lane_strengths_mirrored: Dict[str, float] = dict(_LANE_STRENGTHS_MIRRORED)
+        self._lane_strengths_linear: Dict[str, float] = dict(_LANE_STRENGTHS_LINEAR)
+        self._lane_drag_index: int = -1
+        self._lane_hover_index: int = -1
+        self.setMinimumHeight(180)
+        self.setMaximumHeight(230)
         self.setMouseTracking(True)
         self.setCursor(Qt.CursorShape.CrossCursor)
         self.setToolTip(
             "Left-click: add node (max 5)\n"
             "Right-click node: remove\n"
             "Drag node: reshape bar heights\n"
-            "Drag bottom labels: move frequency zone boundaries"
+            "Drag bottom labels: move frequency zone boundaries\n"
+            "Drag top arrows: set per-lane energy strength"
         )
 
     # ── Public API ───────────────────────────────────────────────────
@@ -209,6 +264,26 @@ class SpectrumShapeEditor(QWidget):
         if self._mirrored != mirrored:
             self._mirrored = mirrored
             self.update()
+
+    def get_lane_strengths(self, mirrored: Optional[bool] = None) -> Dict[str, float]:
+        if mirrored is None:
+            mirrored = self._mirrored
+        src = self._lane_strengths_mirrored if mirrored else self._lane_strengths_linear
+        return dict(src)
+
+    def set_lane_strengths(
+        self,
+        strengths: Mapping[str, float],
+        *,
+        mirrored: Optional[bool] = None,
+    ) -> None:
+        if mirrored is None:
+            mirrored = self._mirrored
+        if mirrored:
+            self._lane_strengths_mirrored = _normalize_lane_strengths(strengths, _LANE_STRENGTHS_MIRRORED)
+        else:
+            self._lane_strengths_linear = _normalize_lane_strengths(strengths, _LANE_STRENGTHS_LINEAR)
+        self.update()
 
     def get_notch_positions(self) -> List[List]:
         """Return current notch positions as [[x_frac, label], ...]."""
@@ -271,6 +346,36 @@ class SpectrumShapeEditor(QWidget):
         ny = max(0.0, min(1.0, ny))
         return nx, ny
 
+    def _active_notches(self) -> List[List]:
+        return self._notches_mirrored if self._mirrored else self._notches_linear
+
+    def _active_lane_strengths(self) -> Dict[str, float]:
+        return self._lane_strengths_mirrored if self._mirrored else self._lane_strengths_linear
+
+    def _lane_anchor_x(self, frac: float) -> float:
+        r = self._plot_rect()
+        if self._mirrored:
+            center_x = r.left() + r.width() * 0.5
+            half_w = r.width() * 0.5
+            return center_x - frac * half_w
+        return r.left() + frac * r.width()
+
+    def _arrow_bounds(self) -> Tuple[float, float]:
+        plot = self._plot_rect()
+        bottom = max(plot.top() + 18.0, plot.bottom() - 9.0)
+        top = max(plot.top() + 6.0, bottom - 26.0)
+        return top, bottom
+
+    def _lane_strength_to_y(self, strength: float) -> float:
+        top, bottom = self._arrow_bounds()
+        return bottom - max(0.0, min(1.0, strength)) * (bottom - top)
+
+    def _y_to_lane_strength(self, py: float) -> float:
+        top, bottom = self._arrow_bounds()
+        if bottom <= top:
+            return 0.0
+        return max(0.0, min(1.0, (bottom - py) / (bottom - top)))
+
     def _hit_test(self, px: float, py: float) -> int:
         for i, (nx, ny) in enumerate(self._nodes):
             pt = self._node_to_pixel(nx, ny)
@@ -284,6 +389,15 @@ class SpectrumShapeEditor(QWidget):
         for n in self._nodes:
             n[0] = max(0.0, min(1.0, n[0]))
             n[1] = max(0.0, min(1.0, n[1]))
+
+    def _arrow_hit_test(self, px: float, py: float) -> int:
+        top, bottom = self._arrow_bounds()
+        if py < top - 4 or py > bottom + 6:
+            return -1
+        for idx, (frac, _label) in enumerate(self._active_notches()):
+            if abs(px - self._lane_anchor_x(float(frac))) <= _ARROW_HIT_HALF_WIDTH:
+                return idx
+        return -1
 
     # ── Mouse handling ───────────────────────────────────────────────
 
@@ -317,6 +431,17 @@ class SpectrumShapeEditor(QWidget):
                 notches = self._notches_mirrored if self._mirrored else self._notches_linear
                 self._notch_drag_ref = notches[notch_idx]
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
+                event.accept()
+                return
+            lane_idx = self._arrow_hit_test(px, py)
+            if lane_idx >= 0:
+                self._lane_drag_index = lane_idx
+                notches = self._active_notches()
+                strengths = self._active_lane_strengths()
+                label = str(notches[lane_idx][1])
+                strengths[label] = self._y_to_lane_strength(py)
+                self.setCursor(Qt.CursorShape.SizeVerCursor)
+                self.update()
                 event.accept()
                 return
 
@@ -354,6 +479,15 @@ class SpectrumShapeEditor(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
         px, py = event.position().x(), event.position().y()
 
+        if self._lane_drag_index >= 0:
+            notches = self._active_notches()
+            if 0 <= self._lane_drag_index < len(notches):
+                label = str(notches[self._lane_drag_index][1])
+                self._active_lane_strengths()[label] = self._y_to_lane_strength(py)
+                self.update()
+            event.accept()
+            return
+
         # Notch dragging
         if self._notch_drag_index >= 0:
             notches = self._notches_mirrored if self._mirrored else self._notches_linear
@@ -390,17 +524,37 @@ class SpectrumShapeEditor(QWidget):
             self._hover_index = self._hit_test(px, py)
             old_notch_hover = self._notch_hover_index
             self._notch_hover_index = self._notch_hit_test(px, py)
+            old_lane_hover = self._lane_hover_index
+            self._lane_hover_index = self._arrow_hit_test(px, py)
             if self._hover_index >= 0:
                 self.setCursor(Qt.CursorShape.PointingHandCursor)
             elif self._notch_hover_index >= 0:
                 self.setCursor(Qt.CursorShape.SizeHorCursor)
+            elif self._lane_hover_index >= 0:
+                self.setCursor(Qt.CursorShape.SizeVerCursor)
             else:
                 self.setCursor(Qt.CursorShape.CrossCursor)
-            if old_hover != self._hover_index or old_notch_hover != self._notch_hover_index:
+            if (
+                old_hover != self._hover_index
+                or old_notch_hover != self._notch_hover_index
+                or old_lane_hover != self._lane_hover_index
+            ):
                 self.update()
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton and self._lane_drag_index >= 0:
+            self._lane_drag_index = -1
+            px, py = event.position().x(), event.position().y()
+            self._lane_hover_index = self._arrow_hit_test(px, py)
+            self.setCursor(
+                Qt.CursorShape.SizeVerCursor if self._lane_hover_index >= 0
+                else Qt.CursorShape.CrossCursor
+            )
+            self.lane_strengths_changed.emit(self.get_lane_strengths())
+            self.update()
+            event.accept()
+            return
         if event.button() == Qt.MouseButton.LeftButton and self._notch_drag_index >= 0:
             notches = self._notches_mirrored if self._mirrored else self._notches_linear
             if self._notch_drag_ref in notches:
@@ -456,6 +610,9 @@ class SpectrumShapeEditor(QWidget):
             mid_x = r.left() + r.width() * 0.5
             p.setPen(QPen(_MIRROR_LINE, 1.5, Qt.PenStyle.DashLine))
             p.drawLine(QPointF(mid_x, r.top()), QPointF(mid_x, r.bottom()))
+
+        # Lane energy arrows
+        self._draw_lane_strength_arrows(p)
 
         # Interpolated curve — editing half
         num_pts = max(2, int(er.width()))
@@ -585,6 +742,46 @@ class SpectrumShapeEditor(QWidget):
             else:
                 x = r.left() + frac * r.width()
                 self._draw_single_notch(p, r, x, label, highlight=is_dragging)
+
+    def _draw_lane_strength_arrows(self, p: QPainter) -> None:
+        notches = self._active_notches()
+        strengths = self._active_lane_strengths()
+        top, bottom = self._arrow_bounds()
+        if bottom <= top:
+            return
+
+        font = p.font()
+        font.setPixelSize(8)
+        p.setFont(font)
+
+        for idx, (frac, label) in enumerate(notches):
+            x = self._lane_anchor_x(float(frac))
+            strength = float(strengths.get(str(label), 0.0))
+            tip_y = self._lane_strength_to_y(strength)
+            is_dragging = idx == self._lane_drag_index
+            is_hover = idx == self._lane_hover_index
+            line_color = _ARROW_DRAG_COLOR if is_dragging else (_ARROW_HOVER_COLOR if is_hover else _ARROW_COLOR)
+
+            p.setPen(QPen(_ARROW_TRACK_COLOR, 1.0))
+            p.drawLine(QPointF(x, top), QPointF(x, bottom))
+
+            p.setPen(QPen(line_color, 2.0))
+            p.drawLine(QPointF(x, bottom), QPointF(x, tip_y))
+            p.setBrush(QBrush(line_color))
+            head = QPainterPath()
+            head.moveTo(QPointF(x, tip_y - _ARROW_HEAD_HEIGHT))
+            head.lineTo(QPointF(x - _ARROW_HEAD_HALF_WIDTH, tip_y))
+            head.lineTo(QPointF(x + _ARROW_HEAD_HALF_WIDTH, tip_y))
+            head.closeSubpath()
+            p.drawPath(head)
+
+            if is_dragging or is_hover:
+                p.setPen(_ARROW_TEXT_COLOR)
+                p.drawText(
+                    QRectF(x - 16, top - 2, 32, 12),
+                    Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignBottom,
+                    f"{int(round(strength * 100.0))}%",
+                )
 
     def _draw_single_notch(self, p: QPainter, r: QRectF, x: float, label: str,
                             *, highlight: bool = False) -> None:

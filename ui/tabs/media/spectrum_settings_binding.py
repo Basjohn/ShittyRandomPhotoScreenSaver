@@ -18,6 +18,19 @@ _SPECTRUM_SAVE_DEFAULT_NODES = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0
 _SPECTRUM_DEFAULT_NOTCHES_MIRRORED = [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
 _SPECTRUM_LEGACY_NOTCHES_LINEAR = [[0.0, "Bass"], [0.25, "Low"], [0.50, "Mid"], [0.75, "Hi-Mid"], [1.0, "Treble"]]
 _SPECTRUM_DEFAULT_NOTCHES_LINEAR = [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]
+_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED = {
+    "Mid": 0.60,
+    "Vocal": 0.64,
+    "Low-Mid": 0.70,
+    "Bass": 0.80,
+}
+_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR = {
+    "Bass": 0.80,
+    "Low-Mid": 0.70,
+    "Vocal": 0.64,
+    "Hi-Mid": 0.80,
+    "Treble": 1.00,
+}
 
 
 def _promote_legacy_linear_notch_family(normalized: list[list]) -> list[list]:
@@ -67,6 +80,22 @@ def _normalize_linear_notches(positions: Any) -> list[list]:
     return _promote_legacy_linear_notch_family(normalized)
 
 
+def _clamp_lane_strength(value: Any, default: float) -> float:
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except Exception:
+        return float(default)
+
+
+def _normalize_lane_strengths(value: Any, defaults: Mapping[str, float]) -> dict[str, float]:
+    if not isinstance(value, Mapping):
+        return {label: float(default) for label, default in defaults.items()}
+    return {
+        label: _clamp_lane_strength(value.get(label, default), default)
+        for label, default in defaults.items()
+    }
+
+
 def load_spectrum_mode_settings(
     tab,
     spotify_vis_config: Mapping[str, Any] | None,
@@ -96,19 +125,6 @@ def load_spectrum_mode_settings(
         tab.spectrum_rainbow_border.setChecked(
             bool(config.get("spectrum_rainbow_border", False))
         )
-    if hasattr(tab, "spectrum_bass_emphasis"):
-        spectrum_bass_emphasis = int(tab._config_float("spotify_visualizer", config, "spectrum_bass_emphasis", 0.50) * 100)
-        tab.spectrum_bass_emphasis.setValue(max(0, min(100, spectrum_bass_emphasis)))
-        tab.spectrum_bass_emphasis_label.setText(f"{spectrum_bass_emphasis}%")
-    if hasattr(tab, "spectrum_vocal_position"):
-        spectrum_vocal_position = int(tab._config_float("spotify_visualizer", config, "spectrum_vocal_position", 0.40) * 100)
-        tab.spectrum_vocal_position.setValue(max(20, min(60, spectrum_vocal_position)))
-    if hasattr(tab, "spectrum_mid_suppression"):
-        spectrum_mid_suppression = int(
-            tab._config_float("spotify_visualizer", config, "spectrum_mid_suppression", 0.50) * 100
-        )
-        tab.spectrum_mid_suppression.setValue(max(0, min(100, spectrum_mid_suppression)))
-        tab.spectrum_mid_suppression_label.setText(f"{spectrum_mid_suppression}%")
     if hasattr(tab, "spectrum_wave_amplitude"):
         spectrum_wave_amplitude = int(tab._config_float("spotify_visualizer", config, "spectrum_wave_amplitude", 0.50) * 100)
         tab.spectrum_wave_amplitude.setValue(max(0, min(100, spectrum_wave_amplitude)))
@@ -160,6 +176,20 @@ def load_spectrum_mode_settings(
         )
         if len(notch_positions_linear) >= 2:
             tab.spectrum_shape_editor.set_notch_positions(notch_positions_linear, mirrored=False)
+        tab.spectrum_shape_editor.set_lane_strengths(
+            _normalize_lane_strengths(
+                config.get("spectrum_lane_strengths_mirrored", _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED),
+                _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
+            ),
+            mirrored=True,
+        )
+        tab.spectrum_shape_editor.set_lane_strengths(
+            _normalize_lane_strengths(
+                config.get("spectrum_lane_strengths_linear", _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR),
+                _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
+            ),
+            mirrored=False,
+        )
 
     ghost_enabled = config.get(
         "spectrum_ghosting_enabled",
@@ -226,15 +256,16 @@ def collect_spectrum_mode_settings(tab) -> dict[str, Any]:
             if hasattr(tab, "spectrum_shape_editor")
             else _SPECTRUM_DEFAULT_NOTCHES_LINEAR
         ),
-        "spectrum_bass_emphasis": (
-            tab.spectrum_bass_emphasis.value() if hasattr(tab, "spectrum_bass_emphasis") else 50
-        ) / 100.0,
-        "spectrum_vocal_position": (
-            tab.spectrum_vocal_position.value() if hasattr(tab, "spectrum_vocal_position") else 40
-        ) / 100.0,
-        "spectrum_mid_suppression": (
-            tab.spectrum_mid_suppression.value() if hasattr(tab, "spectrum_mid_suppression") else 50
-        ) / 100.0,
+        "spectrum_lane_strengths_mirrored": (
+            tab.spectrum_shape_editor.get_lane_strengths(mirrored=True)
+            if hasattr(tab, "spectrum_shape_editor")
+            else dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED)
+        ),
+        "spectrum_lane_strengths_linear": (
+            tab.spectrum_shape_editor.get_lane_strengths(mirrored=False)
+            if hasattr(tab, "spectrum_shape_editor")
+            else dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR)
+        ),
         "spectrum_wave_amplitude": (
             tab.spectrum_wave_amplitude.value() if hasattr(tab, "spectrum_wave_amplitude") else 50
         ) / 100.0,

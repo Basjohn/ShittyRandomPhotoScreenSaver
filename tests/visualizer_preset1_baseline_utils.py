@@ -456,9 +456,19 @@ def _make_spectrum_worker(settings: dict[str, Any], *, bar_count: int) -> Spotif
         else worker._spectrum_notch_positions_linear
     )
     worker._spectrum_shape_config = SpectrumShapeConfig(
-        bass_emphasis=float(settings.get("spectrum_bass_emphasis", 0.50)),
-        vocal_peak_position=float(settings.get("spectrum_vocal_position", 0.40)),
-        mid_suppression=float(settings.get("spectrum_mid_suppression", 0.50)),
+        lane_strengths_mirrored=dict(settings.get("spectrum_lane_strengths_mirrored", {
+            "Mid": 0.60,
+            "Vocal": 0.64,
+            "Low-Mid": 0.70,
+            "Bass": 0.80,
+        })),
+        lane_strengths_linear=dict(settings.get("spectrum_lane_strengths_linear", {
+            "Bass": 0.80,
+            "Low-Mid": 0.70,
+            "Vocal": 0.64,
+            "Hi-Mid": 0.80,
+            "Treble": 1.0,
+        })),
         wave_amplitude=float(settings.get("spectrum_wave_amplitude", 0.50)),
         profile_floor=float(settings.get("spectrum_profile_floor", 0.12)),
     )

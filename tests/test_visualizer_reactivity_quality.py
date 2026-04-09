@@ -51,15 +51,19 @@ def _make_spectrum_soak_worker(np_module, bar_count: int = 15):
     worker._spectrum_mirrored = False
     worker._spectrum_notch_positions = [
         [0.0, "Bass"],
-        [0.25, "Low"],
-        [0.50, "Mid"],
+        [0.25, "Low-Mid"],
+        [0.50, "Vocal"],
         [0.75, "Hi-Mid"],
         [1.0, "Treble"],
     ]
     worker._spectrum_shape_config = SpectrumShapeConfig(
-        bass_emphasis=0.7,
-        vocal_peak_position=0.5,
-        mid_suppression=0.5,
+        lane_strengths_linear={
+            "Bass": 0.7,
+            "Low-Mid": 0.6,
+            "Vocal": 0.55,
+            "Hi-Mid": 0.55,
+            "Treble": 0.50,
+        },
         wave_amplitude=0.9,
         profile_floor=0.05,
     )

@@ -431,62 +431,21 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     tab.spectrum_shape_editor.nodes_changed.connect(tab._save_settings)
     tab.spectrum_shape_editor.notch_positions_changed.connect(tab._save_settings)
+    tab.spectrum_shape_editor.lane_strengths_changed.connect(tab._save_settings)
     shape_bucket.addWidget(tab.spectrum_shape_editor)
     # Connect mirrored checkbox to update editor display
     tab.spectrum_mirrored.stateChanged.connect(
         lambda state: tab.spectrum_shape_editor.set_mirrored(bool(state))
     )
 
-    # --- Audio Influence sliders (control energy zone weights, not shape) ---
-    _influence_hint = QLabel("How much each frequency band drives bar height.")
+    # --- Audio controls that remain global instead of lane-authored ---
+    _influence_hint = QLabel(
+        "Lane strength now lives in the top arrows inside the shaper. "
+        "These controls only handle global reactivity and floor behavior."
+    )
     _influence_hint.setStyleSheet(ADV_HELPER_LABEL_STYLE)
+    _influence_hint.setWordWrap(True)
     audio_bucket.addWidget(_influence_hint)
-
-    # Bass Influence (0–100 → 0.0–1.0)
-    _bass_row = _aligned_row(audio_bucket, "Bass Influence:")
-    tab.spectrum_bass_emphasis = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spectrum_bass_emphasis.setMinimum(0)
-    tab.spectrum_bass_emphasis.setMaximum(100)
-    _bass_default = int(tab._default_float('spotify_visualizer', 'spectrum_bass_emphasis', 0.50) * 100)
-    tab.spectrum_bass_emphasis.setValue(max(0, min(100, _bass_default)))
-    tab.spectrum_bass_emphasis.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spectrum_bass_emphasis.setTickInterval(25)
-    tab.spectrum_bass_emphasis.setToolTip("How strongly bass energy drives edge bars. 0 = subtle, 100 = dominant.")
-    bind_setting_signal(
-        tab,
-        tab.spectrum_bass_emphasis.valueChanged,
-        updater=lambda v: tab.spectrum_bass_emphasis_label.setText(f"{v}%"),
-    )
-    _bass_row.addWidget(tab.spectrum_bass_emphasis)
-    tab.spectrum_bass_emphasis_label = QLabel(f"{_bass_default}%")
-    _bass_row.addWidget(tab.spectrum_bass_emphasis_label)
-
-    # Vocal Position (kept for preset compat, hidden — still saved)
-    tab.spectrum_vocal_position = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spectrum_vocal_position.setMinimum(20)
-    tab.spectrum_vocal_position.setMaximum(60)
-    _vocal_default = int(tab._default_float('spotify_visualizer', 'spectrum_vocal_position', 0.40) * 100)
-    tab.spectrum_vocal_position.setValue(max(20, min(60, _vocal_default)))
-    tab.spectrum_vocal_position.hide()
-
-    # Mid Dampening (0–100 → 0.0–1.0)
-    _mid_row = _aligned_row(audio_bucket, "Mid Dampening:")
-    tab.spectrum_mid_suppression = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.spectrum_mid_suppression.setMinimum(0)
-    tab.spectrum_mid_suppression.setMaximum(100)
-    _mid_default = int(tab._default_float('spotify_visualizer', 'spectrum_mid_suppression', 0.50) * 100)
-    tab.spectrum_mid_suppression.setValue(max(0, min(100, _mid_default)))
-    tab.spectrum_mid_suppression.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.spectrum_mid_suppression.setTickInterval(25)
-    tab.spectrum_mid_suppression.setToolTip("Reduce mid-frequency energy contribution. 0 = full mid, 100 = heavily dampened.")
-    bind_setting_signal(
-        tab,
-        tab.spectrum_mid_suppression.valueChanged,
-        updater=lambda v: tab.spectrum_mid_suppression_label.setText(f"{v}%"),
-    )
-    _mid_row.addWidget(tab.spectrum_mid_suppression)
-    tab.spectrum_mid_suppression_label = QLabel(f"{_mid_default}%")
-    _mid_row.addWidget(tab.spectrum_mid_suppression_label)
 
     # Reactivity (0–100 → 0.0–1.0)
     _wave_row = _aligned_row(audio_bucket, "Reactivity:")

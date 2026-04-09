@@ -333,7 +333,8 @@ class TestCreatorKwargs:
         assert captured["mode"] == "spectrum"
         assert captured["spectrum_single_piece"] is False
         assert captured["spectrum_rainbow_per_bar"] is False
-        assert captured["spectrum_vocal_position"] == pytest.approx(0.40)
+        assert captured["spectrum_lane_strengths_mirrored"] == model.spectrum_lane_strengths_mirrored
+        assert captured["spectrum_lane_strengths_linear"] == model.spectrum_lane_strengths_linear
 
 
 class TestWidgetsTabLiveConfigGuard:
@@ -2551,6 +2552,11 @@ class TestSpectrumSettingsBinding:
             def set_notch_positions(self, notches, mirrored):
                 self.notches.append((mirrored, notches))
 
+            def set_lane_strengths(self, strengths, *, mirrored):
+                if not hasattr(self, "lane_strengths"):
+                    self.lane_strengths = []
+                self.lane_strengths.append((mirrored, strengths))
+
         class _Tab:
             def __init__(self):
                 self.spectrum_growth = _Slider()
@@ -2558,11 +2564,6 @@ class TestSpectrumSettingsBinding:
                 self._spectrum_render_mode = None
                 self.spectrum_rainbow_per_bar = _Check()
                 self.spectrum_rainbow_border = _Check()
-                self.spectrum_bass_emphasis = _Slider()
-                self.spectrum_bass_emphasis_label = _Label()
-                self.spectrum_vocal_position = _Slider()
-                self.spectrum_mid_suppression = _Slider()
-                self.spectrum_mid_suppression_label = _Label()
                 self.spectrum_wave_amplitude = _Slider()
                 self.spectrum_wave_amplitude_label = _Label()
                 self.spectrum_profile_floor = _Slider()
@@ -2602,9 +2603,8 @@ class TestSpectrumSettingsBinding:
                 "spectrum_render_mode": "bars",
                 "spectrum_unique_colors": True,
                 "spectrum_rainbow_border": True,
-                "spectrum_bass_emphasis": 0.63,
-                "spectrum_vocal_position": 0.46,
-                "spectrum_mid_suppression": 0.28,
+                "spectrum_lane_strengths_mirrored": {"Mid": 0.52, "Vocal": 0.67, "Low-Mid": 0.72, "Bass": 0.88},
+                "spectrum_lane_strengths_linear": {"Bass": 0.63, "Low-Mid": 0.54, "Vocal": 0.46, "Hi-Mid": 0.71, "Treble": 0.93},
                 "spectrum_wave_amplitude": 0.55,
                 "spectrum_profile_floor": 0.17,
                 "spectrum_drop_speed": 1.9,
@@ -2629,9 +2629,6 @@ class TestSpectrumSettingsBinding:
         assert tab._spectrum_render_mode == "bars"
         assert tab.spectrum_rainbow_per_bar.checked is True
         assert tab.spectrum_rainbow_border.checked is True
-        assert tab.spectrum_bass_emphasis.value == 63
-        assert tab.spectrum_vocal_position.value == 46
-        assert tab.spectrum_mid_suppression.value == 28
         assert tab.spectrum_wave_amplitude.value == 55
         assert tab.spectrum_profile_floor.value == 17
         assert tab.spectrum_profile_floor_label.text == "0.17"
@@ -2645,6 +2642,10 @@ class TestSpectrumSettingsBinding:
         assert tab.spectrum_shape_editor.notches == [
             (True, [[0.0, "Mid"], [1.0, "Bass"]]),
             (False, [[0.0, "Bass"], [1.0, "Treble"]]),
+        ]
+        assert tab.spectrum_shape_editor.lane_strengths == [
+            (True, {"Mid": 0.52, "Vocal": 0.67, "Low-Mid": 0.72, "Bass": 0.88}),
+            (False, {"Bass": 0.63, "Low-Mid": 0.54, "Vocal": 0.46, "Hi-Mid": 0.71, "Treble": 0.93}),
         ]
         assert tab.vis_ghost_enabled.checked is False
         assert tab.vis_ghost_opacity_slider.value == 37
@@ -2674,9 +2675,14 @@ class TestSpectrumSettingsBinding:
             def __init__(self):
                 self._notches_mirrored = [[0.0, "Mid"], [1.0, "Bass"]]
                 self._notches_linear = [[0.0, "Bass"], [1.0, "Treble"]]
+                self._lane_strengths_mirrored = {"Mid": 0.58, "Vocal": 0.65, "Low-Mid": 0.72, "Bass": 0.83}
+                self._lane_strengths_linear = {"Bass": 0.68, "Low-Mid": 0.52, "Vocal": 0.47, "Hi-Mid": 0.75, "Treble": 0.91}
 
             def get_nodes(self):
                 return [[0.0, 0.21], [1.0, 0.79]]
+
+            def get_lane_strengths(self, mirrored=None):
+                return dict(self._lane_strengths_mirrored if mirrored else self._lane_strengths_linear)
 
         class _Tab:
             vis_ghost_enabled = _Check(True)
@@ -2692,9 +2698,6 @@ class TestSpectrumSettingsBinding:
             _spectrum_glow_color = QColor(1, 2, 3, 4)
             spectrum_mirrored = _Check(False)
             spectrum_shape_editor = _ShapeEditor()
-            spectrum_bass_emphasis = _Slider(68)
-            spectrum_vocal_position = _Slider(47)
-            spectrum_mid_suppression = _Slider(29)
             spectrum_wave_amplitude = _Slider(51)
             spectrum_profile_floor = _Slider(18)
             spectrum_drop_speed = _Slider(175)
@@ -2716,9 +2719,8 @@ class TestSpectrumSettingsBinding:
         assert payload["spectrum_shape_nodes"] == [[0.0, 0.21], [1.0, 0.79]]
         assert payload["spectrum_notch_positions_mirrored"] == [[0.0, "Mid"], [1.0, "Bass"]]
         assert payload["spectrum_notch_positions_linear"] == [[0.0, "Bass"], [1.0, "Treble"]]
-        assert payload["spectrum_bass_emphasis"] == pytest.approx(0.68)
-        assert payload["spectrum_vocal_position"] == pytest.approx(0.47)
-        assert payload["spectrum_mid_suppression"] == pytest.approx(0.29)
+        assert payload["spectrum_lane_strengths_mirrored"] == {"Mid": 0.58, "Vocal": 0.65, "Low-Mid": 0.72, "Bass": 0.83}
+        assert payload["spectrum_lane_strengths_linear"] == {"Bass": 0.68, "Low-Mid": 0.52, "Vocal": 0.47, "Hi-Mid": 0.75, "Treble": 0.91}
         assert payload["spectrum_wave_amplitude"] == pytest.approx(0.51)
         assert payload["spectrum_profile_floor"] == pytest.approx(0.18)
         assert payload["spectrum_drop_speed"] == pytest.approx(1.75)
@@ -2762,6 +2764,21 @@ class TestSpectrumSettingsBinding:
             def set_notch_positions(self, notches, mirrored):
                 self.notches.append((mirrored, notches))
 
+            def set_lane_strengths(self, strengths, *, mirrored):
+                if not hasattr(self, "lane_strengths"):
+                    self.lane_strengths = []
+                self.lane_strengths.append((mirrored, strengths))
+
+            def set_lane_strengths(self, strengths, *, mirrored):
+                if not hasattr(self, "lane_strengths"):
+                    self.lane_strengths = []
+                self.lane_strengths.append((mirrored, strengths))
+
+            def set_lane_strengths(self, strengths, *, mirrored):
+                if not hasattr(self, "lane_strengths"):
+                    self.lane_strengths = []
+                self.lane_strengths.append((mirrored, strengths))
+
         class _Tab:
             def __init__(self):
                 self.spectrum_growth = _Slider()
@@ -2769,11 +2786,6 @@ class TestSpectrumSettingsBinding:
                 self._spectrum_render_mode = None
                 self.spectrum_rainbow_per_bar = _Check()
                 self.spectrum_rainbow_border = _Check()
-                self.spectrum_bass_emphasis = _Slider()
-                self.spectrum_bass_emphasis_label = _Label()
-                self.spectrum_vocal_position = _Slider()
-                self.spectrum_mid_suppression = _Slider()
-                self.spectrum_mid_suppression_label = _Label()
                 self.spectrum_wave_amplitude = _Slider()
                 self.spectrum_wave_amplitude_label = _Label()
                 self.spectrum_profile_floor = _Slider()
@@ -2858,6 +2870,11 @@ class TestSpectrumSettingsBinding:
             def set_notch_positions(self, notches, mirrored):
                 self.notches.append((mirrored, notches))
 
+            def set_lane_strengths(self, strengths, *, mirrored):
+                if not hasattr(self, "lane_strengths"):
+                    self.lane_strengths = []
+                self.lane_strengths.append((mirrored, strengths))
+
         class _Tab:
             def __init__(self):
                 self.spectrum_growth = _Slider()
@@ -2865,11 +2882,6 @@ class TestSpectrumSettingsBinding:
                 self._spectrum_render_mode = None
                 self.spectrum_rainbow_per_bar = _Check()
                 self.spectrum_rainbow_border = _Check()
-                self.spectrum_bass_emphasis = _Slider()
-                self.spectrum_bass_emphasis_label = _Label()
-                self.spectrum_vocal_position = _Slider()
-                self.spectrum_mid_suppression = _Slider()
-                self.spectrum_mid_suppression_label = _Label()
                 self.spectrum_wave_amplitude = _Slider()
                 self.spectrum_wave_amplitude_label = _Label()
                 self.spectrum_profile_floor = _Slider()
@@ -3456,3 +3468,63 @@ class TestVisualizerPresetRepair:
         sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
         for key in expected_keys:
             assert key in sv, f"Missing {key} for {mode}"
+
+    def test_repair_file_promotes_drifted_legacy_spectrum_linear_notches(self, tmp_path):
+        import json
+        from tools.visualizer_preset_repair import repair_file
+
+        payload = {
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "mode": "spectrum",
+                        "spectrum_mirrored": False,
+                        "spectrum_notch_positions_linear": [
+                            [0.0, "Bass"],
+                            [0.22, "Low"],
+                            [0.45, "Mid"],
+                            [0.74, "Hi-Mid"],
+                            [1.0, "Treble"],
+                        ],
+                    }
+                }
+            }
+        }
+        preset_path = tmp_path / "spectrum_linear_legacy.json"
+        preset_path.write_text(json.dumps(payload), encoding="utf-8")
+
+        _, _ = repair_file(preset_path, "spectrum")
+
+        repaired = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
+        assert sv["spectrum_notch_positions_linear"] == [
+            [0.0, "Bass"],
+            [0.22, "Low-Mid"],
+            [0.45, "Vocal"],
+            [0.74, "Hi-Mid"],
+            [1.0, "Treble"],
+        ]
+
+    def test_audit_payload_flags_legacy_spectrum_linear_notch_family(self):
+        from tools.visualizer_preset_repair import audit_payload
+
+        payload = {
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "mode": "spectrum",
+                        "spectrum_notch_positions_linear": [
+                            [0.0, "Bass"],
+                            [0.21, "Low"],
+                            [0.43, "Mid"],
+                            [0.74, "Hi-Mid"],
+                            [1.0, "Treble"],
+                        ],
+                    }
+                }
+            }
+        }
+
+        report = audit_payload("spectrum", payload)
+
+        assert report["legacy_spectrum_linear_notch_family"] is True

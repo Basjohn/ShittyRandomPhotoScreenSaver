@@ -744,7 +744,6 @@ class WidgetManager:
                 if hasattr(vis, 'apply_vis_mode_config'):
                     spectrum_render_mode = str(getattr(model, "spectrum_render_mode", "bars") or "bars").lower()
                     spectrum_single_piece = spectrum_render_mode != "segment"
-                    spectrum_vocal_position = float(getattr(model, "spectrum_vocal_position", 0.40))
                     vis.apply_vis_mode_config(
                         mode=str(model.mode),
                         sine_micro_wobble=model.sine_micro_wobble,
@@ -765,9 +764,8 @@ class WidgetManager:
                         osc_reactive_glow=model.osc_reactive_glow,
                         spectrum_mirrored=model.spectrum_mirrored,
                         spectrum_shape_nodes=model.spectrum_shape_nodes,
-                        spectrum_bass_emphasis=model.spectrum_bass_emphasis,
-                        spectrum_vocal_position=spectrum_vocal_position,
-                        spectrum_mid_suppression=model.spectrum_mid_suppression,
+                        spectrum_lane_strengths_mirrored=model.spectrum_lane_strengths_mirrored,
+                        spectrum_lane_strengths_linear=model.spectrum_lane_strengths_linear,
                         spectrum_wave_amplitude=model.spectrum_wave_amplitude,
                         spectrum_profile_floor=model.spectrum_profile_floor,
                         spectrum_single_piece=spectrum_single_piece,

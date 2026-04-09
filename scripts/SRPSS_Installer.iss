@@ -91,9 +91,6 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""\SRPSS\RedditHelper""
 Type: files; Name: "{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"
 Type: dirifempty; Name: "{commonappdata}\SRPSS\helper"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
-; Remove shipped curated presets that were installed to ProgramData
-Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
-Type: dirifempty; Name: "{commonappdata}\SRPSS\presets"
 
 [Run]
 ; No post-install run step by default. The user can open Screen Saver

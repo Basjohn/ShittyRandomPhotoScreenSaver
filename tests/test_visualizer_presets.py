@@ -64,6 +64,39 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
             monkeypatch.setitem(vp._PRESETS, "sine_wave", original)
 
 
+def test_get_visualizer_presets_dir_uses_shared_programdata_tree_for_frozen_builds(tmp_path, monkeypatch):
+    bundled_root = tmp_path / "bundled" / "presets" / "visualizer_modes"
+    shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    (shared_root / "spectrum").mkdir(parents=True)
+
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: True)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+
+    assert vp.get_visualizer_presets_dir() == shared_root
+    assert vp.get_visualizer_presets_dir("spectrum") == shared_root / "spectrum"
+
+
+def test_frozen_presets_root_bootstraps_shared_programdata_tree_from_bundled_copy(tmp_path, monkeypatch):
+    bundled_root = tmp_path / "bundled" / "presets" / "visualizer_modes"
+    shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    bundled_mode = bundled_root / "blob"
+    bundled_mode.mkdir(parents=True)
+    (bundled_mode / "preset_1_alpha.json").write_text(
+        json.dumps({"name": "Preset 1 (Alpha)", "preset_index": 0}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: True)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+
+    resolved = vp.get_visualizer_presets_dir()
+
+    assert resolved == shared_root
+    assert (shared_root / "blob" / "preset_1_alpha.json").exists()
+
+
 def test_preset_repair_defaults_loader_uses_canonical_defaults_entrypoint(monkeypatch):
     previous_cache = repair._DEFAULTS_CACHE
     repair._DEFAULTS_CACHE = None
@@ -102,7 +135,7 @@ def test_generic_sst_snapshot_does_not_override_curated_presets(tmp_path, monkey
                 "spotify_visualizer": {
                     "mode": "spectrum",
                     "spectrum_growth": 4.0,
-                    "spectrum_bass_emphasis": 1.0,
+                    "spectrum_lane_strengths_linear": {"Bass": 0.8, "Low-Mid": 0.7, "Vocal": 0.64, "Hi-Mid": 0.8, "Treble": 1.0},
                 }
             }
         }
@@ -864,6 +897,41 @@ def test_reindex_curated_presets_normalizes_first_remaining_slot_to_preset_1(tmp
     assert second_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 2.0
 
 
+def test_reindex_curated_presets_unwraps_nested_preset_name_suffixes(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "spectrum"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    preset_path = mode_dir / "preset_4_slobber.json"
+    preset_path.write_text(
+        json.dumps(
+            {
+                "name": "Preset 4 (Preset 4 (Preset 4 (Slobber)))",
+                "preset_index": 3,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": mode,
+                            "spectrum_growth": 1.5,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
+
+    results = repair.reindex_mode_presets(mode)
+
+    assert results
+    _old_path, new_path, _backup = results[0]
+    payload = json.loads(new_path.read_text(encoding="utf-8"))
+    assert payload["name"] == "Preset 1 (Slobber)"
+
+
 def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkeypatch):
     root = tmp_path
     mode = "blob"
@@ -897,6 +965,71 @@ def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkey
     assert backup_path.parent != preset_path.parent
     assert backup_path.is_relative_to(root / "temp" / "visualizer_preset_backups")
     assert not list(mode_dir.glob("*.bak*"))
+
+
+def test_repair_tool_rotates_only_two_backups_per_preset(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "blob"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    preset_path = mode_dir / "preset_1_alpha.json"
+    preset_path.write_text(
+        json.dumps(
+            {
+                "name": "Preset 1 (Alpha)",
+                "preset_index": 0,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": mode,
+                            "blob_growth": 1.0,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
+    monkeypatch.setattr(repair, "_UNDO_STATE_PATH", repair._BACKUP_ROOT / "undo_state.json")
+
+    for idx in range(3):
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] = 1.0 + idx
+        preset_path.write_text(json.dumps(payload), encoding="utf-8")
+        repair.repair_file(preset_path, mode)
+
+    backup_dir = repair._BACKUP_ROOT / "presets" / "visualizer_modes" / mode
+    backups = sorted(path.name for path in backup_dir.glob("preset_1_alpha.json.bak*"))
+    assert backups == ["preset_1_alpha.json.bak", "preset_1_alpha.json.bak1"]
+
+
+def test_repair_tool_undo_state_persists_and_prunes_duplicate_targets(tmp_path, monkeypatch):
+    root = tmp_path
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
+    monkeypatch.setattr(repair, "_UNDO_STATE_PATH", repair._BACKUP_ROOT / "undo_state.json")
+
+    a = repair.UndoEntry(
+        restore_path=root / "presets" / "visualizer_modes" / "blob" / "preset_1_alpha.json",
+        backup_path=root / "temp" / "visualizer_preset_backups" / "a.bak",
+    )
+    a.backup_path.parent.mkdir(parents=True, exist_ok=True)
+    a.backup_path.write_text("a", encoding="utf-8")
+    history = repair._record_undo_entry(a, [])
+
+    newer = repair.UndoEntry(
+        restore_path=a.restore_path,
+        backup_path=root / "temp" / "visualizer_preset_backups" / "a_new.bak",
+    )
+    newer.backup_path.write_text("new", encoding="utf-8")
+    repair._record_undo_entry(newer, history)
+
+    loaded = repair._load_undo_history()
+    assert len(loaded) == 1
+    assert loaded[0].backup_path == newer.backup_path
 
 
 def test_repair_file_regenerates_shipped_artifacts_for_curated_source_paths(tmp_path, monkeypatch):

@@ -37,23 +37,30 @@ ROOT = Path(__file__).resolve().parent.parent
 class TestSpectrumShapeConfig:
     def test_defaults_match_expected(self):
         cfg = SpectrumShapeConfig()
-        assert cfg.bass_emphasis == 0.50
-        assert cfg.vocal_peak_position == 0.40
-        assert cfg.mid_suppression == 0.50
+        assert cfg.lane_strengths_mirrored == {
+            "Mid": pytest.approx(0.60),
+            "Vocal": pytest.approx(0.64),
+            "Low-Mid": pytest.approx(0.70),
+            "Bass": pytest.approx(0.80),
+        }
+        assert cfg.lane_strengths_linear == {
+            "Bass": pytest.approx(0.80),
+            "Low-Mid": pytest.approx(0.70),
+            "Vocal": pytest.approx(0.64),
+            "Hi-Mid": pytest.approx(0.80),
+            "Treble": pytest.approx(1.00),
+        }
         assert cfg.wave_amplitude == 0.50
         assert cfg.profile_floor == 0.12
 
     def test_custom_values(self):
         cfg = SpectrumShapeConfig(
-            bass_emphasis=0.80,
-            vocal_peak_position=0.30,
-            mid_suppression=0.20,
+            lane_strengths_linear={"Bass": 0.25, "Low-Mid": 0.40, "Vocal": 0.80, "Hi-Mid": 0.55, "Treble": 0.90},
             wave_amplitude=0.70,
             profile_floor=0.05,
         )
-        assert cfg.bass_emphasis == 0.80
-        assert cfg.vocal_peak_position == 0.30
-        assert cfg.mid_suppression == 0.20
+        assert cfg.lane_strengths_linear["Bass"] == 0.25
+        assert cfg.lane_strengths_linear["Vocal"] == 0.80
         assert cfg.wave_amplitude == 0.70
         assert cfg.profile_floor == 0.05
 
@@ -62,7 +69,7 @@ class TestSpectrumShapeConfig:
         assert asdict(fresh) == asdict(_DEFAULT_SHAPE_CONFIG)
 
     def test_asdict_roundtrip(self):
-        cfg = SpectrumShapeConfig(bass_emphasis=0.9, profile_floor=0.25)
+        cfg = SpectrumShapeConfig(lane_strengths_mirrored={"Mid": 0.25, "Vocal": 0.50, "Low-Mid": 0.75, "Bass": 1.0}, profile_floor=0.25)
         d = asdict(cfg)
         restored = SpectrumShapeConfig(**d)
         assert asdict(restored) == d
@@ -170,8 +177,8 @@ class TestSpectrumShapeEditorNotches:
 class TestConfigApplierShaping:
     def _make_widget_mock(self) -> MagicMock:
         widget = MagicMock()
-        widget._spectrum_bass_emphasis = 0.50
-        widget._spectrum_mid_suppression = 0.50
+        widget._spectrum_lane_strengths_mirrored = {"Mid": 0.60, "Vocal": 0.64, "Low-Mid": 0.70, "Bass": 0.80}
+        widget._spectrum_lane_strengths_linear = {"Bass": 0.80, "Low-Mid": 0.70, "Vocal": 0.64, "Hi-Mid": 0.80, "Treble": 1.00}
         widget._spectrum_wave_amplitude = 0.50
         widget._spectrum_profile_floor = 0.12
         widget._bar_count = 15
@@ -181,15 +188,15 @@ class TestConfigApplierShaping:
     def test_shaping_keys_applied_to_widget(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         widget = self._make_widget_mock()
-        apply_vis_mode_kwargs(widget, {'spectrum_bass_emphasis': 0.80, 'spectrum_mid_suppression': 0.30})
-        assert widget._spectrum_bass_emphasis == 0.80
-        assert widget._spectrum_mid_suppression == 0.30
+        apply_vis_mode_kwargs(widget, {'spectrum_lane_strengths_linear': {'Bass': 0.25, 'Low-Mid': 0.4, 'Vocal': 0.8, 'Hi-Mid': 0.55, 'Treble': 0.95}})
+        assert widget._spectrum_lane_strengths_linear["Bass"] == pytest.approx(0.25)
+        assert widget._spectrum_lane_strengths_linear["Vocal"] == pytest.approx(0.8)
 
     def test_shaping_clamped_to_bounds(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         widget = self._make_widget_mock()
-        apply_vis_mode_kwargs(widget, {'spectrum_bass_emphasis': 5.0, 'spectrum_profile_floor': -1.0})
-        assert widget._spectrum_bass_emphasis == 1.0  # clamped to max
+        apply_vis_mode_kwargs(widget, {'spectrum_lane_strengths_linear': {'Bass': 5.0}, 'spectrum_profile_floor': -1.0})
+        assert widget._spectrum_lane_strengths_linear["Bass"] == 1.0  # clamped to max
         assert widget._spectrum_profile_floor == 0.05  # clamped to min
 
     def test_shaping_pushes_to_engine(self):
@@ -209,7 +216,7 @@ class TestConfigApplierShaping:
         widget = self._make_widget_mock()
         widget._engine = mock_engine
         # Apply same values as defaults — no change → no push
-        apply_vis_mode_kwargs(widget, {'spectrum_bass_emphasis': 0.50})
+        apply_vis_mode_kwargs(widget, {'spectrum_lane_strengths_linear': dict(widget._spectrum_lane_strengths_linear)})
         mock_engine.set_spectrum_shape_config.assert_not_called()
 
 
@@ -222,10 +229,10 @@ class TestAudioWorkerShapeConfig:
         from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
         worker = SpotifyVisualizerAudioWorker.__new__(SpotifyVisualizerAudioWorker)
         worker._spectrum_shape_config = None
-        cfg = SpectrumShapeConfig(bass_emphasis=0.9)
+        cfg = SpectrumShapeConfig(lane_strengths_mirrored={"Mid": 0.25, "Vocal": 0.5, "Low-Mid": 0.75, "Bass": 0.9})
         worker.set_spectrum_shape_config(cfg)
         assert worker._spectrum_shape_config is cfg
-        assert worker._spectrum_shape_config.bass_emphasis == 0.9
+        assert worker._spectrum_shape_config.lane_strengths_mirrored["Bass"] == 0.9
 
     def test_set_curved_profile_is_noop(self):
         from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker
@@ -244,8 +251,8 @@ class TestPresetShapingKeys:
     def test_shaping_keys_pass_mode_prefix_filter(self):
         from core.settings.visualizer_presets import MODE_KEY_PREFIXES
         expected = {
-            "spectrum_bass_emphasis",
-            "spectrum_mid_suppression",
+            "spectrum_lane_strengths_mirrored",
+            "spectrum_lane_strengths_linear",
             "spectrum_wave_amplitude",
             "spectrum_profile_floor",
             "spectrum_border_radius",
@@ -265,8 +272,7 @@ class TestPresetShapingKeys:
         from core.settings.visualizer_presets import _filter_settings_for_mode
         settings = {
             "mode": "spectrum",
-            "spectrum_bass_emphasis": 0.80,
-            "spectrum_mid_suppression": 0.60,
+            "spectrum_lane_strengths_linear": {"Bass": 0.80, "Low-Mid": 0.60, "Vocal": 0.64, "Hi-Mid": 0.75, "Treble": 0.95},
             "spectrum_wave_amplitude": 0.40,
             "spectrum_profile_floor": 0.10,
             "spectrum_border_radius": 3.0,
@@ -281,7 +287,7 @@ class TestPresetShapingKeys:
             pytest.skip("Preset 1 JSON not found")
         payload = json.loads(preset_path.read_text(encoding="utf-8"))
         sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        assert "spectrum_bass_emphasis" in sv
+        assert "spectrum_lane_strengths_linear" in sv
         assert "spectrum_wave_amplitude" in sv
         assert "spectrum_bar_profile" not in sv
 
@@ -294,8 +300,7 @@ class TestSettingsModelShaping:
     def test_from_mapping_picks_up_shaping(self):
         from core.settings.models import SpotifyVisualizerSettings
         mapping: Dict[str, Any] = {
-            "spectrum_bass_emphasis": 0.70,
-            "spectrum_mid_suppression": 0.25,
+            "spectrum_lane_strengths_linear": {"Bass": 0.70, "Low-Mid": 0.55, "Vocal": 0.65, "Hi-Mid": 0.80, "Treble": 0.95},
             "spectrum_wave_amplitude": 0.80,
             "spectrum_profile_floor": 0.20,
             "spectrum_glow_enabled": True,
@@ -303,8 +308,8 @@ class TestSettingsModelShaping:
             "spectrum_glow_color": [12, 240, 255, 220],
         }
         model = SpotifyVisualizerSettings.from_mapping(mapping)
-        assert model.spectrum_bass_emphasis == 0.70
-        assert model.spectrum_mid_suppression == 0.25
+        assert model.spectrum_lane_strengths_linear["Bass"] == pytest.approx(0.70)
+        assert model.spectrum_lane_strengths_linear["Treble"] == pytest.approx(0.95)
         assert model.spectrum_wave_amplitude == 0.80
         assert model.spectrum_profile_floor == 0.20
         assert model.spectrum_glow_enabled is True
@@ -314,12 +319,12 @@ class TestSettingsModelShaping:
     def test_to_dict_includes_shaping(self):
         from core.settings.models import SpotifyVisualizerSettings
         model = SpotifyVisualizerSettings(
-            spectrum_bass_emphasis=0.60,
+            spectrum_lane_strengths_linear={"Bass": 0.60, "Low-Mid": 0.55, "Vocal": 0.62, "Hi-Mid": 0.80, "Treble": 1.00},
         )
         flat = model.to_dict()
         prefix = "widgets.spotify_visualizer"
-        assert flat[f"{prefix}.spectrum_bass_emphasis"] == 0.60
-        assert flat[f"{prefix}.spectrum_mid_suppression"] == 0.50  # default
+        assert flat[f"{prefix}.spectrum_lane_strengths_linear"]["Bass"] == pytest.approx(0.60)
+        assert flat[f"{prefix}.spectrum_lane_strengths_mirrored"]["Bass"] == pytest.approx(0.80)
         assert flat[f"{prefix}.spectrum_glow_enabled"] is False
         assert flat[f"{prefix}.spectrum_glow_intensity"] == pytest.approx(0.55)
         assert f"{prefix}.spectrum_bar_profile" not in flat
@@ -329,7 +334,7 @@ class TestSettingsModelShaping:
         import dataclasses
         field_names = {f.name for f in dataclasses.fields(SpotifyVisualizerSettings)}
         assert "spectrum_bar_profile" not in field_names
-        assert "spectrum_bass_emphasis" in field_names
+        assert "spectrum_lane_strengths_linear" in field_names
 
 
 # ---------------------------------------------------------------------------
@@ -337,101 +342,46 @@ class TestSettingsModelShaping:
 # ---------------------------------------------------------------------------
 
 class TestProfileShapeComputation:
-    """Test the profile shape math directly — pure numpy, no worker state needed.
-
-    This is the core of SpectrumShapeConfig: the profile_shape array that
-    determines per-bar amplitude weighting in fft_to_bars.
-    """
-
-    @staticmethod
-    def _compute_profile(cfg: SpectrumShapeConfig, bands: int):
-        """Reproduce the profile shape computation from bar_computation.fft_to_bars."""
+    def test_lane_profile_interpolates_between_authored_labels(self):
         import numpy as np
-        center = bands // 2
-        half = bands // 2
-        frac_arr = np.abs(np.arange(bands, dtype="float32") - center) / max(1.0, float(half))
+        from widgets.spotify_visualizer.bar_computation import _build_lane_energy_profile
 
-        wave = np.sin(frac_arr * np.pi * 1.5 + np.pi * 0.5)
-        wave_scale = cfg.wave_amplitude * 0.70
-        profile_shape = wave * wave_scale + 0.50
+        positions = np.linspace(0.0, 1.0, 9, dtype="float32")
+        notches = [
+            [0.0, "Bass"],
+            [0.25, "Low-Mid"],
+            [0.50, "Vocal"],
+            [0.75, "Hi-Mid"],
+            [1.0, "Treble"],
+        ]
+        strengths = {"Bass": 1.0, "Low-Mid": 0.75, "Vocal": 0.50, "Hi-Mid": 0.25, "Treble": 0.0}
 
-        bass_amp = cfg.bass_emphasis * 0.40
-        edge_boost = np.exp(-((frac_arr - 1.0) ** 2) / 0.08) * bass_amp
-        profile_shape = profile_shape + edge_boost
+        profile = _build_lane_energy_profile(np, positions, notches, strengths, 1.0, 0.5, 0.25)
 
-        vp = cfg.vocal_peak_position
-        vocal_peak = np.exp(-((frac_arr - vp) ** 2) / 0.018) * 0.12
-        vocal_dip = -np.exp(-((frac_arr - (vp - 0.10)) ** 2) / 0.015) * 0.06
+        assert profile.shape == (9,)
+        assert profile[0] > profile[4] > profile[-1]
+        assert np.all(profile >= 0.0)
 
-        suppress_depth = cfg.mid_suppression * 0.32
-        mid_suppress = -np.exp(-((frac_arr - 0.20) ** 2) / 0.030) * suppress_depth
-        bar7_cut = -np.exp(-((frac_arr - 0.30) ** 2) / 0.008) * (suppress_depth * 0.375)
-        bar9_cut = -np.exp(-((frac_arr - 0.10) ** 2) / 0.008) * (suppress_depth * 0.25)
-        profile_shape = profile_shape + vocal_peak + vocal_dip + mid_suppress + bar7_cut + bar9_cut
-
-        profile_shape = np.maximum(profile_shape, cfg.profile_floor)
-        return profile_shape
-
-    def test_default_config_produces_nonzero_profile(self):
+    def test_profile_floor_still_enforces_minimum_shape_height(self):
         import numpy as np
-        profile = self._compute_profile(SpectrumShapeConfig(), bands=21)
-        assert profile.shape == (21,)
-        assert np.all(profile > 0), "Default profile should have all positive values"
+        profile = np.array([0.0, 0.1, 0.2, 0.05], dtype="float32")
+        floor = 0.30
+        profile = np.maximum(profile, floor)
+        assert np.all(profile >= floor - 1e-6)
 
-    def test_different_configs_produce_different_profiles(self):
+    def test_wave_amplitude_still_scales_lane_energy(self):
         import numpy as np
-        bands = 21
-        default_profile = self._compute_profile(SpectrumShapeConfig(), bands=bands)
-        custom_profile = self._compute_profile(SpectrumShapeConfig(
-            bass_emphasis=1.0, wave_amplitude=0.0, mid_suppression=0.0,
-        ), bands=bands)
-        assert not np.allclose(default_profile, custom_profile), (
-            "Different SpectrumShapeConfig should produce different profiles"
-        )
+        from widgets.spotify_visualizer.bar_computation import _build_lane_energy_profile
 
-    def test_zero_amplitude_gives_flat_profile(self):
-        import numpy as np
-        bands = 15
-        profile = self._compute_profile(SpectrumShapeConfig(
-            bass_emphasis=0.0, wave_amplitude=0.0, mid_suppression=0.0,
-            vocal_peak_position=0.40, profile_floor=0.50,
-        ), bands=bands)
-        # With zero wave/bass/mid, profile should be near-uniform at ~0.50
-        assert profile.shape == (bands,)
-        assert np.all(profile >= 0.50 - 0.01), "Floor should be respected"
-        ratio = float(np.max(profile)) / float(np.min(profile) + 1e-9)
-        assert ratio < 1.5, f"Flat profile should be near-uniform, got max/min ratio {ratio:.2f}"
+        positions = np.linspace(0.0, 1.0, 7, dtype="float32")
+        notches = [[0.0, "Bass"], [0.5, "Vocal"], [1.0, "Treble"]]
+        strengths = {"Bass": 0.8, "Vocal": 0.8, "Treble": 0.8}
 
-    def test_high_bass_emphasis_boosts_edges(self):
-        bands = 21
-        low_bass = self._compute_profile(SpectrumShapeConfig(bass_emphasis=0.0), bands=bands)
-        high_bass = self._compute_profile(SpectrumShapeConfig(bass_emphasis=1.0), bands=bands)
-        # Edge bars (index 0 and last) should be higher with more bass emphasis
-        assert high_bass[0] > low_bass[0], "Bass emphasis should boost edge bars"
-        assert high_bass[-1] > low_bass[-1], "Bass emphasis should boost edge bars"
+        base = _build_lane_energy_profile(np, positions, notches, strengths, 0.8, 0.6, 0.4)
+        calm = base * (0.5 + 0.0)
+        intense = base * (0.5 + 1.0)
 
-    def test_profile_floor_enforced(self):
-        import numpy as np
-        bands = 15
-        floor_val = 0.30
-        profile = self._compute_profile(SpectrumShapeConfig(
-            profile_floor=floor_val, wave_amplitude=1.0, mid_suppression=1.0,
-        ), bands=bands)
-        assert np.all(profile >= floor_val - 1e-6), (
-            f"No bar should be below profile_floor={floor_val}"
-        )
-
-    def test_wave_amplitude_affects_center(self):
-        import numpy as np
-        bands = 21
-        low_wave = self._compute_profile(SpectrumShapeConfig(wave_amplitude=0.0), bands=bands)
-        high_wave = self._compute_profile(SpectrumShapeConfig(wave_amplitude=1.0), bands=bands)
-        # Higher wave amplitude should create more variation between center and edges
-        range_low = float(np.max(low_wave) - np.min(low_wave))
-        range_high = float(np.max(high_wave) - np.min(high_wave))
-        assert range_high > range_low, (
-            "Higher wave_amplitude should create more variation in the profile"
-        )
+        assert float(np.max(intense)) > float(np.max(calm))
 
 
 class TestLaneAwareSpectrumEnergy:
@@ -444,15 +394,19 @@ class TestLaneAwareSpectrumEnergy:
         worker._spectrum_mirrored = False
         worker._spectrum_notch_positions = [
             [0.0, "Bass"],
-            [0.25, "Low"],
-            [0.50, "Mid"],
+            [0.25, "Low-Mid"],
+            [0.50, "Vocal"],
             [0.75, "Hi-Mid"],
             [1.0, "Treble"],
         ]
         worker._spectrum_shape_config = SpectrumShapeConfig(
-            bass_emphasis=0.7,
-            vocal_peak_position=0.5,
-            mid_suppression=0.1,
+            lane_strengths_linear={
+                "Bass": 0.7,
+                "Low-Mid": 0.65,
+                "Vocal": 0.7,
+                "Hi-Mid": 0.55,
+                "Treble": 0.5,
+            },
             wave_amplitude=0.9,
             profile_floor=0.05,
         )

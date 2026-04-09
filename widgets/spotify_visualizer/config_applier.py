@@ -19,6 +19,20 @@ from core.settings.bubble_gradient_semantics import (
 
 logger = get_logger(__name__)
 
+_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED = {
+    "Mid": 0.60,
+    "Vocal": 0.64,
+    "Low-Mid": 0.70,
+    "Bass": 0.80,
+}
+_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR = {
+    "Bass": 0.80,
+    "Low-Mid": 0.70,
+    "Vocal": 0.64,
+    "Hi-Mid": 0.80,
+    "Treble": 1.00,
+}
+
 
 def _color_or_none(value: Any) -> QColor | None:
     """Return a QColor if *value* is a list/tuple of ≥3 ints, else None."""
@@ -40,6 +54,19 @@ def _normalize_direction(value: Any, default: str = "top_left") -> str:
 def _normalize_blob_glow_drive_mode(value: Any, default: str = "bass") -> str:
     val = str(value).strip().lower()
     return val if val in {"bass", "vocal"} else default
+
+
+def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[str, float] | None:
+    if not isinstance(value, dict):
+        return None
+    normalized: Dict[str, float] = {}
+    for label, default in defaults.items():
+        try:
+            lane_value = float(value.get(label, default))
+        except Exception:
+            lane_value = float(default)
+        normalized[label] = max(0.0, min(1.0, lane_value))
+    return normalized
 
 
 def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
@@ -285,9 +312,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     # --- Spectrum shaping parameters ----------------------------------
     _shape_dirty = False
     for _shape_key, _shape_attr, _shape_lo, _shape_hi in (
-        ('spectrum_bass_emphasis', '_spectrum_bass_emphasis', 0.0, 1.0),
-        ('spectrum_vocal_position', '_spectrum_vocal_position', 0.20, 0.60),
-        ('spectrum_mid_suppression', '_spectrum_mid_suppression', 0.0, 1.0),
         ('spectrum_wave_amplitude', '_spectrum_wave_amplitude', 0.0, 1.0),
         ('spectrum_profile_floor', '_spectrum_profile_floor', 0.05, 0.30),
     ):
@@ -296,6 +320,22 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             if val != getattr(widget, _shape_attr, None):
                 setattr(widget, _shape_attr, val)
                 _shape_dirty = True
+    if 'spectrum_lane_strengths_mirrored' in kwargs:
+        _normalized = _normalize_lane_strengths(
+            kwargs['spectrum_lane_strengths_mirrored'],
+            _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
+        )
+        if _normalized is not None and _normalized != getattr(widget, '_spectrum_lane_strengths_mirrored', None):
+            widget._spectrum_lane_strengths_mirrored = _normalized
+            _shape_dirty = True
+    if 'spectrum_lane_strengths_linear' in kwargs:
+        _normalized = _normalize_lane_strengths(
+            kwargs['spectrum_lane_strengths_linear'],
+            _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
+        )
+        if _normalized is not None and _normalized != getattr(widget, '_spectrum_lane_strengths_linear', None):
+            widget._spectrum_lane_strengths_linear = _normalized
+            _shape_dirty = True
     if _shape_dirty:
         try:
             from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
@@ -303,9 +343,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
             engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
             if engine is not None:
                 engine.set_spectrum_shape_config(SpectrumShapeConfig(
-                    bass_emphasis=widget._spectrum_bass_emphasis,
-                    vocal_peak_position=widget._spectrum_vocal_position,
-                    mid_suppression=widget._spectrum_mid_suppression,
+                    lane_strengths_mirrored=dict(widget._spectrum_lane_strengths_mirrored),
+                    lane_strengths_linear=dict(widget._spectrum_lane_strengths_linear),
                     wave_amplitude=widget._spectrum_wave_amplitude,
                     profile_floor=widget._spectrum_profile_floor,
                 ))

@@ -111,10 +111,20 @@ class SpotifyVisualizerWidget(QWidget):
         self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
         self._spectrum_notch_positions_mirrored: list = [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
         self._spectrum_notch_positions_linear: list = [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]
+        self._spectrum_lane_strengths_mirrored: dict = {
+            "Mid": 0.60,
+            "Vocal": 0.64,
+            "Low-Mid": 0.70,
+            "Bass": 0.80,
+        }
+        self._spectrum_lane_strengths_linear: dict = {
+            "Bass": 0.80,
+            "Low-Mid": 0.70,
+            "Vocal": 0.64,
+            "Hi-Mid": 0.80,
+            "Treble": 1.00,
+        }
         # Spectrum shaping config (pushed to audio worker DSP pipeline)
-        self._spectrum_bass_emphasis: float = 0.50
-        self._spectrum_vocal_position: float = 0.40
-        self._spectrum_mid_suppression: float = 0.50
         self._spectrum_wave_amplitude: float = 0.50
         self._spectrum_profile_floor: float = 0.12
         self._spectrum_drop_speed: float = 1.0
@@ -558,9 +568,8 @@ class SpotifyVisualizerWidget(QWidget):
         try:
             from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
             engine.set_spectrum_shape_config(SpectrumShapeConfig(
-                bass_emphasis=self._spectrum_bass_emphasis,
-                vocal_peak_position=self._spectrum_vocal_position,
-                mid_suppression=self._spectrum_mid_suppression,
+                lane_strengths_mirrored=dict(self._spectrum_lane_strengths_mirrored),
+                lane_strengths_linear=dict(self._spectrum_lane_strengths_linear),
                 wave_amplitude=self._spectrum_wave_amplitude,
                 profile_floor=self._spectrum_profile_floor,
             ))

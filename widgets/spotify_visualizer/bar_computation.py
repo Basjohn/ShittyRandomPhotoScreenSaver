@@ -7,8 +7,8 @@ center-out frequency mapping, reactive smoothing, and adaptive normalization.
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
-from typing import List, Optional, TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import List, Mapping, Optional, TYPE_CHECKING
 
 from core.logging.logger import (
     get_logger,
@@ -22,34 +22,100 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED = {
+    "Mid": 0.60,
+    "Vocal": 0.64,
+    "Low-Mid": 0.70,
+    "Bass": 0.80,
+}
+_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR = {
+    "Bass": 0.80,
+    "Low-Mid": 0.70,
+    "Vocal": 0.64,
+    "Hi-Mid": 0.80,
+    "Treble": 1.00,
+}
+
 
 @dataclass
 class SpectrumShapeConfig:
-    """Audio-influence weights for the lane-aware spectrum model.
+    """Lane-authored audio weights for the Spectrum shaper.
 
-    The node-driven profile remains the primary visual shaper, but each bar
-    now receives a lane-specific energy mix instead of a single shared scalar.
-    Bass/mid/treble energy are routed across the profile with soft crossfades
-    so empty lanes can still collapse toward zero when their source energy is
-    absent.
+    The node-driven profile remains the primary silhouette guide, while
+    per-lane arrows define how much real lane energy each authored region
+    contributes. Mirrored and linear layouts keep separate lane dictionaries
+    because their visible lane families differ.
 
     Attributes:
-        bass_emphasis: Bass energy contribution weight.  0→minimal, 1→strong.
-        vocal_peak_position: Mid/vocal lane center hint.  0.2→closer to bass,
-            0.6→closer to treble.
-        mid_suppression: Dampens mid-band lane contribution.  0→full, 1→heavy cut.
+        lane_strengths_mirrored: `Mid / Vocal / Low-Mid / Bass` strength map.
+        lane_strengths_linear: `Bass / Low-Mid / Vocal / Hi-Mid / Treble` map.
         wave_amplitude: Overall reactivity scaling.  0→subdued, 1→punchy.
         profile_floor: Minimum bar height multiplier (0.05–0.30).
     """
-    bass_emphasis: float = 0.50
-    vocal_peak_position: float = 0.40
-    mid_suppression: float = 0.50
+    lane_strengths_mirrored: Mapping[str, float] = field(
+        default_factory=lambda: dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED)
+    )
+    lane_strengths_linear: Mapping[str, float] = field(
+        default_factory=lambda: dict(_SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR)
+    )
     wave_amplitude: float = 0.50
     profile_floor: float = 0.12
 
 
 # Singleton default config — used when the worker has no custom config.
 _DEFAULT_SHAPE_CONFIG = SpectrumShapeConfig()
+
+
+def _lane_source_energy(label: str, bass_energy: float, mid_energy: float, treble_energy: float) -> float:
+    key = str(label).strip().lower()
+    if key == "bass":
+        return bass_energy
+    if key in {"low-mid", "lowmid", "low"}:
+        return bass_energy * 0.58 + mid_energy * 0.42
+    if key == "vocal":
+        return mid_energy * 0.82 + treble_energy * 0.18
+    if key == "mid":
+        return mid_energy
+    if key in {"hi-mid", "high-mid", "himid"}:
+        return mid_energy * 0.42 + treble_energy * 0.58
+    if key == "treble":
+        return treble_energy
+    return mid_energy
+
+
+def _build_lane_energy_profile(
+    np,
+    sample_positions,
+    notches,
+    strengths: Mapping[str, float],
+    bass_energy: float,
+    mid_energy: float,
+    treble_energy: float,
+):
+    anchors: list[float] = []
+    values: list[float] = []
+    last_pos = -1.0
+    for frac, label in sorted(notches, key=lambda item: float(item[0])):
+        pos = max(0.0, min(1.0, float(frac)))
+        if pos <= last_pos:
+            pos = min(1.0, last_pos + 1e-4)
+        last_pos = pos
+        try:
+            strength = max(0.0, min(1.0, float(strengths.get(str(label), 1.0))))
+        except Exception:
+            strength = 1.0
+        anchors.append(pos)
+        values.append(_lane_source_energy(str(label), bass_energy, mid_energy, treble_energy) * strength)
+
+    if not anchors:
+        return np.zeros_like(sample_positions, dtype="float32")
+    if len(anchors) == 1:
+        return np.full(sample_positions.shape, values[0], dtype="float32")
+    return np.interp(
+        sample_positions,
+        np.asarray(anchors, dtype="float32"),
+        np.asarray(values, dtype="float32"),
+    ).astype("float32", copy=False)
 
 
 def get_zero_bars(worker: "SpotifyVisualizerAudioWorker") -> List[float]:
@@ -234,50 +300,36 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         profile_shape = np.maximum(profile_shape, shape_cfg.profile_floor)
 
         # ── Lane-aware audio routing ─────────────────────────────────
-        # Build soft bar weights so the user-authored shape is still the
-        # visual guide, but bass/mid/treble energy can independently drive
-        # and collapse their own lanes.
-        bass_w = max(0.1, shape_cfg.bass_emphasis * 1.6)   # 0→0.1 .. 1→1.6
-        mid_w = max(0.1, 1.0 - shape_cfg.mid_suppression * 0.8)  # 0→1.0 .. 1→0.2
+        # Interpolate authored lane strengths across the current notch family.
+        # The editor owns those lane identities; runtime just routes each
+        # lane to its intended bass/mid/treble energy source.
         react_scale = 0.5 + shape_cfg.wave_amplitude  # 0→0.5 .. 1→1.5
+        active_notches = getattr(worker, '_spectrum_notch_positions', None)
+        if not isinstance(active_notches, list) or len(active_notches) < 2:
+            active_notches = (
+                [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]]
+                if mirrored
+                else [[0.0, "Bass"], [0.24, "Low-Mid"], [0.46, "Vocal"], [0.72, "Hi-Mid"], [1.0, "Treble"]]
+            )
 
-        positions = np.linspace(0.0, 1.0, bands, dtype="float32")
-        split1_pos = float(_split1) / max(1.0, float(bands - 1))
-        split2_pos = float(_split2) / max(1.0, float(bands - 1))
-        vocal_center = max(split1_pos, min(split2_pos, float(shape_cfg.vocal_peak_position)))
-
-        blend_width = max(0.06, min(0.22, 0.08 + (split2_pos - split1_pos) * 0.35))
-
-        bass_mask = np.clip((split1_pos + blend_width - positions) / max(blend_width, 1e-6), 0.0, 1.0)
-        treble_mask = np.clip((positions - (split2_pos - blend_width)) / max(blend_width, 1e-6), 0.0, 1.0)
-        mid_mask = 1.0 - np.maximum(bass_mask, treble_mask)
-        mid_peak = np.clip(1.0 - (np.abs(positions - vocal_center) / max(split2_pos - split1_pos, 0.12)), 0.0, 1.0)
-        mid_mask = np.maximum(mid_mask, mid_peak * 0.55)
-
-        weight_sum = bass_mask + mid_mask + treble_mask
-        np.maximum(weight_sum, 1e-6, out=weight_sum)
-
-        bass_weight_map = (bass_mask / weight_sum) * bass_w
-        mid_weight_map = (mid_mask / weight_sum) * mid_w
-        treble_weight_map = treble_mask / weight_sum
-
-        per_bar_energy = (
-            bass_energy * bass_weight_map
-            + mid_energy * mid_weight_map
-            + treble_energy * treble_weight_map
-        ) * react_scale
-
-        # In mirrored mode the left half already has correct bass→treble
-        # routing (low bar index = low freq).  Mirror the right half so
-        # both edges get bass energy instead of the right side getting
-        # treble energy due to its high linear position.
         if mirrored:
-            for _mi in range(center + 1, bands):
-                per_bar_energy[_mi] = per_bar_energy[2 * center - _mi]
-            # Prevent center bar energy dip: it represents the same
-            # high-frequency zone as its immediate neighbors.
-            if 0 < center < bands:
-                per_bar_energy[center] = per_bar_energy[center - 1]
+            center_pos = (float(bands) - 1.0) * 0.5
+            max_dist = max(center_pos, 1.0)
+            sample_positions = np.abs(np.arange(bands, dtype="float32") - center_pos) / max_dist
+            lane_strengths = shape_cfg.lane_strengths_mirrored
+        else:
+            sample_positions = np.linspace(0.0, 1.0, bands, dtype="float32")
+            lane_strengths = shape_cfg.lane_strengths_linear
+
+        per_bar_energy = _build_lane_energy_profile(
+            np,
+            sample_positions,
+            active_notches,
+            lane_strengths,
+            bass_energy,
+            mid_energy,
+            treble_energy,
+        ) * react_scale
 
         arr[:bands] = profile_shape[:bands] * per_bar_energy[:bands]
 

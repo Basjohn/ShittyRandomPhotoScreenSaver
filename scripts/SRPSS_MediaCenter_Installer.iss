@@ -44,9 +44,12 @@ Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-inst
 [Files]
 ; Copy everything inside the Nuitka onedir output into {app}
 Source: "..\release\main_mc.dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
-; Visualizer presets always replaced on every install — no backup, no task gate.
-; InstallDelete wipes the old tree first so stale/renamed files never linger.
+; Keep one packaged copy inside the MC install so "Replace Visualizers" can
+; still restore from bundled assets even though runtime loading now uses the
+; shared ProgramData tree.
 Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+; Active curated preset tree shared with SCR/NORMAL builds.
+Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Include the EXE itself (for convenience when browsing install dir)
 Source: "..\release\main_mc.dist\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Installer icon for shortcuts / ARP entry
@@ -65,7 +68,8 @@ Filename: "{app}\SRPSS_Media_Center.exe"; Description: "Launch SRPSS - Media Cen
 Type: filesandordirs; Name: "{app}"
 
 [InstallDelete]
-; Wipe old shipped curated presets before the new ones land so stale/renamed
-; files are never left behind alongside the authoritative replacement set.
+; Wipe both the packaged backup copy and the shared active curated tree so
+; stale/renamed files never linger across upgrades.
 Type: filesandordirs; Name: "{app}\presets\visualizer_modes"
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
 

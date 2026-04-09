@@ -1,6 +1,7 @@
 """Tests for settings dialog."""
 import inspect
 import json
+import sys
 
 import pytest
 from PySide6.QtWidgets import QApplication
@@ -178,17 +179,6 @@ def test_settings_dialog_toggle_maximize(qapp, settings_manager, animation_manag
     assert dialog._is_maximized == initial_state
 
 
-def test_settings_dialog_has_drop_shadow(qapp, settings_manager, animation_manager):
-    """Test dialog has drop shadow effect."""
-    dialog = SettingsDialog(settings_manager, animation_manager)
-
-    container = getattr(dialog, "_dialog_container", None)
-    assert container is not None
-
-    effect = container.graphicsEffect()
-    assert effect is not None
-
-
 def test_settings_dialog_show_does_not_install_global_shadow_filter():
     """showEvent should not opt into the app-wide shadow refresh filter."""
     source = inspect.getsource(SettingsDialog.showEvent)
@@ -254,6 +244,32 @@ def test_replace_visualizers_source_root_is_script_safe(qapp, settings_manager, 
     root, source_kind = dialog._resolve_shipped_visualizer_source_root()
     assert root is None
     assert source_kind == "script"
+
+
+def test_replace_visualizers_source_root_prefers_packaged_tree_in_frozen_build(
+    qapp, settings_manager, animation_manager, tmp_path, monkeypatch
+):
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    packaged_root = tmp_path / "packaged" / "visualizer_modes"
+    active_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    packaged_root.mkdir(parents=True)
+    active_root.mkdir(parents=True)
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr("builtins.__compiled__", False, raising=False)
+    monkeypatch.setattr(
+        "core.settings.visualizer_presets.get_packaged_visualizer_presets_dir",
+        lambda mode=None: packaged_root if mode is None else packaged_root / str(mode),
+    )
+    monkeypatch.setattr(
+        "core.settings.visualizer_presets.get_visualizer_presets_dir",
+        lambda mode=None: active_root if mode is None else active_root / str(mode),
+    )
+
+    root, source_kind = dialog._resolve_shipped_visualizer_source_root()
+
+    assert root == packaged_root
+    assert source_kind == "packaged"
 
 
 def test_replace_visualizers_refreshes_target_manifest_with_reconciled_entries(

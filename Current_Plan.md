@@ -24,7 +24,7 @@ Update this after every significant change.
 ## Snapshot
 
 - **Date:** `2026-04-09`
-- **Status:** Spectrum cleanup through 3.1 remains complete. Bubble now has the same shared bucketing treatment as Spectrum, Blob, Oscilloscope, and Sine Wave, and the bucket work has runtime user validation for logic, neatness, and persistence. Reddit Helper link handoff is now runtime-proven with a reusable scheduled-task authority, so authored planning focus is back on Spectrum cleanup plus preset-location/preset-repair follow-up.
+- **Status:** Spectrum cleanup through 3.1 remains complete. Bubble now has the same shared bucketing treatment as Spectrum, Blob, Oscilloscope, and Sine Wave, and the bucket work has runtime user validation for logic, neatness, and persistence. Reddit Helper link handoff is now runtime-proven with a reusable scheduled-task authority and harness coverage. The non-mirrored Spectrum vocal lane is now user-validated and closed. The first Spectrum Energy Arrows pass is landed in code, with the old lane-power sliders removed in favor of lane-native arrows, and now awaits real runtime/feel validation before consolidation decisions are finalized. Preset follow-up also moved forward: frozen SCR and MC now target one shared ProgramData curated preset tree, and the repair/audit flow now explicitly catches and repairs stale non-mirrored Spectrum linear lane families.
 - **Organs synthetic:** Green against current authored `Preset 1` (user-modified version).
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
@@ -59,84 +59,46 @@ Reddit handoff is now working in real runtime through a durable interactive sche
 
 ### 1. Spectrum Energy Arrows (was §3.2)
 
-**Status:** `[ ]` Not started
+**Status:** `[~]` First pass landed in code; runtime/user validation still needed
 **Priority:** Medium
 
 Replace redundant Spectrum energy-strength sliders with vertical strength arrows above the energy lanes in the Spectrum Shaper.
 
-- [ ] Write down the exact problem being solved: Spectrum currently splits one mental model across two surfaces
-- [ ] Keep the node/notch editor as the owner of spatial placement and lane ownership
-- [ ] Move only lane-contribution authoring into the editor; do not smuggle timing/smoothing controls into it
-- [ ] Define the 0–100% lane-power contract so arrow travel maps directly to real lane contribution strength
-- [ ] Decide whether arrow values are stored by lane label, by normalized lane center, or by layout-specific slot
-- [ ] Make mirrored and non-mirrored arrow semantics equivalent even though the visible lane count differs
-- [ ] Preserve Organs behavior by measuring against the synthetic fence before and after
-- [ ] Record the interaction rationale and mental model in docs
-- [ ] Review adjacent Spectrum controls at the same time and feed overlap/redundancy findings into Task 2
+- [x] Kept the node/notch editor as the owner of spatial placement and lane ownership
+- [x] Moved lane-contribution authoring into the editor without smuggling timing/smoothing controls into it
+- [x] Defined the persisted lane-power contract as label-driven mirrored/non-mirrored maps stored on a real `0.0-1.0` scale
+- [x] Made mirrored and non-mirrored semantics equivalent while still letting mirrored use four arrows and linear use five
+- [x] Removed the redundant authored lane-power sliders from the Spectrum Audio bucket
+- [x] Retired the stale authored/runtime `spectrum_vocal_position` seam from the live contract during the same cleanup
+- [x] Recorded the interaction/runtime contract in code, tests, and repo docs
+- [~] Preserve Organs behavior and current authored feel through synthetic/runtime validation, not assumption
+- [~] Decide whether the current editor height increase is enough or whether the shaper still feels cramped in real use
+- [~] Feed any remaining overlap/redundancy findings into Task 2 after real usage
 
-Current diagnosis:
-- Spectrum shaping is still doing two different jobs in two different places:
-  - the editor owns contour and lane boundaries
-  - sliders own lane contribution / overall motion feel
-- That split is why Spectrum feels partially spatial and partially abstract compared with Blob shaping
-- The current runtime contract is not yet a true per-lane arrow contract; it still revolves around scalar fields such as `spectrum_bass_emphasis`, `spectrum_mid_suppression`, and `spectrum_wave_amplitude`
-- There is also still a stale legacy seam in runtime apply code around `spectrum_vocal_position`, even though vocal ownership is supposed to come from notch layout now
-- That means Energy Arrows is not just a widget swap; it needs a small but explicit authored/runtime contract cleanup
-
-Recommended interaction model to prototype first:
-- Put one vertical arrow above each active lane region, visually centered over the current lane span derived from the notch layout
-- Arrows should move only on the Y axis
-- Arrow travel should map directly to real lane power on a `0–100%` scale
-- `0%` should mean the lane can collapse away if its source energy is absent
-- `100%` should mean full lane power, not just a cosmetic editor hint
-- Arrow length should represent contribution strength only; it must not silently absorb `drop_speed`, smoothing, or floor behavior
-- Moving notch boundaries should move the arrow anchors with the lane, but the stored meaning should stay attached to the lane identity rather than the old pixel position
-
-Explicit control-boundary decision:
-- `drop_speed` stays outside the editor
-- `profile_floor` stays outside the editor
-- `Card Height`, glow, ghost, colour, and render-style controls stay outside the editor
-- The editor should only own:
-  - silhouette nodes
-  - lane boundaries / notch splits
-  - lane contribution arrows
-- First implementation should treat `spectrum_wave_amplitude` carefully rather than assuming it belongs in the editor just because it affects feel
-
-Current best-fit migration direction:
-- Replace `spectrum_bass_emphasis` with a lane-native Bass arrow
-- Replace `spectrum_mid_suppression` with lane-native mid/vocal attenuation authored directly where the user sees those regions
-- Remove redundant lane-power sliders once true lane arrows are in place; do not leave the user with two authored surfaces for the same concept
-- Keep only controls that still own a genuinely different concept after the arrow upgrade
-- Treat `spectrum_wave_amplitude` as removable only if the arrow contract genuinely subsumes it; otherwise keep it explicitly as a separate global reactivity control
-
-Implementation planning that should happen before code:
-- [ ] Audit the current runtime math in `bar_computation.py` and identify exactly how bass, mids, vocal-center hinting, and global reactivity are mixed today
-- [ ] Decide whether the new persisted contract should be mirrored/linear-specific or label-driven across both layouts
-- [ ] Decide whether non-mirrored needs five arrows (`Bass`, `Low-Mid`, `Vocal`, `Hi-Mid`, `Treble`) while mirrored keeps four (`Mid`, `Vocal`, `Low-Mid`, `Bass`)
-- [ ] Confirm how lane identity should survive notch dragging and label migration
-- [ ] Specify how untouched legacy presets/settings are promoted into initial arrow values without flattening Organs
-- [ ] Remove or formally retire the stale `spectrum_vocal_position` runtime seam during the same cleanup, not later
-- [ ] Define whether arrows visually grow upward only or use a centered stem while still storing a strict `0–100%` value
-- [ ] Decide whether arrows need text/value affordances or whether hover/selection feedback is enough
+Landed in code:
+- The Spectrum editor now draws one vertical energy arrow above each active lane, centered over the current lane span derived from the notch layout
+- Arrow travel maps directly to real lane power on a `0-100%` mental model, with stored values persisted as normalized strengths
+- Moving notch boundaries reanchors the arrows with the lane while keeping stored meaning attached to lane identity rather than stale pixel position
+- Mirrored layouts now persist `Mid / Vocal / Low-Mid / Bass` strengths separately from linear `Bass / Low-Mid / Vocal / Hi-Mid / Treble`
+- Spectrum runtime now consumes those lane-strength maps directly in `bar_computation.py` instead of relying on authored scalar fields such as `spectrum_bass_emphasis` or `spectrum_mid_suppression`
+- `spectrum_wave_amplitude` and `profile_floor` remain explicit global controls outside the editor
+- Spectrum builder cleanup removed redundant lane sliders and updated the bucket helper copy so the shaper is the obvious lane-power surface
+- The editor height/padding was increased to make room for arrows without collapsing the authored silhouette area
 
 Testing / validation fence:
-- [ ] Add structural tests for arrow persistence, mirrored/non-mirrored save/load, and notch-motion ownership
-- [ ] Add runtime math tests proving lane arrows actually affect the intended lanes instead of acting like a renamed global slider
-- [ ] Keep `Preset 1 (Organs)` synthetic baselines in the loop before and after migration
-- [ ] Manually validate that a user can understand and edit the feature without needing the old scalar sliders beside it
+- [x] Added structural tests for arrow persistence, mirrored/non-mirrored save/load, and notch-motion ownership
+- [x] Added runtime math tests proving lane strengths affect the intended lanes instead of acting like renamed global sliders
+- [x] Kept `Preset 1 (Organs)` synthetic baselines in the loop during the contract migration work
+- [ ] Manually validate that the arrows are readable, not cramped, and clearly better than the old scalar sliders in real UI use
+- [ ] Validate that current authored presets, especially Organs-like Spectrum motion, still feel right under the new lane-power contract
+- [ ] Decide whether hover-only percentage feedback is enough or whether persistent text/value affordances are still needed
 - [ ] Treat passing tests as schema/math proof only, not interaction sign-off
-
-Decision notes to preserve:
-- This is not a Blob-shaper transplant
-- The goal is a cleaner Spectrum mental model, not feature symmetry for its own sake
-- Spatial ownership stays in the Spectrum editor
-- Time-behavior controls still belong outside the editor
-- If the first pass cannot clearly beat the existing scalar controls, stop and reassess instead of forcing arrows in because the idea sounds elegant
 
 Design guardrails:
 - This is not a Blob-shaper transplant
 - Spatial ownership stays in the Spectrum editor
 - Time-behavior controls still belong outside the editor
+- If the first pass does not clearly beat the old scalar controls in real use, stop and reassess instead of forcing arrows forward for elegance alone
 
 ### 2. Spectrum Consolidation Pass (was §3.3)
 
@@ -236,40 +198,7 @@ Landed:
 - [x] Preserved existing UX defaults where they were already established instead of forcing a surprise global-collapse reset
 - [x] Validated via targeted widget/plumbing suites for `osc`, `sine`, `spectrum`, and `blob`
 
-### 6. Non-Mirrored Spectrum Shaper Vocal Lane (was IDEA BOX #2)
-
-**Status:** `[~]` Reworked after failure / awaiting visual validation
-**Priority:** Low
-
-Non-mirrored Spectrum Shaper currently lacks a vocal lane. In mirrored mode, the center region naturally maps to vocals and is fully adjustable. In linear mode, there is no equivalent.
-
-Decision already captured:
-- [x] Linear mode should auto-insert a vocal region rather than require manual placement
-
-Remaining tasks:
-- [x] Determine the default vocal position in linear mode (`0.46` normalized) so it sits in the editable mid/vocal band without hard-centering it
-- [x] Keep the auto-inserted vocal region user-adjustable after insertion; that flexibility is the point of adding it automatically rather than hard-locking placement
-- [x] Ensure the notch label system supports `Vocal`
-- [x] Update the Spectrum Shaper editor and runtime contract accordingly
-- [x] Promote untouched legacy linear defaults into the new vocal-lane layout without overriding user-customized notch layouts
-- [x] Update docs / plan notes through the live plan
-- [x] Validate: `python -m pytest tests/test_visualizer_settings_plumbing.py tests/test_spectrum_shaping.py tests/test_widgets_tab.py -k "spectrum" -q`
-
-Runtime validation failure:
-- [x] User confirmed the non-mirrored UI still does not show a visible vocal lane in practice
-- [x] The currently shown notch set still reads like `Bass / Low / Mid / Hi-Mid / Treble`, with no visible `Vocal` lane
-- [x] Re-check whether the editor/runtime is still rendering legacy linear notch labels/positions despite the migration logic
-- [x] Found the likely leak: only the exact stock old linear notch list was being promoted, so drifted old `Bass / Low / Mid / Hi-Mid / Treble` layouts could survive forever; a stale runtime/widget default also still carried the old labels
-- [x] Broadened the migration so old five-lane linear families without `Vocal` are promoted even when the user previously nudged the boundaries
-- [x] Preserve user boundary positions during that promotion when the saved layout is legacy-shaped but no longer byte-for-byte equal to the old stock default
-- [x] Updated stale widget/model defaults so fresh/runtime paths no longer reintroduce `Low` / `Mid`
-- [x] Added focused regression coverage for both exact legacy defaults and drifted legacy linear labels
-- [x] Latest available visualizer log review was inconclusive because the live vis logs did not emit notch labels/families directly
-- [x] A later saved-settings spot-check was taken from the normal runtime/settings context, but the user's actual validation run was done from the MC build, so that evidence is not strong enough to close this task
-- [x] Explicit rule: do not validate/remove this task until the emitted notch family is confirmed from the same build context the user actually tested
-- [ ] Verify whether the lane is now visibly correct in the real editor UI and whether runtime behavior also follows the upgraded layout
-
-### 7. Settings Shell Outer Border Radius
+### 6. Settings Shell Outer Border Radius
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -287,7 +216,7 @@ Design guardrails:
 - Do not endanger any other custom styling behavior to gain rounded corners
 - Analysis must be deep before implementation; this task is deliberately risk-averse
 
-### 8. Settings Dialog Close / Teardown Polish
+### 7. Settings Dialog Close / Teardown Polish
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -299,7 +228,7 @@ When closing the settings dialog, some elements visibly deconstruct before the s
 - [ ] Prefer a solution where everything appears to vanish together; second-best is shell-first disappearance
 - [ ] Confirm no cleanup, memory, or shutdown correctness regressions are introduced
 
-### 9. Blob Energy Balance / Glow Drive Follow-up
+### 8. Blob Energy Balance / Glow Drive Follow-up
 
 **Status:** `[ ]` Not started
 **Priority:** Low
@@ -314,7 +243,7 @@ Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-sh
 - [ ] Preserve Blob identity and do not accidentally make it behave like another mode
 - [ ] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
 
-### 10. Bubble UI Bucket Cleanup
+### 9. Bubble UI Bucket Cleanup
 
 **Status:** `[x]` Landed and user-validated
 **Priority:** Low
@@ -327,41 +256,58 @@ Landed:
 - [x] Implemented Bubble using the shared bucket helper/persistence path
 - [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "bubble" -q`
 
-### 11. Shared Preset Install / Save Location Across SCR and MC
+### 10. Shared Preset Install / Save Location Across SCR and MC
 
-**Status:** `[ ]` Not started
+**Status:** `[~]` Landed in code / awaiting dual-install runtime validation
 **Priority:** Medium
 
 MC and SCR/NORMAL builds should use the same shipped/user preset location so dual-install users are not split across two preset worlds.
 
-- [ ] Audit where SCR/NORMAL currently installs shipped presets and where MC currently installs shipped presets
-- [ ] Move MC install placement onto the same durable preset location used by SCR/NORMAL
-- [ ] Ensure MC custom preset saves also target that same shared location
-- [ ] Confirm both builds can coexist without overwriting each other's runtime-only generated artefacts
-- [ ] Validate install, upgrade, and save behavior with both builds present on one machine
+- [x] Audited where SCR/NORMAL currently installs shipped presets and where MC currently installs shipped presets
+- [x] Moved frozen runtime loading onto the shared ProgramData curated tree instead of build-local frozen roots
+- [x] Added one-time frozen bootstrap so a missing shared ProgramData tree is repopulated from bundled assets instead of silently falling back forever
+- [x] Updated MC install flow to refresh the same ProgramData curated tree used by SCR/NORMAL while still keeping a packaged backup copy for `Replace Visualizers`
+- [x] Updated `Replace Visualizers` source resolution to prefer packaged/bundled assets and keep the shared ProgramData tree as the active target
+- [x] Removed the normal SCR uninstall cleanup that would have deleted the shared preset tree out from under a co-installed MC build
+- [x] Added focused tests for frozen shared-root resolution and packaged-source replacement routing
+- [ ] Validate install, upgrade, and coexistence behavior with both builds present on one machine
 
 Design guardrails:
 - Use one reliable preset location for authored/shipped/user preset state where possible
 - Do not break existing user custom presets during migration
 - Keep authored source tree vs generated release artefacts clearly separated in repo semantics even if installed locations converge
 
-### 12. Preset Repair Tool Follow-Up For Spectrum Vocal Lanes And Energy Arrows
+Implementation notes to preserve:
+- Shared active curated root is now `ProgramData\SRPSS\presets\visualizer_modes` for frozen SCR and MC
+- Script mode still uses the repo source tree directly
+- Packaged/bundled preset trees are now replacement/bootstrap sources, not the active frozen runtime root
+- `Replace Visualizers` must keep restoring from packaged assets, not from the already-active shared target
+- We still do not have a separate on-disk custom visualizer preset library; the trailing `Custom` slot remains settings-backed rather than file-backed
 
-**Status:** `[ ]` Not started
+### 11. Preset Repair Tool Follow-Up For Spectrum Vocal Lanes And Energy Arrows
+
+**Status:** `[~]` Vocal-lane follow-up landed / post-arrow repair pass still pending
 **Priority:** Medium
 
-The preset repair tool is heavily relied on and must stay aligned with current authored/runtime contracts, especially after the non-mirrored vocal-lane work and the upcoming Energy Arrows refactor.
+The preset repair tool is heavily relied on and must stay aligned with current authored/runtime contracts, especially after the now-landed non-mirrored vocal-lane work and the new Energy Arrows lane-strength contract.
 
-- [ ] Validate the repair tool against the landed non-mirrored vocal-lane migration rules
-- [ ] Ensure repaired presets preserve legitimate user-authored boundary drift while still promoting stale legacy linear label families
-- [ ] Add an explicit post-Energy-Arrows follow-up pass once the new lane-power contract lands
-- [ ] Confirm the tool does not flatten Organs or other authored presets while healing schema drift
-- [ ] Add/refresh focused tests so future Spectrum contract changes cannot silently break repair behavior
+- [x] Validated the repair tool against the landed non-mirrored vocal-lane migration rules
+- [x] Ensured repaired presets preserve legitimate user-authored boundary drift while still promoting stale legacy linear label families
+- [x] Added explicit audit reporting for stale Spectrum linear label families so they fail loudly instead of drifting silently
+- [x] Repaired the current curated Spectrum preset pack so shipped presets no longer keep the old non-mirrored `Low / Mid` family alive
+- [x] Confirmed the tool does not flatten Organs or other authored presets while healing schema drift, at least at the current structural/schema fence level
+- [x] Added/refreshed focused tests so future Spectrum contract changes cannot silently break repair behavior
+- [ ] Add an explicit post-Energy-Arrows follow-up pass now that the new lane-power contract has landed, so stale scalar-lane keys and repaired preset naming/migration edge cases are re-audited together
 
 Design guardrails:
 - The repair tool must remain permissive enough to preserve user-authored variation
 - Do not hardcode brittle exact-shape assumptions that will break as Spectrum evolves
 - Treat this tool as infrastructure, not cleanup glue; it needs the same care as runtime code
+
+Implementation notes to preserve:
+- The repair tool now uses the same linear-notch promotion logic as runtime/model loading for stale non-mirrored Spectrum families
+- The new audit seam should remain structural: it is meant to catch legacy lane-family drift, not to freeze authored Spectrum shapes
+- The explicit post-Energy-Arrows follow-up still belongs here now that lane-power arrows replaced the old scalar lane controls, because repair/remap edge cases are easiest to miss after the runtime migration is already green
 
 ---
 
@@ -381,7 +327,7 @@ Keep watching for:
 Known items:
 - [~] `%APPDATA%/SRPSS/settings_v2.json` may contain older visualizer-era state that `SettingsManager` heals on load. Confirm whether a user-side save permanently clears the repair path.
 - [~] Blob `Preset 1` synthetic drift is expected because the user personally modified Blob Preset 1. That baseline test should only run immediately before/after Blob work, not continuously.
-- [ ] Spectrum runtime still carries a stale `spectrum_vocal_position` apply/config seam even though notch layout is supposed to own vocal placement now; resolve that as part of Energy Arrows / Spectrum consolidation rather than letting it drift longer
+- [~] Spectrum lane-strength arrows are now the live contract; keep watching for any remaining legacy scalar-lane drift or preset remap edge cases that would make runtime behavior disagree with the editor
 
 ---
 
