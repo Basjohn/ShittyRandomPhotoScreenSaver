@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
     QFileDialog, QMenu, QScrollArea,
 )
 from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.mc import is_mc_build
@@ -31,6 +31,12 @@ from ui.widgets.control_shadow import apply_shadows_to_inputs
 from ui.settings_dialog_cache import get_settings_dialog_cache
 
 logger = get_logger(__name__)
+
+SETTINGS_OUTER_CORNER_RADIUS = 6.75
+SETTINGS_OUTER_BORDER_WIDTH = 4.0
+SETTINGS_OUTER_BORDER_BACKING_WIDTH = 6.0
+SETTINGS_OUTER_BORDER_BACKING_COLOR = QColor(12, 12, 12, 255)
+SETTINGS_CORNER_COVER_COLOR = QColor(12, 12, 12, 255)
 
 
 class CustomTitleBar(QWidget):
@@ -1552,9 +1558,10 @@ class SettingsDialog(QDialog):
                 parent = self.size_grip.parent() or self
                 pw = parent.width()
                 ph = parent.height()
+                grip_inset = 0 if self._is_maximized else int((SETTINGS_OUTER_BORDER_BACKING_WIDTH * 0.5) + 1)
                 self.size_grip.move(
-                    pw - self.size_grip.width(),
-                    ph - self.size_grip.height(),
+                    pw - self.size_grip.width() - grip_inset,
+                    ph - self.size_grip.height() - grip_inset,
                 )
             except Exception as e:
                 logger.debug("[SETTINGS] Exception suppressed: %s", e)
@@ -1637,14 +1644,79 @@ class SettingsDialog(QDialog):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
+        outer_rect = QRectF(self.rect())
         border_rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        border_pen = QPen(QColor(255, 255, 255, 255), 4.0)
-        border_pen.setJoinStyle(Qt.PenJoinStyle.MiterJoin)
+        if not self._is_maximized:
+            self._paint_outer_corner_caps(painter, outer_rect, border_rect)
+            backing_pen = QPen(
+                SETTINGS_OUTER_BORDER_BACKING_COLOR,
+                SETTINGS_OUTER_BORDER_BACKING_WIDTH,
+            )
+            backing_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(backing_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRoundedRect(
+                border_rect,
+                SETTINGS_OUTER_CORNER_RADIUS,
+                SETTINGS_OUTER_CORNER_RADIUS,
+            )
+
+        border_pen = QPen(QColor(255, 255, 255, 255), SETTINGS_OUTER_BORDER_WIDTH)
+        border_pen.setJoinStyle(
+            Qt.PenJoinStyle.MiterJoin if self._is_maximized else Qt.PenJoinStyle.RoundJoin
+        )
         painter.setPen(border_pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawRect(border_rect)
+        if self._is_maximized:
+            painter.drawRect(border_rect)
+        else:
+            painter.drawRoundedRect(
+                border_rect,
+                SETTINGS_OUTER_CORNER_RADIUS,
+                SETTINGS_OUTER_CORNER_RADIUS,
+            )
 
         painter.end()
+
+    def _paint_outer_corner_caps(
+        self,
+        painter: QPainter,
+        outer_rect: QRectF,
+        border_rect: QRectF,
+    ) -> None:
+        """Forge rounded corner fills without altering the real acrylic window edge."""
+        dpr = max(1.0, float(self.devicePixelRatioF()))
+        cover_overlap = max(
+            1.75,
+            ((SETTINGS_OUTER_BORDER_BACKING_WIDTH - SETTINGS_OUTER_BORDER_WIDTH) * 0.5)
+            + (1.25 / dpr),
+        )
+        cover_radius = (
+            SETTINGS_OUTER_CORNER_RADIUS
+            + (SETTINGS_OUTER_BORDER_BACKING_WIDTH * 0.25)
+            + cover_overlap
+        )
+        outer_path = QPainterPath()
+        outer_path.addRect(outer_rect)
+        rounded_path = QPainterPath()
+        rounded_path.addRoundedRect(
+            border_rect.adjusted(
+                -cover_overlap,
+                -cover_overlap,
+                cover_overlap,
+                cover_overlap,
+            ),
+            cover_radius,
+            cover_radius,
+        )
+        cover_path = outer_path.subtracted(rounded_path)
+
+        painter.save()
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(SETTINGS_CORNER_COVER_COLOR)
+        painter.drawPath(cover_path)
+        painter.restore()
 
     def keyPressEvent(self, event):
         """Intercept Enter/Return so it closes the dialog instead of minimizing."""
