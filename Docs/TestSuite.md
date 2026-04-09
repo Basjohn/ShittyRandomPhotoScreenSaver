@@ -302,6 +302,11 @@ This suite now directly guards that visualizer shader-source preload happens bef
 | `test_media_key_feedback.py` | Media key visual feedback | Key feedback changes |
 | `test_s_hotkey_workflow.py` | S-key settings dialog workflow | Settings hotkey |
 
+Settings shell border-radius note:
+- The first hidden-render/offscreen validation attempt produced a false positive and did not reproduce the live Windows corner/title-bar bleed.
+- Treat live runtime inspection as the primary validation path for any future outer-shell radius experiment.
+- The repo's own styling history in `Docs/Custom_Style_Implementation.md` should be consulted before retrying this task; it already documents prior mask/clipping/shadow failures for the same acrylic/translucent dialog family.
+
 ### Interaction Modes
 
 | Test File | What It Tests | When To Use |

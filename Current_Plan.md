@@ -24,7 +24,7 @@ Update this after every significant change.
 ## Snapshot
 
 - **Date:** `2026-04-09`
-- **Status:** Spectrum cleanup through 3.1 remains complete. Bubble now has the same shared bucketing treatment as Spectrum, Blob, Oscilloscope, and Sine Wave, and the bucket work has runtime user validation for logic, neatness, and persistence. Reddit Helper link handoff is now runtime-proven with a reusable scheduled-task authority and harness coverage. The non-mirrored Spectrum vocal lane is user-validated and closed. Spectrum Energy Arrows are also now user-validated, with lane-native arrows replacing the old scalar lane sliders and the remaining scalar/dead-key cleanup completed across settings, presets, repair, and docs. Preset follow-up also moved forward: frozen SCR and MC now target one shared ProgramData curated preset tree, and the repair/audit flow now explicitly catches and repairs stale non-mirrored Spectrum linear lane families while keeping only small rotating backups plus persistent undo state. Spectrum consolidation is now partially landed too: authored Audio copy now distinguishes creative Reactivity/Shape Floor from Technical sensitivity/noise-floor tuning, the fake-adaptive checkbox is now honestly presented as a recommended fixed sensitivity path, and per-mode audio-block guidance now calls out lower-vs-higher tradeoffs plus a mode recommendation.
+- **Status:** Reddit Helper scheduled-task authority remains runtime-proven, Spectrum vocal-lane and Energy Arrow work are user-validated, and the shared preset/repair flow is now on the modern lane-map contract. The latest settings-shell outer-radius attempt has been explicitly rolled back after live runtime validation showed corner bleed on all four corners plus a broken top/title-bar segment. Spectrum consolidation remains partially open for deeper control-pruning decisions, and the settings-shell polish task remains open but back in investigation mode rather than implementation mode.
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
 ---
@@ -172,21 +172,30 @@ Landed:
 
 ### 5. Settings Shell Outer Border Radius
 
-**Status:** `[ ]` Not started
-**Priority:** Low
+**Status:** `[ ]` Open again after failed live attempt
+**Priority:** Medium
 
 Explore a very light rounded outer edge for the settings shell without introducing corner bleed, masking regressions, or collateral QSS breakage.
 
-- [ ] Fully understand the current custom styling stack before attempting changes, including QSS, SVG assets, frame layering, clipping, and any mask behavior
-- [ ] Investigate whether a radius of `2` or `3` is safer/easier; prefer `3` only if it is genuinely equal-risk
-- [ ] Prototype the outermost shell rounding only
-- [ ] Validate specifically for corner bleed, border artifacts, and theme regressions
+- [x] Audit the real shell stack and identify the square top-level `paintEvent()` border as the primary seam fighting any rounded shell attempt
+- [x] Try one tightly scoped outer-shell experiment only
+- [x] Roll that experiment back after live runtime validation showed all four corners bleeding and the custom title-bar/top segment visually broken
+- [ ] Re-evaluate whether this should be attempted through shell paint at all, or whether the correct seam is an inner framed card instead of the true outer window chrome
+- [ ] If another attempt is made, treat live runtime validation as primary and hidden render/offscreen capture as advisory only
 - [ ] Do not proceed to "done" until user validation confirms no bleed
 
 Design guardrails:
 - This is a polish task, not a styling-system rewrite
 - Do not endanger any other custom styling behavior to gain rounded corners
 - Analysis must be deep before implementation; this task is deliberately risk-averse
+
+Failure notes to preserve:
+- The reverted attempt touched both the top-level shell border and the custom title bar; the top segment regression was part of the failure, not a separate issue
+- The hidden render/offscreen path produced a false positive: it did not reproduce the live Windows/compositor bleed that appeared immediately in runtime
+- Do not mark any future border-radius attempt as landed from offscreen rendering alone
+- Repo architecture note: `Docs/Custom_Style_Implementation.md` already records rounded outer-border attempts, mask-based clipping, and dialog-shadow work as rejected for this acrylic/translucent frameless dialog family; any new attempt must start by explaining why those historical failure reasons no longer apply
+- Windows guidance note: Microsoft documents that apps with heavily customized frames can miss automatic rounding, and apps using per-pixel alpha layering or window regions cannot be rounded by the system at all. This makes a true outer-window radius a high-risk path here, not a routine QSS polish task
+- Current safest theory: if rounded polish is revisited, the more realistic seam is probably an inner framed-card illusion inside the square outer window rather than rounding the true outer shell chrome itself
 
 ### 6. Settings Dialog Close / Teardown Polish
 

@@ -12,7 +12,7 @@ The settings dialog uses **Windows DWM acrylic blur-behind** for its translucent
 
 | Requirement | Implementation |
 |---|---|
-| Translucent background | `WA_TranslucentBackground` + `WA_NoSystemBackground` on QDialog |
+| Translucent background | `WA_TranslucentBackground` on `SettingsDialog` plus Windows acrylic blur via `enable_acrylic_blur()` on first show |
 | DWM blur | `core/windows/dwm_blur.py` → `enable_acrylic_blur()` with tint `rgba(24,24,24,80)` |
 | No `QGraphicsDropShadowEffect` on dialog | Breaks per-pixel alpha chain — see §6 |
 | Frameless window | `FramelessWindowHint` with custom title bar (`CustomTitleBar`) |
@@ -211,6 +211,26 @@ border: 1px solid rgba(110, 110, 110, 204);
 ### ✅ Square Outer Border
 
 The only reliable way to prevent corner bleed in Qt's QSS system is to use **no border-radius on the outer container**. This works because there are no sub-pixel edges to expose.
+
+### ❌ Hidden Render / Offscreen Validation As Sign-off
+
+**Goal**: Prove a rounded outer-shell experiment is safe by rendering the dialog offscreen and checking corner pixels.
+
+**What happened**: The hidden-render path appeared clean, but live Windows runtime immediately showed all four corners bleeding and the custom title-bar/top segment visibly broken.
+
+**Root cause**: Offscreen Qt rendering did not reproduce the real compositor/DWM behavior for the translucent frameless acrylic dialog. The path was useful only as a limited paint sanity check, not as a trustworthy live-window validation method.
+
+**Resolution**: Treat live runtime inspection as the primary validation path for any future outer-shell experiment. Hidden render/offscreen captures are advisory only.
+
+### ❌ True Outer-Window Rounding Without A New Architecture
+
+**Goal**: Add a subtle radius directly to the settings dialog's true outer shell.
+
+**What happened**: Even a very light-radius attempt broke the top/title-bar segment and bled at the corners in live runtime.
+
+**Root cause**: This dialog is a frameless translucent acrylic window with a custom title bar and custom-painted outer border. Qt's parent-background propagation plus Windows compositor behavior make the true outer shell the worst possible seam for a casual radius tweak.
+
+**Resolution**: Keep the outer shell square unless a future approach can clearly justify why the documented historical failures no longer apply. If rounded polish is revisited, prefer investigating an inner framed-card illusion or a Windows-native system-corner opt-in first, and only after validating that the dialog architecture actually qualifies for those paths.
 
 ### ✅ Acrylic Widget Background Assessment
 
