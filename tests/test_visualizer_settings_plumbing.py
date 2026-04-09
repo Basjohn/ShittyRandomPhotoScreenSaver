@@ -1913,6 +1913,10 @@ class TestBlobSettingsBinding:
                 self.blob_pulse_release_ms_label = _Label()
                 self.blob_stretch = _Slider()
                 self.blob_stretch_label = _Label()
+                self.blob_shaper_idle_motion = _Slider()
+                self.blob_shaper_idle_motion_label = _Label()
+                self.blob_shaper_audio_motion = _Slider()
+                self.blob_shaper_audio_motion_label = _Label()
                 self.blob_glow_drive_mode = _Combo()
                 self.blob_growth = _Slider()
                 self.blob_growth_label = _Label()
@@ -1940,6 +1944,8 @@ class TestBlobSettingsBinding:
                 "blob_pulse": 1.23,
                 "blob_pulse_release_ms": 1210,
                 "blob_stretch": 0.42,
+                "blob_shaper_idle_motion": 0.11,
+                "blob_shaper_audio_motion": 1.48,
                 "blob_glow_drive_mode": "vocal",
                 "blob_growth": 3.10,
                 "blob_color": [1, 2, 3, 4],
@@ -1958,6 +1964,10 @@ class TestBlobSettingsBinding:
         assert tab.blob_pulse_release_ms_label.text == "1.21s"
         assert tab.blob_stretch.value == 42
         assert tab.blob_stretch_label.text == "42%"
+        assert tab.blob_shaper_idle_motion.value == 11
+        assert tab.blob_shaper_idle_motion_label.text == "11%"
+        assert tab.blob_shaper_audio_motion.value == 148
+        assert tab.blob_shaper_audio_motion_label.text == "148%"
         assert tab.blob_glow_drive_mode.index == 1
         assert tab.blob_growth.value == 310
         assert tab.blob_growth_label.text == "3.1x"
@@ -2010,6 +2020,8 @@ class TestBlobSettingsBinding:
             blob_constant_wobble = _Slider(80)
             blob_reactive_wobble = _Slider(290)
             blob_stretch = _Slider(48)
+            blob_shaper_idle_motion = _Slider(9)
+            blob_shaper_audio_motion = _Slider(155)
             blob_growth = _Slider(275)
             _blob_color = QColor(10, 20, 30, 200)
             _blob_glow_color = QColor(40, 50, 60, 210)
@@ -2030,6 +2042,8 @@ class TestBlobSettingsBinding:
         assert payload["blob_pulse_release_ms"] == 1330
         assert payload["blob_reactive_wobble"] == pytest.approx(2.90)
         assert payload["blob_stretch"] == pytest.approx(0.48)
+        assert payload["blob_shaper_idle_motion"] == pytest.approx(0.09)
+        assert payload["blob_shaper_audio_motion"] == pytest.approx(1.55)
         assert payload["blob_growth"] == pytest.approx(2.75)
 
 

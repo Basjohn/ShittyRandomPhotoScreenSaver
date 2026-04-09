@@ -77,9 +77,9 @@ def compute_stage_progress(
     # Keep stage 1 reachable on ordinary musical support, but leave room for
     # stage 2/3 to appear on stronger passages instead of making the first rung
     # saturate immediately while the later rungs stay effectively unreachable.
-    stage1_t = _smoothstep(0.08, 0.34, weighted_stage1)
-    stage2_t = _smoothstep(0.16, 0.42, stage2_drive)
-    stage3_t = _smoothstep(0.24, 0.52, chorus_drive)
+    stage1_t = _smoothstep(0.08, 0.33, weighted_stage1)
+    stage2_t = _smoothstep(0.14, 0.38, stage2_drive)
+    stage3_t = _smoothstep(0.20, 0.46, chorus_drive)
     stage2_t = min(stage2_t, stage1_t)
     stage3_t = min(stage3_t, stage2_t)
     return (stage1_t, stage2_t, stage3_t)

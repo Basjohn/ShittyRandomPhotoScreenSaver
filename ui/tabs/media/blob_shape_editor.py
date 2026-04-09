@@ -372,7 +372,7 @@ class _PolarEditorCanvas(QWidget):
             sp = self._energy_node_to_screen(node)
             color = _energy_color(str(node.get("type", "bass")))
             handle = self._energy_arrow_handle_to_screen(node)
-            p.setPen(QPen(color.lighter(145), 2.0))
+            p.setPen(QPen(color.lighter(145), 2.2))
             p.drawLine(sp, handle)
             # Arrow head
             direction = QPointF(handle.x() - sp.x(), handle.y() - sp.y())
@@ -380,19 +380,32 @@ class _PolarEditorCanvas(QWidget):
             if dlen > 1e-6:
                 ux = direction.x() / dlen
                 uy = direction.y() / dlen
+                head_len = 11.0
+                head_half = 5.5
                 left = QPointF(
-                    handle.x() - ux * 8.0 - uy * 4.0,
-                    handle.y() - uy * 8.0 + ux * 4.0,
+                    handle.x() - ux * head_len - uy * head_half,
+                    handle.y() - uy * head_len + ux * head_half,
                 )
                 right = QPointF(
-                    handle.x() - ux * 8.0 + uy * 4.0,
-                    handle.y() - uy * 8.0 - ux * 4.0,
+                    handle.x() - ux * head_len + uy * head_half,
+                    handle.y() - uy * head_len - ux * head_half,
                 )
-                p.setBrush(QBrush(color.lighter(130)))
-                p.drawPolygon(QPolygonF([handle, left, right]))
-            p.setPen(QPen(color.lighter(150), 1.4))
-            p.setBrush(QBrush(QColor(28, 28, 34)))
-            p.drawEllipse(handle, _ARROW_HANDLE_RADIUS, _ARROW_HANDLE_RADIUS)
+                collar = QPointF(
+                    handle.x() - ux * (head_len - 3.5),
+                    handle.y() - uy * (head_len - 3.5),
+                )
+                p.setPen(QPen(color.lighter(150), 1.2))
+                p.setBrush(QBrush(color.lighter(125)))
+                p.drawPolygon(QPolygonF([handle, left, collar, right]))
+                diamond = QPolygonF([
+                    QPointF(handle.x(), handle.y() - 4.0),
+                    QPointF(handle.x() + 4.0, handle.y()),
+                    QPointF(handle.x(), handle.y() + 4.0),
+                    QPointF(handle.x() - 4.0, handle.y()),
+                ])
+                p.setPen(QPen(QColor(26, 26, 32), 1.1))
+                p.setBrush(QBrush(color.lighter(118)))
+                p.drawPolygon(diamond)
             p.setPen(QPen(color.darker(120), 1.5))
             p.setBrush(QBrush(color))
             p.drawEllipse(sp, _ENERGY_NODE_RADIUS, _ENERGY_NODE_RADIUS)
@@ -659,7 +672,7 @@ class BlobShapeEditor(QWidget):
 
         hint = QLabel(
             "Click an energy chip, then click on an editor to place it. "
-            "Drag the small arrow handle to choose inward or outward response. "
+            "Drag the arrow tip inward or outward to choose response direction. "
             "Double-click to add profile nodes. Right-click to remove."
         )
         hint.setStyleSheet("color: #667; font-size: 9px;")

@@ -206,6 +206,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_shaper_base_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_base_strength'])))
     if 'blob_shaper_react_strength' in kwargs:
         widget._blob_shaper_react_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_react_strength'])))
+    if 'blob_shaper_idle_motion' in kwargs:
+        widget._blob_shaper_idle_motion = max(0.0, min(2.0, float(kwargs['blob_shaper_idle_motion'])))
+    if 'blob_shaper_audio_motion' in kwargs:
+        widget._blob_shaper_audio_motion = max(0.0, min(3.0, float(kwargs['blob_shaper_audio_motion'])))
     if 'blob_topology' in kwargs:
         val = str(kwargs['blob_topology']).strip().lower()
         widget._blob_topology = val if val in {'circle', 'ring'} else 'circle'
@@ -770,6 +774,8 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_shaper_enabled'] = _blob_shaper_enabled
     extra['blob_shaper_base_strength'] = getattr(widget, '_blob_shaper_base_strength', 0.5)
     extra['blob_shaper_react_strength'] = getattr(widget, '_blob_shaper_react_strength', 0.5)
+    extra['blob_shaper_idle_motion'] = getattr(widget, '_blob_shaper_idle_motion', 0.18)
+    extra['blob_shaper_audio_motion'] = getattr(widget, '_blob_shaper_audio_motion', 1.20)
     extra['blob_topology'] = getattr(widget, '_blob_topology', 'circle')
     extra['blob_ring_thickness'] = getattr(widget, '_blob_ring_thickness', 0.3)
     extra['blob_shape_base_nodes'] = getattr(widget, '_blob_shape_base_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])

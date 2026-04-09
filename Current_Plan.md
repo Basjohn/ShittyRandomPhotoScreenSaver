@@ -24,7 +24,7 @@ Update this after every significant change.
 ## Snapshot
 
 - **Date:** `2026-04-09`
-- **Status:** Reddit Helper scheduled-task authority remains runtime-proven, Spectrum vocal-lane and Energy Arrow work are user-validated, the shared preset/repair flow is now on the modern lane-map contract, and the settings shell now uses an accepted forged-corner outer-border compromise that is visually almost bleed-free without disturbing acrylic or the custom title bar. Spectrum consolidation remains partially open for deeper control-pruning decisions.
+- **Status:** Reddit Helper scheduled-task authority remains runtime-proven, Spectrum vocal-lane and Energy Arrow work are user-validated, the shared preset/repair flow is now on the modern lane-map contract, runtime preset cycling now honors the same Custom-slot snapshot/restore contract as the settings UI, and the settings shell now uses an accepted forged-corner outer-border compromise that is visually almost bleed-free without disturbing acrylic or the custom title bar. Spectrum consolidation remains partially open for deeper control-pruning decisions.
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
 ---
@@ -88,6 +88,10 @@ Captured tuning notes:
 - The target is steadier mid-height motion at 60 fps without flattening large high/low movements
 - Compare behavior on `<=60 Hz` displays versus `165 Hz` displays and decide whether the eventual fix should improve one, both, or both differently
 - `drop_speed` alone is too blunt; Spectrum needs room for large rises and large falls
+- Guardrail: `Input Gain` is non-negotiable for now and must stay available during any consolidation/reduction pass
+
+Runtime watch note:
+- [~] Runtime preset cycling now shares the Custom-slot snapshot/restore contract with the settings UI. Keep watching for intermittent reports where cycling `Custom -> curated -> ... -> Custom` appears to inherit the previously viewed curated slot, especially in Spectrum and especially during live runtime rather than in the settings dialog.
 
 User guidance to preserve:
 - Research whether optional interpolation, motion blur, or related display-side presentation techniques are standard for reducing shimmer on lower-refresh displays
@@ -184,18 +188,31 @@ When closing the settings dialog, some elements visibly deconstruct before the s
 
 ### 6. Blob Energy Balance / Glow Drive Follow-up
 
-**Status:** `[ ]` Not started
+**Status:** `[~]` Partially landed, awaiting user/runtime validation
 **Priority:** Low
 
 Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-shaped Blob path and likely needs retuning there only. There is also a product question around Glow Drive inputs.
 
-- [ ] Audit the current non-shaped `Body Response` balance for constant, reactive, and vocal energy
-- [ ] Confirm the shaped Blob path is unaffected before making any tuning changes
-- [ ] Try a first tuning pass on the non-shaped path that halves constant energy and increases reactive/vocal energy by roughly `20%`
-- [ ] Validate whether that ratio is directionally right rather than assuming the first guess is final
+Landed in code:
+- Non-shaped Blob idle wobble/deformation was reduced so low-energy passages stop looking busier than loud ones
+- Non-shaped reactive/vocal motion and stage-driving support were increased so real music reaches visible reactions more reliably and stage `2/3` are no longer effectively asleep
+- Shaped Blob now owns its own contour residual motion via `blob_shaper_idle_motion` and `blob_shaper_audio_motion` instead of reusing the generic unshaped wobble knobs
+- Shaper mode now hides the generic unshaped `Idle Edge Motion`, `Audio Edge Motion`, `Stretch`, and `Shape Reactivity` rows so authored-shape controls stop pretending to share ownership with the freeform Blob path
+- Blob shaper arrow tips now read more like actual arrows, and runtime still interprets drag direction as a real authored input rather than a decorative handle
+- Focused regression fences now cover both the shaped/unshaped motion split and the shaper-mode UI gating so future tuning work cannot silently reintroduce cross-over
+
+- [x] Audit the current non-shaped `Body Response` balance for constant, reactive, and vocal energy
+- [x] Confirm the shaped Blob path is isolated before making non-shaped tuning changes
+- [x] Land a first tuning pass on the non-shaped path that reduces idle/no-energy deformation and increases real reactive/vocal ownership
+- [ ] Validate that the new balance is directionally right in live runtime rather than assuming the first pass is final
 - [ ] Review the `Glow Drive` selection list for useful additions such as `Transient`
-- [ ] Preserve Blob identity and do not accidentally make it behave like another mode
-- [ ] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
+- [ ] Confirm Blob identity still feels like Blob and has not drifted toward another visualizer mode
+- [~] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
+
+Validation focus:
+- Non-shaped Blob should feel calmer at idle but stronger under real energy, with stage `2/3` reachable on convincing phrases
+- Shaped Blob should keep authored contour ownership and must not change when the unshaped wobble controls are edited
+- Unshaped Blob should still respond to `Idle Edge Motion` / `Audio Edge Motion`, while shaped Blob should instead answer to `Idle Residual` / `Audio Residual`
 
 ### 7. Bubble UI Bucket Cleanup
 

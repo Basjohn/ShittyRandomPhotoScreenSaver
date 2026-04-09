@@ -38,9 +38,12 @@ def build_contour_residual_profile(
     drift = math.sin(time_value * 0.17 + seed * 0.73) * (0.09 * overall + 0.05 * vocal)
     drift += math.sin(time_value * 0.07 + seed * 1.11) * 0.03
 
-    amp = idle * (0.0014 + overall * 0.0018)
-    amp += audio * (0.0018 + vocal * 0.0085 + overall * 0.0035 + high * 0.0012)
-    amp = min(0.028, amp)
+    # Shaped Blob should feel calm at idle and spend more of its available
+    # motion budget on actual routed energy. Keep some organic drift, but let
+    # audio own the visible contour movement.
+    amp = idle * (0.0006 + overall * 0.0008)
+    amp += audio * (0.0024 + vocal * 0.0110 + overall * 0.0048 + high * 0.0016)
+    amp = min(0.0325, amp)
 
     out: list[float] = []
     for idx in range(sample_count):

@@ -25,8 +25,12 @@ from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
 from core.settings.visualizer_presets import (
     apply_preset_to_config,
+    build_normalized_custom_snapshot,
+    get_custom_preset_index,
     get_preset_count,
+    restore_visualizer_snapshot,
     resolve_preset_index_from_mapping,
+    VISUALIZER_CUSTOM_STORAGE_KEY,
 )
 from core.settings.visualizer_mode_registry import get_preset_key
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
@@ -460,6 +464,7 @@ class WidgetManager:
         preset_key = get_preset_key(mode)
         current_idx = resolve_preset_index_from_mapping(mode, vis_config, prefix="widgets.spotify_visualizer")
         current_idx = max(0, min(preset_count - 1, current_idx))
+        custom_index = get_custom_preset_index(mode)
 
         step = 1 if direction > 0 else -1
         next_idx = (current_idx + step) % preset_count
@@ -468,9 +473,23 @@ class WidgetManager:
 
         working_config = dict(vis_config)
         working_config['mode'] = mode
+        if current_idx == custom_index:
+            cache = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+            if not isinstance(cache, dict):
+                cache = {}
+            cache[mode] = build_normalized_custom_snapshot(mode, working_config)
+            settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
+
         applied = apply_preset_to_config(mode, next_idx, working_config)
         vis_config.update(applied)
         vis_config[preset_key] = next_idx
+
+        if next_idx == custom_index:
+            cache = settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
+            if isinstance(cache, dict):
+                payload = cache.get(mode)
+                if isinstance(payload, Mapping):
+                    restore_visualizer_snapshot(mode, vis_config, payload)
 
         full_widgets = dict(widgets_cfg)
         full_widgets['spotify_visualizer'] = vis_config

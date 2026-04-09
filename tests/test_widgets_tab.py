@@ -841,22 +841,34 @@ def test_blob_builder_hides_redundant_controls_when_shaper_or_reactive_glow_are_
         qt_app.processEvents()
 
         assert tab._blob_shape_reactivity_row.isHidden() is False
+        assert tab._blob_idle_edge_motion_row.isHidden() is False
+        assert tab._blob_audio_edge_motion_row.isHidden() is False
         assert tab._blob_stretch_row.isHidden() is False
 
         tab.blob_shaper_enabled.setChecked(True)
         qt_app.processEvents()
 
         assert tab._blob_shape_reactivity_row.isHidden() is True
+        assert tab._blob_idle_edge_motion_row.isHidden() is True
+        assert tab._blob_audio_edge_motion_row.isHidden() is True
         assert tab._blob_stretch_row.isHidden() is True
         assert tab._blob_shape_reactivity_row.isEnabled() is False
+        assert tab._blob_idle_edge_motion_row.isEnabled() is False
+        assert tab._blob_audio_edge_motion_row.isEnabled() is False
         assert tab._blob_stretch_row.isEnabled() is False
+        assert tab._blob_shaper_idle_motion_row.isHidden() is False
+        assert tab._blob_shaper_audio_motion_row.isHidden() is False
 
         tab.blob_shaper_enabled.setChecked(False)
         qt_app.processEvents()
 
         assert tab._blob_shape_reactivity_row.isHidden() is False
+        assert tab._blob_idle_edge_motion_row.isHidden() is False
+        assert tab._blob_audio_edge_motion_row.isHidden() is False
         assert tab._blob_stretch_row.isHidden() is False
         assert tab._blob_shape_reactivity_row.isEnabled() is True
+        assert tab._blob_idle_edge_motion_row.isEnabled() is True
+        assert tab._blob_audio_edge_motion_row.isEnabled() is True
         assert tab._blob_stretch_row.isEnabled() is True
 
         tab.blob_reactive_glow.setChecked(False)

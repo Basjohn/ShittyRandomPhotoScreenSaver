@@ -158,6 +158,8 @@
         ],
         "blob_shaper_base_strength": 1.0,
         "blob_shaper_enabled": true,
+        "blob_shaper_idle_motion": 0.08,
+        "blob_shaper_audio_motion": 0.92,
         "blob_shaper_react_strength": 0.94,
         "blob_size": 0.58,
         "blob_stretch": 0.28,

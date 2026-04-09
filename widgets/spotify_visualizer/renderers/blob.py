@@ -549,8 +549,8 @@ def _solve_runtime_shaper_profile_step(
     high: float,
     overall: float,
     react_strength: float,
-    constant_wobble: float,
-    reactive_wobble: float,
+    shaper_idle_motion: float,
+    shaper_audio_motion: float,
     playing: bool,
     seed: float = 0.0,
 ) -> tuple[list[float], list[float], list[float]]:
@@ -601,8 +601,8 @@ def _solve_runtime_shaper_profile_step(
     residual_profile = build_contour_residual_profile(
         sample_count=count,
         time_value=time_value,
-        idle_motion=float(constant_wobble),
-        audio_motion=float(reactive_wobble),
+        idle_motion=float(shaper_idle_motion),
+        audio_motion=float(shaper_audio_motion),
         overall_energy=float(overall),
         vocal_energy=vocal_energy,
         high_energy=float(high),
@@ -639,7 +639,7 @@ def _solve_runtime_shaper_profile_step(
         stiffness=22.0 if playing else 15.0,
         damping=11.0 if playing else 13.0,
         neighbor_strength=14.0 if playing else 10.0,
-        smoothing_passes=3,
+        smoothing_passes=4 if playing else 3,
     )
     return solved_profile, solved_velocity, target_profile
 
@@ -682,8 +682,8 @@ def _resolve_runtime_shaper_profile(
         high=high,
         overall=overall,
         react_strength=float(getattr(s, "_blob_shaper_react_strength", 1.0)),
-        constant_wobble=float(getattr(s, "_blob_constant_wobble", 0.0)),
-        reactive_wobble=float(getattr(s, "_blob_reactive_wobble", 0.0)),
+        shaper_idle_motion=float(getattr(s, "_blob_shaper_idle_motion", 0.18)),
+        shaper_audio_motion=float(getattr(s, "_blob_shaper_audio_motion", 1.20)),
         playing=bool(getattr(s, "_playing", False)),
         seed=float(seed),
     )

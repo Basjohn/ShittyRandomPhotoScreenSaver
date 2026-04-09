@@ -34,8 +34,12 @@ from core.settings.visualizer_settings_snapshot import (
 from core.settings.visualizer_presets import (
     GLOBAL_ALLOWED_KEYS,
     MODE_KEY_PREFIXES,
+    VISUALIZER_CUSTOM_STORAGE_KEY,
     apply_preset_to_config,
+    build_normalized_custom_snapshot,
+    extract_visualizer_snapshot,
     get_custom_preset_index,
+    restore_visualizer_snapshot,
     resolve_preset_index_from_mapping,
 )
 from core.settings.visualizer_mode_registry import (
@@ -116,7 +120,6 @@ class _RainbowGlowLabel(QWidget):
         p.end()
 
 
-_VISUALIZER_CUSTOM_STORAGE_KEY = "visualizer_custom_presets"
 _DEFAULT_VISUALIZER_MODE = get_default_visualizer_mode_id()
 _DEPRECATED_VISUALIZER_EXPORT_SUFFIXES = ("energy_boost", "use_raw_energy")
 _VISUALIZER_ADVANCED_ROOT_ATTRS = {
@@ -848,51 +851,24 @@ class WidgetsTab(QWidget):
 
     def _snapshot_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> None:
         live_config = self._build_current_spotify_visualizer_config(spotify_vis_config)
-        normalized_live = normalize_visualizer_section_mapping(
-            live_config,
-            apply_preset_overlay=False,
-        )
-        snapshot = self._extract_visualizer_snapshot(mode_key, normalized_live)
-        snapshot = normalize_visualizer_mode_payload(mode_key, snapshot)
-        cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        snapshot = build_normalized_custom_snapshot(mode_key, live_config)
+        cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
         if not isinstance(cache, dict):
             cache = {}
         cache[mode_key] = snapshot
-        self._settings.set(_VISUALIZER_CUSTOM_STORAGE_KEY, cache)
+        self._settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
     def _restore_custom_visualizer_mode(self, mode_key: str, spotify_vis_config: dict) -> bool:
-        cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
+        cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
         if not isinstance(cache, dict):
             return False
         payload = cache.get(mode_key)
         if not isinstance(payload, dict):
             return False
-        changed = False
-        prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
-        for key in list(spotify_vis_config.keys()):
-            if key in payload:
-                continue
-            if self._is_key_for_mode(key, prefixes):
-                spotify_vis_config.pop(key, None)
-                changed = True
-        for key, value in payload.items():
-            stored = spotify_vis_config.get(key)
-            if stored != value:
-                spotify_vis_config[key] = deepcopy(value)
-                changed = True
-        return changed
+        return restore_visualizer_snapshot(mode_key, spotify_vis_config, payload)
 
     def _extract_visualizer_snapshot(self, mode_key: str, spotify_vis_config: dict) -> dict:
-        prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
-        snapshot: dict[str, Any] = {}
-        for key, value in spotify_vis_config.items():
-            if key == _VISUALIZER_CUSTOM_STORAGE_KEY:
-                continue
-            if key.startswith('preset_') and key != f"preset_{mode_key}":
-                continue
-            if self._is_key_for_mode(key, prefixes) or self._is_global_visualizer_key(key):
-                snapshot[key] = deepcopy(value)
-        return snapshot
+        return extract_visualizer_snapshot(mode_key, spotify_vis_config)
 
     def build_visualizer_preset_payload(self, mode_key: str) -> dict[str, Any]:
         """Construct a lean curated-preset payload from current settings."""
@@ -1336,11 +1312,11 @@ class WidgetsTab(QWidget):
         current_custom_index = get_custom_preset_index(current_vis_mode)
         if current_preset_index == current_custom_index:
             snapshot = self._extract_visualizer_snapshot(current_vis_mode, spotify_vis_config)
-            cache = self._settings.get(_VISUALIZER_CUSTOM_STORAGE_KEY, {})
+            cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
             if not isinstance(cache, dict):
                 cache = {}
             cache[current_vis_mode] = snapshot
-            self._settings.set(_VISUALIZER_CUSTOM_STORAGE_KEY, cache)
+            self._settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
         # Imgur config - only save if dev features enabled
         imgur_config = save_imgur_settings(self)

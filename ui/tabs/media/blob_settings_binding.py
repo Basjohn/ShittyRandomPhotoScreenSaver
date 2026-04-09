@@ -138,6 +138,14 @@ def load_blob_mode_settings(
         val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_react_strength", 0.5) * 100)
         tab.blob_shaper_react_strength.setValue(max(0, min(100, val)))
         tab.blob_shaper_react_strength_label.setText(f"{val}%")
+    if hasattr(tab, "blob_shaper_idle_motion"):
+        val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_idle_motion", 0.18) * 100)
+        tab.blob_shaper_idle_motion.setValue(max(0, min(200, val)))
+        tab.blob_shaper_idle_motion_label.setText(f"{val}%")
+    if hasattr(tab, "blob_shaper_audio_motion"):
+        val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_audio_motion", 1.20) * 100)
+        tab.blob_shaper_audio_motion.setValue(max(0, min(300, val)))
+        tab.blob_shaper_audio_motion_label.setText(f"{val}%")
     if hasattr(tab, "blob_topology_combo"):
         topo = str(config.get("blob_topology", "circle")).strip().lower()
         tab.blob_topology_combo.setCurrentIndex(1 if topo == "ring" else 0)
@@ -208,6 +216,12 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
         "blob_shaper_base_strength": 1.0,
         "blob_shaper_react_strength": (
             tab.blob_shaper_react_strength.value() if hasattr(tab, "blob_shaper_react_strength") else 50
+        ) / 100.0,
+        "blob_shaper_idle_motion": (
+            tab.blob_shaper_idle_motion.value() if hasattr(tab, "blob_shaper_idle_motion") else 18
+        ) / 100.0,
+        "blob_shaper_audio_motion": (
+            tab.blob_shaper_audio_motion.value() if hasattr(tab, "blob_shaper_audio_motion") else 120
         ) / 100.0,
         "blob_topology": (
             "ring"

@@ -172,9 +172,9 @@ vec3 compute_stage_progress_values(
     // Keep stage 1 reachable on ordinary musical support, but leave room for
     // stage 2/3 to appear on stronger passages instead of making the first rung
     // saturate immediately while the later rungs stay effectively unreachable.
-    float stage1_t = smoothstep(0.08, 0.34, weighted_stage1);
-    float stage2_t = smoothstep(0.16, 0.42, stage2_drive);
-    float stage3_t = smoothstep(0.24, 0.52, chorus_drive);
+    float stage1_t = smoothstep(0.08, 0.33, weighted_stage1);
+    float stage2_t = smoothstep(0.14, 0.38, stage2_drive);
+    float stage3_t = smoothstep(0.20, 0.46, chorus_drive);
     stage2_t = min(stage2_t, stage1_t);
     stage3_t = min(stage3_t, stage2_t);
 
@@ -294,25 +294,25 @@ float blob_sdf_ex(vec2 p, float time,
 
     // Constant wobble — always-present amorphous distortion.
     // Low harmonics give broad lobes, high harmonics add fine detail.
-    wobble_component += sin(motion_angle * 2.0 + time * 0.4)  * 0.035 * cw;
-    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.030 * cw;
-    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.020 * cw;
-    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.012 * cw;
-    wobble_component += sin(motion_angle * 1.0 + time * 0.2)  * 0.040 * cw;
+    wobble_component += sin(motion_angle * 2.0 + time * 0.4)  * 0.025 * cw;
+    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.021 * cw;
+    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.014 * cw;
+    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.008 * cw;
+    wobble_component += sin(motion_angle * 1.0 + time * 0.2)  * 0.028 * cw;
 
     float reactive_mid = (u_blob_shaper_enabled == 1) ? max(e_mid, u_blob_shaper_mid_energy) : e_mid;
     float reactive_high = (u_blob_shaper_enabled == 1) ? max(e_high, u_blob_shaper_high_energy) : e_high;
 
     // Reactive wobble — energy-driven shape distortion.
-    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.090 * reactive_mid * rw;
-    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.060 * reactive_mid * rw;
-    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.008 * reactive_high * rw;
-    wobble_component += sin(motion_angle * 11.0 - time * 4.7) * 0.004 * reactive_high * rw;
+    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.112 * reactive_mid * rw;
+    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.078 * reactive_mid * rw;
+    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.012 * reactive_high * rw;
+    wobble_component += sin(motion_angle * 11.0 - time * 4.7) * 0.006 * reactive_high * rw;
 
     // Vocal emphasis — mid-range creates broad amorphous lobes.
     float vocal = clamp((u_blob_shaper_enabled == 1) ? max(e_mid, u_blob_shaper_mid_energy) : e_mid, 0.0, 1.0);
-    wobble_component += sin(motion_angle * 2.0 + time * 0.9)  * 0.132 * vocal * rw;
-    wobble_component += sin(motion_angle * 4.0 - time * 1.1)  * 0.092 * vocal * vocal * rw;
+    wobble_component += sin(motion_angle * 2.0 + time * 0.9)  * 0.154 * vocal * rw;
+    wobble_component += sin(motion_angle * 4.0 - time * 1.1)  * 0.108 * vocal * vocal * rw;
 
     float stretch_component = 0.0;
     if (st > 0.01) {

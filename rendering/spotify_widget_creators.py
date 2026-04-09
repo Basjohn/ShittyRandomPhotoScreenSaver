@@ -95,6 +95,8 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         blob_shaper_enabled=model.blob_shaper_enabled,
         blob_shaper_base_strength=model.blob_shaper_base_strength,
         blob_shaper_react_strength=model.blob_shaper_react_strength,
+        blob_shaper_idle_motion=model.blob_shaper_idle_motion,
+        blob_shaper_audio_motion=model.blob_shaper_audio_motion,
         blob_topology=model.blob_topology,
         blob_ring_thickness=model.blob_ring_thickness,
         blob_shape_base_nodes=model.blob_shape_base_nodes,

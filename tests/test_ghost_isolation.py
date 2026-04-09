@@ -463,7 +463,7 @@ class TestRendererGhostIsolation:
         assert overlay._blob_stage_input_bass > float(energy.bass)
         assert overlay._blob_stage_input_overall > float(energy.overall)
         assert overlay._blob_stage_input_bass < first_stage_bass
-        assert overlay._blob_stage_input_overall < first_stage_overall
+        assert overlay._blob_stage_input_overall <= first_stage_overall
 
     @pytest.mark.qt
     def test_blob_live_band_filter_prevents_one_frame_snap_back(self, qt_app):

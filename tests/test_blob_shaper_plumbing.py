@@ -18,6 +18,8 @@ class TestBlobShaperModels:
         assert s.blob_shaper_enabled is False
         assert s.blob_shaper_base_strength == 0.5
         assert s.blob_shaper_react_strength == 0.5
+        assert s.blob_shaper_idle_motion == 0.18
+        assert s.blob_shaper_audio_motion == 1.20
         assert s.blob_topology == "circle"
         assert s.blob_ring_thickness == 0.3
         assert isinstance(s.blob_shape_base_nodes, list)
@@ -31,6 +33,8 @@ class TestBlobShaperModels:
             blob_shaper_enabled=True,
             blob_shaper_base_strength=0.8,
             blob_shaper_react_strength=0.3,
+            blob_shaper_idle_motion=0.12,
+            blob_shaper_audio_motion=1.65,
             blob_topology="ring",
             blob_ring_thickness=0.5,
             blob_shape_base_nodes=[[0.0, 0.5], [0.5, 1.5], [1.0, 0.8]],
@@ -41,11 +45,15 @@ class TestBlobShaperModels:
         prefix = "widgets.spotify_visualizer"
         assert d[f"{prefix}.blob_shaper_enabled"] is True
         assert d[f"{prefix}.blob_topology"] == "ring"
+        assert d[f"{prefix}.blob_shaper_idle_motion"] == pytest.approx(0.12)
+        assert d[f"{prefix}.blob_shaper_audio_motion"] == pytest.approx(1.65)
         assert d[f"{prefix}.blob_shape_energy_nodes"] == [{"type": "bass", "x": 0.3, "y": 0.7, "strength": 1.0, "dir_x": 0.0, "dir_y": -1.0, "dir_len": 22.0}]
 
         flat = {k.split(".", 2)[-1]: v for k, v in d.items() if k.startswith(prefix)}
         s2 = SpotifyVisualizerSettings.from_mapping(flat)
         assert s2.blob_shaper_enabled is True
+        assert s2.blob_shaper_idle_motion == pytest.approx(0.12)
+        assert s2.blob_shaper_audio_motion == pytest.approx(1.65)
         assert s2.blob_topology == "ring"
         assert s2.blob_ring_thickness == 0.5
         assert len(s2.blob_shape_energy_nodes) == 1
@@ -56,6 +64,8 @@ class TestBlobShaperModels:
             "blob_shaper_enabled",
             "blob_shaper_base_strength",
             "blob_shaper_react_strength",
+            "blob_shaper_idle_motion",
+            "blob_shaper_audio_motion",
             "blob_topology",
             "blob_ring_thickness",
             "blob_shape_base_nodes",
@@ -79,8 +89,8 @@ class TestBlobShaperRenderer:
         mid_energy: float = 0.0,
         high_energy: float = 0.0,
         overall_energy: float = 0.0,
-        constant_wobble: float = 1.0,
-        reactive_wobble: float = 1.0,
+        shaper_idle_motion: float = 0.18,
+        shaper_audio_motion: float = 1.20,
         react_strength: float = 1.0,
         playing: bool = True,
     ) -> list[list[float]]:
@@ -107,8 +117,8 @@ class TestBlobShaperRenderer:
                 high=high_energy,
                 overall=overall_energy,
                 react_strength=react_strength,
-                constant_wobble=constant_wobble,
-                reactive_wobble=reactive_wobble,
+                shaper_idle_motion=shaper_idle_motion,
+                shaper_audio_motion=shaper_audio_motion,
                 playing=playing,
                 seed=0.37,
             )
@@ -178,6 +188,58 @@ class TestBlobShaperRenderer:
         weights = _build_energy_routing(nodes, 32)
         peak_index = max(range(32), key=lambda idx: weights[0][idx])
         assert peak_index in {0, 31}
+
+    def test_shaper_runtime_profile_uses_shaper_motion_knobs_not_unshaped_wobble(self):
+        from widgets.spotify_visualizer.renderers.blob import _resolve_runtime_shaper_profile
+
+        base = [1.0] * 16
+        react = [1.2] * 16
+        weights = [[0.0] * 16 for _ in range(5)]
+
+        quiet = MagicMock()
+        quiet._last_update_ts = 1.0
+        quiet._blob_shaper_solver_ts = 0.98
+        quiet._blob_shaper_react_strength = 0.6
+        quiet._blob_constant_wobble = 2.0
+        quiet._blob_reactive_wobble = 3.0
+        quiet._blob_shaper_idle_motion = 0.0
+        quiet._blob_shaper_audio_motion = 0.0
+        quiet._playing = True
+
+        driven = MagicMock()
+        driven._last_update_ts = 1.0
+        driven._blob_shaper_solver_ts = 0.98
+        driven._blob_shaper_react_strength = 0.6
+        driven._blob_constant_wobble = 0.0
+        driven._blob_reactive_wobble = 0.0
+        driven._blob_shaper_idle_motion = 0.35
+        driven._blob_shaper_audio_motion = 1.8
+        driven._playing = True
+
+        quiet_profile = _resolve_runtime_shaper_profile(
+            quiet,
+            base_profile=base,
+            react_profile=react,
+            weights=weights,
+            bass=0.12,
+            mid=0.28,
+            high=0.10,
+            overall=0.22,
+        )
+        driven_profile = _resolve_runtime_shaper_profile(
+            driven,
+            base_profile=base,
+            react_profile=react,
+            weights=weights,
+            bass=0.12,
+            mid=0.28,
+            high=0.10,
+            overall=0.22,
+        )
+
+        quiet_spread = max(quiet_profile) - min(quiet_profile)
+        driven_spread = max(driven_profile) - min(driven_profile)
+        assert driven_spread > quiet_spread * 1.8
 
     def test_build_energy_routing_keeps_authored_influence_broad_and_smooth(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
@@ -409,8 +471,8 @@ class TestBlobShaperRenderer:
             mid_energy=0.95,
             high_energy=0.34,
             overall_energy=0.96,
-            constant_wobble=1.2,
-            reactive_wobble=2.4,
+            shaper_idle_motion=1.2,
+            shaper_audio_motion=2.4,
             react_strength=0.9,
             playing=True,
         )
@@ -455,8 +517,8 @@ class TestBlobShaperRenderer:
                 high=0.28,
                 overall=0.94,
                 react_strength=1.0,
-                constant_wobble=0.5,
-                reactive_wobble=1.0,
+                shaper_idle_motion=0.5,
+                shaper_audio_motion=1.0,
                 playing=True,
                 seed=0.37,
             )
@@ -480,8 +542,8 @@ class TestBlobShaperRenderer:
                 high=0.0,
                 overall=0.0,
                 react_strength=1.0,
-                constant_wobble=0.0,
-                reactive_wobble=0.0,
+                shaper_idle_motion=0.0,
+                shaper_audio_motion=0.0,
                 playing=True,
                 seed=0.37,
             )
@@ -517,8 +579,8 @@ class TestBlobShaperRenderer:
             mid_energy=0.82,
             high_energy=0.30,
             overall_energy=0.72,
-            constant_wobble=1.0,
-            reactive_wobble=2.0,
+            shaper_idle_motion=1.0,
+            shaper_audio_motion=2.0,
             react_strength=0.9,
             playing=True,
         )
@@ -812,6 +874,8 @@ class TestBlobShaperConfigApplier:
         apply_vis_mode_kwargs(widget, {
             "blob_shaper_enabled": True,
             "blob_shaper_base_strength": 0.7,
+            "blob_shaper_idle_motion": 0.16,
+            "blob_shaper_audio_motion": 1.7,
             "blob_topology": "ring",
             "blob_ring_thickness": 0.6,
             "blob_shape_base_nodes": [[0.0, 0.5], [1.0, 1.5]],
@@ -819,6 +883,8 @@ class TestBlobShaperConfigApplier:
         })
         assert widget._blob_shaper_enabled is True
         assert widget._blob_shaper_base_strength == pytest.approx(0.7)
+        assert widget._blob_shaper_idle_motion == pytest.approx(0.16)
+        assert widget._blob_shaper_audio_motion == pytest.approx(1.7)
         assert widget._blob_topology == "ring"
         assert widget._blob_ring_thickness == pytest.approx(0.6)
         assert widget._blob_shape_base_nodes == [[0.0, 0.5], [1.0, 1.5]]
@@ -837,6 +903,8 @@ class TestBlobShaperConfigApplier:
             blob_shaper_enabled=True,
             blob_shaper_base_strength=0.8,
             blob_shaper_react_strength=0.3,
+            blob_shaper_idle_motion=0.12,
+            blob_shaper_audio_motion=1.65,
             blob_topology="ring",
             blob_ring_thickness=0.5,
             blob_shape_base_nodes=[[0.0, 0.5], [1.0, 1.5]],
@@ -852,6 +920,8 @@ class TestBlobShaperConfigApplier:
         if not kw:
             _, kw = kwargs
         assert kw.get("blob_shaper_enabled") is True
+        assert kw.get("blob_shaper_idle_motion") == pytest.approx(0.12)
+        assert kw.get("blob_shaper_audio_motion") == pytest.approx(1.65)
         assert kw.get("blob_topology") == "ring"
         assert kw.get("blob_ring_thickness") == 0.5
         assert kw.get("blob_shape_base_nodes") == [[0.0, 0.5], [1.0, 1.5]]
@@ -870,6 +940,8 @@ class TestBlobShaperConfigApplier:
         widget._blob_shaper_enabled = True
         widget._blob_shaper_base_strength = 0.8
         widget._blob_shaper_react_strength = 0.4
+        widget._blob_shaper_idle_motion = 0.14
+        widget._blob_shaper_audio_motion = 1.55
         widget._blob_topology = "ring"
         widget._blob_ring_thickness = 0.5
         widget._blob_shape_base_nodes = [[0.0, 1.0]]
@@ -878,5 +950,7 @@ class TestBlobShaperConfigApplier:
         extra = {}
         _append_blob_visual_extras(extra, widget)
         assert extra["blob_shaper_enabled"] is True
+        assert extra["blob_shaper_idle_motion"] == pytest.approx(0.14)
+        assert extra["blob_shaper_audio_motion"] == pytest.approx(1.55)
         assert extra["blob_topology"] == "ring"
         assert extra["blob_ring_thickness"] == 0.5

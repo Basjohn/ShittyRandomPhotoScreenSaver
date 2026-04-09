@@ -289,6 +289,48 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     rs_layout.addWidget(tab.blob_shaper_react_strength)
     rs_layout.addWidget(tab.blob_shaper_react_strength_label)
 
+    sim_row, sim_layout = _shaper_row("Idle Residual:")
+    tab._blob_shaper_idle_motion_row = sim_row
+    tab.blob_shaper_idle_motion = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_shaper_idle_motion.setMinimum(0)
+    tab.blob_shaper_idle_motion.setMaximum(200)
+    sim_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_idle_motion', 0.18) * 100)
+    tab.blob_shaper_idle_motion.setValue(max(0, min(200, sim_val)))
+    tab.blob_shaper_idle_motion.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_shaper_idle_motion.setTickInterval(25)
+    tab.blob_shaper_idle_motion.setToolTip(
+        "Always-on contour drift for shaped Blob only. Keeps authored silhouettes alive without stealing the idle budget from unshaped Blob."
+    )
+    tab.blob_shaper_idle_motion_label = QLabel(f"{sim_val}%")
+    bind_setting_signal(
+        tab,
+        tab.blob_shaper_idle_motion.valueChanged,
+        updater=lambda v: tab.blob_shaper_idle_motion_label.setText(f"{v}%"),
+    )
+    sim_layout.addWidget(tab.blob_shaper_idle_motion)
+    sim_layout.addWidget(tab.blob_shaper_idle_motion_label)
+
+    sam_row, sam_layout = _shaper_row("Audio Residual:")
+    tab._blob_shaper_audio_motion_row = sam_row
+    tab.blob_shaper_audio_motion = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_shaper_audio_motion.setMinimum(0)
+    tab.blob_shaper_audio_motion.setMaximum(300)
+    sam_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_audio_motion', 1.20) * 100)
+    tab.blob_shaper_audio_motion.setValue(max(0, min(300, sam_val)))
+    tab.blob_shaper_audio_motion.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_shaper_audio_motion.setTickInterval(25)
+    tab.blob_shaper_audio_motion.setToolTip(
+        "Energy-driven contour motion for shaped Blob only. This does not affect the freeform unshaped wobble system."
+    )
+    tab.blob_shaper_audio_motion_label = QLabel(f"{sam_val}%")
+    bind_setting_signal(
+        tab,
+        tab.blob_shaper_audio_motion.valueChanged,
+        updater=lambda v: tab.blob_shaper_audio_motion_label.setText(f"{v}%"),
+    )
+    sam_layout.addWidget(tab.blob_shaper_audio_motion)
+    sam_layout.addWidget(tab.blob_shaper_audio_motion_label)
+
     topo_row, topo_layout = _shaper_row("Topology:")
     tab.blob_topology_combo = StyledComboBox()
     tab.blob_topology_combo.addItems(["Circle (Filled)", "Ring (Hollow)"])
@@ -501,6 +543,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     rd_layout.addWidget(tab.blob_reactive_deformation_label)
 
     cw_row, cw_layout = _motion_row("Idle Edge Motion:")
+    tab._blob_idle_edge_motion_row = cw_row
     tab.blob_constant_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_constant_wobble.setMinimum(0)
     tab.blob_constant_wobble.setMaximum(200)
@@ -519,6 +562,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     cw_layout.addWidget(tab.blob_constant_wobble_label)
 
     rw_row, rw_layout = _motion_row("Audio Edge Motion:")
+    tab._blob_audio_edge_motion_row = rw_row
     tab.blob_reactive_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_reactive_wobble.setMinimum(0)
     tab.blob_reactive_wobble.setMaximum(300)
@@ -637,11 +681,15 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _update_shaper_gating():
         enabled = tab.blob_shaper_enabled.isChecked()
         tab._blob_shaper_container.setVisible(enabled)
-        # Stretch and generic deformation conflict with authored shaper contours.
+        # Stretch and generic unshaped deformation conflict with authored shaper contours.
         st_row.setVisible(not enabled)
         rd_row.setVisible(not enabled)
+        cw_row.setVisible(not enabled)
+        rw_row.setVisible(not enabled)
         st_row.setEnabled(not enabled)
         rd_row.setEnabled(not enabled)
+        cw_row.setEnabled(not enabled)
+        rw_row.setEnabled(not enabled)
 
     tab.blob_shaper_enabled.toggled.connect(_update_shaper_gating)
     _update_shaper_gating()
