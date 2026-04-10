@@ -52,20 +52,24 @@ def compute_stage_progress(
     overall = _clamp(overall_energy, 0.0, 1.0)
     se = _clamp(smoothed_energy, 0.0, 1.0)
 
-    weighted = _clamp(bass * 0.56 + overall * 0.28 + high * 0.10 + mid * 0.06, 0.0, 1.0)
-    weighted_stage1 = _clamp(weighted * 0.88 + se * 0.12, 0.0, 1.0)
+    weighted = _clamp(bass * 0.48 + overall * 0.24 + high * 0.11 + mid * 0.17, 0.0, 1.0)
+    weighted_stage1 = _clamp(weighted * 0.80 + se * 0.20, 0.0, 1.0)
     base_stage2_drive = _clamp(
-        weighted * 0.74 + bass * 0.10 + mid * 0.12 + high * 0.04,
+        weighted * 0.56 + bass * 0.12 + mid * 0.22 + high * 0.10,
         0.0,
         1.0,
     )
-    stage2_drive = _clamp(base_stage2_drive * 0.84 + se * 0.16, 0.0, 1.0)
+    stage2_drive = _clamp(base_stage2_drive * 0.74 + se * 0.26, 0.0, 1.0)
     chorus_drive = _clamp(
-        max(stage2_drive, bass * 0.38 + overall * 0.30 + mid * 0.18 + high * 0.14),
+        max(stage2_drive, bass * 0.28 + overall * 0.24 + mid * 0.29 + high * 0.19),
         0.0,
         1.0,
     )
-    chorus_drive = _clamp(max(chorus_drive, se * 0.34 + overall * 0.44 + mid * 0.22), 0.0, 1.0)
+    chorus_drive = _clamp(
+        max(chorus_drive, se * 0.28 + overall * 0.34 + mid * 0.26 + high * 0.12),
+        0.0,
+        1.0,
+    )
 
     weighted_stage1, stage2_drive, chorus_drive = _apply_stage_bias_to_drives(
         weighted_stage1,
@@ -77,9 +81,9 @@ def compute_stage_progress(
     # Keep stage 1 reachable on ordinary musical support, but leave room for
     # stage 2/3 to appear on stronger passages instead of making the first rung
     # saturate immediately while the later rungs stay effectively unreachable.
-    stage1_t = _smoothstep(0.08, 0.33, weighted_stage1)
-    stage2_t = _smoothstep(0.14, 0.38, stage2_drive)
-    stage3_t = _smoothstep(0.20, 0.46, chorus_drive)
+    stage1_t = _smoothstep(0.08, 0.29, weighted_stage1)
+    stage2_t = _smoothstep(0.10, 0.30, stage2_drive)
+    stage3_t = _smoothstep(0.13, 0.34, chorus_drive)
     stage2_t = min(stage2_t, stage1_t)
     stage3_t = min(stage3_t, stage2_t)
     return (stage1_t, stage2_t, stage3_t)
@@ -136,9 +140,9 @@ def compute_stage_offset(
         )
 
     stage_unit = base_size * 0.18 + 0.02
-    stage1_amt = stage_unit * 0.58
-    stage2_amt = stage_unit * 1.22
-    stage3_amt = stage_unit * 2.10
+    stage1_amt = stage_unit * 0.70
+    stage2_amt = stage_unit * 1.52
+    stage3_amt = stage_unit * 2.70
 
     offset = stage1_t * stage1_amt
     offset += stage2_t * max(0.0, stage2_amt - stage1_amt)

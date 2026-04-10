@@ -24,7 +24,7 @@ Update this after every significant change.
 ## Snapshot
 
 - **Date:** `2026-04-09`
-- **Status:** Reddit Helper scheduled-task authority remains runtime-proven, Spectrum vocal-lane and Energy Arrow work are user-validated, the shared preset/repair flow is now on the modern lane-map contract, runtime preset cycling now honors the same Custom-slot snapshot/restore contract as the settings UI, and the settings shell now uses an accepted forged-corner outer-border compromise that is visually almost bleed-free without disturbing acrylic or the custom title bar. Spectrum consolidation remains partially open for deeper control-pruning decisions.
+- **Status:** Reddit Helper scheduled-task authority remains runtime-proven, Spectrum vocal-lane and Energy Arrow work are user-validated, the shared preset/repair flow is now on the modern lane-map contract, runtime preset cycling now honors the same Custom-slot snapshot/restore contract as the settings UI, and the settings shell now uses an accepted forged-corner outer-border compromise that is visually almost bleed-free without disturbing acrylic or the custom title bar. Spectrum consolidation remains partially open for deeper control-pruning decisions, and a broader visualizer isolation/bleed audit is now active so mode-specific tuning does not quietly degrade adjacent modes.
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> all green.
 
 ---
@@ -88,7 +88,7 @@ Captured tuning notes:
 - The target is steadier mid-height motion at 60 fps without flattening large high/low movements
 - Compare behavior on `<=60 Hz` displays versus `165 Hz` displays and decide whether the eventual fix should improve one, both, or both differently
 - `drop_speed` alone is too blunt; Spectrum needs room for large rises and large falls
-- Guardrail: `Input Gain` is non-negotiable for now and must stay available during any consolidation/reduction pass
+- Guardrail: `Input Gain` is non-negotiable and must stay available during any consolidation/reduction pass
 
 Runtime watch note:
 - [~] Runtime preset cycling now shares the Custom-slot snapshot/restore contract with the settings UI. Keep watching for intermittent reports where cycling `Custom -> curated -> ... -> Custom` appears to inherit the previously viewed curated slot, especially in Spectrum and especially during live runtime rather than in the settings dialog.
@@ -101,90 +101,26 @@ User guidance to preserve:
 - Drops should be encouraged through a less flickery presentation method than simply increasing `drop_speed`
 - Higher internal resolution appears to reduce shimmer but increases latency and does not eliminate the issue
 
-### 2. Oscilloscope UI Bucket Cleanup
+### 1A. Visualizer Mode Isolation / Bleed Audit
 
-**Status:** `[x]` Landed and user-validated
-**Priority:** Medium-High
+**Status:** `[~]` In progress
+**Priority:** High
 
-The Oscilloscope builder (`ui/tabs/media/oscilloscope_builder.py`, 438 lines) uses a flat `_normal_layout` / `_adv_layout` split with no collapsible buckets. Controls are interleaved without clear grouping.
+Each time one visualizer mode is improved, a different mode seems to pick up collateral damage. This pass exists to make mode ownership explicit all the way from UI/settings through dedicated renderers/math.
 
-**Current flat layout:**
-- Normal: Glow (toggle, intensity, reactivity, reactive), Ghost (toggle, intensity), Amplitude, Smoothing, Speed
-- Advanced: Dim Lines, Line Offset Bias, Vertical Shift, Line/Glow Color, Multi-line (count, line 2/3 colors, ghost per-line), Card Height
+- [x] Audit dedicated Blob/Bubble/Spectrum/Oscilloscope/Sine renderer ownership for foreign mode-setting bleed
+- [x] Audit dedicated visualizer math/helpers (`blob_math`, `blob_shaper_solver`, `bubble_simulation`, `bar_computation`, `transient_bus`) for foreign mode-setting bleed
+- [x] Add a static isolation fence for dedicated mode-owned modules
+- [x] Create a stable visualizer setting-change checklist so future setting additions/removals touch all required seams
+- [ ] Audit the intentionally shared seams (`config_applier`, `spotify_visualizer_widget`, `spotify_bars_gl_overlay`) and document which cross-mode behavior is deliberate versus accidental and how to remove or minimize potential bleed.
+- [ ] Confirm preset/save/repair/regeneration paths still agree with current mode ownership after the audit findings
+- [ ] Finish a live runtime spot-check across the shaper-capable modes after the current Blob tuning pass
 
-**Proposed bucket structure:**
-
-Normal surface:
-- **Appearance** - Line Color, Glow Color, Glow toggle + intensity + reactivity + reactive checkbox
-- **Behavior** - Amplitude, Smoothing, Speed, Ghost toggle + intensity
-
-Advanced surface:
-- **Multi-Line** - Multi-line toggle, Line Count, Line 2/3 colors + glow colors + ghost per-line, Dim Lines 2/3
-- **Layout** - Line Offset Bias, Vertical Shift, Card Height
-
-Landed:
-- [x] Refactored `oscilloscope_builder.py` onto the shared collapsible-bucket helper path
-- [x] Grouped controls into `Appearance`, `Behavior`, `Multi-Line`, and `Layout`
-- [x] Kept control attribute names unchanged so existing bindings still work
-- [x] Normal buckets default expanded; Advanced buckets default collapsed
-- [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "osc" -q`
-
-### 3. Sine Wave UI Bucket Cleanup
-
-**Status:** `[x]` Landed and user-validated
-**Priority:** Medium-High
-
-The Sine Wave builder (`ui/tabs/media/sine_wave_builder.py`, 706 lines) uses a flat layout with many controls. It has the most controls of any waveform mode and benefits most from bucketing.
-
-**Current flat layout:**
-- Normal: Glow section (toggle, intensity, reactivity, color, reactive), Ghost section (toggle, opacity, decay), Line Color, Sensitivity, Speed, Travel, Wave Effect, Micro Wobble, Crawl, Width Reaction
-- Advanced: Density, Heartbeat, Displacement, Vertical Shift, Line 1 Shift, Multi-line (count, line 2/3 colors + glow + travel + ghost + shift), Line Offset Bias, Card Adaptation, Card Height
-
-**Proposed bucket structure:**
-
-Normal surface:
-- **Appearance** - Line Color, Glow (toggle + intensity + reactivity + color + reactive), Ghost (toggle + opacity + decay)
-- **Motion** - Speed, Travel, Wave Effect, Crawl, Micro Wobble (legacy; review whether it should stay visible)
-- **Response** - Sensitivity, Width Reaction, Heartbeat (candidate to promote from Advanced because it is a user-facing feel control)
-
-Advanced surface:
-- **Multi-Line** - Multi-line toggle, Line Count, Line 2/3 colors + glow colors + travel + ghost + horizontal shift, Displacement
-- **Layout** - Density, Vertical Shift, Line 1 Shift, Line Offset Bias, Card Adaptation, Card Height
-
-Landed:
-- [x] Refactored `sine_wave_builder.py` onto the shared collapsible-bucket helper path
-- [x] Grouped controls into `Appearance`, `Motion`, `Response`, `Multi-Line`, and `Layout`
-- [x] Promoted `Heartbeat` from Advanced into the Normal `Response` bucket
-- [x] Left `Micro Wobble` visible for now as a legacy control; do not treat that deprecation decision as settled
-- [x] Kept control attribute names unchanged
-- [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "sine" -q`
-
-### 4. Bucket State Persistence (was IDEA BOX #1)
-
-**Status:** `[x]` Landed and user-validated
-**Priority:** Medium
-
-Bucket collapsed/open state does not persist across settings dialog open/close.
-
-Landed:
-- [x] Replaced ad-hoc per-builder bucket wiring with a shared collapsible-bucket helper in `builder_scaffold.py`
-- [x] Extended `WidgetsTab` with persisted per-mode bucket state storage in settings
-- [x] Implemented save-on-collapse/expand and restore-on-build
-- [x] Applied the shared solution to Spectrum, Blob, Oscilloscope, and Sine Wave
-- [x] Preserved existing UX defaults where they were already established instead of forcing a surprise global-collapse reset
-- [x] Validated via targeted widget/plumbing suites for `osc`, `sine`, `spectrum`, and `blob`
-
-### 5. Settings Dialog Close / Teardown Polish
-
-**Status:** `[ ]` Not started
-**Priority:** Low
-
-When closing the settings dialog, some elements visibly deconstruct before the shell is gone. The goal is for the close to feel atomic, or at least visually shell-first.
-
-- [ ] Audit current shutdown ordering for the settings dialog shell and child elements
-- [ ] Determine whether the visible deconstruction comes from fade timing, layout teardown, QWidget destruction order, or delayed shell close
-- [ ] Prefer a solution where everything appears to vanish together; second-best is shell-first disappearance
-- [ ] Confirm no cleanup, memory, or shutdown correctness regressions are introduced
+Current findings:
+- Dedicated renderers/math now look substantially cleaner; the remaining high-risk areas are the shared runtime bridges, not the per-mode solver files
+- Sine/Oscilloscope now rely on an intentional neutral line-mode transport rather than hidden ownership through fake `_osc_*` setting flow
+- Blob shaped and unshaped motion ownership is intentionally split and now guarded by focused tests, but live Blob feel still needs more runtime validation
+- Any future mode-setting change should now route through `Docs/Visualizer_Change_Checklist.md` before being considered complete
 
 ### 6. Blob Energy Balance / Glow Drive Follow-up
 
@@ -195,37 +131,74 @@ Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-sh
 
 Landed in code:
 - Non-shaped Blob idle wobble/deformation was reduced so low-energy passages stop looking busier than loud ones
-- Non-shaped reactive/vocal motion and stage-driving support were increased so real music reaches visible reactions more reliably and stage `2/3` are no longer effectively asleep
+- Non-shaped reactive/vocal motion and stage-driving support were increased, then increased again from real Blob runtime logs/preset data so subtle rapid drums and higher stage tiers have a better chance to register
+- Non-shaped Blob fast-hit attack/release shaping was tightened again so rapid kick/snare phrases reach the body/stage path faster without turning hitch frames into one-frame event snaps
+- Non-shaped Blob concurrent pockets now trigger from fresher raw/transient hit strength with shorter family cooldowns so alternating rapid drum phrases are less likely to land in a pocket dead-zone between spawns
 - Shaped Blob now owns its own contour residual motion via `blob_shaper_idle_motion` and `blob_shaper_audio_motion` instead of reusing the generic unshaped wobble knobs
 - Shaper mode now hides the generic unshaped `Idle Edge Motion`, `Audio Edge Motion`, `Stretch`, and `Shape Reactivity` rows so authored-shape controls stop pretending to share ownership with the freeform Blob path
 - Blob shaper arrow tips now read more like actual arrows, and runtime still interprets drag direction as a real authored input rather than a decorative handle
 - Focused regression fences now cover both the shaped/unshaped motion split and the shaper-mode UI gating so future tuning work cannot silently reintroduce cross-over
+- Dedicated mode-isolation fences now also cover the per-mode renderer/math modules so foreign runtime tokens cannot quietly creep back in there
 
 - [x] Audit the current non-shaped `Body Response` balance for constant, reactive, and vocal energy
 - [x] Confirm the shaped Blob path is isolated before making non-shaped tuning changes
 - [x] Land a first tuning pass on the non-shaped path that reduces idle/no-energy deformation and increases real reactive/vocal ownership
-- [ ] Validate that the new balance is directionally right in live runtime rather than assuming the first pass is final
+- [ ] Validate that the new balance is directionally right in live runtime rather than assuming the latest pass is final
+- [ ] Audit why subtle rapid drum phrases still under-drive non-shaped Blob in live runtime even when authored settings are reasonable
+- [ ] Audit why stage `2/3` still spend too much time asleep in non-shaped Blob and make the main core size feel parked
 - [ ] Review the `Glow Drive` selection list for useful additions such as `Transient`
 - [ ] Confirm Blob identity still feels like Blob and has not drifted toward another visualizer mode
 - [~] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
+
+### 6A. Blob Concurrent Deformation Pockets (non-shaped path)
+
+**Status:** `[~]` Runtime architecture landed / awaiting live feel validation
+**Priority:** High
+
+Non-shaped Blob currently stores too much of its reaction in shared body/stage channels. That makes slower decay feel nice, but it also means rapid drum phrases can be visually swallowed by already-decaying motion instead of finding a fresh local place to deform. The next implementation should keep the calmer organic release while allowing multiple local reactions to coexist.
+
+Goal:
+- Let rapid successive hits register as fresh local deformations without requiring faster/jitterier global decay
+- Preserve Blob’s organic amorphous feel instead of turning it into rigid lane logic
+- Keep this strictly non-shaped for the first implementation so shaped and unshaped ownership do not bleed back together
+
+Guardrails:
+- Do not introduce compatibility shims or legacy side paths for the old non-shaped reaction model
+- Do not let shaped Blob consume the new non-shaped pocket state
+- Do not add latency; new hits must still register on the current frame/tick path
+- Do not move Blob onto a mode-specific sidecar persistence format; if settings/schema change, convert all canonical touchpoints named in `Docs/Visualizer_Change_Checklist.md`
+- Do not accept “tests green” as proof of musical feel; runtime validation remains required
+
+Phase 1. Runtime architecture / pocket model
+- [x] Define the non-shaped pocket model: count, lifetime, ownership, and how fresh hits claim/reuse pockets
+- [x] Decide the placement basis for pockets (likely angular / lobe-based rather than rigid lane-like buckets)
+- [x] Keep pocket attack/release independent from the slower whole-body decay path
+- [x] Keep pocket routing non-shaped-only; shaped Blob must continue using authored shaper routing
+- [x] Document the current contract in `Spec.md` once the architecture lands
+
+Phase 2. Implementation sweep (all required touchpoints, no legacy carry)
+- [x] Runtime bridge: update `widgets/spotify_bars_gl_overlay.py`, `widgets/spotify_visualizer/renderers/blob.py`, shader/runtime inputs, and any non-shaped Blob math needed for concurrent pocket contribution
+- [x] UI surface: keep this first cut runtime-only; no new authored controls were needed, so nothing new was layered on top
+- [x] Settings binding: no new canonical Blob settings were introduced in this first cut, so there was no binding/schema sweep to keep around
+- [x] Canonical model/defaults: unchanged for the same reason; pocket state is runtime-only in this first implementation
+- [x] Preset mechanics: unchanged for the same reason; curated Blob presets and repair/regeneration flows do not carry pocket payloads in this first cut
+- [x] Regeneration flow: no curated Blob payload change in this first cut
+- [x] Tests: add runtime/reactivity/isolation fences for concurrent pocket ownership and ensure shaped/unshaped split still holds
+- [x] Docs: update `Index.md`, `Spec.md`, `Docs/TestSuite.md`, and `Current_Plan.md`
+
+Phase 3. Validation / cleanup / reduction
+- [ ] Validate real rapid-drum behavior in runtime with the new pocket model
+- [ ] Confirm stage `2/3` feel and core-size growth still read naturally under the new routing
+- [ ] Confirm shaped Blob is unaffected by non-shaped pocket tuning
+- [ ] Remove any superseded non-shaped runtime/state/settings paths instead of leaving dead overlap behind
+- [ ] Decide whether any temporary tuning controls introduced during implementation can be collapsed/removed before sign-off
 
 Validation focus:
 - Non-shaped Blob should feel calmer at idle but stronger under real energy, with stage `2/3` reachable on convincing phrases
 - Shaped Blob should keep authored contour ownership and must not change when the unshaped wobble controls are edited
 - Unshaped Blob should still respond to `Idle Edge Motion` / `Audio Edge Motion`, while shaped Blob should instead answer to `Idle Residual` / `Audio Residual`
+- First implementation note: concurrent deformation pockets are runtime-only and intentionally do not introduce a persisted settings/preset schema until the live musical feel proves the model is worth keeping
 
-### 7. Bubble UI Bucket Cleanup
-
-**Status:** `[x]` Landed and user-validated
-**Priority:** Low
-
-The Bubble builder (`ui/tabs/media/bubble_builder.py`) previously had no collapsible buckets. Lower priority since Bubble is newer and less control-dense, but it still needed the same consistency treatment.
-
-Landed:
-- [x] Audited the Bubble builder layout and replaced raw text-section headings with shared collapsible buckets
-- [x] Grouped Bubble into `Appearance`, `Motion`, `Reactivity`, `Population`, `Layout`, and `Ghost`
-- [x] Implemented Bubble using the shared bucket helper/persistence path
-- [x] Validated: `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "bubble" -q`
 
 ### 9. Shared Preset Install / Save Location Across SCR and MC
 
@@ -278,4 +251,4 @@ Known items:
 
 > Raw ideas that have not yet been shaped into active tasks. Promote them once they have a concrete goal, scope, and guardrails.
 
-- Empty for now. New raw ideas should be captured here before they become numbered tasks above.
+1. Expansion: Raise the supported authored line-count ceiling for Sine and Oscilloscope Modes from `3` to `6` without reviving the old hidden Sine/Osc shared-setting problem.

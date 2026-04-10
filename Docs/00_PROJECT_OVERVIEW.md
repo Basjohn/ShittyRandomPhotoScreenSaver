@@ -8,6 +8,7 @@ This document introduces the SRPSS codebase. Treat it as the top-level landing p
 - `Spec.md` is the current contract: architecture, behavior, schema, and guardrails that still apply now.
 - `Current_Plan.md` is the active rollout log: current work, validation state, temporary checklists, and temporary audit references.
 - `Docs/Historical_Bugs.md` is the historical ledger: dated regressions, failed approaches, final fixes, and regression coverage notes.
+- `Docs/Visualizer_Change_Checklist.md` is the stable visualizer-setting sweep: use it whenever a visualizer mode setting is added, removed, renamed, split, or materially retuned.
 - Audits are temporary working documents. Stable docs should not depend on them directly; if an audit still matters, route readers through `Current_Plan.md` instead of linking the audit from `Index.md` or `Spec.md`.
 - Regression warnings may remain in `Spec.md` only when they are still active contract guardrails because the same class of regression has reappeared more than once.
 

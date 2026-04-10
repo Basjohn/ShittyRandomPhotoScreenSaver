@@ -40,9 +40,9 @@ def _compute_sine_reactivity_targets(s) -> dict[str, float]:
     This keeps the stronger beat response local to Sine Wave so Oscilloscope
     and other renderers do not inherit the same tuning by accident.
     """
-    base_bass = max(0.0, float(getattr(s, '_osc_smoothed_bass', 0.0)))
-    base_mid = max(0.0, float(getattr(s, '_osc_smoothed_mid', 0.0)))
-    base_high = max(0.0, float(getattr(s, '_osc_smoothed_high', 0.0)))
+    base_bass = max(0.0, float(getattr(s, '_line_smoothed_bass', 0.0)))
+    base_mid = max(0.0, float(getattr(s, '_line_smoothed_mid', 0.0)))
+    base_high = max(0.0, float(getattr(s, '_line_smoothed_high', 0.0)))
 
     kick_evt = max(0.0, float(getattr(s, '_line_kick_event_strength', 0.0)))
     snare_evt = max(0.0, float(getattr(s, '_line_snare_event_strength', 0.0)))
@@ -96,7 +96,7 @@ def _compute_sine_reactivity_targets(s) -> dict[str, float]:
         + width_boost,
     )
 
-    raw_sensitivity = max(0.1, float(getattr(s, '_osc_line_amplitude', 1.0)))
+    raw_sensitivity = max(0.1, float(getattr(s, '_line_sensitivity', 1.0)))
     sensitivity = min(
         5.0,
         raw_sensitivity
@@ -249,9 +249,9 @@ def _compute_sine_reactivity_state(s, *, now_ts: float | None = None) -> dict[st
                     "wr_base=%.3f wr=%.3f motion=%.3f wave_gate=%.3f "
                     "evt_s=%.3f hb_s=%.3f wr_s=%.3f sens_s=%.3f gate_s=%.3f dt=%.3f"
                 ),
-                max(0.0, float(getattr(s, '_osc_smoothed_bass', 0.0))),
-                max(0.0, float(getattr(s, '_osc_smoothed_mid', 0.0))),
-                max(0.0, float(getattr(s, '_osc_smoothed_high', 0.0))),
+                max(0.0, float(getattr(s, '_line_smoothed_bass', 0.0))),
+                max(0.0, float(getattr(s, '_line_smoothed_mid', 0.0))),
+                max(0.0, float(getattr(s, '_line_smoothed_high', 0.0))),
                 max(0.0, float(getattr(getattr(s, '_energy_bands', None), 'overall', 0.0))),
                 reactive['_diag_kick_evt'],
                 reactive['_diag_snare_evt'],
@@ -322,10 +322,10 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_ghost_bass", getattr(s, '_sine_peak_bass', 0.0))
     _set1f(gl, u, "u_ghost_mid", getattr(s, '_sine_peak_mid', 0.0))
     _set1f(gl, u, "u_ghost_high", getattr(s, '_sine_peak_high', 0.0))
-    _set1f(gl, u, "u_sine_speed", s._osc_speed)
-    _set1i(gl, u, "u_sine_line_dim", 1 if s._osc_line_dim else 0)
-    _set1f(gl, u, "u_sine_line_offset_bias", s._osc_line_offset_bias)
-    _set1i(gl, u, "u_sine_travel", int(s._osc_sine_travel))
+    _set1f(gl, u, "u_sine_speed", s._line_speed)
+    _set1i(gl, u, "u_sine_line_dim", 1 if s._line_dim else 0)
+    _set1f(gl, u, "u_sine_line_offset_bias", s._line_offset_bias)
+    _set1i(gl, u, "u_sine_travel", int(s._sine_wave_travel))
     _set1f(gl, u, "u_card_adaptation", s._sine_card_adaptation)
     _set1i(gl, u, "u_sine_travel_line2", int(s._sine_travel_line2))
     _set1i(gl, u, "u_sine_travel_line3", int(s._sine_travel_line3))
@@ -362,15 +362,15 @@ def _upload_shared_line_glow(gl, u, s, reactive: dict[str, float] | None = None)
     _set1f(gl, u, "u_glow_reactivity", getattr(s, '_glow_reactivity', 1.0))
     _set_color4(gl, u, "u_glow_color", s._glow_color)
     _set1i(gl, u, "u_reactive_glow", 1 if s._reactive_glow else 0)
-    _set1f(gl, u, "u_sensitivity", (reactive or {}).get('sensitivity', s._osc_line_amplitude))
-    _set1f(gl, u, "u_smoothing", s._osc_smoothing)
+    _set1f(gl, u, "u_sensitivity", (reactive or {}).get('sensitivity', s._line_sensitivity))
+    _set1f(gl, u, "u_smoothing", s._line_smoothing)
     _set_color4(gl, u, "u_line_color", s._line_color)
-    _set1i(gl, u, "u_line_count", s._osc_line_count)
+    _set1i(gl, u, "u_line_count", s._line_count)
     for uname, qc in (
-        ("u_line2_color", s._osc_line2_color),
-        ("u_line2_glow_color", s._osc_line2_glow_color),
-        ("u_line3_color", s._osc_line3_color),
-        ("u_line3_glow_color", s._osc_line3_glow_color),
+        ("u_line2_color", s._line2_color),
+        ("u_line2_glow_color", s._line2_glow_color),
+        ("u_line3_color", s._line3_color),
+        ("u_line3_glow_color", s._line3_glow_color),
     ):
         _set_color4(gl, u, uname, qc)
 

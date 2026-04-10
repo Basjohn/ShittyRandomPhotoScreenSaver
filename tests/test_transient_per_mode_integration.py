@@ -103,6 +103,7 @@ class _BlobKwargsWidget:
         self._sine_glow_color = None
         self._sine_reactive_glow = True
         self._sine_sensitivity = 1.0
+        self._sine_smoothing = 0.7
         self._osc_glow_enabled = True
         self._osc_glow_intensity = 0.5
         self._osc_glow_size = 1.0
@@ -787,15 +788,15 @@ class TestSineSchedulerBeatAssist:
     """Verify sine-only scheduler assist boosts the parts that visually read as reactivity."""
 
     class _State:
-        _osc_smoothed_bass = 0.20
-        _osc_smoothed_mid = 0.10
-        _osc_smoothed_high = 0.05
+        _line_smoothed_bass = 0.20
+        _line_smoothed_mid = 0.10
+        _line_smoothed_high = 0.05
         _line_kick_event_strength = 0.80
         _line_snare_event_strength = 0.45
         _sine_wave_transient_width_mix = 0.40
         _sine_width_reaction = 0.35
         _sine_heartbeat = 0.34
-        _osc_line_amplitude = 1.10
+        _line_sensitivity = 1.10
         _heartbeat_intensity = 0.10
 
         class _Bands:
@@ -842,9 +843,9 @@ class TestSineSchedulerBeatAssist:
         from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
 
         state = self._State()
-        state._osc_smoothed_bass = 0.03
-        state._osc_smoothed_mid = 0.05
-        state._osc_smoothed_high = 0.03
+        state._line_smoothed_bass = 0.03
+        state._line_smoothed_mid = 0.05
+        state._line_smoothed_high = 0.03
         state._energy_bands.overall = 0.05
         state._line_kick_event_strength = 0.95
         state._line_snare_event_strength = 0.60
@@ -876,7 +877,7 @@ class TestSineSchedulerBeatAssist:
         from widgets.spotify_visualizer.renderers.sine_wave import _compute_sine_reactivity_state
 
         state = self._State()
-        state._osc_line_amplitude = 0.42
+        state._line_sensitivity = 0.42
         state._line_kick_event_strength = 0.0
         state._line_snare_event_strength = 0.0
         state._sine_wave_transient_width_mix = 0.0

@@ -58,6 +58,10 @@ def load_sine_wave_mode_settings(
         sine_sensitivity = int(tab._config_float("spotify_visualizer", config, "sine_sensitivity", 1.0) * 100)
         tab.sine_sensitivity.setValue(max(10, min(500, sine_sensitivity)))
         tab.sine_sensitivity_label.setText(f"{sine_sensitivity / 100.0:.2f}x")
+    if hasattr(tab, "sine_smoothing"):
+        sine_smoothing = int(tab._config_float("spotify_visualizer", config, "sine_smoothing", 0.7) * 100)
+        tab.sine_smoothing.setValue(max(0, min(100, sine_smoothing)))
+        tab.sine_smoothing_label.setText(f"{sine_smoothing}%")
     if hasattr(tab, "sine_speed"):
         sine_speed = int(tab._config_float("spotify_visualizer", config, "sine_speed", 1.0) * 100)
         tab.sine_speed.setValue(max(10, min(100, sine_speed)))
@@ -212,6 +216,7 @@ def collect_sine_wave_mode_settings(tab) -> dict[str, Any]:
         "sine_line_color": _qcolor_to_list(getattr(tab, "_sine_line_color", None), [255, 255, 255, 255]),
         "sine_reactive_glow": tab.sine_reactive_glow.isChecked() if hasattr(tab, "sine_reactive_glow") else True,
         "sine_sensitivity": (tab.sine_sensitivity.value() if hasattr(tab, "sine_sensitivity") else 100) / 100.0,
+        "sine_smoothing": (tab.sine_smoothing.value() if hasattr(tab, "sine_smoothing") else 70) / 100.0,
         "sine_speed": (tab.sine_speed.value() if hasattr(tab, "sine_speed") else 100) / 100.0,
         "sine_wave_effect": (tab.sine_wave_effect.value() if hasattr(tab, "sine_wave_effect") else 0) / 100.0,
         "sine_crawl_amount": (tab.sine_crawl_slider.value() if hasattr(tab, "sine_crawl_slider") else 25) / 100.0,

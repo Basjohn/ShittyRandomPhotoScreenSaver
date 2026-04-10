@@ -300,6 +300,24 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_sensitivity_label = QLabel(f"{sine_sens_val / 100.0:.2f}x")
     sine_sens_row.addWidget(tab.sine_sensitivity_label)
 
+    sine_smoothing_row = _aligned_row(response_bucket, "Smoothing:")
+    tab.sine_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.sine_smoothing.setMinimum(0)
+    tab.sine_smoothing.setMaximum(100)
+    sine_smoothing_val = int(tab._default_float('spotify_visualizer', 'sine_smoothing', 0.7) * 100)
+    tab.sine_smoothing.setValue(max(0, min(100, sine_smoothing_val)))
+    tab.sine_smoothing.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.sine_smoothing.setTickInterval(10)
+    tab.sine_smoothing.setToolTip("Temporal smoothing for sine-line motion. Higher = steadier, slower response.")
+    bind_setting_signal(
+        tab,
+        tab.sine_smoothing.valueChanged,
+        updater=lambda v: tab.sine_smoothing_label.setText(f"{v}%"),
+    )
+    sine_smoothing_row.addWidget(tab.sine_smoothing)
+    tab.sine_smoothing_label = QLabel(f"{sine_smoothing_val}%")
+    sine_smoothing_row.addWidget(tab.sine_smoothing_label)
+
     sine_speed_row = _aligned_row(motion_bucket, "Speed:")
     tab.sine_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_speed.setMinimum(10)

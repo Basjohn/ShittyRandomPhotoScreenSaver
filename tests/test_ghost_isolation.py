@@ -462,7 +462,7 @@ class TestRendererGhostIsolation:
         assert overlay._blob_live_mid_energy < first_mid
         assert overlay._blob_stage_input_bass > float(energy.bass)
         assert overlay._blob_stage_input_overall > float(energy.overall)
-        assert overlay._blob_stage_input_bass < first_stage_bass
+        assert overlay._blob_stage_input_bass <= first_stage_bass
         assert overlay._blob_stage_input_overall <= first_stage_overall
 
     @pytest.mark.qt
@@ -816,24 +816,24 @@ class TestRendererGhostIsolation:
             _glow_reactivity=1.0,
             _glow_color=clear,
             _reactive_glow=False,
-            _osc_line_amplitude=1.0,
-            _osc_smoothing=0.5,
+            _line_sensitivity=1.0,
+            _line_smoothing=0.5,
             _line_color=white,
-            _osc_line_count=1,
-            _osc_line2_color=white,
-            _osc_line2_glow_color=white,
-            _osc_line3_color=white,
-            _osc_line3_glow_color=white,
-            _osc_smoothed_bass=0.0,
-            _osc_smoothed_mid=0.0,
-            _osc_smoothed_high=0.0,
+            _line_count=1,
+            _line2_color=white,
+            _line2_glow_color=white,
+            _line3_color=white,
+            _line3_glow_color=white,
+            _line_smoothed_bass=0.0,
+            _line_smoothed_mid=0.0,
+            _line_smoothed_high=0.0,
             _osc_transient_width_mix=0.35,
             _line_kick_event_strength=0.0,
             _line_snare_event_strength=0.0,
             _energy_bands=SimpleNamespace(overall=0.0),
-            _osc_speed=1.0,
-            _osc_line_dim=False,
-            _osc_line_offset_bias=0.0,
+            _line_speed=1.0,
+            _line_dim=False,
+            _line_offset_bias=0.0,
             _osc_vertical_shift=0,
         )
 
@@ -926,24 +926,24 @@ class TestRendererGhostIsolation:
             _glow_reactivity=1.0,
             _glow_color=clear,
             _reactive_glow=False,
-            _osc_line_amplitude=1.0,
-            _osc_smoothing=0.5,
+            _line_sensitivity=1.0,
+            _line_smoothing=0.5,
             _line_color=white,
-            _osc_line_count=1,
-            _osc_line2_color=white,
-            _osc_line2_glow_color=white,
-            _osc_line3_color=white,
-            _osc_line3_glow_color=white,
-            _osc_smoothed_bass=0.0,
-            _osc_smoothed_mid=0.0,
-            _osc_smoothed_high=0.0,
+            _line_count=1,
+            _line2_color=white,
+            _line2_glow_color=white,
+            _line3_color=white,
+            _line3_glow_color=white,
+            _line_smoothed_bass=0.0,
+            _line_smoothed_mid=0.0,
+            _line_smoothed_high=0.0,
             _osc_transient_width_mix=0.35,
             _line_kick_event_strength=0.0,
             _line_snare_event_strength=0.0,
             _energy_bands=SimpleNamespace(overall=0.0),
-            _osc_speed=1.0,
-            _osc_line_dim=False,
-            _osc_line_offset_bias=0.0,
+            _line_speed=1.0,
+            _line_dim=False,
+            _line_offset_bias=0.0,
             _osc_vertical_shift=0,
         )
 
@@ -1596,7 +1596,7 @@ class TestNoCrossModeGhostBleed:
         from core.settings import visualizer_presets as vp
 
         custom_mir = [[0.0, "Mid"], [0.40, "Vocal"], [0.70, "Low-Mid"], [1.0, "Bass"]]
-        custom_lin = [[0.0, "Bass"], [0.20, "Low"], [0.55, "Mid"], [0.80, "Hi-Mid"], [1.0, "Treble"]]
+        custom_lin = [[0.0, "Bass"], [0.20, "Low-Mid"], [0.55, "Vocal"], [0.80, "Hi-Mid"], [1.0, "Treble"]]
         save_dict = {
             "mode": "spectrum",
             "preset_spectrum": vp.get_custom_preset_index("spectrum"),

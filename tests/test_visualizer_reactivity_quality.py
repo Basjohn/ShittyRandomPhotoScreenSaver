@@ -590,7 +590,7 @@ def test_blob_dynamic_floor_pressure_rebases_body_more_than_vocal_motion(qt_app)
 
     assert live[1] > live[0] * 1.20
     assert live[2] > live[0] * 0.70
-    assert live[3] <= float(phrase.overall) + 0.02
+    assert live[3] <= float(phrase.overall) + 0.03
     assert live[3] < live[1] * 0.85
 
 
@@ -652,6 +652,63 @@ def test_blob_stage_progress_uses_vocals_for_upper_stage_support_without_overdri
     assert vocal_supported[0] >= sparse_vocal[0] * 0.95
     assert vocal_supported[1] > sparse_vocal[1]
     assert vocal_supported[2] > sparse_vocal[2]
+
+
+def test_blob_stage_progress_reaches_upper_rungs_for_fast_drum_support():
+    from widgets.spotify_visualizer.blob_math import compute_stage_progress
+
+    rapid = compute_stage_progress(
+        bass_energy=0.36,
+        mid_energy=0.23,
+        high_energy=0.18,
+        overall_energy=0.31,
+        smoothed_energy=0.28,
+        stage_bias=-0.17,
+    )
+
+    assert rapid[0] > 0.45
+    assert rapid[1] > 0.28
+    assert rapid[2] > 0.12
+
+
+@pytest.mark.qt
+def test_blob_floor_pressure_preserves_stage_branch_better_than_live_body(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+    from widgets.spotify_visualizer.blob_math import compute_stage_progress
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._apply_floor_snapshot(
+        {
+            "dynamic_enabled": True,
+            "manual_floor": 0.15,
+            "applied_floor": 0.92,
+            "last_noise_floor": 0.90,
+            "pressure": 0.90,
+        }
+    )
+    overlay._blob_kick_event_strength = 0.72
+    overlay._blob_snare_event_strength = 0.88
+    overlay._transient_energy = SimpleNamespace(
+        bass_transient=0.16,
+        mid_transient=0.22,
+        high_transient=0.12,
+    )
+
+    phrase = SimpleNamespace(bass=0.16, mid=0.25, high=0.15, overall=0.18)
+    live = overlay._compute_blob_live_bands(phrase)
+    stage_progress = compute_stage_progress(
+        bass_energy=overlay._blob_stage_input_bass,
+        mid_energy=overlay._blob_stage_input_mid,
+        high_energy=overlay._blob_stage_input_high,
+        overall_energy=overlay._blob_stage_input_overall,
+        smoothed_energy=live[3],
+        stage_bias=overlay._blob_stage_bias,
+    )
+
+    assert overlay._blob_stage_input_bass >= live[0]
+    assert overlay._blob_stage_input_overall >= live[3]
+    assert stage_progress[1] > 0.08
+    assert stage_progress[2] > 0.02
 
 
 def test_spectrum_lane_isolation_survives_long_run():

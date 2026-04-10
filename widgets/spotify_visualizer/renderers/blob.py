@@ -11,10 +11,12 @@ from widgets.spotify_visualizer.blob_shaper_solver import (
     solve_profile_step,
     slew_profile_toward_target,
 )
+from widgets.spotify_visualizer.blob_pockets import build_blob_pocket_uniform_payload
 from widgets.spotify_visualizer.renderers.gl_helpers import (
     set1f as _set1f,
     set1i as _set1i,
     set1fv as _set1fv,
+    set4fv as _set4fv,
     set_color4 as _set_color4,
 )
 
@@ -706,6 +708,7 @@ def get_uniform_names() -> list[str]:
         "u_blob_reactive_deformation", "u_blob_stage_gain",
         "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias",
         "u_blob_stage_progress_override",
+        "u_blob_pockets", "u_blob_pocket_mix",
         "u_blob_constant_wobble", "u_blob_reactive_wobble", "u_blob_stretch_tendency",
         "u_blob_stretch_inner", "u_blob_stretch_outer",
         # Energy bands (shared)
@@ -768,6 +771,10 @@ def upload_uniforms(gl, u: dict, s) -> bool:
             else (-1.0, -1.0, -1.0)
         )
         gl.glUniform3f(loc, float(stage_vals[0]), float(stage_vals[1]), float(stage_vals[2]))
+
+    pocket_data, pocket_mix = build_blob_pocket_uniform_payload(getattr(s, "_blob_pocket_state", None))
+    _set4fv(gl, u, "u_blob_pockets", pocket_data, 6)
+    _set4fv(gl, u, "u_blob_pocket_mix", pocket_mix, 6)
 
     _set1f(gl, u, "u_blob_constant_wobble", s._blob_constant_wobble)
     _set1f(gl, u, "u_blob_reactive_wobble", s._blob_reactive_wobble)

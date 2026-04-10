@@ -209,6 +209,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_line3_glow_color: QColor = QColor(50, 255, 120, 180)
         self._sine_reactive_glow: bool = True
         self._sine_sensitivity: float = 1.0
+        self._sine_smoothing: float = 0.7
         self._sine_speed: float = 1.0
         self._sine_line_count: int = 1
         self._sine_line_offset_bias: float = 0.0

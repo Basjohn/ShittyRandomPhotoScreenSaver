@@ -29,6 +29,19 @@ def set1fv(gl, u, name, values, count):
         gl.glUniform1fv(loc, count, arr)
 
 
+def set4fv(gl, u, name, values, count):
+    """Upload a vec4 array uniform if the location is valid."""
+    loc = u.get(name, -1)
+    if loc >= 0:
+        import ctypes
+        flat_count = max(0, int(count) * 4)
+        padded = [float(v) for v in values[:flat_count]]
+        if len(padded) < flat_count:
+            padded.extend([0.0] * (flat_count - len(padded)))
+        arr = (ctypes.c_float * flat_count)(*padded)
+        gl.glUniform4fv(loc, int(count), arr)
+
+
 def set4f(gl, u, name, x, y, z, w):
     """Upload a vec4 uniform if the location is valid."""
     loc = u.get(name, -1)

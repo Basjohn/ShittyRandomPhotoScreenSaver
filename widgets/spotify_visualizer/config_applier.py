@@ -433,6 +433,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._sine_reactive_glow = bool(kwargs['sine_reactive_glow'])
     if 'sine_sensitivity' in kwargs:
         widget._sine_sensitivity = max(0.1, min(5.0, float(kwargs['sine_sensitivity'])))
+    if 'sine_smoothing' in kwargs:
+        widget._sine_smoothing = max(0.0, min(1.0, float(kwargs['sine_smoothing'])))
     if 'sine_speed' in kwargs:
         widget._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
     if 'sine_line_count' in kwargs:
@@ -709,13 +711,13 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     )
     extra['glow_color'] = widget._sine_glow_color if is_sine else widget._osc_glow_color
     extra['reactive_glow'] = widget._sine_reactive_glow if is_sine else widget._osc_reactive_glow
-    extra['osc_line_amplitude'] = widget._sine_sensitivity if is_sine else widget._osc_line_amplitude
-    extra['osc_smoothing'] = widget._osc_smoothing
-    extra['osc_speed'] = widget._sine_speed if is_sine else widget._osc_speed
-    extra['osc_line_dim'] = widget._sine_line_dim if is_sine else widget._osc_line_dim
-    extra['osc_line_offset_bias'] = widget._sine_line_offset_bias if is_sine else widget._osc_line_offset_bias
+    extra['line_sensitivity'] = widget._sine_sensitivity if is_sine else widget._osc_line_amplitude
+    extra['line_smoothing'] = widget._sine_smoothing if is_sine else widget._osc_smoothing
+    extra['line_speed'] = widget._sine_speed if is_sine else widget._osc_speed
+    extra['line_dim'] = widget._sine_line_dim if is_sine else widget._osc_line_dim
+    extra['line_offset_bias'] = widget._sine_line_offset_bias if is_sine else widget._osc_line_offset_bias
     extra['osc_vertical_shift'] = widget._osc_vertical_shift
-    extra['osc_sine_travel'] = widget._sine_wave_travel
+    extra['sine_wave_travel'] = widget._sine_wave_travel
     extra['sine_card_adaptation'] = widget._sine_card_adaptation
     extra['sine_travel_line2'] = widget._sine_travel_line2
     extra['sine_travel_line3'] = widget._sine_travel_line3
@@ -728,11 +730,11 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['sine_width_reaction'] = widget._sine_width_reaction
     extra['sine_vertical_shift'] = widget._sine_vertical_shift
     extra['line_color'] = widget._sine_line_color if is_sine else widget._osc_line_color
-    extra['osc_line_count'] = widget._sine_line_count if is_sine else widget._osc_line_count
-    extra['osc_line2_color'] = widget._sine_line2_color if is_sine else widget._osc_line2_color
-    extra['osc_line2_glow_color'] = widget._sine_line2_glow_color if is_sine else widget._osc_line2_glow_color
-    extra['osc_line3_color'] = widget._sine_line3_color if is_sine else widget._osc_line3_color
-    extra['osc_line3_glow_color'] = widget._sine_line3_glow_color if is_sine else widget._osc_line3_glow_color
+    extra['line_count'] = widget._sine_line_count if is_sine else widget._osc_line_count
+    extra['line2_color'] = widget._sine_line2_color if is_sine else widget._osc_line2_color
+    extra['line2_glow_color'] = widget._sine_line2_glow_color if is_sine else widget._osc_line2_glow_color
+    extra['line3_color'] = widget._sine_line3_color if is_sine else widget._osc_line3_color
+    extra['line3_glow_color'] = widget._sine_line3_glow_color if is_sine else widget._osc_line3_glow_color
     extra['osc_ghost_line2_enabled'] = bool(getattr(widget, '_osc_ghost_line2_enabled', True))
     extra['osc_ghost_line3_enabled'] = bool(getattr(widget, '_osc_ghost_line3_enabled', True))
     extra['sine_ghost_line2_enabled'] = bool(getattr(widget, '_sine_ghost_line2_enabled', True))

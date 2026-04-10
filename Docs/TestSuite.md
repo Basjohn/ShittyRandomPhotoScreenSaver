@@ -67,6 +67,11 @@ tests/
   - it must not freeze curated artistic choices such as filenames, pack size, slot labels, or payload tuning; those remain authored content, not rigid regression targets.
   - the old temporary `Preset 1` synthetic migration fence has been retired. Keep preset regression structural: schema hygiene, repair/reindex correctness, source/release parity, and runtime bridge agreement.
   - baseline/recovery work is only considered safe when the curated audit, shipped-tree regeneration, and runtime creator-bridge fence are all green together. Do not use one passing suite to assume the others are implicitly safe.
+- **Visualizer isolation tests**:
+  - `tests/test_visualizer_mode_isolation.py` is the static fence for dedicated per-mode renderer/math modules. It should catch foreign runtime-token drift in Blob/Bubble/Spectrum/Oscilloscope/Sine-owned files before cross-mode bleed turns into a live regression.
+  - This test is intentionally not the whole story: the intentionally shared seams still need targeted behavior tests and live validation.
+- **Blob reactivity tests**:
+  - `tests/test_visualizer_reactivity_quality.py` now also fences the non-shaped Blob stage ladder against dynamic-floor pressure and fast drum-like support so stage `2/3` do not quietly go back to sleep.
 
 ### Stability Rules
 
@@ -557,9 +562,13 @@ When writing tests that create `DisplayWidget` or start transitions:
 - `tests/test_blob_shaper_plumbing.py`
   This is the direct non-visual contract fence for Blob Shaper authoring/runtime parity: model keys, preset/save payload seams, duplicate-angle wrap handling, top-origin angular routing (`0.0 = top`), reaction-canvas-authoritative runtime routing with legacy base fallback, dedicated shaper-drive band blending, broadened/smoothed routing fields, moderate-energy shaper-drive visibility, base-resting drive behavior, and the rule that shaper idle/paused state must not keep wobbling the authored silhouette away from the GUI.
   It also now guards the latest solved-contour contract directly: overlapping local signed contributors must not numerically average the shaper back toward base just because different authored nodes are active together. Arrow direction is interpreted relative to the authored local reaction direction (so inward-authored dips can be driven inward correctly), opposite-direction travel is clamped to a tighter safe inward target instead of mirroring large outward deltas through the center, larger authored gaps require more local energy to fully reach/hold, positive drive can overshoot slightly beyond the authored reaction contour on kicks, and shaper-active playback resolves to one CPU-solved runtime profile that the shader renders directly. The suite now includes deterministic continuity checks on the solved contour itself, a tougher inward-directed angular continuity scenario, a direct shader-contract check for `u_blob_runtime_profile`, and a time-series motion fence with a meaningful minimum delta so "Blob still moves smoothly under shaper playback" is reproducible without relying only on screenshots.
+  It is also the direct shaped/unshaped bleed fence: shaper residual motion must answer to `blob_shaper_idle_motion` / `blob_shaper_audio_motion`, not to the unshaped wobble knobs (`blob_constant_wobble` / `blob_reactive_wobble`).
+- `tests/test_blob_pockets.py`
+  This is the direct non-shaped concurrent-pocket fence. It guards rapid-hit slot rotation, parallel pocket survival during release, shaped-mode suppression, and the rule that same-frame repeat hits cannot spam one pocket forever. It exists specifically to keep the new rapid-hit Blob path additive rather than silently collapsing back into one shared decay bucket.
 - Active targeted suites for the current blob/preset/settings work:
   - `python -m pytest tests/test_visualizer_presets.py tests/test_visualizer_preset_manifest.py tests/test_settings_dialog.py tests/test_settings_defaults_parity.py -q`
   - `python -m pytest tests/test_blob_shaper_plumbing.py -q`
+  - `python -m pytest tests/test_blob_pockets.py -q`
   - `python -m pytest tests/test_visualizer_reactivity_quality.py -k "blob" -q`
   - `python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "blob" -q`
   - `python -m pytest tests/test_blob_shaper_plumbing.py tests/test_visualizer_reactivity_quality.py -k "blob" -q`
@@ -577,6 +586,7 @@ When writing tests that create `DisplayWidget` or start transitions:
   This suite should prefer real model/applier/creator/frame-push behavior checks over source-text assertions. A few static contract checks remain where GL/shader runtime surfaces are impractical.
 It is also now the direct regression fence for extracted WidgetsTab adapters (`spectrum_settings_binding.py`, `blob_settings_binding.py`, `bubble_settings_binding.py`, `oscilloscope_settings_binding.py`, `sine_wave_settings_binding.py`) and for `core/settings/visualizer_settings_contract.py` plus `core/settings/visualizer_settings_snapshot.py`, so coordinator-shrinking refactors and sparse-mapping/SST contract work stay behavior-safe.
 It is also now a direct guard for the Spectrum Energy Arrows contract: the lane-native maps emitted by `spectrum_settings_binding.py` must survive save/load and creator/applier translation without leaking `spectrum_bass_emphasis`, `spectrum_mid_suppression`, or `spectrum_vocal_position` back into authored runtime state.
+  Blob coverage here now also includes the new shaper-only residual controls so load/save, creator/applier translation, and frame-push state cannot silently drop or alias `blob_shaper_idle_motion` / `blob_shaper_audio_motion`.
   Bubble gradient semantics coverage also lives here now: legacy-label migration, `center_out_reverse`, and canonical shader-vector/mode mapping are tested without relying on visual inspection alone.
 - `tests/test_s_hotkey_workflow.py` and `tests/test_flicker_fix_integration.py`
   Minimum regression bar for the now-resolved settings flicker / settings-launch workflow.

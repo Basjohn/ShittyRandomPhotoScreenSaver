@@ -40,6 +40,9 @@ uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward
 uniform float u_blob_stretch_inner;  // 0..1 how deep inward dents can go (default 0.5)
 uniform float u_blob_stretch_outer;  // 0..1 how far outward protrusions extend (default 0.5)
 uniform vec3 u_blob_stage_progress_override;  // (-1,-1,-1) when unused
+const int BLOB_POCKET_COUNT = 6;
+uniform vec4 u_blob_pockets[BLOB_POCKET_COUNT];    // angle_frac, amplitude, width, phase
+uniform vec4 u_blob_pocket_mix[BLOB_POCKET_COUNT]; // bass, mid, high, transient
 uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 uniform float u_ghost_alpha;           // 0 = no ghost, >0 = ghost outline intensity
@@ -103,6 +106,49 @@ float sample_smoothed_linear_series(float angle_frac, float profile[SHAPER_N]) {
         sample_linear_series(angle_frac, profile) * 0.50 +
         sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, profile) * 0.25 +
         sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, profile) * 0.25;
+}
+
+float cyclic_diff_frac(float a, float b) {
+    float diff = abs(a - b);
+    return min(diff, 1.0 - diff);
+}
+
+float compute_blob_pocket_component(
+    float angle_frac,
+    float bass_energy,
+    float mid_energy,
+    float high_energy,
+    float overall_energy,
+    float smoothed_e)
+{
+    float total = 0.0;
+    for (int i = 0; i < BLOB_POCKET_COUNT; ++i) {
+        vec4 pocket = u_blob_pockets[i];
+        vec4 mixv = u_blob_pocket_mix[i];
+        float amplitude = pocket.y;
+        if (amplitude <= 0.001) {
+            continue;
+        }
+        float width = max(0.05, pocket.z);
+        float diff = cyclic_diff_frac(angle_frac, pocket.x);
+        float lobe = 1.0 - smoothstep(width * 0.24, width, diff);
+        if (lobe <= 0.0) {
+            continue;
+        }
+        float drive = clamp(
+            bass_energy * mixv.x +
+            mid_energy * mixv.y +
+            high_energy * mixv.z +
+            smoothed_e * mixv.w +
+            overall_energy * 0.10,
+            0.0,
+            1.8
+        );
+        float ripple_phase = pocket.w + diff / max(width, 0.001) * 2.6;
+        float ripple = 0.84 + 0.16 * sin(ripple_phase);
+        total += amplitude * drive * lobe * ripple;
+    }
+    return total;
 }
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
@@ -332,6 +378,19 @@ float blob_sdf_ex(vec2 p, float time,
         stretch += sin(motion_angle * 3.0 - time * 1.3)  * bass_support * bass_support * 0.26;
         stretch += sin(motion_angle * 7.0 - time * 0.5)  * e_high * 0.10;
         stretch_component += stretch * st;
+    }
+
+    if (u_blob_shaper_enabled == 0) {
+        float pocket_component = compute_blob_pocket_component(
+            angle_frac,
+            e_bass,
+            e_mid,
+            e_high,
+            e_overall,
+            se
+        );
+        stretch_component += pocket_component * 0.148;
+        wobble_component += pocket_component * 0.016;
     }
 
     // Scale total deformation by reactive deformation factor

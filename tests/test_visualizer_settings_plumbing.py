@@ -2289,6 +2289,8 @@ class TestSineWaveSettingsBinding:
                 self.sine_reactive_glow = _Check()
                 self.sine_sensitivity = _Slider()
                 self.sine_sensitivity_label = _Label()
+                self.sine_smoothing = _Slider()
+                self.sine_smoothing_label = _Label()
                 self.sine_speed = _Slider()
                 self.sine_speed_label = _Label()
                 self.sine_wave_effect = _Slider()
@@ -2357,6 +2359,7 @@ class TestSineWaveSettingsBinding:
                 "sine_line_color": [5, 6, 7, 8],
                 "sine_reactive_glow": False,
                 "sine_sensitivity": 1.8,
+                "sine_smoothing": 0.64,
                 "sine_speed": 0.73,
                 "sine_wave_effect": 0.22,
                 "sine_micro_wobble": 0.16,
@@ -2397,6 +2400,8 @@ class TestSineWaveSettingsBinding:
         assert tab.sine_reactive_glow.checked is False
         assert tab.sine_sensitivity.value == 180
         assert tab.sine_sensitivity_label.text == "1.80x"
+        assert tab.sine_smoothing.value == 64
+        assert tab.sine_smoothing_label.text == "64%"
         assert tab.sine_speed.value == 73
         assert tab.sine_wave_effect.value == 22
         assert tab.sine_micro_wobble.value == 16
@@ -2468,6 +2473,7 @@ class TestSineWaveSettingsBinding:
             _sine_line_color = QColor(5, 6, 7, 8)
             sine_reactive_glow = _Check(False)
             sine_sensitivity = _Slider(175)
+            sine_smoothing = _Slider(63)
             sine_speed = _Slider(82)
             sine_wave_effect = _Slider(17)
             sine_crawl_slider = _Slider(46)
@@ -2508,6 +2514,7 @@ class TestSineWaveSettingsBinding:
         assert payload["sine_line_color"] == [5, 6, 7, 8]
         assert payload["sine_reactive_glow"] is False
         assert payload["sine_sensitivity"] == pytest.approx(1.75)
+        assert payload["sine_smoothing"] == pytest.approx(0.63)
         assert payload["sine_speed"] == pytest.approx(0.82)
         assert payload["sine_wave_effect"] == pytest.approx(0.17)
         assert payload["sine_crawl_amount"] == pytest.approx(0.46)

@@ -18,6 +18,11 @@ from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+from widgets.spotify_visualizer.blob_pockets import (
+    advance_blob_pocket_state,
+    make_blob_pocket_state,
+    reset_blob_pocket_state,
+)
 from widgets.spotify_visualizer.blob_math import (
     compute_stage_progress,
 )
@@ -42,6 +47,8 @@ _ARRAY_UNIFORM_NAMES = {
     "u_blob_energy_vocals",
     "u_blob_energy_treble",
     "u_blob_energy_transient",
+    "u_blob_pockets",
+    "u_blob_pocket_mix",
 }
 
 
@@ -126,6 +133,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._energy_bands: EnergyBands = EnergyBands()
         # Transient energy (Approach A dual-path)
         self._transient_energy: TransientEnergyBands = TransientEnergyBands()
+        self._blob_pocket_state = make_blob_pocket_state()
 
         # Oscilloscope glow settings
         self._glow_enabled: bool = True
@@ -135,15 +143,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._glow_color: QColor = QColor(0, 200, 255, 230)
         self._line_color: QColor = QColor(255, 255, 255, 255)
         self._reactive_glow: bool = True
-        self._osc_line_amplitude: float = 3.0
-        self._osc_smoothing: float = 0.7
+        self._line_sensitivity: float = 3.0
+        self._line_smoothing: float = 0.7
 
         # Oscilloscope multi-line
-        self._osc_line_count: int = 1
-        self._osc_line2_color: QColor = QColor(255, 120, 50, 230)
-        self._osc_line2_glow_color: QColor = QColor(255, 120, 50, 180)
-        self._osc_line3_color: QColor = QColor(50, 255, 120, 230)
-        self._osc_line3_glow_color: QColor = QColor(50, 255, 120, 180)
+        self._line_count: int = 1
+        self._line2_color: QColor = QColor(255, 120, 50, 230)
+        self._line2_glow_color: QColor = QColor(255, 120, 50, 180)
+        self._line3_color: QColor = QColor(50, 255, 120, 230)
+        self._line3_glow_color: QColor = QColor(50, 255, 120, 180)
         self._osc_ghost_line2_enabled: bool = True
         self._osc_ghost_line3_enabled: bool = True
 
@@ -177,6 +185,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_shaper_enabled: bool = False
         self._blob_shaper_base_strength: float = 0.5
         self._blob_shaper_react_strength: float = 0.5
+        self._blob_shaper_idle_motion: float = 0.18
+        self._blob_shaper_audio_motion: float = 1.20
         self._blob_topology: str = "circle"
         self._blob_ring_thickness: float = 0.3
         self._blob_shape_base_nodes: list = [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]]
@@ -202,11 +212,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._continuous_floor_applied: float = 0.12
         self._continuous_floor_pressure: float = 0.0
         self._blob_seed_pending: bool = False
-        self._osc_speed: float = 1.0
-        self._osc_line_dim: bool = False  # optional half-strength dimming on lines 2/3
-        self._osc_line_offset_bias: float = 0.0
+        self._line_speed: float = 1.0
+        self._line_dim: bool = False  # optional half-strength dimming on lines 2/3
+        self._line_offset_bias: float = 0.0
         self._osc_vertical_shift: int = 0
-        self._osc_sine_travel: int = 0  # 0=none, 1=left, 2=right (used by sine_wave mode)
+        self._sine_wave_travel: int = 0  # 0=none, 1=left, 2=right
         self._sine_card_adaptation: float = 0.30
         self._sine_travel_line2: int = 0  # per-line travel: 0=none, 1=left, 2=right
         self._sine_travel_line3: int = 0
@@ -220,9 +230,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_line1_shift: float = 0.0
         self._sine_line2_shift: float = 0.0
         self._sine_line3_shift: float = 0.0
-        self._osc_smoothed_bass: float = 0.0  # CPU-side smoothed energy for osc glow
-        self._osc_smoothed_mid: float = 0.0
-        self._osc_smoothed_high: float = 0.0
+        self._line_smoothed_bass: float = 0.0  # CPU-side smoothed energy shared by line modes
+        self._line_smoothed_mid: float = 0.0
+        self._line_smoothed_high: float = 0.0
         self._sine_wave_transient_width_mix: float = 0.4
         self._osc_transient_width_mix: float = 0.35
         self._blob_transient_mix_bass: float = 0.5
@@ -369,9 +379,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._prev_waveform = []
             self._ghost_waveform_ring = []
             self._ghost_ring_idx = 0
-            self._osc_smoothed_bass = 0.0
-            self._osc_smoothed_mid = 0.0
-            self._osc_smoothed_high = 0.0
+            self._line_smoothed_bass = 0.0
+            self._line_smoothed_mid = 0.0
+            self._line_smoothed_high = 0.0
             # Sine ghost peak state: clear to prevent stale peaks on mode re-entry
             self._sine_peak_bass = 0.0
             self._sine_peak_mid = 0.0
@@ -424,6 +434,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_snare_event_strength = 0.0
         self._blob_kick_event_envelope = 0.0
         self._blob_snare_event_envelope = 0.0
+        self._blob_pocket_state = reset_blob_pocket_state(getattr(self, "_blob_pocket_state", None))
         self._blob_diag_last_ts = 0.0
         self._blob_diag_last_sig = None
 
@@ -455,8 +466,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         glow_reactivity: float = 1.0,
         glow_color: QColor | None = None,
         reactive_glow: bool = True,
-        osc_line_amplitude: float = 3.0,
-        osc_smoothing: float = 0.7,
+        line_sensitivity: float = 3.0,
+        line_smoothing: float = 0.7,
         blob_color: QColor | None = None,
         blob_glow_color: QColor | None = None,
         blob_edge_color: QColor | None = None,
@@ -481,11 +492,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_stretch_tendency: float = 0.35,
         blob_stretch_inner: float = 0.5,
         blob_stretch_outer: float = 0.5,
-        osc_speed: float = 1.0,
-        osc_line_dim: bool = False,
-        osc_line_offset_bias: float = 0.0,
+        line_speed: float = 1.0,
+        line_dim: bool = False,
+        line_offset_bias: float = 0.0,
         osc_vertical_shift: int = 0,
-        osc_sine_travel: int = 0,
+        sine_wave_travel: int = 0,
         sine_card_adaptation: float = 0.30,
         sine_travel_line2: int = 0,
         sine_travel_line3: int = 0,
@@ -500,11 +511,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         sine_density: float = 1.0,
         sine_displacement: float = 0.0,
         line_color: QColor | None = None,
-        osc_line_count: int = 1,
-        osc_line2_color: QColor | None = None,
-        osc_line2_glow_color: QColor | None = None,
-        osc_line3_color: QColor | None = None,
-        osc_line3_glow_color: QColor | None = None,
+        line_count: int = 1,
+        line2_color: QColor | None = None,
+        line2_glow_color: QColor | None = None,
+        line3_color: QColor | None = None,
+        line3_glow_color: QColor | None = None,
         osc_ghost_line2_enabled: bool = True,
         osc_ghost_line3_enabled: bool = True,
         single_piece: bool = False,
@@ -557,6 +568,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_shaper_enabled: bool = False,
         blob_shaper_base_strength: float = 0.5,
         blob_shaper_react_strength: float = 0.5,
+        blob_shaper_idle_motion: float = 0.18,
+        blob_shaper_audio_motion: float = 1.20,
         blob_topology: str = "circle",
         blob_ring_thickness: float = 0.3,
         blob_shape_base_nodes: list | None = None,
@@ -608,6 +621,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._sine_displacement = float(sine_displacement)
         except Exception:
             self._sine_displacement = 0.0
+        self._blob_stage2_release_ms = max(50.0, min(5000.0, float(blob_stage2_release_ms)))
+        self._blob_stage3_release_ms = max(50.0, min(5000.0, float(blob_stage3_release_ms)))
+        self._blob_pulse_cap = max(0.0, min(3.0, float(blob_pulse_cap)))
+        self._blob_pulse_release_ms = max(60.0, min(1500.0, float(blob_pulse_release_ms)))
 
         # Keep blob's live core, smoothed energy, peaks, and stage progress on
         # one coherent input snapshot per frame.
@@ -631,8 +648,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 blob_dt = self._compute_blob_smoothing_dt(dt_seconds)
                 blob_dt_seconds = blob_dt
                 hitch_clamped = dt_seconds > (blob_dt + 0.020)
-                kick_tau = 0.22 if blob_kick_raw < self._blob_kick_event_envelope else (0.08 if hitch_clamped else 0.05)
-                snare_tau = 0.18 if blob_snare_raw < self._blob_snare_event_envelope else (0.07 if hitch_clamped else 0.05)
+                kick_tau = 0.20 if blob_kick_raw < self._blob_kick_event_envelope else (0.07 if hitch_clamped else 0.028)
+                snare_tau = 0.16 if blob_snare_raw < self._blob_snare_event_envelope else (0.07 if hitch_clamped else 0.030)
                 kick_alpha = min(1.0, blob_dt / max(kick_tau, 0.01))
                 snare_alpha = min(1.0, blob_dt / max(snare_tau, 0.01))
                 self._blob_kick_event_envelope += (
@@ -663,16 +680,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # vocals do not hijack whole-body intensity, but retain a
                     # small overall contribution so the body never collapses
                     # into a twitchy near-off state between bass phrases.
-                    se_input = live_bass * 0.92 + live_overall * 0.08
+                    se_input = live_bass * 0.80 + live_mid * 0.08 + live_overall * 0.12
                     if se_input > prev:
                         # Magnitude-scaled rise: big jumps (kicks) snap fast,
                         # small wobbles (vocal flutter) get heavily damped.
                         _delta = se_input - prev
-                        _mag = min(1.0, _delta / 0.12)
-                        _rise_tau = 0.022 + (1.0 - _mag) * 0.10  # 22ms..122ms
+                        _mag = min(1.0, _delta / 0.10)
+                        _rise_tau = 0.014 + (1.0 - _mag) * 0.060  # 14ms..74ms
                         alpha = min(1.0, blob_dt / _rise_tau)
                     else:
-                        alpha = min(1.0, blob_dt / 0.35)
+                        alpha = min(1.0, blob_dt / 0.26)
                     self._blob_smoothed_energy = prev + (se_input - prev) * alpha
                     glow_prev = float(getattr(self, "_blob_glow_energy", prev) or 0.0)
                     if getattr(self, "_blob_glow_drive_mode", "bass") == "vocal":
@@ -738,9 +755,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 # Oscilloscope / Sine Wave: smooth per-band energy for glow anti-flicker
                 if self._vis_mode in ('oscilloscope', 'sine_wave') and energy_bands is not None:
                     for attr, band in (
-                        ('_osc_smoothed_bass', 'bass'),
-                        ('_osc_smoothed_mid', 'mid'),
-                        ('_osc_smoothed_high', 'high'),
+                        ('_line_smoothed_bass', 'bass'),
+                        ('_line_smoothed_mid', 'mid'),
+                        ('_line_smoothed_high', 'high'),
                     ):
                         raw_e = getattr(energy_bands, band, 0.0)
                         prev = getattr(self, attr)
@@ -772,7 +789,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         self._sine_peak_bass += (raw_bass - self._sine_peak_bass) * da
                         self._sine_peak_mid += (raw_mid - self._sine_peak_mid) * da
                         self._sine_peak_high += (raw_high - self._sine_peak_high) * da
-                    min_off = max(0.40, self._osc_smoothed_bass * 0.50)
+                    min_off = max(0.40, self._line_smoothed_bass * 0.50)
                     self._sine_peak_bass = max(self._sine_peak_bass, raw_bass + min_off)
                     self._sine_peak_mid = max(self._sine_peak_mid, raw_mid + min_off * 0.90)
                     self._sine_peak_high = max(self._sine_peak_high, raw_high + min_off * 0.80)
@@ -787,9 +804,39 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 self._blob_raw_mid_energy = blob_live_bands[1]
                 self._blob_raw_high_energy = blob_live_bands[2]
                 self._blob_raw_overall_energy = blob_live_bands[3]
+        if self._vis_mode == 'blob':
+            pocket_bass, pocket_mid, pocket_high, pocket_overall = (
+                blob_live_bands_filtered
+                if blob_live_bands_filtered is not None
+                else blob_live_bands
+                if blob_live_bands is not None
+                else (
+                    self._blob_live_bass_energy,
+                    self._blob_live_mid_energy,
+                    self._blob_live_high_energy,
+                    self._blob_live_overall_energy,
+                )
+            )
+            transient = getattr(self, "_transient_energy", None)
+            self._blob_pocket_state = advance_blob_pocket_state(
+                getattr(self, "_blob_pocket_state", None),
+                dt=blob_dt_seconds if blob_dt_seconds > 0.0 else dt_seconds,
+                time_seconds=now_ts,
+                playing=playing,
+                shaper_enabled=bool(getattr(self, "_blob_shaper_enabled", False)),
+                kick_raw=blob_kick_raw,
+                snare_raw=blob_snare_raw,
+                bass_transient=float(getattr(transient, "bass_transient", 0.0) if transient else 0.0),
+                mid_transient=float(getattr(transient, "mid_transient", 0.0) if transient else 0.0),
+                high_transient=float(getattr(transient, "high_transient", 0.0) if transient else 0.0),
+                bass_energy=float(pocket_bass),
+                mid_energy=float(pocket_mid),
+                high_energy=float(pocket_high),
+                overall_energy=float(pocket_overall),
+            )
         self._last_time_ts = now_ts
 
-        # Store waveform data (oscilloscope) with temporal smoothing via osc_speed
+        # Store waveform data (line modes) with temporal smoothing via line_speed
         if waveform is not None:
             # Push current waveform into ghost ring buffer before updating
             if self._waveform and self._osc_ghost_alpha > 0.001:
@@ -804,7 +851,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 self._prev_waveform = ring[oldest_idx] if len(ring) > 0 else []
                 self._ghost_ring_idx = (self._ghost_ring_idx + 1) % max(1, delay)
             new_wf = list(waveform)
-            speed = self._osc_speed
+            speed = self._line_speed
             if speed < 0.99 and len(self._waveform) == len(new_wf) and len(new_wf) > 0:
                 # Blend: low speed = slow change, high speed = instant update
                 # alpha = speed^2 makes low values feel genuinely slow
@@ -931,19 +978,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if line_color is not None:
             self._line_color = QColor(line_color)
         self._reactive_glow = bool(reactive_glow)
-        self._osc_line_amplitude = max(0.5, min(10.0, float(osc_line_amplitude)))
-        self._osc_smoothing = max(0.0, min(1.0, float(osc_smoothing)))
+        self._line_sensitivity = max(0.5, min(10.0, float(line_sensitivity)))
+        self._line_smoothing = max(0.0, min(1.0, float(line_smoothing)))
 
         # Multi-line oscilloscope
-        self._osc_line_count = max(1, min(3, int(osc_line_count)))
-        if osc_line2_color is not None:
-            self._osc_line2_color = QColor(osc_line2_color)
-        if osc_line2_glow_color is not None:
-            self._osc_line2_glow_color = QColor(osc_line2_glow_color)
-        if osc_line3_color is not None:
-            self._osc_line3_color = QColor(osc_line3_color)
-        if osc_line3_glow_color is not None:
-            self._osc_line3_glow_color = QColor(osc_line3_glow_color)
+        self._line_count = max(1, min(3, int(line_count)))
+        if line2_color is not None:
+            self._line2_color = QColor(line2_color)
+        if line2_glow_color is not None:
+            self._line2_glow_color = QColor(line2_glow_color)
+        if line3_color is not None:
+            self._line3_color = QColor(line3_color)
+        if line3_glow_color is not None:
+            self._line3_glow_color = QColor(line3_glow_color)
         self._osc_ghost_line2_enabled = bool(osc_ghost_line2_enabled)
         self._osc_ghost_line3_enabled = bool(osc_ghost_line3_enabled)
 
@@ -984,6 +1031,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_shaper_enabled = bool(blob_shaper_enabled)
         self._blob_shaper_base_strength = max(0.0, min(1.0, float(blob_shaper_base_strength)))
         self._blob_shaper_react_strength = max(0.0, min(1.0, float(blob_shaper_react_strength)))
+        self._blob_shaper_idle_motion = max(0.0, min(2.0, float(blob_shaper_idle_motion)))
+        self._blob_shaper_audio_motion = max(0.0, min(3.0, float(blob_shaper_audio_motion)))
         _topo = str(blob_topology).strip().lower()
         self._blob_topology = _topo if _topo in {'circle', 'ring'} else 'circle'
         self._blob_ring_thickness = max(0.05, min(1.0, float(blob_ring_thickness)))
@@ -993,11 +1042,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_shape_reaction_nodes = blob_shape_reaction_nodes
         if blob_shape_energy_nodes is not None:
             self._blob_shape_energy_nodes = blob_shape_energy_nodes
-        self._osc_speed = max(0.01, min(1.0, float(osc_speed)))
-        self._osc_line_dim = bool(osc_line_dim)
-        self._osc_line_offset_bias = max(0.0, min(1.0, float(osc_line_offset_bias)))
+        self._line_speed = max(0.01, min(1.0, float(line_speed)))
+        self._line_dim = bool(line_dim)
+        self._line_offset_bias = max(0.0, min(1.0, float(line_offset_bias)))
         self._osc_vertical_shift = max(-50, min(200, int(osc_vertical_shift)))
-        self._osc_sine_travel = max(0, min(2, int(osc_sine_travel)))
+        self._sine_wave_travel = max(0, min(2, int(sine_wave_travel)))
         self._sine_card_adaptation = max(0.05, min(1.0, float(sine_card_adaptation)))
         self._sine_travel_line2 = max(0, min(2, int(sine_travel_line2)))
         self._sine_travel_line3 = max(0, min(2, int(sine_travel_line3)))
@@ -1055,7 +1104,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     round(float(self._glow_intensity), 3),
                     round(float(self._glow_reactivity), 3),
                     int(self._reactive_glow),
-                    int(self._osc_line_count),
+                    int(self._line_count),
                     int(self._osc_ghost_line2_enabled),
                     int(self._osc_ghost_line3_enabled),
                     round(float(getattr(self._energy_bands, 'bass', 0.0) or 0.0), 3),
@@ -1088,7 +1137,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         self._glow_intensity,
                         self._glow_reactivity,
                         self._reactive_glow,
-                        int(self._osc_line_count),
+                        int(self._line_count),
                         self._osc_ghost_line2_enabled,
                         self._osc_ghost_line3_enabled,
                         float(getattr(self._energy_bands, 'bass', 0.0) or 0.0),
@@ -1560,15 +1609,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 max(0.08, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 0.75),
             ),  # bass: fast rise, user-shaped release
             (
-                0.028,
+                0.018,
                 max(0.10, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 1.00),
             ),  # mid: most visually obvious deformation path
             (
-                0.025,
+                0.017,
                 max(0.08, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 0.85),
             ),  # high: sparkle without chatter
             (
-                0.028,
+                0.022,
                 max(0.12, float(getattr(self, '_blob_pulse_release_ms', 220.0) or 220.0) / 1000.0 * 1.15),
             ),  # overall: stage/size support
         )
@@ -1582,7 +1631,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 if idx == 0 or idx == 3:
                     _d = cur_val - prev_val
                     _m = min(1.0, _d / 0.10)
-                    tau = rise_tau + (1.0 - _m) * rise_tau * 3.0
+                    tau = rise_tau + (1.0 - _m) * rise_tau * 1.9
                 else:
                     tau = rise_tau
             else:
@@ -1635,10 +1684,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if pressure <= 0.001:
             return (bass, mid, high, overall)
 
-        body_trim = 0.02 + pressure * 0.07
-        body_gain = 1.0 + pressure * 0.55
-        wobble_trim = body_trim * 0.35
-        wobble_gain = 1.0 + pressure * 0.22
+        body_trim = 0.012 + pressure * 0.042
+        body_gain = 1.0 + pressure * 0.38
+        wobble_trim = body_trim * 0.18
+        wobble_gain = 1.0 + pressure * 0.15
 
         def _reshape(value: float, trim: float, gain: float) -> float:
             value = max(0.0, float(value))
@@ -1824,20 +1873,26 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_diag_transient_high = transient_high
         pulse_cap_raw = getattr(self, '_blob_pulse_cap', 1.0)
         pulse_cap_scale = max(0.0, min(2.0, float(1.0 if pulse_cap_raw is None else pulse_cap_raw)))
-        support_bass = min(clamp_max, base_bass + transient_bass * 0.65)
+        support_bass = min(clamp_max, base_bass + transient_bass * 0.88)
         support_mid = min(clamp_max, base_mid + transient_mid * 0.55)
         support_high = min(clamp_max, base_high + transient_high * 0.45)
         support_overall = min(
             clamp_max,
             max(
                 base_overall,
-                support_bass * 0.50 + base_overall * 0.36 + support_mid * 0.10 + support_high * 0.04,
+                support_bass * 0.54 + base_overall * 0.30 + support_mid * 0.11 + support_high * 0.05,
             ),
+        )
+        pre_rebalance_support = (
+            support_bass,
+            support_mid,
+            support_high,
+            support_overall,
         )
         cap_unit = (
             0.035
             + base_overall * 0.10
-            + transient_bass * 0.12
+            + transient_bass * 0.16
             + transient_mid * 0.08
             + transient_high * 0.05
         ) * pulse_cap_scale
@@ -1848,6 +1903,35 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             support_high,
             support_overall,
         )
+        pressure = self._get_blob_floor_pressure()
+        stage_support_bass = min(
+            clamp_max,
+            max(
+                support_bass,
+                pre_rebalance_support[0] * (0.84 + pressure * 0.16),
+            ),
+        )
+        stage_support_mid = min(
+            clamp_max,
+            max(
+                support_mid,
+                pre_rebalance_support[1] * (0.88 + pressure * 0.12),
+            ),
+        )
+        stage_support_high = min(
+            clamp_max,
+            max(
+                support_high,
+                pre_rebalance_support[2] * (0.90 + pressure * 0.10),
+            ),
+        )
+        stage_support_overall = min(
+            clamp_max,
+            max(
+                support_overall,
+                pre_rebalance_support[3] * (0.86 + pressure * 0.14),
+            ),
+        )
 
         # Live silhouette: keep bass/overall on the continuous path so whole-blob
         # pulse remains calm, while events mostly show up in the stretch/wobble bands.
@@ -1855,19 +1939,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         mid = min(
             clamp_max,
             support_mid
-            + snare_drive * 0.90
-            + kick_drive * 0.16,
+            + snare_drive * 1.18
+            + kick_drive * 0.22,
         )
         high = min(
             clamp_max,
             support_high
-            + snare_drive * 0.58
-            + kick_drive * 0.08,
+            + snare_drive * 0.82
+            + kick_drive * 0.12,
         )
         overall = min(
             clamp_max,
             support_overall
-            + kick_drive * 0.08
+            + kick_drive * 0.12
             + snare_drive * 0.03,
         )
 
@@ -1879,28 +1963,28 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Stage-driving support should stay rooted in the same continuous bass path
         # as the live silhouette, but kicks need a less punitive gate than the
         # old over-damped stage branch or normal musical phrases never register.
-        stage_bass_support = min(clamp_max, support_bass * 0.96 + base_bass * 0.10)
+        stage_bass_support = min(clamp_max, stage_support_bass * 0.94 + base_bass * 0.10 + transient_bass * 0.18)
         stage_kick_guard = _clamp01((kick_support - 0.02) / 0.24)
-        stage_kick_boost = kick_evt * stage_kick_guard * (0.08 + kick_support * 0.32)
+        stage_kick_boost = kick_evt * stage_kick_guard * (0.10 + kick_support * 0.40)
         stage_overall = max(
             base_overall,
-            support_overall,
-            stage_bass_support * 0.80 + support_overall * 0.20 + stage_kick_boost * 1.35,
+            stage_support_overall,
+            stage_bass_support * 0.62 + stage_support_overall * 0.30 + transient_bass * 0.18 + stage_kick_boost * 1.75,
         )
-        stage_overall_cap = support_overall + cap_unit * (1.10 + stage_kick_guard * 0.45)
+        stage_overall_cap = stage_support_overall + cap_unit * (1.55 + stage_kick_guard * 0.65)
         stage_overall = min(
             clamp_max,
             max(base_overall, min(stage_overall, stage_overall_cap)),
         )
-        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 1.65)
-        stage_bass = min(stage_bass, support_bass + cap_unit * (1.20 + stage_kick_guard * 0.55))
+        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 2.00)
+        stage_bass = min(stage_bass, stage_support_bass + cap_unit * (1.55 + stage_kick_guard * 0.70))
         stage_mid = min(
             stage_overall,
-            base_mid * 0.18 + transient_mid * 0.12 + snare_drive * 0.18 + kick_drive * 0.06,
+            stage_support_mid * 0.22 + base_mid * 0.18 + transient_mid * 0.22 + snare_drive * 0.34 + kick_drive * 0.10,
         )
         stage_high = min(
-            stage_overall * 0.70,
-            base_high * 0.16 + transient_high * 0.08 + snare_drive * 0.12 + kick_drive * 0.04,
+            stage_overall * 0.76,
+            stage_support_high * 0.16 + base_high * 0.18 + transient_high * 0.14 + snare_drive * 0.23 + kick_drive * 0.07,
         )
         self._blob_stage_input_bass = stage_bass
         self._blob_stage_input_mid = stage_mid
@@ -1986,7 +2070,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_osc_speed", "u_osc_line_dim",
                     "u_osc_line_offset_bias",
                     "u_osc_vertical_shift",
-                    "u_osc_sine_travel",
                     "u_sine_speed", "u_sine_line_dim",
                     "u_sine_line_offset_bias",
                     "u_sine_vertical_shift",
