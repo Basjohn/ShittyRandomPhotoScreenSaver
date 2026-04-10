@@ -64,14 +64,20 @@ tests/
   - `tests/test_visualizer_presets.py` now also guards the repair-tool mutation workflow: curated-source repairs/reindexes must trigger shipped-artifact regeneration, and reindex must preserve authored suffix text instead of reviving old static names.
   - `tests/test_visualizer_settings_plumbing.py` now also carries the Spectrum lane-contract fence: drifted legacy `Bass / Low / Mid / Hi-Mid / Treble` linear families must be promoted to `Bass / Low-Mid / Vocal / Hi-Mid / Treble` without flattening the user's boundary positions, and the new mirrored/linear lane-strength arrow maps must persist cleanly through model -> creator/applier -> runtime bridge without reviving retired scalar lane keys.
   - `tests/test_visualizer_preset_cycling_runtime.py` is the runtime fence for live preset stepping: middle-click/back-button cycling must update the active preset index, reset transient visualizer state, and preserve the `Custom -> curated -> Custom` snapshot/restore contract through `WidgetManager` rather than only through the settings UI.
+  - it now also fences the preset-switch hitch mitigation: runtime cycling must apply the live preset immediately while deferring/coalescing disk persistence, and stale deferred saves must not overwrite newer cycles.
   - it must not freeze curated artistic choices such as filenames, pack size, slot labels, or payload tuning; those remain authored content, not rigid regression targets.
   - the old temporary `Preset 1` synthetic migration fence has been retired. Keep preset regression structural: schema hygiene, repair/reindex correctness, source/release parity, and runtime bridge agreement.
   - baseline/recovery work is only considered safe when the curated audit, shipped-tree regeneration, and runtime creator-bridge fence are all green together. Do not use one passing suite to assume the others are implicitly safe.
 - **Visualizer isolation tests**:
   - `tests/test_visualizer_mode_isolation.py` is the static fence for dedicated per-mode renderer/math modules. It should catch foreign runtime-token drift in Blob/Bubble/Spectrum/Oscilloscope/Sine-owned files before cross-mode bleed turns into a live regression.
   - This test is intentionally not the whole story: the intentionally shared seams still need targeted behavior tests and live validation.
+- `tests/test_spotify_visualizer_widget.py` now also carries a shared-seam behavior fence: if a mode's technical cache entry is missing, the widget must no-op instead of replaying another mode's cached technical config, and explicit mode switches must restore each mode's own floor/sensitivity/block/input/transient state when switching away and back.
+- `tests/test_spotify_visualizer_widget.py` now also fences the shared beat-engine rebuild contract directly: changing bar count must reconfigure the existing shared engine instead of quietly swapping to a warmed alternate engine object, so startup and runtime stay on the same rebuild path.
+- `tests/test_visualizer_settings_plumbing.py` now also fences the GPU-payload seam itself: active mode payloads must not carry unrelated Blob/line/bubble extras just because the GL overlay accepts a wide `set_state(...)` signature.
+- `tests/test_ghost_isolation.py` now also fences overlay mode-switch runtime state: Spectrum peak memory must reset on Spectrum re-entry instead of inheriting foreign-mode bar history, non-Spectrum frames must not mutate `_peaks`, and line-mode resets must clear waveform ring/count buffers.
 - **Blob reactivity tests**:
   - `tests/test_visualizer_reactivity_quality.py` now also fences the non-shaped Blob stage ladder against dynamic-floor pressure and fast drum-like support so stage `2/3` do not quietly go back to sleep.
+  - It now also includes a direct transient-stage regression for the real failure we saw in runtime: `test_blob_transient_rich_snare_phrase_can_seed_stage_progress` exists to catch the case where a visible drum hit deforms locally but still fails to wake stage `1`.
 
 ### Stability Rules
 

@@ -455,6 +455,8 @@ class TestConfigApplier:
 
         assert widget._sine_width_reaction == pytest.approx(0.61)
         assert extra["sine_width_reaction"] == pytest.approx(0.61)
+        assert "blob_color" not in extra
+        assert "bubble_pos_data" not in extra
 
     def test_blob_pulse_controls_applied_and_pushed(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
@@ -493,6 +495,8 @@ class TestConfigApplier:
         assert extra["blob_pulse_cap"] == pytest.approx(1.65)
         assert extra["blob_pulse_release_ms"] == pytest.approx(1320.0)
         assert extra["blob_glow_drive_mode"] == "vocal"
+        assert "line_sensitivity" not in extra
+        assert "bubble_pos_data" not in extra
 
     def test_blob_gpu_push_includes_floor_snapshot_from_engine(self):
         from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
@@ -636,6 +640,8 @@ class TestConfigApplier:
         extra = build_gpu_push_extra_kwargs(DummyWidget(), "bubble", None)
         for key in ("bubble_pos_data", "bubble_extra_data", "bubble_count"):
             assert key in extra
+        assert "blob_color" not in extra
+        assert "line_sensitivity" not in extra
 
     def test_config_applier_accepts_gradient_direction(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs

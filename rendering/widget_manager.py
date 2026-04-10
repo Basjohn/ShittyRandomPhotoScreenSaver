@@ -33,6 +33,7 @@ from core.settings.visualizer_presets import (
     VISUALIZER_CUSTOM_STORAGE_KEY,
 )
 from core.settings.visualizer_mode_registry import get_preset_key
+from core.threading.manager import ThreadManager
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
 from rendering.widget_factories import WidgetFactoryRegistry
@@ -70,6 +71,7 @@ class WidgetManager:
     
     # Rate limit for raise operations (ms)
     RAISE_RATE_LIMIT_MS = 100
+    PRESET_PERSIST_DELAY_MS = 120
     
     def __init__(self, parent: "DisplayWidget", resource_manager: Optional[ResourceManager] = None):
         """
@@ -117,6 +119,7 @@ class WidgetManager:
         
         # Spotify visibility sync state
         self._pending_spotify_visibility_sync: bool = False
+        self._visualizer_preset_save_token: int = 0
         
         logger.debug("[WIDGET_MANAGER] Initialized")
 
@@ -494,7 +497,7 @@ class WidgetManager:
         full_widgets = dict(widgets_cfg)
         full_widgets['spotify_visualizer'] = vis_config
         settings.set('widgets', full_widgets)
-        settings.save()
+        self._schedule_visualizer_preset_save()
         # Immediately push the refreshed config to the live widget so mode-specific
         # colors (fill/border) and other visual properties take effect without
         # waiting for the async settings-changed bridge.
@@ -512,6 +515,48 @@ class WidgetManager:
             next_idx,
         )
         return True
+
+    def _schedule_visualizer_preset_save(self) -> None:
+        """Coalesce runtime preset-cycle persistence so repeated taps do not stall rendering."""
+        settings = self._settings_manager
+        if settings is None:
+            return
+
+        self._visualizer_preset_save_token += 1
+        token = self._visualizer_preset_save_token
+        try:
+            ThreadManager.single_shot(
+                self.PRESET_PERSIST_DELAY_MS,
+                self._flush_visualizer_preset_save,
+                token,
+            )
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Failed to schedule deferred visualizer preset save; saving immediately",
+                exc_info=True,
+            )
+            try:
+                settings.save()
+            except Exception:
+                logger.debug(
+                    "[WIDGET_MANAGER] Immediate visualizer preset save failed",
+                    exc_info=True,
+                )
+
+    def _flush_visualizer_preset_save(self, token: int) -> None:
+        """Persist the latest runtime preset-cycle state if no newer cycle superseded it."""
+        if token != self._visualizer_preset_save_token:
+            return
+        settings = self._settings_manager
+        if settings is None:
+            return
+        try:
+            settings.save()
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Deferred visualizer preset save failed",
+                exc_info=True,
+            )
 
     def raise_all(self, force: bool = False) -> None:
         """

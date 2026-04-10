@@ -808,9 +808,10 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
     if mode_str == 'spectrum':
         return extra
-
-    _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
-    _append_blob_visual_extras(extra, widget)
-    if mode_str == 'bubble':
+    if mode_str in {'sine_wave', 'oscilloscope'}:
+        _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
+    elif mode_str == 'blob':
+        _append_blob_visual_extras(extra, widget)
+    elif mode_str == 'bubble':
         _append_bubble_visual_extras(extra, widget)
     return extra

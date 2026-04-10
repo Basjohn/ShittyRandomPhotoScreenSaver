@@ -887,14 +887,7 @@ class SpotifyVisualizerWidget(QWidget):
         if not self._technical_config_cache:
             return None
         mode_key = mode.name.lower()
-        config = self._technical_config_cache.get(mode_key)
-        if config is None:
-            # Fallback to the first cached entry
-            try:
-                config = next(iter(self._technical_config_cache.values()))
-            except StopIteration:
-                return None
-        return config
+        return self._technical_config_cache.get(mode_key)
 
     def _apply_technical_config_for_mode(self, mode: VisualizerMode, *, reason: str) -> None:
         config = self._get_mode_technical_config(mode)
@@ -1001,13 +994,7 @@ class SpotifyVisualizerWidget(QWidget):
         if new_count == self._bar_count:
             return
         was_enabled = self._enabled
-        old_engine = self._engine
-        if was_enabled and old_engine is not None:
-            try:
-                old_engine.release()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to release old beat engine during resize", exc_info=True)
-        self._engine = None
+        engine = self._engine
         self._bar_count = new_count
         self._display_bars = [0.0] * new_count
         self._target_bars = [0.0] * new_count
@@ -1025,7 +1012,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._waiting_for_fresh_engine_frame = True
         self._waiting_for_fresh_frame = True
         try:
-            engine = get_shared_spotify_beat_engine(new_count)
+            if engine is None:
+                engine = get_shared_spotify_beat_engine(new_count)
+            else:
+                engine.reconfigure_bar_count(new_count)
             self._engine = engine
             if self._thread_manager is not None:
                 engine.set_thread_manager(self._thread_manager)

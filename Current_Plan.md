@@ -72,6 +72,7 @@ Spectrum now uses lane-native vertical energy arrows in the shaper as the real a
 - [ ] Decide whether Spectrum should keep the recommended/manual sensitivity toggle at all or collapse fully to a single manual slider path
 - [ ] Keep shimmer-at-mid-height as a defined tuning target rather than a vibe-based cleanup
 - [ ] Defer shimmer assessment/fix until the rest of this plan has landed cleanly, but do not defer ordinary consolidation work that can proceed safely now
+- [ ] When shimmer/flicker work starts, add a behavior-level reactivity regression test in the same spirit as the Blob stage-seeding test so the failure is reproducible without relying only on manual runs
 
 What landed in this pass:
 - Spectrum authored Audio copy now explicitly separates creative motion controls from Technical signal tuning
@@ -92,6 +93,8 @@ Captured tuning notes:
 
 Runtime watch note:
 - [~] Runtime preset cycling now shares the Custom-slot snapshot/restore contract with the settings UI. Keep watching for intermittent reports where cycling `Custom -> curated -> ... -> Custom` appears to inherit the previously viewed curated slot, especially in Spectrum and especially during live runtime rather than in the settings dialog.
+- [~] Runtime preset cycling no longer blocks the hot path on an immediate settings JSON flush; keep watching for reports where specific preset edges still feel much slower than a full reset, especially if the hitch only appears once per cycle and then clears after a full pass.
+- [~] Runtime preset cycling no longer spins up hidden bar-count-specific beat-engine/worker variants. The shared beat engine now rebuilds bar-count state through one startup/runtime-parity path instead of farming warmed alternate engines, but this still needs live validation against the once-per-cycle slow-switch symptom.
 
 User guidance to preserve:
 - Research whether optional interpolation, motion blur, or related display-side presentation techniques are standard for reducing shimmer on lower-refresh displays
@@ -112,8 +115,8 @@ Each time one visualizer mode is improved, a different mode seems to pick up col
 - [x] Audit dedicated visualizer math/helpers (`blob_math`, `blob_shaper_solver`, `bubble_simulation`, `bar_computation`, `transient_bus`) for foreign mode-setting bleed
 - [x] Add a static isolation fence for dedicated mode-owned modules
 - [x] Create a stable visualizer setting-change checklist so future setting additions/removals touch all required seams
-- [ ] Audit the intentionally shared seams (`config_applier`, `spotify_visualizer_widget`, `spotify_bars_gl_overlay`) and document which cross-mode behavior is deliberate versus accidental and how to remove or minimize potential bleed.
-- [ ] Confirm preset/save/repair/regeneration paths still agree with current mode ownership after the audit findings
+- [~] Audit the intentionally shared seams (`config_applier`, `spotify_visualizer_widget`, `spotify_bars_gl_overlay`) and document which cross-mode behavior is deliberate versus accidental and how to remove or minimize potential bleed.
+- [x] Confirm preset/save/repair/regeneration paths still agree with current mode ownership after the audit findings
 - [ ] Finish a live runtime spot-check across the shaper-capable modes after the current Blob tuning pass
 
 Current findings:
@@ -121,10 +124,17 @@ Current findings:
 - Sine/Oscilloscope now rely on an intentional neutral line-mode transport rather than hidden ownership through fake `_osc_*` setting flow
 - Blob shaped and unshaped motion ownership is intentionally split and now guarded by focused tests, but live Blob feel still needs more runtime validation
 - Any future mode-setting change should now route through `Docs/Visualizer_Change_Checklist.md` before being considered complete
+- Shared technical-cache replay no longer falls back to "whatever mode happened to be cached first"; missing mode entries now no-op instead of silently applying foreign technical state
+- `SpotifyBarsGLOverlay` now treats Spectrum bar-peak memory as Spectrum-owned runtime state: non-Spectrum modes no longer mutate `_peaks`, and switching back into Spectrum resets that ghost history instead of reviving foreign-mode bar memory
+- Line-mode overlay resets now explicitly clear waveform count/ring buffers plus transient event envelopes on mode change so Oscilloscope/Sine re-entry starts from its own live signal state instead of carrying stale signal pressure
+- Focused behavior coverage now exists for shared technical replay itself, not just for static foreign-token scans in dedicated renderer/math files
+- `build_gpu_push_extra_kwargs(...)` now emits mode-local live extras only; line-mode payloads no longer carry Blob extras, Blob no longer carries line-mode extras, and Bubble no longer inherits unrelated line/blob payload clutter just because the overlay can accept those kwargs
+- Shared beat-engine bar-count changes now use one canonical reconfigure path instead of keeping a hidden bar-count engine pool; this is meant to remove the early-cycle “slow once, fine later” warm-up hitch without creating runtime-only behavior that diverges from cold startup
+- Preset/save/repair/regeneration ownership already agrees with the isolation contract: mode filtering stays prefix-driven in `visualizer_presets`, repair sanitization uses the same filtered/defaulted mode contract, and the shipped regeneration path remains a downstream mirror rather than a competing schema authority
 
 ### 6. Blob Energy Balance / Glow Drive Follow-up
 
-**Status:** `[~]` Partially landed, awaiting user/runtime validation
+**Status:** `[~]` Runtime/log behavior is healthy; only final focused sign-off items remain
 **Priority:** Low
 
 Blob `Constant Energy` reportedly overpowers reactive/vocal energy in the non-shaped Blob path and likely needs retuning there only. There is also a product question around Glow Drive inputs.
@@ -141,66 +151,34 @@ Landed in code:
 - Blob shaper arrow tips now read more like actual arrows, and runtime still interprets drag direction as a real authored input rather than a decorative handle
 - Focused regression fences now cover both the shaped/unshaped motion split and the shaper-mode UI gating so future tuning work cannot silently reintroduce cross-over
 - Dedicated mode-isolation fences now also cover the per-mode renderer/math modules so foreign runtime tokens cannot quietly creep back in there
+- Latest live-log read looks healthy overall: no shader fallback, no obvious mode bleed, and strong transient phrases now visibly promote stage `2/3`
+- Latest live run impression: Blob now looks significantly nicer, more adaptive, and more organic while keeping the intended feel; remaining work is sign-off and polish, not rescue engineering
 
 - [x] Audit the current non-shaped `Body Response` balance for constant, reactive, and vocal energy
 - [x] Confirm the shaped Blob path is isolated before making non-shaped tuning changes
 - [x] Land a first tuning pass on the non-shaped path that reduces idle/no-energy deformation and increases real reactive/vocal ownership
-- [ ] Validate that the new balance is directionally right in live runtime rather than assuming the latest pass is final
-- [ ] Audit why subtle rapid drum phrases still under-drive non-shaped Blob in live runtime even when authored settings are reasonable
-- [ ] Audit why stage `2/3` still spend too much time asleep in non-shaped Blob and make the main core size feel parked
+- [x] Validate that the new balance is directionally right in live runtime rather than assuming the latest pass is final
+- [x] Audit why subtle rapid drum phrases still under-drive non-shaped Blob in live runtime even when authored settings are reasonable
+- [x] Audit why stage `2/3` still spend too much time asleep in non-shaped Blob and make the main core size feel parked
 - [ ] Review the `Glow Drive` selection list for useful additions such as `Transient`
 - [ ] Confirm Blob identity still feels like Blob and has not drifted toward another visualizer mode
-- [~] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
+- [ ] Final shaped runtime spot-check: confirm shaped Blob still feels correct and unaffected after the non-shaped pocket/stage work
+- [x] Keep shaped and non-shaped behavior isolated so no cross-over tuning is introduced
 
 ### 6A. Blob Concurrent Deformation Pockets (non-shaped path)
 
-**Status:** `[~]` Runtime architecture landed / awaiting live feel validation
-**Priority:** High
+**Status:** `[x]` Landed
+**Priority:** N/A
 
-Non-shaped Blob currently stores too much of its reaction in shared body/stage channels. That makes slower decay feel nice, but it also means rapid drum phrases can be visually swallowed by already-decaying motion instead of finding a fresh local place to deform. The next implementation should keep the calmer organic release while allowing multiple local reactions to coexist.
+The concurrent non-shaped pocket model is now part of the shipped runtime contract.
 
-Goal:
-- Let rapid successive hits register as fresh local deformations without requiring faster/jitterier global decay
-- Preserve Blob’s organic amorphous feel instead of turning it into rigid lane logic
-- Keep this strictly non-shaped for the first implementation so shaped and unshaped ownership do not bleed back together
-
-Guardrails:
-- Do not introduce compatibility shims or legacy side paths for the old non-shaped reaction model
-- Do not let shaped Blob consume the new non-shaped pocket state
-- Do not add latency; new hits must still register on the current frame/tick path
-- Do not move Blob onto a mode-specific sidecar persistence format; if settings/schema change, convert all canonical touchpoints named in `Docs/Visualizer_Change_Checklist.md`
-- Do not accept “tests green” as proof of musical feel; runtime validation remains required
-
-Phase 1. Runtime architecture / pocket model
-- [x] Define the non-shaped pocket model: count, lifetime, ownership, and how fresh hits claim/reuse pockets
-- [x] Decide the placement basis for pockets (likely angular / lobe-based rather than rigid lane-like buckets)
-- [x] Keep pocket attack/release independent from the slower whole-body decay path
-- [x] Keep pocket routing non-shaped-only; shaped Blob must continue using authored shaper routing
-- [x] Document the current contract in `Spec.md` once the architecture lands
-
-Phase 2. Implementation sweep (all required touchpoints, no legacy carry)
-- [x] Runtime bridge: update `widgets/spotify_bars_gl_overlay.py`, `widgets/spotify_visualizer/renderers/blob.py`, shader/runtime inputs, and any non-shaped Blob math needed for concurrent pocket contribution
-- [x] UI surface: keep this first cut runtime-only; no new authored controls were needed, so nothing new was layered on top
-- [x] Settings binding: no new canonical Blob settings were introduced in this first cut, so there was no binding/schema sweep to keep around
-- [x] Canonical model/defaults: unchanged for the same reason; pocket state is runtime-only in this first implementation
-- [x] Preset mechanics: unchanged for the same reason; curated Blob presets and repair/regeneration flows do not carry pocket payloads in this first cut
-- [x] Regeneration flow: no curated Blob payload change in this first cut
-- [x] Tests: add runtime/reactivity/isolation fences for concurrent pocket ownership and ensure shaped/unshaped split still holds
-- [x] Docs: update `Index.md`, `Spec.md`, `Docs/TestSuite.md`, and `Current_Plan.md`
-
-Phase 3. Validation / cleanup / reduction
-- [ ] Validate real rapid-drum behavior in runtime with the new pocket model
-- [ ] Confirm stage `2/3` feel and core-size growth still read naturally under the new routing
-- [ ] Confirm shaped Blob is unaffected by non-shaped pocket tuning
-- [ ] Remove any superseded non-shaped runtime/state/settings paths instead of leaving dead overlap behind
-- [ ] Decide whether any temporary tuning controls introduced during implementation can be collapsed/removed before sign-off
-
-Validation focus:
-- Non-shaped Blob should feel calmer at idle but stronger under real energy, with stage `2/3` reachable on convincing phrases
-- Shaped Blob should keep authored contour ownership and must not change when the unshaped wobble controls are edited
-- Unshaped Blob should still respond to `Idle Edge Motion` / `Audio Edge Motion`, while shaped Blob should instead answer to `Idle Residual` / `Audio Residual`
-- First implementation note: concurrent deformation pockets are runtime-only and intentionally do not introduce a persisted settings/preset schema until the live musical feel proves the model is worth keeping
-- Regression fence note: `tests/test_visualizer_reactivity_quality.py::test_blob_transient_rich_snare_phrase_can_seed_stage_progress` now exists specifically to catch the “visible drum hit, local deformation moves, but stage stays asleep” failure instead of only checking nicer-looking motion
+What landed:
+- Rapid successive non-shaped hits now claim concurrent local deformation pockets instead of fighting one shared decay bucket
+- Pocket spawning is driven from fresher transient/raw hit information with shorter family cooldowns
+- Fresh pockets carry a short-lived attack accent so new hits read as distinct pulses instead of blending into an already-raised plateau
+- The stage ladder now allows transient-rich snare phrases to wake stage `1` without letting vocal/snare-heavy material climb upper stages too aggressively
+- The pocket layer remains runtime-only in this first cut; no persisted authored settings, preset schema, repair flow, or regeneration payload was added for it
+- Regression fence note: `tests/test_visualizer_reactivity_quality.py::test_blob_transient_rich_snare_phrase_can_seed_stage_progress` exists specifically to catch the “visible drum hit, local deformation moves, but stage stays asleep” failure instead of only checking prettier motion
 
 
 ### 9. Shared Preset Install / Save Location Across SCR and MC

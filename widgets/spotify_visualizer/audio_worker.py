@@ -295,6 +295,52 @@ class SpotifyVisualizerAudioWorker(QObject):
             val = 1.8
         self._energy_boost = val
 
+    def reconfigure_bar_count(self, bar_count: int) -> None:
+        """Rebuild bar-count-dependent runtime state using the startup contract."""
+        new_count = max(1, int(bar_count))
+        if new_count == self._bar_count:
+            return
+
+        self._bar_count = new_count
+        self._band_cache_key = None
+        self._band_log_idx = None
+        self._band_bins = None
+        self._weight_bands = None
+        self._weight_factors = None
+        self._smooth_kernel = None
+        self._work_bars = None
+        self._zero_bars = None
+        self._band_edges = None
+        self._freq_values = None
+        self._bar_history = None
+        self._bar_hold_timers = None
+        self._bar_gate_prev1 = None
+        self._bar_gate_prev2 = None
+        self._bar_gate_output = None
+        self._last_fft_ts = 0.0
+        self._running_peak = 1.0
+        self._env_short = 0.5
+        self._env_long = 0.5
+        self._env_bass_short = 0.5
+        self._env_bass_long = 0.5
+        self._env_mix_short = 0.5
+        self._env_mix_long = 0.5
+        self._raw_bass_avg = self._manual_floor
+        self._applied_noise_floor = self._manual_floor
+        self._last_noise_floor = self._manual_floor
+        self._last_bass_drop_ratio = 0.0
+        self._bass_drop_accum = 0.0
+        self._transient_bass = 0.0
+        self._transient_mid = 0.0
+        self._transient_high = 0.0
+        self._onset_detected = False
+        self._onset_type = ""
+        self._onset_strength = 0.0
+        try:
+            self._transient_bus.reset()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to reset transient bus during bar-count reconfigure", exc_info=True)
+
     def is_running(self) -> bool:
         return self._running
 

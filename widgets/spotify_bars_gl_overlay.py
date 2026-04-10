@@ -367,6 +367,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._accumulated_time = 0.0
         self._last_time_ts = 0.0
 
+        if mode_key == 'spectrum':
+            self._peaks = []
+            self._last_peak_ts = 0.0
+
         if mode_key == 'blob':
             self.reset_blob_state()
         else:
@@ -379,9 +383,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._prev_waveform = []
             self._ghost_waveform_ring = []
             self._ghost_ring_idx = 0
+            self._waveform_count = 0
             self._line_smoothed_bass = 0.0
             self._line_smoothed_mid = 0.0
             self._line_smoothed_high = 0.0
+            self._line_kick_event_strength = 0.0
+            self._line_snare_event_strength = 0.0
+            self._line_kick_event_envelope = 0.0
+            self._line_snare_event_envelope = 0.0
             # Sine ghost peak state: clear to prevent stale peaks on mode re-entry
             self._sine_peak_bass = 0.0
             self._sine_peak_mid = 0.0
@@ -1272,85 +1281,76 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self.clear_overlay_buffer()
             return
 
-        # Update per-bar peak state using the latest clamped values.
-        try:
-            now_ts = time.monotonic()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            now_ts = 0.0
-        dt = 0.0
-        try:
-            last_ts = self._last_peak_ts
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            last_ts = 0.0
-        if last_ts > 0.0 and now_ts > last_ts:
-            dt = now_ts - last_ts
-        try:
-            self._last_peak_ts = now_ts
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        # Update per-bar peak state only for Spectrum. Other modes may still
+        # pass bar arrays through the shared overlay, but they must not mutate
+        # Spectrum ghost memory behind the scenes.
+        if self._vis_mode == 'spectrum':
+            try:
+                now_ts = time.monotonic()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+                now_ts = 0.0
+            dt = 0.0
+            try:
+                last_ts = self._last_peak_ts
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+                last_ts = 0.0
+            if last_ts > 0.0 and now_ts > last_ts:
+                dt = now_ts - last_ts
+            try:
+                self._last_peak_ts = now_ts
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
-        try:
-            peaks = list(self._peaks)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            peaks = []
+            try:
+                peaks = list(self._peaks)
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+                peaks = []
 
-        if not peaks or len(peaks) != len(clamped):
-            peaks = list(clamped)
+            if not peaks or len(peaks) != len(clamped):
+                peaks = list(clamped)
 
-        decay_rate = self._peak_decay_per_sec
-        if decay_rate < 0.0:
-            decay_rate = 0.0
+            decay_rate = self._peak_decay_per_sec
+            if decay_rate < 0.0:
+                decay_rate = 0.0
 
-        if dt > 0.0 and decay_rate > 0.0:
-            decay = decay_rate * dt
-            max_len = len(clamped)
-            if len(peaks) < max_len:
-                peaks.extend([0.0] * (max_len - len(peaks)))
-            for i in range(max_len):
-                v = clamped[i]
-                p = peaks[i]
-                if v > p:
-                    # New higher bar value becomes the next peak.
-                    p = v
-                else:
-                    # Let the peak decay more slowly than the bar value so it
-                    # stays above for a while and forms a visible trail, but
-                    # bias the decay rate by the current peak/value gap so the
-                    # highest (oldest) ghost segments shrink a little faster
-                    # than the newer ones regardless of the global decay
-                    # setting.
-                    delta = p - v
-                    if delta <= 0.0:
+            if dt > 0.0 and decay_rate > 0.0:
+                decay = decay_rate * dt
+                max_len = len(clamped)
+                if len(peaks) < max_len:
+                    peaks.extend([0.0] * (max_len - len(peaks)))
+                for i in range(max_len):
+                    v = clamped[i]
+                    p = peaks[i]
+                    if v > p:
                         p = v
                     else:
-                        # Scale the decay by a mild factor in [0.75, 1.5]
-                        # based on how tall the trail currently is. Long
-                        # trails (large delta) lose height a bit faster so
-                        # their topmost segments disappear sooner, while small
-                        # residual peaks decay more gently.
-                        try:
-                            gap_factor = 0.75 + min(1.0, float(delta)) * 0.75
-                        except Exception as e:
-                            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                            gap_factor = 1.0
-                        p = max(v, p - decay * gap_factor)
-                if p < 0.0:
-                    p = 0.0
-                if p > 1.0:
-                    p = 1.0
-                peaks[i] = p
-        else:
-            for i, v in enumerate(clamped):
-                if i < len(peaks):
-                    if v > peaks[i]:
-                        peaks[i] = v
-                else:
-                    peaks.append(v)
+                        delta = p - v
+                        if delta <= 0.0:
+                            p = v
+                        else:
+                            try:
+                                gap_factor = 0.75 + min(1.0, float(delta)) * 0.75
+                            except Exception as e:
+                                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+                                gap_factor = 1.0
+                            p = max(v, p - decay * gap_factor)
+                    if p < 0.0:
+                        p = 0.0
+                    if p > 1.0:
+                        p = 1.0
+                    peaks[i] = p
+            else:
+                for i, v in enumerate(clamped):
+                    if i < len(peaks):
+                        if v > peaks[i]:
+                            peaks[i] = v
+                    else:
+                        peaks.append(v)
 
-        self._peaks = peaks
+            self._peaks = peaks
 
         self._enabled = True
         self._bars = clamped
@@ -1449,12 +1449,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bar_count = 0
         self._segments = 0
         self._peaks = []
+        self._last_peak_ts = 0.0
         self._fade = 0.0
         self._waveform = []
         self._prev_waveform = []
+        self._waveform_count = 0
         self._bubble_pos_data = []
         self._bubble_extra_data = []
         self._bubble_trail_data = []
+        self._bubble_count = 0
 
         if self._gl_state.is_ready():
             try:

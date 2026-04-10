@@ -16,6 +16,7 @@ from widgets.spotify_visualizer_widget import (
     _AudioFrame,
 )
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
+from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry
 import widgets.spotify_visualizer_widget as vis_mod
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect
 
@@ -150,6 +151,15 @@ def test_sensitivity_config_api_exists(np_module):
     worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
 
 
+def test_shared_beat_engine_registry_reconfigures_single_engine_across_bar_counts():
+    registry = BeatEngineRegistry()
+    engine = registry.get_engine(36)
+    same_engine = registry.get_engine(40)
+
+    assert same_engine is engine
+    assert engine._bar_count == 40
+
+
 class _FakeEngine:
     def __init__(self, bar_count: int = 16) -> None:
         self._audio_buffer = object()
@@ -170,6 +180,7 @@ class _FakeEngine:
         self._latest_generation_with_frame = self._generation_id
         self.playback_states: list[bool] = []
         self.wake_calls = 0
+        self.reconfigure_calls: list[int] = []
 
     def set_floor_config(self, dyn: bool, floor: float) -> None:
         self.last_floor_config = (dyn, floor)
@@ -250,6 +261,42 @@ class _FakeEngine:
 
     def publish_waveform_only(self) -> None:
         self._latest_generation_with_waveform = self._generation_id
+
+    def reconfigure_bar_count(self, bar_count: int) -> None:
+        self.reconfigure_calls.append(int(bar_count))
+        self._bar_count = max(1, int(bar_count))
+        self._audio_buffer = object()
+        self._audio_worker = SimpleNamespace(_kick_lane_gain=1.0)
+        self._bars_result_buffer = object()
+        self._smoothed_bars = [0.0] * self._bar_count
+        self._generation_id += 1
+        self._latest_generation_with_frame = self._generation_id - 1
+        self._latest_generation_with_waveform = self._generation_id - 1
+
+
+@pytest.mark.qt
+def test_resize_bar_buffers_reuses_existing_engine_and_reconfigures_bar_count(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    engine_36 = _FakeEngine(bar_count=36)
+    engine_40 = _FakeEngine(bar_count=40)
+
+    def _fake_get_engine(count: int):
+        return engine_36 if int(count) == 36 else engine_40
+
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", _fake_get_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=36)
+    vis._enabled = True
+    engine_36.acquired = 1
+
+    vis._resize_bar_buffers(40)
+
+    assert vis._engine is engine_36
+    assert engine_36.reconfigure_calls == [40]
+    assert engine_40.acquired == 0
 
 
 class _OverlayStub:
@@ -508,6 +555,146 @@ def test_apply_vis_mode_config_merges_runtime_technical_overrides(qt_app, qtbot,
     assert widget._last_sensitivity_config[0] is False
     assert widget._last_sensitivity_config[1] == pytest.approx(0.58)
     assert widget._last_audio_block_size == 128
+
+
+@pytest.mark.qt
+def test_missing_mode_cache_does_not_fall_back_to_foreign_technical_state(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget._technical_config_cache = {
+        "blob": {
+            "bar_count": 19,
+            "dynamic_floor": False,
+            "manual_floor": 0.31,
+            "adaptive_sensitivity": False,
+            "sensitivity": 0.44,
+            "audio_block_size": 256,
+            "dynamic_range_enabled": True,
+            "agc_strength": 0.71,
+            "input_gain": 1.55,
+            "kick_lane_gain": 1.25,
+            "transient_pulse_gain": 1.4,
+            "transient_clamp": 1.8,
+            "blob_transient_mix_bass": 0.93,
+            "blob_transient_mix_vocal": 0.41,
+        }
+    }
+    widget._last_floor_config = (True, 0.12)
+    widget._last_sensitivity_config = (True, 1.0)
+    widget._last_audio_block_size = 0
+    widget._last_input_gain = 1.0
+
+    widget._apply_technical_config_for_mode(VisualizerMode.SPECTRUM, reason="test_missing_mode_cache")
+
+    assert widget._bar_count == 8
+    assert widget._last_floor_config == (True, 0.12)
+    assert widget._last_sensitivity_config == (True, 1.0)
+    assert widget._last_audio_block_size == 0
+    assert widget._last_input_gain == pytest.approx(1.0)
+    assert fake_engine.last_floor_config == (True, 0.12)
+    assert fake_engine.last_sensitivity_config == (True, 1.0)
+
+
+@pytest.mark.qt
+def test_mode_switch_replays_distinct_per_mode_shared_technical_state(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+
+    model = SpotifyVisualizerSettings(
+        mode="blob",
+        bar_count=8,
+        blob_bar_count=18,
+        blob_dynamic_floor=False,
+        blob_manual_floor=0.14,
+        blob_adaptive_sensitivity=False,
+        blob_sensitivity=0.66,
+        blob_audio_block_size=128,
+        blob_dynamic_range_enabled=True,
+        blob_agc_strength=0.72,
+        blob_input_gain=1.35,
+        blob_kick_lane_gain=1.55,
+        blob_transient_clamp=2.2,
+        blob_transient_mix_bass=0.92,
+        blob_transient_mix_vocal=0.38,
+        sine_wave_bar_count=27,
+        sine_wave_dynamic_floor=False,
+        sine_wave_manual_floor=0.24,
+        sine_wave_adaptive_sensitivity=False,
+        sine_wave_sensitivity=0.83,
+        sine_wave_audio_block_size=512,
+        sine_wave_dynamic_range_enabled=False,
+        sine_wave_agc_strength=0.41,
+        sine_wave_input_gain=1.12,
+        sine_wave_kick_lane_gain=0.77,
+        sine_wave_transient_clamp=1.3,
+        sine_wave_transient_width_mix=0.21,
+    )
+
+    widget.set_settings_model(model)
+
+    assert widget._bar_count == 18
+    assert widget._last_floor_config[0] is False
+    assert widget._last_floor_config[1] == pytest.approx(0.14)
+    assert widget._last_sensitivity_config[0] is False
+    assert widget._last_sensitivity_config[1] == pytest.approx(0.66)
+    assert widget._last_audio_block_size == 128
+    assert widget._last_input_gain == pytest.approx(1.35)
+    assert widget._blob_transient_mix_bass == pytest.approx(0.92)
+    assert widget._blob_transient_mix_vocal == pytest.approx(0.38)
+    assert parent._spotify_bars_overlay._blob_transient_mix_bass == pytest.approx(0.92)
+    assert parent._spotify_bars_overlay._blob_transient_mix_vocal == pytest.approx(0.38)
+
+    widget.set_visualization_mode(VisualizerMode.SINE_WAVE)
+
+    assert widget._bar_count == 27
+    assert widget._last_floor_config[0] is False
+    assert widget._last_floor_config[1] == pytest.approx(0.24)
+    assert widget._last_sensitivity_config[0] is False
+    assert widget._last_sensitivity_config[1] == pytest.approx(0.83)
+    assert widget._last_audio_block_size == 512
+    assert widget._last_input_gain == pytest.approx(1.12)
+    assert widget._kick_lane_gain == pytest.approx(0.77)
+    assert widget._transient_clamp == pytest.approx(1.3)
+    assert widget._sine_wave_transient_width_mix == pytest.approx(0.21)
+    assert parent._spotify_bars_overlay._sine_wave_transient_width_mix == pytest.approx(0.21)
+
+    widget.set_visualization_mode(VisualizerMode.BLOB)
+
+    assert widget._bar_count == 18
+    assert widget._last_floor_config[0] is False
+    assert widget._last_floor_config[1] == pytest.approx(0.14)
+    assert widget._last_sensitivity_config[0] is False
+    assert widget._last_sensitivity_config[1] == pytest.approx(0.66)
+    assert widget._last_audio_block_size == 128
+    assert widget._last_input_gain == pytest.approx(1.35)
+    assert widget._kick_lane_gain == pytest.approx(1.55)
+    assert widget._transient_clamp == pytest.approx(2.2)
+    assert widget._blob_transient_mix_bass == pytest.approx(0.92)
+    assert widget._blob_transient_mix_vocal == pytest.approx(0.38)
+    assert parent._spotify_bars_overlay._blob_transient_mix_bass == pytest.approx(0.92)
+    assert parent._spotify_bars_overlay._blob_transient_mix_vocal == pytest.approx(0.38)
 
 
 @pytest.mark.qt

@@ -94,6 +94,30 @@ class _SpotifyBeatEngine(QObject):
             self._audio_worker.set_process_supervisor(supervisor)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set process supervisor", exc_info=True)
+
+    def reconfigure_bar_count(self, bar_count: int) -> None:
+        """Rebuild shared runtime state for a new bar count."""
+        new_count = max(1, int(bar_count))
+        if new_count == self._bar_count:
+            return
+
+        self.cancel_pending_compute_tasks()
+        self._bar_count = new_count
+        self._audio_buffer = TripleBuffer()
+        self._bars_result_buffer = TripleBuffer()
+        self._audio_worker._buffer = self._audio_buffer
+        self._audio_worker.reconfigure_bar_count(new_count)
+        self._latest_bars = [0.0] * new_count
+        self._smoothed_bars = [0.0] * new_count
+        self._last_smooth_ts = -1.0
+        self._last_audio_ts = 0.0
+        self._waveform = [0.0] * 256
+        self._waveform_count = 0
+        self._energy_bands = EnergyBands()
+        self._generation_id += 1
+        self._latest_generation_with_frame = self._generation_id - 1
+        self._latest_generation_with_waveform = self._generation_id - 1
+        logger.debug("[SPOTIFY_VIS] Beat engine bar-count reconfigured -> %d (generation=%d)", new_count, self._generation_id)
     
     def reset_smoothing_state(self) -> None:
         """Reset all smoothing/energy state for a clean mode switch.
@@ -699,8 +723,7 @@ class BeatEngineRegistry:
     _lock = __import__("threading").Lock()
     
     def __init__(self):
-        self._engines: dict[int, _SpotifyBeatEngine] = {}  # bar_count -> engine
-        self._default_engine: Optional[_SpotifyBeatEngine] = None
+        self._engine: Optional[_SpotifyBeatEngine] = None
     
     @classmethod
     def get_instance(cls) -> "BeatEngineRegistry":
@@ -712,22 +735,30 @@ class BeatEngineRegistry:
         return cls._instance
     
     def get_engine(self, bar_count: int) -> _SpotifyBeatEngine:
-        """Get or create engine for given bar count."""
+        """Get the shared engine, rebuilding bar-count-dependent state if needed."""
         bar_count = max(1, int(bar_count))
-        if bar_count not in self._engines:
-            self._engines[bar_count] = _SpotifyBeatEngine(bar_count)
-            if self._default_engine is None:
-                self._default_engine = self._engines[bar_count]
-        return self._engines[bar_count]
-    
+        if self._engine is None:
+            self._engine = _SpotifyBeatEngine(bar_count)
+        else:
+            self._engine.reconfigure_bar_count(bar_count)
+        return self._engine
+
     def set_engine(self, bar_count: int, engine: _SpotifyBeatEngine) -> None:
         """Inject a custom engine (for testing)."""
-        self._engines[bar_count] = engine
-    
+        try:
+            engine.reconfigure_bar_count(bar_count)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Injected engine could not reconfigure to requested bar count", exc_info=True)
+        self._engine = engine
+
     def clear(self) -> None:
         """Clear all engines (for testing)."""
-        self._engines.clear()
-        self._default_engine = None
+        if self._engine is not None:
+            try:
+                self._engine.force_stop()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to stop shared beat engine during registry clear", exc_info=True)
+        self._engine = None
 
 
 # Backward compatibility: module-level singleton via registry
@@ -745,13 +776,5 @@ def get_shared_spotify_beat_engine(bar_count: int) -> _SpotifyBeatEngine:
     engine = registry.get_engine(bar_count)
     
     # Update module-level reference for backward compatibility
-    if _global_beat_engine is None:
-        _global_beat_engine = engine
-    elif _global_beat_engine._bar_count != bar_count:
-        logger.debug(
-            "[SPOTIFY_VIS] Shared beat engine bar_count mismatch: existing=%d, requested=%d",
-            _global_beat_engine._bar_count,
-            bar_count,
-        )
-    
+    _global_beat_engine = engine
     return engine

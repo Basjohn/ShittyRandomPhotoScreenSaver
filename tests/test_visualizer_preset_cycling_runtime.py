@@ -33,6 +33,7 @@ def _make_widget_manager_parent():
 def test_widget_manager_cycle_visualizer_preset_updates_settings(settings_manager):
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)
+    wm._refresh_spotify_visualizer_config = MagicMock()
 
     widgets_cfg = settings_manager.get("widgets", {}) or {}
     spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
@@ -52,6 +53,7 @@ def test_widget_manager_cycle_visualizer_preset_updates_settings(settings_manage
 def test_widget_manager_cycle_visualizer_preset_wraps_backward(settings_manager):
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)
+    wm._refresh_spotify_visualizer_config = MagicMock()
 
     custom_index = get_custom_preset_index("spectrum")
     assert custom_index >= 1
@@ -116,6 +118,52 @@ def test_widget_manager_cycle_visualizer_preset_restores_custom_snapshot(setting
     assert restored["preset_spectrum"] == custom_index
     assert restored["spectrum_glow_intensity"] == pytest.approx(0.17)
     assert restored["spectrum_growth"] == pytest.approx(1.75)
+
+
+def test_widget_manager_cycle_visualizer_preset_defers_disk_save(settings_manager, monkeypatch):
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+    wm._refresh_spotify_visualizer_config = MagicMock()
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg["mode"] = "spectrum"
+    spotify_cfg["preset_spectrum"] = 0
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    scheduled: list[tuple[int, int]] = []
+    save_calls: list[str] = []
+
+    def _fake_single_shot(delay_ms, func, token):
+        scheduled.append((int(delay_ms), int(token)))
+
+    def _fake_save():
+        save_calls.append("save")
+
+    monkeypatch.setattr("rendering.widget_manager.ThreadManager.single_shot", _fake_single_shot)
+    monkeypatch.setattr(settings_manager, "save", _fake_save)
+
+    assert wm.cycle_visualizer_preset("spectrum", 1) is True
+
+    assert save_calls == []
+    assert scheduled == [(wm.PRESET_PERSIST_DELAY_MS, 1)]
+
+
+def test_widget_manager_deferred_visualizer_preset_save_skips_stale_tokens(settings_manager, monkeypatch):
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+
+    save_calls: list[str] = []
+    monkeypatch.setattr(settings_manager, "save", lambda: save_calls.append("save"))
+
+    wm._visualizer_preset_save_token = 2
+    wm._flush_visualizer_preset_save(1)
+    assert save_calls == []
+
+    wm._flush_visualizer_preset_save(2)
+    assert save_calls == ["save"]
 
 
 @pytest.mark.qt

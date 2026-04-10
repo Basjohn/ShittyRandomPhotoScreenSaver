@@ -1138,7 +1138,125 @@ class TestSpectrumGlowUniforms:
 
         assert overlay._blob_kick_event_strength < 0.80
         assert overlay._blob_snare_event_strength < 0.75
+
+
+class TestOverlayModeResetIsolation:
+    @pytest.mark.qt
+    def test_spectrum_mode_change_clears_shared_peak_history(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = "blob"
+        overlay._peaks = [0.9, 0.8, 0.7]
+        overlay._last_peak_ts = 123.0
+
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.2, 0.3, 0.4],
+            bar_count=3,
+            segments=4,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode="spectrum",
+        )
+
+        assert overlay._vis_mode == "spectrum"
+        assert overlay._peaks == pytest.approx([0.2, 0.3, 0.4])
+        assert overlay._last_peak_ts > 0.0
+
+    @pytest.mark.qt
+    def test_non_spectrum_modes_do_not_mutate_spectrum_peak_history(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = "spectrum"
+        overlay._peaks = [0.6, 0.4, 0.2]
+        overlay._last_peak_ts = 42.0
+
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[1.0, 1.0, 1.0],
+            bar_count=3,
+            segments=4,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode="blob",
+            energy_bands=SimpleNamespace(bass=0.2, mid=0.1, high=0.05, overall=0.18),
+        )
+
+        assert overlay._vis_mode == "blob"
+        assert overlay._peaks == pytest.approx([0.6, 0.4, 0.2])
+        assert overlay._last_peak_ts == pytest.approx(42.0)
+
+    @pytest.mark.qt
+    def test_line_mode_reset_clears_waveform_count_and_buffers(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = "blob"
+        overlay._waveform = [0.5] * 16
+        overlay._prev_waveform = [0.25] * 16
+        overlay._ghost_waveform_ring = [[0.1] * 16]
+        overlay._waveform_count = 16
+
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.2, 0.2, 0.2],
+            bar_count=3,
+            segments=4,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode="sine_wave",
+            waveform=[0.1] * 8,
+            waveform_count=8,
+        )
+
+        assert overlay._vis_mode == "sine_wave"
+        assert overlay._prev_waveform == []
+        assert overlay._ghost_waveform_ring == []
+        assert overlay._waveform_count == 8
         assert overlay._blob_smoothed_energy < 0.45
+
+    @pytest.mark.qt
+    def test_line_mode_reset_clears_line_event_envelopes(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = "blob"
+        overlay._line_kick_event_strength = 0.7
+        overlay._line_snare_event_strength = 0.6
+        overlay._line_kick_event_envelope = 0.7
+        overlay._line_snare_event_envelope = 0.6
+
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.2, 0.2, 0.2],
+            bar_count=3,
+            segments=4,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode="oscilloscope",
+            waveform=[0.1] * 8,
+            waveform_count=8,
+        )
+
+        assert overlay._vis_mode == "oscilloscope"
+        assert overlay._line_kick_event_strength == pytest.approx(0.0)
+        assert overlay._line_snare_event_strength == pytest.approx(0.0)
+        assert overlay._line_kick_event_envelope == pytest.approx(0.0)
+        assert overlay._line_snare_event_envelope == pytest.approx(0.0)
 
 
 # ===========================================================================
