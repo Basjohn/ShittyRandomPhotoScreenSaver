@@ -109,7 +109,7 @@ def _spawn_pocket(
     amp = _clamp(strength, 0.0, 1.0)
     pocket.angle_frac = angle
     pocket.amplitude = max(pocket.amplitude * 0.28, amp)
-    pocket.phase = (time_seconds * 1.7 + slot * 0.93) % 6.283185307179586
+    pocket.phase = time_seconds + slot * 0.017
     if family == "kick":
         pocket.width = 0.17
         pocket.bass_mix = 1.00

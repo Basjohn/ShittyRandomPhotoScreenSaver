@@ -115,6 +115,7 @@ float cyclic_diff_frac(float a, float b) {
 
 float compute_blob_pocket_component(
     float angle_frac,
+    float time_seconds,
     float bass_energy,
     float mid_energy,
     float high_energy,
@@ -144,9 +145,11 @@ float compute_blob_pocket_component(
             0.0,
             1.8
         );
-        float ripple_phase = pocket.w + diff / max(width, 0.001) * 2.6;
-        float ripple = 0.84 + 0.16 * sin(ripple_phase);
-        total += amplitude * drive * lobe * ripple;
+        float pocket_age = max(0.0, time_seconds - pocket.w);
+        float attack_boost = 1.0 + 0.72 * exp(-pocket_age / 0.055);
+        float ripple_phase = pocket_age * 18.0 + diff / max(width, 0.001) * 2.6 + float(i) * 0.7;
+        float ripple = 0.90 + 0.10 * sin(ripple_phase);
+        total += amplitude * drive * lobe * ripple * attack_boost;
     }
     return total;
 }
@@ -383,6 +386,7 @@ float blob_sdf_ex(vec2 p, float time,
     if (u_blob_shaper_enabled == 0) {
         float pocket_component = compute_blob_pocket_component(
             angle_frac,
+            time,
             e_bass,
             e_mid,
             e_high,

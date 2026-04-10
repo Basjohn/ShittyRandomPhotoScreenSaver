@@ -134,6 +134,8 @@ Landed in code:
 - Non-shaped reactive/vocal motion and stage-driving support were increased, then increased again from real Blob runtime logs/preset data so subtle rapid drums and higher stage tiers have a better chance to register
 - Non-shaped Blob fast-hit attack/release shaping was tightened again so rapid kick/snare phrases reach the body/stage path faster without turning hitch frames into one-frame event snaps
 - Non-shaped Blob concurrent pockets now trigger from fresher raw/transient hit strength with shorter family cooldowns so alternating rapid drum phrases are less likely to land in a pocket dead-zone between spawns
+- Non-shaped Blob pocket rendering now adds a short-lived local attack accent on spawn so a fresh hit reads as a distinct pulse instead of disappearing into an already-elevated local plateau
+- Blob stage math now explicitly seeds stage `1` from transient-rich snare phrases without letting vocal/snare-heavy material climb the upper rungs too aggressively
 - Shaped Blob now owns its own contour residual motion via `blob_shaper_idle_motion` and `blob_shaper_audio_motion` instead of reusing the generic unshaped wobble knobs
 - Shaper mode now hides the generic unshaped `Idle Edge Motion`, `Audio Edge Motion`, `Stretch`, and `Shape Reactivity` rows so authored-shape controls stop pretending to share ownership with the freeform Blob path
 - Blob shaper arrow tips now read more like actual arrows, and runtime still interprets drag direction as a real authored input rather than a decorative handle
@@ -198,6 +200,7 @@ Validation focus:
 - Shaped Blob should keep authored contour ownership and must not change when the unshaped wobble controls are edited
 - Unshaped Blob should still respond to `Idle Edge Motion` / `Audio Edge Motion`, while shaped Blob should instead answer to `Idle Residual` / `Audio Residual`
 - First implementation note: concurrent deformation pockets are runtime-only and intentionally do not introduce a persisted settings/preset schema until the live musical feel proves the model is worth keeping
+- Regression fence note: `tests/test_visualizer_reactivity_quality.py::test_blob_transient_rich_snare_phrase_can_seed_stage_progress` now exists specifically to catch the “visible drum hit, local deformation moves, but stage stays asleep” failure instead of only checking nicer-looking motion
 
 
 ### 9. Shared Preset Install / Save Location Across SCR and MC

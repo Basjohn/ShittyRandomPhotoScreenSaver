@@ -1966,12 +1966,27 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         stage_bass_support = min(clamp_max, stage_support_bass * 0.94 + base_bass * 0.10 + transient_bass * 0.18)
         stage_kick_guard = _clamp01((kick_support - 0.02) / 0.24)
         stage_kick_boost = kick_evt * stage_kick_guard * (0.10 + kick_support * 0.40)
+        snare_stage_support = _clamp01(
+            transient_mid * 0.92
+            + transient_high * 0.68
+            + snare_evt * 0.18
+            - base_mid * 0.16
+            - base_high * 0.06
+        )
+        snare_stage_guard = _clamp01((snare_stage_support - 0.05) / 0.22)
+        snare_stage_boost = snare_evt * snare_stage_guard * (0.08 + snare_stage_support * 0.34)
         stage_overall = max(
             base_overall,
             stage_support_overall,
             stage_bass_support * 0.62 + stage_support_overall * 0.30 + transient_bass * 0.18 + stage_kick_boost * 1.75,
+            stage_support_overall * 0.36
+            + transient_mid * 0.34
+            + transient_high * 0.20
+            + snare_stage_boost * 1.45,
         )
-        stage_overall_cap = stage_support_overall + cap_unit * (1.55 + stage_kick_guard * 0.65)
+        stage_overall_cap = stage_support_overall + cap_unit * (
+            1.55 + stage_kick_guard * 0.65 + snare_stage_guard * 0.52
+        )
         stage_overall = min(
             clamp_max,
             max(base_overall, min(stage_overall, stage_overall_cap)),
@@ -1980,11 +1995,21 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         stage_bass = min(stage_bass, stage_support_bass + cap_unit * (1.55 + stage_kick_guard * 0.70))
         stage_mid = min(
             stage_overall,
-            stage_support_mid * 0.22 + base_mid * 0.18 + transient_mid * 0.22 + snare_drive * 0.34 + kick_drive * 0.10,
+            stage_support_mid * 0.22
+            + base_mid * 0.18
+            + transient_mid * 0.24
+            + snare_drive * 0.34
+            + snare_stage_boost * 0.32
+            + kick_drive * 0.10,
         )
         stage_high = min(
             stage_overall * 0.76,
-            stage_support_high * 0.16 + base_high * 0.18 + transient_high * 0.14 + snare_drive * 0.23 + kick_drive * 0.07,
+            stage_support_high * 0.16
+            + base_high * 0.18
+            + transient_high * 0.16
+            + snare_drive * 0.23
+            + snare_stage_boost * 0.18
+            + kick_drive * 0.07,
         )
         self._blob_stage_input_bass = stage_bass
         self._blob_stage_input_mid = stage_mid

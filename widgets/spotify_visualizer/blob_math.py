@@ -53,7 +53,19 @@ def compute_stage_progress(
     se = _clamp(smoothed_energy, 0.0, 1.0)
 
     weighted = _clamp(bass * 0.48 + overall * 0.24 + high * 0.11 + mid * 0.17, 0.0, 1.0)
-    weighted_stage1 = _clamp(weighted * 0.80 + se * 0.20, 0.0, 1.0)
+    # Stage 1 should still feel bass-rooted, but fast snare-rich phrases need a
+    # viable first rung instead of reading as "local wobble only" forever.
+    stage1_drive = max(
+        weighted,
+        _clamp(
+            overall * 0.62
+            + min(mid, overall * 0.50) * 0.16
+            + min(high, overall * 0.35) * 0.12,
+            0.0,
+            1.0,
+        ),
+    )
+    weighted_stage1 = _clamp(stage1_drive * 0.84 + se * 0.16, 0.0, 1.0)
     base_stage2_drive = _clamp(
         weighted * 0.56 + bass * 0.12 + mid * 0.22 + high * 0.10,
         0.0,
@@ -81,7 +93,7 @@ def compute_stage_progress(
     # Keep stage 1 reachable on ordinary musical support, but leave room for
     # stage 2/3 to appear on stronger passages instead of making the first rung
     # saturate immediately while the later rungs stay effectively unreachable.
-    stage1_t = _smoothstep(0.08, 0.29, weighted_stage1)
+    stage1_t = _smoothstep(0.07, 0.29, weighted_stage1)
     stage2_t = _smoothstep(0.10, 0.30, stage2_drive)
     stage3_t = _smoothstep(0.13, 0.34, chorus_drive)
     stage2_t = min(stage2_t, stage1_t)

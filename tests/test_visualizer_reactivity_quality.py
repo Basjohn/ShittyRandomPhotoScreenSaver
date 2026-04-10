@@ -236,7 +236,7 @@ def test_blob_vocal_phrase_prefers_wobble_bands_over_body_size(qt_app):
 
 
 @pytest.mark.qt
-def test_blob_stage_inputs_stay_bass_biased_on_snare_phrase(qt_app):
+def test_blob_stage_inputs_keep_vocal_snare_phrase_off_upper_rungs(qt_app):
     from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
     from widgets.spotify_visualizer.blob_math import compute_stage_progress
 
@@ -270,7 +270,9 @@ def test_blob_stage_inputs_stay_bass_biased_on_snare_phrase(qt_app):
     assert overlay._blob_stage_input_mid < live[1] * 0.65
     assert overlay._blob_stage_input_high < live[2] * 0.60
     assert overlay._blob_stage_input_bass <= live[0] * 1.10
-    assert staged_stage[0] <= live_stage[0]
+    assert staged_stage[0] < 0.35
+    assert staged_stage[1] < 0.08
+    assert staged_stage[2] < 0.08
 
 
 @pytest.mark.qt
@@ -315,6 +317,35 @@ def test_blob_stage_inputs_favor_kick_over_snare_on_light_passages(qt_app):
 
     assert snare_stage_inputs[3] < kick_stage_inputs[3]
     assert snare_stage_inputs[0] < kick_stage_inputs[0]
+
+
+@pytest.mark.qt
+def test_blob_transient_rich_snare_phrase_can_seed_stage_progress(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+    from widgets.spotify_visualizer.blob_math import compute_stage_progress
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._blob_kick_event_strength = 0.05
+    overlay._blob_snare_event_strength = 1.0
+    overlay._transient_energy = SimpleNamespace(
+        bass_transient=0.02,
+        mid_transient=0.15,
+        high_transient=0.12,
+    )
+
+    phrase = SimpleNamespace(bass=0.03, mid=0.03, high=0.03, overall=0.03)
+    live = overlay._compute_blob_live_bands(phrase)
+    stage = compute_stage_progress(
+        bass_energy=overlay._blob_stage_input_bass,
+        mid_energy=overlay._blob_stage_input_mid,
+        high_energy=overlay._blob_stage_input_high,
+        overall_energy=overlay._blob_stage_input_overall,
+        smoothed_energy=live[3],
+        stage_bias=overlay._blob_stage_bias,
+    )
+
+    assert overlay._blob_stage_input_overall > live[3]
+    assert stage[0] > 0.01
 
 
 @pytest.mark.qt
@@ -394,7 +425,7 @@ def test_blob_pulse_release_honors_full_ui_range_above_800ms(qt_app):
     _push_blob_frame(capped, dt=0.016, energy=calm, blob_pulse_release_ms=800.0)
     _push_blob_frame(extended, dt=0.016, energy=calm, blob_pulse_release_ms=1200.0)
 
-    assert extended._blob_live_mid_energy > capped._blob_live_mid_energy
+    assert extended._blob_live_overall_energy > capped._blob_live_overall_energy
 
 
 @pytest.mark.qt
