@@ -27,6 +27,7 @@ from widgets.spotify_visualizer.blob_math import (
     compute_stage_progress,
 )
 from widgets.spotify_visualizer.renderers.spectrum import compute_bar_layout
+from widgets.spotify_visualizer.signal_contract import soft_ceiling
 
 
 logger = get_logger(__name__)
@@ -179,8 +180,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_constant_wobble: float = 1.0
         self._blob_reactive_wobble: float = 1.0
         self._blob_stretch_tendency: float = 0.35
-        self._blob_stretch_inner: float = 0.5
-        self._blob_stretch_outer: float = 0.5
+        self._blob_stretch_inner: float = 0.0
+        self._blob_stretch_outer: float = 0.35
         # Blob Shaper
         self._blob_shaper_enabled: bool = False
         self._blob_shaper_base_strength: float = 0.5
@@ -499,8 +500,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_constant_wobble: float = 1.0,
         blob_reactive_wobble: float = 1.0,
         blob_stretch_tendency: float = 0.35,
-        blob_stretch_inner: float = 0.5,
-        blob_stretch_outer: float = 0.5,
+        blob_stretch_inner: float = 0.0,
+        blob_stretch_outer: float = 0.35,
         line_speed: float = 1.0,
         line_dim: bool = False,
         line_offset_bias: float = 0.0,
@@ -697,9 +698,26 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         _mag = min(1.0, _delta / 0.10)
                         _rise_tau = 0.014 + (1.0 - _mag) * 0.060  # 14ms..74ms
                         alpha = min(1.0, blob_dt / _rise_tau)
+                        hot_release_excess = 0.0
                     else:
-                        alpha = min(1.0, blob_dt / 0.26)
+                        decay_tau = 0.26
+                        hot_release_excess = 0.0
+                        excess_gap = prev - se_input
+                        if prev >= 0.75 and excess_gap >= 0.22:
+                            hot_excess = min(1.0, (excess_gap - 0.22) / 0.55)
+                            decay_tau *= 1.0 - hot_excess * 0.88
+                            decay_tau = min(decay_tau, 0.075)
+                            hot_release_excess = hot_excess
+                        alpha = min(1.0, blob_dt / decay_tau)
                     self._blob_smoothed_energy = prev + (se_input - prev) * alpha
+                    if hot_release_excess > 0.0:
+                        floor = se_input + 0.10
+                        if self._blob_smoothed_energy > floor:
+                            bleed = blob_dt * (1.10 + hot_release_excess * 2.75)
+                            self._blob_smoothed_energy = max(
+                                floor,
+                                self._blob_smoothed_energy - bleed,
+                            )
                     glow_prev = float(getattr(self, "_blob_glow_energy", prev) or 0.0)
                     if getattr(self, "_blob_glow_drive_mode", "bass") == "vocal":
                         glow_input = min(1.5, live_mid * 0.82 + live_high * 0.18 + live_overall * 0.06)
@@ -707,9 +725,26 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         glow_input = min(1.5, live_bass * 0.88 + live_overall * 0.16)
                     if glow_input > glow_prev:
                         glow_alpha = min(1.0, blob_dt / 0.040)
+                        glow_hot_release_excess = 0.0
                     else:
-                        glow_alpha = min(1.0, blob_dt / 0.44)
+                        glow_decay_tau = 0.44
+                        glow_hot_release_excess = 0.0
+                        glow_excess_gap = glow_prev - glow_input
+                        if glow_prev >= 0.70 and glow_excess_gap >= 0.20:
+                            hot_excess = min(1.0, (glow_excess_gap - 0.20) / 0.55)
+                            glow_decay_tau *= 1.0 - hot_excess * 0.80
+                            glow_decay_tau = min(glow_decay_tau, 0.12)
+                            glow_hot_release_excess = hot_excess
+                        glow_alpha = min(1.0, blob_dt / glow_decay_tau)
                     self._blob_glow_energy = glow_prev + (glow_input - glow_prev) * glow_alpha
+                    if glow_hot_release_excess > 0.0:
+                        glow_floor = glow_input + 0.10
+                        if self._blob_glow_energy > glow_floor:
+                            glow_bleed = blob_dt * (0.82 + glow_hot_release_excess * 2.10)
+                            self._blob_glow_energy = max(
+                                glow_floor,
+                                self._blob_glow_energy - glow_bleed,
+                            )
                     self._blob_live_bass_energy = live_bass
                     self._blob_live_mid_energy = live_mid
                     self._blob_live_high_energy = live_high
@@ -1576,6 +1611,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 decay_tau = decay_taus[idx] if idx < len(decay_taus) else 0.65
                 if new_val <= 0.02:
                     decay_tau *= (0.55, 0.72, 0.72)[idx]
+                if new_val <= 0.02 and prev_val >= 0.80:
+                    hot_excess = min(1.0, (prev_val - 0.80) / 0.40)
+                    decay_tau *= 1.0 - hot_excess * (0.48, 0.34, 0.34)[idx]
                 alpha = min(1.0, dt / decay_tau)
             filtered.append(prev_val + (new_val - prev_val) * alpha)
         filtered[1] = min(filtered[1], filtered[0])
@@ -1639,6 +1677,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     tau = rise_tau
             else:
                 tau = decay_tau
+                if cur_val <= 0.04 and prev_val >= 0.75:
+                    # Calm frames should unwind exaggerated hot states faster
+                    # than ordinary musical decay, otherwise Blob feels stuck
+                    # in a post-hit blowout long after the phrase has cooled.
+                    hot_excess = min(1.0, (prev_val - 0.75) / 0.55)
+                    tau *= 1.0 - hot_excess * 0.62
+                elif cur_val <= 0.02:
+                    tau *= 0.82
             alpha = min(1.0, dt / max(tau, 0.01))
             filtered.append(prev_val + (cur_val - prev_val) * alpha)
         return (filtered[0], filtered[1], filtered[2], filtered[3])
@@ -1964,11 +2010,50 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         overall = min(overall, support_overall + cap_unit * 0.52)
 
         # Stage-driving support should stay rooted in the same continuous bass path
-        # as the live silhouette, but kicks need a less punitive gate than the
-        # old over-damped stage branch or normal musical phrases never register.
-        stage_bass_support = min(clamp_max, stage_support_bass * 0.94 + base_bass * 0.10 + transient_bass * 0.18)
-        stage_kick_guard = _clamp01((kick_support - 0.02) / 0.24)
-        stage_kick_boost = kick_evt * stage_kick_guard * (0.10 + kick_support * 0.40)
+        # as the live silhouette, but it cannot live in the same hot range or
+        # moderate phrases will park the stage ladder at the top forever. Compress
+        # the sustained stage drive and let true event accents claim the extra headroom.
+        stage_drive_bass = soft_ceiling(
+            stage_support_bass,
+            knee=0.22,
+            ceiling=0.42,
+            max_input=clamp_max,
+            curve=1.24,
+        )
+        stage_drive_mid = soft_ceiling(
+            stage_support_mid,
+            knee=0.16,
+            ceiling=0.28,
+            max_input=clamp_max,
+            curve=1.22,
+        )
+        stage_drive_high = soft_ceiling(
+            stage_support_high,
+            knee=0.14,
+            ceiling=0.24,
+            max_input=clamp_max,
+            curve=1.20,
+        )
+        stage_drive_overall = soft_ceiling(
+            stage_support_overall,
+            knee=0.18,
+            ceiling=0.24,
+            max_input=clamp_max,
+            curve=1.28,
+        )
+        stage_bass_support = min(
+            clamp_max,
+            max(
+                stage_drive_bass * 0.60,
+                support_bass * (
+                    0.28 + 0.36 * _clamp01((support_bass - 0.12) / 0.30)
+                ),
+            )
+            + base_bass * 0.06
+            + transient_bass * 0.06,
+        )
+        stage_kick_guard = _clamp01((kick_support - 0.04) / 0.24)
+        stage_kick_boost = kick_evt * stage_kick_guard * (0.20 + kick_support * 0.60)
         snare_stage_support = _clamp01(
             transient_mid * 0.92
             + transient_high * 0.68
@@ -1980,25 +2065,33 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         snare_stage_boost = snare_evt * snare_stage_guard * (0.08 + snare_stage_support * 0.34)
         stage_overall = max(
             base_overall,
-            stage_support_overall,
-            stage_bass_support * 0.62 + stage_support_overall * 0.30 + transient_bass * 0.18 + stage_kick_boost * 1.75,
-            stage_support_overall * 0.36
-            + transient_mid * 0.34
-            + transient_high * 0.20
-            + snare_stage_boost * 1.45,
+            stage_drive_overall,
+            stage_drive_overall + support_overall * pressure * 0.18,
+            stage_bass_support * 0.36 + stage_drive_overall * 0.18 + transient_bass * 0.08 + stage_kick_boost * 1.55,
+            overall * 0.76
+            + transient_mid * 0.14
+            + transient_high * 0.08
+            + snare_stage_boost * 0.50,
         )
-        stage_overall_cap = stage_support_overall + cap_unit * (
-            1.55 + stage_kick_guard * 0.65 + snare_stage_guard * 0.52
+        if pressure >= 0.50:
+            stage_overall = max(stage_overall, overall)
+        stage_overall_cap = max(overall, stage_drive_overall) + cap_unit * (
+            1.12 + stage_kick_guard * 0.42 + snare_stage_guard * 0.34
         )
         stage_overall = min(
             clamp_max,
             max(base_overall, min(stage_overall, stage_overall_cap)),
         )
-        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 2.00)
-        stage_bass = min(stage_bass, stage_support_bass + cap_unit * (1.55 + stage_kick_guard * 0.70))
+        stage_bass = min(clamp_max, stage_bass_support + stage_kick_boost * 3.00)
+        stage_bass = min(
+            stage_bass,
+            max(stage_drive_bass * 0.86, support_bass * 0.72) + cap_unit * (1.04 + stage_kick_guard * 0.50),
+        )
+        if kick_evt > 0.0 and stage_kick_guard > 0.0:
+            stage_bass = max(stage_bass, min(clamp_max, bass + stage_kick_boost * 0.55))
         stage_mid = min(
             stage_overall,
-            stage_support_mid * 0.22
+            stage_drive_mid * 0.20
             + base_mid * 0.18
             + transient_mid * 0.24
             + snare_drive * 0.34
@@ -2007,7 +2100,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         )
         stage_high = min(
             stage_overall * 0.76,
-            stage_support_high * 0.16
+            stage_drive_high * 0.16
             + base_high * 0.18
             + transient_high * 0.16
             + snare_drive * 0.23

@@ -161,15 +161,15 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         return
 
     widget._bubble_compute_pending = True
-    # Energy sources: transient bus for pulse, smoothed for drift/stream.
-    use_raw = getattr(widget, '_use_raw_energy', False)
-    if use_raw and widget._engine:
+    # Bubble owns a full-dynamic continuous energy path. Using the shared
+    # post-AGC snapshot here can flatten the mode into a near-constant plateau
+    # under hot floor pressure, especially after preset/custom transitions.
+    if widget._engine:
         eb_pulse = widget._engine.get_pre_agc_energy_bands()
-    elif widget._engine:
-        eb_pulse = widget._engine.get_energy_bands()
+        eb_smooth = widget._engine.get_pre_agc_energy_bands()
     else:
         eb_pulse = None
-    eb_smooth = widget._engine.get_energy_bands() if widget._engine else None
+        eb_smooth = None
     # Transient bus snapshot for immediate beat response (Approach A §6)
     tb = widget._engine.get_transient_energy_bands() if widget._engine else None
     # Event micro-scheduler (§2.4) — passed to bubble sim for consume-once kicks

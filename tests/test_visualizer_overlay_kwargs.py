@@ -97,31 +97,29 @@ def test_spectrum_gpu_kwargs_include_shared_engine_signal_snapshot(qt_app):
 
 
 @pytest.mark.qt
-def test_blob_gpu_kwargs_use_shared_smoothed_energy_when_raw_toggle_is_off(qt_app):
+def test_blob_gpu_kwargs_use_pre_agc_energy_snapshot(qt_app):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qt_app.processEvents()
 
     stub_engine = _StubEngine()
-    widget._use_raw_energy = False
     widget.set_visualization_mode(VisualizerMode.BLOB)
 
     extras = build_gpu_push_extra_kwargs(widget, "blob", stub_engine)
 
-    assert extras["energy_bands"] == stub_engine.get_energy_bands()
+    assert extras["energy_bands"] == stub_engine.get_pre_agc_energy_bands()
 
     widget.deleteLater()
 
 
 @pytest.mark.qt
-def test_raw_energy_toggle_still_uses_pre_agc_snapshot(qt_app):
+def test_bubble_gpu_kwargs_use_pre_agc_energy_snapshot(qt_app):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qt_app.processEvents()
 
     stub_engine = _StubEngine()
-    widget._use_raw_energy = True
-    widget.set_visualization_mode(VisualizerMode.BLOB)
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
 
-    extras = build_gpu_push_extra_kwargs(widget, "blob", stub_engine)
+    extras = build_gpu_push_extra_kwargs(widget, "bubble", stub_engine)
 
     assert extras["energy_bands"] == stub_engine.get_pre_agc_energy_bands()
 

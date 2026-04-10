@@ -1193,6 +1193,58 @@ class TestPerModeTechnicalControlsCollection:
         assert config["sine_wave_audio_block_size"] == 128
         assert config["sine_wave_input_gain"] == pytest.approx(1.30)
 
+
+class TestPerModeTechnicalControlPresentation:
+    def test_block_size_combo_tints_mode_recommended_entry(self, qtbot):
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QVBoxLayout, QWidget
+        from ui.tabs.media import technical_controls as tc
+        from ui.widgets import StyledComboBox
+
+        class _DummySettings:
+            def get(self, *_args, **_kwargs):
+                return {}
+
+        class _DummyTab(QWidget):
+            def __init__(self):
+                super().__init__()
+                self._settings = _DummySettings()
+
+            def _default_bool(self, *_args):
+                return False
+
+            def _default_int(self, _section, _key, default):
+                return default
+
+            def _default_float(self, _section, _key, default):
+                return default
+
+            def _save_settings(self):
+                return None
+
+            def _auto_switch_preset_to_custom(self):
+                return None
+
+        tab = _DummyTab()
+        qtbot.addWidget(tab)
+        host = QWidget()
+        qtbot.addWidget(host)
+        layout = QVBoxLayout(host)
+
+        controls = tc._build_control(
+            tab,
+            layout,
+            "blob",
+            next(defn for defn in tc._BASE_CONTROL_DEFS if defn.control_key == "block_size"),
+        )
+        combo = controls["block_size"]
+        assert isinstance(combo, StyledComboBox)
+        idx = combo.findData(256)
+        assert idx >= 0
+        tinted = combo.itemData(idx, Qt.ItemDataRole.ForegroundRole)
+        assert isinstance(tinted, QColor)
+        assert tinted == tc._RECOMMENDED_COMBO_COLOR
+
     def test_collect_per_mode_controls_keeps_direct_transient_keys_unprefixed(self):
         from ui.tabs.media import technical_controls as tc
 
@@ -1247,6 +1299,48 @@ class TestPerModeTechnicalControlsCollection:
         assert defs["manual_floor"].label_text == "Noise Floor\nBaseline:"
         assert "Recommended for Spectrum: 128 samples." in tc._audio_block_tooltip("spectrum")
         assert "not live adaptive analysis" in tc._recommended_sensitivity_tooltip("spectrum")
+        assert "groove marker shows the recommended starting position" in tc._agc_tooltip("spectrum")
+
+    @pytest.mark.parametrize(
+        ("mode_key", "expected_percent"),
+        [
+            ("spectrum", 42),
+            ("blob", 45),
+            ("bubble", 50),
+            ("sine_wave", 18),
+            ("oscilloscope", 15),
+        ],
+    )
+    def test_agc_slider_uses_mode_specific_recommended_marker(self, qt_app, mode_key, expected_percent):
+        from PySide6.QtWidgets import QVBoxLayout, QWidget
+        from ui.tabs.media import technical_controls as tc
+        from ui.tabs.shared_styles import RecommendedMarkSlider
+
+        class _DummyTab(QWidget):
+            def _default_bool(self, *_args):
+                return False
+
+            def _default_int(self, *_args):
+                return 32
+
+            def _default_float(self, *_args):
+                return 0.5
+
+            def _save_settings(self):
+                return None
+
+            def _auto_switch_preset_to_custom(self):
+                return None
+
+        tab = _DummyTab()
+        layout = QVBoxLayout(tab)
+        defs = {defn.control_key: defn for defn in tc._control_defs_for_mode(mode_key)}
+
+        controls = tc._build_control(tab, layout, mode_key, defs["agc_strength_slider"])
+        slider = controls["agc_strength_slider"]
+
+        assert isinstance(slider, RecommendedMarkSlider)
+        assert slider.recommended_value() == expected_percent
 
     def test_load_per_mode_controls_reads_direct_transient_keys(self):
         from ui.tabs.media import technical_controls as tc

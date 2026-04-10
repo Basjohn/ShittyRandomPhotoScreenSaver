@@ -74,10 +74,19 @@ tests/
 - `tests/test_spotify_visualizer_widget.py` now also carries a shared-seam behavior fence: if a mode's technical cache entry is missing, the widget must no-op instead of replaying another mode's cached technical config, and explicit mode switches must restore each mode's own floor/sensitivity/block/input/transient state when switching away and back.
 - `tests/test_spotify_visualizer_widget.py` now also fences the shared beat-engine rebuild contract directly: changing bar count must reconfigure the existing shared engine instead of quietly swapping to a warmed alternate engine object, so startup and runtime stay on the same rebuild path.
 - `tests/test_visualizer_settings_plumbing.py` now also fences the GPU-payload seam itself: active mode payloads must not carry unrelated Blob/line/bubble extras just because the GL overlay accepts a wide `set_state(...)` signature.
+- `tests/test_visualizer_overlay_kwargs.py` now also fences the continuous-energy routing contract directly: Blob and Bubble GPU payload snapshots must consume pre-AGC energy bands through the shared handoff layer without relying on the retired `_use_raw_energy` seam.
+- `tests/test_visualizer_settings_plumbing.py` now also fences the AGC recommendation UX contract: the shared `AGC Strength` slider must use the centralized recommended-marker widget and keep the tooltip copy that explains the groove marker instead of drifting into mode-local slider variants.
+- `tests/test_spotify_visualizer_widget.py` now also fences Bubble dispatch itself: the live tick pipeline must feed Bubble with pre-AGC energy even when no legacy raw-energy toggle exists on the widget.
 - `tests/test_ghost_isolation.py` now also fences overlay mode-switch runtime state: Spectrum peak memory must reset on Spectrum re-entry instead of inheriting foreign-mode bar history, non-Spectrum frames must not mutate `_peaks`, and line-mode resets must clear waveform ring/count buffers.
+- `tests/test_widgets_tab.py::test_bubble_swirl_toggle_hides_conflicting_direction_rows` now fences the Bubble motion-surface cleanup: enabling Swirl must hide the ordinary stream/drift direction rows instead of leaving three competing direction surfaces visible at once.
 - **Blob reactivity tests**:
   - `tests/test_visualizer_reactivity_quality.py` now also fences the non-shaped Blob stage ladder against dynamic-floor pressure and fast drum-like support so stage `2/3` do not quietly go back to sleep.
   - It now also includes a direct transient-stage regression for the real failure we saw in runtime: `test_blob_transient_rich_snare_phrase_can_seed_stage_progress` exists to catch the case where a visible drum hit deforms locally but still fails to wake stage `1`.
+  - It now also includes a log-shaped hot-baseline unwind fence: `test_non_shaped_blob_log_shaped_hot_seed_unwinds_quickly` seeds the same kind of still-hot live/support/stage state seen in runtime logs and requires Blob to cool materially during a calm window instead of staying blown out/max-glow-heavy.
+- **Bubble reactivity tests**:
+  - `tests/test_bubble_reactivity.py` now also carries the overdrive/plateau guardrail suite.
+  - `TestBubblePlateauGuardrails::test_medium_vocal_run_does_not_latch_overdrive_for_entire_phrase` is the key log-shaped fence for the real failure we saw in runtime: medium vocal-heavy phrases should breathe, not park Bubble in overdrive hold for nearly the whole passage.
+  - `TestBubblePlateauGuardrails::test_bubble_burst_path_consumes_scheduler_edges` exists specifically so stale one-shot scheduler edges cannot silently turn into fake sustained burst authority again.
 
 ### Stability Rules
 

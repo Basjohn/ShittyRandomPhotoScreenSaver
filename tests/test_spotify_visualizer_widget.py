@@ -321,6 +321,20 @@ class _FakeDisplayParent(QWidget):
         self.frames.clear()
 
 
+class _BubbleDispatchThreadManager:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    def submit_compute_task(self, worker, *args, **kwargs) -> None:
+        self.calls.append(
+            {
+                "worker": worker,
+                "args": args,
+                "kwargs": kwargs,
+            }
+        )
+
+
 @pytest.mark.qt
 def test_mode_switch_does_not_request_overlay_reset_before_transition_reset(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
@@ -340,6 +354,49 @@ def test_mode_switch_does_not_request_overlay_reset_before_transition_reset(qt_a
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
     assert parent._spotify_bars_overlay.reset_requests == []
+
+
+@pytest.mark.qt
+def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_energy_bands = lambda: SimpleNamespace(bass=0.11, mid=0.22, high=0.33, overall=0.44)
+    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(bass=0.71, mid=0.72, high=0.73, overall=0.74)
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_compute_pending = False
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = True
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+
+    assert widget._thread_manager.calls
+    eb_snap = widget._thread_manager.calls[0]["args"][1]
+    assert eb_snap["bass"] == pytest.approx(0.71)
+    assert eb_snap["mid"] == pytest.approx(0.72)
+    assert eb_snap["high"] == pytest.approx(0.73)
+    assert eb_snap["overall"] == pytest.approx(0.74)
 
 
 @pytest.mark.qt

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Mapping, Optional
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, add_section_label
+from ui.tabs.shared_styles import ADV_HELPER_LABEL_STYLE, RecommendedMarkSlider, add_section_label
 from ui.tabs.widgets_tab import NoWheelSlider
 from ui.widgets import StyledComboBox
 
@@ -93,6 +94,16 @@ _MODE_RECOMMENDED_BLOCK_SIZE: Dict[str, int] = {
     "blob": 256,
     "bubble": 256,
 }
+
+_MODE_RECOMMENDED_AGC: Dict[str, float] = {
+    "spectrum": 0.42,
+    "oscilloscope": 0.15,
+    "sine_wave": 0.18,
+    "blob": 0.45,
+    "bubble": 0.50,
+}
+
+_RECOMMENDED_COMBO_COLOR = QColor(216, 190, 104)
 
 
 @dataclass(frozen=True)
@@ -212,6 +223,40 @@ def _dynamic_range_tooltip(mode_key: str) -> str:
     )
 
 
+def _agc_tooltip(mode_key: str) -> str:
+    mode_name = _mode_display_name(mode_key)
+    recommendation_map = {
+        "spectrum": "Recommended starting range: 35%–50%. Higher values trade punch for steadier loud/quiet balance.",
+        "blob": "Recommended starting range: 35%–55%. Higher values help uneven tracks but can soften hard transient contrast.",
+        "bubble": "Recommended starting range: 45%–60%. Useful when the stream feels too uneven between tracks.",
+        "oscilloscope": "Recommended starting range: 0%–25%. Usually keep this low so line dynamics stay honest.",
+        "sine_wave": "Recommended starting range: 0%–25%. Usually keep this low so heartbeat/width motion keeps its natural contrast.",
+    }
+    recommendation = recommendation_map.get(
+        mode_key,
+        "Recommended starting range: 25%–50% depending on how uneven the source track is.",
+    )
+    return (
+        f"AGC normalization aggressiveness for {mode_name} (0%=off, 100%=max compression).\n"
+        "Lower values preserve more dynamic range and punch. Higher values level quiet/loud phrases more aggressively.\n"
+        f"{recommendation}\n"
+        "The groove marker shows the recommended starting position."
+    )
+
+
+def _recommended_agc_value(mode_key: str) -> float:
+    return float(_MODE_RECOMMENDED_AGC.get(mode_key, 0.4))
+
+
+def _input_gain_tooltip(mode_key: str) -> str:
+    mode_name = _mode_display_name(mode_key)
+    return (
+        f"Pre-FFT signal gain for {mode_name} (5%–200%).\n"
+        "This behaves like changing the source volume before analysis, without changing actual playback volume.\n"
+        "Lower = calmer visualizer, higher = stronger pickup. 100% = no change."
+    )
+
+
 _BUCKET_DEFS: tuple[_BucketDef, ...] = (
     _BucketDef(
         key="agc",
@@ -302,10 +347,7 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         label_text="AGC Strength:",
         label_key="agc_strength_label",
         section="agc",
-        tooltip=(
-            "AGC normalization aggressiveness (0%=off, 50%=default, 100%=max compression).\n"
-            "Lower values preserve more dynamic range. 0% disables normalization entirely."
-        ),
+        tooltip="",
         minimum=0.0,
         maximum=1.0,
         tick_interval=10,
@@ -322,11 +364,7 @@ _BASE_CONTROL_DEFS: tuple[_ControlDef, ...] = (
         label_text="Input Gain:",
         label_key="input_gain_label",
         section="agc",
-        tooltip=(
-            "Pre-FFT signal gain (5%–200%). Simulates changing the mixer volume\n"
-            "without actually affecting audio output. Lower = calmer visualizer,\n"
-            "higher = more reactive. 100% = no change (default)."
-        ),
+        tooltip="",
         minimum=0.05,
         maximum=2.0,
         tick_interval=25,
@@ -691,7 +729,11 @@ def _create_hidden_control(tab, mode_key: str, defn: _ControlDef) -> Dict[str, o
     default_value = _resolve_default(tab, mode_key, defn)
 
     if defn.widget_kind == "slider":
-        widget = NoWheelSlider(Qt.Orientation.Horizontal)
+        if defn.control_key == "agc_strength_slider":
+            widget = RecommendedMarkSlider(Qt.Orientation.Horizontal)
+            widget.set_recommended_value(_slider_value_from_actual(_recommended_agc_value(mode_key), defn))
+        else:
+            widget = NoWheelSlider(Qt.Orientation.Horizontal)
         widget.setMinimum(_slider_value_from_actual(defn.minimum, defn))
         widget.setMaximum(_slider_value_from_actual(defn.maximum, defn))
         if defn.tick_interval:
@@ -754,6 +796,8 @@ def _build_control(tab, parent_layout: QVBoxLayout, mode_key: str, defn: _Contro
             widget.setMinimumWidth(defn.min_width)
         for label, value in defn.options:
             widget.addItem(label, value)
+        if defn.control_key == "block_size":
+            widget.set_item_foreground_by_data(_recommended_block_size(mode_key), _RECOMMENDED_COMBO_COLOR)
         idx = widget.findData(int(default_value))
         if idx < 0:
             idx = 0
@@ -796,7 +840,11 @@ def _build_control(tab, parent_layout: QVBoxLayout, mode_key: str, defn: _Contro
 
     if defn.widget_kind == "slider":
         row = _aligned_row(parent_layout, defn.label_text)
-        widget = NoWheelSlider(Qt.Orientation.Horizontal)
+        if defn.control_key == "agc_strength_slider":
+            widget = RecommendedMarkSlider(Qt.Orientation.Horizontal)
+            widget.set_recommended_value(_slider_value_from_actual(_recommended_agc_value(mode_key), defn))
+        else:
+            widget = NoWheelSlider(Qt.Orientation.Horizontal)
         widget.setMinimum(_slider_value_from_actual(defn.minimum, defn))
         widget.setMaximum(_slider_value_from_actual(defn.maximum, defn))
         widget.setTickPosition(QSlider.TickPosition.TicksBelow)
@@ -805,6 +853,10 @@ def _build_control(tab, parent_layout: QVBoxLayout, mode_key: str, defn: _Contro
         tooltip = defn.tooltip
         if defn.control_key == "sensitivity_slider":
             tooltip = _sensitivity_tooltip(mode_key)
+        elif defn.control_key == "agc_strength_slider":
+            tooltip = _agc_tooltip(mode_key)
+        elif defn.control_key == "input_gain_slider":
+            tooltip = _input_gain_tooltip(mode_key)
         elif defn.control_key == "manual_floor":
             tooltip = _manual_floor_tooltip(True)
         if tooltip:

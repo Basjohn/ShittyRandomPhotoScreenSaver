@@ -691,6 +691,30 @@ class TestBlobSchedulerEventWiring:
         assert kwargs['blob_kick_event_strength'] == 0.0
         assert kwargs['blob_snare_event_strength'] == 0.0
 
+    def test_build_kwargs_consumes_blob_events_once_per_mode_snapshot(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+        from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEventScheduler
+
+        sched = TransientEventScheduler()
+        now = time.time()
+        assert sched.feed(OnsetEvent(timestamp=now, event_type='kick', strength=0.8))
+        assert sched.feed(OnsetEvent(timestamp=now + 0.15, event_type='snare', strength=0.55))
+
+        engine = _SchedulerEngine(
+            sched,
+            tb=TransientEnergyBands(bass_transient=0.3, mid_transient=0.2),
+            eb=_StubEnergyBands(bass=0.4, mid=0.2, high=0.1, overall=0.3),
+        )
+        widget = _BlobKwargsWidget()
+
+        first = build_gpu_push_extra_kwargs(widget, 'blob', engine)
+        second = build_gpu_push_extra_kwargs(widget, 'blob', engine)
+
+        assert abs(first['blob_kick_event_strength'] - 0.8) < 1e-9
+        assert abs(first['blob_snare_event_strength'] - 0.55) < 1e-9
+        assert second['blob_kick_event_strength'] == 0.0
+        assert second['blob_snare_event_strength'] == 0.0
+
 
 # ===========================================================================
 # 11. Sine/Osc Scheduler Event Wiring (§2.4)

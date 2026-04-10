@@ -375,8 +375,10 @@ class TransientEventScheduler:
       given type and marks it consumed.  Used by Bubble (each kick drives
       exactly one promotion batch).
     - ``peek_latest(type, max_age_s)`` — returns the most recent event of
-      the given type within *max_age_s* without consuming it.  Used by Blob
-      (wobble + outline both respond to the same snare).
+      the given type within *max_age_s* without consuming it.  Use this only
+      inside a mode-owned handoff or fanout that intentionally wants a level-
+      like recent-event view; do not poll it per frame where a consume-once
+      edge is the correct contract.
 
     Threading model:
       Single writer (COMPUTE pool via ``TransientBus.update`` → ``feed``),

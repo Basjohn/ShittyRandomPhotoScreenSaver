@@ -260,6 +260,11 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_line_amplitude.setValue(max(5, min(100, osc_amp_val)))
     tab.osc_line_amplitude.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_line_amplitude.setTickInterval(10)
+    tab.osc_line_amplitude.setToolTip(
+        "Renderer-side waveform amplitude multiplier.\n"
+        "Lower = flatter line after the shared FFT signal is already computed.\n"
+        "Higher = taller visible waveform motion. This is separate from Technical sensitivity."
+    )
     bind_setting_signal(
         tab,
         tab.osc_line_amplitude.valueChanged,

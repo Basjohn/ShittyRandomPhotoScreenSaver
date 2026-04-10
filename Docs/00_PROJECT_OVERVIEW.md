@@ -10,6 +10,7 @@ This document introduces the SRPSS codebase. Treat it as the top-level landing p
 - `Docs/Historical_Bugs.md` is the historical ledger: dated regressions, failed approaches, final fixes, and regression coverage notes.
 - `Docs/Visualizer_Change_Checklist.md` is the stable visualizer-setting sweep: use it whenever a visualizer mode setting is added, removed, renamed, split, or materially retuned.
 - Visualizer runtime guardrail: do not hide switch hitches behind silent engine pools or runtime-only mutation paths that differ from cold startup. If startup and runtime must rebuild something, they should route through the same authoritative path and the contract should be documented in `Spec.md`.
+- Visualizer signal-path guardrail: changing a mode from a dead/flat shared signal path to a hotter raw/pre-AGC path is not a complete fix unless the downstream runtime math is retuned for that hotter signal family too. Otherwise the regression simply changes shape into ceiling pinning, plateau hold, jerkiness, or blowout.
 - Audits are temporary working documents. Stable docs should not depend on them directly; if an audit still matters, route readers through `Current_Plan.md` instead of linking the audit from `Index.md` or `Spec.md`.
 - Regression warnings may remain in `Spec.md` only when they are still active contract guardrails because the same class of regression has reappeared more than once.
 

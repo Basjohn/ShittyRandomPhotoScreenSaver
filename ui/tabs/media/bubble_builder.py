@@ -168,7 +168,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_freq_pulse_label = QLabel(f"{val}%")
     bubble_freq_row.addWidget(tab.bubble_small_freq_pulse_label)
 
-    stream_dir_row = _aligned_row(motion_bucket, "Stream Direction:")
+    tab._bubble_stream_direction_row_widget, stream_dir_row = _aligned_row_widget(motion_bucket, "Stream Direction:")
     tab.bubble_stream_direction = StyledComboBox(size_variant="compact")
     tab.bubble_stream_direction.addItems(["None", "Up", "Down", "Left", "Right", "Diagonal", "Random"])
     saved_dir = tab._default_str('spotify_visualizer', 'bubble_stream_direction', 'up').lower()
@@ -289,7 +289,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_frequency_label = QLabel(f"{val}%")
     drift_frequency_row.addWidget(tab.bubble_drift_frequency_label)
 
-    drift_direction_row = _aligned_row(motion_bucket, "Drift Direction:")
+    tab._bubble_drift_direction_row_widget, drift_direction_row = _aligned_row_widget(motion_bucket, "Drift Direction:")
     tab.bubble_drift_direction = StyledComboBox(size_variant="compact")
     drift_options = [
         ("None", "none"),
@@ -322,7 +322,7 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     swirl_row.addWidget(tab.bubble_swirl_enabled)
     swirl_row.addStretch()
 
-    _, swirl_combo_row = _aligned_row_widget(motion_bucket, "", wrap=False)
+    tab._bubble_swirl_direction_row_widget, swirl_combo_row = _aligned_row_widget(motion_bucket, "", wrap=False)
     tab.bubble_swirl_direction = StyledComboBox(size_variant="compact")
     tab.bubble_swirl_direction.addItem("Clockwise", "swirl_cw")
     tab.bubble_swirl_direction.addItem("Counter-Clockwise", "swirl_ccw")
@@ -339,6 +339,12 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab.bubble_swirl_direction.setEnabled(checked)
         tab.bubble_drift_direction.setEnabled(not checked)
         tab.bubble_stream_direction.setEnabled(not checked)
+        if hasattr(tab, "_bubble_swirl_direction_row_widget"):
+            tab._bubble_swirl_direction_row_widget.setVisible(bool(checked))
+        if hasattr(tab, "_bubble_drift_direction_row_widget"):
+            tab._bubble_drift_direction_row_widget.setVisible(not checked)
+        if hasattr(tab, "_bubble_stream_direction_row_widget"):
+            tab._bubble_stream_direction_row_widget.setVisible(not checked)
         tab._save_settings()
 
     tab.bubble_swirl_enabled.toggled.connect(_on_swirl_toggled)

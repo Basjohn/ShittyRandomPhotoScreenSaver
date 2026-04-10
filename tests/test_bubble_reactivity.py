@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import random
+from types import SimpleNamespace
 
 from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
 
@@ -74,6 +75,33 @@ def _max_big_pulse(sim):
 def _max_small_pulse(sim):
     smalls = _small_bubbles(sim)
     return max((b.pulse_energy for b in smalls), default=0.0)
+
+
+class _SingleShotScheduler:
+    def __init__(self, *, snare_strength=0.0, vocal_strength=0.0):
+        self._events = {
+            "snare": [SimpleNamespace(strength=snare_strength)] if snare_strength > 0.0 else [],
+            "vocal_swell": [SimpleNamespace(strength=vocal_strength)] if vocal_strength > 0.0 else [],
+        }
+
+    def consume_next(self, event_type, max_age_s=0.5):
+        queue = self._events.get(event_type, [])
+        if queue:
+            return queue.pop(0)
+        return None
+
+    def peek_latest(self, event_type, max_age_s=0.3):
+        queue = self._events.get(event_type, [])
+        if queue:
+            return queue[-1]
+        return None
+
+
+class _ConsumeOnlyScheduler(_SingleShotScheduler):
+    def peek_latest(self, event_type, max_age_s=0.3):
+        raise AssertionError(
+            "Bubble burst/overdrive should consume scheduler edges once, not poll them with peek_latest()."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -386,4 +414,207 @@ class TestStreamSpeedReactivity:
         assert high_displacement > low_displacement * 1.35, (
             f"High-reactivity stream displacement {high_displacement:.4f} should exceed "
             f"low-reactivity displacement {low_displacement:.4f}"
+        )
+
+
+class TestBubblePlateauGuardrails:
+    def test_medium_vocal_run_does_not_latch_overdrive_for_entire_phrase(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_stream_constant_speed=0.22,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=1.25,
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        # Log-shaped alternating material: medium-strength vocal-heavy phrases
+        # with short breathers between them. This should breathe, not park
+        # Bubble in overdrive for almost the entire phrase.
+        phrase = (
+            {
+                "bass": 0.20,
+                "mid": 0.58,
+                "high": 0.26,
+                "overall": 0.33,
+                "smooth_mid": 0.58,
+                "smooth_high": 0.26,
+            },
+            {
+                "bass": 0.18,
+                "mid": 0.56,
+                "high": 0.24,
+                "overall": 0.31,
+                "smooth_mid": 0.56,
+                "smooth_high": 0.24,
+            },
+            {
+                "bass": 0.12,
+                "mid": 0.20,
+                "high": 0.08,
+                "overall": 0.14,
+                "smooth_mid": 0.20,
+                "smooth_high": 0.08,
+            },
+            {
+                "bass": 0.21,
+                "mid": 0.62,
+                "high": 0.27,
+                "overall": 0.35,
+                "smooth_mid": 0.62,
+                "smooth_high": 0.27,
+            },
+            {
+                "bass": 0.14,
+                "mid": 0.24,
+                "high": 0.10,
+                "overall": 0.16,
+                "smooth_mid": 0.24,
+                "smooth_high": 0.10,
+            },
+            {
+                "bass": 0.18,
+                "mid": 0.52,
+                "high": 0.22,
+                "overall": 0.29,
+                "smooth_mid": 0.52,
+                "smooth_high": 0.22,
+            },
+        )
+
+        active_frames = 0
+        release_frames = 0
+        transition_count = 0
+        prev_active = sim._overdrive_active
+        for idx in range(300):
+            sim.tick(dt, phrase[idx % len(phrase)], settings)
+            if sim._overdrive_active:
+                active_frames += 1
+            else:
+                release_frames += 1
+            if sim._overdrive_active != prev_active:
+                transition_count += 1
+                prev_active = sim._overdrive_active
+
+        assert active_frames < 180, (
+            f"Bubble stayed in overdrive for {active_frames} / 300 frames on an alternating "
+            "medium-vocal run; the gate is still latching instead of breathing."
+        )
+        assert release_frames > 36, (
+            f"Bubble only spent {release_frames} frames out of overdrive on the same run; "
+            "the speed path still has almost no real release windows."
+        )
+        assert transition_count >= 2, (
+            f"Bubble only changed overdrive state {transition_count} time(s); the alternating "
+            "phrase is still being treated like one long unbroken overdrive hold."
+        )
+
+    def test_sustained_hot_section_does_not_pin_big_bubbles_near_ceiling(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_stream_constant_speed=0.22,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=1.25,
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        hot = {
+            "bass": 0.55,
+            "mid": 0.52,
+            "high": 0.28,
+            "overall": 0.44,
+            "smooth_mid": 0.52,
+            "smooth_high": 0.28,
+        }
+
+        plateau_frames = 0
+        max_big = 0.0
+        for _ in range(150):
+            sim.tick(dt, hot, settings)
+            pulse = _max_big_pulse(sim)
+            max_big = max(max_big, pulse)
+            if pulse >= 0.88:
+                plateau_frames += 1
+
+        assert max_big < 0.96, (
+            f"Big-bubble pulse peaked at {max_big:.3f}, which is too close to a hard ceiling "
+            "for an ordinary sustained loud passage."
+        )
+        assert plateau_frames < 24, (
+            f"Big bubbles spent {plateau_frames} frames pinned near the ceiling; Bubble is still "
+            "living in an overdrive/plateau state instead of breathing."
+        )
+
+    def test_bubble_speed_recovers_without_long_overdrive_hold_after_hot_phrase(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_stream_constant_speed=0.22,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=1.25,
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        hot = {
+            "bass": 0.52,
+            "mid": 0.50,
+            "high": 0.24,
+            "overall": 0.41,
+            "smooth_mid": 0.50,
+            "smooth_high": 0.24,
+        }
+        quiet = {
+            "bass": 0.12,
+            "mid": 0.11,
+            "high": 0.06,
+            "overall": 0.10,
+            "smooth_mid": 0.11,
+            "smooth_high": 0.06,
+        }
+
+        for _ in range(90):
+            sim.tick(dt, hot, settings)
+
+        quiet_hold_frames = 0
+        for _ in range(60):
+            sim.tick(dt, quiet, settings)
+            if sim._overdrive_active:
+                quiet_hold_frames += 1
+
+        assert quiet_hold_frames < 18, (
+            f"Bubble stayed in overdrive for {quiet_hold_frames} quiet frames after the phrase; "
+            "speed is still too sticky and likely to feel jerky/stuck."
+        )
+        assert sim._smoothed_speed_energy < 0.36, (
+            f"Speed energy only decayed to {sim._smoothed_speed_energy:.3f}; Bubble travel is "
+            "still carrying too much stale pressure after the hot section."
+        )
+
+    def test_bubble_burst_path_consumes_scheduler_edges(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_stream_constant_speed=0.22,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=1.25,
+            _event_scheduler=_ConsumeOnlyScheduler(snare_strength=0.9, vocal_strength=0.75),
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        quiet = {
+            "bass": 0.12,
+            "mid": 0.11,
+            "high": 0.06,
+            "overall": 0.10,
+            "smooth_mid": 0.11,
+            "smooth_high": 0.06,
+        }
+
+        sim.tick(dt, quiet, settings)
+        for _ in range(6):
+            sim.tick(dt, quiet, settings)
+
+        assert not sim._overdrive_active, (
+            "Bubble overdrive stayed active after a one-shot scheduler event on quiet audio."
         )

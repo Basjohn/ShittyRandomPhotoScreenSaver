@@ -646,14 +646,13 @@ def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
 
 def _resolve_continuous_energy_bands(widget: Any, mode_str: str, engine: Any):
     """Return the canonical continuous energy source for the active mode."""
-    use_raw = getattr(widget, '_use_raw_energy', False)
-    if use_raw:
+    if str(mode_str or "").lower() in {"blob", "bubble"}:
         return engine.get_pre_agc_energy_bands()
     return engine.get_energy_bands()
 
 
 def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_str: str, engine: Any) -> None:
-    """Attach waveform, continuous energy, transient bus, and scheduler peeks."""
+    """Attach waveform, continuous energy, transient bus, and mode-local event edges."""
     if engine is None:
         return
 
@@ -680,8 +679,11 @@ def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_st
         return
 
     if mode_str == 'blob':
-        kick_evt = scheduler.peek_latest('kick', max_age_s=0.18)
-        snare_evt = scheduler.peek_latest('snare', max_age_s=0.22)
+        # Consume-once at the mode snapshot boundary so Blob gets a fresh edge
+        # signal without replaying the same scheduled event for every frame in
+        # its max-age window.
+        kick_evt = scheduler.consume_next('kick', max_age_s=0.18)
+        snare_evt = scheduler.consume_next('snare', max_age_s=0.22)
         extra['blob_kick_event_strength'] = (
             float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
         )

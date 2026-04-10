@@ -6,7 +6,7 @@ don't duplicate them.
 import weakref
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
     QHBoxLayout,
     QVBoxLayout,
+    QStyle,
+    QStyleOptionSlider,
 )
 
 # Ensure UI resources (e.g., circle checkbox SVGs) are registered even when
@@ -301,6 +303,81 @@ class NoWheelSlider(QSlider):
 
     def wheelEvent(self, event):  # type: ignore[override]
         event.ignore()
+
+
+class RecommendedMarkSlider(NoWheelSlider):
+    """Slider with a subtle recommended-position marker painted on the groove."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._recommended_value: int | None = None
+        self._recommended_color = QColor(210, 210, 210, 170)
+
+    def set_recommended_value(self, value: int | None) -> None:
+        target = None if value is None else int(value)
+        if self._recommended_value == target:
+            return
+        self._recommended_value = target
+        self.update()
+
+    def recommended_value(self) -> int | None:
+        return self._recommended_value
+
+    def set_recommended_color(self, color: QColor) -> None:
+        next_color = QColor(color)
+        if next_color == self._recommended_color:
+            return
+        self._recommended_color = next_color
+        self.update()
+
+    def paintEvent(self, event):  # type: ignore[override]
+        super().paintEvent(event)
+        if self._recommended_value is None:
+            return
+        if self.orientation() != Qt.Orientation.Horizontal:
+            return
+        minimum = int(self.minimum())
+        maximum = int(self.maximum())
+        if maximum <= minimum:
+            return
+
+        option = QStyleOptionSlider()
+        self.initStyleOption(option)
+        groove = self.style().subControlRect(
+            QStyle.ComplexControl.CC_Slider,
+            option,
+            QStyle.SubControl.SC_SliderGroove,
+            self,
+        )
+        handle = self.style().subControlRect(
+            QStyle.ComplexControl.CC_Slider,
+            option,
+            QStyle.SubControl.SC_SliderHandle,
+            self,
+        )
+        if groove.isNull() or handle.isNull():
+            return
+
+        span = max(1, groove.width() - handle.width())
+        ratio = (self._recommended_value - minimum) / float(maximum - minimum)
+        ratio = max(0.0, min(1.0, ratio))
+        center_x = groove.left() + handle.width() * 0.5 + span * ratio
+        groove_mid_y = groove.center().y()
+        marker_height = max(5.0, groove.height() + 8.0)
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(self._recommended_color)
+        pen.setWidthF(1.6)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(
+            int(round(center_x)),
+            int(round(groove_mid_y - marker_height * 0.5)),
+            int(round(center_x)),
+            int(round(groove_mid_y + marker_height * 0.5)),
+        )
+        painter.end()
 
 SPINBOX_STYLE = """
 /* Rounded inputs with opaque borders + circular stepper controls */

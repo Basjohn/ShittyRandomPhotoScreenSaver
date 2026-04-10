@@ -1255,3 +1255,25 @@ def test_visualizer_technical_bucket_visibility_roundtrip(qt_app, settings_manag
             reloaded.deleteLater()
     finally:
         pass
+
+
+def test_bubble_swirl_toggle_hides_conflicting_direction_rows(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab._load_settings()
+
+        tab.bubble_swirl_enabled.setChecked(True)
+        qt_app.processEvents()
+
+        assert tab._bubble_stream_direction_row_widget.isHidden() is True
+        assert tab._bubble_drift_direction_row_widget.isHidden() is True
+        assert tab._bubble_swirl_direction_row_widget.isHidden() is False
+
+        tab.bubble_swirl_enabled.setChecked(False)
+        qt_app.processEvents()
+
+        assert tab._bubble_stream_direction_row_widget.isHidden() is False
+        assert tab._bubble_drift_direction_row_widget.isHidden() is False
+        assert tab._bubble_swirl_direction_row_widget.isHidden() is True
+    finally:
+        tab.deleteLater()

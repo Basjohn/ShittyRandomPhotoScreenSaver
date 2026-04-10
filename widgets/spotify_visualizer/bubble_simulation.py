@@ -22,6 +22,7 @@ from core.logging.logger import (
     is_verbose_logging,
     is_viz_diagnostics_enabled,
 )
+from widgets.spotify_visualizer.signal_contract import burst_authority, soft_ceiling
 
 _SWIRL_DIRECTIONS = {"swirl_cw", "swirl_ccw"}
 
@@ -148,6 +149,8 @@ class BubbleSimulation:
         self._overdrive_consec_frames: int = 0
         self._overdrive_last_log_state: Optional[str] = None
         self._overdrive_last_log_ts: float = 0.0
+        self._burst_active: bool = False
+        self._burst_cooldown: float = 0.0
         self._prev_bass: float = 0.0  # previous frame bass for slope detection
         self._stream_burst_envelope: float = 0.0
 
@@ -164,6 +167,8 @@ class BubbleSimulation:
         self._overdrive_consec_frames = 0
         self._overdrive_last_log_state = None
         self._overdrive_last_log_ts = 0.0
+        self._burst_active = False
+        self._burst_cooldown = 0.0
         self._prev_bass = 0.0
         self._stream_burst_envelope = 0.0
 
@@ -270,6 +275,7 @@ class BubbleSimulation:
 
         # --- Small→big promotion on every beat ---
         if beat_detected:
+            self._burst_cooldown = max(self._burst_cooldown, 0.60)
             small_pool = [b for b in self._bubbles if not b.is_big and not b.promoted and not b.popping and not b.exiting]
             # Scale promotion count by onset strength (scheduler) or fixed 20%
             if beat_strength > 0.6:
@@ -302,13 +308,15 @@ class BubbleSimulation:
         vocal_speed = min(1.0, max(0.0, vocal_raw)) ** 1.1
         vocal_delta = max(0.0, vocal_raw - midhi_prev_avg)
         vocal_burst_target = min(0.85, vocal_delta * 1.1)
+        snare_evt = None
+        vocal_evt = None
         if _scheduler is not None:
             try:
-                vocal_evt = _scheduler.peek_latest("vocal_swell", max_age_s=0.24)
+                vocal_evt = _scheduler.consume_next("vocal_swell", max_age_s=0.24)
             except Exception:
                 vocal_evt = None
             try:
-                snare_evt = _scheduler.peek_latest("snare", max_age_s=0.18)
+                snare_evt = _scheduler.consume_next("snare", max_age_s=0.18)
             except Exception:
                 snare_evt = None
             vocal_burst_target = max(
@@ -331,11 +339,26 @@ class BubbleSimulation:
                 vocal_burst_target - self._stream_burst_envelope
             ) * min(1.0, dt * 7.0)
 
+        sustained_speed = soft_ceiling(
+            self._smoothed_speed_energy,
+            knee=0.28,
+            ceiling=0.82,
+            max_input=1.0,
+            curve=1.28,
+        )
+        burst_speed = burst_authority(
+            envelope=self._stream_burst_envelope,
+            delta=vocal_delta,
+            event=float(getattr(snare_evt, "strength", 0.0) or 0.0) if _scheduler is not None else 0.0,
+            envelope_weight=0.70,
+            delta_weight=1.05,
+            event_weight=0.16,
+        )
         speed_energy = min(
             1.0,
             max(
                 0.0,
-                self._smoothed_speed_energy * 0.92 + self._stream_burst_envelope * 0.25,
+                sustained_speed * 0.94 + burst_speed * 0.28,
             ),
         )
         cap = max(0.1, stream_cap)
@@ -357,7 +380,7 @@ class BubbleSimulation:
             curve_exp = 1.75 - reactivity * 1.15  # 1.75 at react=0 → 0.60 at react=1.0
             curved = speed_energy ** max(0.35, curve_exp)
             linear_floor = speed_energy * (0.35 + 0.30 * reactivity)
-            burst_floor = self._stream_burst_envelope * (0.15 + 0.15 * reactivity)
+            burst_floor = burst_speed * (0.16 + 0.12 * reactivity)
             energy_factor = min(1.0, max(curved, linear_floor, burst_floor))
 
         # Blend: at zero reactivity we sit at baseline; at full reactivity
@@ -365,7 +388,15 @@ class BubbleSimulation:
         effective_speed = baseline + (cap - baseline) * energy_factor * reactivity
 
         # --- Overdrive band (reactivity slider 101-200%) ---
-        overdrive_threshold_gate = 0.12
+        overdrive_threshold_gate = 0.28
+        overdrive_gate_signal = burst_authority(
+            envelope=self._stream_burst_envelope,
+            delta=vocal_delta,
+            event=float(getattr(snare_evt, "strength", 0.0) or 0.0) if _scheduler is not None else 0.0,
+            envelope_weight=0.55,
+            delta_weight=0.95,
+            event_weight=0.18,
+        )
         if overdrive_margin <= 0.0:
             if self._overdrive_active:
                 self._log_overdrive_state("release", reactivity_raw, energy_factor)
@@ -373,25 +404,28 @@ class BubbleSimulation:
             self._overdrive_hold_timer = 0.0
             self._overdrive_consec_frames = 0
         else:
-            if energy_factor >= overdrive_threshold_gate:
+            if overdrive_gate_signal >= overdrive_threshold_gate:
                 self._overdrive_consec_frames += 1
             else:
                 if not self._overdrive_active:
                     self._overdrive_consec_frames = 0
             if (not self._overdrive_active) and self._overdrive_consec_frames >= 3:
                 self._overdrive_active = True
-                self._overdrive_hold_timer = 0.5
+                self._overdrive_hold_timer = 0.12
                 self._log_overdrive_state("enter", reactivity_raw, energy_factor)
 
             if self._overdrive_active:
-                if energy_factor >= overdrive_threshold_gate:
-                    self._overdrive_hold_timer = 0.5
+                if overdrive_gate_signal >= overdrive_threshold_gate:
+                    self._overdrive_hold_timer = 0.12
                 else:
                     self._overdrive_hold_timer = max(0.0, self._overdrive_hold_timer - dt)
                     if self._overdrive_hold_timer <= 0.0:
                         self._overdrive_active = False
                         self._overdrive_consec_frames = 0
                         self._log_overdrive_state("release", reactivity_raw, energy_factor)
+
+        self._burst_cooldown = max(0.0, self._burst_cooldown - dt)
+        self._burst_active = self._burst_cooldown > 0.0
 
         if self._overdrive_active:
             overdrive_boost = 0.10 + 0.30 * overdrive_norm
@@ -497,16 +531,16 @@ class BubbleSimulation:
                     size_range = max(0.001, self._big_size_max - 0.015)
                     size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
                     delta_sens = 3.2 - size_t * 1.0  # 3.2x small big → 2.2x largest
-                    sustained_knee = 0.50 + size_t * 0.20
-                    sustained_scale = 0.35 - size_t * 0.15
+                    sustained_knee = 0.32 + size_t * 0.18
+                    sustained_scale = 0.58 - size_t * 0.18
                     attack_rate = 11.0 - size_t * 3.0
                     decay_rate = 3.0 + size_t * 1.0
                 else:
                     # Promoted small: react to bass with reduced sensitivity
                     size_t = 0.5
                     delta_sens = 2.8   # moderate — enough to visibly pulse
-                    sustained_knee = 0.40
-                    sustained_scale = 0.35
+                    sustained_knee = 0.28
+                    sustained_scale = 0.48
                     attack_rate = 16.0  # snappy attack for promoted
                     decay_rate = 5.0    # fast decay so each beat pops cleanly
             else:

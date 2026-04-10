@@ -282,7 +282,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_ghost_enabled.stateChanged.connect(_update_sine_ghost_vis)
     _update_sine_ghost_vis()
 
-    sine_sens_row = _aligned_row(response_bucket, "Sensitivity:")
+    sine_sens_row = _aligned_row(response_bucket, "Line Response:")
     tab.sine_sensitivity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_sensitivity.setMinimum(10)
     tab.sine_sensitivity.setMaximum(500)
@@ -290,7 +290,11 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_sensitivity.setValue(max(10, min(500, sine_sens_val)))
     tab.sine_sensitivity.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.sine_sensitivity.setTickInterval(50)
-    tab.sine_sensitivity.setToolTip("How much audio energy affects sine wave amplitude.")
+    tab.sine_sensitivity.setToolTip(
+        "Renderer-side sine line response multiplier.\n"
+        "Lower = calmer amplitude reaction after the shared FFT signal is already computed.\n"
+        "Higher = larger visible swings. This is separate from Technical sensitivity."
+    )
     bind_setting_signal(
         tab,
         tab.sine_sensitivity.valueChanged,

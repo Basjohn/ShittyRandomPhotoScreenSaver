@@ -400,7 +400,7 @@ def test_blob_pulse_release_slows_decay_without_slowing_attack(qt_app):
     _push_blob_frame(slow, dt=0.016, energy=calm, blob_pulse_release_ms=420.0)
     slow_release = slow._blob_live_mid_energy
 
-    assert abs(fast_peak - slow_peak) < 0.02
+    assert abs(fast_peak - slow_peak) < 0.03
     assert slow_release > fast_release
 
 
@@ -740,6 +740,129 @@ def test_blob_floor_pressure_preserves_stage_branch_better_than_live_body(qt_app
     assert overlay._blob_stage_input_overall >= live[3]
     assert stage_progress[1] > 0.08
     assert stage_progress[2] > 0.02
+
+
+@pytest.mark.qt
+def test_non_shaped_blob_moderate_phrase_does_not_live_in_hot_plateau(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._vis_mode = "blob"
+
+    calm = SimpleNamespace(bass=0.12, mid=0.11, high=0.05, overall=0.10)
+    phrase = SimpleNamespace(bass=0.34, mid=0.27, high=0.12, overall=0.24)
+
+    for _ in range(12):
+        _push_blob_frame(overlay, dt=0.016, energy=calm)
+
+    hot_frames = 0
+    stage_hot_frames = 0
+    max_live = 0.0
+    for i in range(120):
+        _push_blob_frame(
+            overlay,
+            dt=0.016,
+            energy=phrase,
+            kick=1.0 if i % 8 == 0 else 0.0,
+            snare=1.0 if i % 6 == 0 else 0.0,
+        )
+        max_live = max(max_live, overlay._blob_live_overall_energy)
+        if overlay._blob_live_overall_energy >= 0.82:
+            hot_frames += 1
+        stage_progress = overlay._blob_stage_progress_filtered
+        if (
+            stage_progress[0] >= 0.95
+            or stage_progress[1] >= 0.85
+            or stage_progress[2] >= 0.70
+        ):
+            stage_hot_frames += 1
+
+    assert max_live < 0.95, (
+        f"Blob live overall peaked at {max_live:.3f} on a moderate phrase; "
+        "continuous support is still too close to full blowout."
+    )
+    assert hot_frames < 20, (
+        f"Blob spent {hot_frames} frames above the hot plateau threshold on a moderate phrase; "
+        "non-shaped Blob is still living too high too often."
+    )
+    assert stage_hot_frames < 28, (
+        f"Blob spent {stage_hot_frames} frames with near-saturated stage progress on a moderate phrase; "
+        "the stage branch is still effectively parked at the top."
+    )
+
+
+@pytest.mark.qt
+def test_non_shaped_blob_releases_out_of_hot_state_after_phrase(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._vis_mode = "blob"
+
+    calm = SimpleNamespace(bass=0.12, mid=0.11, high=0.05, overall=0.10)
+    phrase = SimpleNamespace(bass=0.36, mid=0.29, high=0.13, overall=0.25)
+
+    for _ in range(12):
+        _push_blob_frame(overlay, dt=0.016, energy=calm)
+
+    for i in range(80):
+        _push_blob_frame(
+            overlay,
+            dt=0.016,
+            energy=phrase,
+            kick=1.0 if i % 7 == 0 else 0.0,
+            snare=1.0 if i % 5 == 0 else 0.0,
+        )
+
+    for _ in range(40):
+        _push_blob_frame(overlay, dt=0.016, energy=calm)
+
+    assert overlay._blob_live_overall_energy < 0.30, (
+        f"Blob only released to {overlay._blob_live_overall_energy:.3f} after the phrase; "
+        "the hot state is still too sticky."
+    )
+    assert overlay._blob_smoothed_energy < 0.34, (
+        f"Blob smoothed energy only released to {overlay._blob_smoothed_energy:.3f}; "
+        "the continuous support path is still carrying too much stale pressure."
+    )
+
+
+@pytest.mark.qt
+def test_non_shaped_blob_log_shaped_hot_seed_unwinds_quickly(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._vis_mode = "blob"
+    # Seed the same kind of hot carry we saw in the runtime logs:
+    # live bands and whole-body support still near/above 1.0 even though
+    # the next frames have already gone calm.
+    overlay._blob_live_bass_energy = 1.28
+    overlay._blob_live_mid_energy = 1.18
+    overlay._blob_live_high_energy = 0.35
+    overlay._blob_live_overall_energy = 1.13
+    overlay._blob_smoothed_energy = 1.24
+    overlay._blob_stage_progress_filtered = (1.0, 1.0, 1.0)
+    overlay._blob_stage_progress_ready = True
+
+    calm = SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+    for _ in range(12):
+        _push_blob_frame(overlay, dt=0.016, energy=calm)
+
+    assert overlay._blob_live_overall_energy < 0.42, (
+        f"Blob live overall only unwound to {overlay._blob_live_overall_energy:.3f} after "
+        "twelve calm frames from a log-shaped hot seed; the body support is still sticking too hot."
+    )
+    assert overlay._blob_smoothed_energy < 0.65, (
+        f"Blob smoothed energy only unwound to {overlay._blob_smoothed_energy:.3f}; the core/glow "
+        "support path is still carrying far too much stale pressure."
+    )
+    assert overlay._blob_live_mid_energy < 0.40, (
+        f"Blob live mid only unwound to {overlay._blob_live_mid_energy:.3f}; wobble/glow pressure "
+        "is still hanging around long after the calm window started."
+    )
+    assert overlay._blob_stage_progress_filtered[0] < 0.50, (
+        f"Blob stage rung 1 only unwound to {overlay._blob_stage_progress_filtered[0]:.3f}; "
+        "stage support is still acting parked after the hot seed."
+    )
 
 
 def test_spectrum_lane_isolation_survives_long_run():

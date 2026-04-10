@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Literal, Optional
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QComboBox
 
 from ui.tabs import shared_styles
@@ -40,6 +40,14 @@ class StyledComboBox(QComboBox):
         # Dedicated overlay renders the right-hand knob at runtime so it never blurs when scaled.
         self._knob_overlay = ComboKnobController(self)
         attach_control_shadow(self)
+
+    def set_item_foreground_by_data(self, data: object, color: QColor | str) -> None:
+        """Tint a popup item identified by its user data without forking popup QSS."""
+        index = self.findData(data)
+        if index < 0:
+            return
+        brush_color = QColor(color) if not isinstance(color, QColor) else color
+        self.setItemData(index, brush_color, Qt.ItemDataRole.ForegroundRole)
 
     # ------------------------------------------------------------------
     # Qt overrides

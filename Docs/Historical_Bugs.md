@@ -88,6 +88,55 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
+## 2026-04-10 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Unresolved)
+
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current symptom family:** Bubble and Blob have repeatedly fallen into two opposite but related failure states:
+  - shared smoothed/post-AGC pressure makes them feel dead, flattened, and visually stuck in hold-like states
+  - rescuing them with hotter pre-AGC/raw pressure through the old downstream math flips the failure mode into Bubble max-size pinning / jerky speed and non-shaped Blob blowout / judder
+- **Newly confirmed sub-trap (2026-04-10):** even after separating continuous support from burst/stage math, stale scheduler events could still be replayed as if they were fresh accents every frame:
+  - Bubble was polling `peek_latest("snare")` / `peek_latest("vocal_swell")` inside `BubbleSimulation`, which let one recent event keep re-authorizing burst / overdrive
+  - Blob handoff was also using `peek_latest(...)` when building the live overlay payload, which let the same scheduled event keep heating stage/event lanes across multiple frames
+  - this recreates the same “always hot” family under a different disguise, so it belongs to this same bug entry rather than to a separate tuning note
+- **Why this matters:** this is now clearly a recurring architectural trap, not a sequence of unrelated mode-specific tuning mistakes.
+- **Root cause to preserve:** the source signal family changed, but the downstream support/overdrive/stage math was still tuned for the old one. Changing only the source path is therefore not a real fix.
+- **Expanded root cause:** the mode event handoff also matters. If one-shot scheduler accents are treated like reusable level signals instead of consume-once edges, they silently bypass whatever continuous-path protections were added and keep the mode parked in a fake hot state.
+- **Anti-patterns to avoid:**
+  - reviving `_use_raw_energy` or other persisted sidecar toggles
+  - declaring victory because only one side of the trap disappeared
+  - feeding pre-AGC/raw pressure into legacy support/overdrive math unchanged
+  - falling back to shared smoothed/post-AGC pressure solely because the hotter path became too aggressive
+- **Anti-patterns to avoid (event handoff):**
+  - using `peek_latest(...)` per frame in places that actually need consume-once accent edges
+  - accepting “better reactivity” that is really just one scheduler event being replayed for its full max-age window
+  - fixing only Bubble or only Blob when the shared architectural smell is stale event reuse
+- **Latest code-side correction:** Blob event strengths are now consumed once at the mode handoff boundary in `widgets/spotify_visualizer/config_applier.py`, and Bubble now consumes snare/vocal scheduler edges once inside `widgets/spotify_visualizer/bubble_simulation.py` instead of polling them with `peek_latest(...)`.
+- **Regression coverage added:**
+  - `tests/test_transient_per_mode_integration.py::TestBlobSchedulerEventWiring::test_build_kwargs_consumes_blob_events_once_per_mode_snapshot`
+  - `tests/test_bubble_reactivity.py::TestBubblePlateauGuardrails::test_bubble_burst_path_consumes_scheduler_edges`
+- **Latest code-side correction (2026-04-11):** the remaining continuous-path contract was tightened rather than replaced.
+  - Bubble overdrive now uses a stricter burst/hold gate so medium vocal phrases can release instead of living in active hold.
+  - Blob now performs a faster calm-only unwind when live/support/glow/stage pressure is still hot after the incoming phrase has already cooled.
+- **Behavior-level regression coverage added (2026-04-11):**
+  - `tests/test_bubble_reactivity.py::TestBubblePlateauGuardrails::test_medium_vocal_run_does_not_latch_overdrive_for_entire_phrase`
+  - `tests/test_visualizer_reactivity_quality.py::test_non_shaped_blob_log_shaped_hot_seed_unwinds_quickly`
+- **Latest runtime evidence (2026-04-10 late run):**
+  - Bubble is still spending long stretches inside `[SPOTIFY_VIS][BUBBLE][OVERDRIVE] hold` even on a conservative baseline similar to `preset_8_abyss`, with gate values repeatedly living around `0.36-0.87` instead of only flashing briefly on meaningful bursts.
+  - Blob still shows a too-hot baseline in live diagnostics: many frames log filtered live/support values near or above `1.0` and stage-filtered values that stay elevated for long windows, which matches the user's report that even dramatically lowered custom settings still look blown out, twitchy, and max-glow-heavy.
+  - This means the stale-event replay fix was real and necessary, but it did **not** finish the bug family. The remaining problem is no longer "fake hot because one event kept replaying"; it is now "continuous support / overdrive / glow contracts still run too hot for the current authored ranges."
+- **Mode split to preserve:** Bubble and Blob are still part of the same signal-contract family, but the latest evidence suggests the remaining failure is not identical in both modes:
+  - Bubble currently looks closer to an over-permissive overdrive / ceiling / specular contract problem, because conservative authored settings can still spend too much time in active hold.
+  - Blob currently looks like both a preset-authoring problem and a runtime baseline/gain problem, because old curated presets are obviously too hot **and** even heavily reduced custom settings can still remain blown out.
+- **Testing gap updated (2026-04-11):** this is no longer a pure reproduction gap.
+  - current synthetic coverage now includes log-shaped failure tests for both sides of the remaining bug family, not just stale-event replay and clean alternating phrases
+  - the remaining gap is live validation and feel-signoff, especially around Bubble ceiling/specular behavior and Blob authored-preset stability, not the absence of behavior-level reproduction in the suite
+- **Intended solution direction:** preserve the hit readability gained from pre-AGC routing, but solve the root signal-contract mismatch with bounded attack/release, plateau protection, ceiling control, and consume-once event ownership in the downstream math / handoff seam.
+- **Validation needed:** Bubble should remain lively without living at max big-bubble size, giant specular sizing, or overdrive hold for seconds at a time, and non-shaped Blob should stay reactive/organic without constant hot-state blowout, 24/7 max-glow behavior, or presets needing emergency downsizing just to remain in frame.
+
 ## 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)
 
 - [ ] COMPLETELY FUCKED

@@ -171,8 +171,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_constant_wobble: float = 1.0
         self._blob_reactive_wobble: float = 1.0
         self._blob_stretch_tendency: float = 0.35
-        self._blob_stretch_inner: float = 0.5  # 0..1 how deep inward dents go
-        self._blob_stretch_outer: float = 0.5  # 0..1 how far outward protrusions go
+        self._blob_stretch_inner: float = 0.0  # default modern path: no authored inward dents
+        self._blob_stretch_outer: float = 0.35  # 0..1 how far outward protrusions go
 
 
         # Card height expansion (per-mode growth factors, user-customizable)
@@ -277,7 +277,6 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_gradient_direction: str = "top"
         self._bubble_big_size_max: float = 0.038
         self._bubble_small_size_max: float = 0.018
-        self._use_raw_energy: bool = False
         # Transient bus controls (Approach A dual-path)
         self._transient_pulse_gain: float = 1.0   # Bubble: transient bass pulse gain (0-3)
         self._transient_clamp: float = 1.5         # Global: max transient energy per channel (0-3)
