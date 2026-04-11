@@ -224,12 +224,49 @@ Section by date and type.
     - big bubbles are the hero/readability layer and should avoid big-big overlap whenever possible
     - promoted small bubbles must obey the big-bubble overlap rules while promoted
 
+## 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution) (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Final resolved state:** Both the MERGE semantic bug and the cross-mode pollution bug in preset loading/saving were fixed. Preset application now uses CLEAR-then-APPLY pattern instead of MERGE, and preset saving only collects settings for the current mode instead of all modes.
+- **What finally worked:** Two distinct fixes:
+  1. **Loading path fix:** Changed `apply_preset_to_config()` in `core/settings/visualizer_presets.py` (lines 790-827) to use CLEAR-then-APPLY pattern matching `restore_visualizer_snapshot()`. This clears all mode-specific keys not present in the preset before applying the preset's settings.
+  2. **Saving path fix:** Modified `save_media_settings()` in `ui/tabs/widgets_tab_media.py` (lines 902-919) to only collect settings for the current visualizer mode instead of collecting from all modes.
+- **Why the final solution worked:** It addressed both root causes:
+  1. MERGE semantic: The old `merged.update(preset_settings)` only overwrote keys present in the preset, allowing custom settings (like blob shaper) to persist when loading presets without those keys.
+  2. Cross-mode pollution: The old save path collected settings from ALL modes, causing default values from inactive modes to pollute saved presets.
+- **Symptoms before fix:**
+  - Custom settings (shaper, others) were overriding preset application
+  - User got "stuck" on shaped blob even after explicitly choosing unshaped presets
+  - Reset did not clear the stuck state
+  - Selecting "The Mighty Blob" in settings showed selected but rendered Preset 3 behavior
+  - Custom slot may not have been surviving hotswapping
+  - When user saved a custom preset (e.g., Bubble Preset 4 → Custom → Save As Preset 9), the saved preset contained incorrect reactions and behavior due to pollution from other modes' default values
+- **Root causes:**
+  1. **BUG #1 - MERGE Semantic:** `apply_preset_to_config()` used `merged.update(preset_settings)` which only overwrote keys present in preset. Keys not in preset (e.g., `blob_shaper_enabled`) persisted from previous config.
+  2. **BUG #2 - Cross-Mode Pollution:** `save_media_settings()` collected settings from ALL modes (`collect_spectrum_mode_settings()`, `collect_bubble_mode_settings()`, etc.). Inactive modes returned fallback defaults that polluted saved presets.
+- **Affected modes:** ALL visualizer modes (Blob, Spectrum, Bubble, Sine Wave, Oscilloscope) were affected by the MERGE bug. The pollution bug affected any user who saved custom presets.
+- **Verification:** 73 tests pass, manual verification confirms no cross-mode pollution. Saved preset (Bubble Preset 9) contains only 54 bubble-related keys, zero pollution from other modes.
+- **Defense in depth:** Both fixes are now in place:
+  1. Loading: Clears mode-specific keys before applying presets (prevents old keys persisting)
+  2. Saving: Only collects current mode settings (prevents cross-mode pollution)
+  3. Export: `extract_visualizer_snapshot()` filters to only mode-specific keys
+- **Takeaways:**
+  - Preset application should use REPLACE semantics, not MERGE
+  - Preset saving should be mode-scoped, not mode-agnostic
+  - The normalization layer (`normalize_visualizer_mode_payload()` via `_filter_settings_for_mode()`) is a defense-in-depth filter but should not be relied on as the primary guard
+  - Users who saved custom presets during the buggy period may need to re-save them to remove pollution
+- **Documentation:** Full investigation retained in `Docs/Visualizer_Preset_Override_Bug_Investigation.md`
+
 ## 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)
 
 - [ ] COMPLETELY FUCKED
-- [x] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [X] SOLVED
 
 - **Current symptom:** the task was marked landed, but user runtime/editor validation shows no visible `Vocal` lane at all in non-mirrored mode.
 - **Observed evidence:** the notch labels still appear effectively as `Bass / Low / Mid / Hi-Mid / Treble`, matching the old five-band linear presentation rather than the intended `Bass / Low-Mid / Vocal / Hi-Mid / Treble` layout.
@@ -241,9 +278,9 @@ Section by date and type.
 
 ## 2026-04-08 — Settings Dialog Flicker / Placeholder Regression Follow-Up (Unresolved, Low Priority)
 
-- [ ] COMPLETELY FUCKED
+- [X] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
+- [ ] AWAITING VALIDATION
 - [ ] SOLVED
 
 - **Current symptom:** the main resolved entry records this as fixed, but the user later re-raised it as unresolved in some form, albeit lower priority than before.
@@ -266,7 +303,7 @@ Section by date and type.
 ## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
 
 - [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
+- [X] PARTIAL
 - [ ] AWAITING VALIDATION
 - [x] SOLVED
 

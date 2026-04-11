@@ -885,7 +885,15 @@ class WidgetsTab(QWidget):
             apply_preset_overlay=False,
         )
         snapshot = self._extract_visualizer_snapshot(mode_key, normalized_live)
+        
+        # DEBUG: Log what keys are in the snapshot before filtering
+        logger.debug("[VIS_PRESETS_SAVE] Before filtering for %s: %d keys", mode_key, len(snapshot))
+        
         snapshot = normalize_visualizer_mode_payload(mode_key, snapshot)
+        
+        # DEBUG: Log what keys remain after filtering
+        logger.debug("[VIS_PRESETS_SAVE] After filtering for %s: %d keys - %s", 
+                     mode_key, len(snapshot), list(snapshot.keys())[:10])
         prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
         for prefix in prefixes:
             for suffix in _DEPRECATED_VISUALIZER_EXPORT_SUFFIXES:

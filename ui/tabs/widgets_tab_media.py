@@ -898,19 +898,26 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'rainbow_speed': (tab.rainbow_speed_slider.value() if hasattr(tab, 'rainbow_speed_slider') else 50) / 100.0,
     }
     collect_visualizer_rainbow_state(tab, spotify_vis_config)
-    spotify_vis_config.update(collect_spectrum_mode_settings(tab))
-    spotify_vis_config.update(
-        collect_oscilloscope_mode_settings(
-            tab,
-            collect_extra_color_bindings=_collect_osc_multi_line_color_bindings,
-        )
-    )
-    spotify_vis_config.update(collect_sine_wave_mode_settings(tab))
-    spotify_vis_config.update(collect_blob_mode_settings(tab))
-    spotify_vis_config.update(collect_bubble_mode_settings(tab))
-    collect_per_mode_technical_controls(tab, spotify_vis_config)
-
+    
+    # Option A: Only collect settings for the CURRENT visualizer mode
+    # to prevent cross-mode pollution when saving presets
     _cur_mode = collect_visualizer_mode_selection(tab)
+    if _cur_mode == 'spectrum':
+        spotify_vis_config.update(collect_spectrum_mode_settings(tab))
+    elif _cur_mode == 'oscilloscope':
+        spotify_vis_config.update(
+            collect_oscilloscope_mode_settings(
+                tab,
+                collect_extra_color_bindings=_collect_osc_multi_line_color_bindings,
+            )
+        )
+    elif _cur_mode == 'sine_wave':
+        spotify_vis_config.update(collect_sine_wave_mode_settings(tab))
+    elif _cur_mode == 'blob':
+        spotify_vis_config.update(collect_blob_mode_settings(tab))
+    elif _cur_mode == 'bubble':
+        spotify_vis_config.update(collect_bubble_mode_settings(tab))
+    collect_per_mode_technical_controls(tab, spotify_vis_config)
 
     def _per_mode_value(key: str, fallback):
         return spotify_vis_config.get(f'{_cur_mode}_{key}', fallback)

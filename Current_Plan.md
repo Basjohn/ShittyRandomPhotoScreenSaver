@@ -31,6 +31,27 @@ Update this after every significant change.
 
 ## Active Tasks
 
+### 0. Visualizer Preset/Custom Override Bug Investigation
+
+**Status:** `[x]` COMPLETE - Both bugs fixed, tested, verified
+**Priority:** Critical
+**Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md)
+**History:** [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) -> `2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution)`
+
+**Summary:**
+- **BUG #1 - MERGE Semantic:** `apply_preset_to_config()` used `merged.update(preset_settings)` which only overwrote keys present in preset. Fixed with CLEAR-then-APPLY pattern.
+- **BUG #2 - Cross-Mode Pollution:** `save_media_settings()` collected settings from ALL modes. Fixed to only collect current mode settings.
+- **Verification:** 73 tests pass, manual verification confirms no cross-mode pollution (Bubble Preset 9 contains only 54 bubble-related keys).
+
+**All Phases Complete:**
+- [x] Phase 1: Root Cause Analysis - TWO distinct bugs identified
+- [x] Phase 2: Fix Implementation - BOTH BUGS FIXED
+- [x] Phase 3: Regression Tests - 73 tests pass
+- [x] Phase 4: Cross-Mode Verification - Manual verification complete
+
+**User Guidance:**
+Users who saved custom presets during the buggy period may need to re-save them to remove pollution from other modes' default values.
+
 ### 1. Bubble / Blob Runtime Stability Follow-Up
 
 **Status:** `[~]` Awaiting runtime validation
@@ -253,6 +274,90 @@ Definition of done:
 - Runtime, restart, preset cycle, repair tool, and shipped regeneration all preserve those extra lines.
 - No reintroduction of Sine/Osc shared-setting bleed.
 - Docs and tests reflect `6` as the real supported authored ceiling.
+
+### 6. Blob Organic Core/Deformation
+
+**Status:** `[ ]` Planned, not started
+**Priority:** Medium
+**Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md) -> `Next Phase: Blob Organic Core/Deformation`
+
+**Goal:**
+Improve unshaped blob to have a more organic core so the circle is not visible as often, while **absolutely avoiding the pinch inward stretch** from before.
+
+**Constraints:**
+- Never pinch - clamp minimum radius
+- Either organic core connection OR subtle curved inward deformations
+- May apply both approaches
+
+**Implementation Plan:**
+1. Add subtle noise-based deformation to core SDF (low-frequency, outward-biased)
+2. Clamp minimum radius to prevent pinch
+3. Optionally: minor inward curves at high-curvature regions (max 2-5% radius)
+
+**Implementation Ideas:**
+1. **Organic Core Deformation:**
+   - Add subtle noise-based deformation to the core SDF
+   - Use low-frequency noise to avoid harsh edges
+   - Ensure deformation is always outward-biased or symmetric
+   - Clamp minimum radius to prevent pinch
+
+2. **Subtle Inward Curves:**
+   - Detect where outer circles are visible (high curvature regions)
+   - Apply extremely minor inward deformation at those spots
+   - Clamp deformation to be very subtle (e.g., max 2-5% of radius)
+   - Ensure inward deformation never creates pinch points
+
+3. **Combined Approach:**
+   - Use organic core deformation for general shape
+   - Use subtle inward curves only at specific high-curvature points
+   - Ensure both approaches respect the no-pinch constraint
+
+**Guardrails:**
+- Absolutely avoid the pinch inward stretch from before
+- Must never have the ability to pinch
+- Keep changes scoped to unshaped blob core geometry
+
+### 7. Shaped Blob Reaction Variety
+
+**Status:** `[ ]` Planned, not started (polish phase)
+**Priority:** Lowest
+**Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md) -> `Shaped Blob Reaction Variety (Polish Phase LOWEST PRIORITY)`
+
+**Goal:**
+Add more reaction variety to shaped blob - currently too uniform.
+
+**Constraints:**
+- Do this after the 3 extra lines are added to Osc/Sine (polish phase)
+- Never rearchitecture towards raw energy
+- Do not over complicate bubble
+
+**User's Ideas:**
+1. **Outer Border Wobble:**
+   - Make outermost border wobble like non-shaped based on energy
+   - Would need a special notch to indicate this behavior
+   - Energy attached to this node causes border wobble
+
+2. **Directional Energy Deformation:**
+   - Place energy inside reactive shape for most shaping
+   - If energy attached to a node, causes wobble/deformation along direction
+   - Continues until energy runs out or competing energy takes over
+   - Clashes are particularly expressive
+
+**Additional Ideas:**
+3. **Localized Pulse:**
+   - Energy nodes cause localized pulse/wobble in their direction
+   - Pulse decays as energy moves away
+   - Multiple energy nodes create interference patterns
+
+4. **Edge Ripple:**
+   - Energy at edge creates ripple effect traveling along edge
+   - Ripple amplitude based on energy strength
+   - Ripple speed based on energy frequency
+
+**Guardrails:**
+- Never rearchitecture towards raw energy
+- Do not over complicate bubble
+- Keep this as polish work after OSC/SINE 6-line expansion is complete
 
 ---
 
