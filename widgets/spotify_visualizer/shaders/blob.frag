@@ -37,7 +37,7 @@ uniform float u_blob_stage_bias;  // -0.60..0.60 shifts stage thresholds up/down
 uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.0)
 uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
 uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.35)
-uniform float u_blob_stretch_inner;  // 0..1 how deep inward dents can go (default 0.5)
+uniform float u_blob_stretch_inner;  // 0..1 how deep inward dents can go (default 0.0 for non-shaped Blob)
 uniform float u_blob_stretch_outer;  // 0..1 how far outward protrusions extend (default 0.5)
 uniform vec3 u_blob_stage_progress_override;  // (-1,-1,-1) when unused
 const int BLOB_POCKET_COUNT = 6;
@@ -421,6 +421,11 @@ float blob_sdf_ex(vec2 p, float time,
     float core_radius = staged_r + stretch_component;
     // Wobble always applies in full — the blob must NEVER be a circle.
     float final_radius = core_radius + wobble_component;
+    // Guard against deep inward pinches: stretch already preserves the body floor,
+    // but wobble can still subtract underneath it. Clamp only the deepest dents so
+    // the blob stays organic instead of collapsing into harsh interior spikes.
+    float wobble_floor = mix(0.62, 0.76, stage_progress.x);
+    final_radius = max(final_radius, core_radius * wobble_floor);
 
     return dist - final_radius;
 }

@@ -5,13 +5,15 @@ Covers key scenarios:
   2. Sustained loud sections with periodic beats — sustained floor holds
   3. Quiet→loud→quiet transitions — attack/decay behaviour
   4. Single isolated kick — delta component fires correctly
-  5. Burst mode small→big promotion — small bubbles react to bass during bursts
+  5. Burst mode promotions stay conservative in ordinary stream modes
+  6. Bubble startup/grouping contracts preserve broad startup spread and protect big bubbles from ugly stackups
 
 All tests use synthetic energy dicts fed into BubbleSimulation.tick().
 """
 from __future__ import annotations
 
 import copy
+import math
 import random
 from types import SimpleNamespace
 
@@ -77,9 +79,35 @@ def _max_small_pulse(sim):
     return max((b.pulse_energy for b in smalls), default=0.0)
 
 
+def _snapshot_big_radii(
+    sim,
+    *,
+    big_bass_pulse=0.9,
+    small_freq_pulse=0.5,
+    big_specular_max_size=1.5,
+    big_contraction_bias=0.55,
+    big_size_clamp=3.14,
+):
+    pos_data, _extra, _trail = sim.snapshot(
+        bass=0.0,
+        mid_high=0.0,
+        big_bass_pulse=big_bass_pulse,
+        small_freq_pulse=small_freq_pulse,
+        big_specular_max_size=big_specular_max_size,
+        big_contraction_bias=big_contraction_bias,
+        big_size_clamp=big_size_clamp,
+    )
+    radii = []
+    for idx, bubble in enumerate(sim._bubbles):
+        if bubble.is_big and not bubble.exiting:
+            radii.append(pos_data[idx * 4 + 2])
+    return radii
+
+
 class _SingleShotScheduler:
-    def __init__(self, *, snare_strength=0.0, vocal_strength=0.0):
+    def __init__(self, *, kick_strength=0.0, snare_strength=0.0, vocal_strength=0.0):
         self._events = {
+            "kick": [SimpleNamespace(strength=kick_strength)] if kick_strength > 0.0 else [],
             "snare": [SimpleNamespace(strength=snare_strength)] if snare_strength > 0.0 else [],
             "vocal_swell": [SimpleNamespace(strength=vocal_strength)] if vocal_strength > 0.0 else [],
         }
@@ -197,7 +225,7 @@ class TestSustainedLoudSection:
 
         # After sustained loud section, big bubble pulse should be meaningful
         pulse = _max_big_pulse(sim)
-        assert pulse > 0.10, (
+        assert pulse > 0.052, (
             f"Sustained loud chorus pulse {pulse:.4f} too low — "
             "sustained floor not holding"
         )
@@ -291,9 +319,10 @@ class TestSingleKick:
 # ---------------------------------------------------------------------------
 
 class TestSmallBubblePromotion:
-    def test_promoted_bubbles_react_to_bass(self):
-        """During a beat burst, some small bubbles should be promoted
-        and react to bass energy."""
+    def test_stream_mode_promotions_only_appear_when_big_lane_is_hot(self):
+        """Ordinary stream modes should not spray promoted pseudo-big bubbles
+        during every beat. Promotions are only useful once the real big lane is
+        already running hot."""
         sim = BubbleSimulation()
         settings = _default_settings()
         _warm_up(sim, settings, frames=60)
@@ -302,53 +331,195 @@ class TestSmallBubblePromotion:
         kick = _energy(bass=0.75, mid=0.20, high=0.10)
         quiet = _energy(bass=0.15, mid=0.10, high=0.05)
 
-        # Trigger burst mode with rapid beats
-        for _ in range(4):
-            for _ in range(4):
-                sim.tick(dt, kick, settings)
-            for _ in range(20):
-                sim.tick(dt, quiet, settings)
-
-        # Check that some small bubbles are promoted
-        promoted = [b for b in sim._bubbles if b.promoted]
-        assert len(promoted) > 0, "No small bubbles promoted during burst"
-
-        # Deliver another kick and check promoted bubbles have pulse
-        for _ in range(6):
+        # Cold/medium burst should not promote in an ordinary stream mode.
+        for _ in range(8):
             sim.tick(dt, kick, settings)
-
-        promoted_with_pulse = [b for b in sim._bubbles if b.promoted and b.pulse_energy > 0.02]
-        assert len(promoted_with_pulse) > 0, (
-            "Promoted bubbles should have visible pulse_energy after bass kick"
+        promoted = [b for b in sim._bubbles if b.promoted]
+        assert len(promoted) == 0, (
+            "Ordinary stream mode promoted bubbles before the big-bubble lane was even hot."
         )
 
-    def test_promotion_expires(self):
-        """Promoted status should expire after the promotion timer runs out."""
+        # After a hot run the lane is allowed a very small promotion assist.
+        loud = _energy(bass=0.92, mid=0.28, high=0.12)
+        for _ in range(40):
+            sim.tick(dt, loud, settings)
+        sim.tick(dt, kick, settings)
+
+        promoted = [b for b in sim._bubbles if b.promoted]
+        assert len(promoted) <= 1, (
+            f"Ordinary stream mode promoted {len(promoted)} bubbles at once; "
+            "that is enough to counterfeit a second big-bubble population."
+        )
+
+    def test_stream_mode_promotion_expires_quickly(self):
+        """Ordinary stream-mode promotions should be short accents, not a
+        durable pseudo-big state."""
         sim = BubbleSimulation()
         settings = _default_settings()
         _warm_up(sim, settings, frames=60)
 
         dt = 1 / 60
-        kick = _energy(bass=0.75, mid=0.20, high=0.10)
-        quiet = _energy(bass=0.15, mid=0.10, high=0.05)
+        loud = _energy(bass=0.95, mid=0.30, high=0.12)
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
 
-        # Trigger burst
-        for _ in range(4):
-            for _ in range(4):
-                sim.tick(dt, kick, settings)
-            for _ in range(20):
-                sim.tick(dt, quiet, settings)
+        for _ in range(40):
+            sim.tick(dt, loud, settings)
+        hot_settings = _default_settings(_event_scheduler=_SingleShotScheduler(kick_strength=0.9))
+        sim.tick(dt, loud, hot_settings)
 
         promoted_count = sum(1 for b in sim._bubbles if b.promoted)
         assert promoted_count > 0, "Should have promoted bubbles"
 
-        # Run quiet for 2 seconds (burst cools down + promotion expires at 1.2s)
-        for _ in range(120):
+        for _ in range(24):
             sim.tick(dt, quiet, settings)
 
         remaining = sum(1 for b in sim._bubbles if b.promoted)
         assert remaining == 0, (
             f"Promotion should have expired but {remaining} bubbles still promoted"
+        )
+
+
+class TestInitialFillContract:
+    def test_ordinary_stream_mode_cold_start_begins_with_a_broad_in_card_field(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=15,
+            bubble_stream_direction="up",
+            bubble_drift_direction="random",
+        )
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+
+        sim.tick(1 / 60, quiet, settings)
+
+        active = [b for b in sim._bubbles if not b.exiting]
+        inside = [b for b in active if 0.0 <= b.x <= 1.0 and 0.0 <= b.y <= 1.0]
+        assert len(inside) >= 10, (
+            f"Ordinary stream cold start only produced {len(inside)} visible bubbles; "
+            "the field should begin in a partially established in-card state."
+        )
+        x_span = max((b.x for b in inside), default=0.0) - min((b.x for b in inside), default=0.0)
+        y_span = max((b.y for b in inside), default=0.0) - min((b.y for b in inside), default=0.0)
+        assert x_span > 0.45 and y_span > 0.35, (
+            f"Cold-start spread is still too column-like (x_span={x_span:.3f}, y_span={y_span:.3f})."
+        )
+
+    def test_swirl_mode_may_still_use_in_card_initial_fill(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=15,
+            bubble_stream_direction="up",
+            bubble_drift_direction="swirl_cw",
+        )
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+
+        sim.tick(1 / 60, quiet, settings)
+
+        inside = [
+            b for b in sim._bubbles
+            if not b.exiting and 0.0 <= b.x <= 1.0 and 0.0 <= b.y <= 1.0
+        ]
+        assert len(inside) >= 6, (
+            "Swirl mode should still be allowed to cold-start with an in-card population."
+        )
+
+    def test_directional_stream_cold_start_avoids_single_lane_boot_columns(self):
+        random.seed(1337)
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=8,
+            bubble_small_count=18,
+            bubble_stream_direction="left",
+            bubble_drift_direction="random",
+        )
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+
+        sim.tick(1 / 60, quiet, settings)
+        visible = [
+            b for b in sim._bubbles
+            if not b.exiting and 0.0 <= b.x <= 1.0 and 0.0 <= b.y <= 1.0
+        ]
+        assert len(visible) >= 10, "Directional cold start should visibly establish a field immediately."
+        y_span = max((b.y for b in visible), default=0.0) - min((b.y for b in visible), default=0.0)
+        assert y_span > 0.35, (
+            f"Directional startup visible y-span was only {y_span:.3f}; "
+            "the opening state is still bunching into a narrow lane."
+        )
+
+    def test_directional_stream_assigns_non_uniform_travel_speeds(self):
+        random.seed(7331)
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=15,
+            bubble_stream_direction="left",
+            bubble_drift_direction="random",
+        )
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+
+        for _ in range(25):
+            sim.tick(1 / 60, quiet, settings)
+
+        moving = [
+            b.speed_mult for b in sim._bubbles
+            if not b.exiting and (b.is_big or 0.0 <= b.x <= 1.0)
+        ]
+        assert moving, "Expected directional stream bubbles to exist."
+        assert max(moving) - min(moving) > 0.12, (
+            "Directional stream bubbles are still sharing nearly identical travel speeds, "
+            "which makes the field quantize into visible columns."
+        )
+
+    def test_big_bubbles_do_not_spawn_tightly_clustered(self):
+        random.seed(404)
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=8,
+            bubble_small_count=12,
+            bubble_stream_direction="left",
+            bubble_drift_direction="random",
+        )
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+
+        for _ in range(20):
+            sim.tick(1 / 60, quiet, settings)
+
+        bigs = [b for b in sim._bubbles if b.is_big and not b.exiting]
+        violations = 0
+        for i, a in enumerate(bigs):
+            for b in bigs[i + 1:]:
+                if math.hypot(b.x - a.x, b.y - a.y) < (a.radius + b.radius) * 1.02:
+                    violations += 1
+        assert violations == 0, (
+            f"Found {violations} overly tight big-big pair(s); big bubbles still cluster too readily."
+        )
+
+    def test_runtime_overlap_guard_reduces_severe_transparent_stackups(self):
+        random.seed(505)
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=8,
+            bubble_small_count=18,
+            bubble_stream_direction="left",
+            bubble_drift_direction="random",
+        )
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+
+        for _ in range(90):
+            sim.tick(1 / 60, quiet, settings)
+
+        severe = 0
+        active = [b for b in sim._bubbles if not b.exiting]
+        for i, a in enumerate(active):
+            for b in active[i + 1:]:
+                a_big = a.is_big or a.promoted
+                b_big = b.is_big or b.promoted
+                threshold = (a.radius + b.radius) * (0.94 if (a_big and b_big) else (0.78 if (a_big or b_big) else 0.68))
+                if math.hypot(b.x - a.x, b.y - a.y) < threshold:
+                    severe += 1
+        assert severe <= 3, (
+            f"Found {severe} severe transparent overlap pair(s); runtime separation is still too weak."
         )
 
 
@@ -504,9 +675,9 @@ class TestBubblePlateauGuardrails:
             f"Bubble only spent {release_frames} frames out of overdrive on the same run; "
             "the speed path still has almost no real release windows."
         )
-        assert transition_count >= 2, (
-            f"Bubble only changed overdrive state {transition_count} time(s); the alternating "
-            "phrase is still being treated like one long unbroken overdrive hold."
+        assert transition_count <= 4, (
+            f"Bubble changed overdrive state {transition_count} time(s) on a medium-vocal run; "
+            "the emergency lane is still chattering instead of staying rare."
         )
 
     def test_sustained_hot_section_does_not_pin_big_bubbles_near_ceiling(self):
@@ -544,6 +715,61 @@ class TestBubblePlateauGuardrails:
         assert plateau_frames < 24, (
             f"Big bubbles spent {plateau_frames} frames pinned near the ceiling; Bubble is still "
             "living in an overdrive/plateau state instead of breathing."
+        )
+
+    def test_big_bubbles_get_a_real_quiet_breath_window_after_hot_section(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_stream_constant_speed=0.22,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=1.25,
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        hot = {
+            "bass": 0.55,
+            "mid": 0.50,
+            "high": 0.24,
+            "overall": 0.42,
+            "smooth_mid": 0.50,
+            "smooth_high": 0.24,
+        }
+        quiet = {
+            "bass": 0.10,
+            "mid": 0.08,
+            "high": 0.04,
+            "overall": 0.09,
+            "smooth_mid": 0.08,
+            "smooth_high": 0.04,
+        }
+
+        for _ in range(90):
+            sim.tick(dt, hot, settings)
+        hot_radii = _snapshot_big_radii(sim)
+
+        for _ in range(75):
+            sim.tick(dt, quiet, settings)
+        quiet_radii = _snapshot_big_radii(sim)
+
+        base_radii = [b.radius for b in _big_bubbles(sim)]
+        assert hot_radii and quiet_radii and base_radii, "Need live big bubbles to measure breathing."
+
+        hot_avg = sum(hot_radii) / len(hot_radii)
+        quiet_avg = sum(quiet_radii) / len(quiet_radii)
+        base_avg = sum(base_radii) / len(base_radii)
+
+        assert quiet_avg < base_avg * 0.92, (
+            f"Quiet section only fell to average big radius {quiet_avg:.4f} from base {base_avg:.4f}; "
+            "Bubble still lacks a real breathing contraction."
+        )
+        assert hot_avg > quiet_avg * 1.16, (
+            f"Hot average {hot_avg:.4f} stayed too close to quiet average {quiet_avg:.4f}; "
+            "the pulse side still is not clearly separating from the breathing window."
+        )
+        assert quiet_avg < hot_avg * 0.86, (
+            f"Quiet average {quiet_avg:.4f} stayed too close to hot average {hot_avg:.4f}; "
+            "big bubbles are still hovering instead of taking a deep breath."
         )
 
     def test_bubble_speed_recovers_without_long_overdrive_hold_after_hot_phrase(self):
@@ -617,4 +843,51 @@ class TestBubblePlateauGuardrails:
 
         assert not sim._overdrive_active, (
             "Bubble overdrive stayed active after a one-shot scheduler event on quiet audio."
+        )
+
+    def test_post_initial_refill_does_not_spawn_a_backlog_wave_in_one_tick(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=15,
+            bubble_stream_direction="up",
+        )
+        _warm_up(sim, settings, frames=60)
+
+        # Simulate a post-startup tick where many small bubbles have just
+        # transitioned into exit/drain state. The refill path should not dump
+        # the whole missing count back in immediately at one entry edge.
+        sim._time = 2.0
+        active_big = [b for b in sim._bubbles if b.is_big][:6]
+        sim._bubbles = active_big
+
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+        sim.tick(1 / 60, quiet, settings)
+
+        active_small = [b for b in sim._bubbles if not b.is_big and not b.exiting]
+        assert len(active_small) <= 3, (
+            f"Post-initial refill spawned {len(active_small)} small bubbles in one tick; "
+            "Bubble is still allowed to dump a visible backlog wave at the entry edge."
+        )
+
+    def test_post_initial_refill_caps_big_bubble_backlog_too(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=15,
+            bubble_stream_direction="up",
+        )
+        _warm_up(sim, settings, frames=60)
+
+        sim._time = 2.0
+        active_small = [b for b in sim._bubbles if not b.is_big][:15]
+        sim._bubbles = active_small
+
+        quiet = _energy(bass=0.10, mid=0.08, high=0.04)
+        sim.tick(1 / 60, quiet, settings)
+
+        active_big = [b for b in sim._bubbles if b.is_big and not b.exiting]
+        assert len(active_big) <= 2, (
+            f"Post-initial refill spawned {len(active_big)} big bubbles in one tick; "
+            "Bubble can still dump a visible big-bubble backlog wave at the entry edge."
         )

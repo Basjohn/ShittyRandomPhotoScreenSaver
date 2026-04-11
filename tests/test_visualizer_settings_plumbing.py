@@ -487,16 +487,40 @@ class TestConfigApplier:
         extra = build_gpu_push_extra_kwargs(widget, "blob", None)
 
         assert widget._blob_pulse == pytest.approx(1.65)
-        assert widget._blob_pulse_cap == pytest.approx(1.65)
+        assert widget._blob_pulse_cap == pytest.approx(1.0)
         assert widget._blob_pulse_release_ms == pytest.approx(1320.0)
-        assert widget._blob_stage_gain == pytest.approx(1.65)
+        assert widget._blob_stage_gain == pytest.approx(1.0)
         assert widget._blob_glow_drive_mode == "vocal"
         assert extra["blob_pulse"] == pytest.approx(1.65)
-        assert extra["blob_pulse_cap"] == pytest.approx(1.65)
+        assert extra["blob_pulse_cap"] == pytest.approx(1.0)
         assert extra["blob_pulse_release_ms"] == pytest.approx(1320.0)
         assert extra["blob_glow_drive_mode"] == "vocal"
         assert "line_sensitivity" not in extra
         assert "bubble_pos_data" not in extra
+
+    def test_blob_non_shaper_export_keeps_inner_stretch_zero(self):
+        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
+
+        class DummyWidget:
+            _blob_shaper_enabled = False
+            _blob_stretch_inner = 0.5
+            _blob_stretch_outer = 0.4
+
+            def __getattr__(self, name):
+                if "color" in name or "tint" in name:
+                    return QColor(255, 255, 255, 255)
+                if name.endswith("enabled"):
+                    return False
+                if name.endswith("_direction"):
+                    return "top"
+                if name.endswith("line_count"):
+                    return 1
+                return 0.0
+
+        extra = build_gpu_push_extra_kwargs(DummyWidget(), "blob", None)
+
+        assert extra["blob_stretch_inner"] == pytest.approx(0.0)
+        assert extra["blob_stretch_outer"] == pytest.approx(0.4)
 
     def test_blob_gpu_push_includes_floor_snapshot_from_engine(self):
         from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs

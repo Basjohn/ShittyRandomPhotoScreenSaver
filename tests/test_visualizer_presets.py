@@ -539,6 +539,7 @@ def test_widgets_tab_blob_preset_payload_preserves_directional_shaper_nodes(qt_a
         blob_index = tab.vis_mode_combo.findData("blob")
         assert blob_index >= 0
         tab.vis_mode_combo.setCurrentIndex(blob_index)
+        tab.blob_shaper_enabled.setChecked(True)
 
         base_nodes = [[0.0, 0.9], [0.5, 1.15], [1.0, 0.9]]
         react_nodes = [[0.0, 1.3], [0.5, 0.7], [1.0, 1.2]]
@@ -717,6 +718,42 @@ def test_repair_tool_audit_flags_global_mirrors_and_osc_aliases():
     }
     osc_report = repair.audit_payload("oscilloscope", osc_payload)
     assert osc_report["deprecated_mode_alias_keys"] == ["osc_sensitivity"]
+
+
+def test_repair_tool_audit_flags_inactive_blob_shaper_payload():
+    payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_shaper_enabled": False,
+                    "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 0.9]],
+                    "blob_shaper_react_strength": 0.5,
+                }
+            }
+        }
+    }
+
+    report = repair.audit_payload("blob", payload)
+
+    assert report["inactive_blob_shaper_payload"] is True
+
+
+def test_curated_visualizer_payloads_do_not_ship_cross_mode_keys():
+    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
+    problems: list[str] = []
+
+    for mode_dir in sorted(presets_root.iterdir()):
+        if not mode_dir.is_dir():
+            continue
+        mode = mode_dir.name
+        for preset_path in sorted(mode_dir.glob("*.json")):
+            payload = json.loads(preset_path.read_text(encoding="utf-8"))
+            report = repair.audit_payload(mode, payload)
+            if report["cross_mode_keys"]:
+                problems.append(f"{preset_path.name}: {report['cross_mode_keys']}")
+
+    assert not problems, "\n".join(problems)
 
 
 def test_repair_tool_stops_emitting_deprecated_compat_tech_keys():
@@ -1169,6 +1206,67 @@ def test_curated_blob_presets_do_not_ship_retired_blob_keys():
         sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
         unexpected = retired_keys.intersection(sv.keys())
         assert not unexpected, f"{preset_path.name} ships retired blob keys: {sorted(unexpected)}"
+
+
+def test_curated_non_shaped_blob_presets_do_not_ship_blob_shaper_payload():
+    blob_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
+    shaper_only_keys = {
+        "blob_shape_base_nodes",
+        "blob_shape_reaction_nodes",
+        "blob_shape_energy_nodes",
+        "blob_shaper_base_strength",
+        "blob_shaper_react_strength",
+        "blob_shaper_idle_motion",
+        "blob_shaper_audio_motion",
+        "blob_topology",
+        "blob_ring_thickness",
+    }
+
+    for preset_path in sorted(blob_root.glob("*.json")):
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        if sv.get("blob_shaper_enabled") is True:
+            continue
+        unexpected = shaper_only_keys.intersection(sv.keys())
+        assert not unexpected, (
+            f"{preset_path.name} ships Blob Shaper payload while blob_shaper_enabled is false: "
+            f"{sorted(unexpected)}"
+        )
+
+
+def test_normalize_visualizer_mode_payload_strips_inactive_blob_shaper_payload():
+    payload = {
+        "mode": "blob",
+        "blob_shaper_enabled": False,
+        "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 1.2]],
+        "blob_shape_reaction_nodes": [[0.0, 1.0], [0.5, 0.8]],
+        "blob_shape_energy_nodes": [{"type": "bass"}],
+        "blob_shaper_base_strength": 1.0,
+        "blob_shaper_react_strength": 0.5,
+        "blob_shaper_idle_motion": 0.18,
+        "blob_shaper_audio_motion": 1.2,
+        "blob_topology": "circle",
+        "blob_ring_thickness": 0.3,
+        "blob_stretch": 0.44,
+    }
+
+    normalized = vp.normalize_visualizer_mode_payload("blob", payload)
+
+    assert normalized["mode"] == "blob"
+    assert normalized["blob_stretch"] == pytest.approx(0.44)
+    for key in (
+        "blob_shaper_enabled",
+        "blob_shape_base_nodes",
+        "blob_shape_reaction_nodes",
+        "blob_shape_energy_nodes",
+        "blob_shaper_base_strength",
+        "blob_shaper_react_strength",
+        "blob_shaper_idle_motion",
+        "blob_shaper_audio_motion",
+        "blob_topology",
+        "blob_ring_thickness",
+    ):
+        assert key not in normalized
 
 
 def test_curated_visualizer_tree_audits_clean():

@@ -586,10 +586,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.blob_stretch.setMinimum(0)
     tab.blob_stretch.setMaximum(100)
     blob_st_val = int(tab._default_float('spotify_visualizer', 'blob_stretch', 0.35) * 100)
-    if 'blob_stretch' not in getattr(tab._settings, 'get', lambda *_a, **_k: {})("widgets.spotify_visualizer", {}):
-        legacy_outer = int(tab._default_float('spotify_visualizer', 'blob_stretch_outer', 0.35) * 100)
-        legacy_tendency = int(tab._default_float('spotify_visualizer', 'blob_stretch_tendency', 0.0) * 100)
-        blob_st_val = max(blob_st_val, legacy_outer, legacy_tendency)
     tab.blob_stretch.setValue(max(0, min(100, blob_st_val)))
     tab.blob_stretch.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.blob_stretch.setTickInterval(10)

@@ -442,10 +442,10 @@ def test_blob_body_response_drives_derived_runtime_scalars(qt_app):
     high_cap = overlay._blob_pulse_cap
     high_stage_gain = overlay._blob_stage_gain
 
-    assert low_cap == pytest.approx(0.45)
-    assert low_stage_gain == pytest.approx(0.45)
-    assert high_cap == pytest.approx(1.85)
-    assert high_stage_gain == pytest.approx(1.85)
+    assert low_cap == pytest.approx(1.0)
+    assert low_stage_gain == pytest.approx(1.0)
+    assert high_cap == pytest.approx(1.0)
+    assert high_stage_gain == pytest.approx(1.0)
 
 
 @pytest.mark.qt

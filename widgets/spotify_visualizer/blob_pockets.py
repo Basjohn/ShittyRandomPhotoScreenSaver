@@ -160,18 +160,18 @@ def advance_blob_pocket_state(
 
     kick_strength = _clamp(
         max(
-            kick_raw * 0.92,
-            bass_transient * 1.22,
-            bass_energy * 0.28 + bass_transient * 0.72,
+            kick_raw * 0.98,
+            bass_transient * 1.30,
+            bass_energy * 0.18 + bass_transient * 0.82,
         ),
         0.0,
         1.0,
     )
     snare_strength = _clamp(
         max(
-            snare_raw * 0.94,
-            mid_transient * 1.08 + high_transient * 0.22,
-            mid_energy * 0.24 + mid_transient * 0.66 + high_transient * 0.10,
+            snare_raw * 0.98,
+            mid_transient * 1.16 + high_transient * 0.26,
+            mid_energy * 0.18 + mid_transient * 0.72 + high_transient * 0.12,
         ),
         0.0,
         1.0,

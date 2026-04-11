@@ -108,17 +108,7 @@ def load_blob_mode_settings(
         tab.blob_reactive_wobble.setValue(max(0, min(300, blob_reactive_wobble)))
         tab.blob_reactive_wobble_label.setText(f"{blob_reactive_wobble}%")
     if hasattr(tab, "blob_stretch"):
-        blob_stretch = int(
-            tab._config_float(
-                "spotify_visualizer",
-                config,
-                "blob_stretch",
-                max(
-                    tab._config_float("spotify_visualizer", config, "blob_stretch_tendency", 0.0),
-                    tab._config_float("spotify_visualizer", config, "blob_stretch_outer", 0.35),
-                ),
-            ) * 100
-        )
+        blob_stretch = int(tab._config_float("spotify_visualizer", config, "blob_stretch", 0.35) * 100)
         tab.blob_stretch.setValue(max(0, min(100, blob_stretch)))
         tab.blob_stretch_label.setText(f"{blob_stretch}%")
     if hasattr(tab, "blob_growth"):

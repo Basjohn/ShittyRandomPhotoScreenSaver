@@ -2,7 +2,7 @@
   "description": "Magenta heart-shaped blob tuned for readable hits without giant jump scares.",
   "mode": "blob",
   "name": "Preset 3 (Reactive Heart)",
-  "preset_index": 2,
+  "preset_index": 1,
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
@@ -68,51 +68,9 @@
         "blob_reactive_deformation": 1.0,
         "blob_reactive_glow": true,
         "blob_reactive_wobble": 1.15,
-        "blob_ring_thickness": 0.3,
         "blob_sensitivity": 0.45,
-        "blob_shape_base_nodes": [
-          [
-            0.0,
-            1.0
-          ],
-          [
-            0.25,
-            1.0
-          ],
-          [
-            0.5,
-            1.0
-          ],
-          [
-            0.75,
-            1.0
-          ]
-        ],
-        "blob_shape_energy_nodes": [],
-        "blob_shape_reaction_nodes": [
-          [
-            0.0,
-            1.0
-          ],
-          [
-            0.25,
-            1.0
-          ],
-          [
-            0.5,
-            1.0
-          ],
-          [
-            0.75,
-            1.0
-          ]
-        ],
-        "blob_shaper_base_strength": 1.0,
-        "blob_shaper_enabled": false,
-        "blob_shaper_react_strength": 0.5,
         "blob_size": 0.5,
         "blob_stretch": 0.56,
-        "blob_topology": "circle",
         "blob_transient_clamp": 1.5,
         "blob_transient_mix_bass": 0.28,
         "blob_transient_mix_vocal": 0.2,

@@ -121,9 +121,19 @@ Section by date and type.
 - **Latest code-side correction (2026-04-11):** the remaining continuous-path contract was tightened rather than replaced.
   - Bubble overdrive now uses a stricter burst/hold gate so medium vocal phrases can release instead of living in active hold.
   - Blob now performs a faster calm-only unwind when live/support/glow/stage pressure is still hot after the incoming phrase has already cooled.
+- **Latest code-side correction (2026-04-11 later pass):** the current rescue work stayed narrow and tried to remove specific remaining live failure paths instead of rewriting the whole mode family again.
+  - Bubble no longer uses the retired persisted raw-energy toggle path; the remaining Bubble work is on the live contract only.
+  - Bubble overdrive was tightened further and the hold time shortened again because real logs still showed routine re-entry at gate values that were too low for an emergency lane.
+  - Bubble big-bubble sustained support was cooled and its decay was strengthened so big bubbles can breathe instead of camping near the ceiling on ordinary hot passages.
+  - Bubble refill now has post-startup spawn budgets so missing-count backlogs cannot all respawn in one frame.
+  - Bubble spawn overlap spacing is now size-aware so big bubbles are not allowed to arrive nearly on top of each other.
+  - Blob now applies a non-circular final-radius safety floor after wobble is added, specifically to stop deep inward pinches without flattening the silhouette into a safe boring circle.
 - **Behavior-level regression coverage added (2026-04-11):**
   - `tests/test_bubble_reactivity.py::TestBubblePlateauGuardrails::test_medium_vocal_run_does_not_latch_overdrive_for_entire_phrase`
   - `tests/test_visualizer_reactivity_quality.py::test_non_shaped_blob_log_shaped_hot_seed_unwinds_quickly`
+- **Additional regression coverage added (2026-04-11 later pass):**
+  - `tests/test_bubble_reactivity.py::TestBubblePlateauGuardrails::test_post_initial_refill_does_not_spawn_a_backlog_wave_in_one_tick`
+  - `tests/test_bubble_reactivity.py::TestBubblePlateauGuardrails::test_post_initial_refill_caps_big_bubble_backlog_too`
 - **Latest runtime evidence (2026-04-10 late run):**
   - Bubble is still spending long stretches inside `[SPOTIFY_VIS][BUBBLE][OVERDRIVE] hold` even on a conservative baseline similar to `preset_8_abyss`, with gate values repeatedly living around `0.36-0.87` instead of only flashing briefly on meaningful bursts.
   - Blob still shows a too-hot baseline in live diagnostics: many frames log filtered live/support values near or above `1.0` and stage-filtered values that stay elevated for long windows, which matches the user's report that even dramatically lowered custom settings still look blown out, twitchy, and max-glow-heavy.
@@ -131,11 +141,88 @@ Section by date and type.
 - **Mode split to preserve:** Bubble and Blob are still part of the same signal-contract family, but the latest evidence suggests the remaining failure is not identical in both modes:
   - Bubble currently looks closer to an over-permissive overdrive / ceiling / specular contract problem, because conservative authored settings can still spend too much time in active hold.
   - Blob currently looks like both a preset-authoring problem and a runtime baseline/gain problem, because old curated presets are obviously too hot **and** even heavily reduced custom settings can still remain blown out.
+- **Latest runtime/log evidence (2026-04-11):**
+  - Bubble overdrive was still re-entering in real logs at gate values roughly `0.56` to `0.89`, which is too common for a true emergency lane and proved the earlier tightening was not sufficient on its own.
+  - Bubble clustering reports became more specific: the visible problem was not only the explicit decorative `2-3` texture cluster. Runtime eyes described arrival piles that felt more like `~9` bubbles stacking together, especially including big bubbles, which strongly suggests refill-backlog cadence was part of the failure and not just the cosmetic cluster path.
+  - Blob inward pinch remained visible even after stale-key cleanup, which pushed the root cause away from bad preset junk and toward the final geometry contract itself.
+- **Latest runtime/log evidence (2026-04-11 newer run):**
+  - Bubble is still a live failure in ordinary stream modes. The user explicitly reported that "nothing is solved" in practice for Bubble: it still sticks near max, overdrives constantly, produces weirdly sized elements, and forms huge groups of big bubbles.
+  - Spiral/swirl variants behave noticeably better in both spawning and reactivity. That makes it much less likely that Bubble is failing for one totally global reason; the worse failure appears concentrated in the ordinary edge-spawn / stream-travel / refill family.
+  - The worst recent preset examples called out by the user are `Preset 3 (Orange Soda)` and `Preset 6 (Lava Flow)`. These should be treated as active antagonists for future tracing rather than as random anecdotal bad cases.
+  - Fresh log context also showed `Bubble worker: count=52` on one of the failing runs, which lines up exactly with authored target counts on the denser presets. That does not prove the preset is "wrong", but it does prove the full target density is being exposed immediately at runtime and must be considered part of the practical failure.
+  - Blob is currently less catastrophic than Bubble, but still not convincingly reaching higher stages on musical changes. At the moment that looks more like baseline/preset tuning than a new clearly isolated architecture break.
+- **Older-anchor comparison update (2026-04-11 later):**
+  - Much older Bubble baselines are more useful here than the recent April commits:
+    - `a87a46f` (`2026-03-05`, `Bubble And Burn, The Obvious Combination.`)
+    - `5b82c63` (`2026-03-18`, `The Unfuckening Part 2wo`)
+  - Comparing current Bubble to `a87a46f` showed two especially suspicious stream-mode inflation paths that were not part of the older healthier baseline:
+    - the newer full-card initial fill path that scatters the entire authored target count across the card during startup/reset
+    - the newer temporary small->big promotion path that lets ordinary small bubbles behave like extra bass-driven big bubbles during beat bursts
+  - This matters because the user's current runtime failure is not just "there are many bubbles." It is "ordinary stream presets look wrongly big, overstuffed, and badly grouped." Those two newer paths are a much better match for that symptom family than the old decorative small-cluster branch by itself.
+  - The same older comparison also reinforces that recent Bubble clutter is not coming from a wild authored preset change alone. `Orange Soda` still authors very dense counts, but older Bubble presented that density through entry/travel behavior rather than immediately exposing the whole population in-card.
+- **Latest code-side correction (2026-04-11 newest pass):**
+  - kept gradient/specular improvements intact; did **not** throw away modern Bubble styling just to chase old runtime feel
+  - ordinary stream modes no longer use the same in-card initial-fill scatter path that was immediately exposing full authored dense counts on cold start and reset
+  - swirl/center-origin families still keep intentional in-card cold start behavior because that belongs to their authored motion language
+  - promotions were kept, but ordinary stream modes now treat them as a tiny short-lived hot-lane assist rather than a general-purpose second big-bubble population
+  - promoted stream bubbles now require the real big-bubble lane to already be hot, only promote one bubble at a time, and use much weaker sustained support so they add fresh accent noise instead of inflating the whole card
+- **Latest runtime evidence (2026-04-11 newest screenshot/report):**
+  - the latest ordinary-stream change removed the old in-card clutter path, but it also exposed a new directional cold-start failure: startup now produces obvious entry-lane columns / stacked vertical bands across directional presets
+  - the first attempted answer to that was a seeded travel-depth ramp, but runtime rejected it too: instead of one birth queue at the edge, it produced several visible birth columns before the stream normalized
+  - that means the seeded-depth idea itself was the wrong fix shape for this product. For directional presets, startup should simply trickle from the real entry side with restrained early spawn budgets rather than trying to fake an already-filled stream
+  - Bubble big bubbles are also still not breathing correctly in live use. They remain too maxed and do not contract deeply enough between hits, even though `bubble_big_contraction_bias` exists as a control
+  - that makes the current Bubble state a split bug family:
+    - directional stream startup/depth seeding is wrong
+    - big-bubble pulse/contraction balance is still wrong
+  - these need to stay split in future investigation so we do not keep "fixing" one by worsening the other
+- **Regression coverage added for this narrower fix:**
+  - `tests/test_bubble_reactivity.py::TestInitialFillContract::test_ordinary_stream_mode_does_not_spawn_full_density_in_card_on_cold_start`
+  - `tests/test_bubble_reactivity.py::TestInitialFillContract::test_swirl_mode_may_still_use_in_card_initial_fill`
+  - `tests/test_bubble_reactivity.py::TestSmallBubblePromotion::test_stream_mode_promotions_only_appear_when_big_lane_is_hot`
+  - `tests/test_bubble_reactivity.py::TestSmallBubblePromotion::test_stream_mode_promotion_expires_quickly`
+- **New gap exposed by runtime:** the current startup tests only prove that ordinary stream modes no longer dump the full authored density in-card on the first tick. They do **not** yet prove that the remaining edge-spawn depth distribution looks like a real flowing stream instead of a visible column. A dedicated startup-depth/entry-column test is needed.
 - **Testing gap updated (2026-04-11):** this is no longer a pure reproduction gap.
   - current synthetic coverage now includes log-shaped failure tests for both sides of the remaining bug family, not just stale-event replay and clean alternating phrases
   - the remaining gap is live validation and feel-signoff, especially around Bubble ceiling/specular behavior and Blob authored-preset stability, not the absence of behavior-level reproduction in the suite
+- **Latest runtime evidence (2026-04-11 later Bubble passes):**
+  - Bubble reactivity is materially improved relative to the worst raw-energy/blowout state, but startup and grouping are still visibly regressed compared to older healthier Bubble behavior
+  - directional presets still cold-start with obvious entry-side columns for several visible passes before the field settles into something more natural
+  - current grouping/spacing reads too uniform and too overlap-friendly in motion, which makes the column issue more obvious rather than less
+  - the user's product rule is now explicit and should be treated as authoritative:
+    - small bubbles may cluster with each other and around big bubbles
+    - big bubbles should avoid overlapping other big bubbles as much as possible
+    - promoted small bubbles should be treated like big bubbles for spacing/overlap purposes
+  - runtime screenshots now show the current regression family more clearly than logs do:
+    - big bubbles still group with other big bubbles too readily
+    - overlap is still too common, especially in the live flow after startup
+    - startup still looks birthed in columns instead of naturally trickling in from the edge
+- **Method/result update (2026-04-11):**
+  - removing the old full-card cold fill was a real improvement, because it stopped immediately dumping the full authored density in-card
+  - adding entry-side trickle logic was also directionally right, but current grouping and overlap still make the startup look columnar and too uniform
+  - this means the remaining Bubble failure is no longer just “too many bubbles at once”; it is now specifically a bad ownership contract between startup cadence, grouping flavor, and overlap rules
+- **Failed methods to keep visible so we stop looping:**
+  - pushing hotter raw/pre-AGC pressure into legacy support/overdrive math unchanged
+  - “fixing” deadness by reviving raw-energy style behavior without also renegotiating plateau/ceiling/refill contracts downstream
+  - assuming Bubble spawn pile-ups were only the decorative cluster branch instead of checking refill cadence and backlog release
+  - assuming that removing in-card initial fill automatically fixed directional stream startup; it can just trade "too much visible density" for "visible edge-column birth queue"
+  - assuming Blob inward pinch was still just stale preset pollution once the stale-key path had already been fenced
+  - treating green synthetic tests as equivalent to runtime sign-off for these modes
+  - splitting Bubble startup handling by axis family; the user explicitly rejected “horizontal gets one boot rule, vertical gets another” as a product direction because both families exhibit the same startup defect
+  - allowing big-bubble grouping logic to drift toward “everything can overlap a bit” uniformity. That erased an older healthy visual rule: big bubbles should largely avoid other big bubbles, while smalls are the permissive cluster/noise layer
 - **Intended solution direction:** preserve the hit readability gained from pre-AGC routing, but solve the root signal-contract mismatch with bounded attack/release, plateau protection, ceiling control, and consume-once event ownership in the downstream math / handoff seam.
-- **Validation needed:** Bubble should remain lively without living at max big-bubble size, giant specular sizing, or overdrive hold for seconds at a time, and non-shaped Blob should stay reactive/organic without constant hot-state blowout, 24/7 max-glow behavior, or presets needing emergency downsizing just to remain in frame.
+- **Validation needed:** Bubble should remain lively without living at max big-bubble size, giant specular sizing, overdrive hold for seconds at a time, or visible refill-wave pile-ups, and non-shaped Blob should stay reactive/organic without constant hot-state blowout, 24/7 max-glow behavior, or inward pinches severe enough to read as a geometric failure.
+- **Loop-avoidance lessons to preserve:**
+  - when Bubble or Blob regress, first identify whether the failure is continuous-path contract, stale event reuse, refill cadence, or geometry floor. Do not throw all four into one tuning bucket.
+  - do not call the issue solved merely because one half of the opposite-failure pair disappeared.
+  - if runtime says “worse in reality than in tests,” expand the synthetic toward the runtime evidence instead of assuming the user is seeing noise.
+  - keep this entry and [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\current_plan.md) aligned so the current attempted fix and the retired bad ideas are both visible at the same time.
+  - if spiral/swirl Bubble modes behave better than ordinary stream modes, do not keep applying Bubble-wide tuning blindly. Trace the edge-spawn + travel + refill path specifically.
+  - dense Bubble presets should be treated as hostile-but-valid authored content. If runtime cannot present them cleanly anymore, first assume a runtime regression before assuming the preset suddenly became unreasonable.
+  - when older commits were visibly healthier, compare against those much older baselines instead of only diffing the newest churn. Recent-vs-recent diffs can hide the actual regression family.
+  - preserve Bubble's visual class distinction:
+    - small bubbles are the permissive cluster/noise layer
+    - big bubbles are the hero/readability layer and should avoid big-big overlap whenever possible
+    - promoted small bubbles must obey the big-bubble overlap rules while promoted
 
 ## 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)
 

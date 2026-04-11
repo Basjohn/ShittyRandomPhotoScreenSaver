@@ -302,6 +302,39 @@ class TestCustomPresetBackup:
         assert spotify_vis.get("blob_shape_reaction_nodes") == [[0.0, 1.24], [0.5, 0.72], [1.0, 1.17]]
         assert spotify_vis.get("blob_shape_energy_nodes") == energy_nodes
 
+    def test_custom_backup_strips_inactive_blob_shaper_payload(self, settings_manager: SettingsManager):
+        settings_manager.set("widgets", {
+            "spotify_visualizer": {
+                "mode": "blob",
+                "blob_shaper_enabled": False,
+                "blob_shape_base_nodes": [[0.0, 0.94], [0.5, 1.04], [1.0, 0.94]],
+                "blob_shape_reaction_nodes": [[0.0, 1.24], [0.5, 0.72], [1.0, 1.17]],
+                "blob_shape_energy_nodes": [{"type": "bass"}],
+                "blob_shaper_base_strength": 1.0,
+                "blob_shaper_react_strength": 0.5,
+                "blob_topology": "circle",
+                "blob_ring_thickness": 0.3,
+                "blob_stretch": 0.41,
+            }
+        })
+
+        _save_custom_backup(settings_manager)
+
+        spotify_vis = settings_manager.get("custom_preset_backup", {}).get("widgets", {}).get("spotify_visualizer", {})
+        assert spotify_vis.get("mode") == "blob"
+        assert spotify_vis.get("blob_stretch") == pytest.approx(0.41)
+        for key in (
+            "blob_shaper_enabled",
+            "blob_shape_base_nodes",
+            "blob_shape_reaction_nodes",
+            "blob_shape_energy_nodes",
+            "blob_shaper_base_strength",
+            "blob_shaper_react_strength",
+            "blob_topology",
+            "blob_ring_thickness",
+        ):
+            assert key not in spotify_vis
+
     def test_visualizer_normalization_forward_migrates_osc_alias(self):
         normalized = normalize_visualizer_section_mapping(
             {

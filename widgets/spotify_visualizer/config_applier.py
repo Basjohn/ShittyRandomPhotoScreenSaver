@@ -143,10 +143,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'blob_pulse' in kwargs:
         _blob_pulse = max(0.0, float(kwargs['blob_pulse']))
         widget._blob_pulse = _blob_pulse
-        if 'blob_pulse_cap' not in kwargs:
-            widget._blob_pulse_cap = max(0.0, min(3.0, _blob_pulse))
-        if 'blob_stage_gain' not in kwargs:
-            widget._blob_stage_gain = max(0.0, min(2.0, _blob_pulse))
+        # Keep blob_pulse local to the pulse path. Historically we also
+        # mirrored it into pulse_cap/stage_gain when those keys were absent,
+        # which made ordinary preset edits silently re-tune Blob's whole-body
+        # size ladder and caused "why did it suddenly explode?" regressions.
     if 'blob_width' in kwargs:
         widget._blob_width = max(0.1, min(1.0, float(kwargs['blob_width'])))
     if 'blob_size' in kwargs:
@@ -202,6 +202,10 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     # Blob Shaper
     if 'blob_shaper_enabled' in kwargs:
         widget._blob_shaper_enabled = bool(kwargs['blob_shaper_enabled'])
+    if not getattr(widget, '_blob_shaper_enabled', False):
+        # Non-shaped Blob should never import/export or revive inward denting.
+        # Keep this hard-zeroed even if stale presets still carry the key.
+        widget._blob_stretch_inner = 0.0
     if 'blob_shaper_base_strength' in kwargs:
         widget._blob_shaper_base_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_base_strength'])))
     if 'blob_shaper_react_strength' in kwargs:
@@ -645,9 +649,20 @@ def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
 
 
 def _resolve_continuous_energy_bands(widget: Any, mode_str: str, engine: Any):
-    """Return the canonical continuous energy source for the active mode."""
-    if str(mode_str or "").lower() in {"blob", "bubble"}:
-        return engine.get_pre_agc_energy_bands()
+    """Return the canonical continuous energy source for the active mode.
+
+    Warning:
+    Blob and Bubble have repeatedly regressed when their ordinary continuous
+    support path was switched wholesale onto hotter pre-AGC energy. That
+    change made both modes feel initially "more reactive" while actually
+    pushing them into the same recurring failure family: Bubble ceiling/hold
+    pinning and Blob hot-baseline blowout/judder.
+
+    If those modes need more hit readability, prefer transient/event routing
+    or mode-local attack/release work. Do not blindly swap their whole
+    continuous body signal back to pre-AGC energy without proving the full
+    downstream contract can tolerate it.
+    """
     return engine.get_energy_bands()
 
 
@@ -772,7 +787,7 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_constant_wobble'] = widget._blob_constant_wobble
     extra['blob_reactive_wobble'] = widget._blob_reactive_wobble
     extra['blob_stretch_tendency'] = widget._blob_stretch_tendency
-    extra['blob_stretch_inner'] = getattr(widget, '_blob_stretch_inner', 0.5)
+    extra['blob_stretch_inner'] = 0.0 if not _blob_shaper_enabled else getattr(widget, '_blob_stretch_inner', 0.0)
     extra['blob_stretch_outer'] = getattr(widget, '_blob_stretch_outer', 0.5)
     # Blob Shaper
     extra['blob_shaper_enabled'] = _blob_shaper_enabled

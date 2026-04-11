@@ -690,7 +690,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # vocals do not hijack whole-body intensity, but retain a
                     # small overall contribution so the body never collapses
                     # into a twitchy near-off state between bass phrases.
-                    se_input = live_bass * 0.80 + live_mid * 0.08 + live_overall * 0.12
+                    # Keep Blob's whole-body support anchored primarily in bass.
+                    # When this drifted hotter/wider, Blob started living in a
+                    # permanently inflated state even after the phrase cooled.
+                    se_input = live_bass * 0.92 + live_overall * 0.08
                     if se_input > prev:
                         # Magnitude-scaled rise: big jumps (kicks) snap fast,
                         # small wobbles (vocal flutter) get heavily damped.
@@ -1073,6 +1076,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_outer = max(0.0, min(1.0, float(blob_stretch_outer)))
         # Blob Shaper
         self._blob_shaper_enabled = bool(blob_shaper_enabled)
+        if not self._blob_shaper_enabled:
+            # Non-shaped Blob should never carry inward dents, even if a stale
+            # preset/export still forwards an old inner-stretch value.
+            self._blob_stretch_inner = 0.0
         self._blob_shaper_base_strength = max(0.0, min(1.0, float(blob_shaper_base_strength)))
         self._blob_shaper_react_strength = max(0.0, min(1.0, float(blob_shaper_react_strength)))
         self._blob_shaper_idle_motion = max(0.0, min(2.0, float(blob_shaper_idle_motion)))

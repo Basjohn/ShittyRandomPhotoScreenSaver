@@ -55,6 +55,7 @@ class BubbleState:
     rotation: float = 0.0
     vx: float = 0.0
     vy: float = 0.0
+    speed_mult: float = 1.0
     popping: bool = False
     pop_timer: float = 0.0
     pulse_energy: float = 0.0  # smoothed energy for size pulse (attack fast, decay slow)
@@ -87,6 +88,10 @@ _DIAGONAL_VECTORS: Tuple[Tuple[float, float], ...] = (
     ( 0.707, -0.707),  # down-right
     (-0.707, -0.707),  # down-left
 )
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
 
 
 def _random_direction() -> Tuple[float, float]:
@@ -130,6 +135,47 @@ def _spawn_position(direction: str, is_big: bool) -> Tuple[float, float]:
         return (random.uniform(0.1, 0.9), random.uniform(0.1, 0.9))
     else:  # random
         return (random.uniform(0.1, 0.9), random.uniform(0.1, 0.9))
+
+
+def _stream_mode_uses_in_card_initial_fill(stream_dir: str, drift_dir: str) -> bool:
+    """Return True for the accepted cold-start contract.
+
+    Bubble looked healthier when every mode booted into a partly established
+    field instead of exposing a visible entry-lane build-up. We keep the newer
+    runtime refill/overdrive work, but the startup shape returns to an in-card
+    bootstrap across stream families rather than axis-specific birth queues.
+    """
+    return True
+
+
+def _directional_entry_position(
+    direction: str,
+    is_big: bool,
+    *,
+    startup: bool = False,
+) -> Tuple[float, float]:
+    """Spawn off-card with randomized depth so directional streams avoid columns.
+
+    Directional startup should still come from the real entry side, but if every
+    bubble is born on the same side plane and then travels at nearly the same
+    speed, the simulation naturally quantizes into visible columns. Varying the
+    off-card depth preserves side-entry semantics while helping the stream read
+    as a flowing field rather than synchronized lanes.
+    """
+    x, y = _spawn_position(direction, is_big)
+    if direction in {"none", "random"}:
+        return (x, y)
+
+    dx, dy = _get_stream_vector(direction)
+    if startup:
+        extra_depth = random.uniform(0.02, 0.10)
+    else:
+        extra_depth = random.uniform(0.01, 0.06)
+    return (x + dx * extra_depth, y - dy * extra_depth)
+
+
+def _bubble_behaves_big(bubble: BubbleState) -> bool:
+    return bool(bubble.is_big or bubble.promoted)
 
 
 class BubbleSimulation:
@@ -213,15 +259,15 @@ class BubbleSimulation:
         if energy_bands is None:
             bass = mid = high = overall = 0.0
         elif isinstance(energy_bands, dict):
-            bass = float(energy_bands.get('bass', 0.0))
-            mid = float(energy_bands.get('mid', 0.0))
-            high = float(energy_bands.get('high', 0.0))
-            overall = float(energy_bands.get('overall', 0.0))
+            bass = _clamp01(energy_bands.get('bass', 0.0))
+            mid = _clamp01(energy_bands.get('mid', 0.0))
+            high = _clamp01(energy_bands.get('high', 0.0))
+            overall = _clamp01(energy_bands.get('overall', 0.0))
         else:
-            bass = getattr(energy_bands, 'bass', 0.0)
-            mid = getattr(energy_bands, 'mid', 0.0)
-            high = getattr(energy_bands, 'high', 0.0)
-            overall = getattr(energy_bands, 'overall', 0.0)
+            bass = _clamp01(getattr(energy_bands, 'bass', 0.0))
+            mid = _clamp01(getattr(energy_bands, 'mid', 0.0))
+            high = _clamp01(getattr(energy_bands, 'high', 0.0))
+            overall = _clamp01(getattr(energy_bands, 'overall', 0.0))
 
         # Diagnostic: only log during verbose runs to avoid spamming main logs.
         self._diag_tick_count += 1
@@ -277,19 +323,34 @@ class BubbleSimulation:
         if beat_detected:
             self._burst_cooldown = max(self._burst_cooldown, 0.60)
             small_pool = [b for b in self._bubbles if not b.is_big and not b.promoted and not b.popping and not b.exiting]
-            # Scale promotion count by onset strength (scheduler) or fixed 20%
-            if beat_strength > 0.6:
-                promote_frac = 0.30  # strong kick → promote more
-            elif beat_strength > 0.3:
-                promote_frac = 0.20
+            big_pool = [b for b in self._bubbles if b.is_big and not b.popping and not b.exiting]
+            big_hotness = max((b.pulse_energy for b in big_pool), default=0.0)
+            swirl_like = drift_dir in _SWIRL_DIRECTIONS
+
+            # Promotions are still useful as an "extra voice" when the main
+            # big-bubble lane is already busy, but ordinary stream modes should
+            # stay conservative so they do not counterfeit a second big-bubble
+            # population across the whole card.
+            if swirl_like:
+                if beat_strength > 0.6:
+                    promote_frac = 0.18
+                elif beat_strength > 0.3:
+                    promote_frac = 0.12
+                else:
+                    promote_frac = 0.08
+                promote_count = min(2, max(1, int(len(small_pool) * promote_frac)))
+                promote_duration = 0.45 + 0.12 * beat_strength
             else:
-                promote_frac = 0.15
-            promote_count = min(4, max(1, int(len(small_pool) * promote_frac)))
+                if big_hotness < 0.45:
+                    promote_count = 0
+                else:
+                    promote_count = 1
+                promote_duration = 0.24 + 0.08 * beat_strength
             if promote_count > 0:
                 small_pool.sort(key=lambda bb: bb.radius, reverse=True)
                 for bb in small_pool[:promote_count]:
                     bb.promoted = True
-                    bb.promote_timer = 0.9
+                    bb.promote_timer = promote_duration
         # Tick down promotion timers
         for b in self._bubbles:
             if b.promoted:
@@ -299,8 +360,8 @@ class BubbleSimulation:
 
         # Travel speed uses SMOOTHED mid/high so it flows with the melody.
         # Raw mid/high would jerk on every transient.
-        smooth_mid = float(energy_bands.get('smooth_mid', mid)) if isinstance(energy_bands, dict) else mid
-        smooth_high = float(energy_bands.get('smooth_high', high)) if isinstance(energy_bands, dict) else high
+        smooth_mid = _clamp01(energy_bands.get('smooth_mid', mid)) if isinstance(energy_bands, dict) else mid
+        smooth_high = _clamp01(energy_bands.get('smooth_high', high)) if isinstance(energy_bands, dict) else high
 
         # Perceptual curve: keep quiet passages visibly mobile while still
         # reserving extra headroom for loud vocal passages.
@@ -388,7 +449,9 @@ class BubbleSimulation:
         effective_speed = baseline + (cap - baseline) * energy_factor * reactivity
 
         # --- Overdrive band (reactivity slider 101-200%) ---
-        overdrive_threshold_gate = 0.28
+        # Overdrive is a true emergency lane for "everything is already pinned",
+        # not a normal accompaniment to everyday hot passages.
+        overdrive_threshold_gate = 0.72
         overdrive_gate_signal = burst_authority(
             envelope=self._stream_burst_envelope,
             delta=vocal_delta,
@@ -409,20 +472,20 @@ class BubbleSimulation:
             else:
                 if not self._overdrive_active:
                     self._overdrive_consec_frames = 0
-            if (not self._overdrive_active) and self._overdrive_consec_frames >= 3:
+            if (not self._overdrive_active) and self._overdrive_consec_frames >= 5:
                 self._overdrive_active = True
-                self._overdrive_hold_timer = 0.12
-                self._log_overdrive_state("enter", reactivity_raw, energy_factor)
+                self._overdrive_hold_timer = 0.05
+                self._log_overdrive_state("enter", reactivity_raw, overdrive_gate_signal)
 
             if self._overdrive_active:
                 if overdrive_gate_signal >= overdrive_threshold_gate:
-                    self._overdrive_hold_timer = 0.12
+                    self._overdrive_hold_timer = 0.05
                 else:
                     self._overdrive_hold_timer = max(0.0, self._overdrive_hold_timer - dt)
                     if self._overdrive_hold_timer <= 0.0:
                         self._overdrive_active = False
                         self._overdrive_consec_frames = 0
-                        self._log_overdrive_state("release", reactivity_raw, energy_factor)
+                        self._log_overdrive_state("release", reactivity_raw, overdrive_gate_signal)
 
         self._burst_cooldown = max(0.0, self._burst_cooldown - dt)
         self._burst_active = self._burst_cooldown > 0.0
@@ -433,7 +496,7 @@ class BubbleSimulation:
             if is_viz_diagnostics_enabled():
                 now = time.time()
                 if now - self._overdrive_last_log_ts >= 0.5:
-                    self._log_overdrive_state("hold", reactivity_raw, energy_factor)
+                    self._log_overdrive_state("hold", reactivity_raw, overdrive_gate_signal)
                     self._overdrive_last_log_ts = now
         base_vel = effective_speed * 0.35  # normalised units/sec
 
@@ -482,8 +545,9 @@ class BubbleSimulation:
             # Swirl modes: suppress stream velocity so orbits stay centred
             is_swirl = drift_dir in _SWIRL_DIRECTIONS
             stream_scale = 0.0 if is_swirl else 1.0
-            move_x = sv[0] * base_vel * dt * stream_scale
-            move_y = sv[1] * base_vel * dt * stream_scale
+            bubble_vel = base_vel * b.speed_mult
+            move_x = sv[0] * bubble_vel * dt * stream_scale
+            move_y = sv[1] * bubble_vel * dt * stream_scale
 
             # Drift (sinusoidal lateral wander)
             drift_phase = b.phase + self._time * drift_speed * 2.0
@@ -530,19 +594,21 @@ class BubbleSimulation:
                 if b.is_big:
                     size_range = max(0.001, self._big_size_max - 0.015)
                     size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
-                    delta_sens = 3.2 - size_t * 1.0  # 3.2x small big → 2.2x largest
-                    sustained_knee = 0.32 + size_t * 0.18
-                    sustained_scale = 0.58 - size_t * 0.18
+                    delta_sens = 2.9 - size_t * 0.8  # keep kick detail, avoid easy ceilinging
+                    sustained_knee = 0.50 + size_t * 0.16
+                    sustained_scale = 0.22 - size_t * 0.06
                     attack_rate = 11.0 - size_t * 3.0
-                    decay_rate = 3.0 + size_t * 1.0
+                    decay_rate = 2.65 + size_t * 1.0
                 else:
-                    # Promoted small: react to bass with reduced sensitivity
+                    # Promoted smalls should add a brief extra accent when the
+                    # main big bubbles are already busy, not become a durable
+                    # second big-bubble class.
                     size_t = 0.5
-                    delta_sens = 2.8   # moderate — enough to visibly pulse
-                    sustained_knee = 0.28
-                    sustained_scale = 0.48
-                    attack_rate = 16.0  # snappy attack for promoted
-                    decay_rate = 5.0    # fast decay so each beat pops cleanly
+                    delta_sens = 1.95
+                    sustained_knee = 0.60
+                    sustained_scale = 0.10
+                    attack_rate = 15.0
+                    decay_rate = 7.2
             else:
                 raw_src = mid * 0.6 + high * 0.4
                 running_avg = self._midhi_running_avg
@@ -561,10 +627,14 @@ class BubbleSimulation:
 
             # Sustained component: absolute energy through perceptual curve
             # Below knee → near-zero; above knee → gentle ramp to sustained_scale
-            if raw_src <= sustained_knee:
+            perceptual_src = raw_src
+            if use_bass and b.is_big:
+                perceptual_src = raw_src / (raw_src + 0.32)
+
+            if perceptual_src <= sustained_knee:
                 sustained_component = 0.0
             else:
-                t = (raw_src - sustained_knee) / max(0.01, 1.0 - sustained_knee)
+                t = (perceptual_src - sustained_knee) / max(0.01, 1.0 - sustained_knee)
                 sustained_component = min(sustained_scale, t * sustained_scale)
 
             gated_energy = min(1.0, max(delta_component, sustained_component))
@@ -601,6 +671,8 @@ class BubbleSimulation:
                 if tail_outside or b.trail_strength <= 0.001 or b.exit_timer > 0.8:
                     to_remove.append(i)
 
+        self._apply_soft_separation(dt)
+
         # Remove dead bubbles (reverse order)
         for i in sorted(to_remove, reverse=True):
             if i < len(self._bubbles):
@@ -611,9 +683,17 @@ class BubbleSimulation:
         big_count = sum(1 for b in self._bubbles if b.is_big and not b.exiting)
         small_count = sum(1 for b in self._bubbles if not b.is_big and not b.exiting)
 
-        is_initial = self._time < 0.5
-        while big_count < big_target and len(self._bubbles) < MAX_BUBBLES:
-            if is_initial:
+        allow_initial_fill = self._time < 0.5 and _stream_mode_uses_in_card_initial_fill(stream_dir, drift_dir)
+        if allow_initial_fill:
+            big_spawn_budget = big_target
+        else:
+            big_spawn_budget = 2
+        while (
+            big_count < big_target
+            and len(self._bubbles) < MAX_BUBBLES
+            and big_spawn_budget > 0
+        ):
+            if allow_initial_fill:
                 bx = random.uniform(0.08, 0.92)
                 by = random.uniform(0.08, 0.92)
                 self._spawn_bubble_at(True, bx, by, stream_dir, surface_reach, drift_dir,
@@ -621,11 +701,19 @@ class BubbleSimulation:
             else:
                 self._spawn_bubble(True, stream_dir, surface_reach, drift_dir)
             big_count += 1
+            big_spawn_budget -= 1
 
-        while small_count < small_target and len(self._bubbles) < MAX_BUBBLES:
-            # Cluster spawning: 20% chance to spawn 2-3 near each other
-            is_initial = self._time < 0.5
-            cluster = random.random() < 0.2
+        if allow_initial_fill:
+            small_spawn_budget = small_target
+        else:
+            small_spawn_budget = 3
+        while (
+            small_count < small_target
+            and len(self._bubbles) < MAX_BUBBLES
+            and small_spawn_budget > 0
+        ):
+            is_initial = allow_initial_fill
+            cluster = (not is_initial) and random.random() < 0.18
             count = random.randint(2, 3) if cluster else 1
             if is_initial:
                 # First fill: scatter across card area
@@ -640,13 +728,18 @@ class BubbleSimulation:
             else:
                 base_x, base_y = _spawn_position(stream_dir, False)
             for c in range(count):
-                if small_count >= small_target or len(self._bubbles) >= MAX_BUBBLES:
+                if (
+                    small_count >= small_target
+                    or len(self._bubbles) >= MAX_BUBBLES
+                    or small_spawn_budget <= 0
+                ):
                     break
                 cx = base_x + (random.uniform(-0.07, 0.07) if c > 0 else 0.0)
                 cy = base_y + (random.uniform(-0.07, 0.07) if c > 0 else 0.0)
                 self._spawn_bubble_at(False, cx, cy, stream_dir, surface_reach, drift_dir,
                                       initial_fill=is_initial)
                 small_count += 1
+                small_spawn_budget -= 1
 
     def _spawn_bubble(self, is_big: bool, stream_dir: str,
                       surface_reach: float, drift_dir: str) -> None:
@@ -660,10 +753,81 @@ class BubbleSimulation:
             x, y = _spawn_position(stream_dir, is_big)
         self._spawn_bubble_at(is_big, x, y, stream_dir, surface_reach, drift_dir)
 
-    def _overlaps_existing(self, x: float, y: float, radius: float,
-                            min_gap: float = 0.018) -> bool:
+    def _apply_soft_separation(self, dt: float) -> None:
+        """Separate overlapping bubbles by visual class.
+
+        Big bubbles are the readable hero layer and should resist overlap with
+        other big/promoted bubbles strongly. Small bubbles remain the permissive
+        texture/noise layer and may nestle or overlap lightly.
+        """
+        active = [b for b in self._bubbles if not b.popping and not b.exiting]
+        count = len(active)
+        if count < 2:
+            return
+
+        for i in range(count):
+            a = active[i]
+            for j in range(i + 1, count):
+                b = active[j]
+                dx = b.x - a.x
+                dy = b.y - a.y
+                dist = math.hypot(dx, dy)
+                a_big = _bubble_behaves_big(a)
+                b_big = _bubble_behaves_big(b)
+                if a_big and b_big:
+                    target_gap = (a.radius + b.radius) * 1.12 + 0.008
+                    softness = 0.34
+                    max_push = 0.040
+                elif a_big or b_big:
+                    target_gap = (a.radius + b.radius) * 0.90
+                    softness = 0.11
+                    max_push = 0.018
+                else:
+                    target_gap = (a.radius + b.radius) * 0.78
+                    softness = 0.06
+                    max_push = 0.010
+
+                if dist >= target_gap:
+                    continue
+
+                if dist < 1e-5:
+                    angle = random.uniform(0.0, math.tau)
+                    nx = math.cos(angle)
+                    ny = math.sin(angle)
+                else:
+                    inv = 1.0 / dist
+                    nx = dx * inv
+                    ny = dy * inv
+
+                overlap = target_gap - dist
+                push = min(max_push, overlap * softness * min(1.0, dt * 60.0))
+                ax = -nx * push
+                ay = -ny * push
+                bx = nx * push
+                by = ny * push
+
+                a.x += ax
+                a.y += ay
+                b.x += bx
+                b.y += by
+
+    def _overlaps_existing(
+        self,
+        x: float,
+        y: float,
+        radius: float,
+        *,
+        candidate_is_big: bool,
+    ) -> bool:
         """Return True if (x, y, radius) overlaps any existing bubble."""
         for b in self._bubbles:
+            existing_big = _bubble_behaves_big(b)
+            if candidate_is_big and existing_big:
+                min_gap = max(0.010, (radius + b.radius) * 0.10)
+            elif candidate_is_big or existing_big:
+                min_gap = 0.001
+            else:
+                min_gap = -min(radius, b.radius) * 0.10
             dist = math.hypot(b.x - x, b.y - y)
             if dist < b.radius + radius + min_gap:
                 return True
@@ -686,7 +850,7 @@ class BubbleSimulation:
 
         # Overlap prevention: retry up to 15 times with increasing jitter
         for _attempt in range(15):
-            if not self._overlaps_existing(x, y, radius):
+            if not self._overlaps_existing(x, y, radius, candidate_is_big=is_big):
                 break
             spread = 0.08 + _attempt * 0.015
             x = x + random.uniform(-spread, spread)
@@ -728,6 +892,14 @@ class BubbleSimulation:
             dv = random.choice(_DIAGONAL_VECTORS)
             vx, vy = dv
 
+        if stream_dir in {"up", "down", "left", "right", "diagonal"}:
+            if is_big:
+                speed_mult = random.uniform(0.90, 1.12)
+            else:
+                speed_mult = random.uniform(0.84, 1.18)
+        else:
+            speed_mult = 1.0
+
         # Initial fill or swirl: start transparent for fade-in
         age = 0.0
         alpha = 1.0
@@ -747,7 +919,7 @@ class BubbleSimulation:
             reaches_surface=reaches, phase=phase,
             age=age, max_age=max_age, alpha=alpha,
             drift_bias=drift_bias, rotation=0.0,
-            vx=vx, vy=vy,
+            vx=vx, vy=vy, speed_mult=speed_mult,
             spec_size_mut=spec_size_mut, spec_ox=spec_ox, spec_oy=spec_oy,
             trail_tail_x=x, trail_tail_y=y,
         )
@@ -923,7 +1095,7 @@ class BubbleSimulation:
             # flicker between dot and outline rendering.
             is_tiny = (not b.is_big) and b.radius < 0.008
             if b.is_big:
-                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 5.5
+                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.2
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.5
@@ -937,8 +1109,9 @@ class BubbleSimulation:
             # no contraction; bias<1.0 contracts proportionally.
             if b.is_big and big_contraction_bias < 1.0:
                 quiet = 1.0 - min(1.0, b.pulse_energy)
-                shrink = 1.0 - (1.0 - big_contraction_bias) * quiet * 0.25
-                r *= max(0.6, shrink)
+                quiet_curve = quiet ** 0.85
+                shrink = 1.0 - (1.0 - big_contraction_bias) * quiet_curve * 0.70
+                r *= max(0.60, shrink)
 
             # Max size clamp: cap the pulsed radius to base_radius * clamp
             if b.is_big and big_size_clamp > 0.0:
@@ -975,7 +1148,7 @@ class BubbleSimulation:
         # Diagnostic: log first big bubble's pulse details
         if _snap_diag and self._bubbles and is_verbose_logging():
             fb = next((b for b in self._bubbles if b.is_big), self._bubbles[0])
-            pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * (5.5 if fb.is_big else 3.0)
+            pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * (4.2 if fb.is_big else 3.0)
             logger.debug(
                 "[BUBBLE_SIM] snapshot: big_bass_pulse=%.2f small_freq_pulse=%.2f "
                 "first_big: pe=%.3f pf=%.3f base_r=%.4f final_r=%.4f",

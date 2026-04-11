@@ -83,6 +83,17 @@ _MODE_TECH_PREFIXES: Dict[str, str] = {
     "sine_wave": "sine_wave_",
     "oscilloscope": "oscilloscope_",
 }
+_BLOB_SHAPER_ONLY_KEYS: Tuple[str, ...] = (
+    "blob_shape_base_nodes",
+    "blob_shape_reaction_nodes",
+    "blob_shape_energy_nodes",
+    "blob_shaper_base_strength",
+    "blob_shaper_react_strength",
+    "blob_shaper_idle_motion",
+    "blob_shaper_audio_motion",
+    "blob_topology",
+    "blob_ring_thickness",
+)
 
 _BACKUP_ROOT = ROOT / "temp" / "visualizer_preset_backups"
 _UNDO_STATE_PATH = _BACKUP_ROOT / "undo_state.json"
@@ -313,14 +324,22 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
     issues: Dict[str, Any] = {
         "mode": mode,
         "duplicate_prefixed_keys": [],
+        "cross_mode_keys": [],
         "has_custom_preset_backup": False,
         "deprecated_authored_keys": [],
         "deprecated_global_keys": [],
         "deprecated_mode_alias_keys": [],
         "legacy_spectrum_linear_notch_family": False,
+        "inactive_blob_shaper_payload": False,
         "top_level_visualizer_duplication": False,
     }
     prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
+    other_prefixes: tuple[str, ...] = tuple(
+        prefix
+        for other_mode, mode_prefixes in vp.MODE_KEY_PREFIXES.items()  # type: ignore[attr-defined]
+        if other_mode != mode
+        for prefix in mode_prefixes
+    )
 
     snapshot = payload.get("snapshot")
     if isinstance(snapshot, Mapping) and isinstance(snapshot.get("custom_preset_backup"), Mapping):
@@ -344,6 +363,8 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
                 issues["legacy_spectrum_linear_notch_family"] = True
             if any(prefix and key.startswith(f"{prefix}{prefix}") for prefix in prefixes):
                 issues["duplicate_prefixed_keys"].append(key)
+            if any(prefix and key.startswith(prefix) for prefix in other_prefixes):
+                issues["cross_mode_keys"].append(key)
             if any(key.endswith(suffix) for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES):
                 issues["deprecated_authored_keys"].append(key)
             if mode == "blob" and key in _DEPRECATED_BLOB_AUTHORED_KEYS:
@@ -352,17 +373,26 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
                 issues["deprecated_global_keys"].append(key)
             if key in _DEPRECATED_MODE_ALIAS_KEYS.get(mode, ()):
                 issues["deprecated_mode_alias_keys"].append(key)
+        if (
+            mode == "blob"
+            and section.get("blob_shaper_enabled") is False
+            and any(key in section for key in _BLOB_SHAPER_ONLY_KEYS)
+        ):
+            issues["inactive_blob_shaper_payload"] = True
 
     issues["duplicate_prefixed_keys"] = sorted(set(issues["duplicate_prefixed_keys"]))
+    issues["cross_mode_keys"] = sorted(set(issues["cross_mode_keys"]))
     issues["deprecated_authored_keys"] = sorted(set(issues["deprecated_authored_keys"]))
     issues["deprecated_global_keys"] = sorted(set(issues["deprecated_global_keys"]))
     issues["deprecated_mode_alias_keys"] = sorted(set(issues["deprecated_mode_alias_keys"]))
     issues["problem_count"] = (
         len(issues["duplicate_prefixed_keys"])
+        + len(issues["cross_mode_keys"])
         + len(issues["deprecated_authored_keys"])
         + len(issues["deprecated_global_keys"])
         + len(issues["deprecated_mode_alias_keys"])
         + int(bool(issues["legacy_spectrum_linear_notch_family"]))
+        + int(bool(issues["inactive_blob_shaper_payload"]))
         + int(bool(issues["has_custom_preset_backup"]))
         + int(bool(issues["top_level_visualizer_duplication"]))
     )
