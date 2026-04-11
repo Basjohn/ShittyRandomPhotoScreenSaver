@@ -285,21 +285,27 @@ def get_uniform_names() -> list[str]:
         "u_sine_speed", "u_sine_line_dim", "u_sine_line_offset_bias",
         "u_sine_travel", "u_card_adaptation",
         "u_sine_travel_line2", "u_sine_travel_line3",
+        "u_sine_travel_line4", "u_sine_travel_line5", "u_sine_travel_line6",
         "u_wave_effect", "u_micro_wobble", "u_crawl_amount",
         "u_wave_effect_gate",
         "u_sine_vertical_shift",
         "u_heartbeat", "u_heartbeat_intensity", "u_width_reaction",
         "u_sine_density", "u_sine_displacement",
         "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
+        "u_sine_line4_shift", "u_sine_line5_shift", "u_sine_line6_shift",
         # Ghost (peak-tracked energy envelope)
         "u_ghost_alpha", "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
         "u_ghost_line2_enabled", "u_ghost_line3_enabled",
+        "u_ghost_line4_enabled", "u_ghost_line5_enabled", "u_ghost_line6_enabled",
         # Shared line/glow
         "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity", "u_glow_color",
         "u_reactive_glow", "u_sensitivity", "u_smoothing",
         "u_line_color", "u_line_count",
         "u_line2_color", "u_line2_glow_color",
         "u_line3_color", "u_line3_glow_color",
+        "u_line4_color", "u_line4_glow_color",
+        "u_line5_color", "u_line5_glow_color",
+        "u_line6_color", "u_line6_glow_color",
         # Energy bands (smoothed)
         "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
     ]
@@ -319,6 +325,9 @@ def upload_uniforms(gl, u: dict, s) -> bool:
         gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
     _set1i(gl, u, "u_ghost_line2_enabled", 1 if getattr(s, "_sine_ghost_line2_enabled", True) else 0)
     _set1i(gl, u, "u_ghost_line3_enabled", 1 if getattr(s, "_sine_ghost_line3_enabled", True) else 0)
+    _set1i(gl, u, "u_ghost_line4_enabled", 1 if getattr(s, "_sine_ghost_line4_enabled", True) else 0)
+    _set1i(gl, u, "u_ghost_line5_enabled", 1 if getattr(s, "_sine_ghost_line5_enabled", True) else 0)
+    _set1i(gl, u, "u_ghost_line6_enabled", 1 if getattr(s, "_sine_ghost_line6_enabled", True) else 0)
     _set1f(gl, u, "u_ghost_bass", getattr(s, '_sine_peak_bass', 0.0))
     _set1f(gl, u, "u_ghost_mid", getattr(s, '_sine_peak_mid', 0.0))
     _set1f(gl, u, "u_ghost_high", getattr(s, '_sine_peak_high', 0.0))
@@ -329,6 +338,9 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_card_adaptation", s._sine_card_adaptation)
     _set1i(gl, u, "u_sine_travel_line2", int(s._sine_travel_line2))
     _set1i(gl, u, "u_sine_travel_line3", int(s._sine_travel_line3))
+    _set1i(gl, u, "u_sine_travel_line4", int(getattr(s, '_sine_travel_line4', 0)))
+    _set1i(gl, u, "u_sine_travel_line5", int(getattr(s, '_sine_travel_line5', 0)))
+    _set1i(gl, u, "u_sine_travel_line6", int(getattr(s, '_sine_travel_line6', 0)))
     _set1f(gl, u, "u_wave_effect", s._sine_wave_effect)
     _set1f(gl, u, "u_micro_wobble", s._sine_micro_wobble)
     _set1f(gl, u, "u_crawl_amount", s._sine_crawl_amount)
@@ -342,6 +354,9 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_sine_line1_shift", s._sine_line1_shift)
     _set1f(gl, u, "u_sine_line2_shift", s._sine_line2_shift)
     _set1f(gl, u, "u_sine_line3_shift", s._sine_line3_shift)
+    _set1f(gl, u, "u_sine_line4_shift", getattr(s, '_sine_line4_shift', 0.0))
+    _set1f(gl, u, "u_sine_line5_shift", getattr(s, '_sine_line5_shift', 0.0))
+    _set1f(gl, u, "u_sine_line6_shift", getattr(s, '_sine_line6_shift', 0.0))
 
     # Shared line/glow
     _upload_shared_line_glow(gl, u, s, reactive)
@@ -371,6 +386,12 @@ def _upload_shared_line_glow(gl, u, s, reactive: dict[str, float] | None = None)
         ("u_line2_glow_color", s._line2_glow_color),
         ("u_line3_color", s._line3_color),
         ("u_line3_glow_color", s._line3_glow_color),
+        ("u_line4_color", getattr(s, '_line4_color', s._line2_color)),
+        ("u_line4_glow_color", getattr(s, '_line4_glow_color', s._line2_glow_color)),
+        ("u_line5_color", getattr(s, '_line5_color', s._line3_color)),
+        ("u_line5_glow_color", getattr(s, '_line5_glow_color', s._line3_glow_color)),
+        ("u_line6_color", getattr(s, '_line6_color', s._line2_color)),
+        ("u_line6_glow_color", getattr(s, '_line6_glow_color', s._line2_glow_color)),
     ):
         _set_color4(gl, u, uname, qc)
 

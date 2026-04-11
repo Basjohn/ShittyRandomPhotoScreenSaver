@@ -100,7 +100,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         if c is not None:
             widget._osc_line_color = c
     if 'osc_line_count' in kwargs:
-        widget._osc_line_count = max(1, min(3, int(kwargs['osc_line_count'])))
+        widget._osc_line_count = max(1, min(6, int(kwargs['osc_line_count'])))
     if 'osc_line2_color' in kwargs:
         c = _color_or_none(kwargs['osc_line2_color'])
         if c is not None:
@@ -117,10 +117,40 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         c = _color_or_none(kwargs['osc_line3_glow_color'])
         if c is not None:
             widget._osc_line3_glow_color = c
+    if 'osc_line4_color' in kwargs:
+        c = _color_or_none(kwargs['osc_line4_color'])
+        if c is not None:
+            widget._osc_line4_color = c
+    if 'osc_line4_glow_color' in kwargs:
+        c = _color_or_none(kwargs['osc_line4_glow_color'])
+        if c is not None:
+            widget._osc_line4_glow_color = c
+    if 'osc_line5_color' in kwargs:
+        c = _color_or_none(kwargs['osc_line5_color'])
+        if c is not None:
+            widget._osc_line5_color = c
+    if 'osc_line5_glow_color' in kwargs:
+        c = _color_or_none(kwargs['osc_line5_glow_color'])
+        if c is not None:
+            widget._osc_line5_glow_color = c
+    if 'osc_line6_color' in kwargs:
+        c = _color_or_none(kwargs['osc_line6_color'])
+        if c is not None:
+            widget._osc_line6_color = c
+    if 'osc_line6_glow_color' in kwargs:
+        c = _color_or_none(kwargs['osc_line6_glow_color'])
+        if c is not None:
+            widget._osc_line6_glow_color = c
     if 'osc_ghost_line2_enabled' in kwargs:
         widget._osc_ghost_line2_enabled = bool(kwargs['osc_ghost_line2_enabled'])
     if 'osc_ghost_line3_enabled' in kwargs:
         widget._osc_ghost_line3_enabled = bool(kwargs['osc_ghost_line3_enabled'])
+    if 'osc_ghost_line4_enabled' in kwargs:
+        widget._osc_ghost_line4_enabled = bool(kwargs['osc_ghost_line4_enabled'])
+    if 'osc_ghost_line5_enabled' in kwargs:
+        widget._osc_ghost_line5_enabled = bool(kwargs['osc_ghost_line5_enabled'])
+    if 'osc_ghost_line6_enabled' in kwargs:
+        widget._osc_ghost_line6_enabled = bool(kwargs['osc_ghost_line6_enabled'])
 
 
     # --- Blob ---------------------------------------------------------
@@ -395,12 +425,24 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._sine_travel_line2 = max(0, min(2, int(kwargs['sine_travel_line2'])))
     if 'sine_travel_line3' in kwargs:
         widget._sine_travel_line3 = max(0, min(2, int(kwargs['sine_travel_line3'])))
+    if 'sine_travel_line4' in kwargs:
+        widget._sine_travel_line4 = max(0, min(2, int(kwargs['sine_travel_line4'])))
+    if 'sine_travel_line5' in kwargs:
+        widget._sine_travel_line5 = max(0, min(2, int(kwargs['sine_travel_line5'])))
+    if 'sine_travel_line6' in kwargs:
+        widget._sine_travel_line6 = max(0, min(2, int(kwargs['sine_travel_line6'])))
     if 'sine_line1_shift' in kwargs:
         widget._sine_line1_shift = max(-1.0, min(1.0, float(kwargs['sine_line1_shift'])))
     if 'sine_line2_shift' in kwargs:
         widget._sine_line2_shift = max(-1.0, min(1.0, float(kwargs['sine_line2_shift'])))
     if 'sine_line3_shift' in kwargs:
         widget._sine_line3_shift = max(-1.0, min(1.0, float(kwargs['sine_line3_shift'])))
+    if 'sine_line4_shift' in kwargs:
+        widget._sine_line4_shift = max(-1.0, min(1.0, float(kwargs['sine_line4_shift'])))
+    if 'sine_line5_shift' in kwargs:
+        widget._sine_line5_shift = max(-1.0, min(1.0, float(kwargs['sine_line5_shift'])))
+    if 'sine_line6_shift' in kwargs:
+        widget._sine_line6_shift = max(-1.0, min(1.0, float(kwargs['sine_line6_shift'])))
     if 'sine_wave_effect' in kwargs:
         widget._sine_wave_effect = max(0.0, min(1.0, float(kwargs['sine_wave_effect'])))
     if 'sine_micro_wobble' in kwargs:
@@ -442,7 +484,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'sine_speed' in kwargs:
         widget._sine_speed = max(0.1, min(1.0, float(kwargs['sine_speed'])))
     if 'sine_line_count' in kwargs:
-        widget._sine_line_count = max(1, min(3, int(kwargs['sine_line_count'])))
+        widget._sine_line_count = max(1, min(6, int(kwargs['sine_line_count'])))
     if 'sine_line_offset_bias' in kwargs:
         widget._sine_line_offset_bias = max(0.0, min(1.0, float(kwargs['sine_line_offset_bias'])))
     if 'sine_line_dim' in kwargs:
@@ -463,10 +505,40 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         c = _color_or_none(kwargs['sine_line3_glow_color'])
         if c is not None:
             widget._sine_line3_glow_color = c
+    if 'sine_line4_color' in kwargs:
+        c = _color_or_none(kwargs['sine_line4_color'])
+        if c is not None:
+            widget._sine_line4_color = c
+    if 'sine_line4_glow_color' in kwargs:
+        c = _color_or_none(kwargs['sine_line4_glow_color'])
+        if c is not None:
+            widget._sine_line4_glow_color = c
+    if 'sine_line5_color' in kwargs:
+        c = _color_or_none(kwargs['sine_line5_color'])
+        if c is not None:
+            widget._sine_line5_color = c
+    if 'sine_line5_glow_color' in kwargs:
+        c = _color_or_none(kwargs['sine_line5_glow_color'])
+        if c is not None:
+            widget._sine_line5_glow_color = c
+    if 'sine_line6_color' in kwargs:
+        c = _color_or_none(kwargs['sine_line6_color'])
+        if c is not None:
+            widget._sine_line6_color = c
+    if 'sine_line6_glow_color' in kwargs:
+        c = _color_or_none(kwargs['sine_line6_glow_color'])
+        if c is not None:
+            widget._sine_line6_glow_color = c
     if 'sine_ghost_line2_enabled' in kwargs:
         widget._sine_ghost_line2_enabled = bool(kwargs['sine_ghost_line2_enabled'])
     if 'sine_ghost_line3_enabled' in kwargs:
         widget._sine_ghost_line3_enabled = bool(kwargs['sine_ghost_line3_enabled'])
+    if 'sine_ghost_line4_enabled' in kwargs:
+        widget._sine_ghost_line4_enabled = bool(kwargs['sine_ghost_line4_enabled'])
+    if 'sine_ghost_line5_enabled' in kwargs:
+        widget._sine_ghost_line5_enabled = bool(kwargs['sine_ghost_line5_enabled'])
+    if 'sine_ghost_line6_enabled' in kwargs:
+        widget._sine_ghost_line6_enabled = bool(kwargs['sine_ghost_line6_enabled'])
 
     # --- Rainbow (per-mode, falls back to global key for compat) --------
     # Per-mode keys like spectrum_rainbow_enabled take priority over the
@@ -738,9 +810,15 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['sine_card_adaptation'] = widget._sine_card_adaptation
     extra['sine_travel_line2'] = widget._sine_travel_line2
     extra['sine_travel_line3'] = widget._sine_travel_line3
+    extra['sine_travel_line4'] = getattr(widget, '_sine_travel_line4', 0)
+    extra['sine_travel_line5'] = getattr(widget, '_sine_travel_line5', 0)
+    extra['sine_travel_line6'] = getattr(widget, '_sine_travel_line6', 0)
     extra['sine_line1_shift'] = getattr(widget, '_sine_line1_shift', 0.0)
     extra['sine_line2_shift'] = getattr(widget, '_sine_line2_shift', 0.0)
     extra['sine_line3_shift'] = getattr(widget, '_sine_line3_shift', 0.0)
+    extra['sine_line4_shift'] = getattr(widget, '_sine_line4_shift', 0.0)
+    extra['sine_line5_shift'] = getattr(widget, '_sine_line5_shift', 0.0)
+    extra['sine_line6_shift'] = getattr(widget, '_sine_line6_shift', 0.0)
     extra['sine_wave_effect'] = widget._sine_wave_effect
     extra['sine_micro_wobble'] = widget._sine_micro_wobble
     extra['sine_crawl_amount'] = getattr(widget, '_sine_crawl_amount', 0.0)
@@ -752,10 +830,28 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['line2_glow_color'] = widget._sine_line2_glow_color if is_sine else widget._osc_line2_glow_color
     extra['line3_color'] = widget._sine_line3_color if is_sine else widget._osc_line3_color
     extra['line3_glow_color'] = widget._sine_line3_glow_color if is_sine else widget._osc_line3_glow_color
+    extra['line4_color'] = widget._sine_line4_color if is_sine else widget._osc_line4_color
+    extra['line4_glow_color'] = widget._sine_line4_glow_color if is_sine else widget._osc_line4_glow_color
+    extra['line5_color'] = widget._sine_line5_color if is_sine else widget._osc_line5_color
+    extra['line5_glow_color'] = widget._sine_line5_glow_color if is_sine else widget._osc_line5_glow_color
+    extra['line6_color'] = widget._sine_line6_color if is_sine else widget._osc_line6_color
+    extra['line6_glow_color'] = widget._sine_line6_glow_color if is_sine else widget._osc_line6_glow_color
+    extra['ghost_line2_enabled'] = widget._sine_ghost_line2_enabled if is_sine else widget._osc_ghost_line2_enabled
+    extra['ghost_line3_enabled'] = widget._sine_ghost_line3_enabled if is_sine else widget._osc_ghost_line3_enabled
+    extra['ghost_line4_enabled'] = widget._sine_ghost_line4_enabled if is_sine else widget._osc_ghost_line4_enabled
+    extra['ghost_line5_enabled'] = widget._sine_ghost_line5_enabled if is_sine else widget._osc_ghost_line5_enabled
+    extra['ghost_line6_enabled'] = widget._sine_ghost_line6_enabled if is_sine else widget._osc_ghost_line6_enabled
+    # Legacy ghost enabled keys (for shader compatibility)
     extra['osc_ghost_line2_enabled'] = bool(getattr(widget, '_osc_ghost_line2_enabled', True))
     extra['osc_ghost_line3_enabled'] = bool(getattr(widget, '_osc_ghost_line3_enabled', True))
+    extra['osc_ghost_line4_enabled'] = bool(getattr(widget, '_osc_ghost_line4_enabled', True))
+    extra['osc_ghost_line5_enabled'] = bool(getattr(widget, '_osc_ghost_line5_enabled', True))
+    extra['osc_ghost_line6_enabled'] = bool(getattr(widget, '_osc_ghost_line6_enabled', True))
     extra['sine_ghost_line2_enabled'] = bool(getattr(widget, '_sine_ghost_line2_enabled', True))
     extra['sine_ghost_line3_enabled'] = bool(getattr(widget, '_sine_ghost_line3_enabled', True))
+    extra['sine_ghost_line4_enabled'] = bool(getattr(widget, '_sine_ghost_line4_enabled', True))
+    extra['sine_ghost_line5_enabled'] = bool(getattr(widget, '_sine_ghost_line5_enabled', True))
+    extra['sine_ghost_line6_enabled'] = bool(getattr(widget, '_sine_ghost_line6_enabled', True))
 
 
 def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:

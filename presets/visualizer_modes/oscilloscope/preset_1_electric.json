@@ -69,6 +69,45 @@
         "osc_line_count": 2,
         "osc_line_dim": false,
         "osc_line_offset_bias": 0.0,
+        "osc_ghost_line4_enabled": true,
+        "osc_ghost_line5_enabled": true,
+        "osc_ghost_line6_enabled": true,
+        "osc_line4_color": [
+          255,
+          0,
+          150,
+          230
+        ],
+        "osc_line4_glow_color": [
+          255,
+          0,
+          150,
+          180
+        ],
+        "osc_line5_color": [
+          0,
+          255,
+          200,
+          230
+        ],
+        "osc_line5_glow_color": [
+          0,
+          255,
+          200,
+          180
+        ],
+        "osc_line6_color": [
+          200,
+          100,
+          255,
+          230
+        ],
+        "osc_line6_glow_color": [
+          200,
+          100,
+          255,
+          180
+        ],
         "osc_reactive_glow": true,
         "osc_smoothing": 0.3,
         "osc_speed": 0.26,

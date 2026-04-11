@@ -96,7 +96,7 @@ def load_oscilloscope_mode_settings(
     if hasattr(tab, "osc_multi_line"):
         tab.osc_multi_line.setChecked(osc_line_count > 1)
     if hasattr(tab, "osc_line_count"):
-        clamped_line_count = max(2, min(3, osc_line_count))
+        clamped_line_count = max(2, min(6, osc_line_count))
         tab.osc_line_count.setValue(clamped_line_count)
         tab.osc_line_count_label.setText(str(clamped_line_count))
 
@@ -105,6 +105,12 @@ def load_oscilloscope_mode_settings(
     sync_color_button("osc_line2_glow_btn", "_osc_line2_glow_color")
     sync_color_button("osc_line3_color_btn", "_osc_line3_color")
     sync_color_button("osc_line3_glow_btn", "_osc_line3_glow_color")
+    sync_color_button("osc_line4_color_btn", "_osc_line4_color")
+    sync_color_button("osc_line4_glow_btn", "_osc_line4_glow_color")
+    sync_color_button("osc_line5_color_btn", "_osc_line5_color")
+    sync_color_button("osc_line5_glow_btn", "_osc_line5_glow_color")
+    sync_color_button("osc_line6_color_btn", "_osc_line6_color")
+    sync_color_button("osc_line6_glow_btn", "_osc_line6_glow_color")
     update_multi_line_visibility(tab)
 
     if hasattr(tab, "osc_ghost_enabled"):
@@ -122,6 +128,18 @@ def load_oscilloscope_mode_settings(
     if hasattr(tab, "osc_ghost_line3_enabled"):
         tab.osc_ghost_line3_enabled.setChecked(
             tab._config_bool("spotify_visualizer", config, "osc_ghost_line3_enabled", True)
+        )
+    if hasattr(tab, "osc_ghost_line4_enabled"):
+        tab.osc_ghost_line4_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "osc_ghost_line4_enabled", True)
+        )
+    if hasattr(tab, "osc_ghost_line5_enabled"):
+        tab.osc_ghost_line5_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "osc_ghost_line5_enabled", True)
+        )
+    if hasattr(tab, "osc_ghost_line6_enabled"):
+        tab.osc_ghost_line6_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "osc_ghost_line6_enabled", True)
         )
 
 
@@ -154,6 +172,9 @@ def collect_oscilloscope_mode_settings(
         "osc_ghost_intensity": (tab.osc_ghost_intensity.value() if hasattr(tab, "osc_ghost_intensity") else 40) / 100.0,
         "osc_ghost_line2_enabled": tab.osc_ghost_line2_enabled.isChecked() if hasattr(tab, "osc_ghost_line2_enabled") else True,
         "osc_ghost_line3_enabled": tab.osc_ghost_line3_enabled.isChecked() if hasattr(tab, "osc_ghost_line3_enabled") else True,
+        "osc_ghost_line4_enabled": tab.osc_ghost_line4_enabled.isChecked() if hasattr(tab, "osc_ghost_line4_enabled") else True,
+        "osc_ghost_line5_enabled": tab.osc_ghost_line5_enabled.isChecked() if hasattr(tab, "osc_ghost_line5_enabled") else True,
+        "osc_ghost_line6_enabled": tab.osc_ghost_line6_enabled.isChecked() if hasattr(tab, "osc_ghost_line6_enabled") else True,
     }
     payload.update(collect_extra_color_bindings(tab))
     return payload

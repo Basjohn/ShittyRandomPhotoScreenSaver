@@ -1,15 +1,8 @@
 {
   "managed_curated_files": [
-    "blob/preset_10_petal_current.json",
     "blob/preset_1_the_mighty_blob.json",
-    "blob/preset_2_ice_crystal.json",
-    "blob/preset_3_reactive_heart.json",
-    "blob/preset_4_solar_flare.json",
-    "blob/preset_5_neon_derp.json",
-    "blob/preset_6_velvet_moth.json",
-    "blob/preset_7_velvet_moth_ex.json",
-    "blob/preset_8_halo_forge.json",
-    "blob/preset_9_bass_lantern.json",
+    "blob/preset_2_reactive_heart.json",
+    "blob/preset_3_shaped_heart_beta.json",
     "bubble/preset_1_spiral_surge.json",
     "bubble/preset_2_sideway_swish.json",
     "bubble/preset_3_orange_soda.json",

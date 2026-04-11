@@ -99,6 +99,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_ghost_decay: float = 0.3
         self._sine_ghost_line2_enabled: bool = True
         self._sine_ghost_line3_enabled: bool = True
+        self._sine_ghost_line4_enabled: bool = True
+        self._sine_ghost_line5_enabled: bool = True
+        self._sine_ghost_line6_enabled: bool = True
         self._bubble_ghosting_enabled: bool = False
         self._bubble_ghost_alpha: float = 0.0
         self._bubble_ghost_decay: float = 0.4
@@ -147,6 +150,12 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_line2_glow_color: QColor = QColor(255, 120, 50, 180)
         self._osc_line3_color: QColor = QColor(50, 255, 120, 230)
         self._osc_line3_glow_color: QColor = QColor(50, 255, 120, 180)
+        self._osc_line4_color: QColor = QColor(255, 0, 150, 230)
+        self._osc_line4_glow_color: QColor = QColor(255, 0, 150, 180)
+        self._osc_line5_color: QColor = QColor(0, 255, 200, 230)
+        self._osc_line5_glow_color: QColor = QColor(0, 255, 200, 180)
+        self._osc_line6_color: QColor = QColor(200, 100, 255, 230)
+        self._osc_line6_glow_color: QColor = QColor(200, 100, 255, 180)
 
 
         # Blob settings
@@ -189,6 +198,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_wave_travel: int = 0  # 0=none, 1=left, 2=right
         self._sine_travel_line2: int = 0  # per-line travel for line 2
         self._sine_travel_line3: int = 0  # per-line travel for line 3
+        self._sine_travel_line4: int = 0  # per-line travel for line 4
+        self._sine_travel_line5: int = 0  # per-line travel for line 5
+        self._sine_travel_line6: int = 0  # per-line travel for line 6
         self._sine_card_adaptation: float = 0.3  # 0.05-1.0, how much of card height waves use
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions (legacy)
@@ -207,6 +219,12 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_line2_glow_color: QColor = QColor(255, 120, 50, 180)
         self._sine_line3_color: QColor = QColor(50, 255, 120, 230)
         self._sine_line3_glow_color: QColor = QColor(50, 255, 120, 180)
+        self._sine_line4_color: QColor = QColor(255, 120, 50, 230)
+        self._sine_line4_glow_color: QColor = QColor(255, 120, 50, 180)
+        self._sine_line5_color: QColor = QColor(50, 255, 120, 230)
+        self._sine_line5_glow_color: QColor = QColor(50, 255, 120, 180)
+        self._sine_line6_color: QColor = QColor(255, 0, 150, 230)
+        self._sine_line6_glow_color: QColor = QColor(255, 0, 150, 180)
         self._sine_reactive_glow: bool = True
         self._sine_sensitivity: float = 1.0
         self._sine_smoothing: float = 0.7
@@ -217,6 +235,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._sine_line1_shift: float = 0.0
         self._sine_line2_shift: float = 0.0
         self._sine_line3_shift: float = 0.0
+        self._sine_line4_shift: float = 0.0
+        self._sine_line5_shift: float = 0.0
+        self._sine_line6_shift: float = 0.0
 
         # Rainbow (Taste The Rainbow) mode — global, applies to all visualizers
         self._rainbow_enabled: bool = False
@@ -229,6 +250,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_ghost_intensity: float = 0.4
         self._osc_ghost_line2_enabled: bool = True
         self._osc_ghost_line3_enabled: bool = True
+        self._osc_ghost_line4_enabled: bool = True
+        self._osc_ghost_line5_enabled: bool = True
+        self._osc_ghost_line6_enabled: bool = True
 
         # Sine Wave Heartbeat
         self._sine_heartbeat: float = 0.0

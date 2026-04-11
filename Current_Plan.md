@@ -357,7 +357,7 @@ Add more reaction variety to shaped blob - currently too uniform.
 **Guardrails:**
 - Never rearchitecture towards raw energy
 - Do not over complicate bubble
-- Keep this as polish work after OSC/SINE 6-line expansion is complete
+- Keep this as polish work after OSC/SINE 6-line expansion is complete, OSC/SINE extra lines must reference both how existing lines exist, "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Change_Checklist.md" and Default_Settings.md or else they will fail spectactularly. They should only be done after custom modes, preset saving/loading and so on are perfectly healthy for all modes. 
 
 ---
 

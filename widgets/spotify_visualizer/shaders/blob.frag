@@ -427,6 +427,37 @@ float blob_sdf_ex(vec2 p, float time,
     float wobble_floor = mix(0.62, 0.76, stage_progress.x);
     final_radius = max(final_radius, core_radius * wobble_floor);
 
+    // Essential inward curves at high-curvature regions for organic core deformation
+    // Detect curvature by analyzing wobble derivative changes
+    // Apply subtle inward deformation (max 2-5% of radius) to break perfect circles
+    float curvature_inward = 0.0;
+    if (u_blob_shaper_enabled == 0) {
+        // Sample wobble at neighboring angles to estimate curvature
+        float angle_step = 0.08;
+        float wobble_plus = sin((motion_angle + angle_step) * 2.0 + time * 0.4) * 0.025 * cw +
+                           sin((motion_angle + angle_step) * 3.0 + time * 1.5) * 0.021 * cw;
+        float wobble_minus = sin((motion_angle - angle_step) * 2.0 + time * 0.4) * 0.025 * cw +
+                            sin((motion_angle - angle_step) * 3.0 + time * 1.5) * 0.021 * cw;
+        float wobble_center = wobble_component;
+        
+        // Curvature is high where wobble changes rapidly (second derivative)
+        float curvature = abs(wobble_plus - 2.0 * wobble_center + wobble_minus);
+        
+        // Apply subtle inward deformation at high-curvature regions
+        // Max 2-5% of radius, never deep enough to pinch
+        float curvature_threshold = 0.003;
+        if (curvature > curvature_threshold) {
+            float inward_strength = smoothstep(curvature_threshold, curvature_threshold * 3.0, curvature);
+            float max_inward = core_radius * 0.05; // Max 5% of radius
+            curvature_inward = -inward_strength * max_inward;
+        }
+    }
+    
+    final_radius += curvature_inward;
+    
+    // Final clamp to ensure inward curves never cause pinch
+    final_radius = max(final_radius, core_radius * 0.95);
+
     return dist - final_radius;
 }
 

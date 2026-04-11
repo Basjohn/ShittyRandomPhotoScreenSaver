@@ -33,12 +33,24 @@ def _update_osc_multi_line_visibility(tab) -> None:
     line_count = getattr(tab, 'osc_line_count', None)
     show_l2 = enabled and line_count is not None and line_count.value() >= 2
     show_l3 = enabled and line_count is not None and line_count.value() >= 3
+    show_l4 = enabled and line_count is not None and line_count.value() >= 4
+    show_l5 = enabled and line_count is not None and line_count.value() >= 5
+    show_l6 = enabled and line_count is not None and line_count.value() >= 6
     for w in (getattr(tab, '_osc_line2_ghost_row_widget', None),):
         if w is not None:
             w.setVisible(bool(show_l2))
     for w in (getattr(tab, '_osc_l3_row_widget', None), getattr(tab, '_osc_line3_ghost_row_widget', None)):
         if w is not None:
             w.setVisible(bool(show_l3))
+    for w in (getattr(tab, '_osc_l4_row_widget', None), getattr(tab, '_osc_line4_ghost_row_widget', None)):
+        if w is not None:
+            w.setVisible(bool(show_l4))
+    for w in (getattr(tab, '_osc_l5_row_widget', None), getattr(tab, '_osc_line5_ghost_row_widget', None)):
+        if w is not None:
+            w.setVisible(bool(show_l5))
+    for w in (getattr(tab, '_osc_l6_row_widget', None), getattr(tab, '_osc_line6_ghost_row_widget', None)):
+        if w is not None:
+            w.setVisible(bool(show_l6))
 
 
 def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
@@ -379,7 +391,7 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     osc_line_count_row = _aligned_row(ml_layout, "Line Count:")
     tab.osc_line_count = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.osc_line_count.setMinimum(2)
-    tab.osc_line_count.setMaximum(3)
+    tab.osc_line_count.setMaximum(6)
     tab.osc_line_count.setValue(max(2, tab._default_int('spotify_visualizer', 'osc_line_count', 1)))
     tab.osc_line_count.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.osc_line_count.setTickInterval(1)
@@ -459,6 +471,108 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     bind_setting_signal(tab, tab.osc_ghost_line3_enabled.stateChanged)
     osc_l3_ghost_row.addWidget(tab.osc_ghost_line3_enabled)
     osc_l3_ghost_row.addStretch()
+
+    tab._osc_l4_row_widget, osc_l4_row = _swatch_row_widget(ml_layout, "Line 4:")
+
+    osc_l4_color_col = QVBoxLayout()
+    osc_l4_color_label = QLabel("Line Color")
+    osc_l4_color_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    osc_l4_color_col.addWidget(osc_l4_color_label)
+    tab.osc_line4_color_btn = ColorSwatchButton(title="Line 4 Color")
+    tab.osc_line4_color_btn.setToolTip("Oscilloscope line 4 colour")
+    bind_color_button(tab, tab.osc_line4_color_btn, '_osc_line4_color')
+    osc_l4_color_col.addWidget(tab.osc_line4_color_btn)
+    osc_l4_row.addLayout(osc_l4_color_col)
+
+    osc_l4_glow_col = QVBoxLayout()
+    osc_l4_glow_label = QLabel("Glow Color")
+    osc_l4_glow_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    osc_l4_glow_col.addWidget(osc_l4_glow_label)
+    tab.osc_line4_glow_btn = ColorSwatchButton(title="Line 4 Glow Color")
+    tab.osc_line4_glow_btn.setToolTip("Oscilloscope line 4 glow colour")
+    bind_color_button(tab, tab.osc_line4_glow_btn, '_osc_line4_glow_color')
+    osc_l4_glow_col.addWidget(tab.osc_line4_glow_btn)
+    osc_l4_row.addLayout(osc_l4_glow_col)
+    osc_l4_row.addStretch()
+
+    tab._osc_line4_ghost_row_widget, osc_l4_ghost_row = _aligned_row_widget(ml_layout, "Line 4 Ghost:")
+    tab.osc_ghost_line4_enabled = QCheckBox("Draw Ghost")
+    tab.osc_ghost_line4_enabled.setProperty("circleIndicator", True)
+    tab.osc_ghost_line4_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line4_enabled', True)
+    )
+    tab.osc_ghost_line4_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 4.")
+    bind_setting_signal(tab, tab.osc_ghost_line4_enabled.stateChanged)
+    osc_l4_ghost_row.addWidget(tab.osc_ghost_line4_enabled)
+    osc_l4_ghost_row.addStretch()
+
+    tab._osc_l5_row_widget, osc_l5_row = _swatch_row_widget(ml_layout, "Line 5:")
+
+    osc_l5_color_col = QVBoxLayout()
+    osc_l5_color_label = QLabel("Line Color")
+    osc_l5_color_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    osc_l5_color_col.addWidget(osc_l5_color_label)
+    tab.osc_line5_color_btn = ColorSwatchButton(title="Line 5 Color")
+    tab.osc_line5_color_btn.setToolTip("Oscilloscope line 5 colour")
+    bind_color_button(tab, tab.osc_line5_color_btn, '_osc_line5_color')
+    osc_l5_color_col.addWidget(tab.osc_line5_color_btn)
+    osc_l5_row.addLayout(osc_l5_color_col)
+
+    osc_l5_glow_col = QVBoxLayout()
+    osc_l5_glow_label = QLabel("Glow Color")
+    osc_l5_glow_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    osc_l5_glow_col.addWidget(osc_l5_glow_label)
+    tab.osc_line5_glow_btn = ColorSwatchButton(title="Line 5 Glow Color")
+    tab.osc_line5_glow_btn.setToolTip("Oscilloscope line 5 glow colour")
+    bind_color_button(tab, tab.osc_line5_glow_btn, '_osc_line5_glow_color')
+    osc_l5_glow_col.addWidget(tab.osc_line5_glow_btn)
+    osc_l5_row.addLayout(osc_l5_glow_col)
+    osc_l5_row.addStretch()
+
+    tab._osc_line5_ghost_row_widget, osc_l5_ghost_row = _aligned_row_widget(ml_layout, "Line 5 Ghost:")
+    tab.osc_ghost_line5_enabled = QCheckBox("Draw Ghost")
+    tab.osc_ghost_line5_enabled.setProperty("circleIndicator", True)
+    tab.osc_ghost_line5_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line5_enabled', True)
+    )
+    tab.osc_ghost_line5_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 5.")
+    bind_setting_signal(tab, tab.osc_ghost_line5_enabled.stateChanged)
+    osc_l5_ghost_row.addWidget(tab.osc_ghost_line5_enabled)
+    osc_l5_ghost_row.addStretch()
+
+    tab._osc_l6_row_widget, osc_l6_row = _swatch_row_widget(ml_layout, "Line 6:")
+
+    osc_l6_color_col = QVBoxLayout()
+    osc_l6_color_label = QLabel("Line Color")
+    osc_l6_color_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    osc_l6_color_col.addWidget(osc_l6_color_label)
+    tab.osc_line6_color_btn = ColorSwatchButton(title="Line 6 Color")
+    tab.osc_line6_color_btn.setToolTip("Oscilloscope line 6 colour")
+    bind_color_button(tab, tab.osc_line6_color_btn, '_osc_line6_color')
+    osc_l6_color_col.addWidget(tab.osc_line6_color_btn)
+    osc_l6_row.addLayout(osc_l6_color_col)
+
+    osc_l6_glow_col = QVBoxLayout()
+    osc_l6_glow_label = QLabel("Glow Color")
+    osc_l6_glow_label.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+    osc_l6_glow_col.addWidget(osc_l6_glow_label)
+    tab.osc_line6_glow_btn = ColorSwatchButton(title="Line 6 Glow Color")
+    tab.osc_line6_glow_btn.setToolTip("Oscilloscope line 6 glow colour")
+    bind_color_button(tab, tab.osc_line6_glow_btn, '_osc_line6_glow_color')
+    osc_l6_glow_col.addWidget(tab.osc_line6_glow_btn)
+    osc_l6_row.addLayout(osc_l6_glow_col)
+    osc_l6_row.addStretch()
+
+    tab._osc_line6_ghost_row_widget, osc_l6_ghost_row = _aligned_row_widget(ml_layout, "Line 6 Ghost:")
+    tab.osc_ghost_line6_enabled = QCheckBox("Draw Ghost")
+    tab.osc_ghost_line6_enabled.setProperty("circleIndicator", True)
+    tab.osc_ghost_line6_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'osc_ghost_line6_enabled', True)
+    )
+    tab.osc_ghost_line6_enabled.setToolTip("Allow the ghost trail to render for oscilloscope line 6.")
+    bind_setting_signal(tab, tab.osc_ghost_line6_enabled.stateChanged)
+    osc_l6_ghost_row.addWidget(tab.osc_ghost_line6_enabled)
+    osc_l6_ghost_row.addStretch()
 
     multi_line_bucket.addWidget(tab._osc_multi_container)
     _update_osc_multi_line_visibility(tab)

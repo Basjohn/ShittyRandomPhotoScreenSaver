@@ -969,6 +969,60 @@ def test_reindex_curated_presets_unwraps_nested_preset_name_suffixes(tmp_path, m
     assert payload["name"] == "Preset 1 (Slobber)"
 
 
+def test_sine_wave_6_line_preset_roundtrip_preserves_all_line_settings():
+    """Sine wave curated presets include line 4-6 settings after repair tool migration."""
+    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "sine_wave"
+    
+    # Verify all curated sine wave presets have line 4-6 settings
+    for preset_path in sorted(presets_root.glob("*.json")):
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        
+        # Verify line 4-6 ghost enabled flags exist
+        assert "sine_ghost_line4_enabled" in sv, f"{preset_path.name} missing sine_ghost_line4_enabled"
+        assert "sine_ghost_line5_enabled" in sv, f"{preset_path.name} missing sine_ghost_line5_enabled"
+        assert "sine_ghost_line6_enabled" in sv, f"{preset_path.name} missing sine_ghost_line6_enabled"
+        
+        # Verify line 4-6 color settings exist
+        assert "sine_line4_color" in sv, f"{preset_path.name} missing sine_line4_color"
+        assert "sine_line4_glow_color" in sv, f"{preset_path.name} missing sine_line4_glow_color"
+        assert "sine_line5_color" in sv, f"{preset_path.name} missing sine_line5_color"
+        assert "sine_line5_glow_color" in sv, f"{preset_path.name} missing sine_line5_glow_color"
+        assert "sine_line6_color" in sv, f"{preset_path.name} missing sine_line6_color"
+        assert "sine_line6_glow_color" in sv, f"{preset_path.name} missing sine_line6_glow_color"
+        
+        # Verify line 4-6 travel and shift settings exist
+        assert "sine_travel_line4" in sv, f"{preset_path.name} missing sine_travel_line4"
+        assert "sine_travel_line5" in sv, f"{preset_path.name} missing sine_travel_line5"
+        assert "sine_travel_line6" in sv, f"{preset_path.name} missing sine_travel_line6"
+        assert "sine_line4_shift" in sv, f"{preset_path.name} missing sine_line4_shift"
+        assert "sine_line5_shift" in sv, f"{preset_path.name} missing sine_line5_shift"
+        assert "sine_line6_shift" in sv, f"{preset_path.name} missing sine_line6_shift"
+
+
+def test_oscilloscope_6_line_preset_roundtrip_preserves_all_line_settings():
+    """Oscilloscope curated presets include line 4-6 settings after repair tool migration."""
+    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "oscilloscope"
+    
+    # Verify all curated oscilloscope presets have line 4-6 settings
+    for preset_path in sorted(presets_root.glob("*.json")):
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        
+        # Verify line 4-6 ghost enabled flags exist
+        assert "osc_ghost_line4_enabled" in sv, f"{preset_path.name} missing osc_ghost_line4_enabled"
+        assert "osc_ghost_line5_enabled" in sv, f"{preset_path.name} missing osc_ghost_line5_enabled"
+        assert "osc_ghost_line6_enabled" in sv, f"{preset_path.name} missing osc_ghost_line6_enabled"
+        
+        # Verify line 4-6 color settings exist
+        assert "osc_line4_color" in sv, f"{preset_path.name} missing osc_line4_color"
+        assert "osc_line4_glow_color" in sv, f"{preset_path.name} missing osc_line4_glow_color"
+        assert "osc_line5_color" in sv, f"{preset_path.name} missing osc_line5_color"
+        assert "osc_line5_glow_color" in sv, f"{preset_path.name} missing osc_line5_glow_color"
+        assert "osc_line6_color" in sv, f"{preset_path.name} missing osc_line6_color"
+        assert "osc_line6_glow_color" in sv, f"{preset_path.name} missing osc_line6_glow_color"
+
+
 def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkeypatch):
     root = tmp_path
     mode = "blob"

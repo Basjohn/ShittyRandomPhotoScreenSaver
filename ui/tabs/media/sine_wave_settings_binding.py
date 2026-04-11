@@ -18,6 +18,12 @@ _SINE_COLOR_DEFAULTS: tuple[tuple[str, str, list[int]], ...] = (
     ("_sine_line2_glow_color", "sine_line2_glow_color", [255, 120, 50, 180]),
     ("_sine_line3_color", "sine_line3_color", [50, 255, 120, 230]),
     ("_sine_line3_glow_color", "sine_line3_glow_color", [50, 255, 120, 180]),
+    ("_sine_line4_color", "sine_line4_color", [255, 120, 50, 230]),
+    ("_sine_line4_glow_color", "sine_line4_glow_color", [255, 120, 50, 180]),
+    ("_sine_line5_color", "sine_line5_color", [50, 255, 120, 230]),
+    ("_sine_line5_glow_color", "sine_line5_glow_color", [50, 255, 120, 180]),
+    ("_sine_line6_color", "sine_line6_color", [255, 0, 150, 230]),
+    ("_sine_line6_glow_color", "sine_line6_glow_color", [255, 0, 150, 180]),
 )
 
 
@@ -134,12 +140,21 @@ def load_sine_wave_mode_settings(
     if hasattr(tab, "sine_travel_line3"):
         sine_travel_line3 = int(config.get("sine_travel_line3", 0) or 0)
         tab.sine_travel_line3.setCurrentIndex(max(0, min(2, sine_travel_line3)))
+    if hasattr(tab, "sine_travel_line4"):
+        sine_travel_line4 = int(config.get("sine_travel_line4", 0) or 0)
+        tab.sine_travel_line4.setCurrentIndex(max(0, min(2, sine_travel_line4)))
+    if hasattr(tab, "sine_travel_line5"):
+        sine_travel_line5 = int(config.get("sine_travel_line5", 0) or 0)
+        tab.sine_travel_line5.setCurrentIndex(max(0, min(2, sine_travel_line5)))
+    if hasattr(tab, "sine_travel_line6"):
+        sine_travel_line6 = int(config.get("sine_travel_line6", 0) or 0)
+        tab.sine_travel_line6.setCurrentIndex(max(0, min(2, sine_travel_line6)))
 
     sine_line_count = int(config.get("sine_line_count", 1) or 1)
     if hasattr(tab, "sine_multi_line"):
         tab.sine_multi_line.setChecked(sine_line_count > 1)
     if hasattr(tab, "sine_line_count_slider"):
-        clamped_line_count = max(2, min(3, int(config.get("sine_line_count", 2) or 2)))
+        clamped_line_count = max(2, min(6, int(config.get("sine_line_count", 2) or 2)))
         tab.sine_line_count_slider.setValue(clamped_line_count)
         tab.sine_line_count_label.setText(str(clamped_line_count))
 
@@ -157,6 +172,12 @@ def load_sine_wave_mode_settings(
     sync_color_button("sine_line2_glow_btn", "_sine_line2_glow_color")
     sync_color_button("sine_line3_color_btn", "_sine_line3_color")
     sync_color_button("sine_line3_glow_btn", "_sine_line3_glow_color")
+    sync_color_button("sine_line4_color_btn", "_sine_line4_color")
+    sync_color_button("sine_line4_glow_btn", "_sine_line4_glow_color")
+    sync_color_button("sine_line5_color_btn", "_sine_line5_color")
+    sync_color_button("sine_line5_glow_btn", "_sine_line5_glow_color")
+    sync_color_button("sine_line6_color_btn", "_sine_line6_color")
+    sync_color_button("sine_line6_glow_btn", "_sine_line6_glow_color")
     update_multi_line_visibility(tab)
 
     if hasattr(tab, "sine_line2_shift"):
@@ -167,6 +188,18 @@ def load_sine_wave_mode_settings(
         sine_line3_shift = int(tab._config_float("spotify_visualizer", config, "sine_line3_shift", 0.0) * 100)
         tab.sine_line3_shift.setValue(max(-100, min(100, sine_line3_shift)))
         tab.sine_line3_shift_label.setText(f"{sine_line3_shift / 100.0:.2f} cycles")
+    if hasattr(tab, "sine_line4_shift"):
+        sine_line4_shift = int(tab._config_float("spotify_visualizer", config, "sine_line4_shift", 0.0) * 100)
+        tab.sine_line4_shift.setValue(max(-100, min(100, sine_line4_shift)))
+        tab.sine_line4_shift_label.setText(f"{sine_line4_shift / 100.0:.2f} cycles")
+    if hasattr(tab, "sine_line5_shift"):
+        sine_line5_shift = int(tab._config_float("spotify_visualizer", config, "sine_line5_shift", 0.0) * 100)
+        tab.sine_line5_shift.setValue(max(-100, min(100, sine_line5_shift)))
+        tab.sine_line5_shift_label.setText(f"{sine_line5_shift / 100.0:.2f} cycles")
+    if hasattr(tab, "sine_line6_shift"):
+        sine_line6_shift = int(tab._config_float("spotify_visualizer", config, "sine_line6_shift", 0.0) * 100)
+        tab.sine_line6_shift.setValue(max(-100, min(100, sine_line6_shift)))
+        tab.sine_line6_shift_label.setText(f"{sine_line6_shift / 100.0:.2f} cycles")
     if hasattr(tab, "sine_line_dim"):
         tab.sine_line_dim.setChecked(bool(config.get("sine_line_dim", False)))
     if hasattr(tab, "sine_line_offset_bias"):
@@ -202,6 +235,18 @@ def load_sine_wave_mode_settings(
         tab.sine_ghost_line3_enabled.setChecked(
             tab._config_bool("spotify_visualizer", config, "sine_ghost_line3_enabled", True)
         )
+    if hasattr(tab, "sine_ghost_line4_enabled"):
+        tab.sine_ghost_line4_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "sine_ghost_line4_enabled", True)
+        )
+    if hasattr(tab, "sine_ghost_line5_enabled"):
+        tab.sine_ghost_line5_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "sine_ghost_line5_enabled", True)
+        )
+    if hasattr(tab, "sine_ghost_line6_enabled"):
+        tab.sine_ghost_line6_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "sine_ghost_line6_enabled", True)
+        )
 
 
 def collect_sine_wave_mode_settings(tab) -> dict[str, Any]:
@@ -230,6 +275,9 @@ def collect_sine_wave_mode_settings(tab) -> dict[str, Any]:
         "sine_wave_travel": tab.sine_travel.currentIndex() if hasattr(tab, "sine_travel") else 0,
         "sine_travel_line2": tab.sine_travel_line2.currentIndex() if hasattr(tab, "sine_travel_line2") else 0,
         "sine_travel_line3": tab.sine_travel_line3.currentIndex() if hasattr(tab, "sine_travel_line3") else 0,
+        "sine_travel_line4": tab.sine_travel_line4.currentIndex() if hasattr(tab, "sine_travel_line4") else 0,
+        "sine_travel_line5": tab.sine_travel_line5.currentIndex() if hasattr(tab, "sine_travel_line5") else 0,
+        "sine_travel_line6": tab.sine_travel_line6.currentIndex() if hasattr(tab, "sine_travel_line6") else 0,
         "sine_line_count": (
             tab.sine_line_count_slider.value()
             if hasattr(tab, "sine_line_count_slider") and hasattr(tab, "sine_multi_line") and tab.sine_multi_line.isChecked()
@@ -247,8 +295,17 @@ def collect_sine_wave_mode_settings(tab) -> dict[str, Any]:
         "sine_line2_glow_color": _qcolor_to_list(getattr(tab, "_sine_line2_glow_color", None), [255, 120, 50, 180]),
         "sine_line3_color": _qcolor_to_list(getattr(tab, "_sine_line3_color", None), [50, 255, 120, 230]),
         "sine_line3_glow_color": _qcolor_to_list(getattr(tab, "_sine_line3_glow_color", None), [50, 255, 120, 180]),
+        "sine_line4_color": _qcolor_to_list(getattr(tab, "_sine_line4_color", None), [255, 120, 50, 230]),
+        "sine_line4_glow_color": _qcolor_to_list(getattr(tab, "_sine_line4_glow_color", None), [255, 120, 50, 180]),
+        "sine_line5_color": _qcolor_to_list(getattr(tab, "_sine_line5_color", None), [50, 255, 120, 230]),
+        "sine_line5_glow_color": _qcolor_to_list(getattr(tab, "_sine_line5_glow_color", None), [50, 255, 120, 180]),
+        "sine_line6_color": _qcolor_to_list(getattr(tab, "_sine_line6_color", None), [255, 0, 150, 230]),
+        "sine_line6_glow_color": _qcolor_to_list(getattr(tab, "_sine_line6_glow_color", None), [255, 0, 150, 180]),
         "sine_line2_shift": (tab.sine_line2_shift.value() if hasattr(tab, "sine_line2_shift") else 0) / 100.0,
         "sine_line3_shift": (tab.sine_line3_shift.value() if hasattr(tab, "sine_line3_shift") else 0) / 100.0,
+        "sine_line4_shift": (tab.sine_line4_shift.value() if hasattr(tab, "sine_line4_shift") else 0) / 100.0,
+        "sine_line5_shift": (tab.sine_line5_shift.value() if hasattr(tab, "sine_line5_shift") else 0) / 100.0,
+        "sine_line6_shift": (tab.sine_line6_shift.value() if hasattr(tab, "sine_line6_shift") else 0) / 100.0,
         "sine_ghosting_enabled": tab.sine_ghost_enabled.isChecked() if hasattr(tab, "sine_ghost_enabled") else True,
         "sine_ghost_alpha": (tab.sine_ghost_opacity.value() if hasattr(tab, "sine_ghost_opacity") else 45) / 100.0,
         "sine_ghost_decay": max(
@@ -260,5 +317,14 @@ def collect_sine_wave_mode_settings(tab) -> dict[str, Any]:
         ),
         "sine_ghost_line3_enabled": (
             tab.sine_ghost_line3_enabled.isChecked() if hasattr(tab, "sine_ghost_line3_enabled") else True
+        ),
+        "sine_ghost_line4_enabled": (
+            tab.sine_ghost_line4_enabled.isChecked() if hasattr(tab, "sine_ghost_line4_enabled") else True
+        ),
+        "sine_ghost_line5_enabled": (
+            tab.sine_ghost_line5_enabled.isChecked() if hasattr(tab, "sine_ghost_line5_enabled") else True
+        ),
+        "sine_ghost_line6_enabled": (
+            tab.sine_ghost_line6_enabled.isChecked() if hasattr(tab, "sine_ghost_line6_enabled") else True
         ),
     }

@@ -93,6 +93,7 @@ Use `Docs/Visualizer_Change_Checklist.md` whenever a visualizer mode setting is 
 - Blob shaper routing smoothness contract (Apr 2026): authored energy nodes should deform coherent silhouette regions, not a few harsh sectors. Runtime routing therefore uses broadened/smoothed angular weight fields, shader-side linear sampling for those routing weights, and calmer shaper-active wobble scaling so authored reaction contours read as an organic pull instead of Catmull-induced blocky flicker.
 - Blob pulse scalar-body contract (Apr 2026): `widgets.spotify_visualizer.blob_pulse` is the shader-side master for body-size growth. When `blob_pulse = 0`, direct bass lift, bass-squared lift, breath lift, rest contraction, and staged core-growth sizing must all resolve to zero. `blob_pulse_cap` remains a separate live-band/event ceiling and `blob_pulse_release_ms` remains a release-shaping control, but neither should leave whole-body size motion active when `blob_pulse` itself is zero.
 - Oscilloscope visual gain is now surfaced as `osc_line_amplitude`. Runtime accepts the legacy `osc_sensitivity` key for backward compatibility, but all new presets/defaults/docs must emit `osc_line_amplitude`, and the GLSL uniform has been renamed to `u_line_amplitude` to match.
+- **6-line ceiling contract (Apr 2026)**: Sine Wave and Oscilloscope modes now support up to 6 authored lines (previously 3). All layers (settings model/defaults, UI/binding, runtime bridge, renderer/math, curated presets, repair tool, and tests) have been updated to handle lines 4-6 with full customization parity (color, glow color, travel, shift, ghost enabled). Line count sliders clamp to 6, shaders accept uniforms for lines 4-6, and the repair tool automatically fills in line 4-6 defaults when migrating 3-line presets.
 - Repair workflow:
 1. `tools/visualizer_preset_repair.py` (GUI or `--repair-all` / `--audit-curated` CLI) loads JSON/SST snapshots, migrates+filters keys, and rewrites a **single** `snapshot.widgets.spotify_visualizer` block (top-level `widgets.spotify_visualizer` + `snapshot.custom_preset_backup` are no longer emitted). Each run writes `.bak*` backups and supports per-session undo in the GUI.
 2. The integrated batch path (`Repair All Presets Found` button / CLI flag) walks `presets/visualizer_modes/**` automatically so repo-wide schema changes are one click/command instead of bespoke scripts, while audit mode flags duplicate prefixes and stale payload shapes before shipping.
@@ -350,7 +351,7 @@ The table below lists all transitions. All are GL-only, running on the composito
 - `widgets.spotify_visualizer.sine_crawl_amount`: normalized (0.0–1.0) Crawl slider for sine mode. Crawl is a vocal-reactive positional drift that adds low-frequency horizontal motion to the fine dents on every sine line. Implementation details:
   - Energy shaping: playback must report `u_playing > 0.2`, then line 1 uses `0.65*mid + 0.35*high`, line 2 mixes toward `0.55*mid + 0.45*high`, and line 3 leans `0.60*high + 0.40*mid`, each raised to `pow(energy, 0.85)` before scaling by the slider.
   - Spatial/temporal profile: combines two sin bands per line (1.1–4.2x `nx`) with slow time bases (±0.35–0.8 * `u_time`) and density-aware spacing so Crawl reads as a deliberate ripple crawl instead of Micro Wobble’s sparkly dents.
-  - Multi-line variation: line 2/3 blend the shared crawl foundation (`crawl1`) with phase- and energy-biased drifts so stacked cards do not mirror each other.
+  - Multi-line variation: line 2/3 blend the shared crawl foundation (`crawl1`) with phase- and energy-biased drifts so stacked cards do not mirror each other. Lines 4-6 follow similar patterns with progressive phase/energy offsets.
   - Diagnostics: when `SRPSS_VIZ_DIAGNOSTICS` is enabled, `SpotifyVisualizerWidget` emits `[SPOTIFY_VIS][SINE][CRAWL] slider/mid/high/drive/playing` every ~0.75 s so QA can confirm energy gating without recording a capture.
   - Defaults follow `Defaults_Guide.md` (0.25). UI clamps to 0–100 % with tooltips describing the motion; shader uniform `u_crawl_amount` is uploaded by `SpotifyBarsGLOverlay` each frame and covered by `tests/test_visualizer_overlay_kwargs.py`.
 
@@ -663,7 +664,7 @@ bars, or popping), debug in this order:
 
 - Replaced chaotic `randomDirection`-based jitter with smooth bass-reactive offset system. Uses a slowly rotating angle (`u_time * 0.17`) to vary offset direction over time.
 - `disp_phase_offset` shifts sine wave phase; `disp_y_offset` shifts vertical position. Both scale with `displacement_slider` and `bass_vector`.
-- Per-line variation: Line 1 = 1.0× phase / 1.0× Y, Line 2 = 0.85× phase / 1.10× Y, Line 3 = 1.15× phase / 1.25× Y.
+- Per-line variation: Line 1 = 1.0× phase / 1.0× Y, Line 2 = 0.85× phase / 1.10× Y, Line 3 = 1.15× phase / 1.25× Y. Lines 4-6 follow similar progressive offset patterns.
 - All old displacement variables (`rand_line*`, `phase_jitter*`, `l*_drive`, `y_push*`, `y_scale`, `phase_scale`, `l23_*`) removed.
 
 #### Blob Ghosting (Updated Mar 22 2026)

@@ -32,12 +32,18 @@ uniform int u_reactive_glow;
 uniform float u_sensitivity;   // multiplier for waveform values (default 3.0)
 uniform float u_smoothing;     // 0 = linear/jagged, 1 = full Catmull-Rom smooth
 
-// Multi-line mode (1 = single, 2-3 = extra lines)
+// Multi-line mode (1 = single, 2-6 = extra lines)
 uniform int u_line_count;
 uniform vec4 u_line2_color;
 uniform vec4 u_line2_glow_color;
 uniform vec4 u_line3_color;
 uniform vec4 u_line3_glow_color;
+uniform vec4 u_line4_color;
+uniform vec4 u_line4_glow_color;
+uniform vec4 u_line5_color;
+uniform vec4 u_line5_glow_color;
+uniform vec4 u_line6_color;
+uniform vec4 u_line6_glow_color;
 
 // Optional line 2/3 glow dimming (0 = equal glow, 1 = half-strength dim)
 uniform int u_osc_line_dim;
@@ -54,6 +60,9 @@ uniform float u_prev_waveform[256];
 uniform float u_osc_ghost_alpha; // 0 = no ghost, >0 = ghost trail intensity
 uniform int u_ghost_line2_enabled;
 uniform int u_ghost_line3_enabled;
+uniform int u_ghost_line4_enabled;
+uniform int u_ghost_line5_enabled;
+uniform int u_ghost_line6_enabled;
 
 float get_waveform_sample(int idx) {
     // Modular wrap so offset lines read valid circular-buffer data
@@ -328,13 +337,16 @@ void main() {
     // Size controls spread radius only; intensity controls visible strength.
     float glow_sigma_base = 8.0 * max(u_glow_size, 0.1);
 
-    int lines = clamp(u_line_count, 1, 3);
+    int lines = clamp(u_line_count, 1, 6);
 
     // Per-line energy: single mode uses overall, multi-line splits by band
     // Bass boosted 15% for kick/drum punch, mids/highs boosted 15% for vocal response
     float e1 = (lines == 1) ? u_overall_energy : u_bass_energy * 1.15;
     float e2_band = u_mid_energy * 1.15;
     float e3_band = u_high_energy * 1.15;
+    float e4_band = u_mid_energy * 1.10;
+    float e5_band = u_high_energy * 1.05;
+    float e6_band = u_bass_energy * 1.10;
 
     // Line Offset Bias: base vertical spread + per-band energy weight (multi-line)
     float lob = clamp(u_osc_line_offset_bias, 0.0, 1.0);
@@ -343,11 +355,17 @@ void main() {
     vec4 glowColor1 = u_glow_color;
     vec4 glowColor2 = u_line2_glow_color;
     vec4 glowColor3 = u_line3_glow_color;
+    vec4 glowColor4 = u_line4_glow_color;
+    vec4 glowColor5 = u_line5_glow_color;
+    vec4 glowColor6 = u_line6_glow_color;
     bool rainbow_active = (u_rainbow_hue_offset > 0.001);
     if (rainbow_active) {
         glowColor1.rgb = apply_rainbow_shift(glowColor1.rgb);
         glowColor2.rgb = apply_rainbow_shift(glowColor2.rgb);
         glowColor3.rgb = apply_rainbow_shift(glowColor3.rgb);
+        glowColor4.rgb = apply_rainbow_shift(glowColor4.rgb);
+        glowColor5.rgb = apply_rainbow_shift(glowColor5.rgb);
+        glowColor6.rgb = apply_rainbow_shift(glowColor6.rgb);
     }
 
     // --- Ghost lines (previous frame trail, rendered first/behind) ---
@@ -409,6 +427,75 @@ void main() {
             composite_ghost_line(
                 gny3 + 0.010, inner_height, gw3, gamp3,
                 vec4(glowColor3.rgb, 1.0), glowColor3, ghost_sigma3, e3_band,
+                ga,
+                ghost_rgb, ghost_a
+            );
+        }
+        if (lines >= 4 && u_ghost_line4_enabled == 1) {
+            int gwf_count4 = max(u_waveform_count, 2);
+            int goffset4 = max(1, gwf_count4 * 3 / 4);
+            float gamp4 = amplitude * (0.65 + e4_band * 0.25 * band_boost);
+            float gw4 = sample_prev_waveform(nx, goffset4);
+            float gny4;
+            float gv_shift_pct4 = float(u_osc_vertical_shift) / 100.0;
+            if (abs(gv_shift_pct4) > 0.001) {
+                float gbase_sp4 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gshift4 = (gbase_sp4 * gv_shift_pct4 * 1.4) / inner_height;
+                gny4 = ny + gshift4;
+                gamp4 = amplitude * (0.55 + e4_band * 0.12);
+            } else {
+                gny4 = ny - lob * 0.25;
+            }
+            float ghost_sigma4 = ((u_osc_line_dim == 1) ? glow_sigma_base * 0.875 : glow_sigma_base) * 0.70;
+            composite_ghost_line(
+                gny4 + 0.010, inner_height, gw4, gamp4,
+                vec4(glowColor4.rgb, 1.0), glowColor4, ghost_sigma4, e4_band,
+                ga,
+                ghost_rgb, ghost_a
+            );
+        }
+        if (lines >= 5 && u_ghost_line5_enabled == 1) {
+            int gwf_count5 = max(u_waveform_count, 2);
+            int goffset5 = max(1, gwf_count5 * 4 / 5);
+            float gamp5 = amplitude * (0.60 + e5_band * 0.22 * band_boost);
+            float gw5 = sample_prev_waveform(nx, goffset5);
+            float gny5;
+            float gv_shift_pct5 = float(u_osc_vertical_shift) / 100.0;
+            if (abs(gv_shift_pct5) > 0.001) {
+                float gbase_sp5 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gshift5 = (gbase_sp5 * gv_shift_pct5 * 1.8) / inner_height;
+                gny5 = ny - gshift5;
+                gamp5 = amplitude * (0.50 + e5_band * 0.10);
+            } else {
+                gny5 = ny + lob * 0.30;
+            }
+            float ghost_sigma5 = ((u_osc_line_dim == 1) ? glow_sigma_base * 0.825 : glow_sigma_base) * 0.70;
+            composite_ghost_line(
+                gny5 + 0.010, inner_height, gw5, gamp5,
+                vec4(glowColor5.rgb, 1.0), glowColor5, ghost_sigma5, e5_band,
+                ga,
+                ghost_rgb, ghost_a
+            );
+        }
+        if (lines >= 6 && u_ghost_line6_enabled == 1) {
+            int gwf_count6 = max(u_waveform_count, 2);
+            int goffset6 = max(1, gwf_count6 * 5 / 6);
+            float gamp6 = amplitude * (0.55 + e6_band * 0.28 * band_boost);
+            float gw6 = sample_prev_waveform(nx, goffset6);
+            float gny6;
+            float gv_shift_pct6 = float(u_osc_vertical_shift) / 100.0;
+            if (abs(gv_shift_pct6) > 0.001) {
+                float gbase_sp6 = clamp(inner_height * 0.25, 20.0, 80.0);
+                float gshift6 = (gbase_sp6 * gv_shift_pct6 * 2.2) / inner_height;
+                gny6 = ny + gshift6;
+                gamp6 = amplitude * (0.45 + e6_band * 0.08);
+            } else {
+                gny6 = ny - lob * 0.35;
+            }
+            float ghost_sigma6 = ((u_osc_line_dim == 1) ? glow_sigma_base * 0.80 : glow_sigma_base) * 0.70;
+            composite_ghost_line(
+                gny6 + 0.010, inner_height, gw6, gamp6,
+                vec4(glowColor6.rgb, 1.0), glowColor6, ghost_sigma6, e6_band,
                 ga,
                 ghost_rgb, ghost_a
             );
@@ -489,6 +576,93 @@ void main() {
                   sigma3, e3_band,
                   line_rgb3, glow_rgb3, line_alpha3, glow_alpha3);
         composite_line(line_rgb3, glow_rgb3, line_alpha3, glow_alpha3,
+                       lines_rgb, lines_a, glow_accum);
+    }
+
+    if (lines >= 4) {
+        // Line 4: mid-frequency reactive — additional variety
+        int wf_count4 = max(u_waveform_count, 2);
+        int offset4 = max(1, wf_count4 * 3 / 4);
+        float amp4 = amplitude * (0.65 + e4_band * 0.25 * band_boost);
+        float w4 = sample_waveform(nx, offset4);
+        float ny4;
+        float v_shift_pct4 = float(u_osc_vertical_shift) / 100.0;
+        if (abs(v_shift_pct4) > 0.001) {
+            float base_sp4 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float shift4 = (base_sp4 * v_shift_pct4 * 1.4) / inner_height;
+            ny4 = ny + shift4;
+            amp4 = amplitude * (0.55 + e4_band * 0.12);
+        } else {
+            ny4 = ny - lob * 0.25;
+        }
+        float sigma4 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.875 : glow_sigma_base;
+        vec3 line_rgb4;
+        vec3 glow_rgb4;
+        float line_alpha4;
+        float glow_alpha4;
+        eval_line(ny4, inner_height, w4, amp4,
+                  u_line4_color, glowColor4,
+                  sigma4, e4_band,
+                  line_rgb4, glow_rgb4, line_alpha4, glow_alpha4);
+        composite_line(line_rgb4, glow_rgb4, line_alpha4, glow_alpha4,
+                       lines_rgb, lines_a, glow_accum);
+    }
+
+    if (lines >= 5) {
+        // Line 5: high-frequency reactive — additional variety
+        int wf_count5 = max(u_waveform_count, 2);
+        int offset5 = max(1, wf_count5 * 4 / 5);
+        float amp5 = amplitude * (0.60 + e5_band * 0.22 * band_boost);
+        float w5 = sample_waveform(nx, offset5);
+        float ny5;
+        float v_shift_pct5 = float(u_osc_vertical_shift) / 100.0;
+        if (abs(v_shift_pct5) > 0.001) {
+            float base_sp5 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float shift5 = (base_sp5 * v_shift_pct5 * 1.8) / inner_height;
+            ny5 = ny - shift5;
+            amp5 = amplitude * (0.50 + e5_band * 0.10);
+        } else {
+            ny5 = ny + lob * 0.30;
+        }
+        float sigma5 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.825 : glow_sigma_base;
+        vec3 line_rgb5;
+        vec3 glow_rgb5;
+        float line_alpha5;
+        float glow_alpha5;
+        eval_line(ny5, inner_height, w5, amp5,
+                  u_line5_color, glowColor5,
+                  sigma5, e5_band,
+                  line_rgb5, glow_rgb5, line_alpha5, glow_alpha5);
+        composite_line(line_rgb5, glow_rgb5, line_alpha5, glow_alpha5,
+                       lines_rgb, lines_a, glow_accum);
+    }
+
+    if (lines >= 6) {
+        // Line 6: bass-frequency reactive — additional variety
+        int wf_count6 = max(u_waveform_count, 2);
+        int offset6 = max(1, wf_count6 * 5 / 6);
+        float amp6 = amplitude * (0.55 + e6_band * 0.28 * band_boost);
+        float w6 = sample_waveform(nx, offset6);
+        float ny6;
+        float v_shift_pct6 = float(u_osc_vertical_shift) / 100.0;
+        if (abs(v_shift_pct6) > 0.001) {
+            float base_sp6 = clamp(inner_height * 0.25, 20.0, 80.0);
+            float shift6 = (base_sp6 * v_shift_pct6 * 2.2) / inner_height;
+            ny6 = ny + shift6;
+            amp6 = amplitude * (0.45 + e6_band * 0.08);
+        } else {
+            ny6 = ny - lob * 0.35;
+        }
+        float sigma6 = (u_osc_line_dim == 1) ? glow_sigma_base * 0.80 : glow_sigma_base;
+        vec3 line_rgb6;
+        vec3 glow_rgb6;
+        float line_alpha6;
+        float glow_alpha6;
+        eval_line(ny6, inner_height, w6, amp6,
+                  u_line6_color, glowColor6,
+                  sigma6, e6_band,
+                  line_rgb6, glow_rgb6, line_alpha6, glow_alpha6);
+        composite_line(line_rgb6, glow_rgb6, line_alpha6, glow_alpha6,
                        lines_rgb, lines_a, glow_accum);
     }
 

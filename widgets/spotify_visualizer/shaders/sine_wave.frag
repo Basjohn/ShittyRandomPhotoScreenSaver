@@ -29,12 +29,18 @@ uniform int u_reactive_glow;
 // Sensitivity: scales how much energy affects amplitude (default 1.0)
 uniform float u_sensitivity;
 
-// Multi-line mode (1 = single, 2-3 = extra lines)
+// Multi-line mode (1 = single, 2-6 = extra lines)
 uniform int u_line_count;
 uniform vec4 u_line2_color;
 uniform vec4 u_line2_glow_color;
 uniform vec4 u_line3_color;
 uniform vec4 u_line3_glow_color;
+uniform vec4 u_line4_color;
+uniform vec4 u_line4_glow_color;
+uniform vec4 u_line5_color;
+uniform vec4 u_line5_glow_color;
+uniform vec4 u_line6_color;
+uniform vec4 u_line6_glow_color;
 
 // Optional line 2/3 glow dimming (0 = equal glow, 1 = half-strength dim)
 uniform int u_sine_line_dim;
@@ -53,10 +59,16 @@ uniform int u_sine_travel;
 // Per-line travel overrides for multi-line mode (same encoding: 0/1/2)
 uniform int u_sine_travel_line2;
 uniform int u_sine_travel_line3;
+uniform int u_sine_travel_line4;
+uniform int u_sine_travel_line5;
+uniform int u_sine_travel_line6;
 // Per-line horizontal shifts expressed as cycles (-1.0 .. 1.0)
 uniform float u_sine_line1_shift;
 uniform float u_sine_line2_shift;
 uniform float u_sine_line3_shift;
+uniform float u_sine_line4_shift;
+uniform float u_sine_line5_shift;
+uniform float u_sine_line6_shift;
 
 // Playback state: 1 = playing, 0 = paused
 uniform int u_playing;
@@ -100,6 +112,9 @@ uniform float u_ghost_mid;
 uniform float u_ghost_high;
 uniform int u_ghost_line2_enabled;
 uniform int u_ghost_line3_enabled;
+uniform int u_ghost_line4_enabled;
+uniform int u_ghost_line5_enabled;
+uniform int u_ghost_line6_enabled;
 
 float compute_density_cycles() {
     // Two-piece linear: 0.25→1 cycle, 1.0→3 cycles (default), 3.0→8 cycles.
@@ -309,7 +324,7 @@ void main() {
     // Size controls spread radius only; intensity controls visible strength.
     float glow_sigma_base = 8.0 * max(u_glow_size, 0.1);
 
-    int lines = clamp(u_line_count, 1, 3);
+    int lines = clamp(u_line_count, 1, 6);
 
     // Line Offset Bias: declared early — used in energy and wfx/mw blends below.
     float lob = clamp(u_sine_line_offset_bias, 0.0, 1.0);
@@ -323,6 +338,10 @@ void main() {
     // At LOB=0 they are identical to line 1; at LOB=1 they diverge slightly.
     float e2_band = mix(e_base, u_mid_energy * 0.45 + u_bass_energy * 0.20, lob * 0.4);
     float e3_band = mix(e_base, u_high_energy * 0.35 + u_bass_energy * 0.25, lob * 0.4);
+    // Lines 4/5/6: similar band tinting pattern for additional variety
+    float e4_band = mix(e_base, u_mid_energy * 0.35 + u_bass_energy * 0.30, lob * 0.4);
+    float e5_band = mix(e_base, u_high_energy * 0.40 + u_mid_energy * 0.15, lob * 0.4);
+    float e6_band = mix(e_base, u_bass_energy * 0.45 + u_high_energy * 0.20, lob * 0.4);
 
     // Glow energy: raw band energy WITHOUT sensitivity scaling.
     // Reactive glow should respond to actual audio levels, not the sensitivity knob.
@@ -331,6 +350,9 @@ void main() {
         : (u_bass_energy * 0.7 + u_mid_energy * 0.2 + u_high_energy * 0.1);
     float glow_e2 = u_mid_energy * 0.70 + u_bass_energy * 0.20 + u_high_energy * 0.10;
     float glow_e3 = u_high_energy * 0.70 + u_bass_energy * 0.15 + u_mid_energy * 0.15;
+    float glow_e4 = u_mid_energy * 0.65 + u_bass_energy * 0.25 + u_high_energy * 0.10;
+    float glow_e5 = u_high_energy * 0.65 + u_bass_energy * 0.20 + u_mid_energy * 0.15;
+    float glow_e6 = u_bass_energy * 0.70 + u_mid_energy * 0.20 + u_high_energy * 0.10;
 
     // Sine frequency: user slider remapped to a wider visual range (≈0.65–8.5 cycles)
     float density_cycles = compute_density_cycles();
@@ -370,6 +392,18 @@ void main() {
     float phase3 = 0.0;
     if (u_sine_travel_line3 == 1) phase3 = u_time * 2.0 * effective_speed;
     if (u_sine_travel_line3 == 2) phase3 = u_time * -2.0 * effective_speed;
+
+    float phase4 = 0.0;
+    if (u_sine_travel_line4 == 1) phase4 = u_time * 2.0 * effective_speed;
+    if (u_sine_travel_line4 == 2) phase4 = u_time * -2.0 * effective_speed;
+
+    float phase5 = 0.0;
+    if (u_sine_travel_line5 == 1) phase5 = u_time * 2.0 * effective_speed;
+    if (u_sine_travel_line5 == 2) phase5 = u_time * -2.0 * effective_speed;
+
+    float phase6 = 0.0;
+    if (u_sine_travel_line6 == 1) phase6 = u_time * 2.0 * effective_speed;
+    if (u_sine_travel_line6 == 2) phase6 = u_time * -2.0 * effective_speed;
 
     // Wave effect amount (positional undulation)
     float wave_fx = clamp(u_wave_effect, 0.0, 1.0);
@@ -419,11 +453,20 @@ void main() {
     vec4 glowColor2 = u_line2_glow_color;
     vec4 lineColor3 = u_line3_color;
     vec4 glowColor3 = u_line3_glow_color;
+    vec4 lineColor4 = u_line4_color;
+    vec4 glowColor4 = u_line4_glow_color;
+    vec4 lineColor5 = u_line5_color;
+    vec4 glowColor5 = u_line5_glow_color;
+    vec4 lineColor6 = u_line6_color;
+    vec4 glowColor6 = u_line6_glow_color;
     bool rainbow_active = (u_rainbow_hue_offset > 0.001);
     if (rainbow_active) {
         glowColor1.rgb = apply_rainbow_shift(glowColor1.rgb);
         glowColor2.rgb = apply_rainbow_shift(glowColor2.rgb);
         glowColor3.rgb = apply_rainbow_shift(glowColor3.rgb);
+        glowColor4.rgb = apply_rainbow_shift(glowColor4.rgb);
+        glowColor5.rgb = apply_rainbow_shift(glowColor5.rgb);
+        glowColor6.rgb = apply_rainbow_shift(glowColor6.rgb);
     }
 
     vec3 final_rgb = vec3(0.0);
@@ -781,6 +824,339 @@ void main() {
             final_rgb = combined_premult3 + final_rgb * inv_src3;
             final_a = combined_alpha3 + final_a * inv_src3;
             final_glow_alpha = adj_glow_alpha3 + final_glow_alpha * (1.0 - adj_glow_alpha3);
+        }
+    }
+
+    // =====================================================================
+    // LINE 4 — follows pattern of line 2 with different phase offsets
+    // =====================================================================
+    if (lines >= 4) {
+        float amp4_raw = base_amplitude * (1.0 + e4_band * 0.30);
+        float amp4 = min(amp4_raw * hb_mult, hb_cap);
+        float amp4_safe = max(amp4_raw, 0.01);
+        float lob_phase4 = lob * 1.35;  // X-axis separation
+        float add_shift4 = u_sine_line4_shift * TWO_PI;
+        float crawl_offset4 = crawl_offset1 * mix(0.65, 1.30, lob);
+        if (crawl_gate > 0.5) {
+            float crawl_energy4 = clamp(u_mid_energy * 0.65 + u_bass_energy * 0.25 + u_high_energy * 0.20, 0.0, 1.8);
+            float crawl_floor4 = mix(0.14, 0.44, crawl_slider);
+            float crawl_drive4 = (crawl_floor4 + pow(max(crawl_energy4, 0.0001), 0.58) * 2.15) * crawl_slider * crawl_boost;
+            if (crawl_drive4 > 0.00025) {
+                float spacing4 = mix(crawl_spacing * 0.95, crawl_spacing * 1.40, lob);
+                float drift_slow4 = sin(nx * (1.2 + spacing4 * 0.50) + u_time * 0.38);
+                float drift_mid4 = sin(nx * (3.3 + spacing4 * 0.60) - u_time * 0.88) * 0.72;
+                float drift_fast4 = sin(nx * (5.5 + spacing4 * 0.90) + u_time * 1.22) * 0.32;
+                float drift_mix4 = drift_slow4 * 0.48 + drift_mid4 * 0.38 + drift_fast4 * 0.18;
+                float lob_influence4 = clamp(lob * 1.20, 0.22, 1.0);
+                float blended4 = mix(crawl_offset1, drift_mix4 * spacing4 * 0.85, lob_influence4);
+                crawl_offset4 = clamp(blended4 * crawl_drive4 * 0.68, -0.58, 0.58);
+            }
+        }
+        float w4 = sin(nx * sine_freq + lob_phase4 + phase4 + add_shift4 + disp_phase_offset * 1.25);
+
+        float wfx4 = 0.0;
+        if (wave_fx > 0.001) {
+            float we4_raw = u_mid_energy * 0.60 + u_bass_energy * 0.25 + u_high_energy * 0.15;
+            float we4 = sqrt(max(we4_raw, 0.0));
+            float wfx_raw4_own = sin(nx * 8.1 + u_time * 2.3) * 0.42
+                               + sin(nx * 14.5 - u_time * 1.1) * 0.28;
+            float wfx4_own = wfx_raw4_own * we4 * wave_fx * base_amplitude * wave_fx_gate;
+            wfx4 = mix(wfx1, wfx4_own, lob);
+        }
+
+        float mw4 = 0.0;
+        if (micro_wob > 0.001 && play_gate > 0.5) {
+            float mw_energy4 = u_bass_energy * 0.48 + u_mid_energy * 0.32 + u_high_energy * 0.20;
+            float mw_drive4 = clamp(mw_energy4 * 1.8, 0.0, 1.5);
+            if (mw_drive4 > 0.001) {
+                float t_fast4 = u_time * 3.4;
+                float t_med4  = u_time * 1.7;
+                float mw_raw4 = sin(nx * 19.0 + t_fast4 + 1.4) * 0.28
+                              + sin(nx * 9.5 - t_med4 + 0.8) * 0.33
+                              + sin(nx * 4.5 + u_time * 0.8 + 2.3) * 0.24
+                              + sin(nx * 24.0 - t_fast4 * 1.15 + 2.8) * 0.14;
+                float mw4_own = (mw_raw4 * mw_drive4 * micro_wob * 0.18) / amp4_safe;
+                mw4 = mix(mw1, mw4_own, lob);
+            }
+        }
+
+        float ny4 = ny + v_spacing * 1.4 + disp_y_offset * 1.15;
+
+        float sigma4 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.875 : glow_sigma_base;
+        float w4_pre = w4 + mw4 + crawl_offset4 + wfx4 / amp4_safe;
+
+        if (u_ghost_alpha > 0.001 && u_ghost_line4_enabled == 1) {
+            float ghost_e4 = mix(u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10,
+                                 u_mid_energy * 0.40 + u_ghost_bass * 0.25, lob * 0.4);
+            float ghost_amp4_raw = base_amplitude * (1.0 + ghost_e4 * 0.30);
+            float ghost_amp4 = min(ghost_amp4_raw * hb_mult, hb_cap);
+            float ghost_amp4_safe = max(ghost_amp4_raw, 0.01);
+            float ghost_phase4 = phase4 * 0.4;
+            float ghost_lob_phase4 = lob_phase4;
+            float ghost_disp4 = disp_phase_offset * 0.3 * 1.25;
+            float ghost_w4 = sin(nx * sine_freq + ghost_lob_phase4 + ghost_phase4 + add_shift4 + ghost_disp4);
+            float ghost_crawl4 = crawl_offset4 * 0.25;
+            float ghost_mw4 = mw4 * 0.20;
+            float ghost_wfx4 = wfx4 * 0.30;
+            float ghost_w4_pre = ghost_w4 + ghost_mw4 + ghost_crawl4 + ghost_wfx4 / ghost_amp4_safe;
+            float ghost_ny4 = ny4 + 0.012;
+            vec3 g_line_rgb4, g_glow_rgb4;
+            float g_line_a4, g_glow_a4;
+            vec4 ghost_color4 = vec4(glowColor4.rgb, 1.0);
+            eval_line(ghost_ny4, inner_height, ghost_w4_pre, ghost_amp4,
+                      ghost_color4, vec4(0.0), 0.0, 0.0, 0.0, bass_width + 2.0,
+                      g_line_rgb4, g_glow_rgb4, g_line_a4, g_glow_a4);
+            float ga4 = g_line_a4 * u_ghost_alpha;
+            if (ga4 > 0.001) {
+                float inv4 = 1.0 - ga4;
+                vec3 ghost_rgb4 = ghost_color4.rgb * ga4;
+                final_rgb = ghost_rgb4 + final_rgb * inv4;
+                final_a = ga4 + final_a * inv4;
+            }
+        }
+
+        vec3 line_rgb4;
+        vec3 glow_rgb4;
+        float line_alpha4;
+        float glow_alpha4;
+        vec4 tmp4 = eval_line(ny4, inner_height, w4_pre, amp4,
+                              lineColor4, glowColor4, sigma4, glow_e4, 0.0, bass_width,
+                              line_rgb4, glow_rgb4, line_alpha4, glow_alpha4);
+        float available_glow4 = max(0.0, 1.0 - final_glow_alpha);
+        float glow_scale4 = (glow_alpha4 > 0.0001)
+            ? min(1.0, available_glow4 / glow_alpha4)
+            : 1.0;
+        vec3 adj_glow_rgb4 = glow_rgb4 * glow_scale4;
+        float adj_glow_alpha4 = glow_alpha4 * glow_scale4;
+        float combined_alpha4 = line_alpha4 + adj_glow_alpha4;
+        vec3 combined_premult4 = line_rgb4 + adj_glow_rgb4;
+        if (combined_alpha4 > 0.0) {
+            float inv_src4 = 1.0 - combined_alpha4;
+            final_rgb = combined_premult4 + final_rgb * inv_src4;
+            final_a = combined_alpha4 + final_a * inv_src4;
+            final_glow_alpha = adj_glow_alpha4 + final_glow_alpha * (1.0 - adj_glow_alpha4);
+        }
+    }
+
+    // =====================================================================
+    // LINE 5 — follows pattern of line 3 with different phase offsets
+    // =====================================================================
+    if (lines >= 5) {
+        float amp5_raw = base_amplitude * (1.0 + e5_band * 0.30);
+        float amp5 = min(amp5_raw * hb_mult, hb_cap);
+        float amp5_safe = max(amp5_raw, 0.01);
+        float lob_phase5 = lob * 1.80;  // X-axis separation
+        float add_shift5 = u_sine_line5_shift * TWO_PI;
+        float crawl_offset5 = crawl_offset1 * mix(0.70, 1.45, lob);
+        if (crawl_gate > 0.5) {
+            float crawl_energy5 = clamp(u_high_energy * 0.70 + u_mid_energy * 0.30 + u_bass_energy * 0.20, 0.0, 1.8);
+            float crawl_floor5 = mix(0.16, 0.46, crawl_slider);
+            float crawl_drive5 = (crawl_floor5 + pow(max(crawl_energy5, 0.0001), 0.60) * 2.20) * crawl_slider * crawl_boost;
+            if (crawl_drive5 > 0.00025) {
+                float spacing5 = mix(crawl_spacing * 1.0, crawl_spacing * 1.50, lob);
+                float drift_slow5 = sin(nx * (0.95 + spacing5 * 0.45) - u_time * 0.55);
+                float drift_mid5 = sin(nx * (2.7 + spacing5 * 0.62) + u_time * 0.95) * 0.75;
+                float drift_fast5 = sin(nx * (4.5 + spacing5 * 0.88) - u_time * 1.25) * 0.33;
+                float drift_mix5 = drift_slow5 * 0.43 + drift_mid5 * 0.37 + drift_fast5 * 0.22;
+                float lob_influence5 = clamp(lob * 1.22, 0.23, 1.0);
+                float blended5 = mix(crawl_offset1, drift_mix5 * spacing5 * 0.90, lob_influence5);
+                crawl_offset5 = clamp(blended5 * crawl_drive5 * 0.72, -0.62, 0.62);
+            }
+        }
+        float w5 = sin(nx * sine_freq + lob_phase5 + phase5 + add_shift5 + disp_phase_offset * 1.35);
+
+        float wfx5 = 0.0;
+        if (wave_fx > 0.001) {
+            float we5_raw = u_mid_energy * 0.55 + u_high_energy * 0.30 + u_bass_energy * 0.15;
+            float we5 = sqrt(max(we5_raw, 0.0));
+            float wfx_raw5_own = sin(nx * 3.9 - u_time * 2.0) * 0.38
+                               + sin(nx * 8.5 + u_time * 2.5) * 0.32;
+            float wfx5_own = wfx_raw5_own * we5 * wave_fx * base_amplitude * wave_fx_gate;
+            wfx5 = mix(wfx1, wfx5_own, lob);
+        }
+
+        float mw5 = 0.0;
+        if (micro_wob > 0.001 && play_gate > 0.5) {
+            float mw_energy5 = u_bass_energy * 0.42 + u_mid_energy * 0.28 + u_high_energy * 0.30;
+            float mw_drive5 = clamp(mw_energy5 * 1.8, 0.0, 1.5);
+            if (mw_drive5 > 0.001) {
+                float t_fast5 = u_time * 4.0;
+                float t_med5  = u_time * 2.1;
+                float mw_raw5 = sin(nx * 15.0 - t_fast5 + 2.8) * 0.27
+                              + sin(nx * 7.5 + t_med5 + 1.5) * 0.32
+                              + sin(nx * 3.2 - u_time * 0.5 + 3.8) * 0.23
+                              + sin(nx * 21.0 + t_fast5 * 1.25 + 0.3) * 0.13;
+                float mw5_own = (mw_raw5 * mw_drive5 * micro_wob * 0.18) / amp5_safe;
+                mw5 = mix(mw1, mw5_own, lob);
+            }
+        }
+
+        float ny5 = ny - v_spacing * 0.7 + disp_y_offset * 1.20;
+
+        float sigma5 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.825 : glow_sigma_base;
+        float w5_pre = w5 + mw5 + crawl_offset5 + wfx5 / amp5_safe;
+
+        if (u_ghost_alpha > 0.001 && u_ghost_line5_enabled == 1) {
+            float ghost_e5 = mix(u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10,
+                                 u_high_energy * 0.40 + u_ghost_bass * 0.20, lob * 0.4);
+            float ghost_amp5_raw = base_amplitude * (1.0 + ghost_e5 * 0.30);
+            float ghost_amp5 = min(ghost_amp5_raw * hb_mult, hb_cap);
+            float ghost_amp5_safe = max(ghost_amp5_raw, 0.01);
+            float ghost_phase5 = phase5 * 0.4;
+            float ghost_lob_phase5 = lob_phase5;
+            float ghost_disp5 = disp_phase_offset * 0.3 * 1.35;
+            float ghost_w5 = sin(nx * sine_freq + ghost_lob_phase5 + ghost_phase5 + add_shift5 + ghost_disp5);
+            float ghost_crawl5 = crawl_offset5 * 0.25;
+            float ghost_mw5 = mw5 * 0.20;
+            float ghost_wfx5 = wfx5 * 0.30;
+            float ghost_w5_pre = ghost_w5 + ghost_mw5 + ghost_crawl5 + ghost_wfx5 / ghost_amp5_safe;
+            float ghost_ny5 = ny5 + 0.012;
+            vec3 g_line_rgb5, g_glow_rgb5;
+            float g_line_a5, g_glow_a5;
+            vec4 ghost_color5 = vec4(glowColor5.rgb, 1.0);
+            eval_line(ghost_ny5, inner_height, ghost_w5_pre, ghost_amp5,
+                      ghost_color5, vec4(0.0), 0.0, 0.0, 0.0, bass_width + 2.0,
+                      g_line_rgb5, g_glow_rgb5, g_line_a5, g_glow_a5);
+            float ga5 = g_line_a5 * u_ghost_alpha;
+            if (ga5 > 0.001) {
+                float inv5 = 1.0 - ga5;
+                vec3 ghost_rgb5 = ghost_color5.rgb * ga5;
+                final_rgb = ghost_rgb5 + final_rgb * inv5;
+                final_a = ga5 + final_a * inv5;
+            }
+        }
+
+        vec3 line_rgb5;
+        vec3 glow_rgb5;
+        float line_alpha5;
+        float glow_alpha5;
+        vec4 tmp5 = eval_line(ny5, inner_height, w5_pre, amp5,
+                              lineColor5, glowColor5, sigma5, glow_e5, 0.0, bass_width,
+                              line_rgb5, glow_rgb5, line_alpha5, glow_alpha5);
+        float available_glow5 = max(0.0, 1.0 - final_glow_alpha);
+        float glow_scale5 = (glow_alpha5 > 0.0001)
+            ? min(1.0, available_glow5 / glow_alpha5)
+            : 1.0;
+        vec3 adj_glow_rgb5 = glow_rgb5 * glow_scale5;
+        float adj_glow_alpha5 = glow_alpha5 * glow_scale5;
+        float combined_alpha5 = line_alpha5 + adj_glow_alpha5;
+        vec3 combined_premult5 = line_rgb5 + adj_glow_rgb5;
+        if (combined_alpha5 > 0.0) {
+            float inv_src5 = 1.0 - combined_alpha5;
+            final_rgb = combined_premult5 + final_rgb * inv_src5;
+            final_a = combined_alpha5 + final_a * inv_src5;
+            final_glow_alpha = adj_glow_alpha5 + final_glow_alpha * (1.0 - adj_glow_alpha5);
+        }
+    }
+
+    // =====================================================================
+    // LINE 6 — follows pattern of line 2 with different phase offsets
+    // =====================================================================
+    if (lines >= 6) {
+        float amp6_raw = base_amplitude * (1.0 + e6_band * 0.30);
+        float amp6 = min(amp6_raw * hb_mult, hb_cap);
+        float amp6_safe = max(amp6_raw, 0.01);
+        float lob_phase6 = lob * 2.25;  // X-axis separation
+        float add_shift6 = u_sine_line6_shift * TWO_PI;
+        float crawl_offset6 = crawl_offset1 * mix(0.75, 1.60, lob);
+        if (crawl_gate > 0.5) {
+            float crawl_energy6 = clamp(u_bass_energy * 0.75 + u_mid_energy * 0.20 + u_high_energy * 0.15, 0.0, 1.8);
+            float crawl_floor6 = mix(0.18, 0.48, crawl_slider);
+            float crawl_drive6 = (crawl_floor6 + pow(max(crawl_energy6, 0.0001), 0.62) * 2.25) * crawl_slider * crawl_boost;
+            if (crawl_drive6 > 0.00025) {
+                float spacing6 = mix(crawl_spacing * 1.05, crawl_spacing * 1.55, lob);
+                float drift_slow6 = sin(nx * (1.3 + spacing6 * 0.55) + u_time * 0.42);
+                float drift_mid6 = sin(nx * (3.5 + spacing6 * 0.65) - u_time * 0.92) * 0.70;
+                float drift_fast6 = sin(nx * (5.8 + spacing6 * 0.95) + u_time * 1.28) * 0.30;
+                float drift_mix6 = drift_slow6 * 0.46 + drift_mid6 * 0.40 + drift_fast6 * 0.18;
+                float lob_influence6 = clamp(lob * 1.18, 0.21, 1.0);
+                float blended6 = mix(crawl_offset1, drift_mix6 * spacing6 * 0.88, lob_influence6);
+                crawl_offset6 = clamp(blended6 * crawl_drive6 * 0.75, -0.65, 0.65);
+            }
+        }
+        float w6 = sin(nx * sine_freq + lob_phase6 + phase6 + add_shift6 + disp_phase_offset * 1.45);
+
+        float wfx6 = 0.0;
+        if (wave_fx > 0.001) {
+            float we6_raw = u_bass_energy * 0.70 + u_mid_energy * 0.20 + u_high_energy * 0.10;
+            float we6 = sqrt(max(we6_raw, 0.0));
+            float wfx_raw6_own = sin(nx * 9.5 + u_time * 2.5) * 0.40
+                               + sin(nx * 15.7 - u_time * 0.9) * 0.26;
+            float wfx6_own = wfx_raw6_own * we6 * wave_fx * base_amplitude * wave_fx_gate;
+            wfx6 = mix(wfx1, wfx6_own, lob);
+        }
+
+        float mw6 = 0.0;
+        if (micro_wob > 0.001 && play_gate > 0.5) {
+            float mw_energy6 = u_bass_energy * 0.55 + u_mid_energy * 0.25 + u_high_energy * 0.20;
+            float mw_drive6 = clamp(mw_energy6 * 1.8, 0.0, 1.5);
+            if (mw_drive6 > 0.001) {
+                float t_fast6 = u_time * 4.2;
+                float t_med6  = u_time * 2.2;
+                float mw_raw6 = sin(nx * 17.0 + t_fast6 + 1.6) * 0.26
+                              + sin(nx * 8.8 - t_med6 + 0.9) * 0.31
+                              + sin(nx * 4.2 + u_time * 0.6 + 2.5) * 0.22
+                              + sin(nx * 23.0 - t_fast6 * 1.18 + 1.0) * 0.12;
+                float mw6_own = (mw_raw6 * mw_drive6 * micro_wob * 0.18) / amp6_safe;
+                mw6 = mix(mw1, mw6_own, lob);
+            }
+        }
+
+        float ny6 = ny + v_spacing * 2.1 + disp_y_offset * 1.25;
+
+        float sigma6 = (u_sine_line_dim == 1) ? glow_sigma_base * 0.80 : glow_sigma_base;
+        float w6_pre = w6 + mw6 + crawl_offset6 + wfx6 / amp6_safe;
+
+        if (u_ghost_alpha > 0.001 && u_ghost_line6_enabled == 1) {
+            float ghost_e6 = mix(u_ghost_bass * 0.35 + u_ghost_mid * 0.25 + u_ghost_high * 0.10,
+                                 u_bass_energy * 0.45 + u_ghost_mid * 0.20, lob * 0.4);
+            float ghost_amp6_raw = base_amplitude * (1.0 + ghost_e6 * 0.30);
+            float ghost_amp6 = min(ghost_amp6_raw * hb_mult, hb_cap);
+            float ghost_amp6_safe = max(ghost_amp6_raw, 0.01);
+            float ghost_phase6 = phase6 * 0.4;
+            float ghost_lob_phase6 = lob_phase6;
+            float ghost_disp6 = disp_phase_offset * 0.3 * 1.45;
+            float ghost_w6 = sin(nx * sine_freq + ghost_lob_phase6 + ghost_phase6 + add_shift6 + ghost_disp6);
+            float ghost_crawl6 = crawl_offset6 * 0.25;
+            float ghost_mw6 = mw6 * 0.20;
+            float ghost_wfx6 = wfx6 * 0.30;
+            float ghost_w6_pre = ghost_w6 + ghost_mw6 + ghost_crawl6 + ghost_wfx6 / ghost_amp6_safe;
+            float ghost_ny6 = ny6 + 0.012;
+            vec3 g_line_rgb6, g_glow_rgb6;
+            float g_line_a6, g_glow_a6;
+            vec4 ghost_color6 = vec4(glowColor6.rgb, 1.0);
+            eval_line(ghost_ny6, inner_height, ghost_w6_pre, ghost_amp6,
+                      ghost_color6, vec4(0.0), 0.0, 0.0, 0.0, bass_width + 2.0,
+                      g_line_rgb6, g_glow_rgb6, g_line_a6, g_glow_a6);
+            float ga6 = g_line_a6 * u_ghost_alpha;
+            if (ga6 > 0.001) {
+                float inv6 = 1.0 - ga6;
+                vec3 ghost_rgb6 = ghost_color6.rgb * ga6;
+                final_rgb = ghost_rgb6 + final_rgb * inv6;
+                final_a = ga6 + final_a * inv6;
+            }
+        }
+
+        vec3 line_rgb6;
+        vec3 glow_rgb6;
+        float line_alpha6;
+        float glow_alpha6;
+        vec4 tmp6 = eval_line(ny6, inner_height, w6_pre, amp6,
+                              lineColor6, glowColor6, sigma6, glow_e6, 0.0, bass_width,
+                              line_rgb6, glow_rgb6, line_alpha6, glow_alpha6);
+        float available_glow6 = max(0.0, 1.0 - final_glow_alpha);
+        float glow_scale6 = (glow_alpha6 > 0.0001)
+            ? min(1.0, available_glow6 / glow_alpha6)
+            : 1.0;
+        vec3 adj_glow_rgb6 = glow_rgb6 * glow_scale6;
+        float adj_glow_alpha6 = glow_alpha6 * glow_scale6;
+        float combined_alpha6 = line_alpha6 + adj_glow_alpha6;
+        vec3 combined_premult6 = line_rgb6 + adj_glow_rgb6;
+        if (combined_alpha6 > 0.0) {
+            float inv_src6 = 1.0 - combined_alpha6;
+            final_rgb = combined_premult6 + final_rgb * inv_src6;
+            final_a = combined_alpha6 + final_a * inv_src6;
+            final_glow_alpha = adj_glow_alpha6 + final_glow_alpha * (1.0 - adj_glow_alpha6);
         }
     }
 
