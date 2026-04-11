@@ -1091,6 +1091,71 @@ def test_build_visualizer_preset_payload_uses_shared_missing_preset_fallback(qt_
         tab.deleteLater()
 
 
+def test_bubble_move_to_custom_roundtrip_preserves_curated_preset_snapshot(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        from core.settings.visualizer_presets import apply_preset_to_config, build_normalized_custom_snapshot
+
+        mode = "bubble"
+        preset_index = 1
+        slider = getattr(tab, "_bubble_preset_slider", None)
+        assert slider is not None
+        custom_index = slider.custom_index()
+
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": mode,
+            "preset_bubble": preset_index,
+        }
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+        tab._save_settings = tab._save_settings_now
+
+        expected_config = apply_preset_to_config(mode, preset_index, {"mode": mode})
+        expected_snapshot = build_normalized_custom_snapshot(mode, expected_config)
+
+        setattr(slider, "_pending_move_to_custom", True)
+        slider.set_preset_index(custom_index)
+        tab._on_visualizer_preset_changed(mode, custom_index)
+
+        cache = settings_manager.get("visualizer_custom_presets", {}) or {}
+        assert isinstance(cache, dict)
+        assert cache[mode] == expected_snapshot
+
+        payload = tab.build_visualizer_preset_payload(mode)
+        assert payload["snapshot"]["widgets"]["spotify_visualizer"] == expected_snapshot
+    finally:
+        tab.deleteLater()
+
+
+def test_bubble_saved_from_settings_preset_roundtrips_without_snapshot_drift(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        from pathlib import Path
+        import json
+
+        from core.settings.visualizer_presets import build_normalized_custom_snapshot
+
+        mode = "bubble"
+        preset_path = Path("presets/visualizer_modes/bubble/preset_1_spiral_surge.json")
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        saved_snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
+
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = dict(saved_snapshot)
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+
+        rebuilt_config = tab._build_current_spotify_visualizer_config(saved_snapshot)
+        rebuilt_snapshot = build_normalized_custom_snapshot(mode, rebuilt_config)
+
+        assert rebuilt_snapshot == saved_snapshot
+    finally:
+        tab.deleteLater()
+
+
 @pytest.mark.parametrize(
     ("mode", "slider_attr", "mode_key", "mode_value"),
     [

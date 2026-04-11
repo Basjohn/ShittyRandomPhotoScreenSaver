@@ -28,7 +28,7 @@
         "bubble_big_count": 2,
         "bubble_big_size_clamp": 2.2,
         "bubble_big_size_max": 0.02,
-        "bubble_big_specular_max_size": 2.5,
+        "bubble_big_specular_max_size": 2.0,
         "bubble_drift_amount": 1.0,
         "bubble_drift_direction": "swirl_cw",
         "bubble_drift_frequency": 0.9,

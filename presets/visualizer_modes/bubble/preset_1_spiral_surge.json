@@ -68,10 +68,10 @@
           200
         ],
         "bubble_rainbow_enabled": true,
-        "bubble_rainbow_speed": 0.17,
+        "bubble_rainbow_speed": 0.11,
         "bubble_rotation_amount": 0.4,
         "bubble_sensitivity": 0.46,
-        "bubble_small_count": 38,
+        "bubble_small_count": 31,
         "bubble_small_freq_pulse": 0.82,
         "bubble_small_size_max": 0.011,
         "bubble_specular_color": [
@@ -81,10 +81,10 @@
           255
         ],
         "bubble_specular_direction": "top_left",
-        "bubble_stream_constant_speed": 0.6,
+        "bubble_stream_constant_speed": 0.4,
         "bubble_stream_direction": "up",
-        "bubble_stream_reactivity": 1.25,
-        "bubble_stream_speed_cap": 2.5,
+        "bubble_stream_reactivity": 0.95,
+        "bubble_stream_speed_cap": 1.5,
         "bubble_surface_reach": 0.8,
         "bubble_tail_opacity": 0.55,
         "bubble_trail_strength": 0.72,

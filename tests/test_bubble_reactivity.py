@@ -845,6 +845,42 @@ class TestBubblePlateauGuardrails:
             "Bubble overdrive stayed active after a one-shot scheduler event on quiet audio."
         )
 
+    def test_big_bubble_lane_does_not_go_dead_from_conservative_stream_preset_values(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=5,
+            bubble_small_count=30,
+            bubble_stream_direction="down",
+            bubble_stream_constant_speed=0.10,
+            bubble_stream_speed_cap=1.0,
+            bubble_stream_reactivity=1.5,
+            bubble_drift_direction="random",
+            bubble_big_size_max=0.042,
+            bubble_small_size_max=0.009,
+        )
+        _warm_up(sim, settings, frames=45)
+
+        dt = 1 / 60
+        phrase = _energy(bass=0.58, mid=0.20, high=0.08)
+        kick = _energy(bass=0.82, mid=0.24, high=0.10)
+
+        peaks = []
+        for _ in range(4):
+            for _ in range(5):
+                sim.tick(dt, kick, settings)
+            peaks.append(_max_big_pulse(sim))
+            for _ in range(18):
+                sim.tick(dt, phrase, settings)
+
+        assert max(peaks) > 0.10, (
+            f"Big-bubble lane only reached {max(peaks):.3f}; "
+            "it is still too easy for conservative stream presets to lose big-bubble pulse authority."
+        )
+        assert peaks[-1] > 0.06, (
+            f"Later big-bubble pulse collapsed to {peaks[-1]:.3f}; "
+            "tiny authored changes can still kick Bubble into a dead-feeling state."
+        )
+
     def test_post_initial_refill_does_not_spawn_a_backlog_wave_in_one_tick(self):
         sim = BubbleSimulation()
         settings = _default_settings(

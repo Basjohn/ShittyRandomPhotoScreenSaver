@@ -594,11 +594,16 @@ class BubbleSimulation:
                 if b.is_big:
                     size_range = max(0.001, self._big_size_max - 0.015)
                     size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
-                    delta_sens = 2.9 - size_t * 0.8  # keep kick detail, avoid easy ceilinging
-                    sustained_knee = 0.50 + size_t * 0.16
-                    sustained_scale = 0.22 - size_t * 0.06
+                    # The stricter sustain path fixed easy ceilinging, but it
+                    # also made big-bubble life too brittle: tiny authored
+                    # changes could collapse the whole big lane into a dead
+                    # state. Keep the improved overdrive/release behavior, but
+                    # restore more of the older big-lane sustain authority.
+                    delta_sens = 3.05 - size_t * 0.9
+                    sustained_knee = 0.46 + size_t * 0.16
+                    sustained_scale = 0.30 - size_t * 0.10
                     attack_rate = 11.0 - size_t * 3.0
-                    decay_rate = 2.65 + size_t * 1.0
+                    decay_rate = 2.85 + size_t * 1.0
                 else:
                     # Promoted smalls should add a brief extra accent when the
                     # main big bubbles are already busy, not become a durable
@@ -628,9 +633,6 @@ class BubbleSimulation:
             # Sustained component: absolute energy through perceptual curve
             # Below knee → near-zero; above knee → gentle ramp to sustained_scale
             perceptual_src = raw_src
-            if use_bass and b.is_big:
-                perceptual_src = raw_src / (raw_src + 0.32)
-
             if perceptual_src <= sustained_knee:
                 sustained_component = 0.0
             else:
@@ -839,8 +841,12 @@ class BubbleSimulation:
                          initial_fill: bool = False) -> None:
         if is_big:
             center = max(0.016, self._big_size_max)
-            lo = center * 0.6
-            hi = center * 1.4
+            if initial_fill:
+                lo = center * 0.82
+                hi = center * 1.10
+            else:
+                lo = center * 0.68
+                hi = center * 1.30
             radius = random.uniform(lo, hi)
         else:
             center = max(0.005, self._small_size_max)
