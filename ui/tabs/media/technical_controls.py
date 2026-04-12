@@ -1129,12 +1129,25 @@ def load_per_mode_technical_controls(tab, spotify_vis_config: Optional[Mapping[s
         cache[mode_key] = mode_cache
 
 
-def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any]) -> None:
-    """Write per-mode technical values into the spotify_vis_config mapping."""
+def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any], *, current_mode: str | None = None) -> None:
+    """Write per-mode technical values into the spotify_vis_config mapping.
+
+    Only the current active mode's technical keys are collected to prevent
+    cross-mode pollution. Other modes' technical keys are left untouched
+    in the config (preserving any previously saved values).
+    """
     controls_map = get_per_mode_controls(tab)
     cache = _ensure_per_mode_cache(tab)
 
-    for mode_key, controls in controls_map.items():
+    # Determine which mode to collect - if not specified, collect all (legacy behavior)
+    modes_to_collect = [current_mode] if current_mode else list(controls_map.keys())
+
+    for mode_key in modes_to_collect:
+        if mode_key is None:
+            continue
+        controls = controls_map.get(mode_key)
+        if controls is None:
+            continue
         mode_cache: Dict[str, Any] = {}
         for defn in _control_defs_for_mode(mode_key):
             if controls.get(defn.control_key) is None:
@@ -1146,7 +1159,3 @@ def collect_per_mode_technical_controls(tab, spotify_vis_config: Dict[str, Any])
             spotify_vis_config[storage_key] = value
             mode_cache[storage_key] = value
         cache[mode_key] = mode_cache
-
-    for mode_cache in cache.values():
-        for key, value in mode_cache.items():
-            spotify_vis_config[key] = value

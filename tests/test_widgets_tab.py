@@ -128,6 +128,11 @@ class TestWidgetsTab:
 
         first_tab = WidgetsTab(settings_manager)
 
+        # Must set mode to sine_wave before saving sine-specific settings
+        # (save_media_settings now only collects current mode's settings)
+        first_tab.vis_mode_combo.setCurrentIndex(first_tab.vis_mode_combo.findData("sine_wave"))
+        qt_app.processEvents()
+
         custom_glow = QColor(12, 34, 56, 200)
         custom_line = QColor(210, 180, 150, 128)
         first_tab._sine_glow_color = custom_glow
@@ -176,6 +181,10 @@ class TestWidgetsTab:
 
         first_tab = WidgetsTab(settings_manager)
 
+        # Must set mode to oscilloscope before saving osc-specific settings
+        first_tab.vis_mode_combo.setCurrentIndex(first_tab.vis_mode_combo.findData("oscilloscope"))
+        qt_app.processEvents()
+
         custom_glow = QColor(33, 77, 190, 210)
         custom_line = QColor(240, 245, 250, 180)
         first_tab._osc_glow_color = custom_glow
@@ -193,14 +202,26 @@ class TestWidgetsTab:
             reloaded_tab.deleteLater()
 
     def test_secondary_line_ghost_toggles_persist(self, qt_app, settings_manager):
+        """Osc and Sine ghost toggles persist when saved in their respective modes."""
+        # Test oscilloscope ghost toggles
         first_tab = WidgetsTab(settings_manager)
+        first_tab.vis_mode_combo.setCurrentIndex(first_tab.vis_mode_combo.findData("oscilloscope"))
+        qt_app.processEvents()
         first_tab.osc_ghost_line2_enabled.setChecked(False)
         first_tab.osc_ghost_line3_enabled.setChecked(True)
-        first_tab.sine_ghost_line2_enabled.setChecked(True)
-        first_tab.sine_ghost_line3_enabled.setChecked(False)
         first_tab._save_settings_now()
         first_tab.deleteLater()
 
+        # Test sine ghost toggles
+        second_tab = WidgetsTab(settings_manager)
+        second_tab.vis_mode_combo.setCurrentIndex(second_tab.vis_mode_combo.findData("sine_wave"))
+        qt_app.processEvents()
+        second_tab.sine_ghost_line2_enabled.setChecked(True)
+        second_tab.sine_ghost_line3_enabled.setChecked(False)
+        second_tab._save_settings_now()
+        second_tab.deleteLater()
+
+        # Verify both persisted
         reloaded_tab = WidgetsTab(settings_manager)
         try:
             assert reloaded_tab.osc_ghost_line2_enabled.isChecked() is False

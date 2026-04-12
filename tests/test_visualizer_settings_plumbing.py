@@ -2299,6 +2299,12 @@ class TestOscilloscopeSettingsBinding:
             ("osc_line2_glow_btn", "_osc_line2_glow_color"),
             ("osc_line3_color_btn", "_osc_line3_color"),
             ("osc_line3_glow_btn", "_osc_line3_glow_color"),
+            ("osc_line4_color_btn", "_osc_line4_color"),
+            ("osc_line4_glow_btn", "_osc_line4_glow_color"),
+            ("osc_line5_color_btn", "_osc_line5_color"),
+            ("osc_line5_glow_btn", "_osc_line5_glow_color"),
+            ("osc_line6_color_btn", "_osc_line6_color"),
+            ("osc_line6_glow_btn", "_osc_line6_glow_color"),
         ]
         assert visibility_calls == [tab]
 
@@ -2562,6 +2568,12 @@ class TestSineWaveSettingsBinding:
             ("sine_line2_glow_btn", "_sine_line2_glow_color"),
             ("sine_line3_color_btn", "_sine_line3_color"),
             ("sine_line3_glow_btn", "_sine_line3_glow_color"),
+            ("sine_line4_color_btn", "_sine_line4_color"),
+            ("sine_line4_glow_btn", "_sine_line4_glow_color"),
+            ("sine_line5_color_btn", "_sine_line5_color"),
+            ("sine_line5_glow_btn", "_sine_line5_glow_color"),
+            ("sine_line6_color_btn", "_sine_line6_color"),
+            ("sine_line6_glow_btn", "_sine_line6_glow_color"),
         ]
         assert visibility_calls == [tab]
 

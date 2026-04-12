@@ -923,7 +923,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         spotify_vis_config.update(collect_blob_mode_settings(tab))
     elif _cur_mode == 'bubble':
         spotify_vis_config.update(collect_bubble_mode_settings(tab))
-    collect_per_mode_technical_controls(tab, spotify_vis_config)
+    collect_per_mode_technical_controls(tab, spotify_vis_config, current_mode=_cur_mode)
 
     def _per_mode_value(key: str, fallback):
         return spotify_vis_config.get(f'{_cur_mode}_{key}', fallback)

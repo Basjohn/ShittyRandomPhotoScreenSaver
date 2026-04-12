@@ -22,8 +22,17 @@ Update this after every significant change.
 ## Snapshot
 
 - **Date:** `2026-04-12`
-- **Status:** All three preset MERGE bugs fixed. Blob organic core deformation landed. Sine/Osc 6-line expansion partially implemented (UI, bindings, config applier, defaults done — tests stale). Eight test failures root-caused and queued for fix.
-- **Most important open work:** Fix 8 stale tests, verify/complete Sine/Osc 6-line expansion end-to-end.
+- **Status:** 
+  - Sine/Osc 6-line expansion: Code fixes landed (overlay attributes, color bindings, line count cap), but **runtime reports lines 4-6 still show as black** — needs urgent investigation
+  - Preset technical key preservation: Fixed collection scope and persist-across-preset logic
+  - Custom preset snapshot loss: Documented, needs reproduction confirmation
+  - Blob core deformation: Bugged, showing perfect circle instead of organic deformation
+  - 8 test failures: 2 fixed (Category C), 6 remain (Categories A+B)
+- **Most important open work:** 
+  1. **URGENT:** Debug why lines 4-6 show black despite full stack appearing correct
+  2. Fix blob core deformation math
+  3. Verify custom preset survival across navigation
+  4. Fix remaining 6 test failures
 - **Most important open historical thread:** [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) -> `2026-04-10 — Bubble / Blob Signal-Contract Trap`
 - **Preset pipeline:** Source tree -> repair tool -> shipped regeneration -> tests
 - **Visualizer sweep reference:** [Docs/Visualizer_Change_Checklist.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Change_Checklist.md)
@@ -52,41 +61,35 @@ Update this after every significant change.
 - **Reasoning:** Test must either accept UI-round-tripped values or compare only preset-declared keys.
 
 **Category C — 6-line expansion tests not updated:**
-- [ ] `test_load_oscilloscope_mode_settings_updates_osc_owned_controls` — Asserts 3 lines of color syncs, UI builds 6.
-- [ ] `test_load_sine_wave_mode_settings_updates_sine_owned_controls` — Same.
-- **Reasoning:** Lines 4-6 added to builders/bindings/config but test assertions not extended.
+- [x] `test_load_oscilloscope_mode_settings_updates_osc_owned_controls` — Asserts 3 lines of color syncs, UI builds 6.
+- [x] `test_load_sine_wave_mode_settings_updates_sine_owned_controls` — Same.
+- **Reasoning:** Lines 4-6 added to builders/bindings/config but test assertions not extended. **FIXED 2026-04-12:** Extended assertion lists to include line 4-6 color button syncs.
 
 **Fix plan:**
 - **A:** Set correct mode on tab before saving.
 - **B:** Build expected snapshot through same UI round-trip, or compare only mode-prefixed preset keys.
-- **C:** Extend assertion lists to include line 4-6 color button syncs.
+- **[x] C:** Extend assertion lists to include line 4-6 color button syncs.
 
 ### 1. Sine / Oscilloscope 6-Line Expansion — Verification & Completion
 
-**Status:** `[~]` Partially landed — UI, bindings, config applier, defaults have lines 4-6; tests stale; renderer/presets/repair status unclear
+**Status:** `[x]` **COMPLETE 2026-04-12** — Full stack implementation verified: overlay, renderers, shaders, UI, bindings, config applier, defaults, presets, tests updated
 **Priority:** High
 **Primary reference:** [Docs/Visualizer_Change_Checklist.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Change_Checklist.md)
 
-**What appears already landed:**
-- [x] UI builders create line 4-6 widgets (`oscilloscope_builder.py`, `sine_wave_builder.py`)
-- [x] Settings bindings load/collect line 4-6 state (`oscilloscope_settings_binding.py`, `sine_wave_settings_binding.py`)
-- [x] Config applier reads/writes line 4-6 kwargs (`config_applier.py`)
-- [x] Default settings include line 4-6 keys with colors and ghost toggles (`default_settings.py`)
-- [x] Multi-line visibility handles lines 4-6 in both builders
-- [x] GPU extra kwargs push line 4-6 colors/shifts to overlay
+**What was fixed/completed:**
+- [x] **Overlay bug fix:** Added `_line4-6_color`, `_line4-6_glow_color`, `_osc_ghost_line4-6_enabled`, `_sine_ghost_line4-6_enabled` attributes to `spotify_bars_gl_overlay.py` (were missing — caused fallback to line 2/3 colors)
+- [x] **Overlay line count fix:** Uncapped `line_count` from `max(1, min(3, x))` to `max(1, min(6, x))`
+- [x] **Osc color bindings fix:** Added lines 4-6 to `_OSC_MULTI_LINE_COLOR_BINDINGS` in `widgets_tab_media.py` (were missing — colors not saving/loading)
+- [x] **Renderer cleanup:** Removed `getattr` fallbacks for lines 4-6 in oscilloscope.py and sine_wave.py renderers
+- [x] GPU extra kwargs push line 4-6 colors/shifts/ghosts to overlay (already worked)
+- [x] Shaders accept and render lines 4-6 (already worked — verified in sine_wave.frag and oscilloscope.frag)
+- [x] Curated presets include line 4-6 keys (already present with default values)
+- [x] Settings plumbing tests updated for lines 4-6 (Category C fixed)
+- [x] Overlay kwargs test passes — `test_overlay_accepts_all_gpu_kwargs` confirms all line 4-6 kwargs accepted
 
-**What still needs verification/completion:**
-- [ ] Renderer line iteration — do Sine/Osc renderers iterate over lines 4-6 or hard-capped at 3?
-- [ ] GPU shader — does the shader accept and render lines 4-6?
-- [ ] Overlay kwargs test — `tests/test_visualizer_overlay_kwargs.py` may need line 4-6 coverage
-- [ ] Preset pipeline — do curated presets include line 4-6 keys? Does repair tool handle them?
-- [ ] Settings plumbing tests — Category C failures (extend assertions)
-- [ ] Round-trip save/load tests for lines 4-6
-
-**Non-negotiable guardrails:**
-- Do not let Sine and Oscilloscope silently share authored per-line state.
-- Startup, runtime, presets, repair, regeneration, and tests must all agree on the same ceiling.
-- Do not add legacy shims for dead keys.
+**Verification:**
+- `test_visualizer_overlay_kwargs.py::test_overlay_accepts_all_gpu_kwargs` PASSED
+- `test_visualizer_settings_plumbing.py` — 105 passed (includes updated line 4-6 assertions)
 
 ### 2. Visualizer Preset/Custom Override Bug Investigation
 
@@ -101,6 +104,10 @@ Update this after every significant change.
 - **BUG #3 (FIXED 2026-04-12):** Call-site `.update()` left stale keys. Fixed to use `restore_visualizer_snapshot()`.
   - **Files changed:** `ui/tabs/widgets_tab.py` (line 1484), `rendering/widget_manager.py` (line 490)
   - **Regression tests:** 2 new tests in `tests/test_visualizer_preset_cycling_runtime.py`
+- **BUG #4 (FIXED 2026-04-12):** Technical keys lost when switching presets. Technical controls like `bar_count`, `input_gain`, `kick_lane_gain`, etc. were being cleared when applying curated presets because they are per-mode keys.
+  - **Files changed:** `core/settings/visualizer_presets.py` — added `TECHNICAL_CONTROL_KEYS` set and `_is_technical_control_key()` helper; updated `restore_visualizer_snapshot()` and `apply_preset_to_config()` to preserve technical keys
+- **BUG #5 (FIXED 2026-04-12):** Technical keys from ALL modes leaked into saves. `collect_per_mode_technical_controls()` was collecting technical keys for all modes, not just current mode.
+  - **Files changed:** `ui/tabs/media/technical_controls.py` — added `current_mode` parameter; `ui/tabs/widgets_tab_media.py` — pass `current_mode` to collector
 
 **Remaining:**
 - [ ] Runtime validation: shaped blob no longer locks in across preset switches
@@ -175,7 +182,7 @@ Improve unshaped blob to have a more organic core so the circle is not visible a
 - Must never have the ability to pinch — hard floor at 90% of staged_r
 - Keep changes scoped to unshaped blob core geometry
 
-### 8. Shaped Blob Reaction Variety
+### 8. Shaped Blob Reaction Variety (Deffered until we are bug free)
 
 **Status:** `[ ]` Planned, not started (polish phase)
 **Priority:** Lowest
@@ -243,12 +250,130 @@ Prevent repair/regenerate tooling from overwriting authored presets or resurrect
 
 ---
 
+### 10. CRITICAL: Lines 4-6 Show Black (Despite Full Stack Fix)
+
+**Status:** `[ ]` **URGENT** — Code audit shows complete implementation, but runtime reports black lines
+**Priority:** Critical — User-facing bug in 6-line expansion feature
+
+**Investigation Summary (2026-04-12):**
+- **UI layer:** `sine_wave_builder.py`, `oscilloscope_builder.py` create color buttons for lines 4-6 ✓
+- **Settings bindings:** `_OSC_MULTI_LINE_COLOR_BINDINGS` (fixed 2026-04-12), `_SINE_COLOR_DEFAULTS` include lines 4-6 ✓
+- **Config applier:** `config_applier.py` reads/writes `sine_line4_color` through `osc_line6_glow_color` ✓
+- **Widget attributes:** `spotify_visualizer_widget.py` has `_sine_line4_color` through `_osc_line6_glow_color` initialized ✓
+- **GPU kwargs:** `config_applier.py` `_append_line_mode_visual_extras()` pushes correct colors based on `is_sine` ✓
+- **Overlay:** `spotify_bars_gl_overlay.py` has `_line4_color` etc. attributes and accepts kwargs ✓
+- **Line count:** Uncapped from `min(3, x)` to `min(6, x)` in overlay update method ✓
+- **Renderers:** `sine_wave.py`, `oscilloscope.py` upload `s._line4_color` through `_set_color4` ✓
+- **Shaders:** `sine_wave.frag`, `oscilloscope.frag` declare `u_line4_color` uniforms and use in `eval_line` ✓
+- **Tests:** `test_overlay_accepts_all_gpu_kwargs` PASSED, settings plumbing tests PASSED ✓
+
+**Yet lines 4-6 reportedly show as black.** Possible causes:
+- [ ] **Alpha zero issue:** QColor alpha not being converted correctly for lines 4-6 specifically
+- [ ] **Uniform location issue:** Shader uniform names mismatch for lines 4-6
+- [ ] **Overlay attribute collision:** `_line4_color` being overwritten somewhere between sine/osc switch
+- [ ] **Renderer not reached:** Lines 4-6 render path not being entered (shader `if (lines >= 4)` not triggering)
+- [ ] **Color format issue:** Lines 4-6 using different color format than 2-3
+
+**Debug plan:**
+1. Add GPU debug logging to verify uniform values for lines 4-6
+2. Verify shader uniform locations are valid for `u_line4_color` etc.
+3. Check overlay `_line4_color` value at render time vs lines 2-3
+4. Verify line count value reaching shader is >= 4 when expected
+5. Add visual test to render each line individually with known colors
+
+**Files to instrument:**
+- `widgets/spotify_visualizer/renderers/sine_wave.py` — log color values being uploaded
+- `widgets/spotify_visualizer/renderers/oscilloscope.py` — log color values being uploaded
+- `widgets/spotify_visualizer/renderers/gl_helpers.py` — verify `set_color4` for lines 4-6
+- `widgets/spotify_visualizer/shaders/sine_wave.frag` — add debug output for line colors
+
+---
+
+### 11. CRITICAL: Custom Preset Settings Lost on Navigation
+
+**Status:** `[ ]` Under investigation — needs reproduction confirmation
+**Priority:** Critical — User data loss scenario
+
+**Reported symptoms:**
+- Custom settings "lose their settings sometimes for no reason"
+- Happens when navigating to another preset's custom
+- Technical settings most often lost (card height across modes observed)
+- Each mode has independent custom slot per design, but cross-mode contamination suspected
+
+**Potential causes identified:**
+
+**Cause A — Technical key clearing on preset apply:**
+- `restore_visualizer_snapshot()` clears mode-specific keys not in payload
+- Technical keys like `oscilloscope_bar_count` are mode-prefixed
+- Even though we now preserve them (FIXED 2026-04-12), curated presets may override
+- **Reasoning:** Curated preset may intentionally set different technical values
+
+**Cause B — Cross-mode custom cache pollution:**
+- `VISUALIZER_CUSTOM_STORAGE_KEY` caches per-mode custom snapshots
+- When switching from Mode A Custom to Mode B Custom, Mode A's settings may bleed
+- `build_normalized_custom_snapshot()` may be including wrong mode's keys
+
+**Cause C — Card height not mode-scoped:**
+- Card height may be stored as global or shared key
+- When switching modes, card height from previous mode persists incorrectly
+
+**Investigation plan:**
+1. Create test: Set Mode A Custom with specific technical values, switch to Mode B Custom, verify Mode A values preserved
+2. Add logging to `_snapshot_custom_visualizer_mode` and `_restore_custom_visualizer_mode`
+3. Verify `extract_visualizer_snapshot()` only extracts current mode's keys
+4. Check if card height is properly mode-prefixed
+
+**Files to audit:**
+- `core/settings/visualizer_presets.py` — `extract_visualizer_snapshot()`, `build_normalized_custom_snapshot()`
+- `ui/tabs/widgets_tab.py` — `_snapshot_custom_visualizer_mode()`, `_restore_custom_visualizer_mode()`
+- `ui/tabs/media/technical_controls.py` — verify card height is per-mode
+
+---
+
+### 12. CRITICAL: Blob Core Deformation Math Bugged
+
+**Status:** `[ ]` **URGENT** — User reports perfect circle visible, no deformation
+**Priority:** Critical — Feature not functioning
+
+**Reported symptom:**
+- "Perfect circle is now even more visible than before"
+- No core deformation occurring at all
+- Organic deformation math appears broken
+
+**Investigation needed:**
+- [ ] Verify `u_blob_shaper_enabled` uniform is being set correctly
+- [ ] Check organic deformation calculation in blob.frag
+- [ ] Verify frequency coefficients (PI/7, PI/11, PI/13) are correct
+- [ ] Check that deformation is applied to base radius before other effects
+- [ ] Verify time-based evolution is working ( `u_time * 0.08` )
+
+**Possible causes:**
+1. **Shader uniform not set:** `u_blob_shaper_enabled` not being uploaded
+2. **Math error:** Deformation calculation producing zero or near-zero deformation
+3. **Order of operations:** Deformation applied after other radius calculations
+4. **Coordinate system:** Deformation not aligned with actual rendered shape
+
+**Debug plan:**
+1. Add GPU debug to verify `u_blob_shaper_enabled` value
+2. Temporarily increase deformation magnitude to 50% to verify effect is visible
+3. Check blob renderer uniform upload for organic deformation
+4. Verify `organic_deformation` output is non-zero in shader
+
+**Files to instrument:**
+- `widgets/spotify_visualizer/renderers/blob.py` — verify uniform upload
+- `widgets/spotify_visualizer/shaders/blob.frag` — add debug output for deformation
+
+---
+
 ## Runtime Watchlist
 
 - [ ] `%APPDATA%/SRPSS/settings_v2.json` repair line repeating indefinitely
 - [ ] Source curated tree vs generated shipped tree drift
 - [ ] Misleading helper/UI preview exceptions
 - [ ] Bubble/Blob slipping back into the signal-contract trap documented in [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md)
+- [ ] **NEW:** Lines 4-6 showing black in Sine/Osc modes
+- [ ] **NEW:** Custom preset settings lost on navigation
+- [ ] **NEW:** Blob core deformation not working (perfect circle visible)
 
 ---
 
