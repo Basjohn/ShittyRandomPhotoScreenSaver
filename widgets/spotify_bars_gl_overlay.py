@@ -147,14 +147,23 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._line_sensitivity: float = 3.0
         self._line_smoothing: float = 0.7
 
-        # Oscilloscope multi-line
+        # Oscilloscope / Sine multi-line
         self._line_count: int = 1
         self._line2_color: QColor = QColor(255, 120, 50, 230)
         self._line2_glow_color: QColor = QColor(255, 120, 50, 180)
         self._line3_color: QColor = QColor(50, 255, 120, 230)
         self._line3_glow_color: QColor = QColor(50, 255, 120, 180)
+        self._line4_color: QColor = QColor(255, 0, 150, 230)
+        self._line4_glow_color: QColor = QColor(255, 0, 150, 180)
+        self._line5_color: QColor = QColor(0, 255, 200, 230)
+        self._line5_glow_color: QColor = QColor(0, 255, 200, 180)
+        self._line6_color: QColor = QColor(200, 100, 255, 230)
+        self._line6_glow_color: QColor = QColor(200, 100, 255, 180)
         self._osc_ghost_line2_enabled: bool = True
         self._osc_ghost_line3_enabled: bool = True
+        self._osc_ghost_line4_enabled: bool = True
+        self._osc_ghost_line5_enabled: bool = True
+        self._osc_ghost_line6_enabled: bool = True
 
 
         # Blob settings
@@ -303,6 +312,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_ghost_decay: float = 0.3
         self._sine_ghost_line2_enabled: bool = True
         self._sine_ghost_line3_enabled: bool = True
+        self._sine_ghost_line4_enabled: bool = True
+        self._sine_ghost_line5_enabled: bool = True
+        self._sine_ghost_line6_enabled: bool = True
         self._bubble_ghosting_enabled: bool = False
         self._bubble_ghost_alpha: float = 0.0
         self._bubble_ghost_decay: float = 0.4
@@ -1051,8 +1063,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._line_sensitivity = max(0.5, min(10.0, float(line_sensitivity)))
         self._line_smoothing = max(0.0, min(1.0, float(line_smoothing)))
 
-        # Multi-line oscilloscope
-        self._line_count = max(1, min(3, int(line_count)))
+        # Multi-line oscilloscope / sine
+        self._line_count = max(1, min(6, int(line_count)))
         if line2_color is not None:
             self._line2_color = QColor(line2_color)
         if line2_glow_color is not None:
@@ -1061,8 +1073,23 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._line3_color = QColor(line3_color)
         if line3_glow_color is not None:
             self._line3_glow_color = QColor(line3_glow_color)
+        if line4_color is not None:
+            self._line4_color = QColor(line4_color)
+        if line4_glow_color is not None:
+            self._line4_glow_color = QColor(line4_glow_color)
+        if line5_color is not None:
+            self._line5_color = QColor(line5_color)
+        if line5_glow_color is not None:
+            self._line5_glow_color = QColor(line5_glow_color)
+        if line6_color is not None:
+            self._line6_color = QColor(line6_color)
+        if line6_glow_color is not None:
+            self._line6_glow_color = QColor(line6_glow_color)
         self._osc_ghost_line2_enabled = bool(osc_ghost_line2_enabled)
         self._osc_ghost_line3_enabled = bool(osc_ghost_line3_enabled)
+        self._osc_ghost_line4_enabled = bool(osc_ghost_line4_enabled)
+        self._osc_ghost_line5_enabled = bool(osc_ghost_line5_enabled)
+        self._osc_ghost_line6_enabled = bool(osc_ghost_line6_enabled)
 
 
         # Blob settings
@@ -1260,6 +1287,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_ghost_decay = max(0.1, min(1.0, float(sine_ghost_decay)))
         self._sine_ghost_line2_enabled = bool(sine_ghost_line2_enabled)
         self._sine_ghost_line3_enabled = bool(sine_ghost_line3_enabled)
+        self._sine_ghost_line4_enabled = bool(sine_ghost_line4_enabled)
+        self._sine_ghost_line5_enabled = bool(sine_ghost_line5_enabled)
+        self._sine_ghost_line6_enabled = bool(sine_ghost_line6_enabled)
         self._bubble_ghosting_enabled = bool(bubble_ghosting_enabled)
         self._bubble_ghost_alpha = max(0.0, min(1.0, float(bubble_ghost_alpha)))
         self._bubble_ghost_decay = max(0.1, min(1.0, float(bubble_ghost_decay)))

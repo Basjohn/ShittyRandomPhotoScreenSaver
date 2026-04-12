@@ -79,6 +79,12 @@ _OSC_MULTI_LINE_COLOR_BINDINGS = [
     ColorBinding('osc_line2_glow_color', '_osc_line2_glow_color', [255, 120, 50, 180]),
     ColorBinding('osc_line3_color', '_osc_line3_color', [50, 255, 120, 230]),
     ColorBinding('osc_line3_glow_color', '_osc_line3_glow_color', [50, 255, 120, 180]),
+    ColorBinding('osc_line4_color', '_osc_line4_color', [255, 0, 150, 230]),
+    ColorBinding('osc_line4_glow_color', '_osc_line4_glow_color', [255, 0, 150, 180]),
+    ColorBinding('osc_line5_color', '_osc_line5_color', [0, 255, 200, 230]),
+    ColorBinding('osc_line5_glow_color', '_osc_line5_glow_color', [0, 255, 200, 180]),
+    ColorBinding('osc_line6_color', '_osc_line6_color', [200, 100, 255, 230]),
+    ColorBinding('osc_line6_glow_color', '_osc_line6_glow_color', [200, 100, 255, 180]),
 ]
 
 

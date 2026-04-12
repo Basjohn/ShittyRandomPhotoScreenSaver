@@ -386,12 +386,12 @@ def _upload_shared_line_glow(gl, u, s, reactive: dict[str, float] | None = None)
         ("u_line2_glow_color", s._line2_glow_color),
         ("u_line3_color", s._line3_color),
         ("u_line3_glow_color", s._line3_glow_color),
-        ("u_line4_color", getattr(s, '_line4_color', s._line2_color)),
-        ("u_line4_glow_color", getattr(s, '_line4_glow_color', s._line2_glow_color)),
-        ("u_line5_color", getattr(s, '_line5_color', s._line3_color)),
-        ("u_line5_glow_color", getattr(s, '_line5_glow_color', s._line3_glow_color)),
-        ("u_line6_color", getattr(s, '_line6_color', s._line2_color)),
-        ("u_line6_glow_color", getattr(s, '_line6_glow_color', s._line2_glow_color)),
+        ("u_line4_color", s._line4_color),
+        ("u_line4_glow_color", s._line4_glow_color),
+        ("u_line5_color", s._line5_color),
+        ("u_line5_glow_color", s._line5_glow_color),
+        ("u_line6_color", s._line6_color),
+        ("u_line6_glow_color", s._line6_glow_color),
     ):
         _set_color4(gl, u, uname, qc)
 

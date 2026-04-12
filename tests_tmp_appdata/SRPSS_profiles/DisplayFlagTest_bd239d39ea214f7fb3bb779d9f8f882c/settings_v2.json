@@ -1,10 +1,8 @@
 {
   "metadata": {
-    "last_migration_completed": "2026-03-27T19:47:58.588807Z",
-    "profile": "Screensaver",
-    "version": 2
+    "last_migration_completed": "2026-04-12T08:54:38.951663Z"
   },
-  "profile": "Screensaver",
+  "profile": "DisplayFlagTest_bd239d39ea214f7fb3bb779d9f8f882c",
   "snapshot": {
     "display": {
       "gl_depth_bits": 24,
@@ -116,7 +114,7 @@
         "3D Block Spins": true,
         "Blinds": false,
         "Block Puzzle Flip": true,
-        "Burn": false,
+        "Burn": true,
         "Crossfade": false,
         "Crumble": true,
         "Diffuse": true,
@@ -561,8 +559,8 @@
           68,
           255
         ],
-        "bubble_rainbow_enabled": true,
-        "bubble_rainbow_speed": 0.3,
+        "bubble_rainbow_enabled": false,
+        "bubble_rainbow_speed": 0.5,
         "bubble_rotation_amount": 0.3,
         "bubble_sensitivity": 0.4,
         "bubble_small_count": 34,
@@ -589,12 +587,12 @@
         "dynamic_floor": true,
         "dynamic_range_enabled": false,
         "enabled": true,
-        "ghost_alpha": 0.45,
-        "ghost_decay": 0.3,
+        "ghost_alpha": 0.4,
+        "ghost_decay": 0.35,
         "ghosting_enabled": true,
         "input_gain": 1.0,
         "manual_floor": 0.12,
-        "mode": "bubble",
+        "mode": "spectrum",
         "monitor": "ALL",
         "osc_ghost_intensity": 0.4,
         "osc_ghost_line2_enabled": true,
@@ -761,8 +759,8 @@
         "spectrum_drop_speed": 1.0,
         "spectrum_dynamic_floor": true,
         "spectrum_dynamic_range_enabled": false,
-        "spectrum_ghost_alpha": 0.45,
-        "spectrum_ghost_decay": 0.3,
+        "spectrum_ghost_alpha": 0.4,
+        "spectrum_ghost_decay": 0.35,
         "spectrum_ghosting_enabled": true,
         "spectrum_glow_color": [
           110,
@@ -834,8 +832,8 @@
         ],
         "spectrum_profile_floor": 0.12,
         "spectrum_rainbow_border": false,
-        "spectrum_rainbow_enabled": false,
-        "spectrum_rainbow_speed": 0.5,
+        "spectrum_rainbow_enabled": true,
+        "spectrum_rainbow_speed": 0.3,
         "spectrum_render_mode": "bars",
         "spectrum_sensitivity": 0.4,
         "spectrum_shape_nodes": [
