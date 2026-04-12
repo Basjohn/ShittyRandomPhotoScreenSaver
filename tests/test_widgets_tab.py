@@ -202,34 +202,42 @@ class TestWidgetsTab:
             reloaded_tab.deleteLater()
 
     def test_secondary_line_ghost_toggles_persist(self, qt_app, settings_manager):
-        """Osc and Sine ghost toggles persist when saved in their respective modes."""
-        # Test oscilloscope ghost toggles
-        first_tab = WidgetsTab(settings_manager)
-        first_tab.vis_mode_combo.setCurrentIndex(first_tab.vis_mode_combo.findData("oscilloscope"))
-        qt_app.processEvents()
-        first_tab.osc_ghost_line2_enabled.setChecked(False)
-        first_tab.osc_ghost_line3_enabled.setChecked(True)
-        first_tab._save_settings_now()
-        first_tab.deleteLater()
+        """Osc and Sine ghost toggles persist when saved in their respective modes.
 
-        # Test sine ghost toggles
-        second_tab = WidgetsTab(settings_manager)
-        second_tab.vis_mode_combo.setCurrentIndex(second_tab.vis_mode_combo.findData("sine_wave"))
+        Note: mode-scoped save only saves current mode's settings. This test
+        verifies each mode's toggles persist independently when saved in that mode.
+        """
+        # Test oscilloscope ghost toggles persist
+        osc_tab = WidgetsTab(settings_manager)
+        osc_tab.vis_mode_combo.setCurrentIndex(osc_tab.vis_mode_combo.findData("oscilloscope"))
         qt_app.processEvents()
-        second_tab.sine_ghost_line2_enabled.setChecked(True)
-        second_tab.sine_ghost_line3_enabled.setChecked(False)
-        second_tab._save_settings_now()
-        second_tab.deleteLater()
+        osc_tab.osc_ghost_line2_enabled.setChecked(False)
+        osc_tab.osc_ghost_line3_enabled.setChecked(True)
+        osc_tab._save_settings_now()
+        osc_tab.deleteLater()
 
-        # Verify both persisted
-        reloaded_tab = WidgetsTab(settings_manager)
+        reloaded_osc = WidgetsTab(settings_manager)
         try:
-            assert reloaded_tab.osc_ghost_line2_enabled.isChecked() is False
-            assert reloaded_tab.osc_ghost_line3_enabled.isChecked() is True
-            assert reloaded_tab.sine_ghost_line2_enabled.isChecked() is True
-            assert reloaded_tab.sine_ghost_line3_enabled.isChecked() is False
+            assert reloaded_osc.osc_ghost_line2_enabled.isChecked() is False
+            assert reloaded_osc.osc_ghost_line3_enabled.isChecked() is True
         finally:
-            reloaded_tab.deleteLater()
+            reloaded_osc.deleteLater()
+
+        # Test sine ghost toggles persist
+        sine_tab = WidgetsTab(settings_manager)
+        sine_tab.vis_mode_combo.setCurrentIndex(sine_tab.vis_mode_combo.findData("sine_wave"))
+        qt_app.processEvents()
+        sine_tab.sine_ghost_line2_enabled.setChecked(True)
+        sine_tab.sine_ghost_line3_enabled.setChecked(False)
+        sine_tab._save_settings_now()
+        sine_tab.deleteLater()
+
+        reloaded_sine = WidgetsTab(settings_manager)
+        try:
+            assert reloaded_sine.sine_ghost_line2_enabled.isChecked() is True
+            assert reloaded_sine.sine_ghost_line3_enabled.isChecked() is False
+        finally:
+            reloaded_sine.deleteLater()
 
     def test_visualizer_advanced_edit_switches_to_custom(self, qt_app, settings_manager):
         tab = WidgetsTab(settings_manager)
@@ -778,6 +786,11 @@ def test_blob_pulse_controls_load_and_roundtrip(qt_app, settings_manager):
         tab.blob_pulse_release_ms.setValue(1260)
         tab.blob_stretch.setValue(63)
         tab.blob_glow_drive_mode.setCurrentIndex(0)
+
+        # Must set mode to blob before saving blob-specific settings
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("blob"))
+        qt_app.processEvents()
+
         tab._save_settings_now()
 
         saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})

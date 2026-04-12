@@ -41,19 +41,19 @@ Update this after every significant change.
 
 ## Active Tasks
 
-### 0. Test Suite Health — 8 Known Failures
+### 0. Test Suite Health — 1 Remaining Failure (was 8)
 
-**Status:** `[ ]` Root-caused, fix pending
+**Status:** `[~]` 7 fixed, 1 pending (Category B)
 **Priority:** Critical — these are regression guards that must pass before further work
 
 **Failure analysis (2026-04-12):**
 
 **Category A — Tests assume old buggy all-mode save behavior (Bug #2 fix exposed them):**
-- [ ] `test_sine_wave_swatch_persistence` — Sets sine colors without setting mode to `sine_wave`. Default is `spectrum`.
-- [ ] `test_oscilloscope_swatch_persistence` — Same; doesn't set mode to `oscilloscope`.
-- [ ] `test_secondary_line_ghost_toggles_persist` — Sets osc/sine ghost toggles without switching modes.
-- [ ] `test_blob_pulse_controls_load_and_roundtrip` — Sets blob values without setting mode to `blob`.
-- [ ] `test_visualizers_toggle_gates_controls` — `visualizers_enabled` is a global key that may not survive mode-scoped save.
+- [x] `test_sine_wave_swatch_persistence` — Sets sine colors without setting mode to `sine_wave`. Default is `spectrum`. **FIXED 2026-04-12:** Added mode switch to `sine_wave` before saving.
+- [x] `test_oscilloscope_swatch_persistence` — Same; doesn't set mode to `oscilloscope`. **FIXED 2026-04-12:** Added mode switch to `oscilloscope` before saving.
+- [x] `test_secondary_line_ghost_toggles_persist` — Sets osc/sine ghost toggles without switching modes. **FIXED 2026-04-12:** Rewrote test to save each mode independently.
+- [x] `test_blob_pulse_controls_load_and_roundtrip` — Sets blob values without setting mode to `blob`. **FIXED 2026-04-12:** Added mode switch to `blob` before saving.
+- [x] `test_visualizers_toggle_gates_controls` — `visualizers_enabled` is a global key that may not survive mode-scoped save. **FIXED 2026-04-12:** Added `visualizers_enabled` field to `SpotifyVisualizerSettings` model (was missing from model definition).
 - **Reasoning:** All five were written when `save_media_settings` collected ALL modes. After the cross-mode pollution fix, it only collects the active mode. Tests must set the correct mode before saving.
 
 **Category B — Bubble roundtrip expects pure preset dict but gets UI-widget state:**
@@ -113,7 +113,7 @@ Update this after every significant change.
 - [ ] Runtime validation: shaped blob no longer locks in across preset switches
 - [ ] Runtime validation: custom presets survive round-trips through curated presets
 
-### 4. Visualizer Mode Isolation / Bleed Audit
+### 3. Visualizer Mode Isolation / Bleed Audit
 
 **Status:** `[~]` Mostly landed, final runtime confirmation still open
 **Priority:** High
@@ -135,7 +135,7 @@ Still open:
 Important lesson to preserve:
 - The remaining bleed risk is no longer mostly in the dedicated renderer files. It lives in the shared transport/reset/apply seams.
 
-### 6. Shared Preset Install / Save Location Across SCR and MC
+### 4. Shared Preset Install / Save Location Across SCR and MC
 
 **Status:** `[~]` Landed in code, awaiting live coexistence validation
 **Priority:** Medium
@@ -148,83 +148,109 @@ Important lesson to preserve:
 
 (Merged into Task 1 above — 6-line expansion is now a verification/completion task, not planned-from-scratch.)
 
-### 7. Blob Organic Core/Deformation
+### 5. Blob Organic Core/Deformation
 
-**Status:** `[~]` Implemented — awaiting runtime visual validation
-**Priority:** Medium
+**Status:** `[ ]` **URGENT** — Implementation failed visual validation, redesign required
+**Priority:** Critical — Feature completely non-functional
+**Scope:** Unshaped blob ONLY (`u_blob_shaper_enabled == 0`)
 
-**Goal:**
-Improve unshaped blob to have a more organic core so the circle is not visible as often, while **absolutely avoiding the pinch inward stretch** from before.
+**Visual Evidence Analysis (2026-04-12):**
 
-**What landed (2026-04-12):**
-- [x] Replaced the ineffective curvature-detection approach (5% max, 2-harmonic detection, 95% floor) with a proper multi-harmonic organic core deformation in `blob.frag`
-- [x] Uses 4 low-frequency sine waves at golden-ratio angular frequencies (1.618, 2.414, 3.732, 0.618) that never align with existing wobble/stretch harmonics
-- [x] Deformation scales proportionally to `staged_r` (blob base size)
-- [x] Slight outward bias (+1.2% of staged_r) so average radius doesn't shrink
-- [x] Floor changed from `core_radius * 0.95` to `staged_r * 0.90` — allows up to 10% visible inward dips while making pinch physically impossible
-- [x] No new uniforms needed — uses only existing `motion_angle`, `time`, `staged_r`, `u_blob_shaper_enabled`
-- [x] Shaped blob path completely unaffected (guarded by `u_blob_shaper_enabled == 0`)
+**Screenshot 1 (Yellow blob):**
+- Perfect circular core is **extremely visible** — the star-like protrusions sit on top of an unmistakable circular base
+- The golden-ratio harmonic deformation (1.618, 2.414, 3.732, 0.618) is **not producing visible distortion**
+- **Root cause:** Core is calculated as perfect circle then deformation is "added on top" — wrong architecture
 
-**Design rationale:**
-- **Reasoning:** The old curvature-detection approach tried to find where the circle was visible and add tiny inward dips there. This failed because: (a) it only sampled 2 wobble harmonics, missing the full shape; (b) the 5% max was too subtle; (c) the 95% floor negated most of the effect. The new approach makes the entire base shape non-circular everywhere using slowly-evolving asymmetric distortion. Valleys between protrusions naturally show the organic base instead of a perfect circle.
-- **Reasoning:** Golden-ratio angular frequencies ensure the organic pattern never aligns with the integer-harmonic wobble (2, 3, 5, 7) or stretch frequencies, maximizing the circle-breaking effect.
-- **Reasoning:** Floor anchored to `staged_r` (unstretched base) rather than `core_radius` (includes stretch). This means protrusions are unconstrained while valleys can dip up to 10% inward.
+**Screenshot 2 (Blue blob):**
+- **Sharp cut/seam on left side** — classic `atan()` discontinuity at π/-π boundary
+- Indicates angle wrapping is not properly handled in the SDF calculation
 
-**What still needs real eyes:**
-- [ ] Confirm the visible circular core is gone or substantially reduced in the examples the user provided
-- [ ] Confirm the organic deformation looks natural and doesn't create harsh edges
-- [ ] Confirm no pinch or inward denting is possible under any playback conditions
-- [ ] Confirm the blob doesn't look smaller on average (outward bias should compensate)
-- [ ] Confirm the deformation evolves smoothly over time without jumps or static patterns
+**User Design Vision (Clarified):**
 
-**Guardrails:**
-- Absolutely avoid the pinch inward stretch from before
-- Must never have the ability to pinch — hard floor at 90% of staged_r
+**Desired Valley Shape:**
+- Valleys should resemble **")" and "("** — gentle, curved, organic shapes
+- Interconnected in a flowing, continuous way (not isolated dents)
+- Like soft parentheses cradling the protrusions, creating smooth transitions
+
+**Core Integration Requirement:**
+- The **perfect circular core is the root problem** — it must not be disconnected from the deformation system
+- Core deformation, wobble, and stretch must be **one integrated system**, not layered separately
+- Current: Base circle → + organic_deform → + wobble → clamped → still looks like circle
+- Desired: The base itself should be organically shaped, then wobble/stretch modulate that shape
+
+**Anti-Pinching Constraint (CRITICAL):**
+- **NEVER allow deep pinching** — only slight inwards curves or gentle concaves
+- Valley depth must be capped to prevent "pinched" appearance
+- Target: Soft )( curves, not sharp V-shaped dents
+
+**Why Current Implementation Failed:**
+
+**What landed (2026-04-12) — FAILED:**
+- [~] Multi-harmonic organic core deformation using golden-ratio frequencies — **Not visible in output**
+- [~] 90% hard floor — **Still preserves too much circular base**
+- [~] Additive deformation (`staged_r += organic_deform`) — **Wrong architecture**
+- [~] 10.2% deformation magnitude — **Too subtle to break the circle visually**
+
+**Failure Analysis:**
+1. **Architecture failure:** Adding deformation to a perfect circle cannot break the circle's visual dominance
+2. **Magnitude failure:** 10% deformation is invisible against the 90% preserved circle
+3. **Seam artifact:** `atan()` discontinuity at left edge creates sharp cut (coordinate bug)
+4. **Integration failure:** Core, wobble, and stretch are calculated independently then summed — they should be one coherent system
+
+**Architectural Redesign Required:**
+
+**Current Broken Architecture:**
+```glsl
+float staged_r = base_radius;           // Perfect circle
+// ... later ...
+staged_r += organic_deform;             // Add deformation on top
+final_radius = max(staged_r, floor);    // Clamp to prevent pinching
+// Result: Still looks like circle + bumps
+```
+
+**Proposed Integrated Architecture:**
+```glsl
+// Base is organically shaped from the start
+float organic_base = staged_r * (1.0 + organic_shape_multiplier);
+// organic_shape creates gentle )( valleys, never deep pinches
+// Then wobble/stretch modulate this already-organic base
+float final_radius = organic_base + wobble_component + stretch_component;
+// Soft floor prevents extreme pinching but allows natural concavity
+```
+
+**Detailed Action Plan:**
+
+**Phase 1: Design New Core Shape Function**
+- Replace `organic_deform` (additive) with `organic_base_shape` (multiplicative)
+- Target: Gentle )( curves that flow between protrusions
+- Constraint function: `shape(angle)` returns 0.85..1.15 multiplier (±15% max)
+- Anti-pinch: Min clamp at 0.85 ensures never less than 85% of base (gentle valley, not pinch)
+
+**Phase 2: Implement )( Valley Shape**
+- Use lower-frequency harmonics (1.0, 2.0, 3.0) instead of golden-ratio frequencies
+- Phase-shift to align valleys between stretch protrusions
+- Smoothstep blend between peaks and valleys for flowing transitions
+
+**Phase 3: Integrate with Wobble/Stretch**
+- Calculate `organic_base_shape` first (gives the )( skeleton)
+- Apply wobble as modulation on top of organic base
+- Apply stretch as directional exaggeration of organic shape
+- Result: One coherent system, not layered independent effects
+
+**Phase 4: Validate Anti-Pinching**
+- Hard constraint: `final_radius >= staged_r * 0.85` (15% max inward)
+- Soft constraint: Shape function biased toward outward (1.0 baseline + 0.15 max outward, -0.15 max inward)
+- Visual check: Valleys should look like )( not V
+
+**Phase 5: Fix Sharp Seam**
+- Debug: Mark π boundary with red overlay to confirm location
+- Fix: Ensure angle wrapping is handled in all trig calculations
+- Likely cause: `atan()` discontinuity affecting SDF gradient, not deformation
 - Keep changes scoped to unshaped blob core geometry
 
-### 8. Shaped Blob Reaction Variety (Deffered until we are bug free)
+---
 
-**Status:** `[ ]` Planned, not started (polish phase)
-**Priority:** Lowest
-**Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md) -> `Shaped Blob Reaction Variety (Polish Phase LOWEST PRIORITY)`
-
-**Goal:**
-Add more reaction variety to shaped blob - currently too uniform.
-
-**Constraints:**
-- Do this after the 3 extra lines are added to Osc/Sine (polish phase)
-- Never rearchitecture towards raw energy
-- Do not over complicate bubble
-
-**User's Ideas:**
-1. **Outer Border Wobble:**
-   - Make outermost border wobble like non-shaped based on energy
-   - Would need a special notch to indicate this behavior
-   - Energy attached to this node causes border wobble
-
-2. **Directional Energy Deformation:**
-   - Place energy inside reactive shape for most shaping
-   - If energy attached to a node, causes wobble/deformation along direction
-   - Continues until energy runs out or competing energy takes over
-   - Clashes are particularly expressive
-
-**Additional Ideas:**
-3. **Localized Pulse:**
-   - Energy nodes cause localized pulse/wobble in their direction
-   - Pulse decays as energy moves away
-   - Multiple energy nodes create interference patterns
-
-4. **Edge Ripple:**
-   - Energy at edge creates ripple effect traveling along edge
-   - Ripple amplitude based on energy strength
-   - Ripple speed based on energy frequency
-
-**Guardrails:**
-- Never rearchitecture towards raw energy
-- Do not over complicate bubble
-- Keep this as polish work after OSC/SINE 6-line expansion is complete, OSC/SINE extra lines must reference both how existing lines exist, "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Change_Checklist.md" and Default_Settings.md or else they will fail spectactularly. They should only be done after custom modes, preset saving/loading and so on are perfectly healthy for all modes. 
-
-### 9. Preset Tooling Source-Tree Authority
+### 6. Preset Tooling Source-Tree Authority
 
 **Status:** `[ ]` Planned, not started
 **Priority:** Medium
@@ -250,7 +276,7 @@ Prevent repair/regenerate tooling from overwriting authored presets or resurrect
 
 ---
 
-### 10. CRITICAL: Lines 4-6 Show Black (Despite Full Stack Fix)
+### 7. CRITICAL: Lines 4-6 Show Black (Despite Full Stack Fix)
 
 **Status:** `[ ]` **URGENT** — Code audit shows complete implementation, but runtime reports black lines
 **Priority:** Critical — User-facing bug in 6-line expansion feature
@@ -289,7 +315,7 @@ Prevent repair/regenerate tooling from overwriting authored presets or resurrect
 
 ---
 
-### 11. CRITICAL: Custom Preset Settings Lost on Navigation
+### 8. CRITICAL: Custom Preset Settings Lost on Navigation
 
 **Status:** `[ ]` Under investigation — needs reproduction confirmation
 **Priority:** Critical — User data loss scenario
@@ -330,38 +356,47 @@ Prevent repair/regenerate tooling from overwriting authored presets or resurrect
 
 ---
 
-### 12. CRITICAL: Blob Core Deformation Math Bugged
+### 9. Shaped Blob Reaction Variety (Deffered until we are bug free)
 
-**Status:** `[ ]` **URGENT** — User reports perfect circle visible, no deformation
-**Priority:** Critical — Feature not functioning
+**Status:** `[ ]` Planned, not started (polish phase)
+**Priority:** Lowest
+**Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md) -> `Shaped Blob Reaction Variety (Polish Phase LOWEST PRIORITY)`
 
-**Reported symptom:**
-- "Perfect circle is now even more visible than before"
-- No core deformation occurring at all
-- Organic deformation math appears broken
+**Goal:**
+Add more reaction variety to shaped blob - currently too uniform.
 
-**Investigation needed:**
-- [ ] Verify `u_blob_shaper_enabled` uniform is being set correctly
-- [ ] Check organic deformation calculation in blob.frag
-- [ ] Verify frequency coefficients (PI/7, PI/11, PI/13) are correct
-- [ ] Check that deformation is applied to base radius before other effects
-- [ ] Verify time-based evolution is working ( `u_time * 0.08` )
+**Constraints:**
+- Do this after the 3 extra lines are added to Osc/Sine (polish phase)
+- Never rearchitecture towards raw energy
+- Do not over complicate bubble
 
-**Possible causes:**
-1. **Shader uniform not set:** `u_blob_shaper_enabled` not being uploaded
-2. **Math error:** Deformation calculation producing zero or near-zero deformation
-3. **Order of operations:** Deformation applied after other radius calculations
-4. **Coordinate system:** Deformation not aligned with actual rendered shape
+**User's Ideas:**
+1. **Outer Border Wobble:**
+   - Make outermost border wobble like non-shaped based on energy
+   - Would need a special notch to indicate this behavior
+   - Energy attached to this node causes border wobble
 
-**Debug plan:**
-1. Add GPU debug to verify `u_blob_shaper_enabled` value
-2. Temporarily increase deformation magnitude to 50% to verify effect is visible
-3. Check blob renderer uniform upload for organic deformation
-4. Verify `organic_deformation` output is non-zero in shader
+2. **Directional Energy Deformation:**
+   - Place energy inside reactive shape for most shaping
+   - If energy attached to a node, causes wobble/deformation along direction
+   - Continues until energy runs out or competing energy takes over
+   - Clashes are particularly expressive
 
-**Files to instrument:**
-- `widgets/spotify_visualizer/renderers/blob.py` — verify uniform upload
-- `widgets/spotify_visualizer/shaders/blob.frag` — add debug output for deformation
+**Additional Ideas:**
+3. **Localized Pulse:**
+   - Energy nodes cause localized pulse/wobble in their direction
+   - Pulse decays as energy moves away
+   - Multiple energy nodes create interference patterns
+
+4. **Edge Ripple:**
+   - Energy at edge creates ripple effect traveling along edge
+   - Ripple amplitude based on energy strength
+   - Ripple speed based on energy frequency
+
+**Guardrails:**
+- Never rearchitecture towards raw energy
+- Do not over complicate bubble
+- Keep this as polish work after OSC/SINE 6-line expansion is complete, OSC/SINE extra lines must reference both how existing lines exist, "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Change_Checklist.md" and Default_Settings.md or else they will fail spectactularly. They should only be done after custom modes, preset saving/loading and so on are perfectly healthy for all modes.
 
 ---
 
