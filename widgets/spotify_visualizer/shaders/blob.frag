@@ -427,36 +427,33 @@ float blob_sdf_ex(vec2 p, float time,
     float wobble_floor = mix(0.62, 0.76, stage_progress.x);
     final_radius = max(final_radius, core_radius * wobble_floor);
 
-    // Essential inward curves at high-curvature regions for organic core deformation
-    // Detect curvature by analyzing wobble derivative changes
-    // Apply subtle inward deformation (max 2-5% of radius) to break perfect circles
-    float curvature_inward = 0.0;
+    // Organic core deformation — breaks the perfect circular base shape.
+    // Uses low-frequency sine waves at irrational angular frequencies
+    // (golden-ratio multiples) so the pattern continuously evolves, never
+    // repeats the same shape, and never aligns with wobble/stretch harmonics.
+    // Applied to unshaped blob only; shaped blob uses the CPU-solved contour.
+    float organic_deform = 0.0;
     if (u_blob_shaper_enabled == 0) {
-        // Sample wobble at neighboring angles to estimate curvature
-        float angle_step = 0.08;
-        float wobble_plus = sin((motion_angle + angle_step) * 2.0 + time * 0.4) * 0.025 * cw +
-                           sin((motion_angle + angle_step) * 3.0 + time * 1.5) * 0.021 * cw;
-        float wobble_minus = sin((motion_angle - angle_step) * 2.0 + time * 0.4) * 0.025 * cw +
-                            sin((motion_angle - angle_step) * 3.0 + time * 1.5) * 0.021 * cw;
-        float wobble_center = wobble_component;
-        
-        // Curvature is high where wobble changes rapidly (second derivative)
-        float curvature = abs(wobble_plus - 2.0 * wobble_center + wobble_minus);
-        
-        // Apply subtle inward deformation at high-curvature regions
-        // Max 2-5% of radius, never deep enough to pinch
-        float curvature_threshold = 0.003;
-        if (curvature > curvature_threshold) {
-            float inward_strength = smoothstep(curvature_threshold, curvature_threshold * 3.0, curvature);
-            float max_inward = core_radius * 0.05; // Max 5% of radius
-            curvature_inward = -inward_strength * max_inward;
-        }
+        float slow_t = time * 0.15;
+        // Primary lobe — broad asymmetric distortion
+        organic_deform += sin(motion_angle * 1.618 + slow_t * 0.71) * 0.038;
+        // Secondary lobe — different angular pattern
+        organic_deform += sin(motion_angle * 2.414 + slow_t * 1.13 + 0.83) * 0.026;
+        // Tertiary detail — finer organic texture
+        organic_deform += sin(motion_angle * 3.732 - slow_t * 0.53 + 2.15) * 0.016;
+        // Ultra-slow drift — prevents the deformation from looking static
+        organic_deform += sin(motion_angle * 0.618 + slow_t * 0.31 + 4.22) * 0.022;
+        // Scale proportional to blob base size
+        organic_deform *= staged_r;
+        // Slight outward bias so average radius stays close to original
+        organic_deform += staged_r * 0.012;
     }
-    
-    final_radius += curvature_inward;
-    
-    // Final clamp to ensure inward curves never cause pinch
-    final_radius = max(final_radius, core_radius * 0.95);
+    final_radius += organic_deform;
+
+    // Hard floor: never go below 90% of staged base radius.
+    // This absolutely prevents pinch while allowing visible organic shaping
+    // (up to ~10% inward dip in valleys between protrusions).
+    final_radius = max(final_radius, staged_r * 0.90);
 
     return dist - final_radius;
 }

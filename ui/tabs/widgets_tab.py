@@ -1478,7 +1478,10 @@ class WidgetsTab(QWidget):
         working_config = dict(spotify_vis_config)
         working_config['mode'] = mode_key
         applied = apply_preset_to_config(mode_key, preset_index, working_config)
-        spotify_vis_config.update(applied)
+        # Use REPLACE semantics, not merge — .update() would leave stale
+        # custom mode-specific keys (e.g. blob_shaper_enabled) that the
+        # preset didn't include, causing settings to "stick" across presets.
+        restore_visualizer_snapshot(mode_key, spotify_vis_config, applied)
         spotify_vis_config[f"preset_{mode_key}"] = preset_index
 
         # Push preset values into UI widgets so the debounced save reads

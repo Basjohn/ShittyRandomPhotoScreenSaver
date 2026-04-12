@@ -484,7 +484,10 @@ class WidgetManager:
             settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
         applied = apply_preset_to_config(mode, next_idx, working_config)
-        vis_config.update(applied)
+        # Use REPLACE semantics, not merge — .update() would leave stale
+        # custom mode-specific keys (e.g. blob_shaper_enabled) that the
+        # preset didn't include, causing settings to "stick" across presets.
+        restore_visualizer_snapshot(mode, vis_config, applied)
         vis_config[preset_key] = next_idx
 
         if next_idx == custom_index:

@@ -33,21 +33,26 @@ Update this after every significant change.
 
 ### 0. Visualizer Preset/Custom Override Bug Investigation
 
-**Status:** `[x]` COMPLETE - Both bugs fixed, tested, verified
+**Status:** `[~]` Bugs #1/#2 fixed, Bug #3 (call-site merge) fixed — awaiting runtime validation
 **Priority:** Critical
 **Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md)
 **History:** [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) -> `2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution)`
 
 **Summary:**
-- **BUG #1 - MERGE Semantic:** `apply_preset_to_config()` used `merged.update(preset_settings)` which only overwrote keys present in preset. Fixed with CLEAR-then-APPLY pattern.
-- **BUG #2 - Cross-Mode Pollution:** `save_media_settings()` collected settings from ALL modes. Fixed to only collect current mode settings.
-- **Verification:** 73 tests pass, manual verification confirms no cross-mode pollution (Bubble Preset 9 contains only 54 bubble-related keys).
+- **BUG #1 - MERGE Semantic (FIXED):** `apply_preset_to_config()` used `merged.update(preset_settings)` which only overwrote keys present in preset. Fixed with CLEAR-then-APPLY pattern.
+- **BUG #2 - Cross-Mode Pollution (FIXED):** `save_media_settings()` collected settings from ALL modes. Fixed to only collect current mode settings.
+- **BUG #3 - Call-Site MERGE (FIXED 2026-04-12):** Even after Bug #1 was fixed inside `apply_preset_to_config`, the two callers (`_on_visualizer_preset_changed` in `widgets_tab.py` and `cycle_visualizer_preset` in `widget_manager.py`) used `.update()` to merge the result back into the live config. `.update()` only adds/overwrites keys — it never removes stale mode-specific keys (e.g. `blob_shaper_enabled`) that `apply_preset_to_config` had cleared on its internal copy. This caused custom settings like the blob shaper to "stick" across preset switches, making it impossible to exit shaped-blob mode.
+  - **Reasoning:** `apply_preset_to_config` returns a clean dict with stale mode keys removed, but `.update()` merges it as an overlay. The stale keys in the original dict survive untouched.
+  - **Fix:** Both call sites now use `restore_visualizer_snapshot()` instead of `.update()`. This function does proper in-place CLEAR-then-APPLY: it removes mode-specific keys not present in the applied result, then writes the new values.
+  - **Files changed:** `ui/tabs/widgets_tab.py` (line 1484), `rendering/widget_manager.py` (line 490)
+  - **Regression tests:** `test_runtime_cycle_purges_stale_mode_keys_on_preset_switch`, `test_runtime_cycle_custom_roundtrip_preserves_known_custom_keys` in `tests/test_visualizer_preset_cycling_runtime.py`
 
-**All Phases Complete:**
-- [x] Phase 1: Root Cause Analysis - TWO distinct bugs identified
-- [x] Phase 2: Fix Implementation - BOTH BUGS FIXED
-- [x] Phase 3: Regression Tests - 73 tests pass
-- [x] Phase 4: Cross-Mode Verification - Manual verification complete
+**All Phases:**
+- [x] Phase 1: Root Cause Analysis - THREE distinct bugs identified
+- [x] Phase 2: Fix Implementation - ALL THREE BUGS FIXED
+- [x] Phase 3: Regression Tests - 11 cycling tests pass, 295 broader tests pass
+- [x] Phase 4: Cross-Mode Verification - Manual verification complete for Bugs #1/#2
+- [ ] Phase 5: Runtime validation of Bug #3 fix — confirm shaped blob no longer locks in, confirm custom presets survive round-trips through curated presets
 
 **User Guidance:**
 Users who saved custom presets during the buggy period may need to re-save them to remove pollution from other modes' default values.
@@ -277,44 +282,36 @@ Definition of done:
 
 ### 6. Blob Organic Core/Deformation
 
-**Status:** `[ ]` Planned, not started
+**Status:** `[~]` Implemented — awaiting runtime visual validation
 **Priority:** Medium
-**Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md) -> `Next Phase: Blob Organic Core/Deformation`
 
 **Goal:**
 Improve unshaped blob to have a more organic core so the circle is not visible as often, while **absolutely avoiding the pinch inward stretch** from before.
 
-**Constraints:**
-- Never pinch - clamp minimum radius
-- Either organic core connection OR subtle curved inward deformations
-- May apply both approaches
+**What landed (2026-04-12):**
+- [x] Replaced the ineffective curvature-detection approach (5% max, 2-harmonic detection, 95% floor) with a proper multi-harmonic organic core deformation in `blob.frag`
+- [x] Uses 4 low-frequency sine waves at golden-ratio angular frequencies (1.618, 2.414, 3.732, 0.618) that never align with existing wobble/stretch harmonics
+- [x] Deformation scales proportionally to `staged_r` (blob base size)
+- [x] Slight outward bias (+1.2% of staged_r) so average radius doesn't shrink
+- [x] Floor changed from `core_radius * 0.95` to `staged_r * 0.90` — allows up to 10% visible inward dips while making pinch physically impossible
+- [x] No new uniforms needed — uses only existing `motion_angle`, `time`, `staged_r`, `u_blob_shaper_enabled`
+- [x] Shaped blob path completely unaffected (guarded by `u_blob_shaper_enabled == 0`)
 
-**Implementation Plan:**
-1. Add subtle noise-based deformation to core SDF (low-frequency, outward-biased)
-2. Clamp minimum radius to prevent pinch
-3. Optionally: minor inward curves at high-curvature regions (max 2-5% radius)
+**Design rationale:**
+- **Reasoning:** The old curvature-detection approach tried to find where the circle was visible and add tiny inward dips there. This failed because: (a) it only sampled 2 wobble harmonics, missing the full shape; (b) the 5% max was too subtle; (c) the 95% floor negated most of the effect. The new approach makes the entire base shape non-circular everywhere using slowly-evolving asymmetric distortion. Valleys between protrusions naturally show the organic base instead of a perfect circle.
+- **Reasoning:** Golden-ratio angular frequencies ensure the organic pattern never aligns with the integer-harmonic wobble (2, 3, 5, 7) or stretch frequencies, maximizing the circle-breaking effect.
+- **Reasoning:** Floor anchored to `staged_r` (unstretched base) rather than `core_radius` (includes stretch). This means protrusions are unconstrained while valleys can dip up to 10% inward.
 
-**Implementation Ideas:**
-1. **Organic Core Deformation:**
-   - Add subtle noise-based deformation to the core SDF
-   - Use low-frequency noise to avoid harsh edges
-   - Ensure deformation is always outward-biased or symmetric
-   - Clamp minimum radius to prevent pinch
-
-2. **Subtle Inward Curves:**
-   - Detect where outer circles are visible (high curvature regions)
-   - Apply extremely minor inward deformation at those spots
-   - Clamp deformation to be very subtle (e.g., max 2-5% of radius)
-   - Ensure inward deformation never creates pinch points
-
-3. **Combined Approach:**
-   - Use organic core deformation for general shape
-   - Use subtle inward curves only at specific high-curvature points
-   - Ensure both approaches respect the no-pinch constraint
+**What still needs real eyes:**
+- [ ] Confirm the visible circular core is gone or substantially reduced in the examples the user provided
+- [ ] Confirm the organic deformation looks natural and doesn't create harsh edges
+- [ ] Confirm no pinch or inward denting is possible under any playback conditions
+- [ ] Confirm the blob doesn't look smaller on average (outward bias should compensate)
+- [ ] Confirm the deformation evolves smoothly over time without jumps or static patterns
 
 **Guardrails:**
 - Absolutely avoid the pinch inward stretch from before
-- Must never have the ability to pinch
+- Must never have the ability to pinch — hard floor at 90% of staged_r
 - Keep changes scoped to unshaped blob core geometry
 
 ### 7. Shaped Blob Reaction Variety
@@ -358,6 +355,30 @@ Add more reaction variety to shaped blob - currently too uniform.
 - Never rearchitecture towards raw energy
 - Do not over complicate bubble
 - Keep this as polish work after OSC/SINE 6-line expansion is complete, OSC/SINE extra lines must reference both how existing lines exist, "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Change_Checklist.md" and Default_Settings.md or else they will fail spectactularly. They should only be done after custom modes, preset saving/loading and so on are perfectly healthy for all modes. 
+
+### 8. Preset Tooling Source-Tree Authority
+
+**Status:** `[ ]` Planned, not started
+**Priority:** Medium
+
+**Goal:**
+Prevent repair/regenerate tooling from overwriting authored presets or resurrecting retired presets. The source tree in `presets/visualizer_modes` is authoritative — tooling must not add keys the author chose to omit or resurrect files the author deleted.
+
+**Known issues:**
+- `tools/visualizer_preset_repair.py --repair-all` backfills "mandatory" keys that may have been intentionally omitted by the author
+- Regenerate tooling can resurrect retired presets if the source tree has been cleaned but the generated tree hasn't
+- No guard prevents the repair tool from adding back keys the author explicitly removed
+
+**Plan:**
+- [ ] Audit `_sanitize_settings` in `visualizer_preset_repair.py` for any backfill logic that adds keys not already present in the authored payload
+- [ ] Add a `--source-authoritative` mode (or make it default) where the repair tool only removes junk/deprecated keys but never adds missing ones
+- [ ] Ensure `regenerate_visualizer_shipped_presets.py` only mirrors what exists in the source tree — no resurrection of deleted files
+- [ ] Add a test that authored presets survive a repair round-trip without gaining new keys
+
+**Guardrails:**
+- Source tree (`presets/visualizer_modes/`) is the single source of truth for curated presets
+- Tooling may clean (remove junk), rename, reindex, but must not add or backfill
+- If a key is absent from an authored preset, the runtime should use its default, not a tooling-injected value
 
 ---
 

@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QPoint, QRect, Qt
 from core.settings.visualizer_presets import (
     VISUALIZER_CUSTOM_STORAGE_KEY,
     get_custom_preset_index,
+    get_preset_count,
 )
 from rendering.input_handler import InputHandler
 from rendering.widget_manager import WidgetManager
@@ -274,3 +275,89 @@ def test_input_handler_routes_visualizer_back_button():
 
     assert handled is True
     vis.handle_mouse_button.assert_called_once_with(Qt.MouseButton.XButton1)
+
+
+def test_runtime_cycle_purges_stale_mode_keys_on_preset_switch(settings_manager, monkeypatch):
+    """Cycling from a preset with extra mode keys to one without must purge stale keys.
+
+    Regression test for the call-site MERGE bug: apply_preset_to_config correctly
+    CLEAR+APPLYs on its copy, but the caller used .update() which never removed
+    keys absent from the applied result. This caused custom-only keys like
+    blob_shaper_enabled to persist across preset switches.
+    """
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+    wm._refresh_spotify_visualizer_config = MagicMock()
+
+    custom_index = get_custom_preset_index("blob")
+    preset_count = get_preset_count("blob")
+    assert preset_count >= 2
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg.update({
+        "mode": "blob",
+        "preset_blob": custom_index,
+        "blob_shaper_enabled": True,
+        "blob_stretch": 0.5,
+        "blob_color": [255, 0, 128, 255],
+        "blob_some_custom_only_key": 42,
+    })
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    assert wm.cycle_visualizer_preset("blob", 1) is True
+
+    updated_widgets = settings_manager.get("widgets", {}) or {}
+    updated_vis = updated_widgets.get("spotify_visualizer", {}) or {}
+
+    assert updated_vis.get("preset_blob") == 0
+
+    assert "blob_some_custom_only_key" not in updated_vis, (
+        "Stale custom-only blob key survived preset switch — "
+        "call-site merge bug is back"
+    )
+
+    curated_has_shaper = "blob_shaper_enabled" in updated_vis
+    if curated_has_shaper:
+        pass
+    else:
+        assert "blob_shaper_enabled" not in updated_vis, (
+            "blob_shaper_enabled survived from Custom into a curated preset "
+            "that does not declare it — call-site merge bug is back"
+        )
+
+
+def test_runtime_cycle_custom_roundtrip_preserves_known_custom_keys(settings_manager, monkeypatch):
+    """Custom → Curated → Custom must restore real custom keys via snapshot."""
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+    wm._refresh_spotify_visualizer_config = MagicMock()
+
+    custom_index = get_custom_preset_index("blob")
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg.update({
+        "mode": "blob",
+        "preset_blob": custom_index,
+        "blob_stretch": 0.33,
+        "blob_constant_wobble": 1.42,
+    })
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    assert wm.cycle_visualizer_preset("blob", 1) is True
+
+    assert wm.cycle_visualizer_preset("blob", -1) is True
+
+    restored = (settings_manager.get("widgets", {}) or {}).get("spotify_visualizer", {}) or {}
+    assert restored.get("preset_blob") == custom_index
+    assert restored.get("blob_stretch") == pytest.approx(0.33), (
+        "Custom snapshot should restore blob_stretch after round-trip"
+    )
+    assert restored.get("blob_constant_wobble") == pytest.approx(1.42), (
+        "Custom snapshot should restore blob_constant_wobble after round-trip"
+    )
