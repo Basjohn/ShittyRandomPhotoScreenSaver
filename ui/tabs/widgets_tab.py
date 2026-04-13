@@ -1284,14 +1284,23 @@ class WidgetsTab(QWidget):
         media_config, spotify_vis_config = save_media_settings(self)
         reddit_config, reddit2_config = save_reddit_settings(self)
 
-        spotify_vis_config = normalize_visualizer_section_mapping(
-            spotify_vis_config,
-            apply_preset_overlay=False,
-        )
-
         existing_widgets = self._settings.get('widgets', {})
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
+
+        # Merge current-mode visualizer settings into the existing config so
+        # that other modes' persisted keys are preserved across save cycles.
+        # save_media_settings only collects shared + active-mode keys; without
+        # the merge every save would wipe all inactive-mode settings.
+        existing_vis = existing_widgets.get('spotify_visualizer', {})
+        if not isinstance(existing_vis, dict):
+            existing_vis = {}
+        existing_vis.update(spotify_vis_config)
+
+        spotify_vis_config = normalize_visualizer_section_mapping(
+            existing_vis,
+            apply_preset_overlay=False,
+        )
 
         # Global widget shadow configuration
         shadows_config = existing_widgets.get('shadows', {})

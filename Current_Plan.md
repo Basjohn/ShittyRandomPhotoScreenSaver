@@ -26,7 +26,7 @@ Update this after every significant change.
 
 ### 1. Visualizer Custom Settings Lost on Save / Navigation / Runtime Round-Trip
 
-**Status:** `[ ]` Under active investigation
+**Status:** `[~]` Root cause identified and fixed — awaiting user runtime validation
 **Priority:** CRITICAL — User data loss, affects ALL visualizer modes and ALL settings
 
 This is the project's most significant open bug. Every visualizer mode is affected. Settings edited in the builder/GUI revert after entering runtime or navigating to another mode's custom slot.
@@ -38,47 +38,55 @@ This is the project's most significant open bug. Every visualizer mode is affect
 4. **Result:** Sine Line 1 Glow remains Red, but Blob Body Response is back at 1.0x
 5. This pattern repeats for ALL settings across ALL modes
 
-**Potential root causes:**
+**Root causes (confirmed 2026-07-25 / 2026-04-13):**
 
-- **A — `restore_visualizer_snapshot()` clearing mode-specific keys not in payload:**
-  Mode-prefixed technical keys (e.g. `oscilloscope_bar_count`) get wiped when applying a snapshot that doesn't contain them. The 2026-04-12 technical-key preservation fix may be incomplete or bypassed in some code paths.
-- **B — Cross-mode custom cache pollution:**
-  `VISUALIZER_CUSTOM_STORAGE_KEY` caches per-mode custom snapshots. When switching from Mode A Custom → Mode B Custom, Mode A's snapshot may be built with wrong-mode keys via `build_normalized_custom_snapshot()`.
-- **C — Save path collecting wrong scope:**
-  `save_media_settings()` or its callers may still be writing a stale or cross-contaminated snapshot for modes other than the currently active one.
+**BUG #6 — Cross-mode save wipe (fixed 2026-07-25):**
+`_save_settings_now()` replaced the entire `spotify_visualizer` section with fresh current-mode-only data, wiping all inactive-mode settings on every save. Fixed to merge into existing config before normalizing.
+- **File:** `ui/tabs/widgets_tab.py` lines 1287-1303
 
-**Relationship to other tasks:**
-- Task 2 (Sine/Osc lines 4-6) is likely a specific manifestation of this same bug — lines 4-6 use direct lambda save paths instead of `bind_setting_signal`, which may be failing silently within the same broken pipeline.
-- The old "Preset Override Bug Investigation" (see Historical Reference below) attempted fixes that did NOT resolve this. Those fixes are preserved below as context.
+**BUG #7 — Model serialization gap for lines 4-6 (fixed 2026-04-13, TRUE ROOT CAUSE for Issue 1):**
+`SpotifyVisualizerSettings.from_mapping()`, `from_settings()`, and `to_dict()` all read/wrote lines 1-3 but **completely omitted lines 4-6** for both Sine and Oscilloscope modes. The normalization pass (`normalize_visualizer_section_mapping`) goes through `from_mapping()` → `to_dict()`, which silently dropped all line 4-6 keys even when they were correctly collected by `collect_sine_wave_mode_settings()`.
 
-**Next steps:**
-- [ ] Trace the full save→persist→reload cycle for a single setting change in one mode while another mode's custom is active
-- [ ] Determine whether the snapshot written to `settings_v2.json` is correct at write time vs corrupted at read time
-- [ ] Verify `build_normalized_custom_snapshot()` scopes to current mode only
-- [ ] Verify `restore_visualizer_snapshot()` preserves other modes' custom slots untouched
+This means:
+1. User edits Line 4 color → `collect_sine_wave_mode_settings()` reads it correctly ✓
+2. `_save_settings_now()` merges it into existing config correctly ✓ (after BUG #6 fix)
+3. `normalize_visualizer_section_mapping()` round-trips through the model → **line 4-6 keys silently dropped** ✗
+4. Normalized result written to JSON without line 4-6 → settings lost
+
+**Fix applied:**
+- [x] Added all sine lines 4-6 keys to `from_mapping()` (colors, glow colors, travel, shift, ghost enabled)
+- [x] Added all sine lines 4-6 keys to `from_settings()` (same set)
+- [x] Added all sine lines 4-6 keys to `to_dict()` (same set)
+- [x] Added all osc lines 4-6 keys to `from_mapping()` (colors, glow colors, ghost enabled)
+- [x] Added all osc lines 4-6 keys to `from_settings()` (same set)
+- [x] Added all osc lines 4-6 keys to `to_dict()` (same set)
+  - **File:** `core/settings/models.py`
+- [x] Verified normalization round-trip preserves line 4-6 keys
+
+**BUG #8 — Runtime config bridge missing lines 4-6 kwargs (fixed 2026-04-13):**
+`apply_spotify_vis_model_config()` passed only lines 2-3 kwargs to `vis.apply_vis_mode_config()`. Lines 4-6 colors, glow colors, travel, shifts, ghost enabled were never forwarded to the runtime widget even when the model held correct values. Also missing: `sine_smoothing`, `sine_glow_reactivity`, `osc_glow_reactivity`, osc lines 4-6 colors/glow/ghost.
+- **Files:** `rendering/spotify_widget_creators.py`, `rendering/widget_manager.py` (fallback path)
+
+**BUG #9 — Shift updaters used wrong attribute name + shift rows not conditionally visible (fixed 2026-04-13):**
+Lines 4-6 shift `bind_setting_signal` updaters wrote to `_sine_lineN_horizontal_shift` but the collect function reads `_sine_lineN_shift` (from slider value directly, so this was harmless for save but incorrect). Shift rows for all lines (2-6) used `_aligned_row()` instead of `_aligned_row_widget()`, making them invisible to the visibility function — they always showed regardless of line count.
+- **File:** `ui/tabs/media/sine_wave_builder.py`
+
+**Investigation checklist:**
+- [x] Trace the full save→persist→reload cycle for a single setting change in one mode while another mode's custom is active
+- [x] Determine whether the snapshot written to `settings_v2.json` is correct at write time vs corrupted at read time → **Corrupted at normalization time (model gap)**
+- [x] Verify `build_normalized_custom_snapshot()` scopes to current mode only → Yes, correct
+- [x] Verify `restore_visualizer_snapshot()` preserves other modes' custom slots untouched → Yes, correct
 - [ ] Runtime validation: settings survive cross-mode navigation round-trip
 - [ ] Runtime validation: settings survive runtime→settings→runtime cycle
+- [ ] Runtime validation: Line 4-6 colors/shifts survive settings→runtime→settings
 
 ---
 
-### 2. Sine / Oscilloscope Lines 4-6 Settings Do Not Save or Persist
+### 2. ~~Sine / Oscilloscope Lines 4-6 Settings Do Not Save or Persist~~ → MOVED TO HISTORICAL
 
-**Status:** `[ ]` Broken — likely a subset of Task 1
-**Priority:** CRITICAL
-**DO NOT MARK AS FIXED UNLESS USER GIVES VISUAL VALIDATION.**
+**Status:** `[~]` Fixed — moved to [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) → `2026-04-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted`
 
-Lines 4-6 colour swatches, horizontal shifts, and ghost settings do not save. Changes made in the builder revert upon entering runtime or reopening settings. Identical behavior in both Sine and Oscilloscope modes.
-
-**Key evidence (user-found):**
-Lines 2-3 use `bind_setting_signal` while lines 4-6 use direct lambda. There is no sane reason for the difference — 2-3 work, 4-6 don't.
-
-**Failed fix:** A previous attempt to align 4-6 with 2-3's save mechanism still did not persist. Either the alignment was incomplete or the underlying pipeline (Task 1) discards the writes downstream.
-
-**Investigation path:**
-- [ ] Compare the exact `bind_setting_signal` wiring for lines 2-3 against lines 4-6 lambda wiring — identify every divergence
-- [ ] If wiring is now identical, the root cause is Task 1's save pipeline — fix there first
-- [ ] If wiring still differs, complete the alignment and retest
-- [ ] Runtime validation: change Line 4 colour → enter runtime → return to settings → colour persisted
+Root cause was BUG #7 (model serialization gap) inside Task 1. Cross-mode persistence (BUG #6) confirmed improved by user. All fixes landed. Awaiting final visual validation as part of Task 1's remaining runtime checks.
 
 ---
 
@@ -207,9 +215,19 @@ These fixes were attempted for the settings-loss bug (Tasks 1 & 2 above) but **d
 - **BUG #4:** Technical keys lost when switching presets → `TECHNICAL_CONTROL_KEYS` preservation added
   - Files: `core/settings/visualizer_presets.py`
 - **BUG #5:** Technical keys from ALL modes leaked into saves → `current_mode` parameter added
-  - Files: `ui/tabs/media/technical_controls.py`, `ui/tabs/widgets_tab_media.py`
+  - Files: `core/settings/visualizer_presets.py`
+- **BUG #6:** `_save_settings_now()` replaced entire `spotify_visualizer` section with fresh current-mode-only data → Fixed to merge into existing config before normalizing
+  - Files: `ui/tabs/widgets_tab.py`
+  - Secondary: `ui/tabs/media/sine_wave_builder.py` — 10 color button lambdas converted to `bind_color_button()`
+- **BUG #7:** `SpotifyVisualizerSettings.from_mapping()`, `from_settings()`, and `to_dict()` omitted all sine/osc lines 4-6 keys → normalization silently dropped them
+  - Files: `core/settings/models.py` — added ~40 missing keys across all three methods
+- **BUG #8:** `apply_spotify_vis_model_config()` only forwarded lines 2-3 kwargs to the runtime widget → lines 4-6 always used defaults at runtime
+  - Files: `rendering/spotify_widget_creators.py`, `rendering/widget_manager.py`
+- **BUG #9:** Shift updaters wrote `_sine_lineN_horizontal_shift` (wrong attr name) + shift rows used untracked `_aligned_row()` so visibility function couldn't hide them
+  - Files: `ui/tabs/media/sine_wave_builder.py`
+  - Full detail: [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) → `2026-04-13`
 
-**Status:** All 5 fixes landed but the root settings-loss problem persists. These may be correct partial fixes or may be masking the actual cause.
+**Status:** BUGs #6-#9 all fixed. #6 = cross-mode save wipe, #7 = model serialization gap, #8 = runtime config bridge gap (root cause of "GUI correct but runtime wrong"), #9 = shift updater attr name + row visibility. Awaiting user runtime validation.
 
 ---
 

@@ -37,31 +37,28 @@ def _update_sine_multi_line_visibility(tab) -> None:
     show_l4 = enabled and line_count is not None and line_count.value() >= 4
     show_l5 = enabled and line_count is not None and line_count.value() >= 5
     show_l6 = enabled and line_count is not None and line_count.value() >= 6
-    for w in (getattr(tab, '_sine_line2_ghost_row_widget', None),):
+    for w in (getattr(tab, '_sine_line2_ghost_row_widget', None),
+              getattr(tab, '_sine_l2_shift_row_widget', None)):
         if w is not None:
             w.setVisible(bool(show_l2))
-    for w in (getattr(tab, '_sine_line3_label', None), getattr(tab, '_sine_l3_row_widget', None)):
+    for w in (getattr(tab, '_sine_line3_label', None), getattr(tab, '_sine_l3_row_widget', None),
+              getattr(tab, '_sine_line3_ghost_row_widget', None),
+              getattr(tab, '_sine_l3_shift_row_widget', None)):
         if w is not None:
             w.setVisible(bool(show_l3))
-    for w in (getattr(tab, '_sine_line3_ghost_row_widget', None),):
-        if w is not None:
-            w.setVisible(bool(show_l3))
-    for w in (getattr(tab, '_sine_line4_label', None), getattr(tab, '_sine_l4_row_widget', None)):
-        if w is not None:
-            w.setVisible(bool(show_l4))
-    for w in (getattr(tab, '_sine_line4_ghost_row_widget', None),):
+    for w in (getattr(tab, '_sine_line4_label', None), getattr(tab, '_sine_l4_row_widget', None),
+              getattr(tab, '_sine_line4_ghost_row_widget', None),
+              getattr(tab, '_sine_l4_shift_row_widget', None)):
         if w is not None:
             w.setVisible(bool(show_l4))
-    for w in (getattr(tab, '_sine_line5_label', None), getattr(tab, '_sine_l5_row_widget', None)):
+    for w in (getattr(tab, '_sine_line5_label', None), getattr(tab, '_sine_l5_row_widget', None),
+              getattr(tab, '_sine_line5_ghost_row_widget', None),
+              getattr(tab, '_sine_l5_shift_row_widget', None)):
         if w is not None:
             w.setVisible(bool(show_l5))
-    for w in (getattr(tab, '_sine_line5_ghost_row_widget', None),):
-        if w is not None:
-            w.setVisible(bool(show_l5))
-    for w in (getattr(tab, '_sine_line6_label', None), getattr(tab, '_sine_l6_row_widget', None)):
-        if w is not None:
-            w.setVisible(bool(show_l6))
-    for w in (getattr(tab, '_sine_line6_ghost_row_widget', None),):
+    for w in (getattr(tab, '_sine_line6_label', None), getattr(tab, '_sine_l6_row_widget', None),
+              getattr(tab, '_sine_line6_ghost_row_widget', None),
+              getattr(tab, '_sine_l6_shift_row_widget', None)):
         if w is not None:
             w.setVisible(bool(show_l6))
 
@@ -599,7 +596,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l2_color_col.addWidget(sine_l2_color_label)
     tab.sine_line2_color_btn = ColorSwatchButton(title="Line 2 Color")
     tab.sine_line2_color_btn.setToolTip("Sine wave line 2 colour")
-    tab.sine_line2_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line2_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line2_color_btn, '_sine_line2_color')
     sine_l2_color_col.addWidget(tab.sine_line2_color_btn)
     sine_l2_row.addLayout(sine_l2_color_col)
 
@@ -609,7 +606,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l2_glow_col.addWidget(sine_l2_glow_label)
     tab.sine_line2_glow_btn = ColorSwatchButton(title="Line 2 Glow Color")
     tab.sine_line2_glow_btn.setToolTip("Sine wave line 2 glow colour")
-    tab.sine_line2_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line2_glow_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line2_glow_btn, '_sine_line2_glow_color')
     sine_l2_glow_col.addWidget(tab.sine_line2_glow_btn)
     sine_l2_row.addLayout(sine_l2_glow_col)
     sine_l2_travel_col = QVBoxLayout()
@@ -640,7 +637,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l2_ghost_row.addStretch()
 
     # Line 2 horizontal shift
-    sine_l2_shift_row = _aligned_row(sine_ml_layout, "Line 2 Horizontal Shift:")
+    tab._sine_l2_shift_row_widget, sine_l2_shift_row = _aligned_row_widget(sine_ml_layout, "Line 2 Horizontal Shift:")
     tab.sine_line2_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line2_shift.setMinimum(-100)
     tab.sine_line2_shift.setMaximum(100)
@@ -671,7 +668,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l3_color_col.addWidget(sine_l3_color_label)
     tab.sine_line3_color_btn = ColorSwatchButton(title="Line 3 Color")
     tab.sine_line3_color_btn.setToolTip("Sine wave line 3 colour")
-    tab.sine_line3_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line3_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line3_color_btn, '_sine_line3_color')
     sine_l3_color_col.addWidget(tab.sine_line3_color_btn)
     sine_l3_content.addLayout(sine_l3_color_col)
 
@@ -681,7 +678,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l3_glow_col.addWidget(sine_l3_glow_label)
     tab.sine_line3_glow_btn = ColorSwatchButton(title="Line 3 Glow Color")
     tab.sine_line3_glow_btn.setToolTip("Sine wave line 3 glow colour")
-    tab.sine_line3_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line3_glow_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line3_glow_btn, '_sine_line3_glow_color')
     sine_l3_glow_col.addWidget(tab.sine_line3_glow_btn)
     sine_l3_content.addLayout(sine_l3_glow_col)
 
@@ -714,7 +711,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l3_content.addStretch()
 
     # Line 3 horizontal shift
-    sine_l3_shift_row = _aligned_row(sine_ml_layout, "Line 3 Horizontal Shift:")
+    tab._sine_l3_shift_row_widget, sine_l3_shift_row = _aligned_row_widget(sine_ml_layout, "Line 3 Horizontal Shift:")
     tab.sine_line3_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line3_shift.setMinimum(-100)
     tab.sine_line3_shift.setMaximum(100)
@@ -746,7 +743,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l4_color_col.addWidget(sine_l4_color_label)
     tab.sine_line4_color_btn = ColorSwatchButton(title="Line 4 Color")
     tab.sine_line4_color_btn.setToolTip("Sine wave line 4 colour")
-    tab.sine_line4_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line4_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line4_color_btn, '_sine_line4_color')
     sine_l4_color_col.addWidget(tab.sine_line4_color_btn)
     sine_l4_content.addLayout(sine_l4_color_col)
 
@@ -756,7 +753,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l4_glow_col.addWidget(sine_l4_glow_label)
     tab.sine_line4_glow_btn = ColorSwatchButton(title="Line 4 Glow Color")
     tab.sine_line4_glow_btn.setToolTip("Sine wave line 4 glow colour")
-    tab.sine_line4_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line4_glow_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line4_glow_btn, '_sine_line4_glow_color')
     sine_l4_glow_col.addWidget(tab.sine_line4_glow_btn)
     sine_l4_content.addLayout(sine_l4_glow_col)
 
@@ -789,7 +786,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l4_content.addStretch()
 
     # Line 4 horizontal shift
-    sine_l4_shift_row = _aligned_row(sine_ml_layout, "Line 4 Horizontal Shift:")
+    tab._sine_l4_shift_row_widget, sine_l4_shift_row = _aligned_row_widget(sine_ml_layout, "Line 4 Horizontal Shift:")
     tab.sine_line4_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line4_shift.setMinimum(-100)
     tab.sine_line4_shift.setMaximum(100)
@@ -803,7 +800,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     bind_setting_signal(
         tab,
         tab.sine_line4_shift.valueChanged,
-        updater=lambda v: setattr(tab, '_sine_line4_horizontal_shift', v),
+        updater=lambda v: setattr(tab, '_sine_line4_shift', v),
         auto_switch=False,
     )
     tab.sine_line4_shift_label = QLabel(f"{sine_l4_shift_val / 100.0:.2f} cycles")
@@ -826,7 +823,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l5_color_col.addWidget(sine_l5_color_label)
     tab.sine_line5_color_btn = ColorSwatchButton(title="Line 5 Color")
     tab.sine_line5_color_btn.setToolTip("Sine wave line 5 colour")
-    tab.sine_line5_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line5_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line5_color_btn, '_sine_line5_color')
     sine_l5_color_col.addWidget(tab.sine_line5_color_btn)
     sine_l5_content.addLayout(sine_l5_color_col)
 
@@ -836,7 +833,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l5_glow_col.addWidget(sine_l5_glow_label)
     tab.sine_line5_glow_btn = ColorSwatchButton(title="Line 5 Glow Color")
     tab.sine_line5_glow_btn.setToolTip("Sine wave line 5 glow colour")
-    tab.sine_line5_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line5_glow_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line5_glow_btn, '_sine_line5_glow_color')
     sine_l5_glow_col.addWidget(tab.sine_line5_glow_btn)
     sine_l5_content.addLayout(sine_l5_glow_col)
 
@@ -869,7 +866,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l5_content.addStretch()
 
     # Line 5 horizontal shift
-    sine_l5_shift_row = _aligned_row(sine_ml_layout, "Line 5 Horizontal Shift:")
+    tab._sine_l5_shift_row_widget, sine_l5_shift_row = _aligned_row_widget(sine_ml_layout, "Line 5 Horizontal Shift:")
     tab.sine_line5_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line5_shift.setMinimum(-100)
     tab.sine_line5_shift.setMaximum(100)
@@ -883,7 +880,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     bind_setting_signal(
         tab,
         tab.sine_line5_shift.valueChanged,
-        updater=lambda v: setattr(tab, '_sine_line5_horizontal_shift', v),
+        updater=lambda v: setattr(tab, '_sine_line5_shift', v),
         auto_switch=False,
     )
     tab.sine_line5_shift_label = QLabel(f"{sine_l5_shift_val / 100.0:.2f} cycles")
@@ -906,7 +903,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l6_color_col.addWidget(sine_l6_color_label)
     tab.sine_line6_color_btn = ColorSwatchButton(title="Line 6 Color")
     tab.sine_line6_color_btn.setToolTip("Sine wave line 6 colour")
-    tab.sine_line6_color_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line6_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line6_color_btn, '_sine_line6_color')
     sine_l6_color_col.addWidget(tab.sine_line6_color_btn)
     sine_l6_content.addLayout(sine_l6_color_col)
 
@@ -916,7 +913,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l6_glow_col.addWidget(sine_l6_glow_label)
     tab.sine_line6_glow_btn = ColorSwatchButton(title="Line 6 Glow Color")
     tab.sine_line6_glow_btn.setToolTip("Sine wave line 6 glow colour")
-    tab.sine_line6_glow_btn.color_changed.connect(lambda c: (setattr(tab, '_sine_line6_glow_color', c), tab._save_settings()))
+    bind_color_button(tab, tab.sine_line6_glow_btn, '_sine_line6_glow_color')
     sine_l6_glow_col.addWidget(tab.sine_line6_glow_btn)
     sine_l6_content.addLayout(sine_l6_glow_col)
 
@@ -949,7 +946,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l6_content.addStretch()
 
     # Line 6 horizontal shift
-    sine_l6_shift_row = _aligned_row(sine_ml_layout, "Line 6 Horizontal Shift:")
+    tab._sine_l6_shift_row_widget, sine_l6_shift_row = _aligned_row_widget(sine_ml_layout, "Line 6 Horizontal Shift:")
     tab.sine_line6_shift = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.sine_line6_shift.setMinimum(-100)
     tab.sine_line6_shift.setMaximum(100)
@@ -963,7 +960,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     bind_setting_signal(
         tab,
         tab.sine_line6_shift.valueChanged,
-        updater=lambda v: setattr(tab, '_sine_line6_horizontal_shift', v),
+        updater=lambda v: setattr(tab, '_sine_line6_shift', v),
         auto_switch=False,
     )
     tab.sine_line6_shift_label = QLabel(f"{sine_l6_shift_val / 100.0:.2f} cycles")
