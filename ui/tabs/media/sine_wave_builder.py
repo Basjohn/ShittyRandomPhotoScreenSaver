@@ -800,7 +800,12 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line4_shift.setToolTip(
         "Phase offset for line 4 relative to card width (negative = lead, positive = lag)."
     )
-    tab.sine_line4_shift.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_line4_shift.valueChanged,
+        updater=lambda v: setattr(tab, '_sine_line4_horizontal_shift', v),
+        auto_switch=False,
+    )
     tab.sine_line4_shift_label = QLabel(f"{sine_l4_shift_val / 100.0:.2f} cycles")
     tab.sine_line4_shift.valueChanged.connect(
         lambda v: tab.sine_line4_shift_label.setText(f"{v / 100.0:.2f} cycles")
@@ -875,7 +880,12 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line5_shift.setToolTip(
         "Phase offset for line 5 relative to card width (negative = lead, positive = lag)."
     )
-    tab.sine_line5_shift.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_line5_shift.valueChanged,
+        updater=lambda v: setattr(tab, '_sine_line5_horizontal_shift', v),
+        auto_switch=False,
+    )
     tab.sine_line5_shift_label = QLabel(f"{sine_l5_shift_val / 100.0:.2f} cycles")
     tab.sine_line5_shift.valueChanged.connect(
         lambda v: tab.sine_line5_shift_label.setText(f"{v / 100.0:.2f} cycles")
@@ -950,7 +960,12 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.sine_line6_shift.setToolTip(
         "Phase offset for line 6 relative to card width (negative = lead, positive = lag)."
     )
-    tab.sine_line6_shift.valueChanged.connect(tab._save_settings)
+    bind_setting_signal(
+        tab,
+        tab.sine_line6_shift.valueChanged,
+        updater=lambda v: setattr(tab, '_sine_line6_horizontal_shift', v),
+        auto_switch=False,
+    )
     tab.sine_line6_shift_label = QLabel(f"{sine_l6_shift_val / 100.0:.2f} cycles")
     tab.sine_line6_shift.valueChanged.connect(
         lambda v: tab.sine_line6_shift_label.setText(f"{v / 100.0:.2f} cycles")
