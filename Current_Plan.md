@@ -225,9 +225,83 @@ These fixes were attempted for the settings-loss bug (Tasks 1 & 2 above) but **d
   - Files: `rendering/spotify_widget_creators.py`, `rendering/widget_manager.py`
 - **BUG #9:** Shift updaters wrote `_sine_lineN_horizontal_shift` (wrong attr name) + shift rows used untracked `_aligned_row()` so visibility function couldn't hide them
   - Files: `ui/tabs/media/sine_wave_builder.py`
+- **BUG #10:** `SpotifyBarsGLOverlay.set_state()` accepted `sine_line4/5/6_shift` and `sine_travel_line4/5/6` as parameters but **never stored them to `self`** → always used default 0 at GL level despite model and widget having correct values
+  - Files: `widgets/spotify_bars_gl_overlay.py`
   - Full detail: [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) → `2026-04-13`
 
-**Status:** BUGs #6-#9 all fixed. #6 = cross-mode save wipe, #7 = model serialization gap, #8 = runtime config bridge gap (root cause of "GUI correct but runtime wrong"), #9 = shift updater attr name + row visibility. Awaiting user runtime validation.
+**Status:** BUGs #6-#10 all fixed. #6 = cross-mode save wipe, #7 = model serialization gap, #8 = runtime config bridge gap, #9 = shift updater attr name + row visibility, #10 = overlay set_state dropped shift/travel for lines 4-6. Awaiting user runtime validation.
+
+---
+
+### 3. Bubble Bounce Physics
+
+**Status:** `[ ]` Not started — promoted from Idea Box
+
+**Goal:** Bubbles should bounce gently off each other instead of overlapping. This should be an adjustable setting. The existing `_apply_soft_separation()` in `bubble_simulation.py` already pushes overlapping bubbles apart with class-based strength — but it uses a pure position-correction approach (no velocity reflection). The result is that overlapping bubbles separate but don't visually *bounce*.
+
+**Proposed Architecture:**
+
+The bounce system replaces `_apply_soft_separation()` with `_apply_bounce_physics()`. On collision, each bubble pair has its velocity reflected along the collision normal (elastic collision), scaled by a bounce strength factor. Bubbles that don't bounce (governed by the Bounce % slider) fall through to the existing soft-push behavior so they still separate gently without bouncing.
+
+**Settings to add:**
+
+| Setting key | Type | Range | Default | Description |
+|---|---|---|---|---|
+| `bubble_bounce_big_pct` | int (slider) | 0–100 | 70 | % of big bubble collisions that bounce (rest overlap/soft-push) |
+| `bubble_bounce_small_pct` | int (slider) | 0–100 | 30 | % of small bubble collisions that bounce |
+| `bubble_bounce_big_speed` | float (slider) | 0.0–2.0 | 0.8 | Bounce speed multiplier for big bubbles (0 = no rebound, 2 = full elastic) |
+| `bubble_bounce_small_speed` | float (slider) | 0.0–2.0 | 0.5 | Bounce speed multiplier for small bubbles |
+
+**Files to touch:**
+
+1. **`widgets/spotify_visualizer/bubble_simulation.py`**
+   - Add `bounce_big_pct`, `bounce_small_pct`, `bounce_big_speed`, `bounce_small_speed` to `tick()` settings read
+   - Replace `_apply_soft_separation(dt)` with `_apply_bounce_physics(dt, settings)` or extend it
+   - Collision logic: for each overlapping pair, determine if this collision bounces (RNG seeded per-pair per-frame against the appropriate % slider). If bounce: reflect velocity components along collision normal, scale by speed multiplier. If not: apply existing soft-push.
+   - `BubbleState` already has `vx`, `vy` — these drive stream velocity. Bounce should add to them as impulse, then let existing damping/stream logic decay the impulse over subsequent frames.
+
+2. **`widgets/spotify_visualizer/config_applier.py`**
+   - Add `_bubble_bounce_big_pct`, `_bubble_bounce_small_pct`, `_bubble_bounce_big_speed`, `_bubble_bounce_small_speed` to the bubble kwargs in `apply_vis_mode_config`
+   - Add to `_append_bubble_visual_extras()` so they flow into the `build_gpu_push_extra_kwargs` pipeline (not needed for GPU but needed for sim settings)
+
+3. **`widgets/spotify_visualizer/tick_pipeline.py`**
+   - Add `bubble_bounce_big_pct`, `bubble_bounce_small_pct`, `bubble_bounce_big_speed`, `bubble_bounce_small_speed` to `sim_settings` dict in `dispatch_bubble_simulation()`
+
+4. **`core/settings/models.py`**
+   - Add 4 new fields to `SpotifyVisualizerSettings` dataclass
+   - Add to `from_mapping()`, `from_settings()`, `to_dict()`
+
+5. **`core/settings/defaults.py`**
+   - Add defaults for the 4 new keys
+
+6. **`ui/tabs/media/bubble_builder.py`**
+   - Add a new collapsible bucket "Bounce" in the normal layout (after Motion)
+   - 4 sliders: Big Bounce %, Small Bounce %, Big Bounce Speed, Small Bounce Speed
+   - Wire with `bind_setting_signal`
+
+7. **`ui/tabs/media/bubble_settings_binding.py`**
+   - Add the 4 keys to `collect_bubble_mode_settings()`
+
+8. **`rendering/spotify_widget_creators.py`** + **`rendering/widget_manager.py`**
+   - Add the 4 kwargs to `apply_spotify_vis_model_config()` and fallback
+
+9. **`widgets/spotify_bars_gl_overlay.py`**
+   - Add the 4 fields to `__init__`, `set_state` signature and body
+
+10. **`tools/visualizer_preset_repair.py`**
+    - Run `--repair-all` after implementation to update curated presets
+
+**Checklist:**
+- [ ] Implement `_apply_bounce_physics()` in `bubble_simulation.py`
+- [ ] Add 4 settings to model, defaults, and serialization
+- [ ] Add Bounce bucket to `bubble_builder.py`
+- [ ] Wire settings collection in `bubble_settings_binding.py`
+- [ ] Wire runtime config bridge (config_applier, widget_creators, widget_manager, overlay)
+- [ ] Wire tick pipeline `sim_settings`
+- [ ] Run preset repair
+- [ ] Test: big bubbles at 100% bounce + high speed → visible elastic rebounds
+- [ ] Test: 0% bounce → same as current behavior
+- [ ] Test: persistence round-trip
 
 ---
 
@@ -243,4 +317,3 @@ These fixes were attempted for the settings-loss bug (Tasks 1 & 2 above) but **d
 ## Idea Box
 
 1. Add a shimmer/flicker regression test for Spectrum once the actual shimmer task is active.
-2. Can Bubbles be made to bounce gently off each other instead of overlapping? Could this be an adjustable setting? Such as 70% of Bubbles Bounce (30% Overlap) and Bounce Speed X%. The speed they bounce away, grouped in a "Bounce" bucket. Separate sliders for Big and Small Bubbles in this bucket.

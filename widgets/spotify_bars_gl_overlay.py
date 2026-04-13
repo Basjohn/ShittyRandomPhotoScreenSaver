@@ -1151,6 +1151,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_card_adaptation = max(0.05, min(1.0, float(sine_card_adaptation)))
         self._sine_travel_line2 = max(0, min(2, int(sine_travel_line2)))
         self._sine_travel_line3 = max(0, min(2, int(sine_travel_line3)))
+        self._sine_travel_line4 = max(0, min(2, int(sine_travel_line4)))
+        self._sine_travel_line5 = max(0, min(2, int(sine_travel_line5)))
+        self._sine_travel_line6 = max(0, min(2, int(sine_travel_line6)))
         self._sine_wave_effect = max(0.0, min(1.0, float(sine_wave_effect)))
         self._sine_micro_wobble = max(0.0, min(1.0, float(sine_micro_wobble)))
         self._sine_crawl_amount = max(0.0, min(1.0, float(sine_crawl_amount)))
@@ -1158,6 +1161,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_line1_shift = max(-1.0, min(1.0, float(sine_line1_shift)))
         self._sine_line2_shift = max(-1.0, min(1.0, float(sine_line2_shift)))
         self._sine_line3_shift = max(-1.0, min(1.0, float(sine_line3_shift)))
+        self._sine_line4_shift = max(-1.0, min(1.0, float(sine_line4_shift)))
+        self._sine_line5_shift = max(-1.0, min(1.0, float(sine_line5_shift)))
+        self._sine_line6_shift = max(-1.0, min(1.0, float(sine_line6_shift)))
         self._sine_width_reaction = max(0.0, min(1.0, float(sine_width_reaction)))
 
 
