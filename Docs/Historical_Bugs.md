@@ -95,6 +95,7 @@ Section by date and type.
 - [x] AWAITING VALIDATION
 - [ ] SOLVED
 
+- 04/15 Status: Bubble is fine, Blob issues appear to be different at the moment. Keep as partial until sign off that Blob is perfect.
 - **Current symptom family:** Bubble and Blob have repeatedly fallen into two opposite but related failure states:
   - shared smoothed/post-AGC pressure makes them feel dead, flattened, and visually stuck in hold-like states
   - rescuing them with hotter pre-AGC/raw pressure through the old downstream math flips the failure mode into Bubble max-size pinning / jerky speed and non-shaped Blob blowout / judder

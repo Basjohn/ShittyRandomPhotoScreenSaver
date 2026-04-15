@@ -4,8 +4,10 @@ Living reference for testing architecture, policies, and the current regression 
 
 **Purpose**: Detailed reference for all tests, what they check, when to use them, and which suites are the minimum guardrails for active bug work.
 
-**Current Collection Snapshot**: `1724 tests` across `115 test files` (`pytest --collect-only tests -q`, Mar 23 2026)
+**Current Collection Snapshot**: `2090 tests` across `115 test files` (`pytest --collect-only tests -q`, Apr 15 2026)
 Do not treat this as a forever-static number. Refresh it when the suite shape changes substantially.
+
+**Note**: This document lists test files with descriptions of what they test. To see all individual test functions, run `pytest --collect-only tests -q`.
 
 ---
 
@@ -109,6 +111,16 @@ tests/
 | `test_qt_timer_threading.py` | QTimer behavior in threads | Timer-related threading issues |
 | `test_decorators.py` | @rate_limited, @memoize, @timing decorators | Changes to decorator implementations |
 | `test_storage_paths.py` | `get_app_data_dir()`, `get_cache_dir()`, canonical path resolution | Storage path changes |
+
+### Audio & Transient Events
+
+| Test File | What It Tests | When To Use |
+|-----------|---------------|-------------|
+| `test_audio_capture_block_size.py` | Audio block size candidate generation and preference handling | Audio capture block size changes |
+| `test_event_scheduler.py` | TransientEventScheduler debounce, consume-once semantics, peek vs consume isolation | Event scheduler changes |
+| `test_transient_bus.py` | TransientBus event queue and event type handling | Transient event system changes |
+| `test_transient_per_mode_integration.py` | Per-mode transient event integration with visualizer modes | Transient event mode integration |
+| `test_transient_preset_preservation.py` | Transient event state preservation across preset changes | Preset transient state changes |
 
 ### Process Management
 
@@ -357,6 +369,7 @@ Settings shell border-radius note:
 | `test_reddit_helper_runtime.py` | User-session helper heartbeat/bootstrap self-heal plus persistent-vs-session-scoped command shaping, secure-desktop queue-entry handoff stamping, and Windows-safe stale-helper PID probing | Reddit helper lifecycle changes |
 | `test_reddit_helper_watcher.py` | Queue watcher heartbeat, retry, stale-entry expiry, owner-idle self-exit, explicit session-shutdown requests for session-scoped launches, launch-not-before gating, and shell-not-ready queue deferral | Reddit helper worker changes |
 | `test_reddit_helper_task_harness.py` | Scheduled-task authority layer for the real Reddit helper launch contract: COM/XML registration, `schtasks /Query`, `schtasks /Run`, and cleanup of the reusable interactive task definition | Installer/runtime task-authority changes |
+| `test_main_reddit_helper_preload.py` | Reddit helper preload and initialization behavior | Reddit helper preload changes |
 
 ---
 
@@ -379,6 +392,7 @@ Settings shell border-radius note:
 | `test_logging_routing.py` | Log routing to different files | Logging changes |
 | `test_log_throttling.py` | Log deduplication, throttling | Throttling behavior |
 | `test_logging_console_encoding.py` | Console log encoding handling | Encoding issues |
+| `test_fresh_start_logging.py` | Log cleanup for fresh start while preserving worker logs | Logging initialization changes |
 
 ---
 
@@ -390,6 +404,7 @@ Settings shell border-radius note:
 | `test_mc_keyboard_input.py` | MC keyboard handling | MC input changes |
 | `test_mc_context_menu.py` | MC context menu | MC UI changes |
 | `test_mc_eco_mode.py` | MC eco mode | MC eco functionality |
+| `test_mc_entrypoint_contract.py` | MC entrypoint contract and initialization | MC startup changes |
 
 ---
 
@@ -421,14 +436,21 @@ It also guards curated slot normalization through `tools/visualizer_preset_repai
 This suite now also guards source-tree reconciliation behavior: new shipped curated files missing from the manifest must still be accepted by source-aware replacement flows, stale manifest-only paths missing from the source tree must be ignored there instead of causing false failures, and replacement now rewrites the target manifest from the reconciled shipped-tree view.
 | `test_spectrum_shaping.py` | Spectrum shape-editor/runtime contract fence: notch families, mirrored vs linear lane identities, lane-strength arrow defaults/promotion, and label-driven Spectrum DSP routing | Spectrum shaper contract or DSP migration changes |
 | `test_visualizer_settings_plumbing.py` | Behavior-first settings plumbing (model → creator/applier → frame push → overlay state contract), plus direct adapter coverage for Spectrum / Blob / Bubble / Oscilloscope / Sine mode-owned WidgetsTab bindings and the shared visualizer settings contract/snapshot helpers. Spectrum coverage now includes non-mirrored vocal-lane promotion and mirrored/linear lane-strength arrow persistence. | New visualizer settings, adapter extraction regressions, and sparse-mapping contract drift |
+| `test_line4_6_pipeline_trace.py` | Trace lines 4-6 color values through settings → widget → overlay → renderer pipeline to identify disconnect points | Line 4-6 color debugging |
+| `test_sine_line4_builder_integration.py` | Sine wave line 4-6 builder integration with settings and overlay | Sine line 4-6 integration |
+| `test_sine_line4_persistence.py` | Sine wave line 4-6 persistence across settings changes | Sine line 4-6 persistence |
+| `test_sine_line4_ui_simulation.py` | Sine wave line 4-6 UI simulation and interaction | Sine line 4-6 UI |
+| `test_visualizer_doc_references.py` | Visualizer documentation references and consistency | Documentation changes |
+| `test_widget_setup.py` | Setup helpers, expected-overlay contracts, startup-wave exclusions | Overlay coordination / staged-start contracts |
 | `test_visualizer_preset_cycling_runtime.py` | Runtime preset cycling API (`WidgetManager`), SpotifyVisualizerWidget middle/XButton shortcuts, InputHandler routing hit-tests, preset wrap-around | Runtime preset shortcut regressions |
 | `test_visualizer_alignment.py` | Visualizer positioning relative to other widgets | Positioning changes |
 | `test_blob_intensity_reserve.py` | Blob intensity reserve and core floor clamp math | Blob stage tuning |
-| `test_micro_wobble_math.py` | Micro wobble amplitude/frequency math | Wobble parameter changes |
+| `test_blob_pockets.py` | Non-shaped concurrent-pocket fence: rapid-hit slot rotation, parallel pocket survival, shaped-mode suppression, same-frame repeat hit prevention | Blob pocket behavior |
 | `test_sine_wave_gl_fix.py` | Sine wave GL uniform gating regression | Sine mode uniform issues |
 | `test_osc_sine_glow_contract.py` | Focused Osc/Sine glow contract: shader strength/reactivity ownership + mode-specific GPU extra routing | Glow reactivity plumbing |
 | `test_bubble_reactivity.py` | Bubble pulse reactivity with simulated audio: rapid beat clusters (burst detection), sustained loud sections, quiet→loud→quiet transitions, single kicks, small→big promotion lifecycle (8 tests) | Bubble sim pulse/reactivity changes |
 | `test_input_gain.py` | Input gain (virtual volume): PCM scaling identity check, very-low-gain silence, FFT magnitude linearity, model round-trip (default/to_dict/from_mapping/resolve), audio worker clamping (9 tests) | Input gain pipeline changes |
+| `test_visualizer_mode_isolation.py` | Static fence for dedicated per-mode renderer/math modules; catches foreign runtime-token drift in Blob/Bubble/Spectrum/Oscilloscope/Sine-owned files before cross-mode bleed | Per-mode renderer isolation |
 
 ---
 

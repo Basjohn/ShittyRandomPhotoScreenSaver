@@ -11,16 +11,15 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 | Docs/10_WIDGET_GUIDELINES.md | Widget implementation standards + compositor/fade policies |
 | Docs/Defaults_Guide.md | Canonical defaults, storage locations, change workflow |
 | Docs/QTIMER_POLICY.md | QTimer vs ThreadManager policy and allowed UI-thread timers |
-| Docs/TestSuite.md | Test matrix, fixtures, execution order |
+| Docs/TestSuite.md | Test matrix, fixtures, execution order (run `pytest --collect-only tests -q` to see all individual test functions) |
 | Docs/Historical_Bugs.md | Chronological archive of dated regressions, failed approaches, fix notes, and reopenings; use this for historical bug context rather than bloating Index/Spec |
-| Docs/Visualizer_Debug.md | Spotify visualizer architecture, diagnostics, per-mode notes |
+| Docs/Guardrails.md | Project policies and guardrails: threading, resource management, settings, visualizer modes, testing, performance, transitions, documentation |
+| Docs/Visualizer_Reference.md | Consolidated visualizer documentation: architecture, signal contract, baseline tuning, per-mode reference, settings/UI, testing/validation |
 | Docs/Visualizer_Change_Checklist.md | Current cross-system checklist for visualizer setting additions/removals/retunes so UI, runtime, presets, tools, tests, and docs stay aligned |
-| Docs/Visualizer_Signal_Contract.md | Canonical contract for continuous energy, transient bus, micro-scheduler events, and per-mode smoothing ownership |
 | Docs/Visualizer_Reset_Matrix.md | Canonical reset/freshness matrix for cold start, mode switches, same-mode apply, preset cycling, and waveform gates |
-| Docs/Visualizer_Baseline_Tuning_Matrix.md | Cross-mode baseline tuning sheet: floor/AGC strategy, transient vs scheduler roles, retired compat-key policy, and the current structural preset-validation guardrails |
 | Current_Plan.md | Live project plan, rollout status, open validation items, and current implementation backlog |
 | Docs/Custom_Style_Implementation.md | Shared SVG/QSS/QRC patterns for custom controls, settings-shell styling, and CSS specificity notes |
-| Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines and tuning notes. **Spectrum “Cake” preset is exempt from bar-count changes** per 2026 audit. |
+| Docs/Visualizer_Setting_Guide.md | Canonical per-mode technical baselines and tuning notes. **Spectrum "Cake" preset is exempt from bar-count changes** per 2026 audit. |
 | Docs/Visualizer_Mode_Consolidation_Mental_Model.md | Reusable playbook for consolidating visualizer-mode settings, presets, runtime contracts, and validation without freezing artistic content |
 | Spec.md (Visualizer buckets) | Advanced then Technical collapsible buckets per mode (Spectrum/Bubble/Blob/Sine/Osc); state persisted via `_visualizer_adv_state`/`_visualizer_tech_state`. **Helix/Starfield are deprecated** (dev-only remnants kept for backwards compatibility). |
 

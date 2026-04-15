@@ -23,7 +23,7 @@ Update this after every significant change.
 ---
 
 ## Critical / Active
-
+FIXED. HISTORICAL BUGS this and remove from this document.
 ### 1. Visualizer Custom Settings Lost on Save / Navigation / Runtime Round-Trip
 
 **Status:** `[~]` Root cause identified and fixed — awaiting user runtime validation
@@ -79,59 +79,6 @@ Lines 4-6 shift `bind_setting_signal` updaters wrote to `_sine_lineN_horizontal_
 - [ ] Runtime validation: settings survive cross-mode navigation round-trip
 - [ ] Runtime validation: settings survive runtime→settings→runtime cycle
 - [ ] Runtime validation: Line 4-6 colors/shifts survive settings→runtime→settings
-
----
-
-### 2. Sine Wave Lines Render Wrong Colors / Shifts at Runtime
-
-**Status:** `[ ]` Actively investigating
-**Priority:** HIGH — visually broken despite correct GUI values
-**Affects:** Both String Theory preset and Custom — same symptoms on both
-
-**Symptoms (confirmed by user 2026-04-13):**
-1. All lines have identical line+glow color in settings, but at least one line renders with a wrong/different color at runtime
-2. All lines have identical cycle shift values and same travel direction in settings, but they are visibly misaligned at runtime
-
-**What BUG #10 fixed (shift/travel only):**
-`set_state()` accepted `sine_line4/5/6_shift` and `sine_travel_line4/5/6` as params but never stored them to `self`. Fixed: added `self._sine_lineN_shift = ...` and `self._sine_travel_lineN = ...` assignments. **This should fix lines 4-6 shift and travel.** But user reports the problem persists for ALL lines (including 1-3), suggesting additional root causes.
-
-**Pipeline layers already verified working:**
-- **Model** (`core/settings/models.py`): fields are `list` type, loaded as `[r,g,b,a]` from JSON ✅
-- **Model → Widget** (`config_applier.apply_vis_mode_kwargs`): uses `_color_or_none()` which accepts `list/tuple` → returns `QColor` ✅
-- **Widget → Extras** (`_append_line_mode_visual_extras`): reads `widget._sine_lineN_color` → stores in `extra['lineN_color']` ✅
-- **Extras → Overlay** (`set_state`): `if lineN_color is not None: self._lineN_color = QColor(lineN_color)` ✅
-- **Overlay → Shader** (`_upload_shared_line_glow`): reads `s._lineN_color` → `_set_color4()` ✅
-- **GLSL** (`sine_wave.frag`): `u_lineN_color` used correctly for lines 1-6, all follow same pattern ✅
-
-**Remaining investigation vectors:**
-
-1. **Line 1 uses a different key path than lines 2-6:**
-   - Line 1 line color → `u_line_color` ← `s._line_color` ← `widget._sine_line_color` (global, no `1` suffix)
-   - Line 1 glow color → `u_glow_color` ← `s._glow_color` ← `widget._sine_glow_color` (global, no `1` suffix)
-   - Lines 2-6 → `u_lineN_color` ← `s._lineN_color` ← `widget._sine_lineN_color`
-   - **If user sets all lines to same color in GUI, Line 1 might have a different value** because it's stored under `sine_line_color` / `sine_glow_color`, not `sine_line1_color` / `sine_line1_glow_color`. Check: does the GUI builder correctly write both the global key and the per-line key when the user changes Line 1?
-   - **Reasoning:** The curated String Theory preset sets `sine_line_color: [195, 99, 255]` (purple) vs `sine_line2_color: [255, 255, 255]` (white) — intentionally different. If the user then sets "all same" in custom, they might be setting only `sine_lineN_color` for N=2-6 and missing the Line 1 global key, or vice versa.
-
-2. **Shift range interpretation mismatch:**
-   - GUI slider value range vs what `collect_sine_wave_mode_settings()` stores vs what the shader interprets as cycles
-   - The shader does `u_sine_lineN_shift * TWO_PI` — so a shift value of 0.15 means 0.15 * 2π ≈ 0.94 radians phase offset, not 15 cycles
-   - If the user expects "15 cycles shifted" but the slider stores 0.15, the visual shift is actually only ~15% of one cycle — all lines would look nearly aligned
-
-3. **Initial frame race / stale overlay defaults:**
-   - Overlay `__init__` sets `_line4_color = QColor(255, 0, 150, 230)` (magenta), `_line5_color = QColor(0, 255, 200, 230)` (teal), `_line6_color = QColor(200, 100, 255, 230)` (purple)
-   - If the first `set_state` call has `line4_color=None` (because extras pipeline somehow passes None), the default persists
-   - Check: is there ever a code path where `_append_line_mode_visual_extras` is skipped or returns before setting line 4-6 colors?
-
-4. **`_set_color4` helper — does it handle QColor correctly?**
-   - Verify `_set_color4(gl, u, "u_line4_color", qc)` correctly extracts RGBA from a QColor and uploads to the shader
-
-**Checklist:**
-- [ ] Check how Line 1 color is set in the GUI builder — is `sine_line_color` (global) updated when the user edits Line 1?
-- [ ] Check if all 6 lines' colors actually reach the overlay with correct values (add diagnostic log to `set_state`)
-- [ ] Check `_set_color4` for QColor→GL uniform correctness
-- [ ] Verify shift slider range: what value does the slider store for "15 cycles" vs what the shader expects?
-- [ ] Check if there's a timing race where overlay renders before first `set_state` applies saved colors
-- [ ] Test with all-identical settings to isolate which line is visually wrong
 
 ---
 
@@ -193,8 +140,8 @@ Screenshots: `temp/Example 1.png`, `temp/Example 2.png`, `temp/Example 3.png`
 
 **User design vision:**
 - Valleys should resemble **")" and "("** — gentle, curved, organic, interconnected
-- The perfect circular core is the root problem — base itself should be organically shaped
-- **Anti-pinching:** NEVER allow deep pinching. Soft )( curves only, not sharp V-dents. )o( = Good, >o< = TERRIBLE
+- The perfect circular core is the root problem — base itself should be organically shaped, ideally it should be PART OF THE DEFORMATION but with safeguards to prevent sharp indents or pinching.
+- **Anti-pinching:** NEVER allow deep pinching. Soft )( curves only, not sharp V-dents. )o( = Good, >< = TERRIBLE
 
 **Redesign plan:**
 1. Replace additive `organic_deform` with multiplicative `organic_base_shape` (0.85–1.15 range)
@@ -202,7 +149,8 @@ Screenshots: `temp/Example 1.png`, `temp/Example 2.png`, `temp/Example 3.png`
 3. Integrate wobble/stretch as modulation on the already-organic base — one coherent system
 4. Hard anti-pinch: `final_radius >= staged_r * 0.85`
 5. Fix `atan()` seam — ensure angle wrapping in all trig calculations
-
+6. Additionally run blob pocket tests to confirm pocketing reactions still functions.
+   
 ### 6. Preset Tooling Source-Tree Authority
 
 **Status:** `[ ]` Planned, not started
@@ -361,4 +309,4 @@ The bounce system replaces `_apply_soft_separation()` with `_apply_bounce_physic
 
 ## Idea Box
 
-1. Add a shimmer/flicker regression test for Spectrum once the actual shimmer task is active.
+1. Add a shimmer/flicker regression test for Spectrum once the actual shimmer task is active using synthetic audio that shows it, then adjust it to user results until a solution is found.

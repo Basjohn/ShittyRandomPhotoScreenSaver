@@ -24,7 +24,18 @@ The settings dialog uses **Windows DWM acrylic blur-behind** for its translucent
 | `ui/settings_dialog.py` | Dialog class, paintEvent, layout, tab buttons |
 | `ui/settings_theme.py` | QSS styles loaded at theme time |
 | `ui/tabs/shared_styles.py` | Shared QSS constants (group boxes, checkboxes, sliders, etc.) |
-| `core/windows/dwm_blur.py` | Windows DWM acrylic API wrapper |
+| `core/windows/dwm_blur.py` | Windows DWM acrylic API wrapper (MARGINS-based blur, not backdrop blur) |
+
+### DWM Helper Architecture
+
+The DWM helper at `core/windows/dwm_blur.py` implements Windows DWM acrylic blur using the **MARGINS-based blur API** (not the newer backdrop blur API which requires Windows 11). The `enable_acrylic_blur()` function:
+
+- Takes a tint color in RGBA format (e.g., `rgba(24,24,24,80)`)
+- Uses `dwmapi.DwmExtendFrameIntoClientArea()` with a MARGINS struct to extend the glass effect into the client area
+- Applies the tint via a semi-transparent background color on the dialog container
+- Must be called on first show of the dialog (after the HWND is created)
+
+**Important**: This is not the same as Windows 11's backdrop blur API. The MARGINS-based approach is compatible with Windows 10 and provides the frosted glass effect without requiring newer OS features.
 
 ### Container Layout
 
@@ -38,7 +49,7 @@ QDialog (transparent, frameless, margins 0,0,0,0)
          └─ #contentArea (transparent, 1px white border, radius 8)
 ```
 
-### Outer Border
+### Outer Border (Forged Rounded Border)
 
 The dialog now uses a **forged rounded outer border** painted in `paintEvent`, not a genuinely rounded top-level window. The live shell stays acrylic + frameless, and the visible chrome is created by:
 
@@ -46,7 +57,16 @@ The dialog now uses a **forged rounded outer border** painted in `paintEvent`, n
 - a slightly larger dark backing stroke under it
 - a dark forged-corner cover path that hides compositor fringe at the extreme corners
 
-This is an intentionally conservative compromise. The accepted radius is small because stronger rounding reintroduced live Windows bleed and title-bar regressions.
+**Accepted radius constraint**: `6.5px` - this is intentionally conservative because stronger rounding reintroduced live Windows bleed and title-bar regressions. See `Docs/Historical_Bugs.md` (2026-04-09) for the full debugging history.
+
+**Paint technique** (from `ui/settings_dialog.py`):
+1. Real acrylic top-level window remains structurally unchanged
+2. White outer border is custom-painted in `paintEvent`
+3. Darker backing stroke and forged corner-cover path are painted under that border
+4. This solves the correct seam without asking Qt/Windows to genuinely round, clip, or mask the HWND
+5. No acrylic margin is exposed outside the visible shell
+
+**Validation rule**: For this dialog family, hidden render/offscreen validation is only a paint sanity check. Live runtime on the real Windows shell is the only valid sign-off path for any outer-shell experiment.
 
 ---
 
@@ -267,7 +287,47 @@ Frosted glass effect for in-engine overlay widgets was assessed and determined n
 
 ---
 
-## 7. Color Reference
+## 8. Reddit Helper Task Scheduler Integration
+
+The Reddit helper uses Windows Task Scheduler for launch authority, not direct spawning from the screensaver process. This separation ensures the helper can launch in the user desktop session even when the screensaver runs in a secure desktop context.
+
+### Architecture
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| Task harness | `tools/reddit_helper_task_harness.py` | Elevated smoke harness for scheduled-task authority layer; registers, queries, runs, and cleans up the reusable interactive task |
+| Runtime integration | `core/windows/reddit_helper_runtime.py` | Runtime asks Task Scheduler to start the helper via `schtasks /Run` |
+| Helper worker | `helpers/reddit_helper_worker.py` | Queue drainer that waits for shell readiness, launches URLs, and self-exits |
+| Installer integration | `scripts/SRPSS_Installer.iss` | Registers the task during installation using COM XML import |
+
+### Task Registration Contract
+
+The task uses native COM XML registration with `InteractiveToken`:
+
+- Task name: `\SRPSS_RedditHelper` (or legacy `\SRPSS\RedditHelper`)
+- Principal: `UserId` from the XML (interactive user)
+- Command: `SRPSS_RedditHelper.exe` with queue/log/signal directory arguments
+- Authority: COM registration call passes empty user/password variants
+- Runtime start: `schtasks /Run` triggers the task on demand
+
+### Why This Architecture
+
+- Separates responsibilities: saver writes queue entries and exits normally; Task Scheduler owns helper launch authority
+- Avoids 24/7 resident processes or token tricks
+- Provides user-desktop launch authority without repeated runtime prompts
+- Helper waits for shell readiness independently, opens URL via `os.startfile`, and exits itself
+- Normal saver exit is preserved; saver no longer manages helper lifecycle
+
+### Regression Coverage
+
+- `tests/test_reddit_helper_task_harness.py` - Tests COM/XML registration, query, run, and cleanup
+- Smoke test: `python tools/reddit_helper_task_harness.py --action smoke-test --task-name SRPSS_TaskHarness_Test`
+
+See `Docs/Historical_Bugs.md` (2026-04-08/2026-04-09) for the full debugging history of Reddit helper integration.
+
+---
+
+## 9. Color Reference
 
 | Element | Color | Alpha |
 |---|---|---|
@@ -286,27 +346,27 @@ Frosted glass effect for in-engine overlay widgets was assessed and determined n
 
 ---
 
-## 8. Parity Pass Checklist
+## 10. Parity Pass Checklist
 
-### 8.1 Form rows
+### 10.1 Form rows
 
 - Label widths: Widgets 140 px, Visualizers 150 px, Display/Sources/Transitions/Presets/Accessibility 160 px.
 - Margins: row `(0,8,0,8)`, inner layout `(0,0,0,0)`, spacing 12px.
 - Labels: `FORM_ROW_LABEL_STYLE` (Jost 500) with wrap on by default.
 
-### 8.2 Swatch rows
+### 10.2 Swatch rows
 
 - Always call `add_swatch_label` (28 px baseline) with ≥12px vertical breathing room.
 
-### 8.3 Sliders
+### 10.3 Sliders
 
 - All sliders use `NoWheelSlider` + `SLIDER_STYLE`.
 
-### 8.4 Checkbox rows
+### 10.4 Checkbox rows
 
 - Circle checkboxes: `setContentsMargins(0,12,0,12)`.
 
-### 8.5 Re-running the pass
+### 10.5 Re-running the pass
 
 1. Walk `Docs/Propagation_Inventory.md` top to bottom.
 2. Confirm helper usage, label widths, slider chrome, StyledComboBox usage.
@@ -314,20 +374,20 @@ Frosted glass effect for in-engine overlay widgets was assessed and determined n
 
 ---
 
-## 9. Specificity & Shadow Clearance
+## 11. Specificity & Shadow Clearance
 
 - Never use `QScrollArea QWidget { ... }`; always use the direct-child selector in `SCROLL_AREA_STYLE`.
 - Styled combos, spinboxes, and `ColorSwatchButton` keep a 6px bottom margin for drop-shadow clearance.
 
 ---
 
-## 10. Text Rendering
+## 12. Text Rendering
 
 The dialog sets `PreferNoHinting` + `PreferAntialias | PreferQuality` font style strategy on the dialog font for smoother text rendering against the translucent background.
 
 ---
 
-## 11. Documentation Links
+## 13. Documentation Links
 
 - `Docs/Propagation_Inventory.md` — per-file status.
 - `Docs/Acrylic_Widget_Background_Assessment.md` — assessment of frosted glass for in-engine widgets (not viable).
@@ -336,7 +396,7 @@ The dialog sets `PreferNoHinting` + `PreferAntialias | PreferQuality` font style
 
 ---
 
-## 12. Automation
+## 14. Automation
 
 - `tools/check_ui_parity.py` statically scans `ui/tabs/**` and flags raw `QSlider`, `QComboBox`, or `QFontComboBox` usage.
 - Usage:

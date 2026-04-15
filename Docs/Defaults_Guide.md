@@ -426,6 +426,43 @@ Plus UI creation, UI save, and shader uniform if applicable.
 
 `ClockWidgetFactory` and `WeatherWidgetFactory` in `rendering/widget_factories.py` must read fallback defaults from `defaults.py` via `canonical = get_default_settings().get('widgets', {}).get(section, {})`. If you add or change a widget default, verify the factory reads from canonical rather than hardcoding a fallback value directly. Track any active rollout work for this seam in `Current_Plan.md`; keep dated regression details in `Docs/Historical_Bugs.md`.
 
+### Visualizer Preset Application: CLEAR-then-APPLY Pattern
+
+**CRITICAL**: Visualizer preset application must use REPLACE semantics at EVERY layer, not MERGE semantics. See `Docs/Historical_Bugs.md` (2026-04-11/2026-04-12) for the full debugging history of MERGE pollution bugs.
+
+**The CLEAR-then-APPLY pattern**:
+1. **Loading path**: `apply_preset_to_config()` in `core/settings/visualizer_presets.py` clears all mode-specific keys not present in the preset before applying the preset's settings
+2. **Call sites**: Use `restore_visualizer_snapshot()` instead of `.update()` for proper CLEAR-then-APPLY
+3. **Saving**: Only collects current mode settings (prevents cross-mode pollution)
+4. **Export**: `extract_visualizer_snapshot()` filters to only mode-specific keys
+
+**Why this matters**: 
+- `.update()` only adds/overwrites keys — it never removes stale mode-specific keys
+- MERGE semantics caused cross-mode pollution where inactive modes returned fallback defaults that polluted saved presets
+- Stale keys from Custom presets could survive into curated presets that never declared them
+
+**Defense in depth**: All three layers must use CLEAR-then-APPLY:
+- Loading: Clear mode-specific keys before applying presets
+- Call sites: Use proper in-place CLEAR-then-APPLY, not `.update()`
+- Saving: Only collect current mode settings
+- Export: Filter to only mode-specific keys
+
+### Policy Alignment with Guardrails.md
+
+When adding or changing settings, align with the policies documented in `Docs/Guardrails.md`:
+
+**Minimal fallbacks policy**: Fallbacks should be absolutely minimal and loud (text-only debug logging) when exercised. Fallbacks are failure indicators, not silent recovery paths. If you add a new fallback path, ensure it logs prominently in debug mode.
+
+**Synthetic audio testing policy**: Before and after any significant visualizer change (mode addition, signal contract modification, major shader rewrite), run synthetic audio tests to catch regressions. See Guardrails.md §4.3 for detailed procedure.
+
+**Single source of truth**: `defaults.py` is the canonical source for all default values. Never create secondary sources of truth for defaults. All other locations (models, UI, runtime) should read from or reference the canonical defaults.
+
+**No raw energy by default**: Visualizer modes should not use raw energy by default; use smoothed/post-AGC energy unless explicitly required. See Guardrails.md §4.2 for details.
+
+**Test fixing policy**: When fixing tests, fix the underlying issue, not just the test. Do not add skip markers without documenting the reason in TestSuite.md. See Guardrails.md §5.2.
+
+For the complete set of project policies and guardrails, refer to `Docs/Guardrails.md`.
+
 ---
 
 ## 6. Common Pitfalls

@@ -230,6 +230,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_card_adaptation: float = 0.30
         self._sine_travel_line2: int = 0  # per-line travel: 0=none, 1=left, 2=right
         self._sine_travel_line3: int = 0
+        self._sine_travel_line4: int = 0
+        self._sine_travel_line5: int = 0
+        self._sine_travel_line6: int = 0
         self._sine_wave_effect: float = 0.0  # 0.0-1.0, wave-like positional effect
         self._sine_micro_wobble: float = 0.0  # 0.0-1.0, energy-reactive micro distortions
         self._sine_crawl_amount: float = 0.0  # 0.0-1.0, Crawl slider amount
@@ -240,6 +243,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_line1_shift: float = 0.0
         self._sine_line2_shift: float = 0.0
         self._sine_line3_shift: float = 0.0
+        self._sine_line4_shift: float = 0.0
+        self._sine_line5_shift: float = 0.0
+        self._sine_line6_shift: float = 0.0
         self._line_smoothed_bass: float = 0.0  # CPU-side smoothed energy shared by line modes
         self._line_smoothed_mid: float = 0.0
         self._line_smoothed_high: float = 0.0

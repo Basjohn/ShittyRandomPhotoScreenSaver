@@ -537,7 +537,7 @@ The monolithic `SpotifyVisualizerWidget` and `SpotifyBarsGLOverlay` have been de
 
 ### Spotify Visualizer lifecycle & debugging checklist
 
-Canonical reset/freshness behavior now lives in `Docs/Visualizer_Reset_Matrix.md`, the authoritative signal-routing contract lives in `Docs/Visualizer_Signal_Contract.md`, and the cross-mode tuning baseline lives in `Docs/Visualizer_Baseline_Tuning_Matrix.md`. Use those alongside the current tests and `Current_Plan.md` when rollout validation is still active.
+Canonical reset/freshness behavior now lives in `Docs/Visualizer_Reset_Matrix.md`, and the consolidated visualizer documentation (architecture, signal contract, baseline tuning, per-mode reference, settings/UI, testing/validation) lives in `Docs/Visualizer_Reference.md`. Use those alongside the current tests and `Current_Plan.md` when rollout validation is still active.
 
 #### Bubble gradient vs specular direction
 

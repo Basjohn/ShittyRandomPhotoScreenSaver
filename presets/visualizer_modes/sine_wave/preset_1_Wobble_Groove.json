@@ -1,0 +1,156 @@
+{
+  "mode": "sine_wave",
+  "name": "Preset 1 (Wobble Groove)",
+  "preset_index": 0,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "sine_wave",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "monitor": "ALL",
+        "bar_fill_color": [
+          0,
+          0,
+          0,
+          130
+        ],
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "sine_wave_growth": 4.0,
+        "sine_wave_travel": 2,
+        "sine_density": 1.0,
+        "sine_displacement": 0.0,
+        "sine_glow_enabled": true,
+        "sine_glow_intensity": 0.1,
+        "sine_glow_reactivity": 1.35,
+        "sine_glow_color": [
+          206,
+          92,
+          255,
+          255
+        ],
+        "sine_line_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "sine_reactive_glow": true,
+        "sine_ghosting_enabled": false,
+        "sine_ghost_alpha": 0.04,
+        "sine_ghost_decay": 0.17,
+        "sine_ghost_line2_enabled": true,
+        "sine_ghost_line3_enabled": true,
+        "sine_ghost_line4_enabled": true,
+        "sine_ghost_line5_enabled": true,
+        "sine_ghost_line6_enabled": true,
+        "sine_sensitivity": 0.1,
+        "sine_smoothing": 0.0,
+        "sine_speed": 0.4,
+        "sine_line_count": 6,
+        "sine_line_offset_bias": 0.0,
+        "sine_line2_color": [
+          255,
+          255,
+          255,
+          190
+        ],
+        "sine_line2_glow_color": [
+          195,
+          99,
+          255,
+          255
+        ],
+        "sine_line3_color": [
+          255,
+          255,
+          255,
+          180
+        ],
+        "sine_line3_glow_color": [
+          195,
+          99,
+          255,
+          160
+        ],
+        "sine_line4_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "sine_line4_glow_color": [
+          195,
+          99,
+          255,
+          255
+        ],
+        "sine_line5_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "sine_line5_glow_color": [
+          195,
+          99,
+          255,
+          255
+        ],
+        "sine_line6_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "sine_line6_glow_color": [
+          195,
+          99,
+          255,
+          255
+        ],
+        "sine_travel_line2": 2,
+        "sine_travel_line3": 2,
+        "sine_travel_line4": 2,
+        "sine_travel_line5": 2,
+        "sine_travel_line6": 2,
+        "sine_line1_shift": 0.0,
+        "sine_line2_shift": 0.03,
+        "sine_line3_shift": 0.06,
+        "sine_line4_shift": 0.09,
+        "sine_line5_shift": 0.12,
+        "sine_line6_shift": 0.15,
+        "sine_wave_effect": 0.5,
+        "sine_vertical_shift": 0,
+        "sine_card_adaptation": 0.3,
+        "sine_micro_wobble": 0.45,
+        "sine_crawl_amount": 0.0,
+        "sine_width_reaction": 0.0,
+        "sine_heartbeat": 0.0,
+        "sine_line_dim": false,
+        "sine_wave_dynamic_floor": true,
+        "sine_wave_manual_floor": 0.12,
+        "sine_wave_dynamic_range_enabled": false,
+        "sine_wave_agc_strength": 0.65,
+        "sine_wave_input_gain": 0.75,
+        "sine_wave_kick_lane_gain": 1.0,
+        "sine_wave_transient_pulse_gain": 1.0,
+        "sine_wave_transient_clamp": 1.0,
+        "sine_wave_audio_block_size": 128,
+        "sine_wave_adaptive_sensitivity": true,
+        "sine_wave_sensitivity": 0.1,
+        "sine_wave_bar_count": 40,
+        "sine_wave_transient_width_mix": 0.45,
+        "sine_wave_rainbow_enabled": true,
+        "sine_wave_rainbow_speed": 0.45,
+        "mode": "sine_wave"
+      }
+    }
+  },
+  "description": "Saved from current Settings state."
+}
