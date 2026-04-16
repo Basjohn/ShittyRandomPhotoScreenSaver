@@ -768,3 +768,8 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - Normalization passes that round-trip through a model will silently drop any field the model doesn't know how to serialize — this failure mode produces no errors or warnings.
 - When debugging settings persistence, always test the normalization round-trip directly: feed test data into `normalize_visualizer_section_mapping` and verify the output contains all expected keys.
 - UI row widgets that should conditionally hide must use `_aligned_row_widget()` (tracked) instead of `_aligned_row()` (fire-and-forget).
+
+**Closure update (2026-04-16):**
+- The issue was pruned from `current_plan.md` after user-reported runtime confirmation that the settings round-trip now appears solved in practice, not just in code/tests.
+- Keep this entry because the bug was unusually sneaky: the user-facing symptom looked like one cross-mode persistence failure, but the real failure chain spanned save merge semantics, model normalization, runtime config bridging, UI builder wiring, and overlay state storage.
+- Future regressions that look like "custom settings randomly reverted" should be checked against this entire chain before assuming a single save-path bug.

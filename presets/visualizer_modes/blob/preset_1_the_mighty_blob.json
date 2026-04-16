@@ -1,30 +1,11 @@
 {
+  "description": "Saved from current Settings state.",
   "mode": "blob",
   "name": "Preset 1 (The Mighty Blob)",
   "preset_index": 0,
-  "visualizer_preset_override": true,
-  "visualizer_preset_mode": "blob",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "monitor": "ALL",
-        "bar_count": 40,
-        "adaptive_sensitivity": false,
-        "sensitivity": 0.9,
-        "dynamic_floor": false,
-        "manual_floor": 0.05,
-        "dynamic_range_enabled": false,
-        "agc_strength": 0.5,
-        "input_gain": 1.0,
-        "kick_lane_gain": 1.0,
-        "transient_pulse_gain": 1.0,
-        "transient_clamp": 1.5,
-        "bar_fill_color": [
-          255,
-          255,
-          255,
-          230
-        ],
         "bar_border_color": [
           255,
           255,
@@ -32,24 +13,48 @@
           255
         ],
         "bar_border_opacity": 1.0,
+        "bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "blob_adaptive_sensitivity": false,
+        "blob_agc_strength": 0.45,
+        "blob_audio_block_size": 256,
+        "blob_bar_count": 40,
         "blob_color": [
           243,
           243,
           243,
           230
         ],
-        "blob_glow_color": [
-          254,
-          254,
-          254,
-          255
-        ],
+        "blob_constant_wobble": 0.15,
+        "blob_dynamic_floor": false,
+        "blob_dynamic_range_enabled": false,
         "blob_edge_color": [
           251,
           252,
           255,
           215
         ],
+        "blob_ghost_alpha": 0.25,
+        "blob_ghost_decay": 0.35,
+        "blob_ghosting_enabled": true,
+        "blob_glow_color": [
+          254,
+          254,
+          254,
+          255
+        ],
+        "blob_glow_drive_mode": "vocal",
+        "blob_glow_intensity": 0.5,
+        "blob_glow_max_size": 1.1,
+        "blob_glow_reactivity": 1.4,
+        "blob_growth": 5.0,
+        "blob_input_gain": 0.35,
+        "blob_kick_lane_gain": 1.76,
+        "blob_manual_floor": 0.05,
         "blob_outline_color": [
           255,
           255,
@@ -58,40 +63,24 @@
         ],
         "blob_pulse": 0.35,
         "blob_pulse_release_ms": 520,
-        "blob_width": 1.0,
-        "blob_size": 0.35,
-        "blob_glow_intensity": 0.5,
-        "blob_reactive_glow": true,
-        "blob_glow_drive_mode": "vocal",
-        "blob_growth": 5.0,
-        "blob_reactive_deformation": 1.0,
-        "blob_constant_wobble": 0.15,
-        "blob_reactive_wobble": 2.25,
-        "blob_stretch": 0.55,
-        "blob_glow_reactivity": 1.4,
-        "blob_glow_max_size": 1.1,
-        "blob_ghosting_enabled": true,
-        "blob_ghost_alpha": 0.25,
-        "blob_ghost_decay": 0.35,
-        "blob_dynamic_floor": false,
-        "blob_manual_floor": 0.05,
-        "blob_dynamic_range_enabled": false,
-        "blob_agc_strength": 0.45,
-        "blob_input_gain": 0.35,
-        "blob_kick_lane_gain": 1.76,
-        "blob_transient_pulse_gain": 1.0,
-        "blob_transient_clamp": 2.35,
-        "blob_audio_block_size": 256,
-        "blob_adaptive_sensitivity": false,
-        "blob_sensitivity": 0.9,
-        "blob_bar_count": 40,
-        "blob_transient_mix_bass": 0.3,
-        "blob_transient_mix_vocal": 0.3,
         "blob_rainbow_enabled": true,
         "blob_rainbow_speed": 0.15,
-        "mode": "blob"
+        "blob_reactive_deformation": 1.0,
+        "blob_reactive_glow": true,
+        "blob_reactive_wobble": 2.25,
+        "blob_sensitivity": 0.9,
+        "blob_size": 0.35,
+        "blob_stretch": 0.55,
+        "blob_transient_clamp": 2.35,
+        "blob_transient_mix_bass": 0.3,
+        "blob_transient_mix_vocal": 0.3,
+        "blob_transient_pulse_gain": 1.0,
+        "blob_width": 1.0,
+        "mode": "blob",
+        "monitor": "ALL"
       }
     }
   },
-  "description": "Saved from current Settings state."
+  "visualizer_preset_mode": "blob",
+  "visualizer_preset_override": true
 }

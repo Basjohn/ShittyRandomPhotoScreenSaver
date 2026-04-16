@@ -22,11 +22,15 @@ uniform vec4 u_blob_color;
 uniform vec4 u_blob_glow_color;
 uniform vec4 u_blob_edge_color;
 uniform vec4 u_blob_outline_color;
+uniform vec4 u_blob_inward_liquid_color;
 uniform float u_blob_pulse;
 uniform float u_blob_width;  // (legacy, no longer used in shader — card width is widget-level)
 uniform float u_blob_size;   // 0.3..2.0  relative blob scale (default 1.0)
 uniform float u_blob_glow_intensity;  // 0..1  glow size/strength (default 0.5)
 uniform int u_blob_reactive_glow;  // 0 = static glow, 1 = energy-reactive
+uniform int u_blob_inward_liquid_enabled;  // 0 = off, 1 = on
+uniform float u_blob_inward_liquid_reactivity;  // 0..2 interior edge response strength
+uniform float u_blob_inward_liquid_max_size;  // 0.05..0.45 max inward depth fraction
 uniform float u_blob_smoothed_energy;  // CPU-side smoothed energy (reduces flicker)
 uniform float u_blob_glow_energy;  // CPU-side smoothed glow drive (bass or vocal depending on mode)
 uniform float u_blob_reactive_deformation;  // 0..2 scales outward energy growth (default 1.0)
@@ -132,7 +136,9 @@ float compute_blob_pocket_component(
         }
         float width = max(0.05, pocket.z);
         float diff = cyclic_diff_frac(angle_frac, pocket.x);
-        float lobe = 1.0 - smoothstep(width * 0.24, width, diff);
+        float diff_norm = clamp(diff / max(width, 0.001), 0.0, 1.0);
+        float lobe = 1.0 - smoothstep(0.18, 1.0, diff_norm);
+        lobe *= lobe;
         if (lobe <= 0.0) {
             continue;
         }
@@ -146,10 +152,11 @@ float compute_blob_pocket_component(
             1.8
         );
         float pocket_age = max(0.0, time_seconds - pocket.w);
-        float attack_boost = 1.0 + 0.72 * exp(-pocket_age / 0.055);
-        float ripple_phase = pocket_age * 18.0 + diff / max(width, 0.001) * 2.6 + float(i) * 0.7;
-        float ripple = 0.90 + 0.10 * sin(ripple_phase);
-        total += amplitude * drive * lobe * ripple * attack_boost;
+        float attack_boost = 1.0 + 0.42 * exp(-pocket_age / 0.085);
+        float ripple_phase = pocket_age * 12.0 + diff_norm * 2.0 + float(i) * 0.7;
+        float ripple = 0.94 + 0.06 * sin(ripple_phase);
+        float shoulder_fill = 1.0 - diff_norm * 0.26;
+        total += amplitude * drive * lobe * ripple * attack_boost * shoulder_fill;
     }
     return total;
 }
@@ -189,6 +196,113 @@ vec3 apply_rainbow_shift(vec3 rgb) {
 
 float clampf(float value, float lo, float hi) {
     return clamp(value, lo, hi);
+}
+
+vec4 compute_inward_liquid_profile(
+    float angle_frac,
+    float time_seconds,
+    float local_radius,
+    float local_depth,
+    float bass_energy,
+    float mid_energy,
+    float high_energy,
+    float overall_energy,
+    float smoothed_energy,
+    float stage1_t,
+    float stage2_t,
+    float stage3_t,
+    float transient_energy,
+    float reactivity,
+    float max_size,
+    int ring_mode,
+    int enabled)
+{
+    float local_r = max(local_radius, 0.0001);
+    float local_d = max(local_depth, 0.0);
+    if (enabled == 0 || ring_mode == 1) {
+        return vec4(0.0, 0.0, 0.0, local_r);
+    }
+
+    float angle = angle_frac * 6.2831853;
+    float bass = clamp(bass_energy, 0.0, 1.0);
+    float mid = clamp(mid_energy, 0.0, 1.0);
+    float high = clamp(high_energy, 0.0, 1.0);
+    float overall = clamp(overall_energy, 0.0, 1.0);
+    float se = clamp(smoothed_energy, 0.0, 1.0);
+    float stage1 = clamp(stage1_t, 0.0, 1.0);
+    float stage2 = clamp(stage2_t, 0.0, 1.0);
+    float stage3 = clamp(stage3_t, 0.0, 1.0);
+    float transient = clamp(transient_energy, 0.0, 1.0);
+    float react = clamp(reactivity, 0.0, 2.0);
+    float max_fraction = clamp(max_size, 0.05, 0.45);
+
+    float base_drift = 0.20;
+    base_drift += sin(time_seconds * 0.82 + angle * 1.8) * 0.08;
+    base_drift += sin(time_seconds * 1.31 - angle * 2.7 + 0.90) * 0.06;
+    base_drift = clamp(base_drift, 0.08, 0.34);
+
+    float audio_pressure = clamp(
+        se * 0.22 +
+        overall * 0.25 +
+        mid * 0.24 +
+        bass * 0.11 +
+        high * 0.08 +
+        transient * 0.10,
+        0.0,
+        1.4
+    );
+    float ripple_wave = sin(time_seconds * (2.0 + audio_pressure * 2.2) + angle * 3.5);
+    float contour_ripple = 0.5 + 0.5 * ripple_wave;
+    float tangential_slide = (contour_ripple - 0.5) * (0.08 + 0.06 * min(react, 1.0));
+
+    float advance_drive = clamp(
+        base_drift +
+        audio_pressure * (0.12 + 0.10 * react) +
+        tangential_slide,
+        0.06,
+        0.92
+    );
+    float hard_cap = local_r * max_fraction;
+    float requested_depth = hard_cap * advance_drive;
+
+    float body_pressure = clamp(
+        se * 0.18 +
+        overall * 0.20 +
+        mid * 0.10 +
+        stage1 * 0.10 +
+        stage2 * 0.18 +
+        stage3 * 0.28 +
+        transient * 0.08,
+        0.0,
+        1.3
+    );
+    float local_bias = 0.5 + 0.5 * sin(time_seconds * 0.64 - angle * 2.1 + 1.2);
+    float crowding = clamp(requested_depth / max(hard_cap, 0.0001), 0.0, 1.0);
+    float thin_region = smoothstep(0.58, 0.28, local_r);
+    float retreat_signal = clamp(
+        body_pressure * (0.48 + 0.34 * local_bias) +
+        crowding * 0.58 +
+        thin_region * 0.24,
+        0.0,
+        1.4
+    );
+    float retreat_weight = smoothstep(0.45, 1.02, retreat_signal);
+    float retreat_depth = hard_cap * retreat_weight * (0.10 + body_pressure * 0.14 + thin_region * 0.08);
+
+    float redistribution = retreat_weight * (0.03 + 0.05 * audio_pressure) * sin(
+        time_seconds * 1.45 + angle * 4.4 - 0.6
+    );
+    float final_depth = requested_depth - retreat_depth + redistribution * hard_cap;
+    final_depth = clamp(final_depth, local_r * 0.04, hard_cap);
+
+    float front_softness = max(final_depth * 0.38, 0.006);
+    float front_mask = 1.0 - smoothstep(max(final_depth - front_softness, 0.0), final_depth, local_d);
+    float source_anchor = 1.0 - smoothstep(0.0, max(final_depth * 0.75, 0.012), local_d);
+    float body_preserve = smoothstep(0.0, max(local_r * 0.45, 0.02), local_d);
+    float mix_amount = front_mask * (0.34 + source_anchor * 0.22 + audio_pressure * 0.16) * (1.0 - body_preserve * 0.45);
+    mix_amount = clamp(mix_amount, 0.0, 0.78);
+
+    return vec4(final_depth, mix_amount, retreat_depth, max(local_r - final_depth, local_r * (1.0 - max_fraction)));
 }
 
 vec3 compute_stage_progress_values(
@@ -280,6 +394,107 @@ float compute_stage_offset(
     return offset * gain * scale;
 }
 
+float compute_unshaped_organic_base_mult(float angle_frac, float time_seconds, float smoothed_e, float overall_e) {
+    float angle = angle_frac * 6.2831853;
+    float slow_t = time_seconds * 0.12;
+    float drift = 0.60 + clamp(smoothed_e, 0.0, 1.0) * 0.28 + clamp(overall_e, 0.0, 1.0) * 0.12;
+
+    float shape = 1.0;
+    shape += cos(angle * 1.0 + slow_t * 0.41 + 0.70) * 0.054;
+    shape += cos(angle * 2.0 - slow_t * 0.29 + 1.85) * 0.031;
+    shape += cos(angle * 3.0 + slow_t * 0.23 + 3.05) * 0.017;
+    shape += cos(angle * 1.0 - slow_t * 0.17 + 2.45) * 0.016 * drift;
+
+    return clamp(shape, 0.88, 1.16);
+}
+
+vec2 compute_unshaped_motion_offsets(
+    float angle_frac,
+    float time_seconds,
+    float bass_energy,
+    float mid_energy,
+    float high_energy,
+    float overall_energy,
+    float smoothed_energy,
+    float reactive_deformation,
+    float constant_wobble,
+    float reactive_wobble,
+    float stretch_tendency,
+    float stretch_inner,
+    float stretch_outer,
+    float pocket_component)
+{
+    float angle = angle_frac * 6.2831853;
+    float e_bass = clamp(bass_energy, 0.0, 1.0);
+    float e_mid = clamp(mid_energy, 0.0, 1.0);
+    float e_high = clamp(high_energy, 0.0, 1.0);
+    float e_overall = clamp(overall_energy, 0.0, 1.0);
+    float se = clamp(smoothed_energy, 0.0, 1.0);
+    float rd = clamp(reactive_deformation, 0.0, 3.0);
+    float cw = clamp(constant_wobble, 0.0, 2.0);
+    float rw = clamp(reactive_wobble, 0.0, 3.0);
+    float st = clamp(stretch_tendency, 0.0, 1.0);
+    float s_inner = clamp(stretch_inner, 0.0, 1.0);
+    float s_outer = clamp(stretch_outer, 0.0, 1.0);
+
+    float base_mult = compute_unshaped_organic_base_mult(angle_frac, time_seconds, se, e_overall);
+    float base_bias = clamp((base_mult - 1.0) / 0.16, -1.0, 1.0);
+
+    float slow_sway = 0.0;
+    slow_sway += sin(angle * 1.0 + time_seconds * 0.20 + 0.25) * 0.020;
+    slow_sway += sin(angle * 2.0 - time_seconds * 0.34 + 1.05) * 0.011;
+    slow_sway += sin(angle * 3.0 + time_seconds * 0.27 + 2.10) * 0.005;
+    slow_sway *= 1.0 - abs(base_bias) * 0.18;
+
+    float reactive_mid = clamp(e_mid * 0.92 + e_overall * 0.08, 0.0, 1.0);
+    float reactive_high = clamp(e_high * 0.82 + e_mid * 0.12, 0.0, 1.0);
+    float vocal = clamp(e_mid * 1.02 + e_high * 0.18, 0.0, 1.0);
+
+    float reactive_sway = 0.0;
+    reactive_sway += sin(angle * 1.0 + time_seconds * 0.48 + 0.30) * 0.040 * vocal;
+    reactive_sway += sin(angle * 2.0 - time_seconds * 0.56 + 1.80) * 0.026 * reactive_mid;
+    reactive_sway += sin(angle * 3.0 + time_seconds * 0.44 + 2.55) * 0.010 * reactive_high;
+    reactive_sway += base_bias * vocal * 0.015;
+
+    float wobble_component = slow_sway * cw + reactive_sway * rw;
+
+    float pocket_pressure = clamp(pocket_component, 0.0, 1.8);
+    float pocket_soft = 1.0 - exp(-pocket_pressure * 0.92);
+    float pocket_shoulder = pocket_soft * (1.0 - pocket_soft * 0.24);
+
+    float stretch_component = 0.0;
+    if (st > 0.01) {
+        float vocal_impact = clamp(e_mid * 1.02 + e_high * 0.20 + se * 0.10, 0.0, 1.0);
+        float bass_support = clamp(e_bass * 0.18 + e_overall * 0.14, 0.0, 1.0);
+        float impact = clamp(vocal_impact * 0.84 + bass_support * 0.24, 0.0, 1.0);
+        float impact2 = impact * impact;
+        float impact3 = impact2 * impact;
+        float stretch = 0.0;
+        stretch += sin(angle * 1.0 + time_seconds * 0.16 + 0.95) * impact2 * 0.082;
+        stretch += sin(angle * 2.0 - time_seconds * 0.31 + 2.20) * impact3 * 0.058;
+        stretch += base_bias * impact2 * 0.046;
+        stretch += base_bias * max(0.0, vocal_impact - 0.18) * 0.024;
+        stretch += pocket_shoulder * 0.138;
+        stretch += pocket_soft * max(0.0, 0.35 - abs(base_bias)) * 0.022;
+        stretch_component = stretch * st;
+    }
+
+    wobble_component += pocket_shoulder * 0.010;
+    wobble_component += pocket_soft * base_bias * 0.008;
+
+    float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
+    wobble_component *= rd_scale;
+    stretch_component *= rd_scale;
+
+    if (stretch_component < 0.0) {
+        stretch_component *= 0.04 + s_inner * 0.48;
+    } else {
+        stretch_component *= 0.10 + s_outer * 0.90;
+    }
+
+    return vec2(stretch_component, wobble_component);
+}
+
 // 2D SDF organic blob with audio-reactive deformation.
 // Accepts per-band energies + smoothed so it can be called with current OR
 // peak energies (for ghost shape reconstruction).
@@ -325,66 +540,20 @@ float blob_sdf_ex(vec2 p, float time,
         staged_r = r;
     }
 
+    float body_radius = staged_r;
+    if (u_blob_shaper_enabled == 0) {
+        body_radius *= compute_unshaped_organic_base_mult(angle_frac, time, se, e_overall);
+    }
+
     float rd = clamp(u_blob_reactive_deformation, 0.0, 3.0);
     float cw = clamp(u_blob_constant_wobble, 0.0, 2.0);
     float rw = clamp(u_blob_reactive_wobble, 0.0, 3.0);
-    if (u_blob_shaper_enabled == 1) {
-        cw = 0.0;
-        rw = 0.0;
-    }
-    // When shaper is enabled, it owns the shape — suppress stretch controls
-    // so they don't fight with the shaper's base/reaction profiles.
-    // Wobble is kept: it adds organic deformation that complements shaping.
-    float st = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_tendency, 0.0, 1.0);
-    float s_inner = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_inner, 0.0, 1.0);
-    float s_outer = (u_blob_shaper_enabled == 1) ? 0.0 : clamp(u_blob_stretch_outer, 0.0, 1.0);
-    float wobble_component = 0.0;
-    float motion_angle = angle;
-
-    // Constant wobble — always-present amorphous distortion.
-    // Low harmonics give broad lobes, high harmonics add fine detail.
-    wobble_component += sin(motion_angle * 2.0 + time * 0.4)  * 0.025 * cw;
-    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.021 * cw;
-    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.014 * cw;
-    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.008 * cw;
-    wobble_component += sin(motion_angle * 1.0 + time * 0.2)  * 0.028 * cw;
-
-    float reactive_mid = (u_blob_shaper_enabled == 1) ? max(e_mid, u_blob_shaper_mid_energy) : e_mid;
-    float reactive_high = (u_blob_shaper_enabled == 1) ? max(e_high, u_blob_shaper_high_energy) : e_high;
-
-    // Reactive wobble — energy-driven shape distortion.
-    wobble_component += sin(motion_angle * 3.0 + time * 1.5)  * 0.112 * reactive_mid * rw;
-    wobble_component += sin(motion_angle * 5.0 - time * 2.3)  * 0.078 * reactive_mid * rw;
-    wobble_component += sin(motion_angle * 7.0 + time * 3.1)  * 0.012 * reactive_high * rw;
-    wobble_component += sin(motion_angle * 11.0 - time * 4.7) * 0.006 * reactive_high * rw;
-
-    // Vocal emphasis — mid-range creates broad amorphous lobes.
-    float vocal = clamp((u_blob_shaper_enabled == 1) ? max(e_mid, u_blob_shaper_mid_energy) : e_mid, 0.0, 1.0);
-    wobble_component += sin(motion_angle * 2.0 + time * 0.9)  * 0.154 * vocal * rw;
-    wobble_component += sin(motion_angle * 4.0 - time * 1.1)  * 0.108 * vocal * vocal * rw;
-
-    float stretch_component = 0.0;
-    if (st > 0.01) {
-        // Stretch is now primarily vocal-driven with a light bass assist so it
-        // stays alive on musical passages without turning every kick into a
-        // whole-body spear.
-        float vocal_impact = clamp(e_mid * 1.08 + e_high * 0.22, 0.0, 1.0);
-        float bass_support = clamp(e_bass * 0.22 + e_overall * 0.10, 0.0, 1.0);
-        float impact = clamp(vocal_impact * 0.90 + bass_support * 0.25, 0.0, 1.0);
-        float impact2 = impact * impact;
-        float impact3 = impact2 * impact;
-        float stretch = 0.0;
-        stretch += sin(motion_angle * 2.0 + time * 0.7)  * impact3 * 1.18;
-        stretch += sin(motion_angle * 1.0 + time * 0.15) * impact2 * 0.82;
-        stretch += sin(motion_angle * 4.0 - time * 1.0)  * vocal_impact * vocal_impact * 1.02;
-        stretch += sin(motion_angle * 5.0 + time * 2.1)  * vocal_impact * 0.62;
-        stretch += sin(motion_angle * 3.0 - time * 1.3)  * bass_support * bass_support * 0.26;
-        stretch += sin(motion_angle * 7.0 - time * 0.5)  * e_high * 0.10;
-        stretch_component += stretch * st;
-    }
-
+    float st = clamp(u_blob_stretch_tendency, 0.0, 1.0);
+    float s_inner = clamp(u_blob_stretch_inner, 0.0, 1.0);
+    float s_outer = clamp(u_blob_stretch_outer, 0.0, 1.0);
+    float pocket_component = 0.0;
     if (u_blob_shaper_enabled == 0) {
-        float pocket_component = compute_blob_pocket_component(
+        pocket_component = compute_blob_pocket_component(
             angle_frac,
             time,
             e_bass,
@@ -393,67 +562,44 @@ float blob_sdf_ex(vec2 p, float time,
             e_overall,
             se
         );
-        stretch_component += pocket_component * 0.148;
-        wobble_component += pocket_component * 0.016;
     }
-
-    // Scale total deformation by reactive deformation factor
-    // Cubic scaling above 1.0 for truly dramatic stretching at high values
-    float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
-    wobble_component *= rd_scale;
-    stretch_component *= rd_scale;
-
-    // Asymmetric inner/outer scaling on stretch ONLY (not wobble), AFTER rd_scale.
-    // Inner controls depth of inward stretch dents, outer controls outward protrusions.
-    // Applied after rd_scale so the suppression is final and cannot be amplified back.
-    if (stretch_component < 0.0) {
-        stretch_component *= mix(0.05, 1.0, s_inner);
-    } else {
-        stretch_component *= mix(0.05, 1.0, s_outer);
-    }
+    vec2 motion_offsets = compute_unshaped_motion_offsets(
+        angle_frac,
+        time,
+        e_bass,
+        e_mid,
+        e_high,
+        e_overall,
+        se,
+        rd,
+        (u_blob_shaper_enabled == 1) ? 0.0 : cw,
+        (u_blob_shaper_enabled == 1) ? 0.0 : rw,
+        (u_blob_shaper_enabled == 1) ? 0.0 : st,
+        (u_blob_shaper_enabled == 1) ? 0.0 : s_inner,
+        (u_blob_shaper_enabled == 1) ? 0.0 : s_outer,
+        pocket_component
+    );
+    float stretch_component = motion_offsets.x;
+    float wobble_component = motion_offsets.y;
 
     // Stage-aware core floor clamp: preserve a minimum fraction of staged radius
     float stage_floor = compute_stage_floor_fraction(u_blob_core_floor_bias, stage_progress);
-    float min_radius = staged_r * stage_floor;
-    float stretch_floor = min_radius - staged_r;
+    float min_radius = max(staged_r * 0.84, body_radius * stage_floor);
+    float stretch_floor = min_radius - body_radius;
     stretch_floor = min(stretch_floor, 0.0);
     stretch_component = max(stretch_component, stretch_floor);
-    float core_radius = staged_r + stretch_component;
+    float core_radius = body_radius + stretch_component;
     // Wobble always applies in full — the blob must NEVER be a circle.
     float final_radius = core_radius + wobble_component;
-    // Guard against deep inward pinches: stretch already preserves the body floor,
-    // but wobble can still subtract underneath it. Clamp only the deepest dents so
-    // the blob stays organic instead of collapsing into harsh interior spikes.
-    float wobble_floor = mix(0.62, 0.76, stage_progress.x);
+    // Guard against deep inward pinches: wobble must stay in the same fluid family
+    // as the base body, not carve sharp wedges into it on energetic passages.
+    float wobble_floor = clamp(0.84 + stage_progress.x * 0.04 + max(0.0, body_radius / max(staged_r, 0.0001) - 1.0) * 0.03, 0.84, 0.92);
     final_radius = max(final_radius, core_radius * wobble_floor);
 
-    // Organic core deformation — breaks the perfect circular base shape.
-    // Uses low-frequency sine waves at irrational angular frequencies
-    // (golden-ratio multiples) so the pattern continuously evolves, never
-    // repeats the same shape, and never aligns with wobble/stretch harmonics.
-    // Applied to unshaped blob only; shaped blob uses the CPU-solved contour.
-    float organic_deform = 0.0;
-    if (u_blob_shaper_enabled == 0) {
-        float slow_t = time * 0.15;
-        // Primary lobe — broad asymmetric distortion
-        organic_deform += sin(motion_angle * 1.618 + slow_t * 0.71) * 0.038;
-        // Secondary lobe — different angular pattern
-        organic_deform += sin(motion_angle * 2.414 + slow_t * 1.13 + 0.83) * 0.026;
-        // Tertiary detail — finer organic texture
-        organic_deform += sin(motion_angle * 3.732 - slow_t * 0.53 + 2.15) * 0.016;
-        // Ultra-slow drift — prevents the deformation from looking static
-        organic_deform += sin(motion_angle * 0.618 + slow_t * 0.31 + 4.22) * 0.022;
-        // Scale proportional to blob base size
-        organic_deform *= staged_r;
-        // Slight outward bias so average radius stays close to original
-        organic_deform += staged_r * 0.012;
-    }
-    final_radius += organic_deform;
-
-    // Hard floor: never go below 90% of staged base radius.
-    // This absolutely prevents pinch while allowing visible organic shaping
-    // (up to ~10% inward dip in valleys between protrusions).
-    final_radius = max(final_radius, staged_r * 0.90);
+    // Hard floor: protect against wedge-like collapse while still allowing
+    // visibly organic valleys. Preserve the current body language, but keep the
+    // shape in a gel/liquid family rather than a pinched star.
+    final_radius = max(final_radius, max(staged_r * 0.84, body_radius * 0.88));
 
     return dist - final_radius;
 }
@@ -517,6 +663,8 @@ void main() {
 
     float d_fill = d_base;
     float d_shell = d_fill;
+    float radial_dist = length(uv);
+    float local_radius = max(radial_dist - d_signed, 0.0001);
 
     // Multi-layer colouring from the SDF distance
     // Inner core: bright, slightly shifted hue
@@ -606,14 +754,42 @@ void main() {
     vec3 edge_rgb = u_blob_edge_color.rgb;      // EDGE stays exempt
     vec3 glow_rgb = u_blob_glow_color.rgb;
     vec3 outline_rgb = u_blob_outline_color.rgb;
+    vec3 inward_liquid_rgb = u_blob_inward_liquid_color.rgb;
     bool rainbow_active = (u_rainbow_hue_offset > 0.001);
     if (rainbow_active) {
         blob_rgb = apply_rainbow_shift(blob_rgb);
         glow_rgb = apply_rainbow_shift(glow_rgb);
         outline_rgb = apply_rainbow_shift(outline_rgb);
+        inward_liquid_rgb = apply_rainbow_shift(inward_liquid_rgb);
     }
     // Bright core: blend fill toward white
     vec3 core_rgb = mix(blob_rgb, vec3(1.0), 0.55);
+
+    float inward_liquid_mix = 0.0;
+    if (u_blob_inward_liquid_enabled == 1 && u_blob_ring_mode == 0 && d_fill < 0.0) {
+        float angle = atan(uv.y, uv.x);
+        float angle_frac = fract(angle / 6.2831853 + 0.25);
+        vec4 inward_profile = compute_inward_liquid_profile(
+            angle_frac,
+            u_time,
+            local_radius,
+            max(-d_fill, 0.0),
+            u_bass_energy,
+            u_mid_energy,
+            u_high_energy,
+            u_overall_energy,
+            u_blob_smoothed_energy,
+            stage_progress.x,
+            stage_progress.y,
+            stage_progress.z,
+            u_high_energy,
+            u_blob_inward_liquid_reactivity,
+            u_blob_inward_liquid_max_size,
+            u_blob_ring_mode,
+            u_blob_inward_liquid_enabled
+        );
+        inward_liquid_mix = inward_profile.y * clamp(u_blob_inward_liquid_color.a, 0.0, 1.0);
+    }
 
     // Outline band colour (the dark/grey area between fill edge and glow)
 
@@ -636,6 +812,11 @@ void main() {
     } else {
         // Outside: glow colour
         final_rgb = glow_rgb;
+    }
+
+    if (inward_liquid_mix > 0.001 && d_fill < 0.0) {
+        vec3 inward_liquid_tint = mix(inward_liquid_rgb, vec3(1.0), 0.12);
+        final_rgb = mix(final_rgb, inward_liquid_tint, inward_liquid_mix);
     }
 
     fragColor = vec4(final_rgb, total_alpha * u_fade);

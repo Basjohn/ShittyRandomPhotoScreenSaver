@@ -363,6 +363,62 @@ class TestCustomPresetBackup:
         assert "osc_sensitivity" not in spotify_vis
         assert "widgets.spotify_visualizer" in repairs
 
+    def test_visualizer_normalization_drops_retired_blob_legacy_keys_without_forward_migrating_them(self):
+        normalized = normalize_visualizer_section_mapping(
+            {
+                "mode": "blob",
+                "blob_stage2_release_ms": 2050,
+                "blob_stage3_release_ms": 2600,
+                "blob_stretch_tendency": 0.91,
+                "blob_stretch_outer": 0.88,
+                "blob_stretch_x_bias": 0.4,
+                "blob_stretch_y_bias": 0.7,
+            },
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
+
+        for key in (
+            "blob_stage2_release_ms",
+            "blob_stage3_release_ms",
+            "blob_stretch_tendency",
+            "blob_stretch_outer",
+            "blob_stretch_x_bias",
+            "blob_stretch_y_bias",
+        ):
+            assert key not in normalized
+        assert normalized.get("blob_pulse_release_ms") == 220
+        assert normalized.get("blob_stretch") == pytest.approx(0.35)
+
+    def test_settings_validation_removes_retired_blob_legacy_keys(self, settings_manager: SettingsManager):
+        settings_manager.set("widgets", {
+            "spotify_visualizer": {
+                "mode": "blob",
+                "blob_stage_gain": 1.8,
+                "blob_pulse_cap": 2.1,
+                "blob_stretch_tendency": 0.85,
+                "blob_stretch_outer": 0.82,
+                "blob_stage2_release_ms": 1800,
+                "blob_stage3_release_ms": 2200,
+            }
+        })
+
+        repairs = settings_manager.validate_and_repair()
+        spotify_vis = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+
+        for key in (
+            "blob_stage_gain",
+            "blob_pulse_cap",
+            "blob_stretch_tendency",
+            "blob_stretch_outer",
+            "blob_stage2_release_ms",
+            "blob_stage3_release_ms",
+        ):
+            assert key not in spotify_vis
+        assert spotify_vis.get("blob_pulse_release_ms") == 220
+        assert spotify_vis.get("blob_stretch") == pytest.approx(0.35)
+        assert "widgets.spotify_visualizer" in repairs
+
 
 class TestMCModeAdjustments:
     """Test MC mode monitor adjustments."""

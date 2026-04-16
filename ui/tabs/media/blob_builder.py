@@ -146,6 +146,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         return _make_aligned_row(ghost_bucket, label_text)
 
     pulse_widget, pulse_layout = _body_row("Body Response:")
+    tab._blob_pulse_row = pulse_widget
     tab.blob_pulse = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_pulse.setMinimum(0)
     tab.blob_pulse.setMaximum(200)
@@ -167,6 +168,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         return f"{ms / 1000:.2f}s"
 
     pulse_release_row, pulse_release_layout = _body_row("Body Release:")
+    tab._blob_pulse_release_row = pulse_release_row
     tab.blob_pulse_release_ms = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_pulse_release_ms.setMinimum(60)
     tab.blob_pulse_release_ms.setMaximum(1500)
@@ -222,6 +224,83 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     outline_layout.addWidget(tab.blob_outline_color_btn)
     outline_layout.addStretch()
+
+    inward_liquid_enabled_row_w, inward_liquid_enabled_row = _swatch_row("Inward Liquid:")
+    tab._blob_inward_liquid_enabled_row = inward_liquid_enabled_row_w
+    tab.blob_inward_liquid_enabled = QCheckBox("Enable")
+    tab.blob_inward_liquid_enabled.setProperty("circleIndicator", True)
+    tab.blob_inward_liquid_enabled.setChecked(
+        tab._default_bool('spotify_visualizer', 'blob_inward_liquid_enabled', False)
+    )
+    tab.blob_inward_liquid_enabled.setToolTip(
+        "Optional contour-following inner liquid layer. It stays secondary to the main blob body."
+    )
+    bind_setting_signal(tab, tab.blob_inward_liquid_enabled.stateChanged, auto_switch=True)
+    inward_liquid_enabled_row.addWidget(tab.blob_inward_liquid_enabled)
+    inward_liquid_enabled_row.addStretch()
+
+    inward_liquid_color_row, inward_liquid_color_layout = _swatch_row("Inward Liquid Color:")
+    tab._blob_inward_liquid_color_row = inward_liquid_color_row
+    tab.blob_inward_liquid_color_btn = ColorSwatchButton(title="Choose Inward Liquid Color")
+    bind_color_button(
+        tab,
+        tab.blob_inward_liquid_color_btn,
+        '_blob_inward_liquid_color',
+        auto_switch=True,
+        initial_color=getattr(tab, '_blob_inward_liquid_color', None),
+    )
+    inward_liquid_color_layout.addWidget(tab.blob_inward_liquid_color_btn)
+    inward_liquid_color_layout.addStretch()
+
+    inward_liquid_reactivity_row, inward_liquid_reactivity_layout = _make_aligned_row(
+        appearance_bucket,
+        "Liquid Reactivity:",
+    )
+    tab._blob_inward_liquid_reactivity_row = inward_liquid_reactivity_row
+    tab.blob_inward_liquid_reactivity = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_inward_liquid_reactivity.setMinimum(0)
+    tab.blob_inward_liquid_reactivity.setMaximum(200)
+    ilr_val = int(tab._default_float('spotify_visualizer', 'blob_inward_liquid_reactivity', 1.0) * 100)
+    tab.blob_inward_liquid_reactivity.setValue(max(0, min(200, ilr_val)))
+    tab.blob_inward_liquid_reactivity.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_inward_liquid_reactivity.setTickInterval(25)
+    tab.blob_inward_liquid_reactivity.setToolTip(
+        "How strongly the inward liquid reacts to pressure and audio motion."
+    )
+    tab.blob_inward_liquid_reactivity_label = QLabel(f"{ilr_val}%")
+    bind_setting_signal(
+        tab,
+        tab.blob_inward_liquid_reactivity.valueChanged,
+        updater=lambda v: tab.blob_inward_liquid_reactivity_label.setText(f"{v}%"),
+        auto_switch=True,
+    )
+    inward_liquid_reactivity_layout.addWidget(tab.blob_inward_liquid_reactivity)
+    inward_liquid_reactivity_layout.addWidget(tab.blob_inward_liquid_reactivity_label)
+
+    inward_liquid_max_size_row, inward_liquid_max_size_layout = _make_aligned_row(
+        appearance_bucket,
+        "Liquid Maximum Size:",
+    )
+    tab._blob_inward_liquid_max_size_row = inward_liquid_max_size_row
+    tab.blob_inward_liquid_max_size = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.blob_inward_liquid_max_size.setMinimum(5)
+    tab.blob_inward_liquid_max_size.setMaximum(45)
+    ilm_val = int(tab._default_float('spotify_visualizer', 'blob_inward_liquid_max_size', 0.28) * 100)
+    tab.blob_inward_liquid_max_size.setValue(max(5, min(45, ilm_val)))
+    tab.blob_inward_liquid_max_size.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.blob_inward_liquid_max_size.setTickInterval(5)
+    tab.blob_inward_liquid_max_size.setToolTip(
+        "Maximum allowed inward depth before the no-contact safety cap takes over."
+    )
+    tab.blob_inward_liquid_max_size_label = QLabel(f"{ilm_val}%")
+    bind_setting_signal(
+        tab,
+        tab.blob_inward_liquid_max_size.valueChanged,
+        updater=lambda v: tab.blob_inward_liquid_max_size_label.setText(f"{v}%"),
+        auto_switch=True,
+    )
+    inward_liquid_max_size_layout.addWidget(tab.blob_inward_liquid_max_size)
+    inward_liquid_max_size_layout.addWidget(tab.blob_inward_liquid_max_size_label)
 
     # === Blob Shaper Section ===
     from ui.tabs.media.blob_shape_editor import BlobShapeEditor
@@ -332,6 +411,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sam_layout.addWidget(tab.blob_shaper_audio_motion_label)
 
     topo_row, topo_layout = _shaper_row("Topology:")
+    tab._blob_topology_row = topo_row
     tab.blob_topology_combo = StyledComboBox()
     tab.blob_topology_combo.addItems(["Circle (Filled)", "Ring (Hollow)"])
     topo_default = tab._default_str('spotify_visualizer', 'blob_topology', 'circle')
@@ -341,6 +421,7 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     topo_layout.addWidget(tab.blob_topology_combo)
 
     rt_row, rt_layout = _shaper_row("Ring Thickness:")
+    tab._blob_ring_thickness_row = rt_row
     tab.blob_ring_thickness = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.blob_ring_thickness.setMinimum(5)
     tab.blob_ring_thickness.setMaximum(100)
@@ -661,6 +742,19 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab.blob_ghost_enabled.stateChanged.connect(lambda _s: _update_blob_ghost_vis())
     _update_blob_ghost_vis()
+
+    def _update_blob_inward_liquid_vis(tab=tab):
+        enabled = tab.blob_inward_liquid_enabled.isChecked()
+        for row in (
+            tab._blob_inward_liquid_color_row,
+            tab._blob_inward_liquid_reactivity_row,
+            tab._blob_inward_liquid_max_size_row,
+        ):
+            row.setVisible(enabled)
+            row.setEnabled(enabled)
+
+    tab.blob_inward_liquid_enabled.stateChanged.connect(lambda _s: _update_blob_inward_liquid_vis())
+    _update_blob_inward_liquid_vis()
 
     # Ring mode sync: update editor canvases + thickness row visibility
     def _sync_ring_mode():

@@ -13,6 +13,7 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings
 from rendering.widget_setup import parse_color_to_qcolor
+from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
@@ -35,6 +36,16 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
     spectrum_render_mode = str(getattr(model, "spectrum_render_mode", "bars") or "bars").lower()
     spectrum_single_piece = spectrum_render_mode != "segment"
     spectrum_unique_colors = bool(getattr(model, "spectrum_unique_colors", True))
+    blob_shaper_enabled = bool(getattr(model, "blob_shaper_enabled", False))
+    blob_motion_contract = normalize_blob_mode_contract_values(
+        blob_shaper_enabled=blob_shaper_enabled,
+        blob_reactive_deformation=model.blob_reactive_deformation,
+        blob_constant_wobble=model.blob_constant_wobble,
+        blob_reactive_wobble=model.blob_reactive_wobble,
+        blob_stretch_tendency=model.blob_stretch,
+        blob_stretch_inner=0.0,
+        blob_stretch_outer=model.blob_stretch,
+    )
     vis.apply_vis_mode_config(
         mode=str(model.mode),
         bar_fill_color=model.bar_fill_color,
@@ -50,12 +61,16 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         blob_glow_color=model.blob_glow_color,
         blob_edge_color=model.blob_edge_color,
         blob_outline_color=model.blob_outline_color,
+        blob_inward_liquid_color=model.blob_inward_liquid_color,
         blob_pulse=model.blob_pulse,
         blob_pulse_release_ms=model.blob_pulse_release_ms,
         blob_width=model.blob_width,
         blob_size=model.blob_size,
         blob_glow_intensity=model.blob_glow_intensity,
         blob_reactive_glow=model.blob_reactive_glow,
+        blob_inward_liquid_enabled=model.blob_inward_liquid_enabled,
+        blob_inward_liquid_reactivity=model.blob_inward_liquid_reactivity,
+        blob_inward_liquid_max_size=model.blob_inward_liquid_max_size,
         osc_line_color=model.osc_line_color,
         osc_line_count=model.osc_line_count,
         osc_line2_color=model.osc_line2_color,
@@ -87,7 +102,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         osc_line_offset_bias=model.osc_line_offset_bias,
         osc_vertical_shift=int(model.osc_vertical_shift),
         osc_growth=model.osc_growth,
-        blob_reactive_deformation=(0.0 if model.blob_shaper_enabled else model.blob_reactive_deformation),
+        blob_reactive_deformation=blob_motion_contract['blob_reactive_deformation'],
         blob_pulse_cap=model.blob_pulse,
         blob_stage_gain=model.blob_pulse,
         blob_core_scale=1.0,
@@ -95,14 +110,14 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         blob_stage_bias=0.0,
         blob_stage2_release_ms=max(400, int(round(model.blob_pulse_release_ms * 4.1))),
         blob_stage3_release_ms=max(500, int(round(model.blob_pulse_release_ms * 5.45))),
-        blob_constant_wobble=model.blob_constant_wobble,
-        blob_reactive_wobble=model.blob_reactive_wobble,
-        blob_stretch=model.blob_stretch,
-        blob_stretch_tendency=model.blob_stretch,
-        blob_stretch_inner=0.0,
-        blob_stretch_outer=model.blob_stretch,
+        blob_constant_wobble=blob_motion_contract['blob_constant_wobble'],
+        blob_reactive_wobble=blob_motion_contract['blob_reactive_wobble'],
+        blob_stretch=blob_motion_contract['blob_stretch_outer'],
+        blob_stretch_tendency=blob_motion_contract['blob_stretch_tendency'],
+        blob_stretch_inner=blob_motion_contract['blob_stretch_inner'],
+        blob_stretch_outer=blob_motion_contract['blob_stretch_outer'],
         # Blob Shaper
-        blob_shaper_enabled=model.blob_shaper_enabled,
+        blob_shaper_enabled=blob_shaper_enabled,
         blob_shaper_base_strength=model.blob_shaper_base_strength,
         blob_shaper_react_strength=model.blob_shaper_react_strength,
         blob_shaper_idle_motion=model.blob_shaper_idle_motion,

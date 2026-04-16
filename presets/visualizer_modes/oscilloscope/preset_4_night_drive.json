@@ -24,6 +24,9 @@
         "osc_ghost_intensity": 0.42,
         "osc_ghost_line2_enabled": true,
         "osc_ghost_line3_enabled": true,
+        "osc_ghost_line4_enabled": true,
+        "osc_ghost_line5_enabled": true,
+        "osc_ghost_line6_enabled": true,
         "osc_ghosting_enabled": true,
         "osc_glow_color": [
           130,
@@ -59,19 +62,6 @@
           255,
           240
         ],
-        "osc_line_amplitude": 4.4,
-        "osc_line_color": [
-          255,
-          255,
-          255,
-          250
-        ],
-        "osc_line_count": 2,
-        "osc_line_dim": false,
-        "osc_line_offset_bias": 0.06,
-        "osc_ghost_line4_enabled": true,
-        "osc_ghost_line5_enabled": true,
-        "osc_ghost_line6_enabled": true,
         "osc_line4_color": [
           255,
           0,
@@ -108,6 +98,16 @@
           255,
           180
         ],
+        "osc_line_amplitude": 4.4,
+        "osc_line_color": [
+          255,
+          255,
+          255,
+          250
+        ],
+        "osc_line_count": 2,
+        "osc_line_dim": false,
+        "osc_line_offset_bias": 0.06,
         "osc_reactive_glow": true,
         "osc_smoothing": 0.5,
         "osc_speed": 0.24,

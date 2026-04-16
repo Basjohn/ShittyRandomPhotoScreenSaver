@@ -163,6 +163,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
         self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
         self._blob_outline_color: QColor = QColor(0, 0, 0, 0)
+        self._blob_inward_liquid_color: QColor = QColor(170, 225, 255, 190)
         self._blob_pulse: float = 1.0
         self._blob_width: float = 1.0
         self._blob_size: float = 1.0
@@ -170,6 +171,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_glow_reactivity: float = 1.0
         self._blob_glow_max_size: float = 1.0
         self._blob_reactive_glow: bool = True
+        self._blob_inward_liquid_enabled: bool = False
+        self._blob_inward_liquid_reactivity: float = 1.0
+        self._blob_inward_liquid_max_size: float = 0.28
         self._blob_reactive_deformation: float = 1.0
         self._blob_stage_gain: float = 1.0
         self._blob_core_scale: float = 1.0

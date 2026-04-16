@@ -2041,6 +2041,11 @@ class TestBlobSettingsBinding:
                 self.blob_shaper_idle_motion_label = _Label()
                 self.blob_shaper_audio_motion = _Slider()
                 self.blob_shaper_audio_motion_label = _Label()
+                self.blob_inward_liquid_enabled = _Check()
+                self.blob_inward_liquid_reactivity = _Slider()
+                self.blob_inward_liquid_reactivity_label = _Label()
+                self.blob_inward_liquid_max_size = _Slider()
+                self.blob_inward_liquid_max_size_label = _Label()
                 self.blob_glow_drive_mode = _Combo()
                 self.blob_growth = _Slider()
                 self.blob_growth_label = _Label()
@@ -2067,6 +2072,9 @@ class TestBlobSettingsBinding:
                 "blob_ghost_decay": 0.44,
                 "blob_pulse": 1.23,
                 "blob_pulse_release_ms": 1210,
+                "blob_inward_liquid_enabled": True,
+                "blob_inward_liquid_reactivity": 1.34,
+                "blob_inward_liquid_max_size": 0.31,
                 "blob_stretch": 0.42,
                 "blob_shaper_idle_motion": 0.11,
                 "blob_shaper_audio_motion": 1.48,
@@ -2086,6 +2094,11 @@ class TestBlobSettingsBinding:
         assert tab.blob_pulse_label.text == "1.23x"
         assert tab.blob_pulse_release_ms.value == 1210
         assert tab.blob_pulse_release_ms_label.text == "1.21s"
+        assert tab.blob_inward_liquid_enabled.checked is True
+        assert tab.blob_inward_liquid_reactivity.value == 134
+        assert tab.blob_inward_liquid_reactivity_label.text == "134%"
+        assert tab.blob_inward_liquid_max_size.value == 31
+        assert tab.blob_inward_liquid_max_size_label.text == "31%"
         assert tab.blob_stretch.value == 42
         assert tab.blob_stretch_label.text == "42%"
         assert tab.blob_shaper_idle_motion.value == 11
@@ -2101,6 +2114,7 @@ class TestBlobSettingsBinding:
             ("blob_glow_color_btn", "_blob_glow_color"),
             ("blob_edge_color_btn", "_blob_edge_color"),
             ("blob_outline_color_btn", "_blob_outline_color"),
+            ("blob_inward_liquid_color_btn", "_blob_inward_liquid_color"),
         ]
 
     def test_collect_blob_mode_settings_serializes_blob_owned_state(self):
@@ -2141,6 +2155,9 @@ class TestBlobSettingsBinding:
             blob_reactive_glow = _Check(True)
             blob_reactive_deformation = _Slider(88)
             blob_pulse_release_ms = _Slider(1330)
+            blob_inward_liquid_enabled = _Check(True)
+            blob_inward_liquid_reactivity = _Slider(142)
+            blob_inward_liquid_max_size = _Slider(29)
             blob_constant_wobble = _Slider(80)
             blob_reactive_wobble = _Slider(290)
             blob_stretch = _Slider(48)
@@ -2151,6 +2168,7 @@ class TestBlobSettingsBinding:
             _blob_glow_color = QColor(40, 50, 60, 210)
             _blob_edge_color = QColor(70, 80, 90, 220)
             _blob_outline_color = QColor(100, 110, 120, 230)
+            _blob_inward_liquid_color = QColor(130, 140, 150, 240)
 
         payload = collect_blob_mode_settings(_Tab())
 
@@ -2164,6 +2182,10 @@ class TestBlobSettingsBinding:
         assert payload["blob_edge_color"] == [70, 80, 90, 220]
         assert payload["blob_outline_color"] == [100, 110, 120, 230]
         assert payload["blob_pulse_release_ms"] == 1330
+        assert payload["blob_inward_liquid_enabled"] is True
+        assert payload["blob_inward_liquid_reactivity"] == pytest.approx(1.42)
+        assert payload["blob_inward_liquid_max_size"] == pytest.approx(0.29)
+        assert payload["blob_inward_liquid_color"] == [130, 140, 150, 240]
         assert payload["blob_reactive_wobble"] == pytest.approx(2.90)
         assert payload["blob_stretch"] == pytest.approx(0.48)
         assert payload["blob_shaper_idle_motion"] == pytest.approx(0.09)

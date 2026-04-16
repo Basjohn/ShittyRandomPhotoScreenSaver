@@ -933,6 +933,72 @@ def test_blob_builder_hides_redundant_controls_when_shaper_or_reactive_glow_are_
     finally:
         tab.deleteLater()
 
+
+def test_blob_builder_keeps_shared_shaped_controls_visible_when_shaper_is_enabled(
+    qt_app,
+    settings_manager,
+):
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab.blob_shaper_enabled.setChecked(True)
+        qt_app.processEvents()
+
+        assert tab._blob_reactive_glow_row.isHidden() is False
+        assert tab._blob_glow_color_row.isHidden() is False
+        assert tab._blob_glow_intensity_row.isHidden() is False
+        assert tab._blob_glow_reactivity_row.isHidden() is False
+        assert tab._blob_glow_drive_row.isHidden() is False
+        assert tab._blob_glow_max_size_row.isHidden() is False
+        assert tab._blob_shaper_idle_motion_row.isHidden() is False
+        assert tab._blob_shaper_audio_motion_row.isHidden() is False
+        assert tab._blob_pulse_row.isHidden() is False
+        assert tab._blob_pulse_release_row.isHidden() is False
+        assert tab._blob_topology_row.isHidden() is False
+        assert tab._blob_ring_thickness_row.isHidden() is True
+
+        tab.blob_topology_combo.setCurrentIndex(1)
+        qt_app.processEvents()
+        assert tab._blob_ring_thickness_row.isHidden() is False
+
+        tab.blob_topology_combo.setCurrentIndex(0)
+        qt_app.processEvents()
+        assert tab._blob_ring_thickness_row.isHidden() is True
+        assert tab._blob_shape_reactivity_row.isHidden() is True
+        assert tab._blob_idle_edge_motion_row.isHidden() is True
+        assert tab._blob_audio_edge_motion_row.isHidden() is True
+        assert tab._blob_stretch_row.isHidden() is True
+    finally:
+        tab.deleteLater()
+
+
+def test_blob_builder_gates_inward_liquid_detail_rows_from_enable_toggle(
+    qt_app,
+    settings_manager,
+):
+    tab = WidgetsTab(settings_manager)
+    try:
+        assert tab._blob_inward_liquid_enabled_row.isHidden() is False
+        assert tab._blob_inward_liquid_color_row.isHidden() is True
+        assert tab._blob_inward_liquid_reactivity_row.isHidden() is True
+        assert tab._blob_inward_liquid_max_size_row.isHidden() is True
+
+        tab.blob_inward_liquid_enabled.setChecked(True)
+        qt_app.processEvents()
+
+        assert tab._blob_inward_liquid_color_row.isHidden() is False
+        assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
+        assert tab._blob_inward_liquid_max_size_row.isHidden() is False
+
+        tab.blob_shaper_enabled.setChecked(True)
+        qt_app.processEvents()
+
+        assert tab._blob_inward_liquid_enabled_row.isHidden() is False
+        assert tab._blob_inward_liquid_color_row.isHidden() is False
+        assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
+        assert tab._blob_inward_liquid_max_size_row.isHidden() is False
+    finally:
+        tab.deleteLater()
+
 def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:

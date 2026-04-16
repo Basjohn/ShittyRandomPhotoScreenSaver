@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import pytest
 
-from widgets.spotify_visualizer.blob_math import compute_blob_radius_preview
+from widgets.spotify_visualizer.blob_math import (
+    compute_blob_radius_preview,
+    compute_stage_progress,
+    compute_unshaped_radius_multiplier,
+)
 
 
 def _radius(**overrides: float) -> float:
@@ -149,3 +153,139 @@ def test_blob_pulse_zero_also_disables_staged_size_growth() -> None:
         smoothed_energy=0.78,
     )
     assert hit == pytest.approx(calm)
+
+
+def test_stage_progress_keeps_ordinary_support_below_full_saturation() -> None:
+    ordinary = compute_stage_progress(
+        bass_energy=0.22,
+        mid_energy=0.18,
+        high_energy=0.16,
+        overall_energy=0.20,
+        smoothed_energy=0.24,
+    )
+    supportive = compute_stage_progress(
+        bass_energy=0.36,
+        mid_energy=0.31,
+        high_energy=0.24,
+        overall_energy=0.33,
+        smoothed_energy=0.38,
+    )
+    energetic = compute_stage_progress(
+        bass_energy=0.72,
+        mid_energy=0.60,
+        high_energy=0.52,
+        overall_energy=0.66,
+        smoothed_energy=0.70,
+    )
+
+    assert ordinary[0] < 0.35
+    assert ordinary[1] < 0.16
+    assert ordinary[2] < 0.04
+    assert supportive[0] < 0.75
+    assert supportive[1] < 0.65
+    assert supportive[2] < 0.45
+    assert energetic == pytest.approx((1.0, 1.0, 1.0))
+
+
+def test_stage_growth_reserves_clear_headroom_between_ordinary_and_energetic_passages() -> None:
+    ordinary = _radius(
+        stage_gain=1.0,
+        bass_energy=0.22,
+        mid_energy=0.18,
+        high_energy=0.16,
+        overall_energy=0.20,
+        smoothed_energy=0.24,
+    ) - _radius(
+        stage_gain=0.0,
+        bass_energy=0.22,
+        mid_energy=0.18,
+        high_energy=0.16,
+        overall_energy=0.20,
+        smoothed_energy=0.24,
+    )
+    supportive = _radius(
+        stage_gain=1.0,
+        bass_energy=0.36,
+        mid_energy=0.31,
+        high_energy=0.24,
+        overall_energy=0.33,
+        smoothed_energy=0.38,
+    ) - _radius(
+        stage_gain=0.0,
+        bass_energy=0.36,
+        mid_energy=0.31,
+        high_energy=0.24,
+        overall_energy=0.33,
+        smoothed_energy=0.38,
+    )
+    energetic = _radius(
+        stage_gain=1.0,
+        bass_energy=0.72,
+        mid_energy=0.60,
+        high_energy=0.52,
+        overall_energy=0.66,
+        smoothed_energy=0.70,
+    ) - _radius(
+        stage_gain=0.0,
+        bass_energy=0.72,
+        mid_energy=0.60,
+        high_energy=0.52,
+        overall_energy=0.66,
+        smoothed_energy=0.70,
+    )
+
+    assert ordinary > 0.0
+    assert ordinary < energetic * 0.20
+    assert supportive < energetic * 0.55
+
+
+def test_unshaped_radius_profile_keeps_average_body_size_stable_across_stage_levels() -> None:
+    cases = (
+        dict(
+            bass_energy=0.04,
+            mid_energy=0.03,
+            high_energy=0.02,
+            overall_energy=0.03,
+            smoothed_energy=0.05,
+        ),
+        dict(
+            bass_energy=0.36,
+            mid_energy=0.31,
+            high_energy=0.24,
+            overall_energy=0.33,
+            smoothed_energy=0.38,
+        ),
+        dict(
+            bass_energy=0.72,
+            mid_energy=0.60,
+            high_energy=0.52,
+            overall_energy=0.66,
+            smoothed_energy=0.70,
+        ),
+    )
+
+    averages = []
+    for params in cases:
+        stage1_t, stage2_t, stage3_t = compute_stage_progress(**params)
+        samples = [
+            compute_unshaped_radius_multiplier(
+                angle_frac=idx / 64.0,
+                time_seconds=8.0,
+                reactive_deformation=1.0,
+                constant_wobble=0.8,
+                reactive_wobble=1.0,
+                stretch_tendency=0.55,
+                stretch_inner=0.0,
+                stretch_outer=0.55,
+                core_floor_bias=0.35,
+                stage1_t=stage1_t,
+                stage2_t=stage2_t,
+                stage3_t=stage3_t,
+                pocket_component=0.0,
+                **params,
+            )
+            for idx in range(64)
+        ]
+        averages.append(sum(samples) / len(samples))
+
+    assert all(0.995 <= avg <= 1.01 for avg in averages)

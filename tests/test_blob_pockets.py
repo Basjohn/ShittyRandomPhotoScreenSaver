@@ -198,3 +198,35 @@ def test_blob_pockets_can_rotate_on_fresh_rapid_alternating_hits() -> None:
     assert state.kick_cursor > cursor_after_first
     assert state.pockets[0].amplitude > 0.0
     assert state.pockets[1].amplitude > 0.0
+
+
+def test_blob_pocket_families_use_broad_liquid_widths_and_staggered_releases() -> None:
+    from widgets.spotify_visualizer.blob_pockets import advance_blob_pocket_state, make_blob_pocket_state
+
+    state = make_blob_pocket_state()
+    state = advance_blob_pocket_state(
+        state,
+        dt=0.016,
+        time_seconds=6.0,
+        playing=True,
+        shaper_enabled=False,
+        kick_raw=0.94,
+        snare_raw=0.86,
+        bass_transient=0.98,
+        mid_transient=0.90,
+        high_transient=0.74,
+        bass_energy=0.80,
+        mid_energy=0.64,
+        high_energy=0.42,
+        overall_energy=0.68,
+    )
+
+    kick_pocket = state.pockets[0]
+    snare_pocket = state.pockets[2]
+    high_pocket = state.pockets[4]
+
+    assert kick_pocket.width > snare_pocket.width > high_pocket.width
+    assert kick_pocket.release_s > snare_pocket.release_s > high_pocket.release_s
+    assert kick_pocket.width >= 0.18
+    assert snare_pocket.width >= 0.15
+    assert high_pocket.width >= 0.12

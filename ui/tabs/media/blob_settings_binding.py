@@ -16,6 +16,7 @@ _BLOB_COLOR_DEFAULTS: tuple[tuple[str, str, list[int]], ...] = (
     ("_blob_glow_color", "blob_glow_color", [0, 140, 255, 180]),
     ("_blob_edge_color", "blob_edge_color", [100, 220, 255, 230]),
     ("_blob_outline_color", "blob_outline_color", [0, 0, 0, 0]),
+    ("_blob_inward_liquid_color", "blob_inward_liquid_color", [170, 225, 255, 190]),
 )
 
 
@@ -58,6 +59,7 @@ def load_blob_mode_settings(
     sync_color_button("blob_glow_color_btn", "_blob_glow_color")
     sync_color_button("blob_edge_color_btn", "_blob_edge_color")
     sync_color_button("blob_outline_color_btn", "_blob_outline_color")
+    sync_color_button("blob_inward_liquid_color_btn", "_blob_inward_liquid_color")
 
     if hasattr(tab, "blob_width"):
         blob_width_val = int(tab._config_float("spotify_visualizer", config, "blob_width", 1.0) * 100)
@@ -99,6 +101,18 @@ def load_blob_mode_settings(
         blob_pulse_release_ms = max(60, min(1500, blob_pulse_release_ms))
         tab.blob_pulse_release_ms.setValue(blob_pulse_release_ms)
         tab.blob_pulse_release_ms_label.setText(f"{blob_pulse_release_ms / 1000:.2f}s")
+    if hasattr(tab, "blob_inward_liquid_enabled"):
+        tab.blob_inward_liquid_enabled.setChecked(
+            tab._config_bool("spotify_visualizer", config, "blob_inward_liquid_enabled", False)
+        )
+    if hasattr(tab, "blob_inward_liquid_reactivity"):
+        val = int(tab._config_float("spotify_visualizer", config, "blob_inward_liquid_reactivity", 1.0) * 100)
+        tab.blob_inward_liquid_reactivity.setValue(max(0, min(200, val)))
+        tab.blob_inward_liquid_reactivity_label.setText(f"{val}%")
+    if hasattr(tab, "blob_inward_liquid_max_size"):
+        val = int(tab._config_float("spotify_visualizer", config, "blob_inward_liquid_max_size", 0.28) * 100)
+        tab.blob_inward_liquid_max_size.setValue(max(5, min(45, val)))
+        tab.blob_inward_liquid_max_size_label.setText(f"{val}%")
     if hasattr(tab, "blob_constant_wobble"):
         blob_constant_wobble = int(tab._config_float("spotify_visualizer", config, "blob_constant_wobble", 1.0) * 100)
         tab.blob_constant_wobble.setValue(max(0, min(200, blob_constant_wobble)))
@@ -193,6 +207,19 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
             tab.blob_reactive_deformation.value() if hasattr(tab, "blob_reactive_deformation") else 100
         ) / 100.0,
         "blob_pulse_release_ms": tab.blob_pulse_release_ms.value() if hasattr(tab, "blob_pulse_release_ms") else 220,
+        "blob_inward_liquid_enabled": (
+            tab.blob_inward_liquid_enabled.isChecked() if hasattr(tab, "blob_inward_liquid_enabled") else False
+        ),
+        "blob_inward_liquid_reactivity": (
+            tab.blob_inward_liquid_reactivity.value() if hasattr(tab, "blob_inward_liquid_reactivity") else 100
+        ) / 100.0,
+        "blob_inward_liquid_max_size": (
+            tab.blob_inward_liquid_max_size.value() if hasattr(tab, "blob_inward_liquid_max_size") else 28
+        ) / 100.0,
+        "blob_inward_liquid_color": _qcolor_to_list(
+            getattr(tab, "_blob_inward_liquid_color", None),
+            [170, 225, 255, 190],
+        ),
         "blob_constant_wobble": (
             tab.blob_constant_wobble.value() if hasattr(tab, "blob_constant_wobble") else 100
         ) / 100.0,

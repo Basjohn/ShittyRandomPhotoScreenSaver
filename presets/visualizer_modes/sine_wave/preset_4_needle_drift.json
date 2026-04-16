@@ -29,6 +29,9 @@
         "sine_ghost_decay": 0.62,
         "sine_ghost_line2_enabled": true,
         "sine_ghost_line3_enabled": true,
+        "sine_ghost_line4_enabled": true,
+        "sine_ghost_line5_enabled": true,
+        "sine_ghost_line6_enabled": true,
         "sine_ghosting_enabled": true,
         "sine_glow_color": [
           160,
@@ -67,18 +70,6 @@
           160
         ],
         "sine_line3_shift": -0.1,
-        "sine_line_color": [
-          248,
-          255,
-          248,
-          228
-        ],
-        "sine_line_count": 2,
-        "sine_line_dim": false,
-        "sine_line_offset_bias": 0.02,
-        "sine_ghost_line4_enabled": true,
-        "sine_ghost_line5_enabled": true,
-        "sine_ghost_line6_enabled": true,
         "sine_line4_color": [
           255,
           120,
@@ -118,6 +109,15 @@
           180
         ],
         "sine_line6_shift": 0.0,
+        "sine_line_color": [
+          248,
+          255,
+          248,
+          228
+        ],
+        "sine_line_count": 2,
+        "sine_line_dim": false,
+        "sine_line_offset_bias": 0.02,
         "sine_micro_wobble": 0.02,
         "sine_reactive_glow": true,
         "sine_sensitivity": 0.42,

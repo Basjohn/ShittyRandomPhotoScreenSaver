@@ -74,6 +74,8 @@ _DEPRECATED_BLOB_AUTHORED_KEYS: Tuple[str, ...] = (
     "blob_stretch_tendency",
     "blob_stretch_inner",
     "blob_stretch_outer",
+    "blob_stretch_x_bias",
+    "blob_stretch_y_bias",
 )
 
 _MODE_TECH_PREFIXES: Dict[str, str] = {
@@ -190,30 +192,11 @@ def _canonical_mode_defaults(mode: str) -> Dict[str, Any]:
     return normalize_visualizer_mode_payload(mode, defaults)
 
 
-def _required_repair_default_keys_for_mode(mode: str) -> set[str]:
-    raw_defaults = _load_visualizer_defaults()
-    return {
-        key
-        for key in _canonical_mode_defaults(mode).keys()
-        if key != "mode" and key in raw_defaults
-    }
-
-
 def _canonical_mode_prefix(mode: str) -> str:
     prefixes = vp.MODE_KEY_PREFIXES.get(mode)  # type: ignore[attr-defined]
     if prefixes:
         return prefixes[0]
     return f"{mode}_"
-
-
-def _ensure_mandatory_per_mode_defaults(
-    mode: str,
-    sanitized: Dict[str, Any],
-    defaults: Mapping[str, Any],
-) -> None:
-    for key in _required_repair_default_keys_for_mode(mode):
-        if key not in sanitized and key in defaults:
-            sanitized[key] = deepcopy(defaults[key])
 
 
 def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> None:
@@ -282,27 +265,49 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     if not sections:
         raise ValueError("File does not contain any spotify_visualizer settings block")
 
-    filtered_defaults = _canonical_mode_defaults(mode)
-
     base: Dict[str, Any] = {}
 
     original_filtered: Dict[str, Any] = {}
     for section in sections:
         section_payload = dict(section)
+        raw_filtered = vp._filter_settings_for_mode(mode, dict(section_payload))  # type: ignore[attr-defined]
         if mode == "spectrum":
             section_payload = _promote_legacy_spectrum_lane_scalars(section_payload)
         migrated = vp._migrate_preset_settings(mode, section_payload)  # type: ignore[attr-defined]
         filtered = vp._filter_settings_for_mode(mode, migrated)  # type: ignore[attr-defined]
-        original_filtered.update(filtered)
+        original_filtered.update(raw_filtered)
+        if mode == "oscilloscope" and "osc_sensitivity" in section:
+            if "osc_line_amplitude" in filtered:
+                original_filtered["osc_line_amplitude"] = filtered["osc_line_amplitude"]
+        if mode == "spectrum" and (
+            "spectrum_bass_emphasis" in section or "spectrum_mid_suppression" in section
+        ):
+            for promoted_key in (
+                "spectrum_lane_strengths_mirrored",
+                "spectrum_lane_strengths_linear",
+            ):
+                if promoted_key in filtered:
+                    original_filtered[promoted_key] = filtered[promoted_key]
         base.update(filtered)
 
-    sanitized = vp.normalize_visualizer_mode_payload(mode, base)  # type: ignore[attr-defined]
+    authored_keys = set(original_filtered.keys())
+    promoted_mode_keys = {
+        f"{_MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))}{suffix}"
+        for suffix in _MANDATORY_TECH_SUFFIXES
+        if suffix in original_filtered
+    }
+
+    sanitized_full = vp.normalize_visualizer_mode_payload(mode, base)  # type: ignore[attr-defined]
+    sanitized = {
+        key: value
+        for key, value in sanitized_full.items()
+        if key in authored_keys or key in promoted_mode_keys or key == "mode"
+    }
     if mode == "spectrum" and "spectrum_notch_positions_linear" in sanitized:
         sanitized["spectrum_notch_positions_linear"] = _normalize_spectrum_linear_notches(
             sanitized["spectrum_notch_positions_linear"]
         )
     _promote_global_technical_settings(mode, sanitized)
-    _ensure_mandatory_per_mode_defaults(mode, sanitized, filtered_defaults)
     _strip_deprecated_curated_keys(mode, sanitized)
 
     orig_keys = set(original_filtered.keys())

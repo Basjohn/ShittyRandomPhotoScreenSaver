@@ -867,6 +867,58 @@ class TestBlobShaperRenderer:
 class TestBlobShaperConfigApplier:
     """Verify config applier routes shaper keys to widget attributes."""
 
+    def test_blob_mode_contract_normalizer_zeros_unshaped_motion_for_shaper(self):
+        from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
+
+        normalized = normalize_blob_mode_contract_values(
+            blob_shaper_enabled=True,
+            blob_reactive_deformation=1.6,
+            blob_constant_wobble=0.8,
+            blob_reactive_wobble=1.1,
+            blob_stretch_tendency=0.65,
+            blob_stretch_inner=0.25,
+            blob_stretch_outer=0.65,
+        )
+
+        assert normalized == {
+            "blob_reactive_deformation": 0.0,
+            "blob_constant_wobble": 0.0,
+            "blob_reactive_wobble": 0.0,
+            "blob_stretch_tendency": 0.0,
+            "blob_stretch_inner": 0.0,
+            "blob_stretch_outer": 0.0,
+        }
+
+    def test_apply_shaper_kwargs_enforces_runtime_motion_fence_even_if_stale_values_arrive(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        widget = MagicMock()
+        widget._blob_shaper_enabled = False
+        widget._blob_reactive_deformation = 0.0
+        widget._blob_constant_wobble = 0.0
+        widget._blob_reactive_wobble = 0.0
+        widget._blob_stretch_tendency = 0.0
+        widget._blob_stretch_inner = 0.0
+        widget._blob_stretch_outer = 0.0
+
+        apply_vis_mode_kwargs(widget, {
+            "blob_reactive_deformation": 1.7,
+            "blob_constant_wobble": 0.9,
+            "blob_reactive_wobble": 1.4,
+            "blob_stretch": 0.6,
+            "blob_stretch_inner": 0.2,
+            "blob_stretch_outer": 0.6,
+            "blob_shaper_enabled": True,
+        })
+
+        assert widget._blob_shaper_enabled is True
+        assert widget._blob_reactive_deformation == pytest.approx(0.0)
+        assert widget._blob_constant_wobble == pytest.approx(0.0)
+        assert widget._blob_reactive_wobble == pytest.approx(0.0)
+        assert widget._blob_stretch_tendency == pytest.approx(0.0)
+        assert widget._blob_stretch_inner == pytest.approx(0.0)
+        assert widget._blob_stretch_outer == pytest.approx(0.0)
+
     def test_apply_shaper_kwargs(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         widget = MagicMock()
@@ -926,9 +978,12 @@ class TestBlobShaperConfigApplier:
         assert kw.get("blob_ring_thickness") == 0.5
         assert kw.get("blob_shape_base_nodes") == [[0.0, 0.5], [1.0, 1.5]]
         assert kw.get("blob_shape_energy_nodes") == [{"type": "bass", "x": 0.3, "y": 0.7, "strength": 1.0, "dir_x": 0.0, "dir_y": -1.0, "dir_len": 22.0}]
-        assert kw.get("blob_stretch") == pytest.approx(0.7)
+        assert kw.get("blob_reactive_deformation") == pytest.approx(0.0)
+        assert kw.get("blob_constant_wobble") == pytest.approx(0.0)
+        assert kw.get("blob_reactive_wobble") == pytest.approx(0.0)
+        assert kw.get("blob_stretch") == pytest.approx(0.0)
         assert kw.get("blob_stretch_inner") == pytest.approx(0.0)
-        assert kw.get("blob_stretch_outer") == pytest.approx(0.7)
+        assert kw.get("blob_stretch_outer") == pytest.approx(0.0)
 
     def test_blob_extras_include_shaper(self):
         from widgets.spotify_visualizer.config_applier import _append_blob_visual_extras
@@ -937,6 +992,10 @@ class TestBlobShaperConfigApplier:
         widget._blob_glow_color = MagicMock()
         widget._blob_edge_color = MagicMock()
         widget._blob_outline_color = MagicMock()
+        widget._blob_inward_liquid_color = MagicMock()
+        widget._blob_inward_liquid_enabled = True
+        widget._blob_inward_liquid_reactivity = 1.15
+        widget._blob_inward_liquid_max_size = 0.31
         widget._blob_shaper_enabled = True
         widget._blob_shaper_base_strength = 0.8
         widget._blob_shaper_react_strength = 0.4
@@ -947,10 +1006,101 @@ class TestBlobShaperConfigApplier:
         widget._blob_shape_base_nodes = [[0.0, 1.0]]
         widget._blob_shape_reaction_nodes = [[0.0, 1.0]]
         widget._blob_shape_energy_nodes = []
+        widget._blob_reactive_deformation = 1.4
+        widget._blob_constant_wobble = 1.1
+        widget._blob_reactive_wobble = 1.7
+        widget._blob_stretch_tendency = 0.6
+        widget._blob_stretch_outer = 0.6
         extra = {}
         _append_blob_visual_extras(extra, widget)
         assert extra["blob_shaper_enabled"] is True
+        assert extra["blob_inward_liquid_color"] is widget._blob_inward_liquid_color
+        assert extra["blob_inward_liquid_enabled"] is True
+        assert extra["blob_inward_liquid_reactivity"] == pytest.approx(1.15)
+        assert extra["blob_inward_liquid_max_size"] == pytest.approx(0.31)
         assert extra["blob_shaper_idle_motion"] == pytest.approx(0.14)
         assert extra["blob_shaper_audio_motion"] == pytest.approx(1.55)
         assert extra["blob_topology"] == "ring"
         assert extra["blob_ring_thickness"] == 0.5
+        assert extra["blob_reactive_deformation"] == pytest.approx(0.0)
+        assert extra["blob_constant_wobble"] == pytest.approx(0.0)
+        assert extra["blob_reactive_wobble"] == pytest.approx(0.0)
+        assert extra["blob_stretch_tendency"] == pytest.approx(0.0)
+        assert extra["blob_stretch_inner"] == pytest.approx(0.0)
+        assert extra["blob_stretch_outer"] == pytest.approx(0.0)
+
+    def test_blob_extras_preserve_unshaped_motion_controls_when_shaper_is_off(self):
+        from widgets.spotify_visualizer.config_applier import _append_blob_visual_extras
+
+        widget = MagicMock()
+        widget._blob_color = MagicMock()
+        widget._blob_glow_color = MagicMock()
+        widget._blob_edge_color = MagicMock()
+        widget._blob_outline_color = MagicMock()
+        widget._blob_pulse = 1.0
+        widget._blob_width = 1.0
+        widget._blob_size = 1.0
+        widget._blob_glow_intensity = 0.5
+        widget._blob_glow_reactivity = 1.0
+        widget._blob_glow_max_size = 1.0
+        widget._blob_reactive_glow = True
+        widget._blob_inward_liquid_color = MagicMock()
+        widget._blob_inward_liquid_enabled = True
+        widget._blob_inward_liquid_reactivity = 1.33
+        widget._blob_inward_liquid_max_size = 0.27
+        widget._blob_glow_drive_mode = "bass"
+        widget._blob_shaper_enabled = False
+        widget._blob_reactive_deformation = 1.3
+        widget._blob_constant_wobble = 0.9
+        widget._blob_reactive_wobble = 1.4
+        widget._blob_stretch_tendency = 0.52
+        widget._blob_core_scale = 1.0
+        widget._blob_core_floor_bias = 0.35
+        widget._blob_shaper_base_strength = 0.5
+        widget._blob_shaper_react_strength = 0.5
+        widget._blob_shaper_idle_motion = 0.18
+        widget._blob_shaper_audio_motion = 1.20
+        widget._blob_topology = "circle"
+        widget._blob_ring_thickness = 0.3
+        widget._blob_shape_base_nodes = []
+        widget._blob_shape_reaction_nodes = []
+        widget._blob_shape_energy_nodes = []
+        widget._blob_stretch_outer = 0.52
+
+        extra = {}
+        _append_blob_visual_extras(extra, widget)
+
+        assert extra["blob_reactive_deformation"] == pytest.approx(1.3)
+        assert extra["blob_inward_liquid_enabled"] is True
+        assert extra["blob_inward_liquid_reactivity"] == pytest.approx(1.33)
+        assert extra["blob_inward_liquid_max_size"] == pytest.approx(0.27)
+        assert extra["blob_constant_wobble"] == pytest.approx(0.9)
+        assert extra["blob_reactive_wobble"] == pytest.approx(1.4)
+        assert extra["blob_stretch_tendency"] == pytest.approx(0.52)
+        assert extra["blob_stretch_inner"] == pytest.approx(0.0)
+        assert extra["blob_stretch_outer"] == pytest.approx(0.52)
+
+    def test_apply_spotify_vis_model_config_carries_blob_inward_liquid_contract(self):
+        from core.settings.models import SpotifyVisualizerSettings
+        from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+
+        model = SpotifyVisualizerSettings(
+            mode="blob",
+            blob_inward_liquid_enabled=True,
+            blob_inward_liquid_reactivity=1.27,
+            blob_inward_liquid_max_size=0.33,
+            blob_inward_liquid_color=[11, 22, 33, 144],
+        )
+        vis = MagicMock()
+
+        apply_spotify_vis_model_config(vis, model)
+
+        vis.apply_vis_mode_config.assert_called_once()
+        kwargs = vis.apply_vis_mode_config.call_args
+        kw = kwargs.kwargs if kwargs.kwargs else {}
+        if not kw:
+            _, kw = kwargs
+        assert kw.get("blob_inward_liquid_enabled") is True
+        assert kw.get("blob_inward_liquid_reactivity") == pytest.approx(1.27)
+        assert kw.get("blob_inward_liquid_max_size") == pytest.approx(0.33)
+        assert kw.get("blob_inward_liquid_color") == [11, 22, 33, 144]

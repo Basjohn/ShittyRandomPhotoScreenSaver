@@ -774,7 +774,44 @@ def test_repair_tool_stops_emitting_deprecated_compat_tech_keys():
     assert "blob_use_raw_energy" not in cleaned
 
 
-def test_repair_tool_backfills_direct_transient_keys_from_current_defaults():
+def test_blob_preset_migration_drops_retired_legacy_keys_without_forward_deriving_new_values():
+    payload = {
+        "blob_stage2_release_ms": 2050,
+        "blob_stage3_release_ms": 2600,
+        "blob_stretch_tendency": 0.92,
+        "blob_stretch_outer": 0.88,
+        "blob_stretch_x_bias": 0.45,
+        "blob_stretch_y_bias": 0.65,
+    }
+
+    migrated = vp._migrate_preset_settings("blob", dict(payload))
+
+    for key in payload:
+        assert key not in migrated
+    assert "blob_pulse_release_ms" not in migrated
+    assert "blob_stretch" not in migrated
+
+
+def test_repair_tool_audits_retired_blob_xy_bias_keys_as_deprecated():
+    payload = {
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_stretch_x_bias": 0.4,
+                    "blob_stretch_y_bias": 0.7,
+                }
+            }
+        }
+    }
+
+    audit = repair.audit_payload("blob", payload)
+
+    assert "blob_stretch_x_bias" in audit["deprecated_authored_keys"]
+    assert "blob_stretch_y_bias" in audit["deprecated_authored_keys"]
+
+
+def test_repair_tool_keeps_missing_optional_bubble_keys_missing_in_source_authoritative_mode():
     payload = {
         "snapshot": {
             "widgets": {
@@ -788,13 +825,14 @@ def test_repair_tool_backfills_direct_transient_keys_from_current_defaults():
 
     cleaned, _stats = repair._sanitize_settings("bubble", payload)
 
-    assert "bubble_transient_mix_bass" in cleaned
-    assert "bubble_transient_mix_vocal" in cleaned
+    assert "bubble_stream_reactivity" in cleaned
+    assert "bubble_transient_mix_bass" not in cleaned
+    assert "bubble_transient_mix_vocal" not in cleaned
     assert "bubble_bubble_transient_mix_bass" not in cleaned
     assert "bubble_bubble_transient_mix_vocal" not in cleaned
 
 
-def test_repair_tool_backfills_spectrum_glow_and_line_ghost_toggles():
+def test_repair_tool_keeps_missing_optional_spectrum_and_osc_keys_missing_in_source_authoritative_mode():
     spectrum_payload = {
         "snapshot": {
             "widgets": {
@@ -806,9 +844,10 @@ def test_repair_tool_backfills_spectrum_glow_and_line_ghost_toggles():
         }
     }
     spectrum_cleaned, _ = repair._sanitize_settings("spectrum", spectrum_payload)
-    assert spectrum_cleaned["spectrum_glow_enabled"] is False
-    assert spectrum_cleaned["spectrum_glow_intensity"] == pytest.approx(0.55)
-    assert spectrum_cleaned["spectrum_glow_color"] == [110, 220, 255, 235]
+    assert spectrum_cleaned["spectrum_growth"] == pytest.approx(2.7)
+    assert "spectrum_glow_enabled" not in spectrum_cleaned
+    assert "spectrum_glow_intensity" not in spectrum_cleaned
+    assert "spectrum_glow_color" not in spectrum_cleaned
 
     osc_payload = {
         "snapshot": {
@@ -821,8 +860,9 @@ def test_repair_tool_backfills_spectrum_glow_and_line_ghost_toggles():
         }
     }
     osc_cleaned, _ = repair._sanitize_settings("oscilloscope", osc_payload)
-    assert osc_cleaned["osc_ghost_line2_enabled"] is True
-    assert osc_cleaned["osc_ghost_line3_enabled"] is True
+    assert osc_cleaned["osc_line_count"] == 3
+    assert "osc_ghost_line2_enabled" not in osc_cleaned
+    assert "osc_ghost_line3_enabled" not in osc_cleaned
 
 
 def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monkeypatch):

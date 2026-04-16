@@ -111,28 +111,28 @@ def _spawn_pocket(
     pocket.amplitude = max(pocket.amplitude * 0.28, amp)
     pocket.phase = time_seconds + slot * 0.017
     if family == "kick":
-        pocket.width = 0.17
+        pocket.width = 0.19
         pocket.bass_mix = 1.00
-        pocket.mid_mix = 0.18
+        pocket.mid_mix = 0.20
         pocket.high_mix = 0.04
-        pocket.transient_mix = 0.58
-        pocket.release_s = 0.34
+        pocket.transient_mix = 0.54
+        pocket.release_s = 0.38
         state.kick_cooldown = 0.024
     elif family == "snare":
-        pocket.width = 0.14
+        pocket.width = 0.16
         pocket.bass_mix = 0.10
-        pocket.mid_mix = 0.90
-        pocket.high_mix = 0.34
-        pocket.transient_mix = 0.62
-        pocket.release_s = 0.30
+        pocket.mid_mix = 0.88
+        pocket.high_mix = 0.30
+        pocket.transient_mix = 0.58
+        pocket.release_s = 0.34
         state.snare_cooldown = 0.022
     else:
-        pocket.width = 0.11
+        pocket.width = 0.125
         pocket.bass_mix = 0.02
-        pocket.mid_mix = 0.22
-        pocket.high_mix = 0.94
-        pocket.transient_mix = 0.50
-        pocket.release_s = 0.22
+        pocket.mid_mix = 0.24
+        pocket.high_mix = 0.88
+        pocket.transient_mix = 0.44
+        pocket.release_s = 0.26
         state.high_cooldown = 0.018
 
 
