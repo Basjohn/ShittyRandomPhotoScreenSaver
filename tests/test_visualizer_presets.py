@@ -778,8 +778,6 @@ def test_blob_preset_migration_drops_retired_legacy_keys_without_forward_derivin
     payload = {
         "blob_stage2_release_ms": 2050,
         "blob_stage3_release_ms": 2600,
-        "blob_stretch_tendency": 0.92,
-        "blob_stretch_outer": 0.88,
         "blob_stretch_x_bias": 0.45,
         "blob_stretch_y_bias": 0.65,
     }
@@ -789,7 +787,34 @@ def test_blob_preset_migration_drops_retired_legacy_keys_without_forward_derivin
     for key in payload:
         assert key not in migrated
     assert "blob_pulse_release_ms" not in migrated
-    assert "blob_stretch" not in migrated
+
+
+def test_blob_custom_snapshot_normalization_preserves_active_unshaped_keys():
+    payload = {
+        "mode": "blob",
+        "blob_stage_gain": 1.4,
+        "blob_core_scale": 0.9,
+        "blob_core_floor_bias": 0.2,
+        "blob_stage_bias": -0.1,
+        "blob_stretch_tendency": 0.6,
+        "blob_stretch_inner": 0.08,
+        "blob_stretch_outer": 0.7,
+        "blob_inward_liquid_enabled": True,
+        "blob_inward_liquid_reactivity": 1.5,
+        "blob_inward_liquid_max_size": 0.4,
+        "blob_inward_liquid_color": [100, 150, 255, 200],
+    }
+
+    normalized = vp.build_normalized_custom_snapshot("blob", payload)
+
+    assert normalized["blob_stage_gain"] == pytest.approx(1.4)
+    assert normalized["blob_core_scale"] == pytest.approx(0.9)
+    assert normalized["blob_core_floor_bias"] == pytest.approx(0.2)
+    assert normalized["blob_stage_bias"] == pytest.approx(-0.1)
+    assert normalized["blob_stretch_tendency"] == pytest.approx(0.6)
+    assert normalized["blob_stretch_inner"] == pytest.approx(0.08)
+    assert normalized["blob_stretch_outer"] == pytest.approx(0.7)
+    assert normalized["blob_inward_liquid_enabled"] is True
 
 
 def test_repair_tool_audits_retired_blob_xy_bias_keys_as_deprecated():
@@ -1280,15 +1305,8 @@ def test_curated_blob_presets_do_not_ship_retired_blob_keys():
     blob_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
     retired_keys = {
         "blob_pulse_cap",
-        "blob_stage_gain",
-        "blob_core_scale",
-        "blob_core_floor_bias",
-        "blob_stage_bias",
         "blob_stage2_release_ms",
         "blob_stage3_release_ms",
-        "blob_stretch_tendency",
-        "blob_stretch_inner",
-        "blob_stretch_outer",
         "blob_stretch_x_bias",
         "blob_stretch_y_bias",
         "blob_energy_boost",

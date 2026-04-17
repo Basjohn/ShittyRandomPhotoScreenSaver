@@ -241,6 +241,101 @@ class TestBlobShaperRenderer:
         driven_spread = max(driven_profile) - min(driven_profile)
         assert driven_spread > quiet_spread * 1.8
 
+    def test_unshaped_runtime_profile_stays_non_circular_but_bounded(self):
+        from widgets.spotify_visualizer.blob_math import solve_unshaped_blob_profile_step
+
+        profile_bundle, _velocity = solve_unshaped_blob_profile_step(
+            previous_profile=None,
+            previous_velocity=None,
+            previous_target_profile=None,
+            sample_count=64,
+            time_seconds=2.4,
+            dt=0.016,
+            bass_energy=0.68,
+            mid_energy=0.54,
+            high_energy=0.22,
+            overall_energy=0.58,
+            smoothed_energy=0.64,
+            reactive_deformation=1.15,
+            constant_wobble=0.85,
+            reactive_wobble=1.10,
+            stretch_tendency=0.38,
+            stretch_inner=0.06,
+            stretch_outer=0.42,
+            core_floor_bias=0.08,
+            stage1_t=0.74,
+            stage2_t=0.46,
+            stage3_t=0.18,
+            playing=True,
+            seed=0.33,
+        )
+        _base_profile, _raw_target, _target_profile, solved_profile = profile_bundle
+
+        spread = max(solved_profile) - min(solved_profile)
+        assert spread > 0.05
+        assert max(solved_profile) <= 1.12
+        assert min(solved_profile) >= 0.74
+
+    def test_unshaped_runtime_profile_solver_remembers_contour_instead_of_resetting_flat(self):
+        from widgets.spotify_visualizer.blob_math import solve_unshaped_blob_profile_step
+
+        profile_bundle_1, velocity_1 = solve_unshaped_blob_profile_step(
+            previous_profile=None,
+            previous_velocity=None,
+            previous_target_profile=None,
+            sample_count=64,
+            time_seconds=1.0,
+            dt=0.016,
+            bass_energy=0.62,
+            mid_energy=0.50,
+            high_energy=0.18,
+            overall_energy=0.54,
+            smoothed_energy=0.60,
+            reactive_deformation=1.10,
+            constant_wobble=0.80,
+            reactive_wobble=1.05,
+            stretch_tendency=0.34,
+            stretch_inner=0.04,
+            stretch_outer=0.40,
+            core_floor_bias=0.08,
+            stage1_t=0.68,
+            stage2_t=0.40,
+            stage3_t=0.14,
+            playing=True,
+            seed=0.25,
+        )
+        _base_1, _raw_1, target_1, solved_1 = profile_bundle_1
+        profile_bundle_2, _velocity_2 = solve_unshaped_blob_profile_step(
+            previous_profile=solved_1,
+            previous_velocity=velocity_1,
+            previous_target_profile=target_1,
+            sample_count=64,
+            time_seconds=1.016,
+            dt=0.016,
+            bass_energy=0.64,
+            mid_energy=0.52,
+            high_energy=0.20,
+            overall_energy=0.56,
+            smoothed_energy=0.62,
+            reactive_deformation=1.10,
+            constant_wobble=0.80,
+            reactive_wobble=1.05,
+            stretch_tendency=0.34,
+            stretch_inner=0.04,
+            stretch_outer=0.40,
+            core_floor_bias=0.08,
+            stage1_t=0.70,
+            stage2_t=0.42,
+            stage3_t=0.15,
+            playing=True,
+            seed=0.25,
+        )
+        _base_2, _raw_2, _target_2, solved_2 = profile_bundle_2
+
+        mean_delta = sum(abs(a - b) for a, b in zip(solved_1, solved_2)) / len(solved_1)
+        assert mean_delta < 0.03
+        assert max(solved_2) - min(solved_2) > 0.05
+
     def test_build_energy_routing_keeps_authored_influence_broad_and_smooth(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
 
@@ -251,6 +346,16 @@ class TestBlobShaperRenderer:
         assert weights[1] > 0.85
         assert weights[2] > 0.55
         assert max(abs(weights[i] - weights[(i + 1) % 32]) for i in range(32)) < 0.22
+
+    def test_blob_shader_uses_runtime_profile_for_unshaped_contour_and_not_scalar_motion_stack(self):
+        src = Path(
+            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob.frag"
+        ).read_text(encoding="utf-8")
+
+        assert "Both Blob types now upload one solved runtime contour profile." in src
+        assert "float runtime_mult =" in src
+        assert "float support_floor = mix(0.52, 0.60, clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0));" in src
+        assert "float final_radius = max(staged_r * runtime_mult, staged_r * support_floor);" in src
 
     def test_runtime_energy_nodes_prefer_react_canvas_when_present(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing

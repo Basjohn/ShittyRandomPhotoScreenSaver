@@ -43,12 +43,12 @@ def _baseline_radius(**overrides: float) -> float:
     bass = max(0.0, min(1.0, params["bass_energy"]))
     pulse = max(0.0, params["blob_pulse"])
     se = max(0.0, min(1.0, params["smoothed_energy"]))
-    r = 0.44 * blob_size
-    r += bass * bass * 0.066 * pulse
-    r += bass * 0.077 * pulse
+    r = 0.31 * blob_size
+    r += bass * bass * 0.024 * pulse
+    r += bass * 0.028 * pulse
     breath = max(bass, se * 0.82)
-    r += max(0.03, breath) * 0.020 * pulse
-    r -= (1.0 - se) * 0.028 * pulse
+    r += max(0.02, breath) * 0.010 * pulse
+    r -= (1.0 - se) * 0.012 * pulse
     return r
 
 

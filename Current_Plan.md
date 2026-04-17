@@ -86,6 +86,8 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - Remove dead or misleading settings exposure so shaped Blob only shows controls it genuinely uses.
 - Preserve a strongly **fluid / gel / liquid** motion identity across all new Blob work, including any local pocket retunes or new interior edge effects.
 - Add a detailed follow-on plan for **better shaped Blob reactions** once unshaped Blob is stable and the architecture split is clean.
+- Allow an explicit **unshaped-vs-shaped runtime split** if that is what it takes to stop the current shared scalar/body assumptions from poisoning both Blob types.
+- If a split is needed before the redesign is fully validated, prefer a **temporary dev-gated rollout seam** over keeping one muddled runtime path that is hard to reason about and easy to regress.
 
 **Landed so far on 2026-04-16:**
 - [~] Unshaped Blob's late additive `organic_deform` patch is no longer the primary organic silhouette path; a seam-safe low-frequency organic base multiplier now participates in the base radius field instead.
@@ -99,6 +101,28 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [x] Shaped runtime bridges now zero unshaped-only motion controls in both creator kwargs and GPU extras payloads instead of letting shaped Blob silently inherit them.
 - [x] Shared shaped-control row handles/tests landed so the builder now has explicit regression coverage for which controls remain visible when Blob Shaper is enabled.
 - [~] A shared runtime normalizer now owns the shaped-vs-unshaped motion fence in `widgets/spotify_visualizer/config_applier.py`, reducing the chance that future call paths reintroduce the same bleed by hand.
+- [~] Calmer body-sizing pass landed: unshaped Blob's baseline radius, pulse terms, and staged-growth ladder now leave visibly more room for deformation instead of starting from an almost full-card sphere.
+- [~] Shader stage-progress math is now re-aligned with the CPU helper contract instead of using a drifted hotter ladder in the fragment path.
+- [~] The liquid-readability pass landed in first form: the inward liquid band is broader/stronger, and the old sphere-like center brightening has been replaced with a softer elongated slime highlight so the body reads less like a shaded orb.
+- [~] Unshaped Blob now has its own CPU-side runtime contour solver in `widgets/spotify_visualizer/blob_math.py`:
+  - the solver builds a cyclic procedural target profile
+  - applies containment/boundedness in profile space
+  - smooths motion through the shared contour solver contract rather than relying on a scalar radius plus additive perturbations
+- [~] `widgets/spotify_visualizer/renderers/blob.py` now uploads a solved runtime contour for unshaped Blob as well as Blob Shaper, so both Blob types render from the same class of GPU contour handoff even though their contour authorship is different.
+- [~] `widgets/spotify_visualizer/shaders/blob.frag` no longer authors unshaped Blob's final silhouette from the old circle-plus-motion stack; it now renders the uploaded runtime contour directly and uses that same resolved contour for inward-liquid/highlight attachment.
+- [~] Focused regression coverage now checks that the unshaped runtime profile stays non-flat, bounded, and persistent across frames instead of silently resetting toward a circle.
+- [x] The 2026-04-17 workspace log review caught a real unshaped Blob fallback regression in the new contour path:
+  - `logs/screensaver_spotify_vis.log` showed `Shader-based rendering failed (mode=blob)` during uniform upload
+  - root cause was not GLSL compile failure but a Python runtime mismatch between flat pocket uniform payloads and the new CPU contour solver's expected shape
+  - `compute_blob_pocket_component(...)` now accepts the real flat payload contract, and focused regression coverage was added so this exact upload-path fallback cannot silently recur
+- [~] Blob runtime ownership is now cleaner in code:
+  - `widgets/spotify_visualizer/renderers/blob_shaper_runtime.py` owns the shaped authored-contour runtime helpers
+  - `widgets/spotify_visualizer/renderers/blob_unshaped_runtime.py` owns the procedural unshaped runtime helper
+  - `widgets/spotify_visualizer/renderers/blob.py` is now primarily the shared GL upload facade plus compatibility re-export surface
+- [~] The first retained-limiter pass landed:
+  - inward liquid now clamps to a nonzero retained band during retreat instead of collapsing toward invisibility
+  - the shader and CPU helper now share that retained-band floor contract
+  - focused inward-liquid tests now assert retained-band behavior directly
 - [ ] Runtime visual sign-off is still open. These changes are landed and partially proven, not visually closed.
 
 **Current diagnosis to preserve:**
@@ -106,6 +130,34 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - The seam problem is not just "Blob uses `atan()`". The more specific trap is the late organic layer using irrational angular frequencies directly on raw `angle`; integer-frequency cyclic terms wrap cleanly, but irrational multipliers on `atan()` space can produce a visible left-edge discontinuity.
 - Blob Shaper is now the healthier path architecturally: `widgets/spotify_visualizer/renderers/blob.py` solves one CPU-side contour, and the shader renders that contour. Unshaped Blob should not be allowed to remain the messier legacy cousin forever.
 - Blob still has split/duplicated stage knowledge between `widgets/spotify_visualizer/blob_math.py`, `widgets/spotify_bars_gl_overlay.py`, and `widgets/spotify_visualizer/shaders/blob.frag`. Even where runtime currently prefers CPU-fed overrides, that duplication is long-term drift debt.
+- Runtime evidence from 2026-04-17 01:13-01:14 confirms the issue is now architectural rather than transport:
+  - Blob compiles and renders again (`Compiled shader program: blob` in `logs/screensaver_spotify_vis.log`)
+  - the on-screen result still reads as a contained sphereoid with uniform scalar swelling
+  - the user screenshot confirms the body is still effectively a circle with presentation layered on top rather than a fluid contour
+- The current unshaped motion amplitudes are still too subordinate relative to the scalar body radius and preserved floors:
+  - `staged_r` remains the dominant author of silhouette
+  - stretch/wobble/pocket terms are visually secondary perturbations
+  - when energy rises, the viewer mostly sees whole-body growth instead of contour-specific fluid reaction
+- The inward liquid is currently implemented as a shallow interior colour mix over the same solid fill, which means it can be mathematically "active" while remaining visually absent against a strong fill colour.
+- The inward liquid currently fails the intended limiter contract:
+  - it can become visually absent under hot/small-radius states
+  - it is not guaranteed to maintain a persistent interior edge presence
+  - this lets the blob read like gross scalar growth instead of pressure against a liquid boundary
+- The limiter requirement is now stricter than "visible most of the time":
+  - the inward liquid may retract under pressure, and should
+  - but it must never fully disappear as a band/front while enabled
+  - the reactive read must become "local retreat with preserved presence", not "full collapse then return"
+- The current highlight/specular path is still presentation-first:
+  - it shades the body after the fact
+  - it is not a contour-attached vector/slime highlight driven by the same resolved fluid form
+  - this is why the result still reads as a lit orb instead of viscous material
+- Blob Shaper currently has too little apparent reactivity relative to its promise:
+  - authored contours are healthier than old unshaped Blob architecturally
+  - but live response is still too uniform / too subtle
+  - if the shared runtime keeps blocking stronger shaped reactions, that is now justification for a cleaner shaped-vs-unshaped split rather than more compromise tuning
+- The current Blob tests are proving helper/math invariants, not user-visible rendered outcomes:
+  - they do not meaningfully fail when Blob still looks like a circle
+  - they currently over-protect implementation contracts that are not sufficient for the desired visual result
 
 **Non-negotiable visual goals for unshaped Blob:**
 - The body must no longer read as "obvious circle plus star spikes".
@@ -114,6 +166,21 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - Calm passages must still look organic, but not blown out.
 - Strong passages may stretch and pocket, but must not collapse inward into pinched wedges.
 - The overall motion language should read as **gel / fluid / liquid**, not brittle spikes or rigid star geometry. This is intentionally close to the current mode identity, so the redesign should evolve the existing feel rather than replacing Blob with a totally different visual family.
+- The body must stay meaningfully contained within the visualizer card in ordinary operation:
+  - small overshoots may exist only as rare, liquid-feeling excursions
+  - the main read must never be "a giant pulse that simply outgrows the card"
+- The inward liquid must be plainly visible when enabled:
+  - not as a barely-there tint
+  - as a readable inner band/front with its own motion and retreat language
+  - it must never disappear completely, even under strong volume or hot-state response
+  - the extreme case should be "blob nearly meeting the limiter" rather than "limiter vanished and the blob filled everything"
+  - it must remain reactive while preserving that presence:
+    - stronger body pressure should locally pull it back
+    - calmer passages should let it creep forward again
+    - but a nonzero retained band/front must remain throughout
+- The highlight/specular must read like **vector slime / ooze / oblong wet streaking** attached to the fluid body:
+  - not a spherical center brightening
+  - not a sharp static cap/slice near the top
 
 **Non-goals / guardrails:**
 - Do **not** revive `_use_raw_energy` or invent Blob-only persisted signal toggles.
@@ -121,6 +188,7 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - Do **not** expose settings in the UI just because a legacy runtime field still exists; shaped Blob must only surface controls it actually uses.
 - Do **not** create separate startup-vs-runtime code paths for Blob deformation. Cold start and hot runtime must use the same authoritative logic.
 - Do **not** declare success from tests alone; this remains a visual/runtime sign-off area.
+- Do **not** keep trying to solve this primarily by retuning the current circle-SDF scalar growth path. At this point the failure mode is structural, not just numeric.
 
 **Success criteria before this issue is considered closed:**
 - [ ] Unshaped Blob no longer shows a visible circular core on the current antagonistic presets/screenshots.
@@ -129,6 +197,9 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Unshaped Blob pockets still contribute useful local reactions after the redesign.
 - [ ] Blob Shaper keeps its current authored-contour advantages and does not inherit generic unshaped controls again.
 - [ ] Shaped Blob UI only shows controls that materially affect the shaped runtime path.
+- [ ] Unshaped Blob remains substantially inside the card under ordinary playback instead of reading as a giant scalar pulse.
+- [ ] The inward liquid is clearly visible when enabled and visibly retreats/yields under body pressure.
+- [ ] The Blob highlight reads as an attached slime/ooze streak, not a sphere specular.
 - [~] Regression tests cover the new wrap continuity / no-circle-dominance / settings-ownership contracts where practical.
 
 **Program structure:**
@@ -157,9 +228,17 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - `widgets/spotify_visualizer/blob_unshaped_math.py`
   - `widgets/spotify_visualizer/blob_unshaped_contract.py`
   - `widgets/spotify_visualizer/renderers/blob_unshaped.py`
+- [ ] Decide whether shaped Blob should also be isolated more explicitly, likely one of:
+  - `widgets/spotify_visualizer/blob_shaped_runtime.py`
+  - `widgets/spotify_visualizer/renderers/blob_shaped.py`
+  - a shaped-only contour reaction helper separate from the current shared file
 - [ ] If the file split happens, keep the write surface disjoint:
   - shaped contour/routing logic remains with current shaper helpers
   - unshaped radius-field logic moves into clearly named unshaped helpers
+- [ ] If the split happens in stages, allow a temporary dev gate for the new unshaped and/or shaped runtime paths:
+  - gate only Blob-internal implementation choice, never mode identity
+  - do not let the gate bleed into other modes
+  - remove the gate once the new path is validated rather than carrying it indefinitely
 - [ ] Keep shared stage helpers in one canonical place rather than letting shader/CPU math quietly drift apart again.
 
 **Preferred architectural direction:**
@@ -169,6 +248,18 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - body pulse / release
   - shared color / glow / ghost presentation
   - stage/live band transport where truly shared
+- Shared presentation helpers, if retained, should be explicitly presentation-only:
+  - inward liquid
+  - highlight/specular
+  - ghost/glow/outline colour handling
+  - never generic body-shape authorship
+
+**Current preferred implementation direction:**
+- [ ] If the next fluid-state pass still needs large Blob-type conditionals inside shared files, split the runtime more aggressively instead of adding another compromise layer.
+- [ ] Favor a world where:
+  - unshaped Blob can radically improve fluid motion without worrying about shaped regression
+  - shaped Blob can gain stronger contour reactions without inheriting unshaped deformation logic
+  - settings/presets remain explicit about which Blob type they belong to
 
 #### 5B. Unshaped Blob Geometry Redesign
 
@@ -189,6 +280,63 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - Stretch/wobble/pockets should modulate that base silhouette rather than trying to rescue it afterward.
 - The deformation field must be **cyclic by construction** so the left-edge seam cannot exist.
 - Motion should feel viscous and elastic, with rounded follow-through, rather than behaving like sharp mechanical radial teeth.
+
+**Concrete corrective direction after the 2026-04-17 runtime review:**
+- [~] Stop treating the current unshaped Blob as "circle SDF plus offsets" for the final design.
+- [~] Move unshaped Blob onto the same class of solution Blob Shaper already benefits from:
+  - solve one explicit cyclic contour/profile each frame
+  - render that solved contour in the shader
+  - let liquid/highlight layers read from that resolved contour instead of from a scalar circle baseline
+- [~] Introduce an **unshaped runtime profile** separate from the shaped authored profile:
+  - generated procedurally rather than user-authored
+  - still represented as a cyclic angular contour/profile array
+  - likely `64` or `96` samples to start
+- [~] Make the unshaped solver own:
+  - calm rest profile
+  - audio pressure
+  - tangential redistribution
+  - local pocket lift
+  - containment / no-contact / anti-pinch rules
+- [ ] Add an explicit solved-envelope contract to the unshaped path:
+  - `body_outer_profile` stays within the card envelope except for tiny liquid-style overshoot
+  - `inner_liquid_profile` remains present whenever the effect is enabled
+  - `minimum_gap_profile` between body and inward liquid never reaches zero
+  - `retained_limiter_profile` enforces a nonzero visible/reachable inward-liquid band even under the strongest retreat state
+- [~] Reduce global pulse to a secondary body-breath/volume bias, not the main source of visible growth.
+- [~] Add an explicit card-containment contract for unshaped Blob:
+  - ordinary passages must stay within a conservative contour envelope
+  - extreme passages may approach the edge but should not routinely dominate the whole card
+- [~] Build the body so "growth" is mostly perceived through contour flow and local pressure movement rather than gross radius expansion.
+
+**What landed in this corrective pass on 2026-04-17:**
+- [x] A new procedural unshaped contour solve path was added to `widgets/spotify_visualizer/blob_math.py` instead of trying to rescue the old shader-authored scalar silhouette.
+- [x] Unshaped Blob now persists runtime contour state (`_blob_unshaped_runtime_profile`, velocity, target, solver timestamp/seed) so the body can carry shape memory frame to frame.
+- [x] Renderer upload now resolves unshaped Blob contour on the CPU and uploads it through `u_blob_runtime_profile`, matching the healthier shaper architecture class.
+- [x] Shader silhouette ownership now comes from the uploaded runtime contour for both Blob types; the old unshaped final-radius motion stack is no longer the active silhouette author.
+- [~] The inward-liquid/front and slime highlight are now attached to the resolved contour rather than a generic centered orb read, but this still needs runtime eyes.
+- [ ] Runtime verification is still needed to confirm the new contour actually reads as fluid/contained on live presets rather than just being architecturally correct.
+
+**High-detail next-pass checklist for unshaped fluid state:**
+- [ ] Remove the remaining `staged_r` dominance from the final silhouette contract:
+  - the solved contour should author the body
+  - scalar stage radius should only define bounded support/headroom
+  - any residual circular minimum must be small enough that it cannot visually reassert a pulsing disk
+- [ ] Replace "reactivity by size growth" with "reactivity by contour pressure movement":
+  - more local contour travel
+  - less global whole-body inflation
+  - stronger contour-memory carry between frames
+- [ ] Reframe pockets as local fluid pressure zones:
+  - broader shoulders
+  - longer rounded release
+  - no spear / spike read
+- [ ] Add a hard containment rule in solver space:
+  - ordinary playback cannot outgrow the card
+  - extreme excursions are tiny, rare, and liquid-feeling
+  - test this with hot synthetic frames rather than eyeballing only after runtime
+- [ ] Add a retained-limiter rule in solver/presentation space:
+  - inward liquid always has a minimum visible/front thickness while enabled
+  - retreat can thin and pull back the front, but not collapse it to zero
+  - the body/limiter gap remains positive at every sample
 
 **Preferred redesign direction:**
 - [~] Replace late additive `organic_deform` with an **organic base-shape multiplier** or equivalent cyclic radius field that is part of the base silhouette, not a late patch.
@@ -214,6 +362,11 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Rework stretch so it amplifies or steers the organic field rather than simply adding signed radial spikes.
 - [ ] Rework wobble so it lives inside the same shape system rather than acting as an unrelated second shell.
 - [ ] Re-test how pockets interact once the base silhouette is no longer circular; pockets should enrich local reaction, not reintroduce hard spear-like lobes.
+- [ ] Replace the current "small offsets on top of scalar radius" motion model with a contour-space solver/update rule:
+  - contour samples advect/slew under bounded pressure
+  - neighboring samples smooth each other like viscous material
+  - volume/headroom is preserved globally so local lift does not become card-filling scalar growth
+- [ ] Derive the final rendered contour from the solved profile directly, not from scalar radius plus post hoc highlight tricks.
 
 **Safety-floor redesign checklist:**
 - [ ] Keep anti-pinch protection, but make it the final protection layer rather than the main thing preserving silhouette readability.
@@ -235,12 +388,16 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - calmer live bands for whole-body size
   - hotter stage-driving support
   - transient/event assists
+- [ ] Re-scope whole-body size so it is intentionally weaker than local contour pressure:
+  - whole-body size should provide body presence
+  - local contour motion should provide the fluid read
 - [ ] Audit whether unshaped Blob still needs all current technical stage controls as true runtime knobs, or whether some are now just implementation residue.
 - [ ] Reduce stage drift debt:
   - either the CPU helper becomes the authoritative stage contract and the shader only renders the override
   - or the duplicated shader math is intentionally mirrored and tested as such
 - [ ] Keep startup/runtime parity: no special seeding path that makes Blob look "correct only after a few frames".
 - [ ] Reconfirm ghost behavior against the redesigned body so the ghost remains a retained-peak sibling, not a second dominant blob.
+- [ ] Remove the remaining runtime assumption that the main user-visible energetic response should come from scalar radius growth.
 
 **Tests to add or strengthen in this phase:**
 - [x] Wrap continuity regression for unshaped Blob radius logic.
@@ -248,6 +405,12 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [~] Anti-pinch regression proving valleys remain soft without center collapse.
 - [~] Stage/body regression confirming the redesign does not reintroduce hot baseline blowout.
 - [~] Pocket regression confirming local pocket reactions still function after the new radius-field composition.
+- [ ] Add rendered-outcome regressions instead of math-only proxies where practical:
+  - silhouette occupancy / containment checks against the card
+  - visible non-circularity checks against rasterized/profile samples, not just scalar helper outputs
+  - inward-liquid visible-band checks that fail if the layer is mathematically active but visually negligible
+  - highlight shape checks that fail if the highlight collapses back into center-bright sphere shading
+  - limiter-presence checks that fail if the inward liquid ever fully disappears while enabled
 
 #### 5D. Blob Settings Exposure Audit And UI Cleanup
 
@@ -309,6 +472,26 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Only then prune/hide dead shaped/unshaped settings and update bindings/presets/docs.
 - [ ] Finish with tests and runtime eyes, not the other way around.
 
+**Immediate corrective implementation order after the latest runtime review:**
+- [ ] Decide whether the next pass stays in shared Blob files or moves to an explicit unshaped/shaped split first.
+- [ ] If split-first wins, isolate the files/helpers before changing behavior again and optionally dev-gate the new path until visual validation catches up.
+- [ ] Freeze further scalar-radius-only tuning except where needed to keep runtime usable during the transition.
+- [ ] Define the unshaped runtime profile contract in code and tests:
+  - sample count
+  - rest profile generation
+  - fluid pressure update inputs
+  - smoothing / slew / containment rules
+  - explicit `body_outer_profile`, `inner_liquid_profile`, and `minimum_gap_profile` terminology
+- [ ] Extend that contract with limiter-presence semantics:
+  - retreat floor
+  - visible-band floor
+  - positive gap floor
+- [ ] Add a solved-envelope regression that fails if the body can exceed the intended containment envelope by more than a tiny overshoot margin.
+- [ ] Add a limiter-persistence regression that fails if inward liquid visibility or body/liquid gap falls to zero under synthetic hot frames.
+- [ ] Rebuild inward liquid as a persistent contour-following limiter, not a tint mix.
+- [ ] Rebuild the highlight/specular as a contour-attached slime streak rather than orb shading.
+- [ ] Only after those contracts hold, retune pockets and remaining body response against the new contour solver.
+
 **Likely code touchpoints when implementation begins:**
 - `widgets/spotify_visualizer/shaders/blob.frag`
 - `widgets/spotify_visualizer/renderers/blob.py`
@@ -325,7 +508,7 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 
 #### 5F. Shaped Blob Follow-On Plan - Better Reactions Without Breaking The Contour Solver
 
-**Status of this sub-track:** `[ ]` Follow-on after the unshaped redesign is stable enough that Blob mode ownership is no longer muddy
+**Status of this sub-track:** `[ ]` Follow-on, but now promoted in urgency because shaped Blob currently reads as under-reactive in live use
 
 **Goal:** Give Blob Shaper richer live response while preserving its authored-contour identity.
 
@@ -339,6 +522,10 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 
 **Main weakness to improve:**
 - In practice the shaped path can still feel too uniform or too "one contour simply expands/contracts everywhere", especially compared to how expressive the editor suggests the shape could become.
+- Live expectation has now been made explicit by user feedback:
+  - shaped Blob should have noticeably better reactions than today
+  - those reactions must stay contour-authored and fluid
+  - if the present shared runtime blocks that, splitting shaped ownership further is now preferred over keeping shaped response timid
 
 **Shaped reaction ideas worth planning explicitly:**
 - [ ] **Node-lane ripple / wobble**
@@ -357,6 +544,8 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - Keep a tiny per-region decay memory so repeated hits on the same routed node feel cumulative rather than identical one-offs.
 
 **Shaped follow-on checklist:**
+- [ ] Decide whether shaped Blob can be improved safely inside the current shared runtime, or whether it should get a more explicit shaped-only runtime/helper surface first.
+- [ ] If needed, split shaped reaction ownership behind a Blob-internal dev gate before tuning stronger reactions.
 - [ ] Decide whether the first new reaction feature lives:
   - inside the contour solver
   - as a post-solve contour-space residual
@@ -367,6 +556,21 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Ensure ring mode uses the same enriched contour without repainting the hollow center.
 - [ ] Expose only the shaped-specific controls that are truly needed after the first reaction feature lands.
 - [ ] Do not add five new shaped controls before proving one reaction family is worth keeping.
+
+**High-detail shaped reaction program:**
+- [ ] Phase 1: establish stronger local ownership without adding new public controls:
+  - region-local reaction gain
+  - residual follow-through per authored lane
+  - gentle neighbor spill
+  - contour-safe damping so the shape does not become sector-blocky
+- [ ] Phase 2: add visible fluid response features:
+  - node-lane ripple/wobble
+  - short-lived overshoot with recovery
+  - tangential travel along the contour instead of pure radial expand/contract
+- [ ] Phase 3: evaluate whether any of that deserves a user-facing control:
+  - only expose controls that clearly matter
+  - keep shaped UI lean
+  - prefer good authored defaults over a forest of knobs
 
 **Shaped visual validation checklist:**
 - [ ] A driven node region should visibly react more than unrelated regions.
@@ -407,6 +611,11 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 
 **Mandatory visual rules:**
 - [ ] The inward liquid front must always leave a visible interior gap; opposite sides may approach but never meet.
+- [ ] The inward liquid front must never disappear completely while the feature is enabled.
+- [ ] Retraction is allowed and required under pressure, but the rule is now:
+  - retreat yes
+  - complete collapse no
+  - reactivity must be visible without sacrificing continuous presence
 - [ ] The layer must stay thinner and more secondary than the main Blob body.
 - [ ] The inward front must follow the Blob contour organically instead of ignoring shape and reading as a rectangular/card-space wipe.
 - [ ] The layer must remain visibly attached to the border source; it should look emitted from the contour, not spawned in the middle.
@@ -449,6 +658,10 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - unshaped Blob still owns body deformation
   - shaped Blob still owns contour solving
   - inward liquid only shades/animates along the already-resolved interior edge
+- [ ] Stop treating visible liquid as "tint the same solid fill near the edge":
+  - give the layer its own readable band/front
+  - allow it to darken/displace the base fill locally so the eye can actually see it
+  - make visibility resilient even when the fill colour is strong and saturated
 
 **No-contact rule implementation ideas to evaluate:**
 - [ ] Derive a local maximum inward distance from the local body radius/contour thickness and clamp the liquid front to a strict fraction of that span.
@@ -508,6 +721,10 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Treat retreat as subtractive priority logic:
   - no-contact preservation outranks decorative advance
   - if advance and retreat conflict, retreat wins locally
+- [~] Add a separate retained-band floor after retreat:
+  - not enough to look static
+  - enough to prevent visual disappearance
+  - must work in both colour-strong and colour-weak presets
 - [ ] Keep the ripple/redistribution term secondary so it enriches the contour instead of causing detached traveling bands.
 - [ ] If shaped Blob support is enabled, consume the same shared inward-liquid settings but derive proximity/retreat from the solved shaped contour thickness/gap field rather than from unshaped deformation internals.
 
@@ -516,20 +733,30 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Define the no-contact cap mathematically before writing the shader.
 - [~] Add settings/model/defaults/preset plumbing for the three visible controls and enable toggle.
 - [x] Add builder rows and visibility gating.
-- [x] Route runtime config through the creator/config apply/overlay path.
+- [x] Route runtime config through the full creator/config apply/overlay path:
+  - creator/model apply must pass the fields
+  - config apply must store them on the live widget
+  - GPU extra payload build must include them
+  - `SpotifyBarsGLOverlay.set_state(...)` now accepts and stores them without frame-push failure
+  - the shader/runtime side now uploads the matching uniforms intentionally
 - [~] Implement the contour-following inward mask in `blob.frag`.
 - [x] Ensure Taste The Rainbow hue rotation is applied to the liquid color output.
-- [ ] Add focused tests for:
+- [~] Add focused tests for:
   - persistence round-trip
   - shaped/unshaped/ring visibility gating
   - no-contact cap math where practical
   - color pipeline / rainbow interaction contract where practical
+  - nonzero retained-band behavior under hot retreat states
 - [ ] Validate visually that the effect remains secondary to the Blob body.
-- [ ] Add a synthetic-audio Blob interaction regression once the retreat/pressure-balancing pass lands:
+- [ ] Validate visually that the effect is actually visible at all on strong authored fill colours.
+- [~] Add a regression that fails if enabled inward liquid can become visually zeroed or mathematically gapless under hot synthetic frames.
+- [x] Add synthetic-audio Blob interaction regressions for the retreat/pressure-balancing pass:
   - drive staged body expansion and inward liquid response together from authored synthetic band envelopes
   - prove the inward layer reacts in the same scenario as the body instead of lagging behind it
   - prove the front yields or thins when body pressure threatens the interior gap
   - prove the body and inward layer can both stay active without center contact / blowout
+  - prove a pressured peak can retreat first and then relax smoothly on the release phrase without losing the protected gap
+  - prove redistribution remains active as part of the fluid interaction path rather than collapsing into a pure depth-only rule
 
 **Landed so far for this sub-track:**
 - [x] Added canonical settings/model/defaults/runtime fields for:
@@ -539,8 +766,13 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - `blob_inward_liquid_color`
 - [x] Added Blob builder controls for the inward liquid layer and honest UI gating so the detail rows only appear when the feature is enabled.
 - [x] Kept the controls shared across shaped and unshaped Blob at the settings/runtime level without importing unshaped deformation controls into shaped mode.
-- [x] Carried the new fields through settings binding, live widget defaults, config apply, model apply, and GPU extra payload transport.
+- [x] Carried the new fields through settings binding, live widget defaults, config apply, model apply, GPU extra payload transport, overlay state storage, and blob uniform upload.
 - [x] Added focused regressions for settings persistence/round-trip, builder visibility gating, and creator/runtime plumbing.
+- [x] Finished the final overlay handoff seam:
+  - `SpotifyBarsGLOverlay.set_state(...)` accepts the new inward-liquid kwargs
+  - the overlay stores them safely on live state
+  - blob-mode uniform lookup/upload now includes the inward-liquid fields
+  - a focused regression now mirrors the real frame-push contract so new Blob extras cannot silently break runtime again
 - [x] Added a first shader-side filled-Blob inward liquid pass that:
   - follows the resolved Blob contour instead of card-space edges
   - stays disabled for ring mode for now
@@ -552,13 +784,50 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - strong body pressure can locally pull the front back instead of only letting it thicken forward
   - thinner regions retreat proportionally more than roomy regions
   - the shader now mirrors that same contract instead of using a separate one-off interaction rule
+- [~] Runtime research on 2026-04-17 shows the current pass is still not visually honoring the limiter goal:
+  - the inward liquid can still read as missing on strong real presets/custom-slot runs
+  - the next pass must add a hard visibility floor and a stricter body/liquid gap contract, not just more tint strength
+- [~] Updated limiter rule after the latest runtime clarification:
+  - the front already retracts, which is desirable
+  - the remaining failure is that the reactive contract does not preserve enough continuous presence/readability
+  - the next pass must therefore keep the retreat logic but layer in a retained-band floor rather than simply reducing retreat
+- [~] First retained-band implementation landed in code/tests:
+  - retreat still wins locally under pressure
+  - the inward front now clamps to a nonzero retained band instead of collapsing fully
+  - unshaped support-floor/body-radius math was also cooled further so the contour solver can visually matter more
 - [x] Added focused inward-liquid regressions covering:
   - disabled/ring-off behavior
   - positive-gap preservation
   - energetic advance plus pressure-driven retreat
   - narrow-region yielding
   - synthetic body + inward-liquid co-reaction under one authored envelope
+  - stronger body-threat retreat at a shared size cap
+  - rise/release phrase behavior with preserved gap and active redistribution
 - [ ] The more advanced no-contact retreat / pressure-balancing / body-threat gap behavior is no longer merely conceptual, but it still needs further visual tuning and likely one more pass before this can be considered final-quality fluid motion.
+
+#### 5G.1. Blob Highlight / Specular Redesign
+
+**Status of this sub-track:** `[ ]` Newly promoted after the 2026-04-17 runtime review proved the current highlight still reads as sphere shading
+
+**Problem statement:**
+- The user wants a white vector-like slime/ooze/oblong specular that moves with the fluid body.
+- The current runtime still reads as "solid orb with highlight" because the highlight is layered after the body and is not truly attached to the resolved contour language.
+
+**Concrete direction:**
+- [ ] Replace center/depth brightening with one or more elongated contour-attached highlight streaks.
+- [ ] Drive highlight placement from the resolved unshaped contour field, not just raw `uv`.
+- [ ] Let highlight streaks drift/warp with the same fluid solver or local contour-space offsets that move the body.
+- [ ] Keep highlights broad and soft:
+  - avoid sharp wedge caps
+  - avoid a single static top slice
+  - avoid symmetric orb shading
+- [ ] Use at least one "bloblet" or secondary short streak so the highlight reads like wet material rather than a single plastic shine.
+- [ ] Validate against screenshots that the highlight still reads correctly when the body deforms off-round.
+
+**Guardrails:**
+- [ ] Do not reintroduce a generic radial white center under a new name.
+- [ ] Do not let highlight placement become detached from the blob contour and hover in card space.
+- [ ] Do not let highlight strength wash out the inward liquid band or the body silhouette.
 
 **Likely code touchpoints for this sub-track:**
 - `widgets/spotify_visualizer/shaders/blob.frag`
@@ -608,16 +877,18 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - technical-only hidden runtime support
 - [ ] Explicitly retire old Blob authored/runtime keys that should no longer survive in saved state or curated presets, including at minimum:
   - `blob_pulse_cap`
+  - `blob_stage2_release_ms`
+  - `blob_stage3_release_ms`
+  - any shaped-dead authored key we decide to fully remove rather than merely hide
+- [~] Keep current active unshaped runtime-authored keys preserved in normalization until the redesign truly replaces them:
   - `blob_stage_gain`
   - `blob_core_scale`
   - `blob_core_floor_bias`
   - `blob_stage_bias`
-  - `blob_stage2_release_ms`
-  - `blob_stage3_release_ms`
   - `blob_stretch_tendency`
   - `blob_stretch_inner`
   - `blob_stretch_outer`
-  - any shaped-dead authored key we decide to fully remove rather than merely hide
+  - these are active today and must not be treated as deprecated by settings/custom-slot/preset tooling
 - [ ] Decide whether `blob_reactive_deformation`, `blob_constant_wobble`, `blob_reactive_wobble`, and `blob_stretch` remain authored unshaped controls or are replaced by cleaner fluid-language controls later in the redesign.
 - [ ] Once the final decision is made, remove any superseded Blob controls from:
   - live settings serialization
@@ -640,8 +911,8 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Verify no generated preset tree resurrects removed Blob keys.
 
 **Preset-tooling cleanup checklist:**
-- [~] Update `core/settings/visualizer_presets.py` so Blob repair/normalization removes retired Blob keys instead of carrying them forward.
-- [x] Update `tools/visualizer_preset_repair.py` so repair does not reintroduce removed Blob keys under the banner of completeness.
+- [~] Update `core/settings/visualizer_presets.py` so Blob repair/normalization removes retired Blob keys instead of carrying them forward, while preserving active unshaped keys still used by runtime.
+- [~] Update `tools/visualizer_preset_repair.py` so repair/audit only targets truly retired Blob keys and does not misclassify active unshaped keys as deprecated.
 - [ ] Audit any preset migration helpers or snapshot normalizers that currently preserve old Blob fields "just in case".
 - [~] Keep the source-tree-authority rule intact: authored presets define Blob keys, tools do not invent them.
 
@@ -675,6 +946,10 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
   - sanitize no longer backfills missing optional authored visualizer keys from defaults
 - [x] Ran batch repair across the curated preset tree and removed retired Blob keys from shipped authored Blob presets.
 - [x] Ran curated preset reindex after the tool cleanup, which resolved the sine-wave duplicate preset index issue through the supported tool path.
+- [~] 2026-04-17 custom-slot/runtime research uncovered a second cleanup bug:
+  - custom-slot normalization was silently dropping active unshaped Blob keys because `SpotifyVisualizerSettings` did not serialize them
+  - preset migration/repair language had drifted into calling those same active keys "retired"
+  - model serialization and preset normalization are now corrected, and repair/audit has been aligned to the same contract
 - [ ] The remaining cleanup is now the broader canonical-surface pass:
   - deciding the final authored unshaped Blob key set
   - ensuring saved settings write only that canonical set
@@ -698,6 +973,63 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 - [ ] Add `--source-authoritative` mode (or make default) — remove junk but never add missing keys
 - [ ] Ensure `regenerate_visualizer_shipped_presets.py` only mirrors source tree — no resurrection
 - [ ] Add a test that authored presets survive a repair round-trip without gaining new keys
+
+### 7. Cross-Mode Custom-Slot / Preset / Settings Sync Audit
+
+**Status:** `[ ]` Planned, not started
+**Priority:** Medium
+
+**Goal:** Prevent the Blob custom-slot normalization failure family from existing in any other visualizer mode.
+
+**Why this is now a planned program:**
+- Blob exposed a specific class of bug that is easy to miss:
+  - runtime actively uses keys
+  - model serialization silently drops them
+  - custom-slot normalization therefore strips them
+  - preset repair/migration may simultaneously misclassify them as retired
+- That exact drift pattern can exist in other modes even when the runtime "mostly works", so it deserves a deliberate repo-wide audit instead of waiting for more mode-specific surprises.
+
+**Modes to cover explicitly:**
+- [ ] Spectrum
+- [ ] Bubble
+- [ ] Blob
+- [ ] Sine Wave
+- [ ] Oscilloscope
+
+**Audit checklist per mode:**
+- [ ] Build the canonical active-key list from runtime ownership, not just settings docs.
+- [ ] Compare that list against:
+  - `core/settings/models.py`
+  - defaults
+  - settings normalization
+  - custom-slot snapshot normalization
+  - preset migration
+  - preset repair/audit tooling
+  - preset regeneration
+  - builder visibility/binding collection
+  - runtime config apply / creator handoff
+- [ ] Identify keys that are:
+  - active but not serialized
+  - serialized but never used
+  - wrongly treated as deprecated
+  - preserved in one path but dropped in another
+- [ ] Record any discovered drift in `Docs/Historical_Bugs.md` if it represents a real regression family rather than a one-off typo.
+
+**Tests to require from this audit:**
+- [ ] One normalization-survival regression per mode for representative active keys.
+- [ ] One settings round-trip regression per mode for representative authored keys.
+- [ ] One preset repair/regeneration anti-resurrection regression per mode where applicable.
+- [ ] One custom-slot regression proving runtime-active keys survive save/load/normalize for each mode.
+
+**Execution order:**
+- [ ] Finish the current Blob redesign-critical work first.
+- [ ] Then run the audit mode by mode, not all at once:
+  1. Bubble
+  2. Spectrum
+  3. Sine Wave
+  4. Oscilloscope
+  5. final Blob recheck after the canonical Blob surface is locked
+- [ ] Update docs/tests/tooling immediately as each mode is audited so the program creates lasting guardrails rather than one giant late cleanup.
 
 ---
 

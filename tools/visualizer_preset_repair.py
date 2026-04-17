@@ -65,15 +65,8 @@ _DEPRECATED_MODE_ALIAS_KEYS: Dict[str, Tuple[str, ...]] = {
 }
 _DEPRECATED_BLOB_AUTHORED_KEYS: Tuple[str, ...] = (
     "blob_pulse_cap",
-    "blob_stage_gain",
-    "blob_core_scale",
-    "blob_core_floor_bias",
-    "blob_stage_bias",
     "blob_stage2_release_ms",
     "blob_stage3_release_ms",
-    "blob_stretch_tendency",
-    "blob_stretch_inner",
-    "blob_stretch_outer",
     "blob_stretch_x_bias",
     "blob_stretch_y_bias",
 )

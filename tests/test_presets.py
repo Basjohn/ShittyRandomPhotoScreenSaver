@@ -367,9 +367,14 @@ class TestCustomPresetBackup:
         normalized = normalize_visualizer_section_mapping(
             {
                 "mode": "blob",
+                "blob_stage_gain": 1.8,
+                "blob_core_scale": 0.9,
+                "blob_core_floor_bias": 0.2,
+                "blob_stage_bias": -0.1,
                 "blob_stage2_release_ms": 2050,
                 "blob_stage3_release_ms": 2600,
                 "blob_stretch_tendency": 0.91,
+                "blob_stretch_inner": 0.07,
                 "blob_stretch_outer": 0.88,
                 "blob_stretch_x_bias": 0.4,
                 "blob_stretch_y_bias": 0.7,
@@ -381,22 +386,29 @@ class TestCustomPresetBackup:
         for key in (
             "blob_stage2_release_ms",
             "blob_stage3_release_ms",
-            "blob_stretch_tendency",
-            "blob_stretch_outer",
             "blob_stretch_x_bias",
             "blob_stretch_y_bias",
         ):
             assert key not in normalized
-        assert normalized.get("blob_pulse_release_ms") == 220
-        assert normalized.get("blob_stretch") == pytest.approx(0.35)
+        assert normalized.get("blob_stage_gain") == pytest.approx(1.8)
+        assert normalized.get("blob_core_scale") == pytest.approx(0.9)
+        assert normalized.get("blob_core_floor_bias") == pytest.approx(0.2)
+        assert normalized.get("blob_stage_bias") == pytest.approx(-0.1)
+        assert normalized.get("blob_stretch_tendency") == pytest.approx(0.91)
+        assert normalized.get("blob_stretch_inner") == pytest.approx(0.07)
+        assert normalized.get("blob_stretch_outer") == pytest.approx(0.88)
 
     def test_settings_validation_removes_retired_blob_legacy_keys(self, settings_manager: SettingsManager):
         settings_manager.set("widgets", {
             "spotify_visualizer": {
                 "mode": "blob",
                 "blob_stage_gain": 1.8,
+                "blob_core_scale": 0.9,
+                "blob_core_floor_bias": 0.2,
+                "blob_stage_bias": -0.1,
                 "blob_pulse_cap": 2.1,
                 "blob_stretch_tendency": 0.85,
+                "blob_stretch_inner": 0.06,
                 "blob_stretch_outer": 0.82,
                 "blob_stage2_release_ms": 1800,
                 "blob_stage3_release_ms": 2200,
@@ -407,16 +419,18 @@ class TestCustomPresetBackup:
         spotify_vis = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
 
         for key in (
-            "blob_stage_gain",
             "blob_pulse_cap",
-            "blob_stretch_tendency",
-            "blob_stretch_outer",
             "blob_stage2_release_ms",
             "blob_stage3_release_ms",
         ):
             assert key not in spotify_vis
-        assert spotify_vis.get("blob_pulse_release_ms") == 220
-        assert spotify_vis.get("blob_stretch") == pytest.approx(0.35)
+        assert spotify_vis.get("blob_stage_gain") == pytest.approx(1.8)
+        assert spotify_vis.get("blob_core_scale") == pytest.approx(0.9)
+        assert spotify_vis.get("blob_core_floor_bias") == pytest.approx(0.2)
+        assert spotify_vis.get("blob_stage_bias") == pytest.approx(-0.1)
+        assert spotify_vis.get("blob_stretch_tendency") == pytest.approx(0.85)
+        assert spotify_vis.get("blob_stretch_inner") == pytest.approx(0.06)
+        assert spotify_vis.get("blob_stretch_outer") == pytest.approx(0.82)
         assert "widgets.spotify_visualizer" in repairs
 
 

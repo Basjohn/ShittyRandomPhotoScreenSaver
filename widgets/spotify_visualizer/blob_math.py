@@ -2,6 +2,13 @@
 from __future__ import annotations
 
 import math
+from typing import Sequence
+
+from widgets.spotify_visualizer.blob_shaper_solver import (
+    build_contour_residual_profile,
+    solve_profile_step,
+    slew_profile_toward_target,
+)
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:
@@ -211,6 +218,319 @@ def compute_unshaped_radius_multiplier(
     return final_mult
 
 
+def compute_blob_pocket_component(
+    *,
+    angle_frac: float,
+    time_seconds: float,
+    bass_energy: float,
+    mid_energy: float,
+    high_energy: float,
+    overall_energy: float,
+    smoothed_energy: float,
+    pockets: Sequence[Sequence[float]] | None = None,
+    pocket_mix: Sequence[Sequence[float]] | None = None,
+) -> float:
+    """Mirror the shader pocket component for CPU contour solving/tests."""
+
+    if not pockets or not pocket_mix:
+        return 0.0
+
+    if pockets and isinstance(pockets[0], (int, float)):
+        flat_pockets = list(float(v) for v in pockets)
+        pockets = [flat_pockets[idx:idx + 4] for idx in range(0, len(flat_pockets), 4)]
+    if pocket_mix and isinstance(pocket_mix[0], (int, float)):
+        flat_mix = list(float(v) for v in pocket_mix)
+        pocket_mix = [flat_mix[idx:idx + 4] for idx in range(0, len(flat_mix), 4)]
+
+    angle = float(angle_frac) % 1.0
+    time_value = float(time_seconds)
+    bass = _clamp(bass_energy, 0.0, 1.0)
+    mid = _clamp(mid_energy, 0.0, 1.0)
+    high = _clamp(high_energy, 0.0, 1.0)
+    overall = _clamp(overall_energy, 0.0, 1.0)
+    smoothed = _clamp(smoothed_energy, 0.0, 1.0)
+
+    total = 0.0
+    for idx, pocket in enumerate(pockets):
+        if idx >= len(pocket_mix) or len(pocket) < 4 or len(pocket_mix[idx]) < 4:
+            continue
+        center = float(pocket[0]) % 1.0
+        amplitude = max(0.0, float(pocket[1]))
+        if amplitude <= 0.001:
+            continue
+        width = max(0.05, float(pocket[2]))
+        phase = float(pocket[3])
+        diff = abs(angle - center)
+        diff = min(diff, 1.0 - diff)
+        diff_norm = _clamp(diff / max(width, 0.001), 0.0, 1.0)
+        lobe = 1.0 - _smoothstep(0.18, 1.0, diff_norm)
+        lobe *= lobe
+        if lobe <= 0.0:
+            continue
+        mixv = pocket_mix[idx]
+        drive = _clamp(
+            bass * float(mixv[0])
+            + mid * float(mixv[1])
+            + high * float(mixv[2])
+            + smoothed * float(mixv[3])
+            + overall * 0.10,
+            0.0,
+            1.8,
+        )
+        pocket_age = max(0.0, time_value - phase)
+        attack_boost = 1.0 + 0.42 * math.exp(-pocket_age / 0.085)
+        ripple_phase = pocket_age * 12.0 + diff_norm * 2.0 + float(idx) * 0.7
+        ripple = 0.94 + 0.06 * math.sin(ripple_phase)
+        shoulder_fill = 1.0 - diff_norm * 0.26
+        total += amplitude * drive * lobe * ripple * attack_boost * shoulder_fill
+    return total
+
+
+def _fit_profile_inside_containment(
+    profile: Sequence[float],
+    *,
+    min_allowed: float,
+    max_allowed: float,
+    center: float = 1.0,
+) -> list[float]:
+    """Compress contour deviation into a safe envelope without flattening it."""
+
+    if not profile:
+        return []
+    min_allowed = min(float(min_allowed), float(center))
+    max_allowed = max(float(max_allowed), float(center))
+    peak_above = max(max(float(v) - center, 0.0) for v in profile)
+    peak_below = max(max(center - float(v), 0.0) for v in profile)
+    above_cap = max_allowed - center
+    below_cap = center - min_allowed
+    scale = 1.0
+    if peak_above > 1e-6:
+        scale = min(scale, above_cap / peak_above)
+    if peak_below > 1e-6:
+        scale = min(scale, below_cap / peak_below)
+    scale = _clamp(scale, 0.0, 1.0)
+    return [_clamp(center + (float(v) - center) * scale, min_allowed, max_allowed) for v in profile]
+
+
+def build_unshaped_blob_target_profile(
+    *,
+    sample_count: int,
+    time_seconds: float,
+    bass_energy: float,
+    mid_energy: float,
+    high_energy: float,
+    overall_energy: float,
+    smoothed_energy: float,
+    reactive_deformation: float,
+    constant_wobble: float,
+    reactive_wobble: float,
+    stretch_tendency: float,
+    stretch_inner: float,
+    stretch_outer: float,
+    core_floor_bias: float,
+    stage1_t: float,
+    stage2_t: float,
+    stage3_t: float,
+    pockets: Sequence[Sequence[float]] | None = None,
+    pocket_mix: Sequence[Sequence[float]] | None = None,
+    playing: bool = True,
+    seed: float = 0.0,
+) -> tuple[list[float], list[float], list[float]]:
+    """Build the procedural unshaped contour family in profile space.
+
+    Returns ``(base_profile, target_profile, bounded_target_profile)``.
+    """
+
+    count = max(0, int(sample_count))
+    if count <= 0:
+        return ([], [], [])
+
+    time_value = float(time_seconds)
+    bass = _clamp(bass_energy, 0.0, 1.0)
+    mid = _clamp(mid_energy, 0.0, 1.0)
+    high = _clamp(high_energy, 0.0, 1.0)
+    overall = _clamp(overall_energy, 0.0, 1.0)
+    smoothed = _clamp(smoothed_energy, 0.0, 1.0)
+    stage_floor = compute_stage_floor_fraction(
+        core_floor_bias=core_floor_bias,
+        stage1_t=stage1_t,
+        stage2_t=stage2_t,
+        stage3_t=stage3_t,
+    )
+
+    residual = build_contour_residual_profile(
+        sample_count=count,
+        time_value=time_value,
+        idle_motion=0.42,
+        audio_motion=1.05,
+        overall_energy=overall,
+        vocal_energy=_clamp(mid * 0.82 + high * 0.18, 0.0, 1.0),
+        high_energy=high,
+        playing=playing,
+        seed=seed + 0.41,
+    )
+
+    base_profile: list[float] = []
+    target_profile: list[float] = []
+    for idx in range(count):
+        angle_frac = idx / count
+        base_mult = compute_unshaped_organic_base_multiplier(
+            angle_frac=angle_frac,
+            time_seconds=time_value,
+            smoothed_energy=smoothed,
+            overall_energy=overall,
+        )
+        pocket_component = compute_blob_pocket_component(
+            angle_frac=angle_frac,
+            time_seconds=time_value,
+            bass_energy=bass,
+            mid_energy=mid,
+            high_energy=high,
+            overall_energy=overall,
+            smoothed_energy=smoothed,
+            pockets=pockets,
+            pocket_mix=pocket_mix,
+        )
+        final_mult = compute_unshaped_radius_multiplier(
+            angle_frac=angle_frac,
+            time_seconds=time_value,
+            bass_energy=bass,
+            mid_energy=mid,
+            high_energy=high,
+            overall_energy=overall,
+            smoothed_energy=smoothed,
+            reactive_deformation=reactive_deformation,
+            constant_wobble=constant_wobble,
+            reactive_wobble=reactive_wobble,
+            stretch_tendency=stretch_tendency,
+            stretch_inner=stretch_inner,
+            stretch_outer=stretch_outer,
+            core_floor_bias=core_floor_bias,
+            stage1_t=stage1_t,
+            stage2_t=stage2_t,
+            stage3_t=stage3_t,
+            pocket_component=pocket_component,
+        )
+        base_profile.append(base_mult)
+        target_profile.append(final_mult + residual[idx])
+
+    # Give the solved contour more authority over the silhouette while keeping
+    # it card-contained. The body should read as contour pressure, not as a
+    # nearly circular scalar radius with small decoration layered on top.
+    min_allowed = max(0.66, stage_floor * 0.94, min(base_profile) * 0.84)
+    max_allowed = min(1.18, 1.05 + stage1_t * 0.040 + stage2_t * 0.048 + stage3_t * 0.056)
+    bounded = _fit_profile_inside_containment(
+        target_profile,
+        min_allowed=min_allowed,
+        max_allowed=max_allowed,
+        center=1.0,
+    )
+    return (base_profile, target_profile, bounded)
+
+
+def solve_unshaped_blob_profile_step(
+    *,
+    previous_profile: Sequence[float] | None,
+    previous_velocity: Sequence[float] | None,
+    previous_target_profile: Sequence[float] | None,
+    sample_count: int,
+    time_seconds: float,
+    dt: float,
+    bass_energy: float,
+    mid_energy: float,
+    high_energy: float,
+    overall_energy: float,
+    smoothed_energy: float,
+    reactive_deformation: float,
+    constant_wobble: float,
+    reactive_wobble: float,
+    stretch_tendency: float,
+    stretch_inner: float,
+    stretch_outer: float,
+    core_floor_bias: float,
+    stage1_t: float,
+    stage2_t: float,
+    stage3_t: float,
+    pockets: Sequence[Sequence[float]] | None = None,
+    pocket_mix: Sequence[Sequence[float]] | None = None,
+    playing: bool = True,
+    seed: float = 0.0,
+) -> tuple[list[float], list[float], list[float], list[float]]:
+    """Advance the procedural unshaped contour through the shared contour solver."""
+
+    base_profile, raw_target_profile, bounded_target_profile = build_unshaped_blob_target_profile(
+        sample_count=sample_count,
+        time_seconds=time_seconds,
+        bass_energy=bass_energy,
+        mid_energy=mid_energy,
+        high_energy=high_energy,
+        overall_energy=overall_energy,
+        smoothed_energy=smoothed_energy,
+        reactive_deformation=reactive_deformation,
+        constant_wobble=constant_wobble,
+        reactive_wobble=reactive_wobble,
+        stretch_tendency=stretch_tendency,
+        stretch_inner=stretch_inner,
+        stretch_outer=stretch_outer,
+        core_floor_bias=core_floor_bias,
+        stage1_t=stage1_t,
+        stage2_t=stage2_t,
+        stage3_t=stage3_t,
+        pockets=pockets,
+        pocket_mix=pocket_mix,
+        playing=playing,
+        seed=seed,
+    )
+    count = len(base_profile)
+    if count <= 0:
+        return ([], [], [], [])
+
+    target_profile = slew_profile_toward_target(
+        previous_target=previous_target_profile,
+        current_target=bounded_target_profile,
+        base_profile=base_profile,
+        dt=dt,
+        attack_hz=13.5 if playing else 8.0,
+        release_hz=3.2 if playing else 2.2,
+    )
+    current_profile = list(previous_profile or ())
+    current_velocity = list(previous_velocity or ())
+    if len(current_profile) != count:
+        current_profile = list(base_profile)
+    if len(current_velocity) != count:
+        current_velocity = [0.0] * count
+
+    min_profile = [
+        max(0.66, base_profile[idx] * 0.84, stage_floor if (stage_floor := compute_stage_floor_fraction(
+            core_floor_bias=core_floor_bias,
+            stage1_t=stage1_t,
+            stage2_t=stage2_t,
+            stage3_t=stage3_t,
+        )) else 0.66)
+        for idx in range(count)
+    ]
+    max_profile = [min(1.18, max(base_profile[idx] + 0.18, target_profile[idx] + 0.08)) for idx in range(count)]
+    solved_profile, solved_velocity = solve_profile_step(
+        current_profile=current_profile,
+        current_velocity=current_velocity,
+        target_profile=target_profile,
+        min_profile=min_profile,
+        max_profile=max_profile,
+        dt=dt,
+        stiffness=18.0 if playing else 12.0,
+        damping=10.8 if playing else 13.4,
+        neighbor_strength=18.5 if playing else 13.0,
+        smoothing_passes=5 if playing else 4,
+    )
+    solved_profile = _fit_profile_inside_containment(
+        solved_profile,
+        min_allowed=min(min_profile),
+        max_allowed=max(max_profile),
+        center=1.0,
+    )
+    return (base_profile, raw_target_profile, target_profile, solved_profile), solved_velocity
+
+
 def compute_inward_liquid_profile(
     *,
     angle_frac: float,
@@ -294,6 +614,7 @@ def compute_inward_liquid_profile(
         0.92,
     )
     hard_cap = local_r * max_fraction
+    retained_band_floor = max(local_r * (0.070 + max_fraction * 0.06), 0.018)
     requested_depth = hard_cap * advance_drive
 
     body_pressure = _clamp(
@@ -324,15 +645,17 @@ def compute_inward_liquid_profile(
         time_value * 1.45 + angle * 4.4 - 0.6
     )
     final_depth = requested_depth - retreat_depth + redistribution * hard_cap
-    final_depth = _clamp(final_depth, local_r * 0.04, hard_cap)
+    final_depth = _clamp(final_depth, retained_band_floor, hard_cap)
 
-    front_softness = max(final_depth * 0.38, 0.006)
+    front_softness = max(final_depth * 0.56, 0.010)
     front_start = max(final_depth - front_softness, 0.0)
     front_mask = 1.0 - _smoothstep(front_start, final_depth, local_d)
-    source_anchor = 1.0 - _smoothstep(0.0, max(final_depth * 0.75, 0.012), local_d)
-    body_preserve = _smoothstep(0.0, max(local_r * 0.45, 0.02), local_d)
-    mix = front_mask * (0.34 + source_anchor * 0.22 + audio_pressure * 0.16) * (1.0 - body_preserve * 0.45)
-    mix = _clamp(mix, 0.0, 0.78)
+    source_anchor = 1.0 - _smoothstep(0.0, max(final_depth * 0.95, 0.018), local_d)
+    body_preserve = _smoothstep(0.0, max(local_r * 0.58, 0.035), local_d)
+    retained_mix_floor = 0.24 + source_anchor * 0.08
+    mix = front_mask * (0.56 + source_anchor * 0.30 + audio_pressure * 0.18) * (1.0 - body_preserve * 0.22)
+    mix = max(mix, front_mask * retained_mix_floor)
+    mix = _clamp(mix, 0.0, 0.96)
 
     return {
         "front_depth": final_depth,
@@ -340,7 +663,8 @@ def compute_inward_liquid_profile(
         "advance_drive": advance_drive,
         "retreat_depth": retreat_depth,
         "redistribution": redistribution * hard_cap,
-        "no_contact_gap": max(local_r - final_depth, local_r * (1.0 - max_fraction)),
+        "retained_band_floor": retained_band_floor,
+        "no_contact_gap": max(local_r - final_depth, max(local_r * (1.0 - max_fraction), retained_band_floor)),
     }
 
 
@@ -482,7 +806,10 @@ def compute_stage_offset(
             stage_bias=stage_bias,
         )
 
-    stage_unit = base_size * 0.18 + 0.02
+    # Keep stage growth secondary to the fluid body language. The blob should
+    # not read as "a big pulse that happens to wobble"; stage is support, not
+    # the main silhouette author.
+    stage_unit = base_size * 0.11 + 0.012
     stage1_amt = stage_unit * 0.70
     stage2_amt = stage_unit * 1.52
     stage3_amt = stage_unit * 2.70
@@ -511,13 +838,14 @@ def compute_blob_radius_preview(
     blob_size = _clamp(blob_size, 0.1, 2.5)
     bass = _clamp(bass_energy, 0.0, 1.0)
     blob_pulse = max(0.0, blob_pulse)
-    r = 0.44 * blob_size
-    r += bass * bass * 0.066 * blob_pulse
-    r += bass * 0.077 * blob_pulse
+    # A calmer baseline leaves room for fluid deformation to imply growth.
+    r = 0.285 * blob_size
+    r += bass * bass * 0.016 * blob_pulse
+    r += bass * 0.018 * blob_pulse
     se = _clamp(smoothed_energy, 0.0, 1.0)
     breath = max(bass, se * 0.82)
-    r += max(0.03, breath) * 0.020 * blob_pulse
-    r -= (1.0 - se) * 0.028 * blob_pulse
+    r += max(0.02, breath) * 0.007 * blob_pulse
+    r -= (1.0 - se) * 0.010 * blob_pulse
     r += compute_stage_offset(
         blob_size=blob_size,
         bass_energy=bass,

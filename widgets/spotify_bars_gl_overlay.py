@@ -171,6 +171,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
         self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
         self._blob_outline_color: QColor = QColor(0, 0, 0, 0)  # dark band between fill and glow
+        self._blob_inward_liquid_color: QColor = QColor(170, 225, 255, 190)
         self._blob_pulse: float = 1.0
         self._blob_width: float = 1.0
         self._blob_size: float = 1.0
@@ -178,6 +179,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_reactivity: float = 1.0
         self._blob_glow_max_size: float = 1.0
         self._blob_reactive_glow: bool = True
+        self._blob_inward_liquid_enabled: bool = False
+        self._blob_inward_liquid_reactivity: float = 1.0
+        self._blob_inward_liquid_max_size: float = 0.28
         self._blob_glow_drive_mode: str = "bass"
         self._blob_reactive_deformation: float = 1.0
         self._blob_stage_gain: float = 1.0
@@ -505,11 +509,15 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_glow_color: QColor | None = None,
         blob_edge_color: QColor | None = None,
         blob_outline_color: QColor | None = None,
+        blob_inward_liquid_color: QColor | None = None,
         blob_pulse: float = 1.0,
         blob_width: float = 1.0,
         blob_size: float = 1.0,
         blob_glow_intensity: float = 0.5,
         blob_reactive_glow: bool = True,
+        blob_inward_liquid_enabled: bool = False,
+        blob_inward_liquid_reactivity: float = 1.0,
+        blob_inward_liquid_max_size: float = 0.28,
         blob_glow_drive_mode: str = "bass",
         blob_reactive_deformation: float = 1.0,
         blob_stage_gain: float = 1.0,
@@ -1107,6 +1115,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_edge_color = QColor(blob_edge_color)
         if blob_outline_color is not None:
             self._blob_outline_color = QColor(blob_outline_color)
+        if blob_inward_liquid_color is not None:
+            self._blob_inward_liquid_color = QColor(blob_inward_liquid_color)
         self._blob_pulse = max(0.0, float(blob_pulse))
         self._blob_width = max(0.1, min(1.0, float(blob_width)))
         self._blob_size = max(0.3, min(2.0, float(blob_size)))
@@ -1114,6 +1124,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_glow_reactivity = max(0.0, min(2.0, float(blob_glow_reactivity)))
         self._blob_glow_max_size = max(0.1, min(3.0, float(blob_glow_max_size)))
         self._blob_reactive_glow = bool(blob_reactive_glow)
+        self._blob_inward_liquid_enabled = bool(blob_inward_liquid_enabled)
+        self._blob_inward_liquid_reactivity = max(0.0, min(2.0, float(blob_inward_liquid_reactivity)))
+        self._blob_inward_liquid_max_size = max(0.05, min(0.45, float(blob_inward_liquid_max_size)))
         _blob_glow_drive_mode = str(blob_glow_drive_mode).strip().lower()
         self._blob_glow_drive_mode = _blob_glow_drive_mode if _blob_glow_drive_mode in {"bass", "vocal"} else "bass"
         self._blob_reactive_deformation = max(0.0, min(3.0, float(blob_reactive_deformation)))
@@ -2254,11 +2267,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     "u_glow_color", "u_reactive_glow",
                     "u_sensitivity", "u_smoothing",
                     "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
+                    "u_blob_inward_liquid_color",
                     "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
                     "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_glow_energy", "u_blob_peak_energy",
                     "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
                     "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
                     "u_blob_stretch_tendency", "u_blob_stretch_inner", "u_blob_stretch_outer",
+                    "u_blob_inward_liquid_enabled", "u_blob_inward_liquid_reactivity", "u_blob_inward_liquid_max_size",
                     "u_blob_stage_progress_override",
                     "u_osc_speed", "u_osc_line_dim",
                     "u_osc_line_offset_bias",

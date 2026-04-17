@@ -7,6 +7,7 @@ import pytest
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
 from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
 from widgets.spotify_visualizer.energy_bands import EnergyBands
+from widgets.spotify_visualizer.renderers.blob import get_uniform_names as blob_uniform_names
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
@@ -76,6 +77,15 @@ def test_overlay_accepts_all_gpu_kwargs(qt_app):
     widget.deleteLater()
 
 
+def test_blob_renderer_exposes_inward_liquid_uniforms():
+    uniforms = set(blob_uniform_names())
+
+    assert "u_blob_inward_liquid_color" in uniforms
+    assert "u_blob_inward_liquid_enabled" in uniforms
+    assert "u_blob_inward_liquid_reactivity" in uniforms
+    assert "u_blob_inward_liquid_max_size" in uniforms
+
+
 @pytest.mark.qt
 def test_spectrum_gpu_kwargs_include_shared_engine_signal_snapshot(qt_app):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
@@ -97,7 +107,7 @@ def test_spectrum_gpu_kwargs_include_shared_engine_signal_snapshot(qt_app):
 
 
 @pytest.mark.qt
-def test_blob_gpu_kwargs_use_pre_agc_energy_snapshot(qt_app):
+def test_blob_gpu_kwargs_keep_cool_continuous_energy_snapshot(qt_app):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qt_app.processEvents()
 
@@ -106,13 +116,14 @@ def test_blob_gpu_kwargs_use_pre_agc_energy_snapshot(qt_app):
 
     extras = build_gpu_push_extra_kwargs(widget, "blob", stub_engine)
 
-    assert extras["energy_bands"] == stub_engine.get_pre_agc_energy_bands()
+    assert extras["energy_bands"] == stub_engine.get_energy_bands()
+    assert extras["energy_bands"] != stub_engine.get_pre_agc_energy_bands()
 
     widget.deleteLater()
 
 
 @pytest.mark.qt
-def test_bubble_gpu_kwargs_use_pre_agc_energy_snapshot(qt_app):
+def test_bubble_gpu_kwargs_keep_cool_continuous_energy_snapshot(qt_app):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qt_app.processEvents()
 
@@ -121,6 +132,7 @@ def test_bubble_gpu_kwargs_use_pre_agc_energy_snapshot(qt_app):
 
     extras = build_gpu_push_extra_kwargs(widget, "bubble", stub_engine)
 
-    assert extras["energy_bands"] == stub_engine.get_pre_agc_energy_bands()
+    assert extras["energy_bands"] == stub_engine.get_energy_bands()
+    assert extras["energy_bands"] != stub_engine.get_pre_agc_energy_bands()
 
     widget.deleteLater()

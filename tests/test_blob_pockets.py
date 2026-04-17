@@ -116,6 +116,48 @@ def test_blob_pockets_do_not_spawn_for_shaped_blob() -> None:
     assert all(v == pytest.approx(0.0) for v in mix)
 
 
+def test_blob_pocket_component_accepts_flat_uniform_payload_shape() -> None:
+    from widgets.spotify_visualizer.blob_math import compute_blob_pocket_component
+    from widgets.spotify_visualizer.blob_pockets import (
+        advance_blob_pocket_state,
+        build_blob_pocket_uniform_payload,
+        make_blob_pocket_state,
+    )
+
+    state = make_blob_pocket_state()
+    state = advance_blob_pocket_state(
+        state,
+        dt=0.016,
+        time_seconds=1.0,
+        playing=True,
+        shaper_enabled=False,
+        kick_raw=0.95,
+        snare_raw=0.0,
+        bass_transient=1.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        bass_energy=0.84,
+        mid_energy=0.12,
+        high_energy=0.04,
+        overall_energy=0.58,
+    )
+    data, mix = build_blob_pocket_uniform_payload(state)
+
+    component = compute_blob_pocket_component(
+        angle_frac=state.pockets[0].angle_frac,
+        time_seconds=1.0,
+        bass_energy=0.84,
+        mid_energy=0.12,
+        high_energy=0.04,
+        overall_energy=0.58,
+        smoothed_energy=0.62,
+        pockets=data,
+        pocket_mix=mix,
+    )
+
+    assert component > 0.0
+
+
 def test_blob_pockets_cooldown_prevents_same_frame_slot_spam() -> None:
     from widgets.spotify_visualizer.blob_pockets import advance_blob_pocket_state, make_blob_pocket_state
 
