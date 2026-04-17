@@ -179,10 +179,27 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab._bubble_stream_direction_row_widget, stream_dir_row = _aligned_row_widget(motion_bucket, "Stream Direction:")
     tab.bubble_stream_direction = StyledComboBox(size_variant="compact")
-    tab.bubble_stream_direction.addItems(["None", "Up", "Down", "Left", "Right", "Diagonal", "Random"])
+    stream_options = [
+        ("None", "none"),
+        ("Up", "up"),
+        ("Down", "down"),
+        ("Left", "left"),
+        ("Right", "right"),
+        ("Top Left", "top_left"),
+        ("Top Right", "top_right"),
+        ("Bottom Left", "bottom_left"),
+        ("Bottom Right", "bottom_right"),
+        ("Random", "random"),
+    ]
+    for label, value in stream_options:
+        tab.bubble_stream_direction.addItem(label, value)
     saved_dir = tab._default_str('spotify_visualizer', 'bubble_stream_direction', 'up').lower()
-    dir_map = {"none": 0, "up": 1, "down": 2, "left": 3, "right": 4, "diagonal": 5, "random": 6}
-    tab.bubble_stream_direction.setCurrentIndex(dir_map.get(saved_dir, 1))
+    if saved_dir == "diagonal":
+        saved_dir = "top_right"
+    dir_index = tab.bubble_stream_direction.findData(saved_dir)
+    if dir_index < 0:
+        dir_index = tab.bubble_stream_direction.findData("up")
+    tab.bubble_stream_direction.setCurrentIndex(max(0, dir_index))
     bind_setting_signal(tab, tab.bubble_stream_direction.currentIndexChanged)
     stream_dir_row.addWidget(tab.bubble_stream_direction)
     stream_dir_row.addStretch()
@@ -571,6 +588,30 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     bounce_small_speed_row.addWidget(tab.bubble_bounce_small_speed)
     tab.bubble_bounce_small_speed_label = QLabel(f"{val / 100.0:.2f}x")
     bounce_small_speed_row.addWidget(tab.bubble_bounce_small_speed_label)
+
+    bounce_same_only_row = _aligned_row(bounce_bucket, "Collision Filter:")
+    tab.bubble_bounce_same_only = QCheckBox("Same Bubbles Bounce Only")
+    tab.bubble_bounce_same_only.setProperty("circleIndicator", True)
+    tab.bubble_bounce_same_only.setChecked(
+        tab._default_bool('spotify_visualizer', 'bubble_bounce_same_only', False)
+    )
+    bind_setting_signal(tab, tab.bubble_bounce_same_only.stateChanged)
+    bounce_same_only_row.addWidget(tab.bubble_bounce_same_only)
+    bounce_same_only_row.addStretch()
+
+    collision_pop_row = _aligned_row(bounce_bucket, "Pop on Collision:")
+    tab.bubble_collision_pop_mode = StyledComboBox(size_variant="mini")
+    tab.bubble_collision_pop_mode.addItem("Off", "off")
+    tab.bubble_collision_pop_mode.addItem("One Bubble", "one")
+    tab.bubble_collision_pop_mode.addItem("All Bubbles", "all")
+    saved_pop_mode = tab._default_str('spotify_visualizer', 'bubble_collision_pop_mode', 'off').lower()
+    pop_idx = tab.bubble_collision_pop_mode.findData(saved_pop_mode)
+    if pop_idx < 0:
+        pop_idx = 0
+    tab.bubble_collision_pop_mode.setCurrentIndex(pop_idx)
+    tab.bubble_collision_pop_mode.currentIndexChanged.connect(tab._save_settings)
+    collision_pop_row.addWidget(tab.bubble_collision_pop_mode)
+    collision_pop_row.addStretch()
 
     specular_row = _aligned_row(appearance_bucket, "Specular Direction:")
     tab.bubble_specular_direction = StyledComboBox(size_variant="mini")

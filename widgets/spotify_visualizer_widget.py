@@ -300,6 +300,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_bounce_small_pct: int = 30
         self._bubble_bounce_big_speed: float = 0.8
         self._bubble_bounce_small_speed: float = 0.5
+        self._bubble_bounce_same_only: bool = False
+        self._bubble_collision_pop_mode: str = "off"
         self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
         self._bubble_specular_color: QColor = QColor(255, 255, 255, 255)
         self._bubble_gradient_light: QColor = QColor(210, 170, 120, 255)

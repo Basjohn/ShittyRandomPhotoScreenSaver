@@ -252,6 +252,23 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
         treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
 
+        # Bubble/Blob control-lane normalization.
+        #
+        # Hard-clamping hot pre-AGC energy to 1.0 flattens deltas in loud
+        # passages (notably chorus starts) and can make bubble transients look
+        # dead despite strong incoming audio. Keep AGC source semantics intact,
+        # but provide a dedicated dynamically-normalized control lane for modes
+        # that need sustained variance under pressure.
+        prev_control_norm = max(0.25, float(getattr(worker, "_bubble_control_norm", 1.0) or 1.0))
+        control_target = max(0.25, min(3.5, max(bass_energy, mid_energy, treble_energy)))
+        control_alpha = 0.12 if control_target >= prev_control_norm else 0.30
+        control_norm = prev_control_norm + (control_target - prev_control_norm) * control_alpha
+        control_norm = max(0.25, min(3.5, control_norm))
+        worker._bubble_control_norm = control_norm
+        worker._bubble_pre_agc_bass = min(1.0, max(0.0, bass_energy / control_norm))
+        worker._bubble_pre_agc_mid = min(1.0, max(0.0, mid_energy / control_norm))
+        worker._bubble_pre_agc_treble = min(1.0, max(0.0, treble_energy / control_norm))
+
         # Pre-AGC energy: post-noise-floor but pre-normalization.
         # Modes that need true dynamic range (bubbles, blob) read these
         # instead of post-AGC bar-derived energy which is near-constant.
@@ -263,10 +280,13 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         # Feed post-noise-floor, pre-AGC band energies into the fast path.
         _tb = getattr(worker, '_transient_bus', None)
         if _tb is not None:
+            # Keep transients responsive under hot sections by normalising
+            # against the control lane instead of hard-clamping to 1.0.
+            _tb_norm = max(0.2, control_norm * 0.85)
             _t_snap = _tb.update(
-                min(1.0, bass_energy),
-                min(1.0, mid_energy),
-                min(1.0, treble_energy),
+                min(2.5, max(0.0, bass_energy / _tb_norm)),
+                min(2.5, max(0.0, mid_energy / _tb_norm)),
+                min(2.5, max(0.0, treble_energy / _tb_norm)),
             )
             _g_clamp = getattr(worker, '_transient_clamp', 1.5)
             worker._transient_bass = min(_g_clamp, _t_snap.bass_transient)

@@ -392,6 +392,8 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     widget._bubble_bounce_small_pct = 14
     widget._bubble_bounce_big_speed = 1.25
     widget._bubble_bounce_small_speed = 0.42
+    widget._bubble_bounce_same_only = True
+    widget._bubble_collision_pop_mode = "one"
 
     tick_pipeline.dispatch_bubble_simulation(widget, time.time())
 
@@ -406,6 +408,8 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     assert sim_settings["bubble_bounce_small_pct"] == 14
     assert sim_settings["bubble_bounce_big_speed"] == pytest.approx(1.25)
     assert sim_settings["bubble_bounce_small_speed"] == pytest.approx(0.42)
+    assert sim_settings["bubble_bounce_same_only"] is True
+    assert sim_settings["bubble_collision_pop_mode"] == "one"
 
 
 @pytest.mark.qt

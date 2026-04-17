@@ -667,7 +667,20 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_small_freq_pulse = max(0.0, min(1.0, float(kwargs['bubble_small_freq_pulse'])))
     if 'bubble_stream_direction' in kwargs:
         val = str(kwargs['bubble_stream_direction']).lower()
-        if val not in ('none', 'up', 'down', 'left', 'right', 'diagonal', 'random'):
+        if val == 'diagonal':
+            val = 'top_right'
+        if val not in (
+            'none',
+            'up',
+            'down',
+            'left',
+            'right',
+            'top_left',
+            'top_right',
+            'bottom_left',
+            'bottom_right',
+            'random',
+        ):
             val = 'up'
         widget._bubble_stream_direction = val
     if 'bubble_stream_constant_speed' in kwargs:
@@ -712,6 +725,13 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_bounce_big_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_big_speed'])))
     if 'bubble_bounce_small_speed' in kwargs:
         widget._bubble_bounce_small_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_small_speed'])))
+    if 'bubble_bounce_same_only' in kwargs:
+        widget._bubble_bounce_same_only = bool(kwargs['bubble_bounce_same_only'])
+    if 'bubble_collision_pop_mode' in kwargs:
+        mode = str(kwargs['bubble_collision_pop_mode']).strip().lower()
+        if mode not in {"off", "one", "all"}:
+            mode = "off"
+        widget._bubble_collision_pop_mode = mode
     if 'bubble_outline_color' in kwargs:
         c = _color_or_none(kwargs['bubble_outline_color'])
         if c is not None:

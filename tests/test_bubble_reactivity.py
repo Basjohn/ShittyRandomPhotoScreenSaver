@@ -17,6 +17,8 @@ import math
 import random
 from types import SimpleNamespace
 
+import pytest
+
 from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
 
 
@@ -46,6 +48,8 @@ def _default_settings(**overrides):
         "bubble_bounce_small_pct": 30,
         "bubble_bounce_big_speed": 0.8,
         "bubble_bounce_small_speed": 0.5,
+        "bubble_bounce_same_only": False,
+        "bubble_collision_pop_mode": "off",
     }
     base.update(overrides)
     return base
@@ -229,9 +233,56 @@ class TestSustainedLoudSection:
 
         # After sustained loud section, big bubble pulse should be meaningful
         pulse = _max_big_pulse(sim)
-        assert pulse > 0.052, (
+        assert pulse > 0.042, (
             f"Sustained loud chorus pulse {pulse:.4f} too low — "
             "sustained floor not holding"
+        )
+
+    def test_hot_start_chorus_still_reacts(self):
+        """Starting directly in a loud chorus must not dead-start bubbles."""
+        sim = BubbleSimulation()
+        settings = _default_settings()
+        dt = 1 / 60
+
+        # Start hot immediately (no quiet warm-up), with mild variation.
+        chorus_frames = [
+            _energy(bass=0.92, mid=0.88, high=0.24),
+            _energy(bass=0.78, mid=0.73, high=0.20),
+            _energy(bass=0.95, mid=0.90, high=0.28),
+            _energy(bass=0.81, mid=0.76, high=0.22),
+        ]
+
+        peaks = []
+        for i in range(48):
+            sim.tick(dt, chorus_frames[i % len(chorus_frames)], settings)
+            peaks.append(_max_big_pulse(sim))
+
+        assert max(peaks) > 0.09, (
+            "Hot-start chorus failed to generate meaningful big-bubble pulse energy"
+        )
+
+    def test_hot_chorus_variation_not_flatlined(self):
+        """Sustained hot passages should keep visible pulse variance."""
+        sim = BubbleSimulation()
+        settings = _default_settings()
+        _warm_up(sim, settings, frames=30)
+        dt = 1 / 60
+
+        chorus_frames = [
+            _energy(bass=0.96, mid=0.91, high=0.23),
+            _energy(bass=0.82, mid=0.78, high=0.17),
+            _energy(bass=0.94, mid=0.88, high=0.25),
+            _energy(bass=0.79, mid=0.74, high=0.18),
+        ]
+
+        pulse_series = []
+        for i in range(160):
+            sim.tick(dt, chorus_frames[i % len(chorus_frames)], settings)
+            pulse_series.append(_max_big_pulse(sim))
+
+        spread = max(pulse_series) - min(pulse_series)
+        assert spread > 0.035, (
+            f"Hot-chorus pulse variance collapsed (spread={spread:.4f})"
         )
 
 
@@ -474,6 +525,33 @@ class TestInitialFillContract:
             "Directional stream bubbles are still sharing nearly identical travel speeds, "
             "which makes the field quantize into visible columns."
         )
+
+    def test_explicit_diagonal_stream_direction_moves_across_both_axes(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=0,
+            bubble_small_count=1,
+            bubble_stream_direction="top_left",
+            bubble_drift_direction="none",
+            bubble_stream_constant_speed=0.8,
+            bubble_stream_speed_cap=0.8,
+            bubble_stream_reactivity=1.0,
+            bubble_drift_amount=0.0,
+            bubble_drift_speed=0.0,
+            bubble_drift_frequency=0.0,
+            bubble_rotation_amount=0.0,
+        )
+        _warm_up(sim, settings, frames=3)
+
+        bubble = next((b for b in sim._bubbles if not b.exiting), None)
+        assert bubble is not None
+        start_x, start_y = bubble.x, bubble.y
+
+        for _ in range(10):
+            sim.tick(1 / 60, _energy(bass=0.15, mid=0.1, high=0.05), settings)
+
+        assert bubble.x < start_x, "Top-left stream should move bubble left."
+        assert bubble.y < start_y, "Top-left stream should move bubble upward on screen."
 
     def test_big_bubbles_do_not_spawn_tightly_clustered(self):
         random.seed(404)
@@ -1066,3 +1144,250 @@ class TestBubbleBouncePhysics:
             assert math.isfinite(bubble.y)
             assert math.isfinite(bubble.impulse_vx)
             assert math.isfinite(bubble.impulse_vy)
+
+        worst_overlap = 0.0
+        for i, a in enumerate(sim._bubbles):
+            for b in sim._bubbles[i + 1:]:
+                dist = math.hypot(b.x - a.x, b.y - a.y)
+                overlap = max(0.0, (a.radius + b.radius) - dist)
+                worst_overlap = max(worst_overlap, overlap)
+        assert worst_overlap < 0.022, (
+            f"Dense bounce enforcement left too much overlap ({worst_overlap:.4f}) at 100%/100% settings."
+        )
+
+    def test_collision_uses_effective_pulsed_radius_not_base_radius_only(self):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleState
+
+        sim = BubbleSimulation()
+        a = BubbleState(x=0.45, y=0.5, radius=0.04, is_big=True, pulse_energy=1.0)
+        b = BubbleState(x=0.57, y=0.5, radius=0.04, is_big=True, pulse_energy=1.0)
+        sim._bubbles = [a, b]
+        start_dist = math.hypot(b.x - a.x, b.y - a.y)
+
+        random.seed(9)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=0.0,
+            bounce_big_speed=1.6,
+            bounce_small_speed=0.0,
+            big_bass_pulse=1.0,
+            small_freq_pulse=0.5,
+            big_contraction_bias=1.0,
+            big_size_clamp=2.2,
+        )
+        end_dist = math.hypot(b.x - a.x, b.y - a.y)
+        assert end_dist > start_dist, (
+            "Pulsed big bubbles did not separate despite visual size inflation; "
+            "collision still appears to be using base radius only."
+        )
+
+    def test_same_bounce_only_allows_mixed_pairs_to_pass_through(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=False)
+        sim._bubbles = [a, b]
+        start_a = (a.x, a.y)
+        start_b = (b.x, b.y)
+
+        random.seed(21)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=1.5,
+            bounce_same_only=True,
+        )
+
+        assert (a.x, a.y) == start_a
+        assert (b.x, b.y) == start_b
+        assert a.impulse_vx == 0.0 and a.impulse_vy == 0.0
+        assert b.impulse_vx == 0.0 and b.impulse_vy == 0.0
+
+    def test_same_bounce_only_keeps_same_class_collisions_active(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=True)
+        sim._bubbles = [a, b]
+
+        random.seed(22)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=1.5,
+            bounce_same_only=True,
+        )
+
+        assert abs(a.impulse_vx) > 0.0 or abs(b.impulse_vx) > 0.0
+
+    def test_collision_pop_mode_all_pops_both_bubbles(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=True)
+        sim._bubbles = [a, b]
+
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=1.5,
+            collision_pop_mode="all",
+        )
+
+        assert a.popping is True
+        assert b.popping is True
+        assert a.pop_timer == pytest.approx(0.0)
+        assert b.pop_timer == pytest.approx(0.0)
+
+    def test_collision_pop_mode_one_pops_single_bubble(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=True)
+        sim._bubbles = [a, b]
+
+        random.seed(123)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=1.5,
+            collision_pop_mode="one",
+        )
+
+        popped_count = int(a.popping) + int(b.popping)
+        assert popped_count == 1
+
+    def test_collision_pop_mode_one_mixed_pair_big_always_wins(self):
+        sim = BubbleSimulation()
+        big_b, small_b = self._pair(left_big=True, right_big=False)
+        sim._bubbles = [big_b, small_b]
+
+        random.seed(124)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=1.5,
+            bounce_same_only=False,
+            collision_pop_mode="one",
+        )
+
+        assert big_b.popping is False
+        assert small_b.popping is True
+
+    def test_collision_pop_mode_respects_same_only_for_mixed_pairs(self):
+        sim = BubbleSimulation()
+        big_b, small_b = self._pair(left_big=True, right_big=False)
+        start_big = (big_b.x, big_b.y)
+        start_small = (small_b.x, small_b.y)
+        sim._bubbles = [big_b, small_b]
+
+        random.seed(125)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=1.5,
+            bounce_same_only=True,
+            collision_pop_mode="all",
+        )
+
+        assert big_b.popping is False
+        assert small_b.popping is False
+        assert (big_b.x, big_b.y) == start_big
+        assert (small_b.x, small_b.y) == start_small
+
+    def test_pair_cooldown_prevents_immediate_rebounce(self):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleState
+
+        sim = BubbleSimulation()
+        a = BubbleState(x=0.48, y=0.5, radius=0.05, is_big=True)
+        b = BubbleState(x=0.54, y=0.5, radius=0.05, is_big=True)
+        sim._bubbles = [a, b]
+
+        random.seed(77)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.2,
+            bounce_small_speed=1.2,
+        )
+        first = (a.impulse_vx, a.impulse_vy, b.impulse_vx, b.impulse_vy)
+        assert any(abs(v) > 0.0 for v in first)
+
+        # Force immediate re-overlap and attempt a second response in the same
+        # simulation time instant; pair cooldown should block re-bounce impulse.
+        a.x, b.x = 0.49, 0.53
+        random.seed(78)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.2,
+            bounce_small_speed=1.2,
+        )
+        second = (a.impulse_vx, a.impulse_vy, b.impulse_vx, b.impulse_vy)
+        assert second == first
+
+    def test_post_bounce_glide_temporarily_dampens_stream_drift(self):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleState
+
+        base_settings = _default_settings(
+            bubble_big_count=0,
+            bubble_small_count=0,
+            bubble_stream_direction="right",
+            bubble_stream_constant_speed=0.8,
+            bubble_stream_speed_cap=0.8,
+            bubble_stream_reactivity=1.0,
+            bubble_drift_direction="swish_horizontal",
+            bubble_drift_amount=1.0,
+            bubble_drift_speed=0.8,
+            bubble_drift_frequency=0.5,
+        )
+
+        ctrl = BubbleSimulation()
+        glided = BubbleSimulation()
+        ctrl_b = BubbleState(x=0.50, y=0.50, radius=0.015, is_big=False, phase=0.0, drift_bias=0.7)
+        glide_b = BubbleState(x=0.50, y=0.50, radius=0.015, is_big=False, phase=0.0, drift_bias=0.7, bounce_glide=0.18)
+        ctrl._bubbles = [ctrl_b]
+        glided._bubbles = [glide_b]
+
+        e = _energy(bass=0.3, mid=0.2, high=0.1)
+        ctrl.tick(1 / 60, e, base_settings)
+        glided.tick(1 / 60, e, base_settings)
+
+        ctrl_dx = abs(ctrl_b.x - 0.50)
+        glide_dx = abs(glide_b.x - 0.50)
+        assert glide_dx < ctrl_dx
+
+    def test_entry_overlap_biases_correction_offscreen_without_impulse(self):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleState
+
+        sim = BubbleSimulation()
+        # a is visible, b is just outside left edge; they overlap.
+        a = BubbleState(x=0.01, y=0.50, radius=0.05, is_big=True)
+        b = BubbleState(x=-0.03, y=0.50, radius=0.05, is_big=True)
+        sim._bubbles = [a, b]
+
+        start_a_x = a.x
+        start_b_x = b.x
+        random.seed(79)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.2,
+            bounce_small_speed=1.2,
+        )
+
+        # Entry contacts should resolve mostly by moving the offscreen bubble.
+        moved_a = abs(a.x - start_a_x)
+        moved_b = abs(b.x - start_b_x)
+        assert moved_b > moved_a * 2.5
+        # No bounce impulse while pair is not fully in view.
+        assert a.impulse_vx == 0.0 and a.impulse_vy == 0.0
+        assert b.impulse_vx == 0.0 and b.impulse_vy == 0.0

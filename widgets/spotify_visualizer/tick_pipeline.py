@@ -218,6 +218,8 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         "bubble_bounce_small_pct": widget._bubble_bounce_small_pct,
         "bubble_bounce_big_speed": widget._bubble_bounce_big_speed,
         "bubble_bounce_small_speed": widget._bubble_bounce_small_speed,
+        "bubble_bounce_same_only": widget._bubble_bounce_same_only,
+        "bubble_collision_pop_mode": getattr(widget, "_bubble_collision_pop_mode", "off"),
         "_event_scheduler": _event_scheduler,
     }
     pulse_params = {

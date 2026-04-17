@@ -222,6 +222,8 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         bubble_bounce_small_pct=model.bubble_bounce_small_pct,
         bubble_bounce_big_speed=model.bubble_bounce_big_speed,
         bubble_bounce_small_speed=model.bubble_bounce_small_speed,
+        bubble_bounce_same_only=model.bubble_bounce_same_only,
+        bubble_collision_pop_mode=model.bubble_collision_pop_mode,
         bubble_outline_color=model.bubble_outline_color,
         bubble_specular_color=model.bubble_specular_color,
         bubble_gradient_light=model.bubble_gradient_light,

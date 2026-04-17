@@ -218,6 +218,15 @@ Section by date and type.
 - **Additional regression coverage added (2026-04-11 later pass):**
   - `tests/test_bubble_reactivity.py::TestBubblePlateauGuardrails::test_post_initial_refill_does_not_spawn_a_backlog_wave_in_one_tick`
   - `tests/test_bubble_reactivity.py::TestBubblePlateauGuardrails::test_post_initial_refill_caps_big_bubble_backlog_too`
+- **Newly confirmed continuation (2026-04-17):** bubble could still dead-start in chorus and flatten over long hot passages because the control path was effectively hard-ceilinged.
+  - Transient log signatures showed repeated `bass=1.000 mid=1.000` with near-zero flux under loud sections.
+  - Final mitigation path:
+    - introduce a dedicated bubble/blob control-lane normalization (`_bubble_control_norm`, `_bubble_pre_agc_*`)
+    - feed transient bus from control-normalized pre-AGC energy (not hard `min(1.0, ...)`)
+    - make beat-engine pre-AGC accessor prefer the control-lane values for bubble/blob consumers
+  - New regression tests:
+    - `tests/test_bubble_reactivity.py::TestSustainedLoudSection::test_hot_start_chorus_still_reacts`
+    - `tests/test_bubble_reactivity.py::TestSustainedLoudSection::test_hot_chorus_variation_not_flatlined`
 - **Latest runtime evidence (2026-04-10 late run):**
   - Bubble is still spending long stretches inside `[SPOTIFY_VIS][BUBBLE][OVERDRIVE] hold` even on a conservative baseline similar to `preset_8_abyss`, with gate values repeatedly living around `0.36-0.87` instead of only flashing briefly on meaningful bursts.
   - Blob still shows a too-hot baseline in live diagnostics: many frames log filtered live/support values near or above `1.0` and stage-filtered values that stay elevated for long windows, which matches the user's report that even dramatically lowered custom settings still look blown out, twitchy, and max-glow-heavy.

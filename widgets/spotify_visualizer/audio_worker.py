@@ -138,6 +138,14 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._onset_detected: bool = False
         self._onset_type: str = ""
         self._onset_strength: float = 0.0
+        # Bubble/Blob control-lane energies (pre-AGC, dynamically normalised).
+        # These are separate from the AGC source fields so we can keep
+        # visualizer control dynamics expressive under hot passages without
+        # perturbing spectrum AGC internals.
+        self._bubble_control_norm: float = 1.0
+        self._bubble_pre_agc_bass: float = 0.0
+        self._bubble_pre_agc_mid: float = 0.0
+        self._bubble_pre_agc_treble: float = 0.0
 
         # Sensitivity configuration (driven from Settings UI).
         self._cfg_lock = threading.Lock()
@@ -336,6 +344,10 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._onset_detected = False
         self._onset_type = ""
         self._onset_strength = 0.0
+        self._bubble_control_norm = 1.0
+        self._bubble_pre_agc_bass = 0.0
+        self._bubble_pre_agc_mid = 0.0
+        self._bubble_pre_agc_treble = 0.0
         try:
             self._transient_bus.reset()
         except Exception:

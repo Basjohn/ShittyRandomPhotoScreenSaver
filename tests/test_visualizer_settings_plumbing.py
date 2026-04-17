@@ -89,6 +89,8 @@ class TestBubbleGpuPushKwargs:
             "bubble_surface_reach",
             "bubble_bounce_big_pct", "bubble_bounce_small_pct",
             "bubble_bounce_big_speed", "bubble_bounce_small_speed",
+            "bubble_bounce_same_only",
+            "bubble_collision_pop_mode",
         }
         bubble_keys = set(self._build_bubble_extra().keys())
         leaked = bubble_keys & sim_only_keys
@@ -201,6 +203,8 @@ class TestSettingsModelPlumbing:
         "bubble_bounce_small_pct": 12,
         "bubble_bounce_big_speed": 1.42,
         "bubble_bounce_small_speed": 0.37,
+        "bubble_bounce_same_only": True,
+        "bubble_collision_pop_mode": "all",
         "bubble_outline_color": [10, 20, 30, 255],
         "bubble_specular_direction": "bottom_right",
         "bubble_gradient_direction": "center_out",
@@ -280,6 +284,8 @@ class TestCreatorKwargs:
             bubble_bounce_small_pct=18,
             bubble_bounce_big_speed=1.1,
             bubble_bounce_small_speed=0.6,
+            bubble_bounce_same_only=True,
+            bubble_collision_pop_mode="one",
         )
 
         apply_spotify_vis_model_config(FakeVis(), model)
@@ -298,6 +304,8 @@ class TestCreatorKwargs:
         assert captured["bubble_bounce_small_pct"] == 18
         assert captured["bubble_bounce_big_speed"] == pytest.approx(1.1)
         assert captured["bubble_bounce_small_speed"] == pytest.approx(0.6)
+        assert captured["bubble_bounce_same_only"] is True
+        assert captured["bubble_collision_pop_mode"] == "one"
 
     def test_apply_spotify_vis_model_config_passes_spectrum_glow_and_secondary_ghosts(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -709,6 +717,8 @@ class TestConfigApplier:
             _bubble_bounce_small_pct = 30
             _bubble_bounce_big_speed = 0.8
             _bubble_bounce_small_speed = 0.5
+            _bubble_bounce_same_only = False
+            _bubble_collision_pop_mode = "off"
 
         widget = DummyWidget()
         apply_vis_mode_kwargs(
@@ -718,12 +728,16 @@ class TestConfigApplier:
                 "bubble_bounce_small_pct": -9,
                 "bubble_bounce_big_speed": 9.5,
                 "bubble_bounce_small_speed": -3.0,
+                "bubble_bounce_same_only": True,
+                "bubble_collision_pop_mode": "bad_value",
             },
         )
         assert widget._bubble_bounce_big_pct == 100
         assert widget._bubble_bounce_small_pct == 0
         assert widget._bubble_bounce_big_speed == pytest.approx(2.0)
         assert widget._bubble_bounce_small_speed == pytest.approx(0.0)
+        assert widget._bubble_bounce_same_only is True
+        assert widget._bubble_collision_pop_mode == "off"
 
     def test_gpu_push_extra_kwargs_include_gradient_and_specular(self):
         from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
@@ -1714,6 +1728,8 @@ class TestVisualizerSettingsSnapshotNormalization:
                 "bubble_bounce_small_pct": 17,
                 "bubble_bounce_big_speed": 1.45,
                 "bubble_bounce_small_speed": 0.33,
+                "bubble_bounce_same_only": True,
+                "bubble_collision_pop_mode": "one",
             },
             apply_preset_overlay=False,
         )
@@ -1722,6 +1738,8 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert normalized["bubble_bounce_small_pct"] == 17
         assert normalized["bubble_bounce_big_speed"] == pytest.approx(1.45)
         assert normalized["bubble_bounce_small_speed"] == pytest.approx(0.33)
+        assert normalized["bubble_bounce_same_only"] is True
+        assert normalized["bubble_collision_pop_mode"] == "one"
 
     def test_model_roundtrip_omits_retired_compat_settings_keys(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -3295,6 +3313,8 @@ class TestBubbleSettingsBinding:
                 self.bubble_bounce_big_speed_label = _Label()
                 self.bubble_bounce_small_speed = _Slider()
                 self.bubble_bounce_small_speed_label = _Label()
+                self.bubble_bounce_same_only = _Check()
+                self.bubble_collision_pop_mode = _Combo(["off", "one", "all"])
                 self.bubble_growth = _Slider()
                 self.bubble_growth_label = _Label()
                 self.bubble_tail_opacity = _Slider()
@@ -3329,6 +3349,8 @@ class TestBubbleSettingsBinding:
                 "bubble_bounce_small_pct": 19,
                 "bubble_bounce_big_speed": 1.47,
                 "bubble_bounce_small_speed": 0.26,
+                "bubble_bounce_same_only": True,
+                "bubble_collision_pop_mode": "all",
                 "bubble_specular_direction": "bottom_right",
                 "bubble_gradient_direction": "center_out",
                 "bubble_growth": 3.2,
@@ -3352,6 +3374,8 @@ class TestBubbleSettingsBinding:
         assert tab.bubble_bounce_small_pct.value == 19
         assert tab.bubble_bounce_big_speed.value == 147
         assert tab.bubble_bounce_small_speed.value == 26
+        assert tab.bubble_bounce_same_only.checked is True
+        assert tab.bubble_collision_pop_mode.currentData() == "all"
         assert tab.bubble_specular_direction.currentData() == "bottom_right"
         assert tab.bubble_gradient_direction.currentData() == "center_out"
         assert tab.bubble_growth.value == 320
@@ -3382,13 +3406,6 @@ class TestBubbleSettingsBinding:
             def value(self):
                 return self._value
 
-        class _TextCombo:
-            def __init__(self, text):
-                self._text = text
-
-            def currentText(self):
-                return self._text
-
         class _DataCombo:
             def __init__(self, value):
                 self._value = value
@@ -3396,13 +3413,20 @@ class TestBubbleSettingsBinding:
             def currentData(self):
                 return self._value
 
+        class _TextCombo:
+            def __init__(self, text):
+                self._text = text
+
+            def currentText(self):
+                return self._text
+
         class _Tab:
             bubble_ghost_enabled = _Check(True)
             bubble_ghost_opacity = _Slider(33)
             bubble_ghost_decay_slider = _Slider(48)
             bubble_big_bass_pulse = _Slider(76)
             bubble_small_freq_pulse = _Slider(44)
-            bubble_stream_direction = _TextCombo("Diagonal")
+            bubble_stream_direction = _DataCombo("top_left")
             bubble_stream_constant_speed = _Slider(61)
             bubble_stream_speed_cap = _Slider(240)
             bubble_stream_reactivity = _Slider(83)
@@ -3420,6 +3444,8 @@ class TestBubbleSettingsBinding:
             bubble_bounce_small_pct = _Slider(21)
             bubble_bounce_big_speed = _Slider(165)
             bubble_bounce_small_speed = _Slider(44)
+            bubble_bounce_same_only = _Check(True)
+            bubble_collision_pop_mode = _DataCombo("one")
             bubble_specular_direction = _DataCombo("bottom_right")
             bubble_gradient_direction = _DataCombo("center_out")
             bubble_big_size_max = _Slider(42)
@@ -3441,7 +3467,7 @@ class TestBubbleSettingsBinding:
         assert payload["bubble_ghosting_enabled"] is True
         assert payload["bubble_ghost_alpha"] == pytest.approx(0.33)
         assert payload["bubble_ghost_decay"] == pytest.approx(0.48)
-        assert payload["bubble_stream_direction"] == "diagonal"
+        assert payload["bubble_stream_direction"] == "top_left"
         assert payload["bubble_drift_direction"] == "swirl_ccw"
         assert payload["bubble_gradient_direction"] == "center_out"
         assert payload["bubble_outline_color"] == [1, 2, 3, 4]
@@ -3450,6 +3476,8 @@ class TestBubbleSettingsBinding:
         assert payload["bubble_bounce_small_pct"] == 21
         assert payload["bubble_bounce_big_speed"] == pytest.approx(1.65)
         assert payload["bubble_bounce_small_speed"] == pytest.approx(0.44)
+        assert payload["bubble_bounce_same_only"] is True
+        assert payload["bubble_collision_pop_mode"] == "one"
         assert payload["bubble_growth"] == pytest.approx(3.10)
         assert payload["bubble_tail_opacity"] == pytest.approx(0.11)
 
@@ -3487,6 +3515,17 @@ class TestBubbleSwirlSettings:
             "bubble_drift_direction": "swirl_cw",
         })
         assert widget._bubble_drift_direction == "swirl_cw"
+
+    def test_config_applier_accepts_directional_stream_diagonals(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bubble_stream_direction = "up"
+
+        widget = DummyWidget()
+        for direction in ("top_left", "top_right", "bottom_left", "bottom_right"):
+            apply_vis_mode_kwargs(widget, {"bubble_stream_direction": direction})
+            assert widget._bubble_stream_direction == direction
 
 
 class TestBubbleSwirlMotion:

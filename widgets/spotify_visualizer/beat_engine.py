@@ -148,6 +148,10 @@ class _SpotifyBeatEngine(QObject):
         aw._bar_history = None
         aw._bar_hold_timers = None
         aw._last_fft_ts = 0.0
+        aw._bubble_control_norm = 1.0
+        aw._bubble_pre_agc_bass = 0.0
+        aw._bubble_pre_agc_mid = 0.0
+        aw._bubble_pre_agc_treble = 0.0
         self._generation_id += 1
         # Force consumers to wait for the next FFT result produced after
         # this reset instead of reusing the pre-reset generation id.
@@ -615,9 +619,12 @@ class _SpotifyBeatEngine(QObject):
         """
         w = self._audio_worker
         ramp = self._get_play_ramp_factor()
-        bass = getattr(w, '_pre_agc_bass', 0.0) * ramp
-        mid = getattr(w, '_pre_agc_mid', 0.0) * ramp
-        high = getattr(w, '_pre_agc_treble', 0.0) * ramp
+        bass = getattr(w, '_bubble_pre_agc_bass', getattr(w, '_pre_agc_bass', 0.0)) * ramp
+        mid = getattr(w, '_bubble_pre_agc_mid', getattr(w, '_pre_agc_mid', 0.0)) * ramp
+        high = getattr(w, '_bubble_pre_agc_treble', getattr(w, '_pre_agc_treble', 0.0)) * ramp
+        bass = max(0.0, min(1.0, float(bass)))
+        mid = max(0.0, min(1.0, float(mid)))
+        high = max(0.0, min(1.0, float(high)))
         overall = max(0.0, min(1.0, (bass * 0.5 + mid * 0.3 + high * 0.2)))
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 

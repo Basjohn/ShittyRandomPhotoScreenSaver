@@ -31,8 +31,11 @@ _STREAM_DIRECTION_INDEX = {
     "down": 2,
     "left": 3,
     "right": 4,
-    "diagonal": 5,
-    "random": 6,
+    "top_left": 5,
+    "top_right": 6,
+    "bottom_left": 7,
+    "bottom_right": 8,
+    "random": 9,
 }
 
 
@@ -77,6 +80,8 @@ def load_bubble_mode_settings(
 
     if hasattr(tab, "bubble_stream_direction"):
         stream_direction = tab._config_str("spotify_visualizer", config, "bubble_stream_direction", "up").lower()
+        if stream_direction == "diagonal":
+            stream_direction = "top_right"
         tab.bubble_stream_direction.setCurrentIndex(_STREAM_DIRECTION_INDEX.get(stream_direction, 1))
     if hasattr(tab, "bubble_stream_constant_speed"):
         v = int(tab._config_float("spotify_visualizer", config, "bubble_stream_constant_speed", 0.5) * 100)
@@ -154,6 +159,15 @@ def load_bubble_mode_settings(
         clamped_v = max(0, min(200, v))
         tab.bubble_bounce_small_speed.setValue(clamped_v)
         tab.bubble_bounce_small_speed_label.setText(f"{clamped_v / 100.0:.2f}x")
+    if hasattr(tab, "bubble_bounce_same_only"):
+        tab.bubble_bounce_same_only.setChecked(
+            tab._config_bool("spotify_visualizer", config, "bubble_bounce_same_only", False)
+        )
+    if hasattr(tab, "bubble_collision_pop_mode"):
+        pop_mode = str(tab._config_str("spotify_visualizer", config, "bubble_collision_pop_mode", "off")).lower()
+        if pop_mode not in {"off", "one", "all"}:
+            pop_mode = "off"
+        _set_combo_data_or_fallback(tab.bubble_collision_pop_mode, pop_mode, "off")
 
     if hasattr(tab, "bubble_specular_direction"):
         specular_direction = normalize_bubble_specular_direction(
@@ -228,7 +242,7 @@ def collect_bubble_mode_settings(tab) -> dict[str, Any]:
         "bubble_big_bass_pulse": (tab.bubble_big_bass_pulse.value() if hasattr(tab, "bubble_big_bass_pulse") else 50) / 100.0,
         "bubble_small_freq_pulse": (tab.bubble_small_freq_pulse.value() if hasattr(tab, "bubble_small_freq_pulse") else 50) / 100.0,
         "bubble_stream_direction": (
-            tab.bubble_stream_direction.currentText().lower().replace(" ", "_")
+            (tab.bubble_stream_direction.currentData() or "up")
             if hasattr(tab, "bubble_stream_direction")
             else "up"
         ),
@@ -267,6 +281,14 @@ def collect_bubble_mode_settings(tab) -> dict[str, Any]:
         "bubble_bounce_small_speed": (
             tab.bubble_bounce_small_speed.value() if hasattr(tab, "bubble_bounce_small_speed") else 50
         ) / 100.0,
+        "bubble_bounce_same_only": (
+            tab.bubble_bounce_same_only.isChecked() if hasattr(tab, "bubble_bounce_same_only") else False
+        ),
+        "bubble_collision_pop_mode": (
+            (tab.bubble_collision_pop_mode.currentData() or "off")
+            if hasattr(tab, "bubble_collision_pop_mode")
+            else "off"
+        ),
         "bubble_outline_color": _qcolor_to_list(getattr(tab, "_bubble_outline_color", None), [255, 255, 255, 230]),
         "bubble_specular_color": _qcolor_to_list(getattr(tab, "_bubble_specular_color", None), [255, 255, 255, 255]),
         "bubble_gradient_light": _qcolor_to_list(getattr(tab, "_bubble_gradient_light", None), [210, 170, 120, 255]),

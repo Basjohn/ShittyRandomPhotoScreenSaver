@@ -38,8 +38,8 @@ TRAIL_SMEAR_FOLLOW_MAX = 0.18   # clamp per-tick lerp to keep visible lag
 TRAIL_SMEAR_DECAY_PER_SEC = 0.9  # how fast strength fades when slowing
 TRAIL_SMEAR_STRENGTH_FROM_DISTANCE = 35.0  # convert offset distance → brightness (higher = brighter sooner)
 TRAIL_SMEAR_MAX_LENGTH = 0.55   # cap streak length to avoid card wrap
-IMPULSE_DAMPING_PER_SEC = 8.0
-MAX_IMPULSE_SPEED = 0.35
+IMPULSE_DAMPING_PER_SEC = 10.5
+MAX_IMPULSE_SPEED = 0.22
 
 
 @dataclass
@@ -74,6 +74,7 @@ class BubbleState:
     promote_timer: float = 0.0   # remaining promotion duration (seconds)
     exiting: bool = False       # bubble head left the card; trail draining out
     exit_timer: float = 0.0     # time since exit began (safety destroy after grace)
+    bounce_glide: float = 0.0   # short post-collision window where drift/stream are damped
 
 
 # Direction vectors for stream directions
@@ -83,10 +84,13 @@ _DIRECTION_VECTORS: Dict[str, Tuple[float, float]] = {
     "down": (0.0, -1.0),
     "left": (-1.0, 0.0),
     "right": (1.0, 0.0),
-    "diagonal": (0.707, 0.707),  # placeholder; actual direction chosen per-spawn
+    "top_left": (-0.707, 0.707),
+    "top_right": (0.707, 0.707),
+    "bottom_left": (-0.707, -0.707),
+    "bottom_right": (0.707, -0.707),
 }
 
-_DIAGONAL_VECTORS: Tuple[Tuple[float, float], ...] = (
+_DIAGONAL_STREAM_VECTORS: Tuple[Tuple[float, float], ...] = (
     ( 0.707,  0.707),  # up-right
     (-0.707,  0.707),  # up-left
     ( 0.707, -0.707),  # down-right
@@ -107,7 +111,9 @@ def _get_stream_vector(direction: str) -> Tuple[float, float]:
     if direction == "random":
         return _random_direction()
     if direction == "diagonal":
-        return random.choice(_DIAGONAL_VECTORS)
+        # Legacy compatibility: old single "diagonal" mode becomes random
+        # diagonal direction.
+        return random.choice(_DIAGONAL_STREAM_VECTORS)
     return _DIRECTION_VECTORS.get(direction, (0.0, 1.0))
 
 
@@ -122,10 +128,8 @@ def _spawn_position(direction: str, is_big: bool) -> Tuple[float, float]:
         return (1.0 + margin, random.uniform(margin, 1.0 - margin))
     elif direction == "right":
         return (-margin, random.uniform(margin, 1.0 - margin))
-    elif direction == "diagonal":
-        # Pick a random diagonal; spawn at the opposite corner/edge
-        diag = random.choice(_DIAGONAL_VECTORS)
-        dx, dy = diag
+    elif direction in {"top_left", "top_right", "bottom_left", "bottom_right", "diagonal"}:
+        dx, dy = _get_stream_vector(direction)
         # Spawn on the edge opposite to the travel direction
         if random.random() < 0.5:
             # Spawn on the horizontal edge opposite to dy
@@ -203,6 +207,7 @@ class BubbleSimulation:
         self._burst_cooldown: float = 0.0
         self._prev_bass: float = 0.0  # previous frame bass for slope detection
         self._stream_burst_envelope: float = 0.0
+        self._pair_bounce_cooldowns: Dict[Tuple[int, int], float] = {}
 
     def reset(self) -> None:
         """Clear all accumulated state for a clean cold-start on mode re-entry."""
@@ -221,6 +226,7 @@ class BubbleSimulation:
         self._burst_cooldown = 0.0
         self._prev_bass = 0.0
         self._stream_burst_envelope = 0.0
+        self._pair_bounce_cooldowns.clear()
 
     @property
     def count(self) -> int:
@@ -252,10 +258,18 @@ class BubbleSimulation:
         drift_speed = float(settings.get("bubble_drift_speed", 0.5))
         drift_freq = float(settings.get("bubble_drift_frequency", 0.5))
         drift_dir = str(settings.get("bubble_drift_direction", "random"))
+        big_bass_pulse = float(settings.get("bubble_big_bass_pulse", 0.5))
+        small_freq_pulse = float(settings.get("bubble_small_freq_pulse", 0.5))
+        big_contraction_bias = float(settings.get("bubble_big_contraction_bias", 1.0))
+        big_size_clamp = float(settings.get("bubble_big_size_clamp", 4.0))
         bounce_big_pct = max(0.0, min(100.0, float(settings.get("bubble_bounce_big_pct", 70.0))))
         bounce_small_pct = max(0.0, min(100.0, float(settings.get("bubble_bounce_small_pct", 30.0))))
         bounce_big_speed = max(0.0, min(2.0, float(settings.get("bubble_bounce_big_speed", 0.8))))
         bounce_small_speed = max(0.0, min(2.0, float(settings.get("bubble_bounce_small_speed", 0.5))))
+        bounce_same_only = bool(settings.get("bubble_bounce_same_only", False))
+        collision_pop_mode = str(settings.get("bubble_collision_pop_mode", "off")).strip().lower()
+        if collision_pop_mode not in {"off", "one", "all"}:
+            collision_pop_mode = "off"
         self._big_size_max = float(settings.get("bubble_big_size_max", 0.038))
         self._small_size_max = float(settings.get("bubble_small_size_max", 0.018))
         trail_strength = float(settings.get("bubble_trail_strength", 0.0))
@@ -512,6 +526,8 @@ class BubbleSimulation:
         to_remove: List[int] = []
         for i, b in enumerate(self._bubbles):
             b.age += dt
+            if b.bounce_glide > 0.0:
+                b.bounce_glide = max(0.0, b.bounce_glide - dt)
 
             # Fade-in ramp for initial-fill bubbles (alpha starts at 0)
             if b.alpha < 1.0 and not b.popping:
@@ -539,29 +555,30 @@ class BubbleSimulation:
                     continue
 
             # Stream velocity
-            use_stored = stream_dir in ("random", "diagonal")
+            use_stored = stream_dir == "random"
             sv = _get_stream_vector(stream_dir) if not use_stored else (b.vx, b.vy)
             if use_stored and b.vx == 0.0 and b.vy == 0.0:
-                if stream_dir == "diagonal":
-                    dv = random.choice(_DIAGONAL_VECTORS)
-                    b.vx, b.vy = dv
-                else:
-                    rd = _random_direction()
-                    b.vx, b.vy = rd
+                rd = _random_direction()
+                b.vx, b.vy = rd
                 sv = (b.vx, b.vy)
 
             # Swirl modes: suppress stream velocity so orbits stay centred
             is_swirl = drift_dir in _SWIRL_DIRECTIONS
             stream_scale = 0.0 if is_swirl else 1.0
+            # Post-bounce glide: briefly reduce stream/drift so rebound
+            # trajectory is visible instead of immediately being re-steered.
+            glide_t = min(1.0, b.bounce_glide / 0.18) if b.bounce_glide > 0.0 else 0.0
+            stream_follow = 1.0 - 0.75 * glide_t
+            drift_follow = 1.0 - 0.85 * glide_t
             bubble_vel = base_vel * b.speed_mult
-            move_x = sv[0] * bubble_vel * dt * stream_scale
-            move_y = sv[1] * bubble_vel * dt * stream_scale
+            move_x = sv[0] * bubble_vel * dt * stream_scale * stream_follow
+            move_y = sv[1] * bubble_vel * dt * stream_scale * stream_follow
 
             # Drift (sinusoidal lateral wander)
             drift_phase = b.phase + self._time * drift_speed * 2.0
             drift_noise = math.sin(drift_phase * (1.0 + drift_freq * 3.0))
             drift_bias_val = b.drift_bias * drift_amount * 0.05
-            drift_offset = drift_noise * drift_amount * 0.03 + drift_bias_val
+            drift_offset = (drift_noise * drift_amount * 0.03 + drift_bias_val) * drift_follow
 
             # Apply drift; Swish modes force an axis, swirl modes orbit around centre,
             # otherwise stay perpendicular to stream
@@ -571,8 +588,8 @@ class BubbleSimulation:
                 move_y += drift_offset * dt
             elif is_swirl:
                 swirl_dx, swirl_dy = self._swirl_motion(b, drift_dir, drift_amount, drift_speed, dt, base_vel)
-                move_x += swirl_dx
-                move_y += swirl_dy
+                move_x += swirl_dx * drift_follow
+                move_y += swirl_dy * drift_follow
             else:
                 if abs(sv[0]) > abs(sv[1]) if stream_dir != "random" else True:
                     move_y += drift_offset * dt
@@ -697,6 +714,12 @@ class BubbleSimulation:
             bounce_small_pct=bounce_small_pct,
             bounce_big_speed=bounce_big_speed,
             bounce_small_speed=bounce_small_speed,
+            bounce_same_only=bounce_same_only,
+            collision_pop_mode=collision_pop_mode,
+            big_bass_pulse=big_bass_pulse,
+            small_freq_pulse=small_freq_pulse,
+            big_contraction_bias=big_contraction_bias,
+            big_size_clamp=big_size_clamp,
         )
 
         # Remove dead bubbles (reverse order)
@@ -752,7 +775,7 @@ class BubbleSimulation:
                 base_x = 0.5 + math.cos(_angle) * _spawn_r
                 base_y = 0.5 + math.sin(_angle) * _spawn_r
             else:
-                base_x, base_y = _spawn_position(stream_dir, False)
+                base_x, base_y = _directional_entry_position(stream_dir, False, startup=False)
             for c in range(count):
                 if (
                     small_count >= small_target
@@ -776,8 +799,35 @@ class BubbleSimulation:
             x = 0.5 + math.cos(angle) * spawn_r
             y = 0.5 + math.sin(angle) * spawn_r
         else:
-            x, y = _spawn_position(stream_dir, is_big)
+            x, y = _directional_entry_position(stream_dir, is_big, startup=False)
         self._spawn_bubble_at(is_big, x, y, stream_dir, surface_reach, drift_dir)
+
+    def _predict_stream_position(
+        self,
+        x: float,
+        y: float,
+        stream_dir: str,
+        *,
+        vx: float = 0.0,
+        vy: float = 0.0,
+        distance: float = 0.16,
+    ) -> Tuple[float, float]:
+        """Project a bubble forward along stream travel for entry-lane checks."""
+        if stream_dir == "random":
+            dx, dy = (vx, vy) if (vx != 0.0 or vy != 0.0) else _random_direction()
+        else:
+            dx, dy = _get_stream_vector(stream_dir)
+        return (x + dx * distance, y - dy * distance)
+
+    @staticmethod
+    def _trigger_collision_pop(bubble: BubbleState) -> None:
+        if bubble.popping or bubble.exiting:
+            return
+        bubble.popping = True
+        bubble.pop_timer = 0.0
+        bubble.impulse_vx = 0.0
+        bubble.impulse_vy = 0.0
+        bubble.bounce_glide = 0.0
 
     def _apply_bubble_collision_response(
         self,
@@ -787,6 +837,12 @@ class BubbleSimulation:
         bounce_small_pct: float,
         bounce_big_speed: float,
         bounce_small_speed: float,
+        bounce_same_only: bool = False,
+        collision_pop_mode: str = "off",
+        big_bass_pulse: float = 0.5,
+        small_freq_pulse: float = 0.5,
+        big_contraction_bias: float = 1.0,
+        big_size_clamp: float = 4.0,
     ) -> None:
         """Separate overlapping bubbles by visual class.
 
@@ -799,91 +855,260 @@ class BubbleSimulation:
         if count < 2:
             return
 
-        for i in range(count):
-            a = active[i]
-            for j in range(i + 1, count):
-                b = active[j]
-                dx = b.x - a.x
-                dy = b.y - a.y
-                dist = math.hypot(dx, dy)
-                a_big = _bubble_behaves_big(a)
-                b_big = _bubble_behaves_big(b)
-                if a_big and b_big:
-                    target_gap = (a.radius + b.radius) * 1.12 + 0.008
-                    softness = 0.34
-                    max_push = 0.040
-                    bounce_pct = bounce_big_pct
-                    bounce_speed = bounce_big_speed
-                elif a_big or b_big:
-                    target_gap = (a.radius + b.radius) * 0.90
-                    softness = 0.11
-                    max_push = 0.018
-                    bounce_pct = bounce_big_pct
-                    bounce_speed = bounce_big_speed
-                else:
-                    target_gap = (a.radius + b.radius) * 0.78
-                    softness = 0.06
-                    max_push = 0.010
-                    bounce_pct = bounce_small_pct
-                    bounce_speed = bounce_small_speed
+        max_bounce_pct = max(bounce_big_pct, bounce_small_pct)
+        max_bounce_speed = max(bounce_big_speed, bounce_small_speed)
+        passes = 1
+        if max_bounce_pct >= 88.0 and max_bounce_speed >= 0.85:
+            passes += 1
+        if max_bounce_pct >= 98.0 and max_bounce_speed >= 1.5:
+            passes += 2
 
-                if dist >= target_gap:
+        dt_scale = min(1.0, dt * 60.0)
+        max_speed_norm = max(0.0, min(1.0, max_bounce_speed / 2.0))
+        smooth_mode = max_speed_norm < 0.45
+        view_margin = 0.02
+        if collision_pop_mode not in {"off", "one", "all"}:
+            collision_pop_mode = "off"
+
+        def _in_view(bubble: BubbleState) -> bool:
+            return (
+                -view_margin <= bubble.x <= 1.0 + view_margin
+                and -view_margin <= bubble.y <= 1.0 + view_margin
+            )
+
+        for _ in range(passes):
+            pending_dx = [0.0] * count if smooth_mode else []
+            pending_dy = [0.0] * count if smooth_mode else []
+            for i in range(count):
+                a = active[i]
+                if a.popping or a.exiting:
                     continue
+                for j in range(i + 1, count):
+                    b = active[j]
+                    if b.popping or b.exiting:
+                        continue
+                    a_radius = self._effective_collision_radius(
+                        a,
+                        big_bass_pulse=big_bass_pulse,
+                        small_freq_pulse=small_freq_pulse,
+                        big_contraction_bias=big_contraction_bias,
+                        big_size_clamp=big_size_clamp,
+                    )
+                    b_radius = self._effective_collision_radius(
+                        b,
+                        big_bass_pulse=big_bass_pulse,
+                        small_freq_pulse=small_freq_pulse,
+                        big_contraction_bias=big_contraction_bias,
+                        big_size_clamp=big_size_clamp,
+                    )
+                    dx = b.x - a.x
+                    dy = b.y - a.y
+                    dist = math.hypot(dx, dy)
+                    a_big = _bubble_behaves_big(a)
+                    b_big = _bubble_behaves_big(b)
+                    if a_big and b_big:
+                        target_gap = (a_radius + b_radius) * 1.12 + 0.008
+                        softness = 0.22
+                        max_push = 0.022
+                        bounce_pct = bounce_big_pct
+                        bounce_speed = bounce_big_speed
+                    elif a_big or b_big:
+                        if bounce_same_only:
+                            continue
+                        target_gap = (a_radius + b_radius) * 0.90
+                        softness = 0.08
+                        max_push = 0.012
+                        bounce_pct = bounce_big_pct
+                        bounce_speed = bounce_big_speed
+                    else:
+                        target_gap = (a_radius + b_radius) * 0.78
+                        softness = 0.045
+                        max_push = 0.007
+                        bounce_pct = bounce_small_pct
+                        bounce_speed = bounce_small_speed
 
-                if dist < 1e-5:
-                    angle = random.uniform(0.0, math.tau)
-                    nx = math.cos(angle)
-                    ny = math.sin(angle)
-                else:
-                    inv = 1.0 / dist
-                    nx = dx * inv
-                    ny = dy * inv
+                    bounce_strength = max(0.0, min(1.0, bounce_pct / 100.0))
+                    speed_norm = max(0.0, min(1.0, bounce_speed / 2.0))
+                    strict_gap = (a_radius + b_radius) * (0.92 + 0.08 * bounce_strength)
+                    if bounce_strength >= 0.85:
+                        strict_gap += 0.0015
+                    target_gap = max(target_gap, strict_gap)
 
-                overlap = target_gap - dist
-                push = min(max_push, overlap * softness * min(1.0, dt * 60.0))
-                ax = -nx * push
-                ay = -ny * push
-                bx = nx * push
-                by = ny * push
+                    if dist >= target_gap:
+                        continue
 
-                a.x += ax
-                a.y += ay
-                b.x += bx
-                b.y += by
+                    if dist < 1e-5:
+                        angle = random.uniform(0.0, math.tau)
+                        nx = math.cos(angle)
+                        ny = math.sin(angle)
+                    else:
+                        inv = 1.0 / dist
+                        nx = dx * inv
+                        ny = dy * inv
 
-                bounce_prob = max(0.0, min(1.0, bounce_pct / 100.0))
-                if bounce_prob <= 0.0 or bounce_speed <= 0.0:
-                    continue
+                    overlap = target_gap - dist
+                    a_in_view = _in_view(a)
+                    b_in_view = _in_view(b)
+                    both_in_view = a_in_view and b_in_view
+                    push_softness = softness * (0.60 + 0.52 * speed_norm) + bounce_strength * 0.03
+                    push_cap = max_push * (0.25 + 0.75 * speed_norm + bounce_strength * 0.15)
+                    if speed_norm >= 0.80 and bounce_strength >= 0.90:
+                        push_softness *= 1.70
+                        push_cap *= 2.00
+                    push = min(push_cap, overlap * push_softness * dt_scale)
+                    if speed_norm >= 0.80 and bounce_strength >= 0.90:
+                        push = max(push, overlap * 0.34)
 
-                if random.random() > bounce_prob:
-                    continue
+                    # Entry stability: resolve overlap before it becomes visible.
+                    # When only one bubble is on-card, move the off-card bubble
+                    # far more than the visible one to prevent snap-shifts.
+                    if not both_in_view:
+                        if a_in_view != b_in_view:
+                            push *= 0.70
+                        else:
+                            push = min(push_cap * 1.35, push * 1.35)
 
-                rel_vx = b.impulse_vx - a.impulse_vx
-                rel_vy = b.impulse_vy - a.impulse_vy
-                sep_speed = rel_vx * nx + rel_vy * ny
-                if sep_speed > 0.0:
-                    continue
+                    if a_in_view and not b_in_view:
+                        weight_a, weight_b = 0.14, 0.86
+                    elif b_in_view and not a_in_view:
+                        weight_a, weight_b = 0.86, 0.14
+                    else:
+                        weight_a, weight_b = 0.5, 0.5
+                    total_push = push * 2.0
+                    ax = -nx * total_push * weight_a
+                    ay = -ny * total_push * weight_a
+                    bx = nx * total_push * weight_b
+                    by = ny * total_push * weight_b
 
-                restitution = max(0.0, min(1.0, bounce_speed * 0.5))
-                impulse = (-(1.0 + restitution) * sep_speed) * 0.5
-                floor_kick = min(MAX_IMPULSE_SPEED * 0.45, overlap * (6.0 + bounce_speed * 4.0))
-                impulse = max(impulse, floor_kick)
+                    if smooth_mode:
+                        pending_dx[i] += ax
+                        pending_dy[i] += ay
+                        pending_dx[j] += bx
+                        pending_dy[j] += by
+                    else:
+                        a.x += ax
+                        a.y += ay
+                        b.x += bx
+                        b.y += by
 
-                a.impulse_vx -= nx * impulse
-                a.impulse_vy -= ny * impulse
-                b.impulse_vx += nx * impulse
-                b.impulse_vy += ny * impulse
+                    if collision_pop_mode == "all":
+                        self._trigger_collision_pop(a)
+                        self._trigger_collision_pop(b)
+                        continue
+                    if collision_pop_mode == "one":
+                        # Mixed-class policy: big bubbles always win when
+                        # same-class-only filtering is disabled.
+                        if a_big != b_big:
+                            if a_big:
+                                self._trigger_collision_pop(b)
+                            else:
+                                self._trigger_collision_pop(a)
+                        elif random.random() < 0.5:
+                            self._trigger_collision_pop(a)
+                        else:
+                            self._trigger_collision_pop(b)
+                        continue
 
-                a_speed = math.hypot(a.impulse_vx, a.impulse_vy)
-                if a_speed > MAX_IMPULSE_SPEED:
-                    scale = MAX_IMPULSE_SPEED / a_speed
-                    a.impulse_vx *= scale
-                    a.impulse_vy *= scale
-                b_speed = math.hypot(b.impulse_vx, b.impulse_vy)
-                if b_speed > MAX_IMPULSE_SPEED:
-                    scale = MAX_IMPULSE_SPEED / b_speed
-                    b.impulse_vx *= scale
-                    b.impulse_vy *= scale
+                    bounce_prob = max(0.0, min(1.0, bounce_pct / 100.0))
+                    pair_key = (min(id(a), id(b)), max(id(a), id(b)))
+                    cooldown_until = self._pair_bounce_cooldowns.get(pair_key, 0.0)
+                    in_pair_cooldown = self._time < cooldown_until
+                    if (
+                        bounce_prob > 0.0
+                        and bounce_speed > 0.0
+                        and both_in_view
+                        and (not in_pair_cooldown)
+                        and random.random() <= bounce_prob
+                    ):
+                        rel_vx = b.impulse_vx - a.impulse_vx
+                        rel_vy = b.impulse_vy - a.impulse_vy
+                        sep_speed = rel_vx * nx + rel_vy * ny
+                        if sep_speed <= -0.004 or overlap > target_gap * 0.07:
+                            restitution = max(0.0, min(1.0, bounce_speed * 0.5))
+                            impulse = (-(1.0 + restitution) * sep_speed) * 0.5
+                            floor_kick = min(
+                                MAX_IMPULSE_SPEED * (0.03 + 0.22 * speed_norm),
+                                overlap * (0.25 + 0.95 * speed_norm) * speed_norm,
+                            )
+                            impulse = max(impulse, floor_kick)
+                            local_cap = MAX_IMPULSE_SPEED * (0.18 + 0.82 * speed_norm)
+
+                            a.impulse_vx -= nx * impulse
+                            a.impulse_vy -= ny * impulse
+                            b.impulse_vx += nx * impulse
+                            b.impulse_vy += ny * impulse
+                            glide_window = 0.10 + 0.10 * speed_norm
+                            a.bounce_glide = max(a.bounce_glide, glide_window)
+                            b.bounce_glide = max(b.bounce_glide, glide_window)
+                            self._pair_bounce_cooldowns[pair_key] = self._time + (0.10 + 0.07 * speed_norm)
+
+                            a_speed = math.hypot(a.impulse_vx, a.impulse_vy)
+                            if a_speed > local_cap:
+                                scale = local_cap / a_speed
+                                a.impulse_vx *= scale
+                                a.impulse_vy *= scale
+                            b_speed = math.hypot(b.impulse_vx, b.impulse_vy)
+                            if b_speed > local_cap:
+                                scale = local_cap / b_speed
+                                b.impulse_vx *= scale
+                                b.impulse_vy *= scale
+
+            if smooth_mode:
+                # Prevent one-frame "snap" shifts in dense pulse clusters by
+                # capping accumulated positional correction per bubble.
+                max_disp = 0.0010 + 0.0030 * max_speed_norm + 0.0060 * max_speed_norm * max_speed_norm
+                if max_bounce_pct >= 95.0:
+                    max_disp += 0.0015 * max_speed_norm
+                    if max_speed_norm >= 0.80:
+                        max_disp = max(max_disp, 0.014 + 0.010 * max_speed_norm)
+                for i, bubble in enumerate(active):
+                    dx = pending_dx[i]
+                    dy = pending_dy[i]
+                    mag = math.hypot(dx, dy)
+                    if _in_view(bubble):
+                        max_disp *= 0.72
+                    if mag > max_disp and mag > 1e-8:
+                        scale = max_disp / mag
+                        dx *= scale
+                        dy *= scale
+                    bubble.x += dx
+                    bubble.y += dy
+
+        if self._pair_bounce_cooldowns:
+            now = self._time
+            stale = [k for k, t in self._pair_bounce_cooldowns.items() if t <= now]
+            for key in stale:
+                self._pair_bounce_cooldowns.pop(key, None)
+
+    def _effective_collision_radius(
+        self,
+        bubble: BubbleState,
+        *,
+        big_bass_pulse: float,
+        small_freq_pulse: float,
+        big_contraction_bias: float,
+        big_size_clamp: float,
+    ) -> float:
+        """Approximate rendered radius so collision and visuals stay aligned."""
+        is_tiny = (not bubble.is_big) and bubble.radius < 0.008
+        if bubble.is_big:
+            pulse_factor = 1.0 + bubble.pulse_energy * big_bass_pulse * 4.2
+        elif is_tiny:
+            pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 0.5
+        else:
+            pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 3.0
+
+        r = bubble.radius * pulse_factor
+        if bubble.is_big and big_contraction_bias < 1.0:
+            quiet = 1.0 - min(1.0, bubble.pulse_energy)
+            quiet_curve = quiet ** 0.85
+            shrink = 1.0 - (1.0 - big_contraction_bias) * quiet_curve * 0.70
+            r *= max(0.60, shrink)
+
+        if bubble.is_big and big_size_clamp > 0.0:
+            r = min(r, bubble.radius * max(1.5, big_size_clamp))
+
+        return max(0.001, r)
 
     def _overlaps_existing(
         self,
@@ -892,6 +1117,9 @@ class BubbleSimulation:
         radius: float,
         *,
         candidate_is_big: bool,
+        stream_dir: str = "none",
+        candidate_vx: float = 0.0,
+        candidate_vy: float = 0.0,
     ) -> bool:
         """Return True if (x, y, radius) overlaps any existing bubble."""
         for b in self._bubbles:
@@ -902,9 +1130,35 @@ class BubbleSimulation:
                 min_gap = 0.001
             else:
                 min_gap = -min(radius, b.radius) * 0.10
+            if candidate_is_big and existing_big and stream_dir not in {"none", "random"}:
+                # Entry-lane guard: directional streams can otherwise spawn
+                # big bubbles too close outside the viewport and they enter as
+                # sticky overlap groups.
+                min_gap = max(min_gap, (radius + b.radius) * 0.22 + 0.010)
             dist = math.hypot(b.x - x, b.y - y)
             if dist < b.radius + radius + min_gap:
                 return True
+
+            # Pre-entry lane guard: keep big bubbles from spawning into future
+            # overlap when they are still outside the viewport.
+            if candidate_is_big and existing_big and stream_dir not in {"none"}:
+                cand_px, cand_py = self._predict_stream_position(
+                    x,
+                    y,
+                    stream_dir,
+                    vx=candidate_vx,
+                    vy=candidate_vy,
+                )
+                existing_px, existing_py = self._predict_stream_position(
+                    b.x,
+                    b.y,
+                    stream_dir,
+                    vx=b.vx,
+                    vy=b.vy,
+                )
+                future_gap = max(0.014, (radius + b.radius) * 0.16)
+                if math.hypot(existing_px - cand_px, existing_py - cand_py) < (b.radius + radius + future_gap):
+                    return True
         return False
 
     def _spawn_bubble_at(self, is_big: bool, x: float, y: float,
@@ -926,15 +1180,33 @@ class BubbleSimulation:
             hi = center * 1.45
             radius = random.uniform(lo, hi)
 
+        # Per-bubble velocity for random stream direction.
+        vx, vy = 0.0, 0.0
+        if stream_dir == "random":
+            rd = _random_direction()
+            vx, vy = rd
+        elif stream_dir == "diagonal":
+            # Legacy compatibility for previously persisted single diagonal key.
+            dv = random.choice(_DIAGONAL_STREAM_VECTORS)
+            vx, vy = dv
+
         # Overlap prevention: retry up to 15 times with increasing jitter
         for _attempt in range(15):
-            if not self._overlaps_existing(x, y, radius, candidate_is_big=is_big):
+            if not self._overlaps_existing(
+                x,
+                y,
+                radius,
+                candidate_is_big=is_big,
+                stream_dir=stream_dir,
+                candidate_vx=vx,
+                candidate_vy=vy,
+            ):
                 break
             spread = 0.08 + _attempt * 0.015
             x = x + random.uniform(-spread, spread)
             y = y + random.uniform(-spread, spread)
-            x = max(-0.05, min(1.05, x))
-            y = max(-0.05, min(1.05, y))
+            x = max(-0.25, min(1.25, x))
+            y = max(-0.25, min(1.25, y))
         # If still overlapping after 15 attempts, skip spawn entirely
         else:
             return
@@ -961,16 +1233,7 @@ class BubbleSimulation:
         else:  # none
             drift_bias = random.uniform(-0.3, 0.3)
 
-        # Per-bubble velocity for random and diagonal stream directions
-        vx, vy = 0.0, 0.0
-        if stream_dir == "random":
-            rd = _random_direction()
-            vx, vy = rd
-        elif stream_dir == "diagonal":
-            dv = random.choice(_DIAGONAL_VECTORS)
-            vx, vy = dv
-
-        if stream_dir in {"up", "down", "left", "right", "diagonal"}:
+        if stream_dir in {"up", "down", "left", "right", "top_left", "top_right", "bottom_left", "bottom_right", "diagonal"}:
             if is_big:
                 speed_mult = random.uniform(0.90, 1.12)
             else:

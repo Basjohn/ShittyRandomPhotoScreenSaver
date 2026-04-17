@@ -496,6 +496,9 @@ The bounce system uses `_apply_bubble_collision_response()` with two paths:
 - fallback path: existing soft separation remains for non-bounce collisions
 
 Mixed big/small collisions are intentionally **big-dominant** for both chance and speed.
+At high bounce settings the solver runs extra collision passes and stricter minimum-gap correction so `100%` profiles enforce visible anti-overlap behavior rather than impulse-only jitter.
+Directional stream entry now applies stronger big-big spawn spacing guards to reduce pre-viewport overlap clusters.
+Collision gap now uses effective pulse-inflated radius (not base radius only) to prevent the specific big-bubble “half-hook interlock” artifact.
 
 **Settings to add:**
 
@@ -505,6 +508,12 @@ Mixed big/small collisions are intentionally **big-dominant** for both chance an
 | `bubble_bounce_small_pct` | int (slider) | 0–100 | 30 | % of small bubble collisions that bounce |
 | `bubble_bounce_big_speed` | float (slider) | 0.0–2.0 | 0.8 | Bounce speed multiplier for big bubbles (0 = no rebound, 2 = full elastic) |
 | `bubble_bounce_small_speed` | float (slider) | 0.0–2.0 | 0.5 | Bounce speed multiplier for small bubbles |
+| `bubble_bounce_same_only` | bool (toggle) | true/false | false | When true, big↔small collisions pass through; only same-class collisions bounce/separate |
+| `bubble_collision_pop_mode` | enum (dropdown) | `off` / `one` / `all` | `off` | Optional collision resolver: pop no bubbles, pop one bubble in the pair, or pop both bubbles in the pair |
+
+Collision-pop policy guardrails:
+- `bubble_bounce_same_only = true`: mixed big/small pairs do not collide, bounce, or pop.
+- `bubble_bounce_same_only = false` + `bubble_collision_pop_mode = one`: big bubbles always survive mixed big/small collisions (small pops).
 
 **Files to touch:**
 
@@ -531,7 +540,9 @@ Mixed big/small collisions are intentionally **big-dominant** for both chance an
 6. **`ui/tabs/media/bubble_builder.py`**
    - Add a new collapsible bucket "Bounce" in the normal layout (after Motion)
    - 4 sliders: Big Bounce %, Small Bounce %, Big Bounce Speed, Small Bounce Speed
+   - Add "Pop on Collision" dropdown (`Off`, `One Bubble`, `All Bubbles`)
    - Wire with `bind_setting_signal`
+   - Stream Direction now uses explicit diagonals (`top_left`, `top_right`, `bottom_left`, `bottom_right`) instead of a single ambiguous diagonal option
 
 7. **`ui/tabs/media/bubble_settings_binding.py`**
    - Add the 4 keys to `collect_bubble_mode_settings()`
@@ -549,10 +560,77 @@ Mixed big/small collisions are intentionally **big-dominant** for both chance an
 - [x] Wire settings load/collection in `bubble_settings_binding.py`
 - [x] Wire runtime config bridge (config_applier + widget creators + widget attrs)
 - [x] Wire tick pipeline `sim_settings`
+- [x] Add optional collision-pop policy (`off`/`one`/`all`) and keep it simulation-only (no GPU payload leak)
 - [x] Run preset repair (`--audit-curated`, `--repair-all`, `--reindex-curated`)
 - [x] Test: big bubbles at 100% bounce + high speed → measurable rebound impulse
 - [x] Test: 0% bounce → retains soft-separation behavior
 - [x] Test: persistence/normalization round-trip for new bounce keys
+- [x] Test: collision-pop policy pops one/all bubbles as configured
+
+#### 3A. Bubble Chorus-Start / Long-Session Reactivity Collapse (Control-Lane Fix)
+
+**Status:** `[~]` Code + tests landed, runtime validation pending
+
+**Observed failure (from latest logs + runtime report):**
+- Bubble can start dead in chorus and lose reactivity over time.
+- `/logs/screensaver_spotify_vis.log` showed frequent dynamic floor pressure plus transient snapshots where bass/mid sat at `1.000` with near-zero flux, indicating plateau/clamp behavior in the control path.
+
+**Root cause summary:**
+- Bubble/transient control inputs were effectively hard-ceilinging hot pre-AGC bands.
+- Under sustained loud sections, that flattens deltas and can starve onset variance.
+
+**Landed mitigation:**
+- Add a dedicated Bubble/Blob control lane in `audio_worker`:
+  - `_bubble_control_norm`
+  - `_bubble_pre_agc_bass`, `_bubble_pre_agc_mid`, `_bubble_pre_agc_treble`
+- In `bar_computation.fft_to_bars()`:
+  - compute dynamic control normalization from live pre-AGC energies (fast release, slower rise)
+  - populate `_bubble_pre_agc_*` from normalized control lane
+  - feed transient bus with control-normalized energies instead of hard `min(1.0, ...)` input
+- In `beat_engine.get_pre_agc_energy_bands()`:
+  - prefer `_bubble_pre_agc_*` control-lane values for mode consumers (fallback to legacy `_pre_agc_*`)
+- Reset control-lane state on engine smoothing reset / worker reconfigure.
+
+**Regression tests added:**
+- `tests/test_bubble_reactivity.py::TestSustainedLoudSection::test_hot_start_chorus_still_reacts`
+- `tests/test_bubble_reactivity.py::TestSustainedLoudSection::test_hot_chorus_variation_not_flatlined`
+
+**Follow-up validation checklist:**
+- [x] Land control-lane normalization patch
+- [x] Land hot-start + hot-variance bubble tests
+- [ ] Validate on user runtime logs that transient flux no longer plateaus during loud sections
+- [ ] Confirm long-session chorus passages retain visible bubble response without max pinning
+
+#### 3B. Bubble Entry Snap / Double-Shift Smoothing
+
+**Status:** `[~]` Landed in solver; runtime validation pending
+
+**Observed symptom:**
+- On low/medium bounce speeds, some bubbles still made abrupt snap shifts (sometimes push-then-return), most often while entering from spawn into the viewport.
+
+**Landed mitigation:**
+- Entry spawn path now uses `_directional_entry_position(...)` (off-card depth spread) instead of raw edge-only `_spawn_position(...)` for directional streams.
+- Spawn retry jitter clamp widened from `[-0.05, 1.05]` to `[-0.25, 1.25]` so retries do not collapse into the viewport border line.
+- Collision response retuned for gentle motion at low speed:
+  - reduced low-speed positional correction softness/caps
+  - reduced low-speed impulse floor kick and per-pair impulse caps
+  - faster impulse damping
+- Extreme high-speed/high-bounce behavior preserved via strict branch so `100%/high-speed` still resolves dense overlaps without instability.
+- Drift-aware rebound stabilization:
+  - per-pair short bounce cooldown to block immediate re-bounce loops on the same pair
+  - per-bubble short `bounce_glide` window that temporarily damps stream/drift steering after a bounce so bubbles briefly follow rebound trajectory instead of fighting it
+- Entry visibility guard:
+  - bounce impulse now only applies when **both** bubbles are in view
+  - when one bubble is in view and the other is off-card, overlap correction is biased heavily to move the off-card bubble, minimizing visible snap on the in-view bubble
+  - in-view per-frame positional correction cap is tightened further during smooth-mode accumulation
+
+**Verification:**
+- [x] `tests/test_bubble_reactivity.py` passes
+- [x] `tests/test_spotify_visualizer_widget.py::test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle` passes
+- [x] New regression: `test_pair_cooldown_prevents_immediate_rebounce`
+- [x] New regression: `test_post_bounce_glide_temporarily_dampens_stream_drift`
+- [x] New regression: `test_entry_overlap_biases_correction_offscreen_without_impulse`
+- [ ] Live runtime confirmation: low-speed bounce looks gentle with no visible pop-return at entry
 
 ---
 
