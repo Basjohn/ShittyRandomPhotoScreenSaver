@@ -655,9 +655,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Set active visualizer mode
         prev_mode = self._vis_mode
-        requested_mode = vis_mode if vis_mode in (
-            'spectrum', 'oscilloscope', 'blob', 'sine_wave', 'bubble'
-        ) else 'spectrum'
+        from core.settings.visualizer_mode_registry import is_mode_active, get_default_visualizer_mode_id
+        requested_mode = vis_mode if is_mode_active(vis_mode) else get_default_visualizer_mode_id()
         self._vis_mode = requested_mode
         manual_reset = False
         if requested_mode in self._pending_mode_resets:

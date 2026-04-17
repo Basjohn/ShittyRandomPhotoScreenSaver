@@ -42,6 +42,10 @@ def _default_settings(**overrides):
         "bubble_big_size_max": 0.038,
         "bubble_small_size_max": 0.018,
         "bubble_trail_strength": 0.0,
+        "bubble_bounce_big_pct": 70,
+        "bubble_bounce_small_pct": 30,
+        "bubble_bounce_big_speed": 0.8,
+        "bubble_bounce_small_speed": 0.5,
     }
     base.update(overrides)
     return base
@@ -927,3 +931,138 @@ class TestBubblePlateauGuardrails:
             f"Post-initial refill spawned {len(active_big)} big bubbles in one tick; "
             "Bubble can still dump a visible big-bubble backlog wave at the entry edge."
         )
+
+
+class TestBubbleBouncePhysics:
+    def _pair(self, *, left_big=False, right_big=False):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleState
+
+        left = BubbleState(x=0.50, y=0.50, radius=0.06, is_big=left_big)
+        right = BubbleState(x=0.56, y=0.50, radius=0.06, is_big=right_big)
+        return left, right
+
+    def test_full_bounce_applies_impulse_response(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=True)
+        sim._bubbles = [a, b]
+
+        random.seed(7)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=0.0,
+            bounce_big_speed=2.0,
+            bounce_small_speed=0.0,
+        )
+
+        assert abs(a.impulse_vx) > 1e-5
+        assert abs(b.impulse_vx) > 1e-5
+        assert a.impulse_vx < 0.0
+        assert b.impulse_vx > 0.0
+
+    def test_zero_bounce_uses_soft_separation_without_impulse(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=True)
+        start_dist = math.hypot(b.x - a.x, b.y - a.y)
+        sim._bubbles = [a, b]
+
+        random.seed(3)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=0.0,
+            bounce_small_pct=0.0,
+            bounce_big_speed=2.0,
+            bounce_small_speed=2.0,
+        )
+        end_dist = math.hypot(b.x - a.x, b.y - a.y)
+
+        assert end_dist > start_dist
+        assert a.impulse_vx == 0.0 and a.impulse_vy == 0.0
+        assert b.impulse_vx == 0.0 and b.impulse_vy == 0.0
+
+    def test_mixed_pair_uses_big_dominant_bounce_policy(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=False)
+        sim._bubbles = [a, b]
+
+        random.seed(11)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=0.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=0.0,
+        )
+        assert abs(a.impulse_vx) > 0.0 or abs(b.impulse_vx) > 0.0
+
+        a2, b2 = self._pair(left_big=True, right_big=False)
+        sim._bubbles = [a2, b2]
+        random.seed(11)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=0.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=1.5,
+            bounce_small_speed=2.0,
+        )
+        assert a2.impulse_vx == 0.0 and a2.impulse_vy == 0.0
+        assert b2.impulse_vx == 0.0 and b2.impulse_vy == 0.0
+
+    def test_impulse_damps_over_time_without_permanent_velocity_drift(self):
+        sim = BubbleSimulation()
+        a, b = self._pair(left_big=True, right_big=True)
+        a.impulse_vx = 0.26
+        sim._bubbles = [a, b]
+
+        settings = _default_settings(
+            bubble_big_count=0,
+            bubble_small_count=0,
+            bubble_stream_direction="none",
+            bubble_stream_constant_speed=0.0,
+            bubble_stream_speed_cap=0.1,
+            bubble_stream_reactivity=0.0,
+            bubble_drift_amount=0.0,
+            bubble_drift_speed=0.0,
+            bubble_drift_frequency=0.0,
+            bubble_rotation_amount=0.0,
+            bubble_bounce_big_pct=0,
+            bubble_bounce_small_pct=0,
+        )
+
+        sim.tick(1 / 60, _energy(), settings)
+        after_one = a.impulse_vx
+        sim.tick(1 / 60, _energy(), settings)
+        after_two = a.impulse_vx
+
+        assert abs(after_one) < 0.26
+        assert abs(after_two) < abs(after_one)
+        assert abs(after_two) < 0.26
+
+    def test_dense_overlap_remains_finite_under_high_bounce(self):
+        from widgets.spotify_visualizer.bubble_simulation import BubbleState
+
+        sim = BubbleSimulation()
+        sim._bubbles = [
+            BubbleState(
+                x=0.50 + (i % 4) * 0.005,
+                y=0.50 + (i // 4) * 0.005,
+                radius=0.05,
+                is_big=(i % 2 == 0),
+            )
+            for i in range(10)
+        ]
+
+        random.seed(19)
+        sim._apply_bubble_collision_response(
+            1 / 60,
+            bounce_big_pct=100.0,
+            bounce_small_pct=100.0,
+            bounce_big_speed=2.0,
+            bounce_small_speed=2.0,
+        )
+
+        for bubble in sim._bubbles:
+            assert math.isfinite(bubble.x)
+            assert math.isfinite(bubble.y)
+            assert math.isfinite(bubble.impulse_vx)
+            assert math.isfinite(bubble.impulse_vy)

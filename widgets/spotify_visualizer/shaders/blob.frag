@@ -112,6 +112,19 @@ float sample_smoothed_linear_series(float angle_frac, float profile[SHAPER_N]) {
         sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, profile) * 0.25;
 }
 
+float sample_unshaped_contour(float angle_frac, float profile[SHAPER_N]) {
+    return
+        sample_linear_series(angle_frac, profile) * 0.78 +
+        sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP * 0.5, profile) * 0.11 +
+        sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP * 0.5, profile) * 0.11;
+}
+
+float sample_profile_gradient(float angle_frac, float profile[SHAPER_N]) {
+    float prev = sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, profile);
+    float next = sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, profile);
+    return (next - prev) * 0.5;
+}
+
 float cyclic_diff_frac(float a, float b) {
     float diff = abs(a - b);
     return min(diff, 1.0 - diff);
@@ -199,10 +212,10 @@ float clampf(float value, float lo, float hi) {
 }
 
 vec4 compute_inward_liquid_profile(
-    float angle_frac,
+    float edge_distance,
+    float blob_clearance,
+    float perimeter_pos,
     float time_seconds,
-    float local_radius,
-    float local_depth,
     float bass_energy,
     float mid_energy,
     float high_energy,
@@ -217,13 +230,13 @@ vec4 compute_inward_liquid_profile(
     int ring_mode,
     int enabled)
 {
-    float local_r = max(local_radius, 0.0001);
-    float local_d = max(local_depth, 0.0);
-    if (enabled == 0 || ring_mode == 1) {
-        return vec4(0.0, 0.0, 0.0, local_r);
+    float edge_d = max(edge_distance, 0.0);
+    float clearance = max(blob_clearance, 0.0);
+    if (enabled == 0) {
+        return vec4(0.0, 0.0, 0.0, clearance);
     }
 
-    float angle = angle_frac * 6.2831853;
+    float angle = perimeter_pos * 6.2831853;
     float bass = clamp(bass_energy, 0.0, 1.0);
     float mid = clamp(mid_energy, 0.0, 1.0);
     float high = clamp(high_energy, 0.0, 1.0);
@@ -236,76 +249,90 @@ vec4 compute_inward_liquid_profile(
     float react = clamp(reactivity, 0.0, 2.0);
     float max_fraction = clamp(max_size, 0.05, 0.45);
 
-    float base_drift = 0.20;
-    base_drift += sin(time_seconds * 0.82 + angle * 1.8) * 0.08;
-    base_drift += sin(time_seconds * 1.31 - angle * 2.7 + 0.90) * 0.06;
-    base_drift = clamp(base_drift, 0.08, 0.34);
+    float hard_cap = 0.014 + max_fraction * 0.22;
+    float retained_front_floor = max(0.010, hard_cap * (0.22 + max_fraction * 0.08));
+
+    float base_drift = 0.18;
+    base_drift += sin(time_seconds * 0.74 + angle * 1.7) * 0.05;
+    base_drift += sin(time_seconds * 1.19 - angle * 2.4 + 0.90) * 0.04;
+    base_drift = clamp(base_drift, 0.07, 0.36);
 
     float audio_pressure = clamp(
-        se * 0.22 +
-        overall * 0.25 +
-        mid * 0.24 +
-        bass * 0.11 +
+        se * 0.24 +
+        overall * 0.22 +
+        mid * 0.20 +
+        bass * 0.10 +
         high * 0.08 +
-        transient * 0.10,
+        transient * 0.12,
         0.0,
         1.4
     );
-    float ripple_wave = sin(time_seconds * (2.0 + audio_pressure * 2.2) + angle * 3.5);
-    float contour_ripple = 0.5 + 0.5 * ripple_wave;
-    float tangential_slide = (contour_ripple - 0.5) * (0.08 + 0.06 * min(react, 1.0));
+    float pressure_balance = 0.5 + 0.5 * sin(time_seconds * (1.8 + audio_pressure * 1.8) + angle * 3.1);
+    float tangential_slide = (pressure_balance - 0.5) * (0.10 + 0.08 * min(react, 1.0));
 
     float advance_drive = clamp(
         base_drift +
-        audio_pressure * (0.12 + 0.10 * react) +
+        audio_pressure * (0.18 + 0.14 * react) +
         tangential_slide,
         0.06,
         0.92
     );
-    float hard_cap = local_r * max_fraction;
-    float retained_band_floor = max(local_r * (0.070 + max_fraction * 0.06), 0.018);
-    float requested_depth = hard_cap * advance_drive;
+    float requested_depth = retained_front_floor + hard_cap * advance_drive;
 
     float body_pressure = clamp(
-        se * 0.18 +
-        overall * 0.20 +
-        mid * 0.10 +
-        stage1 * 0.10 +
+        se * 0.12 +
+        overall * 0.10 +
+        mid * 0.08 +
+        stage1 * 0.12 +
         stage2 * 0.18 +
-        stage3 * 0.28 +
-        transient * 0.08,
+        stage3 * 0.26 +
+        transient * 0.12,
         0.0,
         1.3
     );
-    float local_bias = 0.5 + 0.5 * sin(time_seconds * 0.64 - angle * 2.1 + 1.2);
-    float crowding = clamp(requested_depth / max(hard_cap, 0.0001), 0.0, 1.0);
-    float thin_region = smoothstep(0.58, 0.28, local_r);
+    float local_bias = 0.5 + 0.5 * sin(time_seconds * 0.58 - angle * 1.9 + 1.2);
+    float no_contact_gap = 0.010 + max_fraction * 0.020 + min(react, 1.0) * 0.006 + body_pressure * 0.010;
+    float crowding = 1.0 - smoothstep(
+        no_contact_gap,
+        no_contact_gap + requested_depth * 1.35 + 0.015,
+        clearance
+    );
     float retreat_signal = clamp(
-        body_pressure * (0.48 + 0.34 * local_bias) +
-        crowding * 0.58 +
-        thin_region * 0.24,
+        body_pressure * (0.30 + 0.28 * local_bias) +
+        crowding * (0.82 + 0.14 * react),
         0.0,
         1.4
     );
-    float retreat_weight = smoothstep(0.45, 1.02, retreat_signal);
-    float retreat_depth = hard_cap * retreat_weight * (0.10 + body_pressure * 0.14 + thin_region * 0.08);
+    float retreat_weight = smoothstep(0.16, 0.96, retreat_signal);
+    float retreat_depth = requested_depth * retreat_weight * (0.28 + body_pressure * 0.26);
 
     float redistribution = retreat_weight * (0.03 + 0.05 * audio_pressure) * sin(
-        time_seconds * 1.45 + angle * 4.4 - 0.6
+        time_seconds * 1.36 + angle * 4.2 - 0.6
     );
     float final_depth = requested_depth - retreat_depth + redistribution * hard_cap;
-    final_depth = clamp(final_depth, retained_band_floor, hard_cap);
+    final_depth = clamp(final_depth, retained_front_floor, hard_cap);
 
-    float front_softness = max(final_depth * 0.56, 0.010);
-    float front_mask = 1.0 - smoothstep(max(final_depth - front_softness, 0.0), final_depth, local_d);
-    float source_anchor = 1.0 - smoothstep(0.0, max(final_depth * 0.95, 0.018), local_d);
-    float body_preserve = smoothstep(0.0, max(local_r * 0.58, 0.035), local_d);
-    float retained_mix_floor = 0.24 + source_anchor * 0.08;
-    float mix_amount = front_mask * (0.56 + source_anchor * 0.30 + audio_pressure * 0.18) * (1.0 - body_preserve * 0.22);
-    mix_amount = max(mix_amount, front_mask * retained_mix_floor);
+    float front_mask = 1.0 - smoothstep(
+        max(final_depth * 0.12, retained_front_floor * 0.50),
+        max(final_depth, retained_front_floor + 0.003),
+        edge_d
+    );
+    float source_anchor = 1.0 - smoothstep(
+        0.0,
+        max(final_depth * 0.55, retained_front_floor + 0.003),
+        edge_d
+    );
+    float gap_guard = smoothstep(
+        no_contact_gap,
+        no_contact_gap + max(final_depth * 0.30, 0.006),
+        clearance
+    );
+    float retained_mix_floor = 0.14 + source_anchor * 0.04;
+    float mix_amount = front_mask * gap_guard * (0.28 + source_anchor * 0.24 + audio_pressure * 0.12);
+    mix_amount = max(mix_amount, front_mask * gap_guard * retained_mix_floor);
     mix_amount = clamp(mix_amount, 0.0, 0.96);
 
-    return vec4(final_depth, mix_amount, retreat_depth, max(local_r - final_depth, max(local_r * (1.0 - max_fraction), retained_band_floor)));
+    return vec4(final_depth, mix_amount, retreat_depth, no_contact_gap);
 }
 
 vec3 compute_stage_progress_values(
@@ -523,6 +550,7 @@ float blob_sdf_ex(vec2 p, float time,
     r += max(0.02, breath) * 0.007 * pulse_amt;
     r -= (1.0 - se) * 0.010 * pulse_amt;
 
+    float calm_r = r;
     vec3 stage_progress = vec3(0.0);
     r += compute_stage_offset(
         clamp(u_blob_size, 0.1, 2.5),
@@ -537,6 +565,12 @@ float blob_sdf_ex(vec2 p, float time,
     }
 
     float staged_r = r;
+    if (u_blob_shaper_enabled == 0) {
+        // Unshaped Blob should read as contour pressure first and scalar
+        // breathing second. Keep some staged support, but stop letting the
+        // stage ladder dominate the final silhouette.
+        staged_r = mix(calm_r, staged_r, 0.46);
+    }
 
     float angle = atan(p.y, p.x);
     float dist = length(p);
@@ -545,12 +579,34 @@ float blob_sdf_ex(vec2 p, float time,
     // Shaper authors it from user contours; unshaped Blob authors it from the
     // procedural fluid solver on the CPU.
     float angle_frac = fract(angle / 6.2831853 + 0.25);
-    float runtime_mult =
-        sample_profile(angle_frac, u_blob_runtime_profile) * 0.50 +
-        sample_profile(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25 +
-        sample_profile(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25;
-    float support_floor = mix(0.52, 0.60, clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0));
-    float final_radius = max(staged_r * runtime_mult, staged_r * support_floor);
+    float runtime_mult = (u_blob_shaper_enabled == 1)
+        ? (
+            sample_profile(angle_frac, u_blob_runtime_profile) * 0.50 +
+            sample_profile(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25 +
+            sample_profile(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25
+        )
+        : sample_unshaped_contour(angle_frac, u_blob_runtime_profile);
+    if (u_blob_shaper_enabled == 0) {
+        float contour_delta = runtime_mult - 1.0;
+        float size_compensation = clamp(0.24 / max(calm_r, 0.001), 1.0, 2.2);
+        float contour_authority = (
+            4.80
+            + clamp(smoothed_e, 0.0, 1.0) * 0.70
+            + stage_progress.x * 0.48
+            + stage_progress.y * 0.30
+            + stage_progress.z * 0.24
+        ) * size_compensation;
+        float signed_push = sign(contour_delta) * pow(abs(contour_delta), 0.88);
+        runtime_mult = clamp(1.0 + signed_push * contour_authority, 0.42, 1.78);
+    }
+    float support_floor = (u_blob_shaper_enabled == 1)
+        ? mix(0.52, 0.60, clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0))
+        : mix(0.48, 0.60, clamp(stage_progress.z * 0.55 + stage_progress.y * 0.22, 0.0, 1.0));
+    float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;
+    float unshaped_support = max(calm_r * support_floor, staged_r * 0.28);
+    float final_radius = (u_blob_shaper_enabled == 1)
+        ? max(staged_r * runtime_mult, staged_r * support_floor)
+        : max(contour_radius, unshaped_support);
 
     return dist - final_radius;
 }
@@ -707,11 +763,6 @@ void main() {
         ghost_ring_alpha = (ghost_fill * 0.7 + edge_glow * 0.4) * u_ghost_alpha;
     }
 
-    float total_alpha = max(fill_alpha, max(edge_alpha, max(glow_alpha, max(outline_band_alpha, ghost_ring_alpha))));
-    if (total_alpha <= 0.001) {
-        discard;
-    }
-
     // Colour blending using configurable colours
     vec3 blob_rgb = u_blob_color.rgb;
     vec3 edge_rgb = u_blob_edge_color.rgb;      // EDGE stays exempt
@@ -725,31 +776,74 @@ void main() {
         outline_rgb = apply_rainbow_shift(outline_rgb);
         inward_liquid_rgb = apply_rainbow_shift(inward_liquid_rgb);
     }
+    float left_edge_dist = (fc.x - margin_x) / inner_height;
+    float right_edge_dist = (width - margin_x - fc.x) / inner_height;
+    float top_edge_dist = (fc.y - margin_y) / inner_height;
+    float bottom_edge_dist = (height - margin_y - fc.y) / inner_height;
+    float card_edge_distance = top_edge_dist;
+    float perimeter_phase = 0.25 * clamp((fc.x - margin_x) / max(inner_width, 1.0), 0.0, 1.0);
+    if (right_edge_dist < card_edge_distance) {
+        card_edge_distance = right_edge_dist;
+        perimeter_phase = 0.25 + 0.25 * clamp((fc.y - margin_y) / max(inner_height, 1.0), 0.0, 1.0);
+    }
+    if (bottom_edge_dist < card_edge_distance) {
+        card_edge_distance = bottom_edge_dist;
+        perimeter_phase = 0.50 + 0.25 * clamp((width - margin_x - fc.x) / max(inner_width, 1.0), 0.0, 1.0);
+    }
+    if (left_edge_dist < card_edge_distance) {
+        card_edge_distance = left_edge_dist;
+        perimeter_phase = 0.75 + 0.25 * clamp((height - margin_y - fc.y) / max(inner_height, 1.0), 0.0, 1.0);
+    }
     float angle_frac_main = fract(atan(uv.y, uv.x) / 6.2831853 + 0.25);
+    float profile_gradient = sample_profile_gradient(angle_frac_main, u_blob_runtime_profile);
+    float profile_gradient_abs = abs(profile_gradient);
     float local_depth_main = max(-d_fill, 0.0);
     float normalized_depth = clamp(local_depth_main / max(local_radius, 0.0001), 0.0, 1.0);
-    float surface_band = smoothstep(0.28, 0.05, normalized_depth) * smoothstep(-0.16, -0.004, d_fill);
-    float streak_center_a = fract(0.83 + sin(u_time * 0.13) * 0.05);
-    float streak_center_b = fract(streak_center_a + 0.08 + sin(u_time * 0.09 + 0.8) * 0.03);
-    float streak_diff_a = cyclic_diff_frac(angle_frac_main, streak_center_a);
-    float streak_diff_b = cyclic_diff_frac(angle_frac_main, streak_center_b);
-    float streak_arc_a = exp(-pow(streak_diff_a / 0.11, 2.0));
-    float streak_arc_b = exp(-pow(streak_diff_b / 0.07, 2.0));
+    float surface_band = smoothstep(0.30, 0.04, normalized_depth) * smoothstep(-0.16, -0.003, d_fill);
+    vec2 highlight_axis = normalize(vec2(-0.46, 0.89));
+    vec2 highlight_cross = vec2(-highlight_axis.y, highlight_axis.x);
+    vec2 local_uv = uv / max(local_radius, 0.0001);
+    float streak_main = dot(local_uv, highlight_axis);
+    float streak_cross = dot(local_uv, highlight_cross);
+    float streak_arc_a = exp(
+        -pow((streak_main - 0.12 - sin(u_time * 0.18) * 0.03 - profile_gradient * 1.8) / 0.15, 2.0)
+        -pow((streak_cross + 0.03) / 0.40, 2.0)
+    );
+    float streak_arc_b = exp(
+        -pow((streak_main + 0.01 + sin(u_time * 0.13 + 0.8) * 0.02 + profile_gradient * 1.1) / 0.12, 2.0)
+        -pow((streak_cross - 0.10) / 0.28, 2.0)
+    );
     float streak_breakup =
-        0.72 + 0.28 * sin(u_time * 1.05 + angle_frac_main * 23.0 + normalized_depth * 6.0);
+        0.78 + 0.22 * sin(u_time * 0.92 + angle_frac_main * 15.0 + normalized_depth * 4.0);
     float slime_highlight = clamp(
-        (streak_arc_a * 0.88 + streak_arc_b * 0.44) * streak_breakup * surface_band,
+        (streak_arc_a * 1.10 + streak_arc_b * 0.62) * streak_breakup * surface_band,
         0.0,
         1.0
     );
+    float contour_line = exp(
+        -pow(max(abs(d_fill) - 0.003, 0.0) / 0.0045, 2.0)
+    ) * smoothstep(-0.050, -0.004, d_fill);
+    float inner_contour_line = exp(
+        -pow(max(abs(d_fill + 0.014) - 0.0025, 0.0) / 0.0050, 2.0)
+    ) * smoothstep(-0.080, -0.016, d_fill);
+    float vector_rim_line = exp(
+        -pow(d_fill / 0.0032, 2.0)
+    ) * (0.66 + profile_gradient_abs * 4.0);
+    float vector_specular = clamp(
+        slime_highlight * (0.85 + profile_gradient_abs * 3.2) +
+        vector_rim_line * 0.42,
+        0.0,
+        1.2
+    );
 
-    float inward_liquid_mix = 0.0;
-    if (u_blob_inward_liquid_enabled == 1 && u_blob_ring_mode == 0 && d_fill < 0.0) {
+    float border_liquid_alpha = 0.0;
+    float border_liquid_line = 0.0;
+    if (u_blob_inward_liquid_enabled == 1) {
         vec4 inward_profile = compute_inward_liquid_profile(
-            angle_frac_main,
+            card_edge_distance,
+            max(d_fill, 0.0),
+            perimeter_phase,
             u_time,
-            local_radius,
-            local_depth_main,
             u_bass_energy,
             u_mid_energy,
             u_high_energy,
@@ -764,13 +858,17 @@ void main() {
             u_blob_ring_mode,
             u_blob_inward_liquid_enabled
         );
-        float front_band = 1.0 - smoothstep(
-            max(inward_profile.x * 0.22, 0.002),
-            max(inward_profile.x * 0.96, 0.010),
-            local_depth_main
-        );
-        float retained_visibility = smoothstep(0.0, max(inward_profile.x * 0.85, 0.012), local_depth_main);
-        inward_liquid_mix = inward_profile.y * max(front_band, retained_visibility * 0.38) * clamp(u_blob_inward_liquid_color.a, 0.0, 1.0);
+        float front_depth = inward_profile.x;
+        float front_mix = inward_profile.y;
+        float front_width = max(front_depth * 0.10, 0.0032);
+        float front_fill = 1.0 - smoothstep(max(front_depth * 0.06, 0.0018), front_depth, card_edge_distance);
+        float front_line = exp(-pow((card_edge_distance - front_depth) / front_width, 2.0));
+        float front_inner_line = exp(-pow((card_edge_distance - max(front_depth - front_width * 1.6, 0.0)) / max(front_width * 1.4, 0.0035), 2.0));
+        float front_ripple = 0.72 + 0.28 * sin(u_time * 1.4 + perimeter_phase * 25.0);
+        border_liquid_line = front_line * front_ripple * front_mix;
+        border_liquid_alpha =
+            clamp((front_fill * 0.18 + border_liquid_line * 1.25 + front_inner_line * 0.44) * front_mix, 0.0, 0.99) *
+            clamp(u_blob_inward_liquid_color.a, 0.0, 1.0);
     }
 
     // Outline band colour (the dark/grey area between fill edge and glow)
@@ -779,12 +877,14 @@ void main() {
     if (d_fill < -0.02) {
         // Deep inside: mostly stable fill colour with a soft ooze highlight.
         float depth = clamp(-d_fill / 0.15, 0.0, 1.0);
-        float highlight_mask = slime_highlight * depth * (0.22 + u_blob_smoothed_energy * 0.10);
+        float highlight_mask =
+            (vector_specular * 0.88 + contour_line * 0.80 + inner_contour_line * 0.46 + vector_rim_line * 0.36) *
+            depth * (0.22 + u_blob_smoothed_energy * 0.10);
         final_rgb = mix(blob_rgb, vec3(1.0), highlight_mask);
     } else if (d_fill < 0.0) {
         // Near edge: transition from fill to edge highlight colour
         float t = 1.0 - clamp(-d_fill / 0.02, 0.0, 1.0);
-        final_rgb = mix(blob_rgb, edge_rgb, t);
+        final_rgb = mix(blob_rgb, edge_rgb, clamp(t + contour_line * 0.55 + vector_rim_line * 0.35, 0.0, 1.0));
     } else if (ghost_ring_alpha > 0.01 && ghost_ring_alpha >= glow_alpha) {
         // Ghost shape zone: use glow colour blended toward outline for depth
         final_rgb = mix(glow_rgb, outline_rgb, 0.5);
@@ -797,11 +897,26 @@ void main() {
         final_rgb = glow_rgb;
     }
 
-    if (inward_liquid_mix > 0.001 && d_fill < 0.0) {
-        vec3 inward_liquid_tint = mix(inward_liquid_rgb, vec3(1.0), 0.12);
-        final_rgb *= 1.0 - inward_liquid_mix * 0.28;
-        final_rgb = mix(final_rgb, inward_liquid_tint, clamp(inward_liquid_mix * 2.10, 0.0, 0.98));
+    float blob_total_alpha = max(fill_alpha, max(edge_alpha, max(glow_alpha, max(outline_band_alpha, ghost_ring_alpha))));
+    if (blob_total_alpha <= 0.001 && border_liquid_alpha <= 0.001) {
+        discard;
     }
 
-    fragColor = vec4(final_rgb, total_alpha * u_fade);
+    if (blob_total_alpha > 0.001) {
+        float deep_fill = smoothstep(-0.22, -0.02, d_fill);
+        float highlight_mask =
+            (vector_specular * 0.72 + contour_line * 0.58 + inner_contour_line * 0.34 + vector_rim_line * 0.26) *
+            deep_fill * (0.14 + u_blob_smoothed_energy * 0.06);
+        final_rgb = mix(final_rgb, vec3(1.0), highlight_mask);
+    }
+
+    vec3 border_liquid_rgb = mix(inward_liquid_rgb, vec3(1.0), 0.16 + border_liquid_line * 0.42);
+    float total_alpha = border_liquid_alpha + blob_total_alpha * (1.0 - border_liquid_alpha);
+    vec3 composed_rgb = border_liquid_rgb;
+    if (blob_total_alpha > 0.001) {
+        float blob_weight = blob_total_alpha / max(total_alpha, 0.0001);
+        composed_rgb = mix(border_liquid_rgb, final_rgb, blob_weight);
+    }
+
+    fragColor = vec4(composed_rgb, total_alpha * u_fade);
 }

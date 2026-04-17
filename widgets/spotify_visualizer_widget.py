@@ -296,6 +296,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_big_count: int = 8
         self._bubble_small_count: int = 25
         self._bubble_surface_reach: float = 0.6
+        self._bubble_bounce_big_pct: int = 70
+        self._bubble_bounce_small_pct: int = 30
+        self._bubble_bounce_big_speed: float = 0.8
+        self._bubble_bounce_small_speed: float = 0.5
         self._bubble_outline_color: QColor = QColor(255, 255, 255, 230)
         self._bubble_specular_color: QColor = QColor(255, 255, 255, 255)
         self._bubble_gradient_light: QColor = QColor(210, 170, 120, 255)
@@ -2504,15 +2508,17 @@ class SpotifyVisualizerWidget(QWidget):
     def cycle_visualization_mode(self) -> VisualizerMode:
         """Cycle to the next visualization mode and return it.
 
-        Cycles through Spectrum → Oscilloscope → Sine Wave → Blob → Bubble.
+        Only cycles through modes whose dev gates are active.
         """
-        _CYCLE_MODES = [
-            VisualizerMode.SPECTRUM,
-            VisualizerMode.OSCILLOSCOPE,
-            VisualizerMode.SINE_WAVE,
-            VisualizerMode.BLOB,
-            VisualizerMode.BUBBLE,
-        ]
+        from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+
+        _CYCLE_MODES = []
+        for desc in iter_visualizer_mode_descriptors():
+            member = getattr(VisualizerMode, desc.mode_id.upper(), None)
+            if member is not None:
+                _CYCLE_MODES.append(member)
+        if not _CYCLE_MODES:
+            return self._vis_mode
         try:
             idx = _CYCLE_MODES.index(self._vis_mode)
         except ValueError:

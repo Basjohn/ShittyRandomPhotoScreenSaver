@@ -704,6 +704,14 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_small_count = max(5, min(80, int(kwargs['bubble_small_count'])))
     if 'bubble_surface_reach' in kwargs:
         widget._bubble_surface_reach = max(0.0, min(1.0, float(kwargs['bubble_surface_reach'])))
+    if 'bubble_bounce_big_pct' in kwargs:
+        widget._bubble_bounce_big_pct = max(0, min(100, int(kwargs['bubble_bounce_big_pct'])))
+    if 'bubble_bounce_small_pct' in kwargs:
+        widget._bubble_bounce_small_pct = max(0, min(100, int(kwargs['bubble_bounce_small_pct'])))
+    if 'bubble_bounce_big_speed' in kwargs:
+        widget._bubble_bounce_big_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_big_speed'])))
+    if 'bubble_bounce_small_speed' in kwargs:
+        widget._bubble_bounce_small_speed = max(0.0, min(2.0, float(kwargs['bubble_bounce_small_speed'])))
     if 'bubble_outline_color' in kwargs:
         c = _color_or_none(kwargs['bubble_outline_color'])
         if c is not None:

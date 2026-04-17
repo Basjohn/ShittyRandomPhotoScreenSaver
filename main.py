@@ -116,12 +116,14 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --debug, -d - Enable debug logging
     - --viz - Enable visualizer logging
     - --viz-diagnostics (or --viz-diag) - Enable Spotify visualizer diagnostics
+    - -devblob - Enable dev-gated Blob visualizer mode
+    - -devgoo  - Enable dev-gated Goo visualizer mode
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
     """
-    # Filter out debug/viz flags
-    _filtered = {"--debug", "-d", "--viz", "--viz-diagnostics", "--viz-diag", "--fresh"}
+    # Filter out debug/viz/dev-gate flags
+    _filtered = {"--debug", "-d", "--viz", "--viz-diagnostics", "--viz-diag", "--fresh", "-devblob", "-devgoo"}
     args = [arg for arg in sys.argv if arg not in _filtered]
     
     logger.debug(f"Command-line arguments: {sys.argv}")

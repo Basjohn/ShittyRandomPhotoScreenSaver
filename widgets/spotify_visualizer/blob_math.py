@@ -41,19 +41,20 @@ def compute_unshaped_organic_base_multiplier(
     slow_t = float(time_seconds) * 0.12
     se = _clamp(smoothed_energy, 0.0, 1.0)
     overall = _clamp(overall_energy, 0.0, 1.0)
-    drift = 0.60 + se * 0.28 + overall * 0.12
+    drift = 0.62 + se * 0.30 + overall * 0.16
 
     shape = 1.0
     # Broad liquid body language: low harmonics only, phase-shifted so the
     # body breathes as one form rather than reading as radial teeth.
-    shape += math.cos(angle * 1.0 + slow_t * 0.41 + 0.70) * 0.054
-    shape += math.cos(angle * 2.0 - slow_t * 0.29 + 1.85) * 0.031
-    shape += math.cos(angle * 3.0 + slow_t * 0.23 + 3.05) * 0.017
+    shape += math.cos(angle * 1.0 + slow_t * 0.41 + 0.70) * 0.082
+    shape += math.cos(angle * 2.0 - slow_t * 0.29 + 1.85) * 0.050
+    shape += math.cos(angle * 3.0 + slow_t * 0.23 + 3.05) * 0.024
     # A slower asymmetry term keeps the body from settling into a repeated,
     # evenly-balanced clover shape while remaining fully periodic.
-    shape += math.cos(angle * 1.0 - slow_t * 0.17 + 2.45) * 0.016 * drift
+    shape += math.cos(angle * 1.0 - slow_t * 0.17 + 2.45) * 0.030 * drift
+    shape += math.cos(angle * 2.0 + slow_t * 0.11 + 0.25) * 0.022 * drift
 
-    return _clamp(shape, 0.88, 1.16)
+    return _clamp(shape, 0.80, 1.24)
 
 
 def compute_unshaped_motion_offsets(
@@ -104,9 +105,9 @@ def compute_unshaped_motion_offsets(
     base_bias = _clamp((base_mult - 1.0) / 0.16, -1.0, 1.0)
 
     slow_sway = 0.0
-    slow_sway += math.sin(angle * 1.0 + time_value * 0.20 + 0.25) * 0.020
-    slow_sway += math.sin(angle * 2.0 - time_value * 0.34 + 1.05) * 0.011
-    slow_sway += math.sin(angle * 3.0 + time_value * 0.27 + 2.10) * 0.005
+    slow_sway += math.sin(angle * 1.0 + time_value * 0.20 + 0.25) * 0.024
+    slow_sway += math.sin(angle * 2.0 - time_value * 0.34 + 1.05) * 0.014
+    slow_sway += math.sin(angle * 3.0 + time_value * 0.27 + 2.10) * 0.007
     slow_sway *= 1.0 - abs(base_bias) * 0.18
 
     reactive_mid = _clamp(e_mid * 0.92 + e_overall * 0.08, 0.0, 1.0)
@@ -114,10 +115,10 @@ def compute_unshaped_motion_offsets(
     vocal = _clamp(e_mid * 1.02 + e_high * 0.18, 0.0, 1.0)
 
     reactive_sway = 0.0
-    reactive_sway += math.sin(angle * 1.0 + time_value * 0.48 + 0.30) * 0.040 * vocal
-    reactive_sway += math.sin(angle * 2.0 - time_value * 0.56 + 1.80) * 0.026 * reactive_mid
-    reactive_sway += math.sin(angle * 3.0 + time_value * 0.44 + 2.55) * 0.010 * reactive_high
-    reactive_sway += base_bias * vocal * 0.015
+    reactive_sway += math.sin(angle * 1.0 + time_value * 0.48 + 0.30) * 0.050 * vocal
+    reactive_sway += math.sin(angle * 2.0 - time_value * 0.56 + 1.80) * 0.034 * reactive_mid
+    reactive_sway += math.sin(angle * 3.0 + time_value * 0.44 + 2.55) * 0.014 * reactive_high
+    reactive_sway += base_bias * vocal * 0.020
 
     wobble_component = slow_sway * cw + reactive_sway * rw
 
@@ -134,25 +135,25 @@ def compute_unshaped_motion_offsets(
         impact3 = impact2 * impact
 
         stretch = 0.0
-        stretch += math.sin(angle * 1.0 + time_value * 0.16 + 0.95) * impact2 * 0.082
-        stretch += math.sin(angle * 2.0 - time_value * 0.31 + 2.20) * impact3 * 0.058
-        stretch += base_bias * impact2 * 0.046
-        stretch += base_bias * max(0.0, vocal_impact - 0.18) * 0.024
-        stretch += pocket_shoulder * 0.138
-        stretch += pocket_soft * max(0.0, 0.35 - abs(base_bias)) * 0.022
+        stretch += math.sin(angle * 1.0 + time_value * 0.16 + 0.95) * impact2 * 0.142
+        stretch += math.sin(angle * 2.0 - time_value * 0.31 + 2.20) * impact3 * 0.104
+        stretch += base_bias * impact2 * 0.082
+        stretch += base_bias * max(0.0, vocal_impact - 0.18) * 0.044
+        stretch += pocket_shoulder * 0.236
+        stretch += pocket_soft * max(0.0, 0.35 - abs(base_bias)) * 0.044
         stretch_component = stretch * st
 
-    wobble_component += pocket_shoulder * 0.010
-    wobble_component += pocket_soft * base_bias * 0.008
+    wobble_component += pocket_shoulder * 0.030
+    wobble_component += pocket_soft * base_bias * 0.016
 
     rd_scale = rd if rd <= 1.0 else 1.0 + (rd - 1.0) ** 3 * 4.0 + (rd - 1.0) * 2.0
     wobble_component *= rd_scale
     stretch_component *= rd_scale
 
     if stretch_component < 0.0:
-        stretch_component *= 0.04 + s_inner * 0.48
+        stretch_component *= 0.14 + s_inner * 0.74
     else:
-        stretch_component *= 0.10 + s_outer * 0.90
+        stretch_component *= 0.28 + s_outer * 1.38
 
     return (stretch_component, wobble_component)
 
@@ -208,13 +209,13 @@ def compute_unshaped_radius_multiplier(
         stage2_t=stage2_t,
         stage3_t=stage3_t,
     )
-    min_radius_mult = max(0.84, body_mult * stage_floor)
+    min_radius_mult = max(0.74, body_mult * max(stage_floor, 0.76))
     stretch_floor = min(min_radius_mult - body_mult, 0.0)
     stretch_component = max(stretch_component, stretch_floor)
     core_mult = body_mult + stretch_component
-    fluid_floor = _clamp(0.84 + stage1_t * 0.04 + max(0.0, body_mult - 1.0) * 0.03, 0.84, 0.92)
+    fluid_floor = _clamp(0.72 + stage1_t * 0.05 + max(0.0, body_mult - 1.0) * 0.04, 0.72, 0.84)
     final_mult = max(core_mult + wobble_component, core_mult * fluid_floor)
-    final_mult = max(final_mult, max(0.84, body_mult * 0.88))
+    final_mult = max(final_mult, max(0.74, body_mult * 0.80))
     return final_mult
 
 
@@ -417,8 +418,8 @@ def build_unshaped_blob_target_profile(
     # Give the solved contour more authority over the silhouette while keeping
     # it card-contained. The body should read as contour pressure, not as a
     # nearly circular scalar radius with small decoration layered on top.
-    min_allowed = max(0.66, stage_floor * 0.94, min(base_profile) * 0.84)
-    max_allowed = min(1.18, 1.05 + stage1_t * 0.040 + stage2_t * 0.048 + stage3_t * 0.056)
+    min_allowed = max(0.48, stage_floor * 0.78, min(base_profile) * 0.66)
+    max_allowed = min(1.38, 1.16 + stage1_t * 0.090 + stage2_t * 0.110 + stage3_t * 0.136)
     bounded = _fit_profile_inside_containment(
         target_profile,
         min_allowed=min_allowed,
@@ -501,15 +502,15 @@ def solve_unshaped_blob_profile_step(
         current_velocity = [0.0] * count
 
     min_profile = [
-        max(0.66, base_profile[idx] * 0.84, stage_floor if (stage_floor := compute_stage_floor_fraction(
+        max(0.48, base_profile[idx] * 0.66, stage_floor if (stage_floor := compute_stage_floor_fraction(
             core_floor_bias=core_floor_bias,
             stage1_t=stage1_t,
             stage2_t=stage2_t,
             stage3_t=stage3_t,
-        )) else 0.66)
+        )) else 0.60)
         for idx in range(count)
     ]
-    max_profile = [min(1.18, max(base_profile[idx] + 0.18, target_profile[idx] + 0.08)) for idx in range(count)]
+    max_profile = [min(1.38, max(base_profile[idx] + 0.36, target_profile[idx] + 0.24)) for idx in range(count)]
     solved_profile, solved_velocity = solve_profile_step(
         current_profile=current_profile,
         current_velocity=current_velocity,
@@ -517,10 +518,10 @@ def solve_unshaped_blob_profile_step(
         min_profile=min_profile,
         max_profile=max_profile,
         dt=dt,
-        stiffness=18.0 if playing else 12.0,
-        damping=10.8 if playing else 13.4,
-        neighbor_strength=18.5 if playing else 13.0,
-        smoothing_passes=5 if playing else 4,
+        stiffness=19.0 if playing else 13.0,
+        damping=7.2 if playing else 10.8,
+        neighbor_strength=12.6 if playing else 9.8,
+        smoothing_passes=2 if playing else 2,
     )
     solved_profile = _fit_profile_inside_containment(
         solved_profile,
@@ -533,10 +534,10 @@ def solve_unshaped_blob_profile_step(
 
 def compute_inward_liquid_profile(
     *,
-    angle_frac: float,
+    edge_distance: float,
+    blob_clearance: float,
+    perimeter_pos: float,
     time_seconds: float,
-    local_radius: float,
-    local_depth: float,
     bass_energy: float,
     mid_energy: float,
     high_energy: float,
@@ -551,29 +552,41 @@ def compute_inward_liquid_profile(
     ring_mode: bool = False,
     enabled: bool = True,
 ) -> dict[str, float]:
-    """Return the inward-liquid motion profile for one contour sample.
+    """Return the card-edge inward-liquid profile for one perimeter sample.
 
-    The layer is built as a contour-following inner fluid band. It should:
-    - stay alive at rest via low-amplitude drift
-    - advance under bounded audio pressure
-    - yield locally when the body is energetic or the gap grows too crowded
-    - redistribute some of that pressure tangentially instead of hard-popping
-    - always preserve a positive interior gap
+    This is intentionally *not* a blob-internal tint band.
+    The layer represents liquid advancing inward from the visualizer card
+    borders while locally retreating when the blob threatens the front.
+
+    Inputs:
+    - ``edge_distance``: normalized distance from the current pixel/sample to
+      the nearest card edge
+    - ``blob_clearance``: normalized distance from the current pixel/sample to
+      the blob body (outside-only clearance)
+    - ``perimeter_pos``: wrapped 0..1 coordinate traveling around the card
+
+    The profile should:
+    - stay visibly alive at rest
+    - advance inward under bounded audio pressure
+    - retreat locally when blob pressure threatens contact
+    - preserve a strict positive gap to the blob
+    - never fully collapse while enabled
     """
 
-    local_r = max(float(local_radius), 1e-4)
-    local_d = max(float(local_depth), 0.0)
-    if not enabled or ring_mode:
+    edge_d = max(float(edge_distance), 0.0)
+    clearance = max(float(blob_clearance), 0.0)
+    if not enabled:
         return {
             "front_depth": 0.0,
             "mix": 0.0,
             "advance_drive": 0.0,
             "retreat_depth": 0.0,
             "redistribution": 0.0,
-            "no_contact_gap": local_r,
+            "retained_front_floor": 0.0,
+            "no_contact_gap": clearance,
         }
 
-    angle = (float(angle_frac) % 1.0) * math.tau
+    angle = (float(perimeter_pos) % 1.0) * math.tau
     time_value = float(time_seconds)
     bass = _clamp(bass_energy, 0.0, 1.0)
     mid = _clamp(mid_energy, 0.0, 1.0)
@@ -587,74 +600,87 @@ def compute_inward_liquid_profile(
     react = _clamp(reactivity, 0.0, 2.0)
     max_fraction = _clamp(max_size, 0.05, 0.45)
 
-    base_drift = 0.20
-    base_drift += math.sin(time_value * 0.82 + angle * 1.8) * 0.08
-    base_drift += math.sin(time_value * 1.31 - angle * 2.7 + 0.90) * 0.06
-    base_drift = _clamp(base_drift, 0.08, 0.34)
+    hard_cap = 0.014 + max_fraction * 0.22
+    retained_front_floor = max(0.010, hard_cap * (0.22 + max_fraction * 0.08))
+
+    base_drift = 0.18
+    base_drift += math.sin(time_value * 0.74 + angle * 1.7) * 0.05
+    base_drift += math.sin(time_value * 1.19 - angle * 2.4 + 0.90) * 0.04
+    base_drift = _clamp(base_drift, 0.07, 0.36)
 
     audio_pressure = _clamp(
-        se * 0.22 +
-        overall * 0.25 +
-        mid * 0.24 +
-        bass * 0.11 +
+        se * 0.24 +
+        overall * 0.22 +
+        mid * 0.20 +
+        bass * 0.10 +
         high * 0.08 +
-        transient * 0.10,
+        transient * 0.12,
         0.0,
         1.4,
     )
-    ripple_wave = math.sin(time_value * (2.0 + audio_pressure * 2.2) + angle * 3.5)
-    contour_ripple = 0.5 + 0.5 * ripple_wave
-    tangential_slide = (contour_ripple - 0.5) * (0.08 + 0.06 * min(react, 1.0))
+    pressure_balance = 0.5 + 0.5 * math.sin(time_value * (1.8 + audio_pressure * 1.8) + angle * 3.1)
+    tangential_slide = (pressure_balance - 0.5) * (0.10 + 0.08 * min(react, 1.0))
 
     advance_drive = _clamp(
         base_drift +
-        audio_pressure * (0.12 + 0.10 * react) +
+        audio_pressure * (0.18 + 0.14 * react) +
         tangential_slide,
         0.06,
         0.92,
     )
-    hard_cap = local_r * max_fraction
-    retained_band_floor = max(local_r * (0.070 + max_fraction * 0.06), 0.018)
-    requested_depth = hard_cap * advance_drive
+    requested_depth = retained_front_floor + hard_cap * advance_drive
 
     body_pressure = _clamp(
-        se * 0.18 +
-        overall * 0.20 +
-        mid * 0.10 +
-        stage1 * 0.10 +
+        se * 0.12 +
+        overall * 0.10 +
+        mid * 0.08 +
+        stage1 * 0.12 +
         stage2 * 0.18 +
-        stage3 * 0.28 +
-        transient * 0.08,
+        stage3 * 0.26 +
+        transient * 0.12,
         0.0,
         1.3,
     )
-    local_bias = 0.5 + 0.5 * math.sin(time_value * 0.64 - angle * 2.1 + 1.2)
-    crowding = _clamp(requested_depth / max(hard_cap, 1e-4), 0.0, 1.0)
-    thin_region = _smoothstep(0.58, 0.28, local_r)
+    local_bias = 0.5 + 0.5 * math.sin(time_value * 0.58 - angle * 1.9 + 1.2)
+    no_contact_gap = 0.010 + max_fraction * 0.020 + min(react, 1.0) * 0.006 + body_pressure * 0.010
+    crowding = 1.0 - _smoothstep(
+        no_contact_gap,
+        no_contact_gap + requested_depth * 1.35 + 0.015,
+        clearance,
+    )
     retreat_signal = _clamp(
-        body_pressure * (0.48 + 0.34 * local_bias) +
-        crowding * 0.58 +
-        thin_region * 0.24,
+        body_pressure * (0.30 + 0.28 * local_bias) +
+        crowding * (0.82 + 0.14 * react),
         0.0,
         1.4,
     )
-    retreat_weight = _smoothstep(0.45, 1.02, retreat_signal)
-    retreat_depth = hard_cap * retreat_weight * (0.10 + body_pressure * 0.14 + thin_region * 0.08)
+    retreat_weight = _smoothstep(0.16, 0.96, retreat_signal)
+    retreat_depth = requested_depth * retreat_weight * (0.28 + body_pressure * 0.26)
 
     redistribution = retreat_weight * (0.03 + 0.05 * audio_pressure) * math.sin(
-        time_value * 1.45 + angle * 4.4 - 0.6
+        time_value * 1.36 + angle * 4.2 - 0.6
     )
     final_depth = requested_depth - retreat_depth + redistribution * hard_cap
-    final_depth = _clamp(final_depth, retained_band_floor, hard_cap)
+    final_depth = _clamp(final_depth, retained_front_floor, hard_cap)
 
-    front_softness = max(final_depth * 0.56, 0.010)
-    front_start = max(final_depth - front_softness, 0.0)
-    front_mask = 1.0 - _smoothstep(front_start, final_depth, local_d)
-    source_anchor = 1.0 - _smoothstep(0.0, max(final_depth * 0.95, 0.018), local_d)
-    body_preserve = _smoothstep(0.0, max(local_r * 0.58, 0.035), local_d)
-    retained_mix_floor = 0.24 + source_anchor * 0.08
-    mix = front_mask * (0.56 + source_anchor * 0.30 + audio_pressure * 0.18) * (1.0 - body_preserve * 0.22)
-    mix = max(mix, front_mask * retained_mix_floor)
+    front_mask = 1.0 - _smoothstep(
+        max(final_depth * 0.22, retained_front_floor * 0.60),
+        max(final_depth, retained_front_floor + 0.003),
+        edge_d,
+    )
+    source_anchor = 1.0 - _smoothstep(
+        0.0,
+        max(final_depth * 0.55, retained_front_floor + 0.003),
+        edge_d,
+    )
+    gap_guard = _smoothstep(
+        no_contact_gap,
+        no_contact_gap + max(final_depth * 0.30, 0.006),
+        clearance,
+    )
+    retained_mix_floor = 0.18 + source_anchor * 0.05
+    mix = front_mask * gap_guard * (0.46 + source_anchor * 0.34 + audio_pressure * 0.14)
+    mix = max(mix, front_mask * gap_guard * retained_mix_floor)
     mix = _clamp(mix, 0.0, 0.96)
 
     return {
@@ -663,8 +689,8 @@ def compute_inward_liquid_profile(
         "advance_drive": advance_drive,
         "retreat_depth": retreat_depth,
         "redistribution": redistribution * hard_cap,
-        "retained_band_floor": retained_band_floor,
-        "no_contact_gap": max(local_r - final_depth, max(local_r * (1.0 - max_fraction), retained_band_floor)),
+        "retained_front_floor": retained_front_floor,
+        "no_contact_gap": no_contact_gap,
     }
 
 

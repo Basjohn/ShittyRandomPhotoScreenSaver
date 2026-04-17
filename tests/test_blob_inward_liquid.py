@@ -6,287 +6,167 @@ from widgets.spotify_visualizer.blob_math import (
     compute_blob_radius_preview,
     compute_inward_liquid_profile,
     compute_stage_progress,
+    solve_unshaped_blob_profile_step,
 )
 
 
-def test_inward_liquid_disables_cleanly_for_ring_or_disabled_mode() -> None:
-    disabled = compute_inward_liquid_profile(
-        angle_frac=0.25,
-        time_seconds=1.2,
-        local_radius=0.52,
-        local_depth=0.01,
-        bass_energy=0.6,
-        mid_energy=0.5,
-        high_energy=0.3,
-        overall_energy=0.55,
-        smoothed_energy=0.58,
-        enabled=False,
-    )
-    ring = compute_inward_liquid_profile(
-        angle_frac=0.25,
-        time_seconds=1.2,
-        local_radius=0.52,
-        local_depth=0.01,
-        bass_energy=0.6,
-        mid_energy=0.5,
-        high_energy=0.3,
-        overall_energy=0.55,
-        smoothed_energy=0.58,
-        ring_mode=True,
+def _border_profile(
+    *,
+    edge_distance: float = 0.006,
+    blob_clearance: float = 0.18,
+    perimeter_pos: float = 0.25,
+    time_seconds: float = 1.2,
+    bass_energy: float = 0.30,
+    mid_energy: float = 0.26,
+    high_energy: float = 0.14,
+    overall_energy: float = 0.24,
+    smoothed_energy: float = 0.28,
+    stage1_t: float = 0.0,
+    stage2_t: float = 0.0,
+    stage3_t: float = 0.0,
+    transient_energy: float = 0.0,
+    reactivity: float = 1.15,
+    max_size: float = 0.28,
+    enabled: bool = True,
+) -> dict[str, float]:
+    return compute_inward_liquid_profile(
+        edge_distance=edge_distance,
+        blob_clearance=blob_clearance,
+        perimeter_pos=perimeter_pos,
+        time_seconds=time_seconds,
+        bass_energy=bass_energy,
+        mid_energy=mid_energy,
+        high_energy=high_energy,
+        overall_energy=overall_energy,
+        smoothed_energy=smoothed_energy,
+        stage1_t=stage1_t,
+        stage2_t=stage2_t,
+        stage3_t=stage3_t,
+        transient_energy=transient_energy,
+        reactivity=reactivity,
+        max_size=max_size,
+        enabled=enabled,
     )
 
+
+def test_border_liquid_disables_cleanly() -> None:
+    disabled = _border_profile(enabled=False)
     assert disabled["front_depth"] == 0.0
     assert disabled["mix"] == 0.0
-    assert ring["front_depth"] == 0.0
-    assert ring["mix"] == 0.0
+    assert disabled["retreat_depth"] == 0.0
 
 
-def test_blob_shader_resolves_stage_progress_for_inward_liquid_in_main_scope() -> None:
+def test_blob_shader_resolves_stage_progress_for_border_liquid_in_main_scope() -> None:
     src = Path(
         r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob.frag"
     ).read_text(encoding="utf-8")
 
     assert "vec3 stage_progress_main = compute_stage_progress_values(" in src
-    assert "stage_progress_main.x" in src
-    assert "stage_progress_main.y" in src
-    assert "stage_progress_main.z" in src
+    assert "card_edge_distance" in src
+    assert "perimeter_phase" in src
+    assert "max(d_fill, 0.0)" in src
 
 
-def test_inward_liquid_advances_under_energy_but_keeps_a_positive_gap() -> None:
-    calm = compute_inward_liquid_profile(
-        angle_frac=0.18,
-        time_seconds=2.4,
-        local_radius=0.48,
-        local_depth=0.01,
+def test_border_liquid_advances_under_energy_but_keeps_gap() -> None:
+    calm = _border_profile(
         bass_energy=0.08,
-        mid_energy=0.05,
-        high_energy=0.04,
-        overall_energy=0.06,
-        smoothed_energy=0.07,
-        reactivity=1.15,
-        max_size=0.32,
+        mid_energy=0.06,
+        high_energy=0.05,
+        overall_energy=0.07,
+        smoothed_energy=0.08,
     )
-    active = compute_inward_liquid_profile(
-        angle_frac=0.18,
-        time_seconds=2.4,
-        local_radius=0.48,
-        local_depth=0.01,
-        bass_energy=0.70,
+    active = _border_profile(
+        bass_energy=0.72,
         mid_energy=0.62,
-        high_energy=0.34,
-        overall_energy=0.66,
-        smoothed_energy=0.72,
-        stage1_t=0.92,
-        stage2_t=0.80,
-        stage3_t=0.58,
-        transient_energy=0.36,
-        reactivity=1.15,
-        max_size=0.32,
+        high_energy=0.28,
+        overall_energy=0.64,
+        smoothed_energy=0.70,
+        stage1_t=0.88,
+        stage2_t=0.74,
+        stage3_t=0.52,
+        transient_energy=0.30,
     )
 
     assert active["advance_drive"] > calm["advance_drive"]
     assert active["mix"] > calm["mix"]
-    assert active["retreat_depth"] > calm["retreat_depth"]
-    assert calm["front_depth"] >= calm["retained_band_floor"]
-    assert active["front_depth"] >= active["retained_band_floor"]
-    assert calm["no_contact_gap"] > 0.0
+    assert active["front_depth"] >= active["retained_front_floor"] > 0.0
+    assert calm["front_depth"] >= calm["retained_front_floor"] > 0.0
     assert active["no_contact_gap"] > 0.0
+    assert calm["no_contact_gap"] > 0.0
 
 
-def test_inward_liquid_yields_more_in_narrow_or_threatened_regions() -> None:
-    roomy = compute_inward_liquid_profile(
-        angle_frac=0.42,
-        time_seconds=3.1,
-        local_radius=0.62,
-        local_depth=0.012,
-        bass_energy=0.84,
-        mid_energy=0.78,
-        high_energy=0.30,
-        overall_energy=0.74,
-        smoothed_energy=0.80,
-        stage1_t=1.0,
-        stage2_t=0.94,
-        stage3_t=0.80,
-        transient_energy=0.45,
-        reactivity=1.35,
-        max_size=0.36,
-    )
-    narrow = compute_inward_liquid_profile(
-        angle_frac=0.42,
-        time_seconds=3.1,
-        local_radius=0.34,
-        local_depth=0.012,
-        bass_energy=0.84,
-        mid_energy=0.78,
-        high_energy=0.30,
-        overall_energy=0.74,
-        smoothed_energy=0.80,
-        stage1_t=1.0,
-        stage2_t=0.94,
-        stage3_t=0.80,
-        transient_energy=0.45,
-        reactivity=1.35,
-        max_size=0.36,
-    )
-
-    roomy_fraction = roomy["front_depth"] / 0.62
-    narrow_fraction = narrow["front_depth"] / 0.34
-
-    assert narrow["retreat_depth"] > roomy["retreat_depth"]
-    assert narrow_fraction < roomy_fraction
-    assert narrow["front_depth"] >= narrow["retained_band_floor"]
-    assert narrow["no_contact_gap"] > 0.0
-
-
-def test_synthetic_blob_and_inward_liquid_react_together_without_center_contact() -> None:
-    synthetic_frames = [
-        dict(bass=0.08, mid=0.06, high=0.04, overall=0.06, smoothed=0.08, transient=0.02),
-        dict(bass=0.24, mid=0.20, high=0.10, overall=0.18, smoothed=0.22, transient=0.08),
-        dict(bass=0.52, mid=0.46, high=0.18, overall=0.40, smoothed=0.48, transient=0.18),
-        dict(bass=0.82, mid=0.74, high=0.30, overall=0.72, smoothed=0.78, transient=0.42),
-        dict(bass=0.44, mid=0.54, high=0.26, overall=0.48, smoothed=0.56, transient=0.16),
-        dict(bass=0.18, mid=0.16, high=0.08, overall=0.14, smoothed=0.16, transient=0.04),
-    ]
-
-    radius_series: list[float] = []
-    inward_series: list[float] = []
-    gap_series: list[float] = []
-
-    for idx, frame in enumerate(synthetic_frames):
-        stage1_t, stage2_t, stage3_t = compute_stage_progress(
-            bass_energy=frame["bass"],
-            mid_energy=frame["mid"],
-            high_energy=frame["high"],
-            overall_energy=frame["overall"],
-            smoothed_energy=frame["smoothed"],
-        )
-        radius = compute_blob_radius_preview(
-            blob_size=1.0,
-            blob_pulse=1.0,
-            bass_energy=frame["bass"],
-            mid_energy=frame["mid"],
-            high_energy=frame["high"],
-            overall_energy=frame["overall"],
-            smoothed_energy=frame["smoothed"],
-            stage_gain=1.0,
-            core_scale=1.0,
-        )
-        profile = compute_inward_liquid_profile(
-            angle_frac=0.33,
-            time_seconds=idx * 0.16,
-            local_radius=radius,
-            local_depth=0.012,
-            bass_energy=frame["bass"],
-            mid_energy=frame["mid"],
-            high_energy=frame["high"],
-            overall_energy=frame["overall"],
-            smoothed_energy=frame["smoothed"],
-            stage1_t=stage1_t,
-            stage2_t=stage2_t,
-            stage3_t=stage3_t,
-            transient_energy=frame["transient"],
-            reactivity=1.2,
-            max_size=0.33,
-        )
-        radius_series.append(radius)
-        inward_series.append(profile["front_depth"])
-        gap_series.append(profile["no_contact_gap"])
-
-    radius_peak_index = max(range(len(radius_series)), key=radius_series.__getitem__)
-    inward_peak_index = max(range(len(inward_series)), key=inward_series.__getitem__)
-
-    assert abs(radius_peak_index - inward_peak_index) <= 1
-    assert inward_series[radius_peak_index] > inward_series[0]
-    assert all(gap > 0.0 for gap in gap_series)
-    assert min(gap_series) > 0.20
-
-
-def test_inward_liquid_retreats_more_when_body_pressure_rises_at_same_size_cap() -> None:
-    """Extra stage/transient pressure should make the inner front yield sooner."""
-    baseline = compute_inward_liquid_profile(
-        angle_frac=0.27,
-        time_seconds=1.6,
-        local_radius=0.33,
-        local_depth=0.010,
-        bass_energy=0.62,
-        mid_energy=0.54,
-        high_energy=0.20,
-        overall_energy=0.50,
-        smoothed_energy=0.58,
-        stage1_t=0.18,
-        stage2_t=0.08,
-        stage3_t=0.02,
-        transient_energy=0.04,
-        reactivity=1.30,
-        max_size=0.36,
-    )
-    threatened = compute_inward_liquid_profile(
-        angle_frac=0.27,
-        time_seconds=1.6,
-        local_radius=0.33,
-        local_depth=0.010,
-        bass_energy=0.62,
-        mid_energy=0.54,
-        high_energy=0.20,
-        overall_energy=0.50,
-        smoothed_energy=0.58,
+def test_border_liquid_retreats_when_blob_clearance_shrinks() -> None:
+    roomy = _border_profile(
+        blob_clearance=0.22,
+        bass_energy=0.78,
+        mid_energy=0.66,
+        high_energy=0.24,
+        overall_energy=0.68,
+        smoothed_energy=0.74,
         stage1_t=0.94,
         stage2_t=0.82,
-        stage3_t=0.66,
-        transient_energy=0.38,
+        stage3_t=0.58,
+        transient_energy=0.36,
         reactivity=1.30,
-        max_size=0.36,
+        max_size=0.32,
+    )
+    threatened = _border_profile(
+        blob_clearance=0.04,
+        bass_energy=0.78,
+        mid_energy=0.66,
+        high_energy=0.24,
+        overall_energy=0.68,
+        smoothed_energy=0.74,
+        stage1_t=0.94,
+        stage2_t=0.82,
+        stage3_t=0.58,
+        transient_energy=0.36,
+        reactivity=1.30,
+        max_size=0.32,
     )
 
-    assert abs(threatened["advance_drive"] - baseline["advance_drive"]) < 0.01
-    assert threatened["retreat_depth"] > baseline["retreat_depth"]
-    assert threatened["front_depth"] <= baseline["front_depth"]
-    assert threatened["front_depth"] >= threatened["retained_band_floor"]
-    assert baseline["front_depth"] >= baseline["retained_band_floor"]
-    assert threatened["no_contact_gap"] >= baseline["no_contact_gap"]
+    assert threatened["retreat_depth"] > roomy["retreat_depth"]
+    assert threatened["front_depth"] < roomy["front_depth"]
     assert threatened["no_contact_gap"] > 0.0
 
 
-def test_inward_liquid_retreat_never_collapses_the_retained_band() -> None:
-    hot = compute_inward_liquid_profile(
-        angle_frac=0.41,
-        time_seconds=2.3,
-        local_radius=0.24,
-        local_depth=0.009,
+def test_border_liquid_retained_front_never_collapses() -> None:
+    hot = _border_profile(
+        edge_distance=0.004,
+        blob_clearance=0.09,
         bass_energy=1.0,
-        mid_energy=0.82,
-        high_energy=0.36,
-        overall_energy=0.88,
+        mid_energy=0.86,
+        high_energy=0.34,
+        overall_energy=0.90,
         smoothed_energy=0.96,
         stage1_t=1.0,
         stage2_t=1.0,
         stage3_t=0.94,
-        transient_energy=0.44,
+        transient_energy=0.42,
         reactivity=1.45,
-        max_size=0.38,
+        max_size=0.36,
     )
 
     assert hot["retreat_depth"] > 0.0
-    assert hot["front_depth"] >= hot["retained_band_floor"]
-    assert hot["mix"] > 0.10
+    assert hot["front_depth"] >= hot["retained_front_floor"] > 0.0
+    assert hot["mix"] > 0.05
     assert hot["no_contact_gap"] > 0.0
 
 
-def test_synthetic_phrase_yields_under_pressure_then_relaxes_without_contact() -> None:
-    """A musical rise/release should show fluid retreat first, then smooth relaxation."""
+def test_synthetic_blob_and_border_liquid_hold_gap_through_phrase() -> None:
     synthetic_frames = [
-        dict(bass=0.10, mid=0.08, high=0.05, overall=0.08, smoothed=0.10, transient=0.02),
-        dict(bass=0.28, mid=0.24, high=0.10, overall=0.22, smoothed=0.26, transient=0.08),
-        dict(bass=0.58, mid=0.50, high=0.18, overall=0.44, smoothed=0.52, transient=0.20),
-        dict(bass=0.88, mid=0.78, high=0.32, overall=0.76, smoothed=0.82, transient=0.48),
-        dict(bass=0.62, mid=0.68, high=0.28, overall=0.58, smoothed=0.66, transient=0.16),
-        dict(bass=0.26, mid=0.22, high=0.10, overall=0.18, smoothed=0.22, transient=0.04),
+        dict(bass=0.08, mid=0.06, high=0.05, overall=0.06, smoothed=0.08, transient=0.02),
+        dict(bass=0.22, mid=0.18, high=0.10, overall=0.16, smoothed=0.20, transient=0.06),
+        dict(bass=0.48, mid=0.42, high=0.18, overall=0.38, smoothed=0.44, transient=0.16),
+        dict(bass=0.82, mid=0.70, high=0.28, overall=0.72, smoothed=0.78, transient=0.40),
+        dict(bass=0.40, mid=0.48, high=0.24, overall=0.42, smoothed=0.50, transient=0.14),
+        dict(bass=0.14, mid=0.12, high=0.08, overall=0.12, smoothed=0.14, transient=0.04),
     ]
 
-    retreat_series: list[float] = []
-    depth_series: list[float] = []
-    gap_series: list[float] = []
-    redistribution_series: list[float] = []
+    front_depths: list[float] = []
+    gaps: list[float] = []
+    mixes: list[float] = []
+    radii: list[float] = []
 
     for idx, frame in enumerate(synthetic_frames):
         stage1_t, stage2_t, stage3_t = compute_stage_progress(
@@ -297,21 +177,22 @@ def test_synthetic_phrase_yields_under_pressure_then_relaxes_without_contact() -
             smoothed_energy=frame["smoothed"],
         )
         radius = compute_blob_radius_preview(
-            blob_size=1.0,
+            blob_size=0.35,
             blob_pulse=1.0,
             bass_energy=frame["bass"],
             mid_energy=frame["mid"],
             high_energy=frame["high"],
             overall_energy=frame["overall"],
             smoothed_energy=frame["smoothed"],
-            stage_gain=1.0,
-            core_scale=1.0,
+            stage_gain=0.72,
+            core_scale=0.88,
         )
-        profile = compute_inward_liquid_profile(
-            angle_frac=0.31,
-            time_seconds=idx * 0.15,
-            local_radius=radius,
-            local_depth=0.010,
+        clearance = max(0.44 - radius, 0.0)
+        profile = _border_profile(
+            edge_distance=0.006,
+            blob_clearance=clearance,
+            perimeter_pos=0.31,
+            time_seconds=idx * 0.16,
             bass_energy=frame["bass"],
             mid_energy=frame["mid"],
             high_energy=frame["high"],
@@ -321,22 +202,68 @@ def test_synthetic_phrase_yields_under_pressure_then_relaxes_without_contact() -
             stage2_t=stage2_t,
             stage3_t=stage3_t,
             transient_energy=frame["transient"],
-            reactivity=1.25,
-            max_size=0.34,
+            reactivity=1.20,
+            max_size=0.30,
         )
-        retreat_series.append(profile["retreat_depth"])
-        depth_series.append(profile["front_depth"])
-        gap_series.append(profile["no_contact_gap"])
-        redistribution_series.append(abs(profile["redistribution"]))
+        radii.append(radius)
+        front_depths.append(profile["front_depth"])
+        gaps.append(profile["no_contact_gap"])
+        mixes.append(profile["mix"])
 
-    peak_index = max(range(len(retreat_series)), key=retreat_series.__getitem__)
-    assert peak_index == 3
-    assert retreat_series[3] > retreat_series[2]
-    assert retreat_series[4] < retreat_series[3]
-    assert retreat_series[5] < retreat_series[4]
-    assert depth_series[4] > depth_series[1]
-    assert depth_series[4] < depth_series[3]
-    assert depth_series[5] < depth_series[4]
-    assert all(gap > 0.0 for gap in gap_series)
-    assert min(gap_series) > 0.20
-    assert max(redistribution_series) > 0.0
+    assert all(gap > 0.0 for gap in gaps)
+    assert front_depths[3] >= front_depths[0]
+    assert mixes[3] > mixes[0]
+    assert max(radii) < 0.30
+
+
+def test_small_unshaped_blob_contour_has_visible_screen_space_delta() -> None:
+    stage1_t, stage2_t, stage3_t = compute_stage_progress(
+        bass_energy=0.15,
+        mid_energy=0.18,
+        high_energy=0.12,
+        overall_energy=0.20,
+        smoothed_energy=0.22,
+        stage_bias=-0.08,
+    )
+    profile_bundle, _velocity = solve_unshaped_blob_profile_step(
+        previous_profile=None,
+        previous_velocity=None,
+        previous_target_profile=None,
+        sample_count=64,
+        time_seconds=1.23,
+        dt=0.016,
+        bass_energy=0.15,
+        mid_energy=0.18,
+        high_energy=0.12,
+        overall_energy=0.20,
+        smoothed_energy=0.22,
+        reactive_deformation=1.0,
+        constant_wobble=1.0,
+        reactive_wobble=1.0,
+        stretch_tendency=0.55,
+        stretch_inner=0.0,
+        stretch_outer=0.55,
+        core_floor_bias=0.12,
+        stage1_t=stage1_t,
+        stage2_t=stage2_t,
+        stage3_t=stage3_t,
+        playing=True,
+        seed=0.3,
+    )
+    _base_profile, _raw_target, _target_profile, solved_profile = profile_bundle
+
+    radius = compute_blob_radius_preview(
+        blob_size=0.35,
+        blob_pulse=1.0,
+        bass_energy=0.15,
+        mid_energy=0.18,
+        high_energy=0.12,
+        overall_energy=0.20,
+        smoothed_energy=0.22,
+        stage_gain=0.72,
+        core_scale=0.88,
+    )
+    contour_authority = 2.75 + 0.22 * 0.36 + stage1_t * 0.30 + stage2_t * 0.18 + stage3_t * 0.14
+    screen_space_delta = (max(solved_profile) - min(solved_profile)) * contour_authority * radius * 576.0
+
+    assert screen_space_delta > 24.0

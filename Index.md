@@ -45,9 +45,25 @@ A living map of modules, purposes, and key classes. Keep this up to date.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| SRPSS_PERF_METRICS | false | Enable performance metrics logging to screensaver_perf.log |
-| SRPSS_VIZ_DIAGNOSTICS | false | Enables verbose Spotify visualizer diagnostics (`--viz-diagnostics` CLI alias); gates `[SPOTIFY_VIS][FLOOR]`, `[SPOTIFY_VIS][BARS]`, `[SPOTIFY_VIS][LATENCY]`, and timer instrumentation |
-| SRPSS_ENABLE_DEV | false | Enable experimental/broken features (e.g., Imgur widget, Starfield visualizer) |
+| SRPSS_ENABLE_DEV | false | Enable experimental/broken features (Imgur widget, Starfield visualizer). See Spec.md § Developer Feature Gate |
+| SRPSS_PERF_METRICS | false | Enable performance metrics logging to `screensaver_perf.log` |
+| SRPSS_VIZ_DIAGNOSTICS | false | Verbose Spotify visualizer diagnostics (`--viz-diagnostics` CLI alias); gates `[SPOTIFY_VIS][FLOOR]`, `[SPOTIFY_VIS][BARS]`, `[SPOTIFY_VIS][LATENCY]`, and timer instrumentation |
+| SRPSS_DISABLE_LOGGING | false | Kill all file/console logging entirely (tools only) |
+| SRPSS_LOG_DIR | (auto) | Override log directory. Default: `./logs` (dev) or `%LOCALAPPDATA%\Screensaver\logs` (frozen) |
+| SRPSS_FORCE_SOUNDDEVICE | false | Force sounddevice backend instead of PyAudio-WPATCH on Windows (`utils/audio_capture.py`) |
+| SRPSS_SPOTIFY_VIS_DEBUG_CONST | 0.0 | Debug: feed constant bar values (float >0) to the visualizer instead of live audio (`tick_pipeline.py`, `audio_worker.py`) |
+| SRPSS_HALO_PERF_MIN_MS | 0.25 | Minimum milliseconds for cursor halo perf logging threshold (`widgets/cursor_halo.py`) |
+
+## CLI Flags
+
+| Flag | Purpose |
+|------|---------|
+| `--debug`, `-d` | Enable debug logging (verbose log, console output) |
+| `--viz` | Enable Spotify visualizer subsystem logging |
+| `--viz-diagnostics`, `--viz-diag` | Enable per-frame visualizer floor/bar/latency diagnostics (also sets `SRPSS_VIZ_DIAGNOSTICS=1`) |
+| `--fresh` | Clear runtime log folder before logging starts (preserves `worker_*.log`) |
+| `-devblob` | Enable dev-gated Blob visualizer mode. See Spec.md § Visualizer Mode Dev Gates |
+| `-devgoo` | Enable dev-gated Goo visualizer mode. See Spec.md § Visualizer Mode Dev Gates |
 
 ## Core Managers
 
@@ -71,9 +87,10 @@ un_on_ui_thread(), single_shot() | UI thread dispatch helpers |
 | Events | core/events/event_system.py | EventSystem | Pub/sub event bus |
 | Events | core/events/event_types.py | ImageChanged, TransitionStarted | Event type definitions |
 | Frame Budget | core/performance/frame_budget.py | FrameBudget, GCController | Frame time allocation |
+| Dev Gates | core/dev_gates.py | is_blob_enabled(), is_goo_enabled(), force_gate() | CLI-driven dev gates (`-devblob`, `-devgoo`) for visualizer modes under active development. See Spec.md § Visualizer Mode Dev Gates |
 | Settings | core/settings/defaults.py | get_default_settings() | Canonical defaults |
 | Settings | core/settings/models.py | DisplaySettings, TransitionSettings | Type-safe dataclass models |
-| Vis Mode Registry | core/settings/visualizer_mode_registry.py | VisualizerModeDescriptor, iter_visualizer_mode_descriptors(), get_preset_key() | Shared visualizer mode identity contract: mode ids, display labels, preset keys, and preset-slider ownership wiring |
+| Vis Mode Registry | core/settings/visualizer_mode_registry.py | VisualizerModeDescriptor, iter_visualizer_mode_descriptors(), get_preset_key(), is_mode_active() | Shared visualizer mode identity contract: mode ids, display labels, preset keys, and preset-slider ownership wiring. Dev-gated modes (blob, goo) are filtered out of `iter_visualizer_mode_descriptors()` when their CLI flag is absent; `is_mode_active()` provides the runtime check. |
 | Vis Preset Indices | core/settings/visualizer_preset_indices.py | get_missing_preset_fallback_index(), resolve_preset_index_from_mapping(), resolve_all_preset_indices_from_mapping() | Shared preset-index fallback and sparse lookup contract decoupled from curated preset file loading |
 | Vis Settings Contract | core/settings/visualizer_settings_contract.py | resolve_visualizer_baselines(), build_visualizer_mode_kwargs(), resolve_visualizer_active_mode_rainbow_state() | Shared baseline/per-mode fallback contract for sparse visualizer settings, used by `SpotifyVisualizerSettings` loaders |
 | Vis Settings Snapshot | core/settings/visualizer_settings_snapshot.py | normalize_visualizer_section_mapping(), normalize_visualizer_mode_payload() | Canonical `widgets.spotify_visualizer` normalization for defaults reset, SST import/export, preset payload parsing, and custom visualizer snapshot/export flows |

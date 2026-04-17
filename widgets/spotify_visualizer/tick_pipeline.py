@@ -214,6 +214,10 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         "bubble_big_size_max": widget._bubble_big_size_max,
         "bubble_small_size_max": widget._bubble_small_size_max,
         "bubble_trail_strength": widget._bubble_trail_strength,
+        "bubble_bounce_big_pct": widget._bubble_bounce_big_pct,
+        "bubble_bounce_small_pct": widget._bubble_bounce_small_pct,
+        "bubble_bounce_big_speed": widget._bubble_bounce_big_speed,
+        "bubble_bounce_small_speed": widget._bubble_bounce_small_speed,
         "_event_scheduler": _event_scheduler,
     }
     pulse_params = {

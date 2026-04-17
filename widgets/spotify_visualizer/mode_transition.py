@@ -39,13 +39,16 @@ def cycle_mode(widget: Any) -> bool:
     if widget._mode_transition_phase != 0:
         return False
 
-    _CYCLE_MODES = [
-        VisualizerMode.SPECTRUM,
-        VisualizerMode.OSCILLOSCOPE,
-        VisualizerMode.SINE_WAVE,
-        VisualizerMode.BLOB,
-        VisualizerMode.BUBBLE,
-    ]
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+
+    _CYCLE_MODES = []
+    for desc in iter_visualizer_mode_descriptors():
+        enum_name = desc.mode_id.upper()
+        member = getattr(VisualizerMode, enum_name, None)
+        if member is not None:
+            _CYCLE_MODES.append(member)
+    if not _CYCLE_MODES:
+        return False
     try:
         idx = _CYCLE_MODES.index(widget._vis_mode)
     except ValueError:

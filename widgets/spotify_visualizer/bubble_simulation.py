@@ -38,6 +38,8 @@ TRAIL_SMEAR_FOLLOW_MAX = 0.18   # clamp per-tick lerp to keep visible lag
 TRAIL_SMEAR_DECAY_PER_SEC = 0.9  # how fast strength fades when slowing
 TRAIL_SMEAR_STRENGTH_FROM_DISTANCE = 35.0  # convert offset distance → brightness (higher = brighter sooner)
 TRAIL_SMEAR_MAX_LENGTH = 0.55   # cap streak length to avoid card wrap
+IMPULSE_DAMPING_PER_SEC = 8.0
+MAX_IMPULSE_SPEED = 0.35
 
 
 @dataclass
@@ -55,6 +57,8 @@ class BubbleState:
     rotation: float = 0.0
     vx: float = 0.0
     vy: float = 0.0
+    impulse_vx: float = 0.0
+    impulse_vy: float = 0.0
     speed_mult: float = 1.0
     popping: bool = False
     pop_timer: float = 0.0
@@ -248,6 +252,10 @@ class BubbleSimulation:
         drift_speed = float(settings.get("bubble_drift_speed", 0.5))
         drift_freq = float(settings.get("bubble_drift_frequency", 0.5))
         drift_dir = str(settings.get("bubble_drift_direction", "random"))
+        bounce_big_pct = max(0.0, min(100.0, float(settings.get("bubble_bounce_big_pct", 70.0))))
+        bounce_small_pct = max(0.0, min(100.0, float(settings.get("bubble_bounce_small_pct", 30.0))))
+        bounce_big_speed = max(0.0, min(2.0, float(settings.get("bubble_bounce_big_speed", 0.8))))
+        bounce_small_speed = max(0.0, min(2.0, float(settings.get("bubble_bounce_small_speed", 0.5))))
         self._big_size_max = float(settings.get("bubble_big_size_max", 0.038))
         self._small_size_max = float(settings.get("bubble_small_size_max", 0.018))
         trail_strength = float(settings.get("bubble_trail_strength", 0.0))
@@ -573,6 +581,16 @@ class BubbleSimulation:
 
             b.x += move_x
             b.y -= move_y  # Y is inverted in UV space (0=top, 1=bottom)
+            if b.impulse_vx != 0.0 or b.impulse_vy != 0.0:
+                b.x += b.impulse_vx * dt
+                b.y -= b.impulse_vy * dt
+                damp = max(0.0, 1.0 - dt * IMPULSE_DAMPING_PER_SEC)
+                b.impulse_vx *= damp
+                b.impulse_vy *= damp
+                if abs(b.impulse_vx) < 1e-5:
+                    b.impulse_vx = 0.0
+                if abs(b.impulse_vy) < 1e-5:
+                    b.impulse_vy = 0.0
 
             if trail_enabled:
                 self._update_trail_smear(b, dt, move_x, -move_y)
@@ -673,7 +691,13 @@ class BubbleSimulation:
                 if tail_outside or b.trail_strength <= 0.001 or b.exit_timer > 0.8:
                     to_remove.append(i)
 
-        self._apply_soft_separation(dt)
+        self._apply_bubble_collision_response(
+            dt,
+            bounce_big_pct=bounce_big_pct,
+            bounce_small_pct=bounce_small_pct,
+            bounce_big_speed=bounce_big_speed,
+            bounce_small_speed=bounce_small_speed,
+        )
 
         # Remove dead bubbles (reverse order)
         for i in sorted(to_remove, reverse=True):
@@ -755,7 +779,15 @@ class BubbleSimulation:
             x, y = _spawn_position(stream_dir, is_big)
         self._spawn_bubble_at(is_big, x, y, stream_dir, surface_reach, drift_dir)
 
-    def _apply_soft_separation(self, dt: float) -> None:
+    def _apply_bubble_collision_response(
+        self,
+        dt: float,
+        *,
+        bounce_big_pct: float,
+        bounce_small_pct: float,
+        bounce_big_speed: float,
+        bounce_small_speed: float,
+    ) -> None:
         """Separate overlapping bubbles by visual class.
 
         Big bubbles are the readable hero layer and should resist overlap with
@@ -780,14 +812,20 @@ class BubbleSimulation:
                     target_gap = (a.radius + b.radius) * 1.12 + 0.008
                     softness = 0.34
                     max_push = 0.040
+                    bounce_pct = bounce_big_pct
+                    bounce_speed = bounce_big_speed
                 elif a_big or b_big:
                     target_gap = (a.radius + b.radius) * 0.90
                     softness = 0.11
                     max_push = 0.018
+                    bounce_pct = bounce_big_pct
+                    bounce_speed = bounce_big_speed
                 else:
                     target_gap = (a.radius + b.radius) * 0.78
                     softness = 0.06
                     max_push = 0.010
+                    bounce_pct = bounce_small_pct
+                    bounce_speed = bounce_small_speed
 
                 if dist >= target_gap:
                     continue
@@ -812,6 +850,40 @@ class BubbleSimulation:
                 a.y += ay
                 b.x += bx
                 b.y += by
+
+                bounce_prob = max(0.0, min(1.0, bounce_pct / 100.0))
+                if bounce_prob <= 0.0 or bounce_speed <= 0.0:
+                    continue
+
+                if random.random() > bounce_prob:
+                    continue
+
+                rel_vx = b.impulse_vx - a.impulse_vx
+                rel_vy = b.impulse_vy - a.impulse_vy
+                sep_speed = rel_vx * nx + rel_vy * ny
+                if sep_speed > 0.0:
+                    continue
+
+                restitution = max(0.0, min(1.0, bounce_speed * 0.5))
+                impulse = (-(1.0 + restitution) * sep_speed) * 0.5
+                floor_kick = min(MAX_IMPULSE_SPEED * 0.45, overlap * (6.0 + bounce_speed * 4.0))
+                impulse = max(impulse, floor_kick)
+
+                a.impulse_vx -= nx * impulse
+                a.impulse_vy -= ny * impulse
+                b.impulse_vx += nx * impulse
+                b.impulse_vy += ny * impulse
+
+                a_speed = math.hypot(a.impulse_vx, a.impulse_vy)
+                if a_speed > MAX_IMPULSE_SPEED:
+                    scale = MAX_IMPULSE_SPEED / a_speed
+                    a.impulse_vx *= scale
+                    a.impulse_vy *= scale
+                b_speed = math.hypot(b.impulse_vx, b.impulse_vy)
+                if b_speed > MAX_IMPULSE_SPEED:
+                    scale = MAX_IMPULSE_SPEED / b_speed
+                    b.impulse_vx *= scale
+                    b.impulse_vy *= scale
 
     def _overlaps_existing(
         self,

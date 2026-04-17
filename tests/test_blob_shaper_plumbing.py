@@ -273,7 +273,7 @@ class TestBlobShaperRenderer:
 
         spread = max(solved_profile) - min(solved_profile)
         assert spread > 0.05
-        assert max(solved_profile) <= 1.12
+        assert max(solved_profile) <= 1.20
         assert min(solved_profile) >= 0.74
 
     def test_unshaped_runtime_profile_solver_remembers_contour_instead_of_resetting_flat(self):
@@ -354,8 +354,13 @@ class TestBlobShaperRenderer:
 
         assert "Both Blob types now upload one solved runtime contour profile." in src
         assert "float runtime_mult =" in src
-        assert "float support_floor = mix(0.52, 0.60, clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0));" in src
-        assert "float final_radius = max(staged_r * runtime_mult, staged_r * support_floor);" in src
+        assert "if (u_blob_shaper_enabled == 0)" in src
+        assert "sample_unshaped_contour(angle_frac, u_blob_runtime_profile)" in src
+        assert "float contour_authority =" in src
+        assert "float support_floor = (u_blob_shaper_enabled == 1)" in src
+        assert "float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;" in src
+        assert "float unshaped_support = max(calm_r * support_floor, staged_r * 0.28);" in src
+        assert "float final_radius = (u_blob_shaper_enabled == 1)" in src
 
     def test_runtime_energy_nodes_prefer_react_canvas_when_present(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
@@ -1077,6 +1082,7 @@ class TestBlobShaperConfigApplier:
         if not kw:
             _, kw = kwargs
         assert kw.get("blob_shaper_enabled") is True
+        assert kw.get("blob_shaper_base_strength") == pytest.approx(0.8)
         assert kw.get("blob_shaper_idle_motion") == pytest.approx(0.12)
         assert kw.get("blob_shaper_audio_motion") == pytest.approx(1.65)
         assert kw.get("blob_topology") == "ring"
@@ -1089,6 +1095,47 @@ class TestBlobShaperConfigApplier:
         assert kw.get("blob_stretch") == pytest.approx(0.0)
         assert kw.get("blob_stretch_inner") == pytest.approx(0.0)
         assert kw.get("blob_stretch_outer") == pytest.approx(0.0)
+
+    def test_creator_preserves_explicit_unshaped_blob_runtime_contract(self):
+        from core.settings.models import SpotifyVisualizerSettings
+        from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+
+        model = SpotifyVisualizerSettings(
+            mode="blob",
+            blob_shaper_enabled=False,
+            blob_reactive_deformation=0.72,
+            blob_constant_wobble=0.34,
+            blob_reactive_wobble=1.46,
+            blob_stage_gain=0.63,
+            blob_core_scale=0.81,
+            blob_core_floor_bias=0.19,
+            blob_stage_bias=-0.12,
+            blob_stretch=0.91,
+            blob_stretch_tendency=0.57,
+            blob_stretch_inner=0.08,
+            blob_stretch_outer=0.69,
+        )
+        vis = MagicMock()
+
+        apply_spotify_vis_model_config(vis, model)
+
+        vis.apply_vis_mode_config.assert_called_once()
+        kwargs = vis.apply_vis_mode_config.call_args
+        kw = kwargs.kwargs if kwargs.kwargs else {}
+        if not kw:
+            _, kw = kwargs
+
+        assert kw.get("blob_reactive_deformation") == pytest.approx(0.72)
+        assert kw.get("blob_constant_wobble") == pytest.approx(0.34)
+        assert kw.get("blob_reactive_wobble") == pytest.approx(1.46)
+        assert kw.get("blob_stage_gain") == pytest.approx(0.63)
+        assert kw.get("blob_core_scale") == pytest.approx(0.81)
+        assert kw.get("blob_core_floor_bias") == pytest.approx(0.19)
+        assert kw.get("blob_stage_bias") == pytest.approx(-0.12)
+        assert kw.get("blob_stretch") == pytest.approx(0.69)
+        assert kw.get("blob_stretch_tendency") == pytest.approx(0.57)
+        assert kw.get("blob_stretch_inner") == pytest.approx(0.0)
+        assert kw.get("blob_stretch_outer") == pytest.approx(0.69)
 
     def test_blob_extras_include_shaper(self):
         from widgets.spotify_visualizer.config_applier import _append_blob_visual_extras

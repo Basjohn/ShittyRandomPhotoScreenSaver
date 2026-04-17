@@ -179,6 +179,30 @@ if dev_features_enabled:
 - Do NOT expose gated features in settings UI or documentation unless dev mode is enabled
 - Test that features are properly hidden when gate is disabled
 
+## Visualizer Mode Dev Gates (-devblob, -devgoo)
+
+**Purpose**: Gate entire visualizer modes behind CLI flags during active development. Unlike `SRPSS_ENABLE_DEV` (env var for broken/API-dependent features), these are lightweight CLI switches for modes under parallel development.
+
+**CLI Flags** (passed alongside other args like `--debug`):
+- `-devblob` — Enables Blob visualizer mode (shaped + unshaped)
+- `-devgoo` — Enables Goo visualizer mode (reactive liquid, new)
+- **Without either flag, neither mode appears in UI, preset swaps, or shader compilation.**
+
+**Usage**: `python main.py --debug -devblob` or `python main.py --debug -devblob -devgoo`
+
+**Implementation**:
+- `core/dev_gates.py` — reads flags from `sys.argv`, exposes `is_blob_enabled()`, `is_goo_enabled()`, `force_gate()` for tests
+- `core/settings/visualizer_mode_registry.py` — `_GATED_MODES` maps mode_id → gate function; `_active_descriptors()` filters; `is_mode_active()` for runtime checks
+- `widgets/spotify_visualizer/shaders/__init__.py` — `_active_shader_files()` skips gated modes' shaders
+- `widgets/spotify_bars_gl_overlay.py` — `set_state()` validates mode via `is_mode_active()`, falls back to default
+- `main.py` — flags are in the filtered-args set so they don't interfere with screensaver mode parsing
+
+**Key design rules**:
+- Settings/model fields always exist in code (no conditional imports) — only UI visibility and runtime mode selection are gated
+- `VISUALIZER_MODE_IDS` includes ALL modes (for settings persistence and tooling)
+- `iter_visualizer_mode_descriptors()` returns only ACTIVE modes (drives combo, preset sliders, rainbow)
+- Tests call `force_gate(blob=True)` / `force_gate(goo=True)` to enable gates without CLI flags
+
 ## Deployment
 - **SRPSS.scr** / **SRPSS.exe**: Main screensaver build
 - **SRPSS_MC.exe**: Manual Controller variant

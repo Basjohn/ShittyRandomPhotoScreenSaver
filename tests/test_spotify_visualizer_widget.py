@@ -388,15 +388,24 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     widget._thread_manager = _BubbleDispatchThreadManager()
     widget._spotify_playing = True
     widget._bubble_last_tick_ts = time.time() - 0.016
+    widget._bubble_bounce_big_pct = 87
+    widget._bubble_bounce_small_pct = 14
+    widget._bubble_bounce_big_speed = 1.25
+    widget._bubble_bounce_small_speed = 0.42
 
     tick_pipeline.dispatch_bubble_simulation(widget, time.time())
 
     assert widget._thread_manager.calls
     eb_snap = widget._thread_manager.calls[0]["args"][1]
+    sim_settings = widget._thread_manager.calls[0]["args"][2]
     assert eb_snap["bass"] == pytest.approx(0.71)
     assert eb_snap["mid"] == pytest.approx(0.72)
     assert eb_snap["high"] == pytest.approx(0.73)
     assert eb_snap["overall"] == pytest.approx(0.74)
+    assert sim_settings["bubble_bounce_big_pct"] == 87
+    assert sim_settings["bubble_bounce_small_pct"] == 14
+    assert sim_settings["bubble_bounce_big_speed"] == pytest.approx(1.25)
+    assert sim_settings["bubble_bounce_small_speed"] == pytest.approx(0.42)
 
 
 @pytest.mark.qt

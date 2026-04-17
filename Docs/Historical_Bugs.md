@@ -88,6 +88,89 @@ Section by date and type.
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
+## 2026-04-17 — Blob False-Positive Visual Pass: Wrong Limiter Geometry + Runtime Transport Drift + Math-Only Tests (Unresolved)
+
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current symptom family:** Blob can compile, render, and even pass focused tests while still presenting as a rigid pulsing disk with no convincing liquidity and no visible inward border liquid.
+- **Why this entry exists:** this is a loop-prevention entry. Several recent passes improved architecture and fixed real regressions, but they still failed the user's actual visual target. Those failures need to stay visible so we stop treating "mathematically non-flat" or "tests green" as equivalent to the feature being right.
+- **What was newly learned on 2026-04-17:**
+  - the latest runtime logs show Blob compiling/rendering normally; this is not primarily a fallback/shader-crash issue anymore
+  - live Blob log values are often modest rather than permanently maxed, so "everything is simply too hot" is not a complete explanation
+  - direct solver probing showed the unshaped contour is not numerically flat by default, which means the remaining rigid-disk read cannot be blamed on "profile spread is literally zero"
+  - a separate model→runtime transport bug was found: several canonical Blob settings can exist in stored config/custom slots but never actually reach the widget because the creator path hardcoded replacements
+- **What was newly learned later on 2026-04-17:**
+  - direct follow-up probing against a representative small-blob custom-slot style setup showed the current unshaped contour spread only buys about **`6-7 px` of silhouette delta** on screen
+  - that is the missing bridge between "math says non-flat" and "user still sees a rigid circle": the contour is alive, but not authoritative enough to visually dethrone the scalar disk read
+  - custom-slot normalization itself appears to preserve modern Blob keys correctly, including promoted stretch and explicit advanced fields; this means the remaining failure is not primarily "the normalizer dropped my settings"
+  - the real remaining settings risk is runtime transport/application drift and preset/custom-slot cleanup hygiene, not the canonical normalizer alone
+- **What was newly learned from the later 2026-04-17 runtime/log pass:**
+  - live `BLOB_PROFILE` diagnostics repeatedly sat around `min ~= 0.93-0.95`, `max ~= 1.08-1.09`, `spread ~= 0.136-0.155`
+  - this is enough to prove the contour solver is active, but still not enough to stop the body from reading as a rounded badge/circle
+  - the current failure is therefore not "Blob math is dead"; it is "Blob math is still too timid, and the renderer is still too eager to preserve the scalar body"
+  - the new inward liquid can now be seen, but it currently reads as a broad gelatinous edge wash instead of a crisp moving liquid front/limiter
+- **What was newly learned from the even later 2026-04-17 14:12 run:**
+  - the widened contour absolutely is reaching runtime: `BLOB_PROFILE` diagnostics now regularly reach spreads around `0.30-0.37`
+  - despite that, the user still sees an under-reactive smooth badge with almost no vector-liquid styling
+  - that rules out another common false lead: this is no longer mainly a "spread too small" problem
+  - the remaining failure is renderer-side:
+    - the contour is still being visually rounded/smoothed into a badge
+    - the highlight/specular treatment is still too much generic shading and not enough contour-derived vector line work
+    - the border liquid/front still reads more like a soft frame effect than a liquid contour/front
+- **What the user's mockup clarified later on 2026-04-17:**
+  - the target is not "a more deformed center blob"
+  - the target is a **flat/vector pooled-liquid style**
+  - the most important ingredients are:
+    - broad pooled silhouettes
+    - clean white outline edges
+    - sparse white vector specular puddles/ribbons
+    - soft offset shadow/accent puddles
+    - the inward-liquid layer using the same style vocabulary
+  - this means several recent passes were solving the wrong artistic problem even when their diagnostics improved
+- **Critical wrong assumption to preserve:** the current "inward liquid" implementation is solving the wrong feature.
+  - the requested feature is an inward border liquid / limiter sourced from the **card edges inward**
+  - the current implementation is a colour/front mix **inside the blob body itself**
+  - that means it is geometrically incapable of producing the intended "outer layer slides back when the blob threatens it" read
+- **Updated wrong-shape warning after the first rewrite:** merely moving the limiter to card space is not enough.
+  - the first card-edge rewrite fixed the geometry family, but not the presentation family
+  - a front that is too broad, too fog-like, or too uniformly present across the whole edge still fails the product goal
+  - the limiter/front must read as liquid contour/front motion, not as a decorative frame aura
+- **Confirmed transport drift to preserve:**
+  - `rendering/spotify_widget_creators.py::apply_spotify_vis_model_config(...)` was found hardcoding several Blob runtime values instead of forwarding the canonical model values
+  - examples at the time of discovery:
+    - `blob_stage_gain` forced from `blob_pulse`
+    - `blob_core_scale` forced to `1.0`
+    - `blob_core_floor_bias` forced to `0.35`
+    - `blob_stage_bias` forced to `0.0`
+    - unshaped stretch derived from legacy `blob_stretch` rather than the normalized explicit stretch contract
+  - Blob builder binding also hardcoded `blob_shaper_base_strength` to `1.0` on load/save
+  - consequence: user-facing/custom-slot settings can look correct in storage yet runtime still behaves like a defaulted Blob
+- **False-positive test gap to preserve:**
+  - focused tests were mostly proving helper invariants and upload health
+  - they could pass while the rendered result still looked like a circle
+  - the existing inward-liquid tests also validated the wrong geometry family because they were testing an interior blob band, not a card-edge limiter/front
+  - the current non-circularity threshold is especially misleading: a contour spread greater than `0.05` can still produce a blob that only deforms by a handful of pixels and visually reads as a locked disk
+- **Failed solution shapes to stop repeating:**
+  - more scalar pulse/base-size tuning without first proving the contour/presentation path is the real bottleneck
+  - treating a blob-internal tint as if it were the requested border liquid limiter
+  - accepting math-only contour spread tests as proof of visible fluidity
+  - accepting "profile is non-flat" without checking whether that spread is actually large enough to be legible on a small blob
+  - assuming custom-slot settings are live merely because normalization/storage looks correct
+  - shipping another runtime test request before logs can prove which Blob contracts actually reached the shader/widget
+  - accepting "the border liquid is now visible" when it still reads as a soft vignette/wash instead of a liquid front
+  - accepting "the blob is slightly misshapen now" when the underlying silhouette still reads as a protected circle
+  - widening the uploaded runtime contour while leaving the fragment renderer free to smooth/average it back into a badge
+  - continuing to refine the visual as if the problem were "one nicer central blob" after the mockup already showed a broader pooled-liquid composition target
+- **What the next correct path must prove:**
+  - the canonical stored Blob settings reach runtime unchanged unless intentionally normalized
+  - the limiter is a card-edge-anchored liquid/front with a strict no-contact gap to the blob
+  - the blob silhouette can no longer read as a preserved pulsing disk on the user's antagonistic presets/screenshots
+  - tests fail when Blob visually regresses into "circle with tint/glow" even if the math helpers still look reasonable on paper
+- **Loop-avoidance lesson:** for Blob, do not let "compiled," "uploaded," "non-flat profile," or "green tests" substitute for the actual product target. If the user still sees a rigid circle and no border liquid, the issue remains open.
+
 ## 2026-04-10 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Unresolved)
 
 - [ ] COMPLETELY FUCKED

@@ -134,6 +134,26 @@ def load_bubble_mode_settings(
         v = int(tab._config_float("spotify_visualizer", config, "bubble_surface_reach", 0.6) * 100)
         tab.bubble_surface_reach.setValue(max(0, min(100, v)))
         tab.bubble_surface_reach_label.setText(f"{v}%")
+    if hasattr(tab, "bubble_bounce_big_pct"):
+        v = tab._config_int("spotify_visualizer", config, "bubble_bounce_big_pct", 70)
+        clamped_v = max(0, min(100, v))
+        tab.bubble_bounce_big_pct.setValue(clamped_v)
+        tab.bubble_bounce_big_pct_label.setText(f"{clamped_v}%")
+    if hasattr(tab, "bubble_bounce_small_pct"):
+        v = tab._config_int("spotify_visualizer", config, "bubble_bounce_small_pct", 30)
+        clamped_v = max(0, min(100, v))
+        tab.bubble_bounce_small_pct.setValue(clamped_v)
+        tab.bubble_bounce_small_pct_label.setText(f"{clamped_v}%")
+    if hasattr(tab, "bubble_bounce_big_speed"):
+        v = int(tab._config_float("spotify_visualizer", config, "bubble_bounce_big_speed", 0.8) * 100)
+        clamped_v = max(0, min(200, v))
+        tab.bubble_bounce_big_speed.setValue(clamped_v)
+        tab.bubble_bounce_big_speed_label.setText(f"{clamped_v / 100.0:.2f}x")
+    if hasattr(tab, "bubble_bounce_small_speed"):
+        v = int(tab._config_float("spotify_visualizer", config, "bubble_bounce_small_speed", 0.5) * 100)
+        clamped_v = max(0, min(200, v))
+        tab.bubble_bounce_small_speed.setValue(clamped_v)
+        tab.bubble_bounce_small_speed_label.setText(f"{clamped_v / 100.0:.2f}x")
 
     if hasattr(tab, "bubble_specular_direction"):
         specular_direction = normalize_bubble_specular_direction(
@@ -239,6 +259,14 @@ def collect_bubble_mode_settings(tab) -> dict[str, Any]:
         "bubble_big_count": tab.bubble_big_count.value() if hasattr(tab, "bubble_big_count") else 8,
         "bubble_small_count": tab.bubble_small_count.value() if hasattr(tab, "bubble_small_count") else 25,
         "bubble_surface_reach": (tab.bubble_surface_reach.value() if hasattr(tab, "bubble_surface_reach") else 60) / 100.0,
+        "bubble_bounce_big_pct": tab.bubble_bounce_big_pct.value() if hasattr(tab, "bubble_bounce_big_pct") else 70,
+        "bubble_bounce_small_pct": tab.bubble_bounce_small_pct.value() if hasattr(tab, "bubble_bounce_small_pct") else 30,
+        "bubble_bounce_big_speed": (
+            tab.bubble_bounce_big_speed.value() if hasattr(tab, "bubble_bounce_big_speed") else 80
+        ) / 100.0,
+        "bubble_bounce_small_speed": (
+            tab.bubble_bounce_small_speed.value() if hasattr(tab, "bubble_bounce_small_speed") else 50
+        ) / 100.0,
         "bubble_outline_color": _qcolor_to_list(getattr(tab, "_bubble_outline_color", None), [255, 255, 255, 230]),
         "bubble_specular_color": _qcolor_to_list(getattr(tab, "_bubble_specular_color", None), [255, 255, 255, 255]),
         "bubble_gradient_light": _qcolor_to_list(getattr(tab, "_bubble_gradient_light", None), [210, 170, 120, 255]),

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict
 
 from core.logging.logger import get_logger
+from core.settings.visualizer_mode_registry import is_mode_active
 
 logger = get_logger(__name__)
 
@@ -27,13 +28,19 @@ void main() {
 """
 
 # Registry of available fragment shader filenames keyed by vis_mode string.
-_SHADER_FILES: Dict[str, str] = {
+_ALL_SHADER_FILES: Dict[str, str] = {
     "spectrum": "spectrum.frag",
     "oscilloscope": "oscilloscope.frag",
     "blob": "blob.frag",
     "sine_wave": "sine_wave.frag",
     "bubble": "bubble.frag",
+    "goo": "goo.frag",
 }
+
+
+def _active_shader_files() -> Dict[str, str]:
+    """Return only shader files for modes that are not behind a closed dev gate."""
+    return {m: f for m, f in _ALL_SHADER_FILES.items() if is_mode_active(m)}
 
 
 def load_fragment_shader(vis_mode: str) -> str | None:
@@ -46,7 +53,7 @@ def load_fragment_shader(vis_mode: str) -> str | None:
     if cache is not None:
         return cache.get(vis_mode)
 
-    filename = _SHADER_FILES.get(vis_mode)
+    filename = _ALL_SHADER_FILES.get(vis_mode)
     if filename is None:
         logger.warning("[SHADER_LOADER] Unknown vis_mode: %s", vis_mode)
         return None
@@ -74,7 +81,8 @@ def preload_fragment_shaders(*, force: bool = False) -> Dict[str, str]:
 
     result: Dict[str, str] = {}
     missing: list[str] = []
-    for mode in _SHADER_FILES:
+    active = _active_shader_files()
+    for mode in active:
         src = load_fragment_shader(mode)
         if src is not None:
             result[mode] = src
@@ -83,7 +91,7 @@ def preload_fragment_shaders(*, force: bool = False) -> Dict[str, str]:
     logger.info(
         "[SHADER_LOADER] Loaded %d/%d shaders: %s",
         len(result),
-        len(_SHADER_FILES),
+        len(active),
         ", ".join(sorted(result.keys())),
     )
     if missing:

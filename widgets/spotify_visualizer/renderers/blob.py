@@ -205,4 +205,28 @@ def upload_uniforms(gl, u: dict, s) -> bool:
             overall=float(getattr(s, "_blob_live_overall_energy", eb.overall)),
         )
     _set1fv(gl, u, "u_blob_runtime_profile", runtime_profile, _SHAPER_N)
+    try:
+        current_ts = float(getattr(s, "_last_update_ts", 0.0) or 0.0)
+        if current_ts <= 0.0:
+            import time as _time
+            current_ts = _time.monotonic()
+        previous_diag_ts = float(getattr(s, "_blob_runtime_diag_ts", 0.0) or 0.0)
+        if current_ts - previous_diag_ts >= 0.75:
+            profile_min = min(float(v) for v in runtime_profile)
+            profile_max = max(float(v) for v in runtime_profile)
+            logger.debug(
+                "[SPOTIFY_VIS][BLOB_PROFILE] shaper=%s liquid=%s liquid_react=%.2f liquid_max=%.2f "
+                "min=%.3f max=%.3f spread=%.3f avg=%.3f",
+                shaper_on,
+                bool(getattr(s, "_blob_inward_liquid_enabled", False)),
+                float(getattr(s, "_blob_inward_liquid_reactivity", 1.0)),
+                float(getattr(s, "_blob_inward_liquid_max_size", 0.28)),
+                profile_min,
+                profile_max,
+                profile_max - profile_min,
+                sum(float(v) for v in runtime_profile) / max(len(runtime_profile), 1),
+            )
+            setattr(s, "_blob_runtime_diag_ts", current_ts)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to log blob runtime profile diagnostics", exc_info=True)
     return True

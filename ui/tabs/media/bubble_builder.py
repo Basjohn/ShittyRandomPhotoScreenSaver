@@ -64,6 +64,15 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         helper_text="Streaming, drift, swirl, and motion-tail controls still apply when hidden.",
         default_expanded=True,
     )
+    _, bounce_bucket = build_collapsible_bucket(
+        tab,
+        _normal_layout,
+        mode_key="bubble",
+        bucket_key="bounce",
+        title="Bounce",
+        helper_text="Adjust collision rebound probability and speed by bubble class.",
+        default_expanded=True,
+    )
     _, reactivity_bucket = build_collapsible_bucket(
         tab,
         _adv_layout,
@@ -494,6 +503,74 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     surface_reach_row.addWidget(tab.bubble_surface_reach)
     tab.bubble_surface_reach_label = QLabel(f"{val}%")
     surface_reach_row.addWidget(tab.bubble_surface_reach_label)
+
+    bounce_big_pct_row = _aligned_row(bounce_bucket, "Big Bounce Chance:")
+    tab.bubble_bounce_big_pct = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_bounce_big_pct.setMinimum(0)
+    tab.bubble_bounce_big_pct.setMaximum(100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_big_pct', 70))
+    tab.bubble_bounce_big_pct.setValue(max(0, min(100, val)))
+    tab.bubble_bounce_big_pct.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_bounce_big_pct.setTickInterval(10)
+    bind_setting_signal(
+        tab,
+        tab.bubble_bounce_big_pct.valueChanged,
+        updater=lambda v: tab.bubble_bounce_big_pct_label.setText(f"{v}%"),
+    )
+    bounce_big_pct_row.addWidget(tab.bubble_bounce_big_pct)
+    tab.bubble_bounce_big_pct_label = QLabel(f"{val}%")
+    bounce_big_pct_row.addWidget(tab.bubble_bounce_big_pct_label)
+
+    bounce_small_pct_row = _aligned_row(bounce_bucket, "Small Bounce Chance:")
+    tab.bubble_bounce_small_pct = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_bounce_small_pct.setMinimum(0)
+    tab.bubble_bounce_small_pct.setMaximum(100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_small_pct', 30))
+    tab.bubble_bounce_small_pct.setValue(max(0, min(100, val)))
+    tab.bubble_bounce_small_pct.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_bounce_small_pct.setTickInterval(10)
+    bind_setting_signal(
+        tab,
+        tab.bubble_bounce_small_pct.valueChanged,
+        updater=lambda v: tab.bubble_bounce_small_pct_label.setText(f"{v}%"),
+    )
+    bounce_small_pct_row.addWidget(tab.bubble_bounce_small_pct)
+    tab.bubble_bounce_small_pct_label = QLabel(f"{val}%")
+    bounce_small_pct_row.addWidget(tab.bubble_bounce_small_pct_label)
+
+    bounce_big_speed_row = _aligned_row(bounce_bucket, "Big Bounce Speed:")
+    tab.bubble_bounce_big_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_bounce_big_speed.setMinimum(0)
+    tab.bubble_bounce_big_speed.setMaximum(200)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_big_speed', 0.8) * 100)
+    tab.bubble_bounce_big_speed.setValue(max(0, min(200, val)))
+    tab.bubble_bounce_big_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_bounce_big_speed.setTickInterval(10)
+    bind_setting_signal(
+        tab,
+        tab.bubble_bounce_big_speed.valueChanged,
+        updater=lambda v: tab.bubble_bounce_big_speed_label.setText(f"{v / 100.0:.2f}x"),
+    )
+    bounce_big_speed_row.addWidget(tab.bubble_bounce_big_speed)
+    tab.bubble_bounce_big_speed_label = QLabel(f"{val / 100.0:.2f}x")
+    bounce_big_speed_row.addWidget(tab.bubble_bounce_big_speed_label)
+
+    bounce_small_speed_row = _aligned_row(bounce_bucket, "Small Bounce Speed:")
+    tab.bubble_bounce_small_speed = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_bounce_small_speed.setMinimum(0)
+    tab.bubble_bounce_small_speed.setMaximum(200)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_bounce_small_speed', 0.5) * 100)
+    tab.bubble_bounce_small_speed.setValue(max(0, min(200, val)))
+    tab.bubble_bounce_small_speed.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_bounce_small_speed.setTickInterval(10)
+    bind_setting_signal(
+        tab,
+        tab.bubble_bounce_small_speed.valueChanged,
+        updater=lambda v: tab.bubble_bounce_small_speed_label.setText(f"{v / 100.0:.2f}x"),
+    )
+    bounce_small_speed_row.addWidget(tab.bubble_bounce_small_speed)
+    tab.bubble_bounce_small_speed_label = QLabel(f"{val / 100.0:.2f}x")
+    bounce_small_speed_row.addWidget(tab.bubble_bounce_small_speed_label)
 
     specular_row = _aligned_row(appearance_bucket, "Specular Direction:")
     tab.bubble_specular_direction = StyledComboBox(size_variant="mini")
