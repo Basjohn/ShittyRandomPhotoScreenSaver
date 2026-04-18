@@ -361,10 +361,13 @@ void main() {
     // Apply width reaction stretch after density computation (declared later)
     // Placeholder — actual sine_freq set after wr_stretch_factor is computed.
 
-    // Speed slider: controls travel rate. Gated on playback.
+    // Speed slider: controls travel rate.
     float speed = clamp(u_sine_speed, 0.0, 3.0);
     float play_gate = (u_playing == 1) ? 1.0 : 0.0;
-    float effective_speed = speed * play_gate;
+    float idle_motion_gate = (u_playing == 1) ? 1.0 : 0.14;
+    float effective_speed = speed * idle_motion_gate;
+    // Keep paused sine visibly alive even when travel sliders are NONE.
+    float idle_phase = (u_playing == 1) ? 0.0 : (u_time * 0.22 * max(0.6, speed));
 
     // Displacement: smooth bass-reactive positional offset for all lines.
     // On bass hits lines shift smoothly in Y (bounce) and X (phase nudge),
@@ -384,30 +387,36 @@ void main() {
     float phase1 = 0.0;
     if (u_sine_travel == 1) phase1 = u_time * 2.0 * effective_speed;
     if (u_sine_travel == 2) phase1 = u_time * -2.0 * effective_speed;
+    phase1 += idle_phase;
 
     float phase2 = 0.0;
     if (u_sine_travel_line2 == 1) phase2 = u_time * 2.0 * effective_speed;
     if (u_sine_travel_line2 == 2) phase2 = u_time * -2.0 * effective_speed;
+    phase2 += idle_phase * 0.95;
 
     float phase3 = 0.0;
     if (u_sine_travel_line3 == 1) phase3 = u_time * 2.0 * effective_speed;
     if (u_sine_travel_line3 == 2) phase3 = u_time * -2.0 * effective_speed;
+    phase3 += idle_phase * 1.03;
 
     float phase4 = 0.0;
     if (u_sine_travel_line4 == 1) phase4 = u_time * 2.0 * effective_speed;
     if (u_sine_travel_line4 == 2) phase4 = u_time * -2.0 * effective_speed;
+    phase4 += idle_phase * 0.90;
 
     float phase5 = 0.0;
     if (u_sine_travel_line5 == 1) phase5 = u_time * 2.0 * effective_speed;
     if (u_sine_travel_line5 == 2) phase5 = u_time * -2.0 * effective_speed;
+    phase5 += idle_phase * 1.07;
 
     float phase6 = 0.0;
     if (u_sine_travel_line6 == 1) phase6 = u_time * 2.0 * effective_speed;
     if (u_sine_travel_line6 == 2) phase6 = u_time * -2.0 * effective_speed;
+    phase6 += idle_phase * 0.92;
 
     // Wave effect amount (positional undulation)
     float wave_fx = clamp(u_wave_effect, 0.0, 1.0);
-    float wave_fx_gate = clamp(u_wave_effect_gate, 0.0, 1.0) * play_gate;
+    float wave_fx_gate = clamp(u_wave_effect_gate, 0.0, 1.0) * max(play_gate, 0.30);
 
     // Micro wobble amount (energy-reactive snake lines)
     float micro_wob = clamp(u_micro_wobble, 0.0, 1.0);
@@ -419,7 +428,7 @@ void main() {
     float crawl_boost = mix(0.45, 2.20, crawl_slider);
     float crawl_spacing_bias = clamp(u_sine_density * 0.35, 0.0, 1.0);
     float crawl_spacing = mix(0.40, 1.50, crawl_spacing_bias) * crawl_boost;
-    float crawl_gate = (crawl_amt > 0.001 && play_gate > 0.15) ? 1.0 : 0.0;
+    float crawl_gate = (crawl_amt > 0.001 && (play_gate > 0.15 || u_playing == 0)) ? 1.0 : 0.0;
 
     // Width Reaction: bass-driven horizontal stretch + line width boost (0 = off, 1 = max)
     float wr = clamp(u_width_reaction, 0.0, 1.0);

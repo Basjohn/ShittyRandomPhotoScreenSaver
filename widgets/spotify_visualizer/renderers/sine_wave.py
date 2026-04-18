@@ -1,6 +1,7 @@
 """Sine wave mode uniform renderer."""
 from __future__ import annotations
 
+import math
 import time
 
 from core.logging.logger import get_logger, is_viz_diagnostics_enabled
@@ -312,8 +313,75 @@ def get_uniform_names() -> list[str]:
 
 
 def upload_uniforms(gl, u: dict, s) -> bool:
+    now = time.time()
     reactive = _compute_sine_reactivity_state(s)
     _set1i(gl, u, "u_playing", 1 if s._playing else 0)
+
+    line_count = max(1, min(6, int(getattr(s, "_line_count", 1))))
+    t1 = int(getattr(s, "_sine_wave_travel", 0))
+    t2 = int(getattr(s, "_sine_travel_line2", 0))
+    t3 = int(getattr(s, "_sine_travel_line3", 0))
+    t4 = int(getattr(s, "_sine_travel_line4", 0))
+    t5 = int(getattr(s, "_sine_travel_line5", 0))
+    t6 = int(getattr(s, "_sine_travel_line6", 0))
+    speed = float(getattr(s, "_line_speed", 0.5))
+    paused = not bool(getattr(s, "_playing", False))
+    if paused:
+        # Idle guardrail: presets can legitimately carry "no travel", but idle
+        # Sine must still drift. Keep existing directions when present and only
+        # inject minimum travel for lanes that would otherwise be static.
+        preferred = next((d for d in (t1, t2, t3, t4, t5, t6) if d in (1, 2)), 2)
+        if t1 == 0:
+            t1 = preferred
+        if line_count >= 2 and t2 == 0:
+            t2 = preferred
+        if line_count >= 3 and t3 == 0:
+            t3 = preferred
+        if line_count >= 4 and t4 == 0:
+            t4 = preferred
+        if line_count >= 5 and t5 == 0:
+            t5 = preferred
+        if line_count >= 6 and t6 == 0:
+            t6 = preferred
+        speed = max(0.22, speed)
+
+    def _dir_sign(travel: int) -> float:
+        if travel == 1:
+            return 1.0
+        if travel == 2:
+            return -1.0
+        return 0.0
+
+    base_shift1 = float(getattr(s, "_sine_line1_shift", 0.0))
+    base_shift2 = float(getattr(s, "_sine_line2_shift", 0.0))
+    base_shift3 = float(getattr(s, "_sine_line3_shift", 0.0))
+    base_shift4 = float(getattr(s, "_sine_line4_shift", 0.0))
+    base_shift5 = float(getattr(s, "_sine_line5_shift", 0.0))
+    base_shift6 = float(getattr(s, "_sine_line6_shift", 0.0))
+    if paused:
+        # Hard idle movement guarantee with bounded phase accumulation.
+        # Never feed huge phase values into the shader: that can flatten lines
+        # due to float precision loss in the fragment arithmetic.
+        last_idle_ts = float(getattr(s, "_sine_idle_shift_ts", 0.0))
+        if last_idle_ts > 0.0:
+            dt = max(1.0 / 240.0, min(0.100, now - last_idle_ts))
+        else:
+            dt = 1.0 / 60.0
+        idle_phase = float(getattr(s, "_sine_idle_shift_phase", 0.0))
+        idle_phase = math.fmod(idle_phase + dt * (0.12 * speed), 1.0)
+        if idle_phase < 0.0:
+            idle_phase += 1.0
+        setattr(s, "_sine_idle_shift_phase", idle_phase)
+        setattr(s, "_sine_idle_shift_ts", now)
+
+        base_shift1 += _dir_sign(t1) * idle_phase
+        base_shift2 += _dir_sign(t2) * idle_phase
+        base_shift3 += _dir_sign(t3) * idle_phase
+        base_shift4 += _dir_sign(t4) * idle_phase
+        base_shift5 += _dir_sign(t5) * idle_phase
+        base_shift6 += _dir_sign(t6) * idle_phase
+    else:
+        setattr(s, "_sine_idle_shift_ts", now)
 
     # Ghost alpha (mode-specific: sine wave)
     loc = u.get("u_ghost_alpha", -1)
@@ -331,16 +399,16 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_ghost_bass", getattr(s, '_sine_peak_bass', 0.0))
     _set1f(gl, u, "u_ghost_mid", getattr(s, '_sine_peak_mid', 0.0))
     _set1f(gl, u, "u_ghost_high", getattr(s, '_sine_peak_high', 0.0))
-    _set1f(gl, u, "u_sine_speed", s._line_speed)
+    _set1f(gl, u, "u_sine_speed", speed)
     _set1i(gl, u, "u_sine_line_dim", 1 if s._line_dim else 0)
     _set1f(gl, u, "u_sine_line_offset_bias", s._line_offset_bias)
-    _set1i(gl, u, "u_sine_travel", int(s._sine_wave_travel))
+    _set1i(gl, u, "u_sine_travel", t1)
     _set1f(gl, u, "u_card_adaptation", s._sine_card_adaptation)
-    _set1i(gl, u, "u_sine_travel_line2", int(s._sine_travel_line2))
-    _set1i(gl, u, "u_sine_travel_line3", int(s._sine_travel_line3))
-    _set1i(gl, u, "u_sine_travel_line4", int(getattr(s, '_sine_travel_line4', 0)))
-    _set1i(gl, u, "u_sine_travel_line5", int(getattr(s, '_sine_travel_line5', 0)))
-    _set1i(gl, u, "u_sine_travel_line6", int(getattr(s, '_sine_travel_line6', 0)))
+    _set1i(gl, u, "u_sine_travel_line2", t2)
+    _set1i(gl, u, "u_sine_travel_line3", t3)
+    _set1i(gl, u, "u_sine_travel_line4", t4)
+    _set1i(gl, u, "u_sine_travel_line5", t5)
+    _set1i(gl, u, "u_sine_travel_line6", t6)
     _set1f(gl, u, "u_wave_effect", s._sine_wave_effect)
     _set1f(gl, u, "u_micro_wobble", s._sine_micro_wobble)
     _set1f(gl, u, "u_crawl_amount", s._sine_crawl_amount)
@@ -351,12 +419,12 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_width_reaction", reactive['width_reaction'])
     _set1f(gl, u, "u_sine_density", s._sine_density)
     _set1f(gl, u, "u_sine_displacement", s._sine_displacement)
-    _set1f(gl, u, "u_sine_line1_shift", s._sine_line1_shift)
-    _set1f(gl, u, "u_sine_line2_shift", s._sine_line2_shift)
-    _set1f(gl, u, "u_sine_line3_shift", s._sine_line3_shift)
-    _set1f(gl, u, "u_sine_line4_shift", getattr(s, '_sine_line4_shift', 0.0))
-    _set1f(gl, u, "u_sine_line5_shift", getattr(s, '_sine_line5_shift', 0.0))
-    _set1f(gl, u, "u_sine_line6_shift", getattr(s, '_sine_line6_shift', 0.0))
+    _set1f(gl, u, "u_sine_line1_shift", base_shift1)
+    _set1f(gl, u, "u_sine_line2_shift", base_shift2)
+    _set1f(gl, u, "u_sine_line3_shift", base_shift3)
+    _set1f(gl, u, "u_sine_line4_shift", base_shift4)
+    _set1f(gl, u, "u_sine_line5_shift", base_shift5)
+    _set1f(gl, u, "u_sine_line6_shift", base_shift6)
 
     # Shared line/glow
     _upload_shared_line_glow(gl, u, s, reactive)
@@ -366,6 +434,24 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_bass_energy", reactive['bass_energy'])
     _set1f(gl, u, "u_mid_energy", reactive['mid_energy'])
     _set1f(gl, u, "u_high_energy", reactive['high_energy'])
+
+    if is_viz_diagnostics_enabled():
+        last_diag = float(getattr(s, '_sine_idle_uniform_diag_ts', 0.0))
+        if now - last_diag >= 0.9:
+            logger.debug(
+                "[SPOTIFY_VIS][SINE][IDLE_UNIFORMS] playing=%s speed=%.3f line_count=%d travel=(%d,%d,%d,%d,%d,%d) shift1=%.4f",
+                bool(getattr(s, "_playing", False)),
+                speed,
+                line_count,
+                t1,
+                t2,
+                t3,
+                t4,
+                t5,
+                t6,
+                float(base_shift1),
+            )
+            setattr(s, '_sine_idle_uniform_diag_ts', now)
 
     return True
 
@@ -394,4 +480,3 @@ def _upload_shared_line_glow(gl, u, s, reactive: dict[str, float] | None = None)
         ("u_line6_glow_color", s._line6_glow_color),
     ):
         _set_color4(gl, u, uname, qc)
-

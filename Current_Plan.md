@@ -38,27 +38,6 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 
 ## Awaiting Validation
 
-### 3. Visualizer Mode Isolation / Bleed Audit
-
-**Status:** `[~]` Mostly landed, final runtime confirmation still open
-**Priority:** High
-
-**Landed:**
-- [x] Dedicated Blob/Bubble/Spectrum/Oscilloscope/Sine renderer ownership audited
-- [x] Dedicated visualizer math/helper ownership audited
-- [x] Static isolation fences added for dedicated mode-owned modules
-- [x] Shared visualizer change checklist established in [Docs/Visualizer_Change_Checklist.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Change_Checklist.md)
-- [x] Preset/save/repair/regeneration paths aligned with current mode ownership
-- [x] Shared beat-engine bar-count hitch fix moved onto one startup/runtime-parity rebuild path
-- [x] Shared technical cache replay now no-ops when a mode entry is missing instead of silently borrowing foreign technical state
-- [x] GPU extra kwargs now stay mode-local rather than carrying unrelated payload clutter
-
-**Still open:**
-- [~] Shared seams in `config_applier`, `spotify_visualizer_widget`, and `spotify_bars_gl_overlay` are much cleaner but remain the highest-risk bleed area
-- [ ] Finish a live runtime spot-check across shaper-capable modes once Bubble/Blob validation is calmer
-
-**Lesson:** The remaining bleed risk lives in the shared transport/reset/apply seams, not in the dedicated renderer files.
-
 ### 4. Shared Preset Install / Save Location Across SCR and MC
 
 **Status:** `[~]` Landed in code, awaiting live coexistence validation
@@ -448,191 +427,18 @@ Reason for pruning here: the active root-cause work is done, the sneaky multi-la
 
 ---
 
-## Deferred
+## Completed Since Last Sync
 
-## Historical Reference — Preset Override Bug Investigation (Failed Fixes)
+- [x] Bubble Bounce system shipped and validated in runtime (bounce controls, same-class bounce option, collision pop modes, directional improvements, and overlap/snap stabilization).
+- [x] Sine idle-motion dead/freeze bug shipped and validated in runtime (paused travel fallback, bounded idle phase, corrected direction semantics, phase-coherent idle drift).
+- [x] Strict worker-off idle architecture shipped for Bubble/Sine/Oscilloscope (audio worker remains off while not playing; idle visuals remain alive).
 
-These fixes were attempted for the settings-loss bug (Tasks 1 & 2 above) but **did not resolve the core issue**. Kept as context to avoid re-treading the same ground.
+Historical detail for completed failures/fixes belongs in [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md).
 
-**Documentation:** [Docs/Visualizer_Preset_Override_Bug_Investigation.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Visualizer_Preset_Override_Bug_Investigation.md)
-**History:** [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) → `2026-04-11 — Visualizer Preset Override Bug`
+## Open Validation Only
 
-- **BUG #1:** `apply_preset_to_config()` used merge overlay → Fixed with CLEAR-then-APPLY
-- **BUG #2:** `save_media_settings()` collected all modes → Fixed to current mode only
-- **BUG #3:** Call-site `.update()` left stale keys → Fixed to use `restore_visualizer_snapshot()`
-  - Files: `ui/tabs/widgets_tab.py`, `rendering/widget_manager.py`
-  - Tests: `tests/test_visualizer_preset_cycling_runtime.py`
-- **BUG #4:** Technical keys lost when switching presets → `TECHNICAL_CONTROL_KEYS` preservation added
-  - Files: `core/settings/visualizer_presets.py`
-- **BUG #5:** Technical keys from ALL modes leaked into saves → `current_mode` parameter added
-  - Files: `core/settings/visualizer_presets.py`
-- **BUG #6:** `_save_settings_now()` replaced entire `spotify_visualizer` section with fresh current-mode-only data → Fixed to merge into existing config before normalizing
-  - Files: `ui/tabs/widgets_tab.py`
-  - Secondary: `ui/tabs/media/sine_wave_builder.py` — 10 color button lambdas converted to `bind_color_button()`
-- **BUG #7:** `SpotifyVisualizerSettings.from_mapping()`, `from_settings()`, and `to_dict()` omitted all sine/osc lines 4-6 keys → normalization silently dropped them
-  - Files: `core/settings/models.py` — added ~40 missing keys across all three methods
-- **BUG #8:** `apply_spotify_vis_model_config()` only forwarded lines 2-3 kwargs to the runtime widget → lines 4-6 always used defaults at runtime
-  - Files: `rendering/spotify_widget_creators.py`, `rendering/widget_manager.py`
-- **BUG #9:** Shift updaters wrote `_sine_lineN_horizontal_shift` (wrong attr name) + shift rows used untracked `_aligned_row()` so visibility function couldn't hide them
-  - Files: `ui/tabs/media/sine_wave_builder.py`
-- **BUG #10:** `SpotifyBarsGLOverlay.set_state()` accepted `sine_line4/5/6_shift` and `sine_travel_line4/5/6` as parameters but **never stored them to `self`** → always used default 0 at GL level despite model and widget having correct values
-  - Files: `widgets/spotify_bars_gl_overlay.py`
-  - Full detail: [Docs/Historical_Bugs.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Historical_Bugs.md) → `2026-04-13`
-
-**Status:** BUGs #6-#10 all fixed. #6 = cross-mode save wipe, #7 = model serialization gap, #8 = runtime config bridge gap, #9 = shift updater attr name + row visibility, #10 = overlay set_state dropped shift/travel for lines 4-6. Awaiting user runtime validation.
-
----
-
-### 3. Bubble Bounce Physics
-
-**Status:** `[~]` Core implementation landed; preset repair/runtime validation pending
-
-**Goal:** Bubbles should bounce gently off each other instead of overlapping. This should be an adjustable setting. The existing `_apply_soft_separation()` in `bubble_simulation.py` already pushes overlapping bubbles apart with class-based strength — but it uses a pure position-correction approach (no velocity reflection). The result is that overlapping bubbles separate but don't visually *bounce*.
-
-**Proposed Architecture:**
-
-The bounce system uses `_apply_bubble_collision_response()` with two paths:
-- bounce path: class-scoped bounce probability + speed injects collision impulse on a dedicated impulse channel (`impulse_vx`, `impulse_vy`)
-- fallback path: existing soft separation remains for non-bounce collisions
-
-Mixed big/small collisions are intentionally **big-dominant** for both chance and speed.
-At high bounce settings the solver runs extra collision passes and stricter minimum-gap correction so `100%` profiles enforce visible anti-overlap behavior rather than impulse-only jitter.
-Directional stream entry now applies stronger big-big spawn spacing guards to reduce pre-viewport overlap clusters.
-Collision gap now uses effective pulse-inflated radius (not base radius only) to prevent the specific big-bubble “half-hook interlock” artifact.
-
-**Settings to add:**
-
-| Setting key | Type | Range | Default | Description |
-|---|---|---|---|---|
-| `bubble_bounce_big_pct` | int (slider) | 0–100 | 70 | % of big bubble collisions that bounce (rest overlap/soft-push) |
-| `bubble_bounce_small_pct` | int (slider) | 0–100 | 30 | % of small bubble collisions that bounce |
-| `bubble_bounce_big_speed` | float (slider) | 0.0–2.0 | 0.8 | Bounce speed multiplier for big bubbles (0 = no rebound, 2 = full elastic) |
-| `bubble_bounce_small_speed` | float (slider) | 0.0–2.0 | 0.5 | Bounce speed multiplier for small bubbles |
-| `bubble_bounce_same_only` | bool (toggle) | true/false | false | When true, big↔small collisions pass through; only same-class collisions bounce/separate |
-| `bubble_collision_pop_mode` | enum (dropdown) | `off` / `one` / `all` | `off` | Optional collision resolver: pop no bubbles, pop one bubble in the pair, or pop both bubbles in the pair |
-
-Collision-pop policy guardrails:
-- `bubble_bounce_same_only = true`: mixed big/small pairs do not collide, bounce, or pop.
-- `bubble_bounce_same_only = false` + `bubble_collision_pop_mode = one`: big bubbles always survive mixed big/small collisions (small pops).
-
-**Files to touch:**
-
-1. **`widgets/spotify_visualizer/bubble_simulation.py`**
-   - Add `bounce_big_pct`, `bounce_small_pct`, `bounce_big_speed`, `bounce_small_speed` to `tick()` settings read
-   - Replace `_apply_soft_separation(dt)` callsite with `_apply_bubble_collision_response(...)`
-   - Keep soft separation as non-bounce fallback; bounce path adds impulse + post-collision positional correction
-   - Use dedicated impulse channel (`impulse_vx`, `impulse_vy`) so random/diagonal stream velocity (`vx`, `vy`) remains untouched
-
-2. **`widgets/spotify_visualizer/config_applier.py`**
-   - Add `_bubble_bounce_big_pct`, `_bubble_bounce_small_pct`, `_bubble_bounce_big_speed`, `_bubble_bounce_small_speed` to the bubble kwargs in `apply_vis_mode_config`
-   - Keep bounce keys out of `_append_bubble_visual_extras()` (sim-only, no GPU leak)
-
-3. **`widgets/spotify_visualizer/tick_pipeline.py`**
-   - Add `bubble_bounce_big_pct`, `bubble_bounce_small_pct`, `bubble_bounce_big_speed`, `bubble_bounce_small_speed` to `sim_settings` dict in `dispatch_bubble_simulation()`
-
-4. **`core/settings/models.py`**
-   - Add 4 new fields to `SpotifyVisualizerSettings` dataclass
-   - Add to `from_mapping()`, `from_settings()`, `to_dict()`
-
-5. **`core/settings/defaults.py`**
-   - Add defaults for the 4 new keys
-
-6. **`ui/tabs/media/bubble_builder.py`**
-   - Add a new collapsible bucket "Bounce" in the normal layout (after Motion)
-   - 4 sliders: Big Bounce %, Small Bounce %, Big Bounce Speed, Small Bounce Speed
-   - Add "Pop on Collision" dropdown (`Off`, `One Bubble`, `All Bubbles`)
-   - Wire with `bind_setting_signal`
-   - Stream Direction now uses explicit diagonals (`top_left`, `top_right`, `bottom_left`, `bottom_right`) instead of a single ambiguous diagonal option
-
-7. **`ui/tabs/media/bubble_settings_binding.py`**
-   - Add the 4 keys to `collect_bubble_mode_settings()`
-
-8. **`rendering/spotify_widget_creators.py`** + **`rendering/widget_manager.py`**
-   - Add the 4 kwargs to `apply_spotify_vis_model_config()` and fallback
-
-9. **`tools/visualizer_preset_repair.py`**
-    - Run `--repair-all` after implementation to update curated presets
-
-**Checklist:**
-- [x] Implement `_apply_bubble_collision_response()` in `bubble_simulation.py`
-- [x] Add 4 settings to model/defaults/serialization
-- [x] Add Bounce bucket to `bubble_builder.py`
-- [x] Wire settings load/collection in `bubble_settings_binding.py`
-- [x] Wire runtime config bridge (config_applier + widget creators + widget attrs)
-- [x] Wire tick pipeline `sim_settings`
-- [x] Add optional collision-pop policy (`off`/`one`/`all`) and keep it simulation-only (no GPU payload leak)
-- [x] Run preset repair (`--audit-curated`, `--repair-all`, `--reindex-curated`)
-- [x] Test: big bubbles at 100% bounce + high speed → measurable rebound impulse
-- [x] Test: 0% bounce → retains soft-separation behavior
-- [x] Test: persistence/normalization round-trip for new bounce keys
-- [x] Test: collision-pop policy pops one/all bubbles as configured
-
-#### 3A. Bubble Chorus-Start / Long-Session Reactivity Collapse (Control-Lane Fix)
-
-**Status:** `[~]` Code + tests landed, runtime validation pending
-
-**Observed failure (from latest logs + runtime report):**
-- Bubble can start dead in chorus and lose reactivity over time.
-- `/logs/screensaver_spotify_vis.log` showed frequent dynamic floor pressure plus transient snapshots where bass/mid sat at `1.000` with near-zero flux, indicating plateau/clamp behavior in the control path.
-
-**Root cause summary:**
-- Bubble/transient control inputs were effectively hard-ceilinging hot pre-AGC bands.
-- Under sustained loud sections, that flattens deltas and can starve onset variance.
-
-**Landed mitigation:**
-- Add a dedicated Bubble/Blob control lane in `audio_worker`:
-  - `_bubble_control_norm`
-  - `_bubble_pre_agc_bass`, `_bubble_pre_agc_mid`, `_bubble_pre_agc_treble`
-- In `bar_computation.fft_to_bars()`:
-  - compute dynamic control normalization from live pre-AGC energies (fast release, slower rise)
-  - populate `_bubble_pre_agc_*` from normalized control lane
-  - feed transient bus with control-normalized energies instead of hard `min(1.0, ...)` input
-- In `beat_engine.get_pre_agc_energy_bands()`:
-  - prefer `_bubble_pre_agc_*` control-lane values for mode consumers (fallback to legacy `_pre_agc_*`)
-- Reset control-lane state on engine smoothing reset / worker reconfigure.
-
-**Regression tests added:**
-- `tests/test_bubble_reactivity.py::TestSustainedLoudSection::test_hot_start_chorus_still_reacts`
-- `tests/test_bubble_reactivity.py::TestSustainedLoudSection::test_hot_chorus_variation_not_flatlined`
-
-**Follow-up validation checklist:**
-- [x] Land control-lane normalization patch
-- [x] Land hot-start + hot-variance bubble tests
-- [ ] Validate on user runtime logs that transient flux no longer plateaus during loud sections
-- [ ] Confirm long-session chorus passages retain visible bubble response without max pinning
-
-#### 3B. Bubble Entry Snap / Double-Shift Smoothing
-
-**Status:** `[~]` Landed in solver; runtime validation pending
-
-**Observed symptom:**
-- On low/medium bounce speeds, some bubbles still made abrupt snap shifts (sometimes push-then-return), most often while entering from spawn into the viewport.
-
-**Landed mitigation:**
-- Entry spawn path now uses `_directional_entry_position(...)` (off-card depth spread) instead of raw edge-only `_spawn_position(...)` for directional streams.
-- Spawn retry jitter clamp widened from `[-0.05, 1.05]` to `[-0.25, 1.25]` so retries do not collapse into the viewport border line.
-- Collision response retuned for gentle motion at low speed:
-  - reduced low-speed positional correction softness/caps
-  - reduced low-speed impulse floor kick and per-pair impulse caps
-  - faster impulse damping
-- Extreme high-speed/high-bounce behavior preserved via strict branch so `100%/high-speed` still resolves dense overlaps without instability.
-- Drift-aware rebound stabilization:
-  - per-pair short bounce cooldown to block immediate re-bounce loops on the same pair
-  - per-bubble short `bounce_glide` window that temporarily damps stream/drift steering after a bounce so bubbles briefly follow rebound trajectory instead of fighting it
-- Entry visibility guard:
-  - bounce impulse now only applies when **both** bubbles are in view
-  - when one bubble is in view and the other is off-card, overlap correction is biased heavily to move the off-card bubble, minimizing visible snap on the in-view bubble
-  - in-view per-frame positional correction cap is tightened further during smooth-mode accumulation
-
-**Verification:**
-- [x] `tests/test_bubble_reactivity.py` passes
-- [x] `tests/test_spotify_visualizer_widget.py::test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle` passes
-- [x] New regression: `test_pair_cooldown_prevents_immediate_rebounce`
-- [x] New regression: `test_post_bounce_glide_temporarily_dampens_stream_drift`
-- [x] New regression: `test_entry_overlap_biases_correction_offscreen_without_impulse`
-- [ ] Live runtime confirmation: low-speed bounce looks gentle with no visible pop-return at entry
-
----
+- [ ] Full provider-swap soak (Spotify ↔ MusicBee) during long no-audio mode-switch sessions to confirm no stale idle/active gating state appears.
+- [ ] Final cross-mode custom-slot/preset cleanup sweep (Bubble/Spectrum/Sine/Oscilloscope/Blob) to ensure no legacy keys reappear through tools.
 
 ## Runtime Watchlist
 

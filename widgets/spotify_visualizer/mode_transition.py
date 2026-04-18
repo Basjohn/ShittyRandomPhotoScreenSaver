@@ -376,7 +376,17 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
         engine.reset_floor_state()
         engine.set_smoothing(widget._smoothing)
         widget._replay_engine_config(engine)
-        engine.ensure_started()
+        should_capture = bool(getattr(widget, "_spotify_playing", False))
+        _capture_helper = getattr(widget, "_should_capture_audio_now", None)
+        if callable(_capture_helper):
+            try:
+                should_capture = bool(_capture_helper())
+            except Exception:
+                should_capture = bool(getattr(widget, "_spotify_playing", False))
+        if should_capture:
+            engine.ensure_started()
+        else:
+            engine.set_playback_state(False)
         widget._mode_teardown_target_generation = engine.get_generation_id()
         widget._track_engine_generation(engine)
     except Exception:
@@ -407,6 +417,19 @@ def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:
     if widget._mode_teardown_state != 'waiting_bars':
         return
     ready = False
+    wait_started = float(getattr(widget, "_mode_teardown_wait_started_ts", 0.0) or 0.0)
+    if wait_started <= 0.0:
+        wait_started = float(getattr(widget, "_mode_transition_ts", 0.0) or now_ts)
+    waited_s = max(0.0, now_ts - wait_started)
+    capture_now = False
+    _capture_helper = getattr(widget, "_should_capture_audio_now", None)
+    if callable(_capture_helper):
+        try:
+            capture_now = bool(_capture_helper())
+        except Exception:
+            capture_now = bool(getattr(widget, "_spotify_playing", False))
+    else:
+        capture_now = bool(getattr(widget, "_spotify_playing", False))
     if engine is not None and widget._mode_teardown_target_generation > 0:
         try:
             latest = engine.get_latest_generation_with_frame()
@@ -421,8 +444,17 @@ def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:
             waveform_ready = latest_waveform >= widget._mode_teardown_target_generation
         if latest >= widget._mode_teardown_target_generation and waveform_ready:
             ready = True
-    elif (now_ts - widget._mode_teardown_wait_started_ts) >= 0.75:
+    # Never allow permanent waiting_bars deadlocks.
+    # Paused/idle mode cycles must complete without worker frames.
+    timeout_s = 1.50 if capture_now else 0.35
+    if not ready and waited_s >= timeout_s:
         ready = True
+        logger.debug(
+            "[SPOTIFY_VIS] Mode teardown timeout fallback (capture_now=%s waited=%.2fs target_gen=%s)",
+            capture_now,
+            waited_s,
+            getattr(widget, "_mode_teardown_target_generation", -1),
+        )
     if ready and not widget._mode_transition_ready:
         widget._mode_teardown_state = 'ready'
         begin_mode_fade_in(widget, now_ts)

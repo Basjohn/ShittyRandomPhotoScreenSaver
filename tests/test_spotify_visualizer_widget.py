@@ -16,7 +16,7 @@ from widgets.spotify_visualizer_widget import (
     _AudioFrame,
 )
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
-from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry
+from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _SpotifyBeatEngine
 import widgets.spotify_visualizer_widget as vis_mod
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect
 
@@ -412,6 +412,169 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     assert sim_settings["bubble_collision_pop_mode"] == "one"
 
 
+def test_beat_engine_playback_state_strict_worker_lifecycle():
+    class _WorkerStub:
+        def __init__(self) -> None:
+            self.running = False
+            self.start_calls = 0
+            self.stop_calls = 0
+
+        def is_running(self) -> bool:
+            return self.running
+
+        def start(self) -> None:
+            self.start_calls += 1
+            self.running = True
+
+        def stop(self) -> None:
+            self.stop_calls += 1
+            self.running = False
+
+    engine = _SpotifyBeatEngine(bar_count=8)
+    worker = _WorkerStub()
+    engine._audio_worker = worker  # type: ignore[assignment]
+    engine._ref_count = 1
+
+    engine.set_playback_state(True)
+    assert worker.start_calls == 1
+    assert worker.running is True
+
+    engine.set_playback_state(False)
+    assert worker.stop_calls == 1
+    assert worker.running is False
+
+    # Without an active widget reference, play-state must not auto-start capture.
+    engine._ref_count = 0
+    engine.set_playback_state(True)
+    assert worker.start_calls == 1
+
+
+@pytest.mark.qt
+def test_bubble_dispatch_keeps_idle_motion_while_paused(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_compute_pending = False
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = False
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+
+    assert widget._thread_manager.calls
+    dt = widget._thread_manager.calls[0]["args"][0]
+    eb_snap = widget._thread_manager.calls[0]["args"][1]
+    assert dt > 0.0
+    assert eb_snap["bass"] > 0.0
+    assert eb_snap["overall"] > 0.0
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        VisualizerMode.BUBBLE,
+        VisualizerMode.OSCILLOSCOPE,
+        VisualizerMode.SINE_WAVE,
+        VisualizerMode.SPECTRUM,
+    ],
+)
+@pytest.mark.qt
+def test_paused_idle_modes_do_not_block_on_fresh_engine_wait(qt_app, qtbot, monkeypatch, mode):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(mode)
+    widget._spotify_playing = False
+    widget._waiting_for_fresh_engine_frame = True
+    widget._pending_engine_generation = 42
+
+    tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._pending_engine_generation == -1
+
+
+@pytest.mark.qt
+def test_on_tick_checks_mode_teardown_before_fresh_wait_return(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._waiting_for_fresh_engine_frame = True
+    widget._pending_engine_generation = fake_engine.get_generation_id()
+    widget._mode_teardown_state = "waiting_bars"
+    widget._mode_teardown_block_until_ready = True
+    widget._mode_transition_ready = False
+    widget._mode_teardown_target_generation = fake_engine.get_generation_id()
+    widget._mode_teardown_wait_started_ts = time.time() - 1.0
+
+    widget._on_tick()
+
+    assert widget._mode_teardown_state in {"ready", "fading_in"}
+    assert widget._mode_teardown_block_until_ready is False
+
+
+@pytest.mark.qt
+def test_mode_teardown_ready_uses_timeout_fallback_when_paused(qt_app, qtbot, monkeypatch):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
+    qtbot.addWidget(widget)
+
+    widget._spotify_playing = False
+    widget._enabled = True
+    widget._mode_teardown_state = "waiting_bars"
+    widget._mode_teardown_block_until_ready = True
+    widget._mode_transition_ready = False
+    widget._mode_teardown_target_generation = 999
+    widget._mode_teardown_wait_started_ts = time.time() - 1.0
+
+    # Keep the test deterministic; we only care that waiting state clears.
+    monkeypatch.setattr(mode_transition, "start_widget_fade_in", lambda *_args, **_kwargs: None)
+
+    mode_transition.check_mode_teardown_ready(widget, engine=_FakeEngine(bar_count=8), now_ts=time.time())
+
+    assert widget._mode_transition_ready is True
+    assert widget._mode_teardown_block_until_ready is False
+    assert widget._mode_teardown_state in {"ready", "fading_in"}
+
+
 @pytest.mark.qt
 def test_mode_switch_waits_for_fresh_engine_generation(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
@@ -428,6 +591,7 @@ def test_mode_switch_waits_for_fresh_engine_generation(qt_app, qtbot, monkeypatc
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
 
     widget._engine = fake_engine
+    widget._spotify_playing = True
     widget.start()
     qt_app.processEvents()
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
@@ -464,6 +628,7 @@ def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monk
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
 
     widget._engine = fake_engine
+    widget._spotify_playing = True
     widget.start()
     qt_app.processEvents()
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
@@ -783,6 +948,7 @@ def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, mo
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
 
     widget._engine = fake_engine
+    widget._spotify_playing = True
     widget.start()
     qt_app.processEvents()
 
@@ -1678,6 +1844,21 @@ def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
     vis.handle_media_update({"state": "playing"})
     assert vis._spotify_playing is True
     
+    vis.deleteLater()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_media_update_provider_neutral_musicbee_payload(qt_app):
+    """Playback gating must follow the active provider payload, not provider name."""
+    vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
+
+    vis._spotify_playing = False
+    vis.handle_media_update({"state": "playing", "app_name": "MusicBee"})
+    assert vis._spotify_playing is True
+
+    vis.handle_media_update({"state": "paused", "app_name": "MusicBee"})
+    assert vis._spotify_playing is False
+
     vis.deleteLater()
 
 

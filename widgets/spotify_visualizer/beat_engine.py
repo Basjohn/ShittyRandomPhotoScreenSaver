@@ -84,6 +84,7 @@ class _SpotifyBeatEngine(QObject):
         # AGC warmup (envelopes converging to actual audio levels).
         self._play_ramp_start_ts: float = 0.0
         self._play_ramp_duration: float = 1.5  # seconds
+        self._idle_wave_phase: float = 0.0
 
     def set_thread_manager(self, thread_manager: Optional[ThreadManager]) -> None:
         self._thread_manager = thread_manager
@@ -267,6 +268,11 @@ class _SpotifyBeatEngine(QObject):
         if self._is_spotify_playing and not was_playing:
             self._play_ramp_start_ts = time.time()
             logger.debug("[SPOTIFY_VIS] Play detected — starting %.1fs reactivity ramp-up", self._play_ramp_duration)
+            # Strict capture policy: worker runs only while actively playing.
+            if self._ref_count > 0:
+                self.ensure_started()
+        elif (not self._is_spotify_playing) and was_playing:
+            self._stop_worker()
         
         if is_verbose_logging():
             logger.debug(
@@ -487,6 +493,10 @@ class _SpotifyBeatEngine(QObject):
         tm = self._thread_manager
 
         now_ts = time.time()
+        # Strict worker-off contract while paused: keep oscilloscope visually alive
+        # with a low-cost synthetic idle waveform that does not require capture.
+        if not self._is_spotify_playing:
+            self._update_idle_waveform(now_ts)
         frame = self._audio_buffer.consume_latest()
         if frame is not None:
             samples = getattr(frame, "samples", None)
@@ -560,6 +570,21 @@ class _SpotifyBeatEngine(QObject):
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         return self._latest_bars
+
+    def _update_idle_waveform(self, now_ts: float) -> None:
+        """Generate a subtle synthetic waveform for paused idle rendering."""
+        count = 256
+        phase = now_ts * 0.62
+        out: list[float] = [0.0] * count
+        for i in range(count):
+            x = float(i) / float(max(1, count - 1))
+            slow = math.sin((x * 2.0 * math.pi * 1.2) + phase)
+            mid = math.sin((x * 2.0 * math.pi * 2.7) - (phase * 0.8))
+            fine = math.sin((x * 2.0 * math.pi * 5.1) + (phase * 1.4))
+            out[i] = float((slow * 0.035) + (mid * 0.022) + (fine * 0.010))
+        self._waveform = out
+        self._waveform_count = count
+        self._latest_generation_with_waveform = self._generation_id
     
     def get_smoothed_bars(self) -> List[float]:
         """Get pre-smoothed bars for UI display.

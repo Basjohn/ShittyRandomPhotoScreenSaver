@@ -115,6 +115,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Accumulated time for animated visualizers (seconds)
         self._accumulated_time: float = 0.0
         self._last_time_ts: float = 0.0
+        self._last_sine_idle_diag_ts: float = 0.0
         self._pending_mode_resets: Set[str] = set()
         self._last_reset_mode: Optional[str] = None
         self._last_reset_reason: Optional[str] = None
@@ -720,8 +721,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 self._blob_snare_event_strength = self._blob_snare_event_envelope
                 if self._vis_mode == 'blob' and energy_bands is not None:
                     blob_live_bands = self._compute_blob_live_bands(energy_bands)
-                # Gate rainbow hue rotation on playing state (issue 1.5)
-                if playing:
+                # Keep time advancing for inherently animated line/blob modes
+                # while paused, but preserve the old "no paused drift" behavior
+                # for spectrum/rainbow.
+                if playing or self._vis_mode in ('sine_wave', 'oscilloscope', 'blob', 'bubble'):
                     self._accumulated_time += dt
                 # Blob: smooth overall energy to reduce glow flickering
                 if self._vis_mode == 'blob' and blob_live_bands is not None:
@@ -1483,6 +1486,30 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._fade = 1.0
         self._playing = bool(playing)
+        if (
+            is_viz_diagnostics_enabled()
+            and self._vis_mode == 'sine_wave'
+            and not self._playing
+        ):
+            now_diag = time.time()
+            if now_diag - self._last_sine_idle_diag_ts >= 0.9:
+                logger.debug(
+                    (
+                        "[SPOTIFY_VIS][SINE][IDLE_STATE] t=%.3f dt=%.4f speed=%.3f "
+                        "travel=(%d,%d,%d,%d,%d,%d) line_count=%d"
+                    ),
+                    float(self._accumulated_time),
+                    float(dt_seconds),
+                    float(self._line_speed),
+                    int(self._sine_wave_travel),
+                    int(self._sine_travel_line2),
+                    int(self._sine_travel_line3),
+                    int(self._sine_travel_line4),
+                    int(self._sine_travel_line5),
+                    int(self._sine_travel_line6),
+                    int(self._line_count),
+                )
+                self._last_sine_idle_diag_ts = now_diag
 
         _geom_start = time.time()
         if not clamped:

@@ -8,6 +8,7 @@ Phase 2 of the Visualizer Architecture Split.
 """
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Optional
 
@@ -22,6 +23,9 @@ from core.logging.logger import (
 )
 
 logger = get_logger(__name__)
+
+_IDLE_BUBBLE_DT_SCALE = 0.50
+_IDLE_LINE_MODE_DT_SCALE = 0.80
 
 
 def _ensure_fresh_generation_state(widget: Any) -> None:
@@ -177,27 +181,41 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     prev_ts = widget._bubble_last_tick_ts
     widget._bubble_last_tick_ts = now_ts
     dt_bubble = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
+    # Keep bubble alive during pause: low-energy synthetic idle motion.
     if not widget._spotify_playing:
-        dt_bubble = 0.0
-    # Mix transient bass into pulse bass for immediate kick response
-    _pulse_bass = getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0
-    _t_bass = getattr(tb, 'bass_transient', 0.0) if tb else 0.0
-    _t_mid = getattr(tb, 'mid_transient', 0.0) if tb else 0.0
-    _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
-    _t_clamp = getattr(widget, '_transient_clamp', 1.5)
-    _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
-    _bmix_vocal = getattr(widget, '_bubble_transient_mix_vocal', 0.25)
-    _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
-    _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
-    _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
-    eb_snap = {
-        'bass': _mixed_bass,
-        'mid': _mixed_mid,
-        'high': getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0,
-        'overall': getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,
-        'smooth_mid': getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
-        'smooth_high': getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0,
-    }
+        dt_bubble *= _IDLE_BUBBLE_DT_SCALE
+        idle_phase = now_ts
+        idle_bass = 0.015 + 0.008 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
+        idle_mid = 0.013 + 0.006 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
+        idle_high = 0.010 + 0.004 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
+        eb_snap = {
+            'bass': idle_bass,
+            'mid': idle_mid,
+            'high': idle_high,
+            'overall': 0.015,
+            'smooth_mid': idle_mid,
+            'smooth_high': idle_high,
+        }
+    else:
+        # Mix transient bass into pulse bass for immediate kick response
+        _pulse_bass = getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0
+        _t_bass = getattr(tb, 'bass_transient', 0.0) if tb else 0.0
+        _t_mid = getattr(tb, 'mid_transient', 0.0) if tb else 0.0
+        _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
+        _t_clamp = getattr(widget, '_transient_clamp', 1.5)
+        _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
+        _bmix_vocal = getattr(widget, '_bubble_transient_mix_vocal', 0.25)
+        _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
+        _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
+        _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
+        eb_snap = {
+            'bass': _mixed_bass,
+            'mid': _mixed_mid,
+            'high': getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0,
+            'overall': getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,
+            'smooth_mid': getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
+            'smooth_high': getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0,
+        }
     sim_settings = {
         "bubble_big_count": widget._bubble_big_count,
         "bubble_small_count": widget._bubble_small_count,
@@ -303,6 +321,14 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     _engine_tick_elapsed = (time.time() - _engine_tick_start) * 1000.0
     if _engine_tick_elapsed > 20.0 and is_perf_metrics_enabled():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow engine.tick(): %.2fms", _engine_tick_elapsed)
+
+    if (
+        widget._waiting_for_fresh_engine_frame
+        and not widget._spotify_playing
+        and str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "oscilloscope", "spectrum"}
+    ):
+        widget._waiting_for_fresh_engine_frame = False
+        widget._pending_engine_generation = -1
 
     if widget._waiting_for_fresh_engine_frame and widget._pending_engine_generation >= 0:
         try:
@@ -611,6 +637,8 @@ def on_tick(widget: Any) -> None:
 
     # Consume bars from engine
     changed, _any_nonzero = consume_engine_bars(widget, now_ts)
+    # Let paused mode transitions progress even when fresh-engine wait short-circuits.
+    widget._check_mode_teardown_ready(widget._engine, now_ts)
     # If consume returned (False, False) while waiting for fresh engine frame, bail
     if widget._waiting_for_fresh_engine_frame and not changed and not _any_nonzero:
         return
@@ -618,7 +646,6 @@ def on_tick(widget: Any) -> None:
     # Heartbeat transient detection for sine mode
     process_heartbeat(widget, now_ts)
 
-    widget._check_mode_teardown_ready(widget._engine, now_ts)
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
         return
 

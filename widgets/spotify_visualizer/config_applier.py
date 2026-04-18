@@ -942,6 +942,22 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
     extra['sine_ghost_line5_enabled'] = bool(getattr(widget, '_sine_ghost_line5_enabled', True))
     extra['sine_ghost_line6_enabled'] = bool(getattr(widget, '_sine_ghost_line6_enabled', True))
 
+    # Preset guardrail: when paused, ensure Sine has minimum travel so it
+    # remains visibly alive even if a preset stores travel as NONE.
+    if is_sine and not bool(getattr(widget, "_spotify_playing", False)):
+        t1 = int(extra.get('sine_wave_travel', 0) or 0)
+        t2 = int(extra.get('sine_travel_line2', 0) or 0)
+        t3 = int(extra.get('sine_travel_line3', 0) or 0)
+        t4 = int(extra.get('sine_travel_line4', 0) or 0)
+        t5 = int(extra.get('sine_travel_line5', 0) or 0)
+        t6 = int(extra.get('sine_travel_line6', 0) or 0)
+        preferred = next((d for d in (t1, t2, t3, t4, t5, t6) if d in (1, 2)), 2)
+        if t1 == 0:
+            extra['sine_wave_travel'] = preferred
+        # Ensure fallback travel is actually visible at idle without becoming
+        # distractingly fast for quiet/paused scenes.
+        extra['line_speed'] = max(0.22, float(extra.get('line_speed', 0.0) or 0.0))
+
 
 def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     """Attach Blob-only live-core and retained-ghost parameters."""

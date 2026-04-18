@@ -1058,7 +1058,10 @@ class SpotifyVisualizerWidget(QWidget):
             if was_enabled:
                 engine.acquire()
                 self._replay_engine_config(engine)
-                engine.ensure_started()
+                if self._should_capture_audio_now():
+                    engine.ensure_started()
+                else:
+                    engine.set_playback_state(False)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to resize beat engine", exc_info=True)
 
@@ -1431,11 +1434,13 @@ class SpotifyVisualizerWidget(QWidget):
         return False
 
     def handle_media_update(self, payload: dict) -> None:
-        """Receive Spotify media state from MediaWidget.
+        """Receive media state from MediaWidget.
 
         Expects payload from MediaWidget.media_updated with a ``state``
         field of "playing"/"paused"/"stopped". When not playing, the
         visualizer decays to idle even if other apps are producing audio.
+        Contract: this is provider-neutral and follows whichever media
+        provider is currently active (Spotify or MusicBee).
         """
 
         try:
@@ -1618,7 +1623,10 @@ class SpotifyVisualizerWidget(QWidget):
                     self._vis_mode,
                     reason=f"engine_reset:{reason}" if reason else "engine_reset",
                 )
-                engine.ensure_started()
+                if self._should_capture_audio_now():
+                    engine.ensure_started()
+                else:
+                    engine.set_playback_state(False)
                 self._track_engine_generation(engine)
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to reset engine state", exc_info=True)
@@ -1632,6 +1640,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._waiting_for_fresh_frame = True
         if reason:
             logger.debug("[SPOTIFY_VIS] Engine state reset reason=%s", reason)
+
+    def _should_capture_audio_now(self) -> bool:
+        """Return True when audio capture/FFT should actively run."""
+        return bool(self._enabled and self._spotify_playing)
 
     def _track_engine_generation(self, engine: Optional[_SpotifyBeatEngine]) -> None:
         if engine is None:

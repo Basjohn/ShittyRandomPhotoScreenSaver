@@ -4,6 +4,9 @@ import inspect
 
 import pytest
 
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QColor
+
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
 from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
 from widgets.spotify_visualizer.energy_bands import EnergyBands
@@ -11,6 +14,7 @@ from widgets.spotify_visualizer.renderers.blob import get_uniform_names as blob_
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+import widgets.spotify_bars_gl_overlay as overlay_mod
 
 
 class _StubEngine:
@@ -28,6 +32,11 @@ class _StubEngine:
 
     def get_transient_energy_bands(self):
         return TransientEnergyBands()
+
+
+class _ZeroBandEngine(_StubEngine):
+    def get_energy_bands(self):
+        return EnergyBands(bass=0.0, mid=0.0, high=0.0, overall=0.0)
 
 
 @pytest.mark.qt
@@ -136,3 +145,117 @@ def test_bubble_gpu_kwargs_keep_cool_continuous_energy_snapshot(qt_app):
     assert extras["energy_bands"] != stub_engine.get_pre_agc_energy_bands()
 
     widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_sine_paused_gpu_kwargs_enforce_minimum_travel_floor_when_all_zero(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+
+    engine = _ZeroBandEngine()
+    widget.set_visualization_mode(VisualizerMode.SINE_WAVE)
+    widget._spotify_playing = False
+    widget._sine_wave_travel = 0
+    widget._sine_travel_line2 = 0
+    widget._sine_travel_line3 = 0
+    widget._sine_travel_line4 = 0
+    widget._sine_travel_line5 = 0
+    widget._sine_travel_line6 = 0
+    widget._sine_speed = 0.1
+
+    extras = build_gpu_push_extra_kwargs(widget, "sine_wave", engine)
+    assert int(extras.get("sine_wave_travel", 0)) == 2
+    assert int(extras.get("sine_travel_line2", 0)) == 0
+    assert int(extras.get("sine_travel_line3", 0)) == 0
+    assert int(extras.get("sine_travel_line4", 0)) == 0
+    assert int(extras.get("sine_travel_line5", 0)) == 0
+    assert int(extras.get("sine_travel_line6", 0)) == 0
+    assert float(extras.get("line_speed", 0.0)) >= 0.22
+
+    # Active playback path must preserve explicit "no travel" values.
+    widget._spotify_playing = True
+    extras_live = build_gpu_push_extra_kwargs(widget, "sine_wave", engine)
+    assert int(extras_live.get("sine_wave_travel", -1)) == 0
+    assert int(extras_live.get("sine_travel_line2", -1)) == 0
+    assert int(extras_live.get("sine_travel_line3", -1)) == 0
+    assert int(extras_live.get("sine_travel_line4", -1)) == 0
+    assert int(extras_live.get("sine_travel_line5", -1)) == 0
+    assert int(extras_live.get("sine_travel_line6", -1)) == 0
+    assert float(extras_live.get("line_speed", 0.0)) == pytest.approx(0.1)
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_overlay_accumulated_time_advances_for_paused_sine_but_not_spectrum(qt_app, monkeypatch):
+    overlay = SpotifyBarsGLOverlay(parent=None)
+    qt_app.processEvents()
+
+    clock = {"t": 100.0}
+    monkeypatch.setattr(overlay_mod.time, "time", lambda: clock["t"])
+    base_rect = QRect(0, 0, 320, 120)
+    base_bars = [0.1] * 16
+    fill = QColor(200, 200, 200, 230)
+    border = QColor(255, 255, 255, 255)
+
+    overlay.set_state(
+        rect=base_rect,
+        bars=base_bars,
+        bar_count=16,
+        segments=18,
+        fill_color=fill,
+        border_color=border,
+        fade=1.0,
+        playing=False,
+        visible=True,
+        vis_mode="sine_wave",
+    )
+    t0 = float(overlay._accumulated_time)
+    clock["t"] += 0.25
+    overlay.set_state(
+        rect=base_rect,
+        bars=base_bars,
+        bar_count=16,
+        segments=18,
+        fill_color=fill,
+        border_color=border,
+        fade=1.0,
+        playing=False,
+        visible=True,
+        vis_mode="sine_wave",
+    )
+    t1 = float(overlay._accumulated_time)
+    assert t1 > t0
+
+    overlay._accumulated_time = 0.0
+    clock["t"] += 0.25
+    overlay.set_state(
+        rect=base_rect,
+        bars=base_bars,
+        bar_count=16,
+        segments=18,
+        fill_color=fill,
+        border_color=border,
+        fade=1.0,
+        playing=False,
+        visible=True,
+        vis_mode="spectrum",
+    )
+    t2 = float(overlay._accumulated_time)
+    clock["t"] += 0.25
+    overlay.set_state(
+        rect=base_rect,
+        bars=base_bars,
+        bar_count=16,
+        segments=18,
+        fill_color=fill,
+        border_color=border,
+        fade=1.0,
+        playing=False,
+        visible=True,
+        vis_mode="spectrum",
+    )
+    t3 = float(overlay._accumulated_time)
+    assert t3 == pytest.approx(t2)
+
+    overlay.deleteLater()
