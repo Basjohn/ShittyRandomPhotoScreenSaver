@@ -34,6 +34,34 @@ Historical detail remains in [Docs/Historical_Bugs.md](F:\Programming\Apps\Shitt
 
 Reason for pruning here: the active root-cause work is done, the sneaky multi-layer persistence/runtime bridge failure is now documented historically, and this live plan should stay focused on open validation and remaining Blob/Bubble work.
 
+### General Settings Presets Retired by Default (Env-Gated)
+
+Closed on 2026-04-18.
+
+- Added `SRPSS_ENABLE_GENERAL_PRESETS` gate (default off) for the **global** settings-dialog Presets tab/system.
+- General preset API now enforces effective Custom-only behavior while gate is off.
+- Settings dialog tab wiring is now key-based and tolerates Presets tab absence safely.
+- Added isolation test coverage to assert this gate does not alter visualizer preset index/key resolution.
+
+Non-impact note:
+- `core/settings/visualizer_presets.py`, visualizer preset sliders, curated preset trees, and visualizer preset repair/index tooling were intentionally not modified by this change.
+
+### Visualizer Preset Selection Contract (Curated vs Custom Isolation)
+
+Closed on 2026-04-18.
+
+- Fixed a runtime/model hydration bug where curated preset overlay was followed by explicit runtime-key restoration, which could silently re-apply stale custom/live values.
+- `SpotifyVisualizerSettings.from_mapping()` now applies curated preset overlay without a post-overlay runtime override restore pass.
+- Tightened `apply_preset_to_config()` semantics so curated presets clear all mode-specific keys not present in the curated payload, eliminating technical-key bleed from prior custom state.
+- Added regression tests to lock the contract:
+  - curated selection wins over saved custom/runtime values
+  - custom selection keeps custom values
+  - curated overlay clears mode keys absent from curated payload
+  - coverage now explicitly includes settings-GUI preset apply, runtime hotswap refresh, mode-change contract, and startup hydration contract
+
+Non-impact note:
+- This change is limited to visualizer preset selection/hydration behavior and does not touch the retired general preset system.
+
 ---
 
 ## Awaiting Validation

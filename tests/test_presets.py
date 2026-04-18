@@ -9,6 +9,7 @@ from core.settings.presets import (
     _restore_custom_backup,
     _save_custom_backup,
     adjust_settings_for_mc_mode,
+    are_general_presets_enabled,
     apply_preset,
     check_and_switch_to_custom,
     get_current_preset_info,
@@ -29,6 +30,12 @@ def _make_manager(tmp_path, base_name=None, app_name=None) -> SettingsManager:
         application=application,
         storage_base_dir=storage_root,
     )
+
+
+@pytest.fixture(autouse=True)
+def _enable_general_presets(monkeypatch):
+    """Keep legacy general preset behavior enabled for existing preset tests."""
+    monkeypatch.setenv("SRPSS_ENABLE_GENERAL_PRESETS", "1")
 
 
 class TestPresetDefinitions:
@@ -160,6 +167,21 @@ class TestApplyPreset:
 
         new_settings = _make_manager(tmp_path, base_name=base_name, app_name=app_name)
         assert new_settings.get('preset') == 'purist'
+
+    def test_apply_non_custom_preset_rejected_when_general_presets_disabled(
+        self, settings_manager: SettingsManager, monkeypatch
+    ):
+        monkeypatch.setenv("SRPSS_ENABLE_GENERAL_PRESETS", "0")
+        assert are_general_presets_enabled() is False
+
+        settings_manager.set("preset", "essentials")
+        result = apply_preset(settings_manager, "purist")
+        assert result is False
+        assert settings_manager.get("preset") == "custom"
+
+    def test_get_ordered_presets_custom_only_when_general_presets_disabled(self, monkeypatch):
+        monkeypatch.setenv("SRPSS_ENABLE_GENERAL_PRESETS", "0")
+        assert get_ordered_presets() == ["custom"]
 
 
 class TestNestedSettings:

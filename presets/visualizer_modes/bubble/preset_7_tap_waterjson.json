@@ -1,6 +1,7 @@
 {
+  "description": "Saved from current Settings state.",
   "mode": "bubble",
-  "name": "Preset 7 (Firefly)",
+  "name": "Preset 7 (Tap Waterjson)",
   "preset_index": 6,
   "snapshot": {
     "widgets": {
@@ -28,6 +29,12 @@
         "bubble_big_size_clamp": 2.2,
         "bubble_big_size_max": 0.02,
         "bubble_big_specular_max_size": 2.5,
+        "bubble_bounce_big_pct": 70,
+        "bubble_bounce_big_speed": 0.8,
+        "bubble_bounce_same_only": false,
+        "bubble_bounce_small_pct": 30,
+        "bubble_bounce_small_speed": 0.5,
+        "bubble_collision_pop_mode": "off",
         "bubble_drift_amount": 1.0,
         "bubble_drift_direction": "swirl_cw",
         "bubble_drift_frequency": 0.9,
@@ -53,7 +60,7 @@
         "bubble_gradient_semantics_version": 2,
         "bubble_growth": 4.0,
         "bubble_input_gain": 0.3,
-        "bubble_kick_lane_gain": 0.9,
+        "bubble_kick_lane_gain": 0.8,
         "bubble_manual_floor": 0.07,
         "bubble_outline_color": [
           200,

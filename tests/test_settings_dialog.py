@@ -103,16 +103,17 @@ def test_settings_dialog_has_tabs(qapp, settings_manager, animation_manager):
     assert hasattr(dialog, 'transitions_tab_btn')
     assert hasattr(dialog, 'widgets_tab_btn')
     assert hasattr(dialog, 'about_tab_btn')
-    
-    assert len(dialog.tab_buttons) == 7
+
+    expected = 7 if "presets" in dialog._tab_keys else 6
+    assert len(dialog.tab_buttons) == expected
 
 
 def test_settings_dialog_has_content_stack(qapp, settings_manager, animation_manager):
     """Test dialog has stacked widget for content."""
     dialog = SettingsDialog(settings_manager, animation_manager)
-    
+
     assert hasattr(dialog, 'content_stack')
-    assert dialog.content_stack.count() == 7
+    assert dialog.content_stack.count() == len(dialog._tab_keys)
 
 
 def test_settings_dialog_default_tab(qapp, settings_manager, animation_manager):
@@ -126,37 +127,45 @@ def test_settings_dialog_default_tab(qapp, settings_manager, animation_manager):
 def test_settings_dialog_tab_switching(qapp, settings_manager, animation_manager):
     """Test tab switching functionality."""
     dialog = SettingsDialog(settings_manager, animation_manager)
-    
-    # Switch to display tab (index 1)
-    dialog._switch_tab(1)
+
+    display_idx = dialog._tab_index_for_key("display")
+    transitions_idx = dialog._tab_index_for_key("transitions")
+    widgets_idx = dialog._tab_index_for_key("widgets")
+    accessibility_idx = dialog._tab_index_for_key("accessibility")
+    about_idx = dialog._tab_index_for_key("about")
+
+    # Switch to display tab
+    dialog._switch_tab(display_idx)
     assert dialog.display_tab_btn.isChecked() is True
     assert dialog.sources_tab_btn.isChecked() is False
 
-    # Switch to transitions tab (index 2)
-    dialog._switch_tab(2)
+    # Switch to transitions tab
+    dialog._switch_tab(transitions_idx)
     assert dialog.transitions_tab_btn.isChecked() is True
     assert dialog.display_tab_btn.isChecked() is False
 
-    # Switch to widgets tab (index 3)
-    dialog._switch_tab(3)
+    # Switch to widgets tab
+    dialog._switch_tab(widgets_idx)
     assert dialog.widgets_tab_btn.isChecked() is True
     assert dialog.transitions_tab_btn.isChecked() is False
 
-    # Switch to new tab at index 4 (media keys input tab)
-    dialog._switch_tab(4)
-    # Tab 4 exists and is checkable
-    assert dialog.tab_buttons[4].isChecked() is True
+    # Switch to accessibility tab
+    dialog._switch_tab(accessibility_idx)
+    assert dialog.tab_buttons[accessibility_idx].isChecked() is True
     assert dialog.widgets_tab_btn.isChecked() is False
 
-    # Switch to new tab at index 5 (media keys visualizer tab)
-    dialog._switch_tab(5)
-    assert dialog.tab_buttons[5].isChecked() is True
-    assert dialog.tab_buttons[4].isChecked() is False
+    # Optional presets tab
+    presets_idx = dialog._tab_index_for_key("presets")
+    if presets_idx >= 0:
+        dialog._switch_tab(presets_idx)
+        assert dialog.tab_buttons[presets_idx].isChecked() is True
+        assert dialog.tab_buttons[accessibility_idx].isChecked() is False
 
-    # Switch to about tab (index 6)
-    dialog._switch_tab(6)
+    # Switch to about tab
+    dialog._switch_tab(about_idx)
     assert dialog.about_tab_btn.isChecked() is True
-    assert dialog.tab_buttons[5].isChecked() is False
+    if presets_idx >= 0:
+        assert dialog.tab_buttons[presets_idx].isChecked() is False
 
 
 def test_settings_dialog_has_size_grip(qapp, settings_manager, animation_manager):
@@ -230,11 +239,31 @@ def test_settings_dialog_tab_button_clicks(qapp, settings_manager, animation_man
 def test_about_tab_uses_replace_visualizers_button(qapp, settings_manager, animation_manager):
     """About tab should expose the shipped-preset replacement action, not reset."""
     dialog = SettingsDialog(settings_manager, animation_manager)
-    dialog._switch_tab(6)
+    dialog._switch_tab(dialog._tab_index_for_key("about"))
 
     assert hasattr(dialog, "replace_visualizers_btn")
     assert dialog.replace_visualizers_btn.text() == "Replace Visualizers"
     assert dialog.reset_visualizers_btn is dialog.replace_visualizers_btn
+
+
+def test_settings_dialog_hides_general_presets_tab_by_default(
+    qapp, settings_manager, animation_manager, monkeypatch
+):
+    monkeypatch.delenv("SRPSS_ENABLE_GENERAL_PRESETS", raising=False)
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    assert "presets" not in dialog._tab_keys
+    assert dialog.presets_tab_btn is None
+
+
+def test_settings_dialog_shows_general_presets_tab_when_env_enabled(
+    qapp, settings_manager, animation_manager, monkeypatch
+):
+    monkeypatch.setenv("SRPSS_ENABLE_GENERAL_PRESETS", "1")
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    assert "presets" in dialog._tab_keys
+    assert dialog.presets_tab_btn is not None
 
 
 def test_replace_visualizers_source_root_is_script_safe(qapp, settings_manager, animation_manager):

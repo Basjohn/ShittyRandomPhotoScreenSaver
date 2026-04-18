@@ -251,6 +251,117 @@ class TestSettingsModelPlumbing:
         self._assert_serialized_matches(model.to_dict())
 
 
+class TestVisualizerPresetSelectionAuthority:
+    """Guard against curated/custom cross-bleed in visualizer preset hydration."""
+
+    def test_apply_preset_to_config_clears_mode_keys_not_present_in_curated_payload(self, monkeypatch):
+        from core.settings import visualizer_presets as vp
+
+        mode = "bubble"
+        custom_idx = vp.get_custom_preset_index(mode)
+        curated_idx = 0 if custom_idx > 0 else 1
+
+        def _fake_get_preset_settings(mode_key, index):
+            if mode_key == mode and index == curated_idx:
+                return {
+                    "bubble_stream_direction": "left",
+                }
+            return {}
+
+        monkeypatch.setattr(vp, "get_preset_settings", _fake_get_preset_settings)
+
+        source = {
+            "mode": "bubble",
+            "preset_bubble": curated_idx,
+            "bubble_stream_direction": "right",
+            "bubble_manual_floor": 0.27,
+            "bubble_audio_block_size": 256,
+        }
+        merged = vp.apply_preset_to_config(mode, curated_idx, source)
+        assert merged["bubble_stream_direction"] == "left"
+        assert "bubble_manual_floor" not in merged
+        assert "bubble_audio_block_size" not in merged
+
+    def test_from_mapping_curated_preset_values_win_over_saved_custom_values(self, monkeypatch):
+        from core.settings import visualizer_presets as vp
+        from core.settings.models import SpotifyVisualizerSettings
+
+        mode = "bubble"
+        custom_idx = vp.get_custom_preset_index(mode)
+        curated_idx = 0 if custom_idx > 0 else 1
+
+        def _fake_get_preset_settings(mode_key, index):
+            if mode_key == mode and index == curated_idx:
+                return {
+                    "bubble_stream_direction": "up",
+                    "bubble_manual_floor": 0.12,
+                    "bubble_audio_block_size": 128,
+                }
+            return {}
+
+        monkeypatch.setattr(vp, "get_preset_settings", _fake_get_preset_settings)
+
+        payload = {
+            "mode": "bubble",
+            "preset_bubble": curated_idx,
+            "bubble_stream_direction": "right",
+            "bubble_manual_floor": 0.27,
+            "bubble_audio_block_size": 256,
+        }
+        model = SpotifyVisualizerSettings.from_mapping(payload)
+        assert model.bubble_stream_direction == "up"
+        assert model.resolve_manual_floor("bubble") == pytest.approx(0.12)
+        assert model.resolve_audio_block_size("bubble") == 128
+
+    def test_from_mapping_custom_preset_keeps_custom_values(self):
+        from core.settings import visualizer_presets as vp
+        from core.settings.models import SpotifyVisualizerSettings
+
+        custom_idx = vp.get_custom_preset_index("bubble")
+        payload = {
+            "mode": "bubble",
+            "preset_bubble": custom_idx,
+            "bubble_stream_direction": "right",
+            "bubble_manual_floor": 0.31,
+            "bubble_audio_block_size": 256,
+        }
+        model = SpotifyVisualizerSettings.from_mapping(payload)
+        assert model.bubble_stream_direction == "right"
+        assert model.resolve_manual_floor("bubble") == pytest.approx(0.31)
+        assert model.resolve_audio_block_size("bubble") == 256
+
+    def test_mode_switch_uses_active_mode_curated_preset_contract(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        payload = {
+            "mode": "bubble",
+            "preset_bubble": 0,
+            "preset_spectrum": 0,
+            "bubble_manual_floor": 0.31,
+            "bubble_audio_block_size": 256,
+            "spectrum_manual_floor": 0.37,
+            "spectrum_audio_block_size": 256,
+        }
+
+        bubble_model = SpotifyVisualizerSettings.from_mapping(payload)
+        bubble_baseline = SpotifyVisualizerSettings.from_mapping({"mode": "bubble", "preset_bubble": 0})
+        assert bubble_model.resolve_manual_floor("bubble") == pytest.approx(
+            bubble_baseline.resolve_manual_floor("bubble")
+        )
+        assert bubble_model.resolve_audio_block_size("bubble") == bubble_baseline.resolve_audio_block_size("bubble")
+
+        spectrum_payload = dict(payload)
+        spectrum_payload["mode"] = "spectrum"
+        spectrum_model = SpotifyVisualizerSettings.from_mapping(spectrum_payload)
+        spectrum_baseline = SpotifyVisualizerSettings.from_mapping({"mode": "spectrum", "preset_spectrum": 0})
+        assert spectrum_model.resolve_manual_floor("spectrum") == pytest.approx(
+            spectrum_baseline.resolve_manual_floor("spectrum")
+        )
+        assert spectrum_model.resolve_audio_block_size("spectrum") == spectrum_baseline.resolve_audio_block_size(
+            "spectrum"
+        )
+
+
 # ===========================================================================
 # 5. Creator kwargs: settings must be passed through
 # ===========================================================================
@@ -378,13 +489,19 @@ class TestWidgetsTabLiveConfigGuard:
 
 
 class TestPresetOverlayRuntimeOverrides:
-    def test_from_mapping_preserves_explicit_spectrum_runtime_overrides(self):
+    def test_from_mapping_curated_spectrum_ignores_explicit_runtime_overrides(self):
         from core.settings.models import SpotifyVisualizerSettings
 
+        baseline = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "spectrum",
+                "preset_spectrum": 0,
+            }
+        )
         model = SpotifyVisualizerSettings.from_mapping(
             {
                 "mode": "spectrum",
-                "preset_spectrum": 5,
+                "preset_spectrum": 0,
                 "bar_count": 32,
                 "spectrum_bar_count": 35,
                 "spectrum_glow_enabled": True,
@@ -394,19 +511,25 @@ class TestPresetOverlayRuntimeOverrides:
             }
         )
 
-        assert model.resolve_bar_count("spectrum") == 35
-        assert model.spectrum_glow_enabled is True
-        assert model.spectrum_glow_intensity == pytest.approx(1.2)
-        assert model.spectrum_glow_color == [0, 120, 255, 255]
-        assert model.resolve_manual_floor("spectrum") == pytest.approx(0.33)
+        assert model.resolve_bar_count("spectrum") == baseline.resolve_bar_count("spectrum")
+        assert model.spectrum_glow_enabled == baseline.spectrum_glow_enabled
+        assert model.spectrum_glow_intensity == pytest.approx(baseline.spectrum_glow_intensity)
+        assert model.spectrum_glow_color == baseline.spectrum_glow_color
+        assert model.resolve_manual_floor("spectrum") == pytest.approx(baseline.resolve_manual_floor("spectrum"))
 
-    def test_from_mapping_preserves_dotted_runtime_overrides(self):
+    def test_from_mapping_curated_spectrum_ignores_dotted_runtime_overrides(self):
         from core.settings.models import SpotifyVisualizerSettings
 
+        baseline = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "spectrum",
+                "preset_spectrum": 0,
+            }
+        )
         model = SpotifyVisualizerSettings.from_mapping(
             {
                 "widgets.spotify_visualizer.mode": "spectrum",
-                "widgets.spotify_visualizer.preset_spectrum": 5,
+                "widgets.spotify_visualizer.preset_spectrum": 0,
                 "widgets.spotify_visualizer.spectrum_bar_count": 35,
                 "widgets.spotify_visualizer.spectrum_glow_enabled": True,
                 "widgets.spotify_visualizer.spectrum_glow_intensity": 1.2,
@@ -414,14 +537,20 @@ class TestPresetOverlayRuntimeOverrides:
             }
         )
 
-        assert model.resolve_bar_count("spectrum") == 35
-        assert model.spectrum_glow_enabled is True
-        assert model.spectrum_glow_intensity == pytest.approx(1.2)
-        assert model.spectrum_glow_color == [0, 120, 255, 255]
+        assert model.resolve_bar_count("spectrum") == baseline.resolve_bar_count("spectrum")
+        assert model.spectrum_glow_enabled == baseline.spectrum_glow_enabled
+        assert model.spectrum_glow_intensity == pytest.approx(baseline.spectrum_glow_intensity)
+        assert model.spectrum_glow_color == baseline.spectrum_glow_color
 
-    def test_from_mapping_preserves_explicit_secondary_ghost_toggles(self):
+    def test_from_mapping_curated_ignores_explicit_secondary_ghost_toggles(self):
         from core.settings.models import SpotifyVisualizerSettings
 
+        osc_baseline = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "oscilloscope",
+                "preset_oscilloscope": 0,
+            }
+        )
         osc_model = SpotifyVisualizerSettings.from_mapping(
             {
                 "mode": "oscilloscope",
@@ -431,10 +560,16 @@ class TestPresetOverlayRuntimeOverrides:
                 "osc_ghost_line3_enabled": True,
             }
         )
-        assert osc_model.resolve_bar_count("oscilloscope") == 35
-        assert osc_model.osc_ghost_line2_enabled is False
-        assert osc_model.osc_ghost_line3_enabled is True
+        assert osc_model.resolve_bar_count("oscilloscope") == osc_baseline.resolve_bar_count("oscilloscope")
+        assert osc_model.osc_ghost_line2_enabled == osc_baseline.osc_ghost_line2_enabled
+        assert osc_model.osc_ghost_line3_enabled == osc_baseline.osc_ghost_line3_enabled
 
+        sine_baseline = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "sine_wave",
+                "preset_sine_wave": 0,
+            }
+        )
         sine_model = SpotifyVisualizerSettings.from_mapping(
             {
                 "mode": "sine_wave",
@@ -443,8 +578,8 @@ class TestPresetOverlayRuntimeOverrides:
                 "sine_ghost_line3_enabled": True,
             }
         )
-        assert sine_model.sine_ghost_line2_enabled is False
-        assert sine_model.sine_ghost_line3_enabled is True
+        assert sine_model.sine_ghost_line2_enabled == sine_baseline.sine_ghost_line2_enabled
+        assert sine_model.sine_ghost_line3_enabled == sine_baseline.sine_ghost_line3_enabled
 
 
 # ===========================================================================
@@ -854,6 +989,7 @@ class TestCreateTimeRefreshParity:
         appdata = ROOT / "tests_tmp_appdata"
         appdata.mkdir(parents=True, exist_ok=True)
         monkeypatch.setenv("APPDATA", str(appdata))
+        from core.settings import visualizer_presets as vp
         from rendering import spotify_widget_creators as creators
 
         class FakeVisualizer:
@@ -932,7 +1068,7 @@ class TestCreateTimeRefreshParity:
             "spotify_visualizer": {
                 "enabled": True,
                 "mode": "spectrum",
-                "preset_spectrum": 5,
+                "preset_spectrum": vp.get_custom_preset_index("spectrum"),
                 "bar_count": 32,
                 "spectrum_bar_count": 35,
                 "spectrum_glow_enabled": True,
@@ -974,6 +1110,100 @@ class TestCreateTimeRefreshParity:
             "Create-time visualizer setup must reuse the same refresh contract "
             "that settings re-entry uses."
         )
+
+    def test_create_spotify_visualizer_widget_applies_curated_contract_on_startup(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from core.settings.models import SpotifyVisualizerSettings
+        from rendering import spotify_widget_creators as creators
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count):
+                self.parent = parent
+                self.bar_count = bar_count
+
+            def set_settings_model(self, model):
+                self.model = model
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_bar_colors(self, fill, border):
+                self.bar_colors = (fill, border)
+
+            def set_ghost_config(self, enabled, alpha, decay):
+                self.ghost = (enabled, alpha, decay)
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+            def apply_vis_mode_config(self, **kwargs):
+                self.mode_kwargs = kwargs
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = object()
+                self._widgets = {}
+
+            def add_expected_overlay(self, name):
+                self.expected_overlay = name
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        mgr = FakeManager()
+        widgets_config = {
+            "media": {"monitor": "ALL"},
+            "spotify_visualizer": {
+                "enabled": True,
+                "mode": "bubble",
+                "preset_bubble": 0,
+                "bubble_manual_floor": 0.31,
+                "bubble_audio_block_size": 256,
+            },
+        }
+
+        vis = creators.create_spotify_visualizer_widget(
+            mgr,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=FakeMediaWidget(),
+        )
+
+        assert vis is not None
+        baseline = SpotifyVisualizerSettings.from_mapping({"mode": "bubble", "preset_bubble": 0})
+        assert vis.model.resolve_manual_floor("bubble") == pytest.approx(
+            baseline.resolve_manual_floor("bubble")
+        )
+        assert vis.model.resolve_audio_block_size("bubble") == baseline.resolve_audio_block_size("bubble")
 
 
 class TestDisplayFramePush:

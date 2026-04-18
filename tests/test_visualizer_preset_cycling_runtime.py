@@ -152,6 +152,45 @@ def test_widget_manager_cycle_visualizer_preset_defers_disk_save(settings_manage
     assert scheduled == [(wm.PRESET_PERSIST_DELAY_MS, 1)]
 
 
+def test_widget_manager_refresh_applies_curated_contract_for_hotswap(settings_manager):
+    from core.settings.models import SpotifyVisualizerSettings
+
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+
+    class _FakeVis:
+        def __init__(self):
+            self.model = None
+
+        def set_settings_model(self, model):
+            self.model = model
+
+        def apply_vis_mode_config(self, **kwargs):
+            self.kwargs = dict(kwargs)
+
+    fake_vis = _FakeVis()
+    wm._widgets["spotify_visualizer"] = fake_vis
+
+    cfg = {
+        "spotify_visualizer": {
+            "mode": "bubble",
+            "preset_bubble": 0,
+            # Deliberately conflicting runtime values that should not override curated.
+            "bubble_manual_floor": 0.31,
+            "bubble_audio_block_size": 256,
+        }
+    }
+
+    wm._refresh_spotify_visualizer_config(cfg)
+
+    baseline = SpotifyVisualizerSettings.from_mapping({"mode": "bubble", "preset_bubble": 0})
+    assert fake_vis.model is not None
+    assert fake_vis.model.resolve_manual_floor("bubble") == pytest.approx(
+        baseline.resolve_manual_floor("bubble")
+    )
+    assert fake_vis.model.resolve_audio_block_size("bubble") == baseline.resolve_audio_block_size("bubble")
+
+
 def test_widget_manager_deferred_visualizer_preset_save_skips_stale_tokens(settings_manager, monkeypatch):
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)

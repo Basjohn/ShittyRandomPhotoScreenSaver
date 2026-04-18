@@ -934,6 +934,47 @@ def test_blob_builder_hides_redundant_controls_when_shaper_or_reactive_glow_are_
         tab.deleteLater()
 
 
+def test_widgets_tab_curated_preset_apply_ignores_stale_custom_runtime_values(qt_app, settings_manager):
+    """Settings GUI preset apply should commit curated values, not stale custom values."""
+    from core.settings.models import SpotifyVisualizerSettings
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        mode = "bubble"
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+        slider = getattr(tab, "_bubble_preset_slider", None)
+        assert slider is not None
+        tab._save_settings = tab._save_settings_now
+
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+        spotify_vis.update(
+            {
+                "mode": mode,
+                "preset_bubble": slider.custom_index(),
+                # Deliberately conflicting values.
+                "bubble_manual_floor": 0.31,
+                "bubble_audio_block_size": 256,
+            }
+        )
+        settings_manager.set("widgets", widgets_cfg)
+        tab._load_settings()
+
+        slider.set_preset_index(0)
+        tab._on_visualizer_preset_changed(mode, 0)
+
+        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+        saved_model = SpotifyVisualizerSettings.from_mapping(saved)
+        baseline = SpotifyVisualizerSettings.from_mapping({"mode": mode, "preset_bubble": 0})
+
+        assert saved_model.resolve_manual_floor("bubble") == pytest.approx(
+            baseline.resolve_manual_floor("bubble")
+        )
+        assert saved_model.resolve_audio_block_size("bubble") == baseline.resolve_audio_block_size("bubble")
+    finally:
+        tab.deleteLater()
+
+
 def test_blob_builder_keeps_shared_shaped_controls_visible_when_shaper_is_enabled(
     qt_app,
     settings_manager,

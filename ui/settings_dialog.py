@@ -22,6 +22,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPaint
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.mc import is_mc_build
+from core.settings.presets import are_general_presets_enabled
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, PresetsTab
@@ -478,17 +479,14 @@ class SettingsDialog(QDialog):
                 except (TypeError, ValueError):
                     pass
         self._suppress_scroll_capture: bool = False
-        self._tab_keys = [
-            "sources",
-            "display",
-            "transitions",
-            "widgets",
-            "accessibility",
-            "presets",
-            "about",
-        ]
+        self._general_presets_enabled = are_general_presets_enabled()
+        self._tab_keys = ["sources", "display", "transitions", "widgets", "accessibility"]
+        if self._general_presets_enabled:
+            self._tab_keys.append("presets")
+        self._tab_keys.append("about")
         self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
         self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
+        self._tab_button_by_key: Dict[str, TabButton] = {}
         stored_states = self._settings.get('ui.tab_state', {})
         if isinstance(stored_states, dict):
             for key, value in stored_states.items():
@@ -634,18 +632,20 @@ class SettingsDialog(QDialog):
         # Accessibility icon: wheelchair symbol for universal accessibility
         self.accessibility_tab_btn = TabButton("Accessibility", "♿")
         # Presets icon: sliders/controls symbol for configuration presets
-        self.presets_tab_btn = TabButton("Presets", "🎚")
+        self.presets_tab_btn = TabButton("Presets", "🎚") if self._general_presets_enabled else None
         self.about_tab_btn = TabButton("About", "ℹ️")
-        
-        self.tab_buttons = [
-            self.sources_tab_btn,
-            self.display_tab_btn,
-            self.transitions_tab_btn,
-            self.widgets_tab_btn,
-            self.accessibility_tab_btn,
-            self.presets_tab_btn,
-            self.about_tab_btn
-        ]
+
+        self._tab_button_by_key = {
+            "sources": self.sources_tab_btn,
+            "display": self.display_tab_btn,
+            "transitions": self.transitions_tab_btn,
+            "widgets": self.widgets_tab_btn,
+            "accessibility": self.accessibility_tab_btn,
+            "about": self.about_tab_btn,
+        }
+        if self._general_presets_enabled and self.presets_tab_btn is not None:
+            self._tab_button_by_key["presets"] = self.presets_tab_btn
+        self.tab_buttons = [self._tab_button_by_key[key] for key in self._tab_keys]
         
         for btn in self.tab_buttons:
             shadow = QGraphicsDropShadowEffect(btn)
@@ -671,9 +671,10 @@ class SettingsDialog(QDialog):
                 widget_defaults=cache.widget_defaults,
             ),
             "accessibility": lambda: AccessibilityTab(self._settings),
-            "presets": lambda: PresetsTab(self._settings),
             "about": self._create_about_tab,
         }
+        if self._general_presets_enabled:
+            self._tab_builders["presets"] = lambda: PresetsTab(self._settings)
 
         for key in self._tab_keys:
             placeholder = QWidget()
@@ -839,13 +840,12 @@ class SettingsDialog(QDialog):
         self.title_bar.maximize_clicked.connect(self._toggle_maximize)
         
         # Tab buttons (indices match content_stack order)
-        self.sources_tab_btn.clicked.connect(lambda: self._switch_tab(0))
-        self.display_tab_btn.clicked.connect(lambda: self._switch_tab(1))
-        self.transitions_tab_btn.clicked.connect(lambda: self._switch_tab(2))
-        self.widgets_tab_btn.clicked.connect(lambda: self._switch_tab(3))
-        self.accessibility_tab_btn.clicked.connect(lambda: self._switch_tab(4))
-        self.presets_tab_btn.clicked.connect(lambda: self._switch_tab(5))
-        self.about_tab_btn.clicked.connect(lambda: self._switch_tab(6))
+        for key in self._tab_keys:
+            btn = self._tab_button_by_key.get(key)
+            if btn is None:
+                continue
+            index = self._tab_index_for_key(key)
+            btn.clicked.connect(lambda _checked=False, idx=index: self._switch_tab(idx))
         
         # Presets tab signal is wired when the tab is built (lazy)
 
@@ -875,7 +875,8 @@ class SettingsDialog(QDialog):
         old_widget = self.content_stack.currentWidget()
         def _after_switch():
             current_widget = self.content_stack.currentWidget()
-            if index == 6:  # About tab is now at index 6 (presets is at 5)
+            about_idx = self._tab_index_for_key("about")
+            if index == about_idx:
                 try:
                     self._about_last_card_width = 0
                 except Exception:

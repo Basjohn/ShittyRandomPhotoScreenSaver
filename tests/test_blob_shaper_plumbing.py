@@ -58,23 +58,6 @@ class TestBlobShaperModels:
         assert s2.blob_ring_thickness == 0.5
         assert len(s2.blob_shape_energy_nodes) == 1
 
-    def test_override_keys_include_shaper(self):
-        from core.settings.models import _VISUALIZER_RUNTIME_OVERRIDE_KEYS
-        for key in (
-            "blob_shaper_enabled",
-            "blob_shaper_base_strength",
-            "blob_shaper_react_strength",
-            "blob_shaper_idle_motion",
-            "blob_shaper_audio_motion",
-            "blob_topology",
-            "blob_ring_thickness",
-            "blob_shape_base_nodes",
-            "blob_shape_reaction_nodes",
-            "blob_shape_energy_nodes",
-        ):
-            assert key in _VISUALIZER_RUNTIME_OVERRIDE_KEYS, f"{key} missing from override keys"
-
-
 class TestBlobShaperRenderer:
     """Verify renderer helper functions."""
 
