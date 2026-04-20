@@ -2148,6 +2148,23 @@ class SpotifyVisualizerWidget(QWidget):
             self._request_latency_probe("mode_cycle")
         return result
 
+    def switch_to_mode(self, mode_id: str) -> bool:
+        """Switch to a specific visualizer mode with a crossfade.
+
+        Same transition path as _cycle_mode / double-click but targets
+        a specific mode by registry mode_id (e.g. ``"spectrum"``).
+        """
+        from widgets.spotify_visualizer.mode_transition import switch_to_mode
+
+        result = switch_to_mode(self, mode_id)
+        if result:
+            try:
+                self._on_mode_cycle_requested()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Mode switch hook failed", exc_info=True)
+            self._request_latency_probe("mode_switch")
+        return result
+
     def handle_double_click(self, local_pos) -> bool:
         """Called by WidgetManager dispatch. Cycles visualizer mode."""
         return self._cycle_mode()

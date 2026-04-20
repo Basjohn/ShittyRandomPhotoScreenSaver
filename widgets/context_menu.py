@@ -113,6 +113,7 @@ class ScreensaverContextMenu(QMenu):
     previous_requested = Signal()
     next_requested = Signal()
     transition_selected = Signal(str)  # transition name
+    visualizer_selected = Signal(str)  # mode_id
     settings_requested = Signal()
     dimming_toggled = Signal(bool)  # new state
     hard_exit_toggled = Signal(bool)  # new state
@@ -129,6 +130,7 @@ class ScreensaverContextMenu(QMenu):
         is_mc_build: bool = False,
         always_on_top: bool = False,
         random_enabled: bool = False,
+        current_visualizer: str = "spectrum",
     ):
         super().__init__(parent)
         
@@ -143,6 +145,7 @@ class ScreensaverContextMenu(QMenu):
         self._random_enabled = random_enabled
         self._dimming_enabled = dimming_enabled
         self._hard_exit_enabled = hard_exit_enabled
+        self._current_visualizer = current_visualizer
         
         self.setStyleSheet(MENU_STYLE)
         try:
@@ -195,6 +198,13 @@ class ScreensaverContextMenu(QMenu):
             self._transition_actions[trans_name] = action
         
         self.addMenu(self._transition_menu)
+        
+        # Visualizer submenu — populated from active mode registry (gate-aware)
+        self._visualizer_menu = QMenu("⟳  Change Visualizer", self)
+        self._visualizer_menu.setStyleSheet(SUBMENU_STYLE)
+        self._visualizer_actions: dict[str, QAction] = {}
+        self._populate_visualizer_submenu()
+        self.addMenu(self._visualizer_menu)
         
         self.addSeparator()
         
@@ -292,3 +302,42 @@ class ScreensaverContextMenu(QMenu):
         self._always_on_top = on_top
         if self._on_top_action is not None:
             self._on_top_action.setChecked(on_top)
+    
+    def _populate_visualizer_submenu(self) -> None:
+        """Build visualizer submenu entries from active mode descriptors."""
+        try:
+            from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+            descriptors = iter_visualizer_mode_descriptors()
+        except Exception:
+            logger.debug("[CONTEXT_MENU] Failed to load visualizer mode descriptors", exc_info=True)
+            descriptors = ()
+        
+        self._visualizer_menu.clear()
+        self._visualizer_actions.clear()
+        
+        for desc in descriptors:
+            action = self._visualizer_menu.addAction(desc.display_name)
+            action.setCheckable(True)
+            action.setChecked(desc.mode_id == self._current_visualizer)
+            action.triggered.connect(
+                lambda checked, mid=desc.mode_id: self._on_visualizer_selected(mid)
+            )
+            self._visualizer_actions[desc.mode_id] = action
+    
+    def _on_visualizer_selected(self, mode_id: str) -> None:
+        """Handle visualizer mode selection."""
+        self._current_visualizer = mode_id
+        for mid, action in self._visualizer_actions.items():
+            action.setChecked(mid == mode_id)
+        self.visualizer_selected.emit(mode_id)
+        logger.debug("Context menu: visualizer selected: %s", mode_id)
+    
+    def update_visualizer_state(self, mode_id: str) -> None:
+        """Sync visualizer checkmarks with the current mode."""
+        self._current_visualizer = mode_id
+        for mid, action in self._visualizer_actions.items():
+            action.setChecked(mid == mode_id)
+    
+    def refresh_visualizer_modes(self) -> None:
+        """Rebuild the visualizer submenu (e.g. after gate changes)."""
+        self._populate_visualizer_submenu()

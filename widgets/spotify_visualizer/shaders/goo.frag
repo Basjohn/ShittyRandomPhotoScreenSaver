@@ -75,10 +75,11 @@ float fbm(vec2 p, float t) {
 // ---- Metaball field ----
 float metaball_influence(float r2) {
     float q = max(r2, 0.0);
-    // Broad falloff for generous merging + tight peak for definition
-    float broad = exp(-q * 0.65);
-    float tight = exp(-q * 2.8);
-    return broad * 0.50 + tight * 0.60;
+    // Localized influence — sources form distinct tendrils, not one solid mass.
+    // Neighbors merge only when overlapping, creating bridges and gaps.
+    float core  = exp(-q * 3.2);   // sharp core definition
+    float skirt = exp(-q * 1.1);   // moderate reach for neighbor merging
+    return core * 0.55 + skirt * 0.35;
 }
 
 float sample_field(vec2 p) {
@@ -90,7 +91,7 @@ float sample_field(vec2 p) {
         if (rad < 0.001 && energy < 0.001) continue;
         vec2 d = p - src.xy;
         float r2 = dot(d, d) / (rad * rad);
-        f += metaball_influence(r2) * (0.45 + 0.70 * energy);
+        f += metaball_influence(r2) * (0.60 + 0.90 * energy);
     }
     return f;
 }
@@ -130,18 +131,20 @@ void main() {
 
     vec2 uv = vec2((fc.x - border_w) / inner_w, (fc.y - border_w) / inner_h);
     float aa = max(1.5 / max(inner_h, 1.0), 0.0015);
-    float threshold = clamp(u_goo_threshold * 0.55, 0.16, 0.38);
+    // Higher threshold — only strong field regions are liquid,
+    // naturally carving large voids between source clusters.
+    float threshold = clamp(u_goo_threshold * 0.85, 0.30, 0.65);
     float ow = max(0.003, u_goo_outline_width * 2.0);
 
     // Energy drive for noise amplitude
     float drive = clamp(u_bass_energy * 0.40 + u_overall_energy * 0.35 + u_mid_energy * 0.25, 0.0, 1.3);
 
-    // Noise-based coordinate warp for organic tendril edges
-    float noise_scale = 6.0 + drive * 3.0;
-    float noise_amp = 0.018 + drive * 0.022;
+    // Strong coordinate warp — creates the organic blobby edges from the mock.
+    float noise_scale = 3.5 + drive * 2.0;
+    float noise_amp = 0.08 + drive * 0.10;
     vec2 warp = vec2(
-        fbm(uv * noise_scale, u_time * 0.7),
-        fbm(uv * noise_scale + vec2(43.0, 17.0), u_time * 0.7 + 100.0)
+        fbm(uv * noise_scale, u_time * 0.5),
+        fbm(uv * noise_scale + vec2(43.0, 17.0), u_time * 0.5 + 100.0)
     ) * noise_amp;
 
     vec2 warped_uv = uv + warp;
@@ -149,18 +152,18 @@ void main() {
     // Sample the unified metaball field
     float field = sample_field(warped_uv);
 
-    // Edge sheet: ensures liquid always touches card edges (no floating islands)
-    float d_edge = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
-    float sheet_w = 0.04 + drive * 0.02;
-    float edge_boost = (1.0 - smoothstep(0.0, sheet_w, d_edge)) * (threshold + 0.15);
-    field = max(field, edge_boost);
+    // Noise-based field disruption — breaks the field into complex topology
+    // with tendrils, bridges, and isolated pools like the mock.
+    float disrupt = fbm(uv * 4.5 + vec2(7.0, 13.0), u_time * 0.35) * 0.18;
+    field -= disrupt;
 
     float liquid = smoothstep(threshold - aa, threshold + aa, field);
 
     // Shadow: offset field sample (flat 2D silhouette)
     vec2 shadow_offset = vec2(0.012, -0.014);
     float shadow_field = sample_field(warped_uv - shadow_offset);
-    shadow_field = max(shadow_field, (1.0 - smoothstep(0.0, sheet_w, d_edge + 0.02)) * (threshold + 0.15));
+    float shadow_disrupt = fbm((uv - shadow_offset) * 4.5 + vec2(7.0, 13.0), u_time * 0.35) * 0.18;
+    shadow_field -= shadow_disrupt;
     float shadow_liquid = smoothstep(threshold - aa, threshold + aa, shadow_field);
     float shadow_band = shadow_liquid * (1.0 - liquid);
 

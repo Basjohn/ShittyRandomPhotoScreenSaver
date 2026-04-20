@@ -61,6 +61,33 @@ def cycle_mode(widget: Any) -> bool:
     return True
 
 
+def switch_to_mode(widget: Any, mode_id: str) -> bool:
+    """Switch to a specific visualizer mode with a crossfade.
+
+    Same transition path as cycle_mode / double-click but targets a
+    specific mode by its registry mode_id (e.g. ``"spectrum"``).
+    Returns True if initiated, False if already transitioning or same mode.
+    """
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    if widget._mode_transition_phase != 0:
+        return False
+
+    target_enum = getattr(VisualizerMode, mode_id.upper(), None)
+    if target_enum is None:
+        logger.warning("[SPOTIFY_VIS] Unknown mode_id for switch: %s", mode_id)
+        return False
+
+    if target_enum == widget._vis_mode:
+        return False
+
+    widget._mode_transition_pending = target_enum
+    widget._mode_transition_phase = 1
+    widget._mode_transition_ts = time.time()
+    logger.info("[SPOTIFY_VIS] Mode switch requested: %s -> %s", widget._vis_mode.name, target_enum.name)
+    return True
+
+
 def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
     """Return a 0..1 fade multiplier for the mode crossfade.
 

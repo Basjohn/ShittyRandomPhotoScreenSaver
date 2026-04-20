@@ -124,17 +124,17 @@ def seed_goo_field(state: GooFieldState, source_count: int, *, seed: int = 0) ->
             # Stagger positions along edge with jitter for organic feel
             t = (slot + 0.5) / edge_count + rng.uniform(-0.06, 0.06)
             t = max(0.03, min(0.97, t))
-            # Varied depth scale — some sources reach deep, some stay shallow
-            # This creates natural tendril vs bay alternation
-            depth_scale = rng.uniform(0.55, 1.45)
-            radius_scale = rng.uniform(0.65, 1.35)
+            # Wide depth variance — some sources reach deep (tendrils),
+            # others stay shallow (bays), creating the mock's complex topology
+            depth_scale = rng.uniform(0.30, 1.70)
+            radius_scale = rng.uniform(0.50, 1.55)
             state.sources.append(
                 GooSource(
                     edge=edge_id,
                     home_t=t,
                     t=t,
-                    depth=0.10 + rng.uniform(0.0, 0.06),
-                    radius=0.09 + rng.uniform(-0.02, 0.04),
+                    depth=0.08 + rng.uniform(0.0, 0.12),
+                    radius=0.11 + rng.uniform(-0.02, 0.05),
                     energy=0.0,
                     band=bands[idx % len(bands)],
                     phase=rng.uniform(0.0, math.tau),
@@ -211,9 +211,10 @@ def solve_goo_field_step(
 
     overall = _band_energy(energy_bands, BAND_OVERALL)
 
-    # Max depth sources can reach — enough to cover ~70% of card when merging
-    max_depth = max(0.20, min(0.48, 0.44 - void_floor * 0.15))
-    max_radius = max(0.06, min(0.24, 0.10 + growth * 0.022))
+    # Max depth sources can reach — void_floor directly limits penetration
+    # so the center void stays prominent even at peak energy.
+    max_depth = max(0.15, min(0.40, (0.50 - void_floor) * 0.78))
+    max_radius = max(0.08, min(0.32, 0.13 + growth * 0.028))
 
     state.boundary_clamp_count = 0
     sat = 0
@@ -256,8 +257,8 @@ def solve_goo_field_step(
         slide = math.sin(state.time * 0.9 + src.phase * 0.6) * src.energy * 0.06
         src.t = src.home_t + wobble_slow + wobble_fast + slide
 
-        # Radius — larger when energized, varied per-source
-        target_radius = (0.08 + src.energy * (0.07 + growth * 0.015)) * src.radius_scale
+        # Radius — larger when energized, varied per-source for diverse pool sizes
+        target_radius = (0.10 + src.energy * (0.10 + growth * 0.020)) * src.radius_scale
         src.radius = _integrate_energy(src.radius, target_radius, dt=dt, attack=5.0, release=4.0)
 
         state.boundary_clamp_count += _enforce_boundary(

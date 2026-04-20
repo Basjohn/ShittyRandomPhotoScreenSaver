@@ -221,6 +221,15 @@ def prewarm_context_menu(widget) -> None:
                 widget.settings_manager.get("accessibility.dimming.enabled", False), False
             )
 
+        # Read current visualizer mode for the submenu
+        current_vis = "spectrum"
+        try:
+            vis = getattr(widget, "spotify_visualizer_widget", None)
+            if vis is not None:
+                current_vis = str(getattr(vis, "_vis_mode_str", "spectrum") or "spectrum")
+        except Exception:
+            pass
+
         widget._context_menu = ScreensaverContextMenu(
             parent=widget,
             current_transition=current_transition,
@@ -229,11 +238,13 @@ def prewarm_context_menu(widget) -> None:
             hard_exit_enabled=hard_exit,
             is_mc_build=widget._is_mc_build,
             always_on_top=widget._always_on_top,
+            current_visualizer=current_vis,
         )
         # Connect signals once during construction
         widget._context_menu.previous_requested.connect(widget.previous_requested.emit)
         widget._context_menu.next_requested.connect(widget.next_requested.emit)
         widget._context_menu.transition_selected.connect(widget._on_context_transition_selected)
+        widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
         widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
         widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
         widget._context_menu.hard_exit_toggled.connect(widget._on_context_hard_exit_toggled)

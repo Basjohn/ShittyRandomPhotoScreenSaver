@@ -1399,6 +1399,11 @@ class DisplayWidget(QWidget):
         from rendering.display_context_menu import on_context_transition_selected
         on_context_transition_selected(self, name)
 
+    def _on_context_visualizer_selected(self, mode_id: str) -> None:
+        """Delegates to rendering.display_context_menu."""
+        from rendering.display_context_menu import on_context_visualizer_selected
+        on_context_visualizer_selected(self, mode_id)
+
     def _on_context_dimming_toggled(self, enabled: bool) -> None:
         """Delegates to rendering.display_context_menu."""
         from rendering.display_context_menu import on_context_dimming_toggled

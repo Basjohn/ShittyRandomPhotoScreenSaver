@@ -25,6 +25,17 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
+def _get_current_visualizer_mode(widget) -> str:
+    """Read the current visualizer mode_id from the live widget."""
+    try:
+        vis = getattr(widget, "spotify_visualizer_widget", None)
+        if vis is not None:
+            return str(getattr(vis, "_vis_mode_str", "spectrum") or "spectrum")
+    except Exception:
+        pass
+    return "spectrum"
+
+
 def show_context_menu(widget, global_pos) -> None:
     """Show the context menu at the given global position."""
     try:
@@ -39,6 +50,9 @@ def show_context_menu(widget, global_pos) -> None:
                 widget.settings_manager.get("accessibility.dimming.enabled", False), False
             )
         
+        # Read current visualizer mode for the submenu
+        current_vis = _get_current_visualizer_mode(widget)
+        
         # Create menu if needed (lazy init for performance)
         if widget._context_menu is None:
             current_transition, random_enabled = widget._refresh_transition_state_from_settings()
@@ -50,11 +64,13 @@ def show_context_menu(widget, global_pos) -> None:
                 hard_exit_enabled=hard_exit,
                 is_mc_build=widget._is_mc_build,
                 always_on_top=widget._always_on_top,
+                current_visualizer=current_vis,
             )
             # Connect signals
             widget._context_menu.previous_requested.connect(widget.previous_requested.emit)
             widget._context_menu.next_requested.connect(widget.next_requested.emit)
             widget._context_menu.transition_selected.connect(widget._on_context_transition_selected)
+            widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
             widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
             widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
             widget._context_menu.hard_exit_toggled.connect(widget._on_context_hard_exit_toggled)
@@ -94,6 +110,7 @@ def show_context_menu(widget, global_pos) -> None:
             widget._context_menu.update_dimming_state(dimming_enabled)
             widget._context_menu.update_hard_exit_state(hard_exit)
             widget._context_menu.update_always_on_top_state(widget._always_on_top)
+            widget._context_menu.update_visualizer_state(current_vis)
         
         try:
             widget._context_menu_active = True
@@ -314,6 +331,23 @@ def on_context_always_on_top_toggled(widget, on_top: bool) -> None:
             widget.setUpdatesEnabled(True)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
+def on_context_visualizer_selected(widget, mode_id: str) -> None:
+    """Handle visualizer mode selection from context menu.
+
+    Routes through the visualizer widget's switch_to_mode() which uses
+    the same crossfade transition path as double-click / cycle_mode.
+    """
+    try:
+        vis = getattr(widget, "spotify_visualizer_widget", None)
+        if vis is not None and hasattr(vis, "switch_to_mode"):
+            vis.switch_to_mode(mode_id)
+            logger.info("Context menu: visualizer mode switched to %s", mode_id)
+        else:
+            logger.debug("[CONTEXT_MENU] No visualizer widget available for mode switch")
+    except Exception:
+        logger.debug("Failed to switch visualizer mode from context menu", exc_info=True)
+
 
 def on_context_exit_requested(widget) -> None:
     """Handle exit request from context menu."""
