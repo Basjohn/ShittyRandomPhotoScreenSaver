@@ -4,7 +4,7 @@ from typing import List, Sequence, Optional, Set
 
 import numpy as np
 import time
-from PySide6.QtCore import Qt, QRect, QRectF
+from PySide6.QtCore import Qt, QRect, QRectF, Signal
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -50,6 +50,7 @@ _ARRAY_UNIFORM_NAMES = {
     "u_blob_energy_transient",
     "u_blob_pockets",
     "u_blob_pocket_mix",
+    "u_goo_sources",
 }
 
 
@@ -74,6 +75,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     border, fade, shadow) continues to be drawn by ``SpotifyVisualizerWidget``;
     this class is responsible only for the bar geometry.
     """
+
+    # Emitted (once) when the requested vis mode has no compiled shader and
+    # the overlay falls back to spectrum.  Args: (failed_mode, fallback_mode).
+    mode_fallback_requested = Signal(str, str)
 
     def __init__(self, parent=None) -> None:  # type: ignore[override]
         super().__init__(parent)
@@ -111,6 +116,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         
         # Active visualization mode
         self._vis_mode: str = 'spectrum'
+        self._fallback_emitted: bool = False
 
         # Accumulated time for animated visualizers (seconds)
         self._accumulated_time: float = 0.0
@@ -330,6 +336,27 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_ghost_alpha: float = 0.0
         self._bubble_ghost_decay: float = 0.4
 
+        # Goo mode defaults (safe no-op values so upload_uniforms always works)
+        self._goo_color: QColor = QColor(0, 140, 220, 230)
+        self._goo_outline_color: QColor = QColor(255, 255, 255, 255)
+        self._goo_shadow_color: QColor = QColor(0, 60, 110, 180)
+        self._goo_outline_width: float = 0.008
+        self._goo_shadow_strength: float = 0.3
+        self._goo_specular_density: float = 0.3
+        self._goo_void_floor: float = 0.15
+        self._goo_void_size: float = 0.25
+        self._goo_threshold: float = 0.5
+        self._goo_advance_speed: float = 1.0
+        self._goo_retreat_speed: float = 1.0
+        self._goo_source_count: int = 64
+        self._goo_sources: list = []
+        self._goo_boundary_margin: float = 0.01
+        self._goo_boundary_clamp_count: int = 0
+        self._goo_source_saturation_ratio: float = 0.0
+        self._goo_ghosting_enabled: bool = False
+        self._goo_ghost_alpha: float = 0.0
+        self._goo_ghost_decay: float = 0.4
+
         # Per-bar peak values used to draw trailing "ghost" segments above
         # the current bar height. Peaks are updated whenever new bar data
         # arrives and decay over time.
@@ -379,6 +406,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             'blob',
             'sine_wave',
             'bubble',
+            'goo',
         }
         if normalized not in valid_modes:
             return
@@ -426,6 +454,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._bubble_extra_data = []
             self._bubble_trail_data = []
             self._bubble_count = 0
+        if mode_key == 'goo':
+            self._goo_sources = []
+            self._goo_boundary_clamp_count = 0
+            self._goo_source_saturation_ratio = 0.0
 
         logger.info(
             "[SPOTIFY_VIS][OVERLAY][RESET] mode=%s reason=%s",
@@ -615,6 +647,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_trail_data: list | None = None,
         bubble_trail_strength: float = 0.0,
         bubble_tail_opacity: float = 0.0,
+        # Goo mode
+        goo_color: list | None = None,
+        goo_outline_color: list | None = None,
+        goo_shadow_color: list | None = None,
+        goo_outline_width: float = 0.008,
+        goo_shadow_strength: float = 0.3,
+        goo_specular_density: float = 0.3,
+        goo_void_floor: float = 0.15,
+        goo_advance_speed: float = 1.0,
+        goo_retreat_speed: float = 1.0,
+        goo_source_count: int = 64,
+        goo_sources: list | None = None,
+        goo_boundary_margin: float = 0.01,
+        goo_ghosting_enabled: bool = False,
+        goo_ghost_alpha: float = 0.0,
+        goo_ghost_decay: float = 0.4,
         bubble_outline_color: QColor | None = None,
         bubble_specular_color: QColor | None = None,
         bubble_gradient_light: QColor | None = None,
@@ -665,6 +713,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._pending_mode_resets.discard(requested_mode)
         if prev_mode != self._vis_mode or manual_reset:
             reason = "mode_change" if prev_mode != self._vis_mode else "manual_reset"
+            self._fallback_emitted = False
             self._reset_mode_state(self._vis_mode, reason=reason)
             self._last_vis_mode = self._vis_mode
         try:
@@ -1320,6 +1369,33 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_ghosting_enabled = bool(bubble_ghosting_enabled)
         self._bubble_ghost_alpha = max(0.0, min(1.0, float(bubble_ghost_alpha)))
         self._bubble_ghost_decay = max(0.1, min(1.0, float(bubble_ghost_decay)))
+
+        # Goo mode state -----------------------------------------------------
+        if goo_color is not None:
+            self._goo_color = QColor(*goo_color) if not isinstance(goo_color, QColor) else QColor(goo_color)
+        if goo_outline_color is not None:
+            self._goo_outline_color = QColor(*goo_outline_color) if not isinstance(goo_outline_color, QColor) else QColor(goo_outline_color)
+        if goo_shadow_color is not None:
+            self._goo_shadow_color = QColor(*goo_shadow_color) if not isinstance(goo_shadow_color, QColor) else QColor(goo_shadow_color)
+        self._goo_outline_width = max(0.0, min(0.1, float(goo_outline_width)))
+        self._goo_shadow_strength = max(0.0, min(1.0, float(goo_shadow_strength)))
+        self._goo_specular_density = max(0.0, min(1.0, float(goo_specular_density)))
+        self._goo_void_floor = max(0.0, min(1.0, float(goo_void_floor)))
+        self._goo_advance_speed = max(0.0, min(4.0, float(goo_advance_speed)))
+        self._goo_retreat_speed = max(0.0, min(4.0, float(goo_retreat_speed)))
+        self._goo_source_count = max(16, min(128, int(goo_source_count)))
+        if goo_sources is not None:
+            self._goo_sources = list(goo_sources)
+        self._goo_boundary_margin = max(0.005, min(0.10, float(goo_boundary_margin)))
+        self._goo_ghosting_enabled = bool(goo_ghosting_enabled)
+        self._goo_ghost_alpha = max(0.0, min(1.0, float(goo_ghost_alpha)))
+        self._goo_ghost_decay = max(0.1, min(1.0, float(goo_ghost_decay)))
+        # Derive runtime void_size from the void_floor setting + overall energy.
+        # Keep this conservative: the core field must remain visible (mock-parity),
+        # so center trimming can shape contour but never hollow the mode out.
+        _overall = float(getattr(self._energy_bands, 'overall', 0.0) or 0.0)
+        base_void = self._goo_void_floor * 0.22
+        self._goo_void_size = max(0.0, min(0.10, base_void + 0.02 - min(0.03, _overall * 0.02)))
 
         # Legacy global ghost fields — still written for backward compat but
         # renderers MUST read mode-specific fields above.
@@ -2346,6 +2422,26 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 ):
                     uniforms[uname] = _gl.glGetUniformLocation(prog, _uniform_lookup_name(uname))
 
+                # IMPORTANT: always include renderer-declared uniforms so new
+                # modes (for example Goo) cannot silently compile yet fail to
+                # upload mode-specific state because the lookup table omitted
+                # their uniform names.
+                try:
+                    from widgets.spotify_visualizer.renderers import get_all_uniform_names
+
+                    for uname in get_all_uniform_names(mode):
+                        if not uname or uname in uniforms:
+                            continue
+                        uniforms[uname] = _gl.glGetUniformLocation(
+                            prog, _uniform_lookup_name(uname)
+                        )
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to query renderer uniform names for %s",
+                        mode,
+                        exc_info=True,
+                    )
+
                 self._gl_programs[mode] = prog
                 self._gl_uniforms[mode] = uniforms
                 logger.debug("[SPOTIFY_VIS] Compiled shader program: %s", mode)
@@ -2517,8 +2613,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         prog = self._gl_programs.get(mode)
         if prog is None:
             # Fall back to spectrum if the requested mode wasn't compiled
+            failed_mode = mode
             prog = self._gl_programs.get('spectrum')
             mode = 'spectrum'
+            if prog is not None and not self._fallback_emitted:
+                self._fallback_emitted = True
+                logger.warning(
+                    "[SPOTIFY_VIS] Mode '%s' shader unavailable — requesting fallback to spectrum",
+                    failed_mode,
+                )
+                self.mode_fallback_requested.emit(failed_mode, 'spectrum')
         if prog is None:
             return False
 

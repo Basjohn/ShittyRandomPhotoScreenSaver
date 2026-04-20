@@ -519,6 +519,53 @@ class WidgetManager:
         )
         return True
 
+    def force_visualizer_mode_preset(
+        self, target_mode: str, preset_index: int, *, reason: str = "fallback"
+    ) -> bool:
+        """Switch to a specific mode + preset via the normal settings pipeline.
+
+        Used by the shader-fallback path so the application performs a real
+        mode switch (config ⟶ model ⟶ widget refresh) identical to what the
+        UI or preset-cycle code would do.
+        """
+        settings = self._settings_manager
+        if settings is None:
+            return False
+
+        mode = str(target_mode or '').strip()
+        if not mode:
+            return False
+
+        widgets_cfg = settings.get('widgets', {}) or {}
+        if not isinstance(widgets_cfg, Mapping):
+            widgets_cfg = {}
+        vis_config = dict(widgets_cfg.get('spotify_visualizer', {}) or {})
+
+        vis_config['mode'] = mode
+        preset_key = get_preset_key(mode)
+        applied = apply_preset_to_config(mode, preset_index, vis_config)
+        restore_visualizer_snapshot(mode, vis_config, applied)
+        vis_config[preset_key] = preset_index
+
+        full_widgets = dict(widgets_cfg)
+        full_widgets['spotify_visualizer'] = vis_config
+        settings.set('widgets', full_widgets)
+        self._schedule_visualizer_preset_save()
+
+        try:
+            self._refresh_spotify_visualizer_config(full_widgets)
+        except Exception:
+            logger.debug(
+                "[WIDGET_MANAGER] Failed to refresh visualizer after forced switch",
+                exc_info=True,
+            )
+
+        logger.info(
+            "[SPOTIFY_VIS] Forced mode switch: mode=%s preset=%d reason=%s",
+            mode, preset_index, reason,
+        )
+        return True
+
     def _schedule_visualizer_preset_save(self) -> None:
         """Coalesce runtime preset-cycle persistence so repeated taps do not stall rendering."""
         settings = self._settings_manager

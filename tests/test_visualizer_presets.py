@@ -97,6 +97,123 @@ def test_frozen_presets_root_bootstraps_shared_programdata_tree_from_bundled_cop
     assert (shared_root / "blob" / "preset_1_alpha.json").exists()
 
 
+def test_frozen_presets_root_never_falls_back_to_bundled_when_bootstrap_fails(tmp_path, monkeypatch):
+    bundled_root = tmp_path / "onefile" / "presets" / "visualizer_modes"
+    shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    bundled_root.mkdir(parents=True)
+
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: True)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+
+    def _raise(*_args, **_kwargs):
+        raise RuntimeError("mirror failed")
+
+    monkeypatch.setattr(vp, "mirror_curated_visualizer_preset_tree", _raise)
+
+    resolved = vp.get_visualizer_presets_dir()
+
+    assert resolved == shared_root
+    assert "\\onefile\\" not in str(resolved).lower().replace("/", "\\")
+    assert shared_root.exists()
+    assert shared_root.is_dir()
+
+
+def test_frozen_presets_root_stays_on_shared_path_even_without_bundled_tree(tmp_path, monkeypatch):
+    bundled_root = tmp_path / "onefile" / "presets" / "visualizer_modes"
+    shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: True)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+
+    resolved = vp.get_visualizer_presets_dir()
+
+    assert resolved == shared_root
+    assert shared_root.exists()
+    assert shared_root.is_dir()
+
+
+def test_onefile_like_runtime_uses_shared_programdata_even_when_not_marked_frozen(tmp_path, monkeypatch):
+    bundled_root = tmp_path / "LocalAppData" / "SRPSS" / "onefile" / "presets" / "visualizer_modes"
+    shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    (shared_root / "bubble").mkdir(parents=True)
+
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: False)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+
+    assert vp.get_visualizer_presets_dir() == shared_root
+
+
+def test_onefile_prefixed_runtime_path_uses_shared_programdata(tmp_path, monkeypatch):
+    bundled_root = tmp_path / "LocalAppData" / "SRPSS" / "onefile_abc123" / "presets" / "visualizer_modes"
+    shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    (shared_root / "bubble").mkdir(parents=True)
+
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: False)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+
+    assert vp.get_visualizer_presets_dir() == shared_root
+
+
+def test_onefile_like_runtime_bootstraps_shared_programdata_from_bundled(tmp_path, monkeypatch):
+    bundled_root = tmp_path / "LocalAppData" / "SRPSS" / "onefile" / "presets" / "visualizer_modes"
+    shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
+    bundled_mode = bundled_root / "bubble"
+    bundled_mode.mkdir(parents=True)
+    (bundled_mode / "preset_1_demo.json").write_text(
+        json.dumps({"name": "Preset 1 (Demo)", "preset_index": 0}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: False)
+    monkeypatch.setattr(vp, "_bundled_presets_root", lambda: bundled_root)
+    monkeypatch.setattr(vp, "_shared_presets_root", lambda: shared_root)
+
+    resolved = vp.get_visualizer_presets_dir()
+
+    assert resolved == shared_root
+    assert (shared_root / "bubble" / "preset_1_demo.json").exists()
+
+
+def test_is_frozen_build_treats_srpss_executable_name_as_frozen(monkeypatch):
+    monkeypatch.setattr(vp.sys, "frozen", False, raising=False)
+    monkeypatch.setattr("builtins.__compiled__", False, raising=False)
+    monkeypatch.setattr(vp.sys, "executable", str(Path(r"C:\Program Files\SRPSS\SRPSS.scr")))
+
+    assert vp._is_frozen_build() is True
+
+
+def test_is_frozen_build_keeps_python_interpreter_as_script(monkeypatch):
+    monkeypatch.setattr(vp.sys, "frozen", False, raising=False)
+    monkeypatch.setattr("builtins.__compiled__", False, raising=False)
+    monkeypatch.setattr(vp.sys, "executable", str(Path(r"C:\Python311\python.exe")))
+    monkeypatch.setattr(vp.sys, "argv", [r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\main.py"])
+
+    assert vp._is_frozen_build() is False
+
+
+def test_is_frozen_build_treats_exe_argv0_as_frozen(monkeypatch):
+    monkeypatch.setattr(vp.sys, "frozen", False, raising=False)
+    monkeypatch.setattr("builtins.__compiled__", False, raising=False)
+    monkeypatch.setattr(vp.sys, "executable", str(Path(r"C:\Python311\python.exe")))
+    monkeypatch.setattr(vp.sys, "argv", [r"C:\Program Files\SRPSS\main.exe"])
+
+    assert vp._is_frozen_build() is True
+
+
+def test_snapshot_presets_root_uses_shared_for_onefile_like_runtime(tmp_path, monkeypatch):
+    bundled_overrides_root = tmp_path / "LocalAppData" / "SRPSS" / "onefile" / "presets" / "visualizer_mode_overrides"
+    shared_base = tmp_path / "ProgramData" / "SRPSS" / "presets"
+    monkeypatch.setattr(vp, "_is_frozen_build", lambda: False)
+    monkeypatch.setattr(vp, "_bundled_snapshot_overrides_root", lambda: bundled_overrides_root)
+    monkeypatch.setattr(vp, "_shared_presets_base_dir", lambda: shared_base)
+
+    assert vp._snapshot_presets_root() == shared_base / "visualizer_mode_overrides"
+
+
 def test_preset_repair_defaults_loader_uses_canonical_defaults_entrypoint(monkeypatch):
     previous_cache = repair._DEFAULTS_CACHE
     repair._DEFAULTS_CACHE = None
@@ -479,6 +596,143 @@ def test_curated_payload_parser_drops_retired_compat_keys():
     assert "blob_use_raw_energy" not in preset.settings
     assert "blob_energy_boost" not in preset.settings
     assert preset.settings["blob_stretch"] == pytest.approx(0.41)
+
+
+def test_curated_payload_parser_prefers_filename_slot_over_payload_index():
+    payload = {
+        "mode": "bubble",
+        "name": "Preset 1 (Spiral Surge)",
+        "preset_index": 0,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "bubble_growth": 4.2,
+                }
+            }
+        },
+    }
+
+    parsed = vp._parse_preset_payload(
+        Path("preset_4_sideway_swish.json"),
+        payload,
+        "bubble",
+        prefer_filename_index=True,
+    )
+
+    assert parsed is not None
+    index, _preset = parsed
+    assert index == 3
+
+
+def test_curated_payload_parser_prefers_filename_name_over_payload_name():
+    payload = {
+        "mode": "bubble",
+        "name": "Preset 1 (Wrong Name)",
+        "preset_index": 0,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "bubble_growth": 4.2,
+                }
+            }
+        },
+    }
+
+    parsed = vp._parse_preset_payload(
+        Path("preset_4_sideway_swish.json"),
+        payload,
+        "bubble",
+        prefer_filename_index=True,
+        prefer_filename_name=True,
+    )
+
+    assert parsed is not None
+    _index, preset = parsed
+    assert preset.name == "Preset 4 (Sideway Swish)"
+
+
+def test_get_preset_file_path_matches_curated_loader_slot_precedence(tmp_path, monkeypatch):
+    curated_root = tmp_path / "curated"
+    mode = "bubble"
+    mode_dir = curated_root / mode
+    mode_dir.mkdir(parents=True)
+    shared_payload = {
+        "mode": mode,
+        "preset_index": 0,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": mode,
+                    "bubble_growth": 1.0,
+                }
+            }
+        },
+    }
+    (mode_dir / "preset_1_alpha.json").write_text(
+        json.dumps({**shared_payload, "name": "Preset 1 (Alpha)"}),
+        encoding="utf-8",
+    )
+    (mode_dir / "preset_1_beta.json").write_text(
+        json.dumps({**shared_payload, "name": "Preset 1 (Beta)"}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: tmp_path / "overrides")
+
+    presets = vp._build_presets_for_mode(mode)
+    assert presets[0].name == "Preset 1 (Beta)"
+    assert vp.get_preset_file_path(mode, 0) == mode_dir / "preset_1_beta.json"
+
+
+def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
+    curated_root = tmp_path / "curated"
+    snapshots_root = tmp_path / "snapshots"
+    mode = "bubble"
+    mode_dir = curated_root / mode
+    mode_dir.mkdir(parents=True)
+    snapshots_root.mkdir(parents=True)
+
+    curated_payload = {
+        "mode": mode,
+        "name": "Preset 1 (Deep Sea)",
+        "preset_index": 0,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": mode,
+                    "bubble_growth": 1.0,
+                }
+            }
+        },
+    }
+    (mode_dir / "preset_1_deep_sea.json").write_text(json.dumps(curated_payload), encoding="utf-8")
+
+    override_payload = {
+        "visualizer_preset_override": True,
+        "visualizer_preset_mode": mode,
+        "mode": mode,
+        "name": "Preset 1 (Spiral Surge)",
+        "preset_index": 0,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": mode,
+                    "bubble_growth": 9.0,
+                }
+            }
+        },
+    }
+    (snapshots_root / "preset_1_bad_name.json").write_text(json.dumps(override_payload), encoding="utf-8")
+
+    monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
+    monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
+
+    presets = vp._build_presets_for_mode(mode)
+    assert presets[0].name == "Preset 1 (Deep Sea)"
+    assert presets[0].settings["bubble_growth"] == pytest.approx(9.0)
 
 
 def test_blob_curated_payload_parser_preserves_directional_shaper_nodes():
@@ -1440,3 +1694,61 @@ def test_release_main_mc_dist_curated_tree_matches_source_when_present():
             mismatched.append(rel)
 
     assert not mismatched, f"release/main_mc.dist preset payloads differ from source: {mismatched}"
+
+
+def test_malformed_curated_preset_is_skipped_without_crashing_reload(monkeypatch, tmp_path):
+    from core.settings import visualizer_presets as vp_mod
+
+    curated_root = tmp_path / "visualizer_modes"
+    bubble_dir = curated_root / "bubble"
+    bubble_dir.mkdir(parents=True, exist_ok=True)
+
+    # Valid preset slot 1
+    (bubble_dir / "preset_1_valid.json").write_text(
+        json.dumps(
+            {
+                "name": "Preset 1 (Valid)",
+                "mode": "bubble",
+                "preset_index": 0,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": "bubble",
+                            "bubble_growth": 3.0,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Malformed preset payload that should be ignored, not crash reload/import paths.
+    (bubble_dir / "preset_2_bad.json").write_text(
+        json.dumps(
+            {
+                "name": "Preset 2 (Bad)",
+                "mode": "bubble",
+                "preset_index": 1,
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": "bubble",
+                            # Deliberately wrong type to exercise fail-open parse guards.
+                            "bubble_gradient_light": "not-a-list",
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(vp_mod, "_presets_root", lambda: curated_root)
+    monkeypatch.setattr(vp_mod, "_snapshot_presets_root", lambda: tmp_path / "overrides")
+
+    vp_mod.reload_presets("bubble")
+    presets = vp_mod.get_presets("bubble")
+    assert presets, "Reload should succeed even with malformed curated payloads"
+    # Custom slot should still exist and remain last.
+    assert presets[-1].is_custom is True

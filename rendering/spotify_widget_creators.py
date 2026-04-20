@@ -239,6 +239,21 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         bubble_growth=model.bubble_growth,
         bubble_trail_strength=model.bubble_trail_strength,
         bubble_tail_opacity=model.bubble_tail_opacity,
+        # Goo
+        goo_color=model.goo_color,
+        goo_outline_color=model.goo_outline_color,
+        goo_shadow_color=model.goo_shadow_color,
+        goo_outline_width=model.goo_outline_width,
+        goo_shadow_strength=model.goo_shadow_strength,
+        goo_specular_density=model.goo_specular_density,
+        goo_void_floor=model.goo_void_floor,
+        goo_advance_speed=model.goo_advance_speed,
+        goo_retreat_speed=model.goo_retreat_speed,
+        goo_source_count=model.goo_source_count,
+        goo_growth=model.goo_growth,
+        goo_ghosting_enabled=model.goo_ghosting_enabled,
+        goo_ghost_alpha=model.goo_ghost_alpha,
+        goo_ghost_decay=model.goo_ghost_decay,
         sine_line_dim=model.sine_line_dim,
     )
 

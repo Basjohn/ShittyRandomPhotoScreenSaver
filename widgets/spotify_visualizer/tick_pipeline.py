@@ -153,6 +153,75 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
 # Bubble simulation dispatch
 # ------------------------------------------------------------------
 
+def dispatch_goo_field(widget: Any, now_ts: float) -> None:
+    """Advance the Goo liquid field on the UI thread (~64 sources).
+
+    Populates ``widget._goo_sources`` so the renderer can upload
+    ``u_goo_sources`` during the next GPU push.
+    """
+    if widget._vis_mode_str != 'goo':
+        return
+
+    from widgets.spotify_visualizer.goo_liquid_field import (
+        GooFieldState,
+        pack_sources_for_upload,
+        solve_goo_field_step,
+    )
+
+    state = getattr(widget, '_goo_field_state', None)
+    if state is None:
+        state = GooFieldState()
+        widget._goo_field_state = state
+
+    prev_ts = getattr(widget, '_goo_last_tick_ts', 0.0) or 0.0
+    widget._goo_last_tick_ts = now_ts
+    dt = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
+
+    engine = widget._engine
+    try:
+        energy = engine.get_energy_bands() if engine is not None else None
+    except Exception:
+        energy = None
+
+    try:
+        solve_goo_field_step(
+            state,
+            dt=dt,
+            energy_bands=energy,
+            playing=bool(widget._spotify_playing),
+            advance_speed=float(getattr(widget, '_goo_advance_speed', 1.0)),
+            retreat_speed=float(getattr(widget, '_goo_retreat_speed', 1.0)),
+            source_count=int(getattr(widget, '_goo_source_count', 64)),
+            growth=float(getattr(widget, '_goo_growth', 3.5)),
+            void_floor=float(getattr(widget, '_goo_void_floor', 0.15)),
+            boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
+            seed=id(widget) & 0xFFFFFFFF,
+        )
+    except Exception:
+        logger.debug("[SPOTIFY_VIS][GOO] solve step failed", exc_info=True)
+        return
+
+    sources = pack_sources_for_upload(
+        state,
+        int(getattr(widget, '_goo_source_count', 64)),
+        boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
+    )
+    widget._goo_sources = sources
+
+    widget._goo_boundary_clamp_count = int(getattr(state, "boundary_clamp_count", 0))
+    widget._goo_source_saturation_ratio = float(getattr(state, "source_saturation_ratio", 0.0))
+    if is_viz_diagnostics_enabled():
+        last_diag = float(getattr(widget, "_goo_diag_last_log_ts", 0.0) or 0.0)
+        if now_ts - last_diag >= 0.75:
+            logger.debug(
+                "[SPOTIFY_VIS][GOO][DIAG] boundary_clamps=%d saturation=%.3f source_count=%d",
+                widget._goo_boundary_clamp_count,
+                widget._goo_source_saturation_ratio,
+                len(sources),
+            )
+            widget._goo_diag_last_log_ts = now_ts
+
+
 def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     """Snapshot bubble settings on UI thread and submit to COMPUTE pool."""
     if (
@@ -651,6 +720,9 @@ def on_tick(widget: Any) -> None:
 
     # Bubble simulation dispatch
     dispatch_bubble_simulation(widget, now_ts)
+
+    # Goo liquid field solve (UI-thread, cheap: ~32 sources)
+    dispatch_goo_field(widget, now_ts)
 
     # GPU frame push
     first_frame = not widget._has_pushed_first_frame

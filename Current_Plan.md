@@ -46,44 +46,53 @@ Closed on 2026-04-18.
 Non-impact note:
 - `core/settings/visualizer_presets.py`, visualizer preset sliders, curated preset trees, and visualizer preset repair/index tooling were intentionally not modified by this change.
 
-### Visualizer Preset Selection Contract (Curated vs Custom Isolation)
+### Frozen Visualizer Preset Root Drifted to Onefile Extraction Paths
 
 Closed on 2026-04-18.
 
-- Fixed a runtime/model hydration bug where curated preset overlay was followed by explicit runtime-key restoration, which could silently re-apply stale custom/live values.
-- `SpotifyVisualizerSettings.from_mapping()` now applies curated preset overlay without a post-overlay runtime override restore pass.
-- Tightened `apply_preset_to_config()` semantics so curated presets clear all mode-specific keys not present in the curated payload, eliminating technical-key bleed from prior custom state.
-- Added regression tests to lock the contract:
-  - curated selection wins over saved custom/runtime values
-  - custom selection keeps custom values
-  - curated overlay clears mode keys absent from curated payload
-  - coverage now explicitly includes settings-GUI preset apply, runtime hotswap refresh, mode-change contract, and startup hydration contract
+- Frozen curated preset resolution is now strict-canonical: always `%ProgramData%\SRPSS\presets\visualizer_modes` for both SCR and MC runtime families.
+- Frozen mode no longer falls back to bundled onefile extraction trees for curated reads.
+- If shared root is missing, runtime attempts bootstrap from bundled shipped tree; if bootstrap fails, it still creates/returns the shared canonical root.
+- Added regression tests to lock:
+  - no bundled/`onefile` fallback in frozen mode
+  - shared-root path remains authoritative even when bootstrap fails or bundled source is absent
 
 Non-impact note:
-- This change is limited to visualizer preset selection/hydration behavior and does not touch the retired general preset system.
+- This is visualizer curated preset root resolution only. It does not modify general settings preset retirement behavior, visualizer preset slot semantics, or per-mode payload filtering.
 
----
+### Frozen One-Dir Runtime Misdetected as Script (Visualizer Presets)
 
-## Awaiting Validation
+Closed on 2026-04-18.
 
-### 4. Shared Preset Install / Save Location Across SCR and MC
+- `core/settings/visualizer_presets.py::_is_frozen_build()` now matches the robust runtime contract used by `main.py`, including executable-name detection (`SRPSS*.exe` / `.scr`) for one-dir builds that may not set `sys.frozen`.
+- This prevents frozen builds from accidentally resolving curated preset roots to extracted onefile/bundled folders.
+- Added a one-dir extraction guard: if bundled preset paths contain a `onefile` segment, preset roots are treated as frozen-style and forced to shared ProgramData roots even when runtime frozen flags are inconsistent.
+- Curated preset parsing now prefers filename slot (`preset_N_*.json`) over embedded `preset_index` so malformed payload indices cannot silently remap slider labels to the wrong slot.
+- Added focused tests for:
+  - frozen detection via executable name
+  - Python interpreter remaining script mode
+  - filename-slot precedence for curated payload parsing
 
-**Status:** `[~]` Landed in code, awaiting live coexistence validation
-**Priority:** Medium
+### Visualizer Preset Label/File Divergence + Onefile-Prefixed Path Drift
 
-- [x] Frozen SCR and MC resolve active curated presets through the shared ProgramData tree
-- [x] Packaged assets remain the replacement/bootstrap source rather than the active runtime root
-- [x] Normal SCR uninstall no longer deletes the shared curated tree out from under MC
-- [x] Focused tests for frozen shared-root resolution and replacement routing landed
-- [ ] Validate install, upgrade, and coexistence behavior with both builds present on one machine
+Closed on 2026-04-18.
 
----
+- Hardened onefile extraction detection to catch prefixed extraction segments (e.g. `onefile_*`) so curated preset resolution still converges to `%ProgramData%\SRPSS\presets\visualizer_modes`.
+- Curated payload parsing now prefers filename-derived names as well as filename slot indices; stale embedded `name` fields no longer mislabel slider slots.
+- `get_preset_file_path()` now resolves curated files using the same slot-precedence parser as the curated loader (last-wins on duplicate slot collisions), preventing slider-label vs edit-target disagreement.
+- Snapshot override merge now keeps curated slot labels while allowing override settings payloads, preventing override metadata from renaming curated slots.
+- Added regression tests for:
+  - onefile-prefixed extraction paths
+  - curated filename-name precedence
+  - curated duplicate-slot file resolution consistency
+  - snapshot override name isolation from curated labels
+
 
 ## Planned
 
 ### 5. Goo Mode — New Reactive Liquid Visualizer (Dev-Gated)
 
-**Status:** `[ ]` Architecture decided, implementation not started
+**Status:** `[~]` Implemented and under active visual parity tuning
 **Priority:** High
 **Detailed plan:** [Docs/Blob_Redesign_Plan.md → Goo Mode Plan](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\Docs\Blob_Redesign_Plan.md)
 
@@ -127,6 +136,25 @@ Non-impact note:
 - [ ] Substantial Tuning GUI but sorted into buckets. All colours adjustable by swatches like other modes.
 - [ ] Dev gate can be flipped to expose Goo in production builds
 
+**2026-04-18 Recovery Status (mock-parity pass):**
+- [x] Solver rebuilt as dual-field (`edge_liquid` + `core_liquid`) with hard gap invariant enforcement and pressure-balancing retreat/compression
+- [x] Runtime transport upgraded to dual source arrays (`goo_edge_sources` / `goo_core_sources`) with fixed-size upload and diagnostics (`gap_violation_count`, `boundary_clamp_count`, `source_saturation_ratio`)
+- [x] Shader rewritten to dual-field composition with rounded-card clipping applied to all layers, overlap barrier, vector contour stack, and non-block specular ribbons
+- [x] Goo settings/plumbing/UI extended with `goo_gap_min`, `goo_edge_pressure`, `goo_core_pressure`
+- [x] Initial regression tests added for solver invariants, Goo shader compile, and Goo settings/plumbing round-trip
+- [x] Shader-unavailable fallback: GL overlay emits `mode_fallback_requested` signal → visualizer widget defers a full mode+preset switch to Spectrum Preset 1 via `WidgetManager.force_visualizer_mode_preset()` — uses the same settings pipeline as manual preset cycling, no hardcoded values
+
+**2026-04-20 Unified Field Rewrite + Legacy Cleanup:**
+- [x] Collapsed dual-field system (edge + core) into single unified 64-source metaball field
+- [x] Solver rewrite: `goo_liquid_field.py` — single `GooFieldState` with 64 `GooSource` instances, organic seeding from all 4 edges, band-proportional advance, exponential energy envelopes, boundary clamping
+- [x] Shader rewrite: `goo.frag` — single `u_goo_sources[64]` array, simplex noise + FBM coordinate warp for organic edges, edge-sheet support for card-edge liquid continuity, thin streak-style speculars, flat 2D shadow
+- [x] Renderer cleaned: `goo.py` — single array upload only, no legacy dual-field arrays
+- [x] Full legacy removal: removed `GooDualFieldState`, `seed_goo_dual_field`, `solve_goo_dual_field_step`, `pack_dual_sources_for_upload`, `compute_gap_clearance` aliases, `goo_gap_min`, `goo_edge_pressure`, `goo_core_pressure` settings, `u_goo_edge_sources`/`u_goo_core_sources` shader uniforms, and all backward-compat keys from models/defaults/presets/overlay/config_applier/UI/tests
+- [x] All tests updated and passing (15/15 goo tests + 2/2 plumbing roundtrip tests)
+- [x] Release build artifacts updated (preset JSON + shader copy)
+- [ ] Runtime visual sign-off against `images/GooGoalMock.png` (pending user validation)
+- [ ] CPU grid evaluation for synthetic visual analysis (pending)
+
 #### 5A. Dev-Gate Architecture
 
 **Status:** `[x]` Implemented
@@ -155,23 +183,33 @@ Non-impact note:
 **Intent:** Register Goo as a first-class visualizer mode with clean ownership from day one.
 
 **New files to create:**
-- [ ] `widgets/spotify_visualizer/shaders/goo.frag` — fragment shader for Goo
-- [ ] `widgets/spotify_visualizer/renderers/goo.py` — uniform upload / renderer
-- [ ] `widgets/spotify_visualizer/goo_liquid_field.py` — CPU-side liquid field solver
-- [ ] `ui/tabs/media/goo_builder.py` — builder UI for Goo settings
-- [ ] `ui/tabs/media/goo_settings_binding.py` — settings collection/load for Goo
-- [ ] `presets/visualizer_modes/goo/` — curated Goo presets directory
+- [x] `widgets/spotify_visualizer/shaders/goo.frag` — fragment shader with edge-sourced metaball field, shadow, outline, sparse speculars
+- [x] `widgets/spotify_visualizer/renderers/goo.py` — uniform upload + `u_goo_sources` vec4 array upload
+- [x] `widgets/spotify_visualizer/goo_liquid_field.py` — CPU-side liquid field solver (`GooFieldState`, `GooSource`, `solve_goo_field_step`, `pack_sources_for_upload`)
+- [x] `ui/tabs/media/goo_builder.py` — builder UI (appearance, motion, ghost buckets)
+- [x] `ui/tabs/media/goo_settings_binding.py` — `load_goo_mode_settings` / `collect_goo_mode_settings`
+- [x] `presets/visualizer_modes/goo/preset_1_deep_blue.json` — first curated preset
 
 **Registration checklist:**
 - [x] Add `"goo"` to the visualizer mode registry (gated behind `-devgoo`)
-- [x] Register `goo.frag` in the shader registry (gated, file not yet created)
-- [ ] Register `goo.py` renderer in the renderer dispatch
-- [ ] Add Goo to `config_applier.py` mode dispatch (new `_apply_goo_config` or equivalent)
-- [ ] Add Goo kwargs builder to `spotify_widget_creators.py`
-- [ ] Add Goo state fields to `spotify_bars_gl_overlay.py::set_state()`
-- [ ] Add Goo builder to the builder tab dispatch (gated)
-- [ ] Add Goo to mode combo in UI (gated)
+- [x] Register `goo.frag` in the shader registry (gated, file created)
+- [x] Register `goo.py` renderer in the renderer dispatch
+- [x] Add `VisualizerMode.GOO` to the enum and `'goo'` to mode_map in `spotify_visualizer_widget.py`
+- [x] Add Goo card-height default in `widgets/spotify_visualizer/card_height.py`
+- [x] Add Goo default settings in `core/settings/default_settings.py`
+- [x] Add Goo fields to `SpotifyVisualizerSettings` dataclass (`from_settings`, `from_mapping`, `to_dict`, `__post_init__` defaults)
+- [x] Add Goo kwargs section to `config_applier.py::apply_vis_mode_kwargs`
+- [x] Add `_append_goo_visual_extras` and wire into `build_gpu_push_extra_kwargs`
+- [x] Wire Goo model kwargs in `spotify_widget_creators.py::apply_spotify_vis_model_config`
+- [x] Add Goo state fields and assignment block to `spotify_bars_gl_overlay.py::set_state()` (colors, outline, shadow, void, advance/retreat, source count, sources, ghost)
+- [x] Add Goo default attributes to `SpotifyBarsGLOverlay.__init__`
+- [x] Dispatch Goo field solve each tick via `tick_pipeline.dispatch_goo_field()`
+- [~] GL program uniform lookup now merges renderer-declared names (`get_all_uniform_names(mode)`) so mode uniforms like `u_goo_sources` are not silently omitted from the query table (runtime validation pending)
+- [x] Add Goo builder to the builder tab dispatch (gated behind `is_goo_enabled()`)
+- [x] Add Goo load/collect wiring to `load_media_settings` / `save_media_settings`
+- [x] Add `'goo'` to per-mode container visibility dict in `_update_vis_mode_sections`
 - [x] Update `Index.md` with dev gates module entry
+- [x] Update `Index.md` with Goo builder + solver + renderer + binding rows
 - [x] Update `Spec.md` with dev gate documentation
 
 **Settings namespace:**
@@ -184,59 +222,58 @@ Non-impact note:
 **Intent:** The core rendering model. A 2D scalar field composed of edge-sourced metaballs that merge via smooth-union.
 
 **1A. Field Model Design (before code):**
-- [ ] Define field equation — polynomial falloff preferred (cheaper, no singularities)
-- [ ] Source budget: ~32 sources (8 per edge), uploaded as `vec4` uniform arrays
-- [ ] Threshold: liquid exists where `F(x,y) > threshold`; below = void
-- [ ] Audio→source mapping: ~40% bass, ~30% mid, ~20% high, ~10% overall
-- [ ] Document in `Docs/Goo_Liquid_Field_Spec.md`
+- [x] Define field equation — polynomial falloff (cheap, no singularities); see `goo_liquid_field.metaball_influence` on CPU and `metaball_influence()` in `goo.frag`
+- [x] Source budget: 64 sources (16 per edge), uploaded as `vec4 u_goo_sources[64]`
+- [x] Threshold: liquid exists where `F(x,y) > u_goo_threshold`; below = void
+- [x] Audio→source mapping: ~40% bass, ~30% mid, ~20% high, ~10% overall (see `seed_goo_field` band plan)
+- [ ] Document in `Docs/Goo_Liquid_Field_Spec.md` (deferred; living contract is Index.md row + solver docstring for now)
 
 **1B. CPU Solver (`goo_liquid_field.py`):**
-- [ ] `GooFieldState` dataclass: per-source position, depth, radius, velocity, band assignment
-- [ ] `solve_goo_field_step(dt, energy_bands, playing, seed)`:
-  - Base drift — sources move along edges during silence
-  - Audio advance — energy pushes sources inward
-  - Retreat — energy drop pulls sources back
-  - Void breathing — overall energy shrinks void
-  - Containment — sources cannot cross center
-- [ ] Spring-damper motion per source with neighbor smoothing
-- [ ] Tests: silent=near edges, bass=deeper, void preserved, smooth motion, continuous profile
+- [x] `GooSource`/`GooFieldState` dataclasses: per-source edge, home_t, t, depth, radius, energy, band, phase
+- [x] `solve_goo_field_step(dt, energy_bands, playing, advance_speed, retreat_speed, source_count, growth, void_floor, seed)`:
+  - Base drift — idle wobble along home edge when silent
+  - Audio advance — depth grows with band energy, gated by advance_speed
+  - Retreat — decay back toward edge when energy drops, gated by retreat_speed
+  - Void floor — `max_depth = 0.5 - void_floor` keeps dark center visible
+- [ ] Spring-damper motion per source with neighbor smoothing (Phase 2 — current solver uses simple exponential envelopes)
+- [ ] Tests: silent=near edges, bass=deeper, void preserved, smooth motion, continuous profile (`tests/test_goo_liquid_field.py` pending)
 
 **1C. Upload Pipeline:**
-- [ ] Uniforms: `vec4 u_goo_sources[32]`, `float u_goo_threshold`, `float u_goo_void_size`
-- [ ] Add to `goo.py::get_uniform_names()` and `upload_uniforms()`
-- [ ] Wire through config_applier → overlay → renderer
-- [ ] Transport regression: uniforms reach shader without fallback
+- [x] Uniforms: `vec4 u_goo_sources[64]`, `float u_goo_threshold`, `float u_goo_void_size`, colors/outline/shadow/specular/void uniforms
+- [x] `goo.py::get_uniform_names()` includes `u_goo_sources`; `upload_uniforms()` packs and uploads via `glUniform4fv`
+- [x] Wire through config_applier → overlay (`set_state`) → renderer via `tick_pipeline.dispatch_goo_field()`
+- [ ] Transport regression: add `tests/test_goo_uniform_plumbing.py` covering sparse-config → overlay → renderer path
 
 **1D. Shader (`goo.frag`):**
-- [ ] `float evaluate_goo_field(vec2 uv)` — sum source contributions
-- [ ] `float goo_sdf(vec2 uv)` — `threshold - field` (negative = inside liquid)
-- [ ] Basic rendering: inside liquid = flat color, outside = discard
-- [ ] Runtime test: goo.frag compiles, mode renders, no fallback
+- [x] `sample_field(vec2 p)` sums source contributions with aspect-normalised distance
+- [x] Uses `smoothstep(threshold - aa, threshold + aa, field)` for anti-aliased liquid edge; shadow = same field sampled with offset
+- [x] Basic rendering: inside liquid = flat `u_goo_color`, outside = transparent
+- [ ] Runtime test: goo.frag compiles, mode renders, no fallback (requires visual sign-off)
 
 #### 5D. Phase 2 — Vector Styling System
 
 **Intent:** Layer the mockup's vector illustration style onto the rendered liquid field.
 
 **2A. Flat Fill:**
-- [ ] Inside liquid → `u_goo_color.rgb` flat, NO depth shading
-- [ ] Anti-aliased edge: `smoothstep(-px, 0, goo_sdf)` only
+- [x] Inside liquid → `u_goo_color.rgb` flat (no depth shading); anti-aliased via `smoothstep`
+- [~] Confirm against mockup with `images/GooGoalMock.png` reference — visual sign-off pending
 
 **2B. White Contour Outline:**
-- [ ] `outline = exp(-pow(goo_sdf / outline_width, 2.0))` — white, constant width
-- [ ] Both outer and inner edges automatically
+- [x] Outline band straddles threshold: `(1 - smoothstep(threshold + ow, threshold + 2*ow, field)) * smoothstep(threshold - 2*ow, threshold - ow, field)`
+- [x] Applies to both outer and inner (void-side) edges automatically
 
 **2C. Offset Shadow:**
-- [ ] Sample `goo_sdf(uv + offset)` — darker color behind liquid
-- [ ] Composite: shadow → fill → outline → specular
+- [x] Sample `sample_field(p - shadow_offset)` — `u_goo_shadow_color` behind liquid, scaled by `u_goo_shadow_strength`
+- [x] Composite order: shadow → fill → outline → specular
 
 **2D. Specular Puddles:**
-- [ ] Curvature-based: `laplacian(field)` via central differences
-- [ ] Noise breakup for sparsity
-- [ ] White, small, inside liquid only, drifting
+- [x] Noise-gated sparse speculars inside liquid; density controlled by `u_goo_specular_density`
+- [ ] Curvature-based enhancement (laplacian of field) — Phase 2 refinement pending
+- [x] White, small, inside liquid only (current pass uses hash-noise jitter; swap to curvature once shipping)
 
 **2E. Inner Edge Parity:**
-- [ ] All styling derives from `goo_sdf` — inner void edges get same treatment automatically
-- [ ] Verify and test
+- [x] All styling derives from the same `field`/`threshold` pair so void-side edges get the same outline/shadow/specular treatment
+- [ ] Runtime visual verification against the mock
 
 #### 5E. Phase 3 — Audio Reactivity & Motion
 

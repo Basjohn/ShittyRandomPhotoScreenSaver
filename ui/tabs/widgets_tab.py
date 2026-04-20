@@ -1532,6 +1532,7 @@ class WidgetsTab(QWidget):
             'blob': getattr(self, '_blob_settings_container', None),
             'sine_wave': getattr(self, '_sine_wave_settings_container', None),
             'bubble': getattr(self, '_bubble_settings_container', None),
+            'goo': getattr(self, '_goo_settings_container', None),
         }
         for m, container in containers.items():
             if container is not None:

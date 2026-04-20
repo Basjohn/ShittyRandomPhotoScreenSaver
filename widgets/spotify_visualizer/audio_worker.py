@@ -38,6 +38,7 @@ class VisualizerMode(Enum):
     BLOB = auto()           # Organic reactive metaball
     SINE_WAVE = auto()      # Pure sine wave with audio-reactive amplitude
     BUBBLE = auto()         # Sound-reactive bubble/water tank flow
+    GOO = auto()            # Reactive liquid pool (dev-gated)
 
 
 @dataclass

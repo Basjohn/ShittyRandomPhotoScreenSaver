@@ -1971,6 +1971,23 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert normalized["bubble_bounce_same_only"] is True
         assert normalized["bubble_collision_pop_mode"] == "one"
 
+    def test_section_normalizer_preserves_goo_unified_field_keys(self):
+        from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+
+        normalized = normalize_visualizer_section_mapping(
+            {
+                "mode": "goo",
+                "goo_source_count": 64,
+                "goo_growth": 3.5,
+                "goo_advance_speed": 1.2,
+            },
+            apply_preset_overlay=False,
+        )
+
+        assert normalized["goo_source_count"] == 64
+        assert normalized["goo_growth"] == pytest.approx(3.5)
+        assert normalized["goo_advance_speed"] == pytest.approx(1.2)
+
     def test_model_roundtrip_omits_retired_compat_settings_keys(self):
         from core.settings.models import SpotifyVisualizerSettings
 
@@ -1991,6 +2008,25 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert "widgets.spotify_visualizer.blob_use_raw_energy" not in saved
         assert saved["widgets.spotify_visualizer.blob_input_gain"] == pytest.approx(1.2)
         assert saved["widgets.spotify_visualizer.blob_stretch"] == pytest.approx(0.52)
+
+    def test_model_roundtrip_preserves_goo_unified_field_keys(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "goo",
+                "goo_source_count": 48,
+                "goo_growth": 4.0,
+            },
+            apply_preset_overlay=False,
+        )
+
+        saved = model.to_dict()
+        assert saved["widgets.spotify_visualizer.goo_source_count"] == 48
+        assert saved["widgets.spotify_visualizer.goo_growth"] == pytest.approx(4.0)
+        assert "widgets.spotify_visualizer.goo_gap_min" not in saved
+        assert "widgets.spotify_visualizer.goo_edge_pressure" not in saved
+        assert "widgets.spotify_visualizer.goo_core_pressure" not in saved
 
 
 class TestVisualizerModeBinding:

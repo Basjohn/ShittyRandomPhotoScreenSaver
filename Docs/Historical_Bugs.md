@@ -145,6 +145,35 @@ Section by date and type.
   - do not add post-overlay re-merge phases in visualizer preset hydration
   - if curated presets are selected, partial technical carry-over from prior custom state is a correctness bug, not a convenience feature
 
+## 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Observed failure pattern:**
+  - preset slider labels could disagree with `Edit Preset` target file
+  - `Save Preset As…` default path could drift back toward onefile extraction-like roots in some one-dir runtime shapes
+- **Root causes:**
+  - onefile extraction path detection was too strict (`part == "onefile"`), so prefixed extraction folder names could bypass shared ProgramData root enforcement
+  - curated parser trusted embedded payload `name` too much, allowing stale authored metadata to mislabel slots despite filename slot correctness
+  - `get_preset_file_path()` used `first-match` filename lookup while curated slot loading used `last-wins` index overwrite behavior; duplicate-slot files could therefore produce label/file divergence
+  - snapshot override payload names could rename curated slot labels, even when `Edit Preset` still points to curated files
+- **What fixed it:**
+  - broadened onefile extraction detection to any segment starting with `onefile`
+  - curated parsing now prefers filename-derived names and slot indices
+  - file-open path resolution now follows the same parser/precedence as curated slot loading
+  - snapshot overrides now replace settings only for existing curated slots and preserve curated labels
+- **Why the final solution worked:**
+  - all user-facing slot surfaces (label, slot assignment, edit file path) now use one consistent slot-resolution contract
+  - root resolution no longer relies on a brittle exact folder-name check
+- **Guardrails/tests added:**
+  - onefile-prefixed runtime path resolves to shared ProgramData
+  - curated filename-name precedence test
+  - duplicate-slot file path precedence parity test
+  - snapshot override cannot rename curated slot labels
+
 ######                        ######
 #### UNRESOLVED BELOW THIS LINE ####
 
@@ -970,3 +999,93 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - `SpotifyBarsGLOverlay.set_state()` is a manual contract. New runtime kwargs must be added to both the signature and the body.
 - Shader support alone is insufficient; the GL uniform lookup table and mode-specific uploader must also know about the new fields.
 - When logs suggest a visualizer "fell back", verify whether the real failure is a shared transport exception before diagnosing the renderer itself.
+
+## 2026-04-18 — Frozen Curated Presets Silently Fell Back to Onefile Tree (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Symptoms**
+- Normal/frozen runtime could load curated visualizer presets from onefile extraction paths under `%LOCALAPPDATA%` instead of shared curated content.
+- MC path behavior could appear correct while SCR path drifted to older bundled payloads, causing cross-build preset mismatch on the same machine.
+
+- **Root cause**
+- `core/settings/visualizer_presets.py::_presets_root()` allowed frozen-mode fallback to `_bundled_presets_root()` when shared-root bootstrap failed.
+- Bootstrap failures were debug-logged and then masked by that fallback, so runtime stayed functional but silently selected the wrong preset source.
+
+- **Fix**
+- Frozen-mode root resolution is now strict-canonical:
+  - always resolve to `%ProgramData%\SRPSS\presets\visualizer_modes`
+  - attempt bootstrap from bundled shipped tree only as a copy source
+  - never return bundled/onefile paths as active curated root
+- Added regression tests to lock this behavior, including bootstrap-failure and missing-bundled scenarios.
+
+- **Why this worked**
+- It removed ambiguous runtime source selection entirely: frozen curated reads now have one authoritative root regardless of bootstrap outcome.
+- This aligns SCR and MC with the same machine-wide curated preset contract.
+
+## 2026-04-18 — One-Dir Runtime Misdetected As Script + Curated Slot Drift (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Symptoms**
+- Frozen Main build sometimes resolved visualizer preset save/edit defaults into extracted onefile paths.
+- Preset slider labels could drift from the file opened by "Edit Preset" when curated JSON payloads carried mismatched `preset_index` values.
+
+- **Root cause**
+- `core/settings/visualizer_presets.py::_is_frozen_build()` used a narrower detection contract than `main.py`, so some one-dir runtimes were treated as script mode.
+- Curated preset parsing trusted embedded `preset_index` before filename slot inference, so malformed payload indices could remap in-memory preset slots even when filenames were correct.
+
+- **Fix**
+- Unified frozen detection behavior with `main.py` semantics, including executable-name detection (`SRPSS*` / `.scr`) for runtimes where `sys.frozen` is absent.
+- Added one-dir extraction-path guard: when bundled roots include a `onefile` segment, preset roots are treated as frozen-style and pinned to shared ProgramData roots.
+- Hardened curated parsing to prefer filename-derived slot (`preset_N_*.json`) over payload index, while snapshot override parsing keeps payload-index behavior.
+- Added regression tests for both detection paths and filename-slot precedence.
+
+## 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Symptoms**
+- Goo rendered as disconnected edge blobs or rigid circles instead of coordinated center+border liquid.
+- White highlight layer showed block/noise artifacts.
+- Liquid could escape visual card limits or visually clip inconsistently.
+- Center and inward border systems could visually merge, violating the explicit "never touch" rule.
+
+- **Root cause**
+- Single-field Goo architecture could not model border-vs-center pressure balancing or hard-gap behavior.
+- Shader used hash/floor noise specular gating and lacked strict rounded-card clipping across all compositing passes.
+- Runtime transport only carried one source field, so center/edge semantics were not representable.
+
+- **Fix**
+- Replaced single Goo field with a dual-field solver (`edge_liquid`, `core_liquid`) and per-tick gap invariant enforcement.
+- Added pressure-coupled retreat/compression controls and mode-local settings (`goo_gap_min`, `goo_edge_pressure`, `goo_core_pressure`).
+- Upgraded renderer/upload contract to dual vec4 arrays (`u_goo_edge_sources`, `u_goo_core_sources`) plus gap/boundary uniforms.
+- Rewrote Goo shader compositing with strict rounded-card clipping, overlap barrier, vector contour stack, and smooth ribbon-style speculars (no block-noise path).
+- Added regression coverage for solver invariants and Goo shader compile/contract checks.
+
+- **Guardrail**
+- Any future Goo change must preserve these invariants before runtime ask:
+  - edge/core liquids never merge
+  - no out-of-card pixels
+  - no hash/floor specular artifact path
+
+- **Follow-up regression noted 2026-04-18 (still open for visual sign-off)**
+- **Observed pattern:** even after dual-field landing, runtime could still render disconnected "oval islands" and a hollow/weak center instead of pooled mock-like sheets.
+- **Contributing causes:**
+  - field influence had an effective hard radius cutoff, so neighboring sources did not fuse into fluid structures
+  - center-void trim was too aggressive and suppressed core liquid visibility
+  - evenly distributed core seeding reinforced ring/donut artifacts
+- **Corrective direction now applied:**
+  - switched Goo field influence to long-tail blending in shader so sources can merge naturally
+  - reduced center-void trim to contour shaping (not center suppression)
+  - randomized core angular homes and increased core depth/radius envelope to avoid stable ring lock
+- **Loop-avoidance reminder:** if Goo resembles isolated circles, do not tune "hotness" first; inspect field kernel tail, threshold range, and center-void suppression as the first triage path.

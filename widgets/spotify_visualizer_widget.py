@@ -767,6 +767,7 @@ class SpotifyVisualizerWidget(QWidget):
             'blob': VisualizerMode.BLOB,
             'sine_wave': VisualizerMode.SINE_WAVE,
             'bubble': VisualizerMode.BUBBLE,
+            'goo': VisualizerMode.GOO,
         }
         vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
         mode_changed = vm != self._vis_mode
@@ -823,6 +824,7 @@ class SpotifyVisualizerWidget(QWidget):
                 "blob": VisualizerMode.BLOB,
                 "sine_wave": VisualizerMode.SINE_WAVE,
                 "bubble": VisualizerMode.BUBBLE,
+                "goo": VisualizerMode.GOO,
             }.get(mode_name, self._vis_mode)
         except Exception:
             target_mode = self._vis_mode
@@ -1810,6 +1812,30 @@ class SpotifyVisualizerWidget(QWidget):
             prewarm_spotify_visualizer_overlay(parent)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to prewarm parent GL overlay", exc_info=True)
+
+        overlay = getattr(parent, '_spotify_bars_overlay', None)
+        if overlay is not None and hasattr(overlay, 'mode_fallback_requested'):
+            try:
+                overlay.mode_fallback_requested.connect(
+                    self._handle_mode_fallback, Qt.ConnectionType.UniqueConnection,
+                )
+            except RuntimeError:
+                pass  # already connected
+
+    def _handle_mode_fallback(self, failed_mode: str, fallback_mode: str) -> None:
+        """Deferred handler: perform a real mode switch to spectrum preset 1."""
+        QTimer.singleShot(0, lambda: self._execute_mode_fallback(failed_mode, fallback_mode))
+
+    def _execute_mode_fallback(self, failed_mode: str, fallback_mode: str) -> None:
+        wm = getattr(self, '_widget_manager', None)
+        if wm is None or not hasattr(wm, 'force_visualizer_mode_preset'):
+            logger.warning(
+                "[SPOTIFY_VIS] Cannot execute mode fallback — no widget_manager "
+                "(failed=%s target=%s)", failed_mode, fallback_mode,
+            )
+            return
+        wm.force_visualizer_mode_preset(fallback_mode, 0, reason=f"shader_unavailable:{failed_mode}")
+        self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
 
     def _finish_staged_startup_reveal(
         self,

@@ -660,6 +660,36 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'sine_heartbeat' in kwargs:
         widget._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
 
+    # --- Goo --------------------------------------------------------------
+    if 'goo_color' in kwargs:
+        widget._goo_color = list(kwargs['goo_color']) if kwargs['goo_color'] is not None else None
+    if 'goo_outline_color' in kwargs:
+        widget._goo_outline_color = list(kwargs['goo_outline_color']) if kwargs['goo_outline_color'] is not None else None
+    if 'goo_shadow_color' in kwargs:
+        widget._goo_shadow_color = list(kwargs['goo_shadow_color']) if kwargs['goo_shadow_color'] is not None else None
+    if 'goo_outline_width' in kwargs:
+        widget._goo_outline_width = max(0.0, min(0.1, float(kwargs['goo_outline_width'])))
+    if 'goo_shadow_strength' in kwargs:
+        widget._goo_shadow_strength = max(0.0, min(1.0, float(kwargs['goo_shadow_strength'])))
+    if 'goo_specular_density' in kwargs:
+        widget._goo_specular_density = max(0.0, min(1.0, float(kwargs['goo_specular_density'])))
+    if 'goo_void_floor' in kwargs:
+        widget._goo_void_floor = max(0.0, min(1.0, float(kwargs['goo_void_floor'])))
+    if 'goo_advance_speed' in kwargs:
+        widget._goo_advance_speed = max(0.0, min(4.0, float(kwargs['goo_advance_speed'])))
+    if 'goo_retreat_speed' in kwargs:
+        widget._goo_retreat_speed = max(0.0, min(4.0, float(kwargs['goo_retreat_speed'])))
+    if 'goo_source_count' in kwargs:
+        widget._goo_source_count = max(4, min(128, int(kwargs['goo_source_count'])))
+    if 'goo_growth' in kwargs:
+        widget._goo_growth = max(0.5, min(10.0, float(kwargs['goo_growth'])))
+    if 'goo_ghosting_enabled' in kwargs:
+        widget._goo_ghosting_enabled = bool(kwargs['goo_ghosting_enabled'])
+    if 'goo_ghost_alpha' in kwargs:
+        widget._goo_ghost_alpha = max(0.0, min(1.0, float(kwargs['goo_ghost_alpha'])))
+    if 'goo_ghost_decay' in kwargs:
+        widget._goo_ghost_decay = max(0.1, min(1.0, float(kwargs['goo_ghost_decay'])))
+
     # --- Bubble -----------------------------------------------------------
     if 'bubble_big_bass_pulse' in kwargs:
         widget._bubble_big_bass_pulse = max(0.0, min(1.0, float(kwargs['bubble_big_bass_pulse'])))
@@ -1045,4 +1075,25 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
         _append_blob_visual_extras(extra, widget)
     elif mode_str == 'bubble':
         _append_bubble_visual_extras(extra, widget)
+    elif mode_str == 'goo':
+        _append_goo_visual_extras(extra, widget)
     return extra
+
+
+def _append_goo_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach GL-safe Goo mode extras for the compositor overlay."""
+    extra['goo_color'] = getattr(widget, '_goo_color', None)
+    extra['goo_outline_color'] = getattr(widget, '_goo_outline_color', None)
+    extra['goo_shadow_color'] = getattr(widget, '_goo_shadow_color', None)
+    extra['goo_outline_width'] = float(getattr(widget, '_goo_outline_width', 0.008))
+    extra['goo_shadow_strength'] = float(getattr(widget, '_goo_shadow_strength', 0.3))
+    extra['goo_specular_density'] = float(getattr(widget, '_goo_specular_density', 0.3))
+    extra['goo_void_floor'] = float(getattr(widget, '_goo_void_floor', 0.15))
+    extra['goo_advance_speed'] = float(getattr(widget, '_goo_advance_speed', 1.0))
+    extra['goo_retreat_speed'] = float(getattr(widget, '_goo_retreat_speed', 1.0))
+    extra['goo_source_count'] = int(getattr(widget, '_goo_source_count', 64))
+    extra['goo_boundary_margin'] = float(getattr(widget, '_goo_boundary_margin', 0.01))
+    extra['goo_sources'] = list(getattr(widget, '_goo_sources', []))
+    extra['goo_ghosting_enabled'] = bool(getattr(widget, '_goo_ghosting_enabled', False))
+    extra['goo_ghost_alpha'] = float(getattr(widget, '_goo_ghost_alpha', 0.0))
+    extra['goo_ghost_decay'] = float(getattr(widget, '_goo_ghost_decay', 0.4))
