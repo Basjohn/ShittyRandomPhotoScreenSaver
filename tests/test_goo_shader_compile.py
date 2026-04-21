@@ -74,5 +74,5 @@ def test_goo_shader_avoids_block_noise_pattern():
     lower = source.lower()
     assert "fract(sin(dot" not in lower
     assert "floor(sp" not in lower
-    assert "u_goo_sources" in source
-
+    assert "u_goo_edge_sources" in source
+    assert "u_goo_core_sources" in source

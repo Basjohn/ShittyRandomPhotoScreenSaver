@@ -896,7 +896,8 @@ class TestBlobShaperRenderer:
         assert _uniform_lookup_name("u_blob_runtime_profile") == "u_blob_runtime_profile[0]"
         assert _uniform_lookup_name("u_waveform") == "u_waveform[0]"
         assert _uniform_lookup_name("u_bars") == "u_bars[0]"
-        assert _uniform_lookup_name("u_goo_sources") == "u_goo_sources[0]"
+        assert _uniform_lookup_name("u_goo_edge_sources") == "u_goo_edge_sources[0]"
+        assert _uniform_lookup_name("u_goo_core_sources") == "u_goo_core_sources[0]"
         assert _uniform_lookup_name("u_blob_ring_mode") == "u_blob_ring_mode"
 
     def test_overlay_shader_manifest_includes_runtime_profile_uniform(self):
@@ -917,7 +918,8 @@ class TestBlobShaperRenderer:
         from widgets.spotify_visualizer.renderers import get_all_uniform_names
 
         names = set(get_all_uniform_names("goo"))
-        assert "u_goo_sources" in names
+        assert "u_goo_edge_sources" in names
+        assert "u_goo_core_sources" in names
 
     @staticmethod
     def _mouse_event(event_type, x, y, button, buttons=None):

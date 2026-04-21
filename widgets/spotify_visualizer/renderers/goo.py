@@ -1,7 +1,7 @@
 """Goo mode uniform renderer.
 
-Uploads all Goo-specific uniforms, including the per-source vec4 array
-produced by ``goo_liquid_field.pack_sources_for_upload``.
+Uploads all Goo-specific uniforms, including dual contour vec4 arrays
+produced by ``goo_liquid_field.pack_dual_sources_for_upload``.
 """
 from __future__ import annotations
 
@@ -38,7 +38,8 @@ def get_uniform_names() -> list[str]:
         "u_goo_void_size",
         "u_goo_edge_inward_depth",
         "u_goo_threshold",
-        "u_goo_sources",
+        "u_goo_edge_sources",
+        "u_goo_core_sources",
     ]
 
 
@@ -89,17 +90,25 @@ def upload_uniforms(gl, u: dict, s) -> bool:
         gl.glUniform4fv(loc, GOO_SOURCE_COUNT_MAX, buf)
         return True
 
-    # Upload unified source array
-    sources_data = getattr(s, "_goo_sources", None)
-    ok = _upload_source_array("u_goo_sources", sources_data)
+    edge_ok = _upload_source_array("u_goo_edge_sources", getattr(s, "_goo_edge_sources", None))
+    core_ok = _upload_source_array("u_goo_core_sources", getattr(s, "_goo_core_sources", None))
 
-    if not ok:
+    if not edge_ok:
         now = time.monotonic()
-        last = float(getattr(s, "_goo_missing_sources_uniform_logged_at", 0.0) or 0.0)
+        last = float(getattr(s, "_goo_missing_edge_uniform_logged_at", 0.0) or 0.0)
         if now - last >= 5.0:
             logger.warning(
-                "[SPOTIFY_VIS][GOO] u_goo_sources uniform missing; Goo field upload skipped"
+                "[SPOTIFY_VIS][GOO] u_goo_edge_sources uniform missing; edge contour upload skipped"
             )
-            setattr(s, "_goo_missing_sources_uniform_logged_at", now)
+            setattr(s, "_goo_missing_edge_uniform_logged_at", now)
+
+    if not core_ok:
+        now = time.monotonic()
+        last = float(getattr(s, "_goo_missing_core_uniform_logged_at", 0.0) or 0.0)
+        if now - last >= 5.0:
+            logger.warning(
+                "[SPOTIFY_VIS][GOO] u_goo_core_sources uniform missing; core contour upload skipped"
+            )
+            setattr(s, "_goo_missing_core_uniform_logged_at", now)
 
     return True

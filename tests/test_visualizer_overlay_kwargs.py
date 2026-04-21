@@ -96,19 +96,21 @@ def test_blob_renderer_exposes_inward_liquid_uniforms():
 
 
 @pytest.mark.qt
-def test_goo_gpu_kwargs_include_unified_sources(qt_app):
+def test_goo_gpu_kwargs_include_dual_sources(qt_app):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qt_app.processEvents()
 
     stub_engine = _StubEngine()
     widget._goo_boundary_margin = 0.01
-    widget._goo_sources = [[0.1, 0.1, 0.08, 0.9], [0.5, 0.5, 0.06, 0.7]]
+    widget._goo_edge_sources = [[0.1, 0.1, 0.40, 0.9], [0.9, 0.1, 0.41, 0.7]]
+    widget._goo_core_sources = [[0.45, 0.45, 0.09, 0.9], [0.55, 0.45, 0.09, 0.7]]
     widget._goo_inward_outline_width = 0.005
 
     extras = build_gpu_push_extra_kwargs(widget, "goo", stub_engine)
 
     assert extras["goo_boundary_margin"] == pytest.approx(0.01)
-    assert extras["goo_sources"] == [[0.1, 0.1, 0.08, 0.9], [0.5, 0.5, 0.06, 0.7]]
+    assert extras["goo_edge_sources"] == [[0.1, 0.1, 0.40, 0.9], [0.9, 0.1, 0.41, 0.7]]
+    assert extras["goo_core_sources"] == [[0.45, 0.45, 0.09, 0.9], [0.55, 0.45, 0.09, 0.7]]
     assert "goo_core_size" in extras
     assert extras["goo_core_size"] == pytest.approx(0.18)
     assert "goo_edge_inward_depth" in extras

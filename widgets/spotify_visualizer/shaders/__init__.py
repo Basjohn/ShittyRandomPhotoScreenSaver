@@ -51,7 +51,11 @@ def load_fragment_shader(vis_mode: str) -> str | None:
     """
     cache = _FRAGMENT_SHADER_CACHE
     if cache is not None:
-        return cache.get(vis_mode)
+        cached = cache.get(vis_mode)
+        if cached is not None:
+            return cached
+        # Cache may have been warmed while a dev-gated mode was inactive.
+        # Fall through to direct file load so explicit requests still work.
 
     filename = _ALL_SHADER_FILES.get(vis_mode)
     if filename is None:

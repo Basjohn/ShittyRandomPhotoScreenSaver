@@ -154,24 +154,20 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
 # ------------------------------------------------------------------
 
 def dispatch_goo_field(widget: Any, now_ts: float) -> None:
-    """Advance the Goo liquid field on the UI thread (~64 sources).
-
-    Populates ``widget._goo_sources`` so the renderer can upload
-    ``u_goo_sources`` during the next GPU push.
-    """
+    """Advance the Goo dual-spline field on the UI thread (~64 sources/layer)."""
     if widget._vis_mode_str != 'goo':
         return
 
     from widgets.spotify_visualizer.goo_liquid_field import (
         GOO_SOURCE_COUNT_MAX,
-        GooFieldState,
-        pack_sources_for_upload,
-        solve_goo_field_step,
+        GooDualFieldState,
+        pack_dual_sources_for_upload,
+        solve_goo_dual_field_step,
     )
 
     state = getattr(widget, '_goo_field_state', None)
     if state is None:
-        state = GooFieldState()
+        state = GooDualFieldState()
         widget._goo_field_state = state
 
     prev_ts = getattr(widget, '_goo_last_tick_ts', 0.0) or 0.0
@@ -206,7 +202,7 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
         )
 
     try:
-        solve_goo_field_step(
+        solve_goo_dual_field_step(
             state,
             dt=dt,
             energy_bands=energy,
@@ -214,30 +210,35 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
             core_size=float(getattr(widget, '_goo_core_size', 0.18)),
             edge_inward_depth=float(getattr(widget, '_goo_edge_inward_depth', 0.18)),
             boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
+            aspect=float(max(1, int(widget.width()))) / float(max(1, int(widget.height()))),
             seed=id(widget) & 0xFFFFFFFF,
         )
     except Exception:
         logger.debug("[SPOTIFY_VIS][GOO] solve step failed", exc_info=True)
         return
 
-    sources = pack_sources_for_upload(
+    edge_sources, core_sources = pack_dual_sources_for_upload(
         state,
         GOO_SOURCE_COUNT_MAX,
         aspect=float(max(1, int(widget.width()))) / float(max(1, int(widget.height()))),
         boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
     )
-    widget._goo_sources = sources
+    widget._goo_edge_sources = edge_sources
+    widget._goo_core_sources = core_sources
 
+    widget._goo_gap_violation_count = int(getattr(state, "gap_violation_count", 0))
     widget._goo_boundary_clamp_count = int(getattr(state, "boundary_clamp_count", 0))
     widget._goo_source_saturation_ratio = float(getattr(state, "source_saturation_ratio", 0.0))
     if is_viz_diagnostics_enabled():
         last_diag = float(getattr(widget, "_goo_diag_last_log_ts", 0.0) or 0.0)
         if now_ts - last_diag >= 0.75:
             logger.debug(
-                "[SPOTIFY_VIS][GOO][DIAG] boundary_clamps=%d saturation=%.3f source_count=%d",
+                "[SPOTIFY_VIS][GOO][DIAG] gap_violations=%d boundary_clamps=%d saturation=%.3f edge_count=%d core_count=%d",
+                widget._goo_gap_violation_count,
                 widget._goo_boundary_clamp_count,
                 widget._goo_source_saturation_ratio,
-                len(sources),
+                len(edge_sources),
+                len(core_sources),
             )
             widget._goo_diag_last_log_ts = now_ts
 

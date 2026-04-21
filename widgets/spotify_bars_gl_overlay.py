@@ -50,7 +50,8 @@ _ARRAY_UNIFORM_NAMES = {
     "u_blob_energy_transient",
     "u_blob_pockets",
     "u_blob_pocket_mix",
-    "u_goo_sources",
+    "u_goo_edge_sources",
+    "u_goo_core_sources",
 }
 
 
@@ -348,8 +349,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._goo_edge_inward_depth: float = 0.18
         self._goo_void_size: float = 0.25
         self._goo_threshold: float = 0.5
-        self._goo_sources: list = []
+        self._goo_edge_sources: list = []
+        self._goo_core_sources: list = []
         self._goo_boundary_margin: float = 0.01
+        self._goo_gap_violation_count: int = 0
         self._goo_boundary_clamp_count: int = 0
         self._goo_source_saturation_ratio: float = 0.0
         self._goo_ghosting_enabled: bool = False
@@ -454,7 +457,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._bubble_trail_data = []
             self._bubble_count = 0
         if mode_key == 'goo':
-            self._goo_sources = []
+            self._goo_edge_sources = []
+            self._goo_core_sources = []
+            self._goo_gap_violation_count = 0
             self._goo_boundary_clamp_count = 0
             self._goo_source_saturation_ratio = 0.0
 
@@ -656,7 +661,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         goo_specular_density: float = 0.3,
         goo_core_size: float = 0.18,
         goo_edge_inward_depth: float = 0.18,
-        goo_sources: list | None = None,
+        goo_edge_sources: list | None = None,
+        goo_core_sources: list | None = None,
         goo_boundary_margin: float = 0.01,
         goo_ghosting_enabled: bool = False,
         goo_ghost_alpha: float = 0.0,
@@ -1381,8 +1387,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._goo_specular_density = max(0.0, min(1.0, float(goo_specular_density)))
         self._goo_core_size = max(0.06, min(0.30, float(goo_core_size)))
         self._goo_edge_inward_depth = max(0.0, min(0.45, float(goo_edge_inward_depth)))
-        if goo_sources is not None:
-            self._goo_sources = list(goo_sources)
+        if goo_edge_sources is not None:
+            self._goo_edge_sources = list(goo_edge_sources)
+        if goo_core_sources is not None:
+            self._goo_core_sources = list(goo_core_sources)
         self._goo_boundary_margin = max(0.005, min(0.10, float(goo_boundary_margin)))
         self._goo_ghosting_enabled = bool(goo_ghosting_enabled)
         self._goo_ghost_alpha = max(0.0, min(1.0, float(goo_ghost_alpha)))
