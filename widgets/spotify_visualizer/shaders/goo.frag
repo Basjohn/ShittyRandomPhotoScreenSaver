@@ -89,11 +89,14 @@ int goo_point_count() {
     return count;
 }
 
-float segment_distance(vec2 p, vec2 a, vec2 b) {
-    vec2 ab = b - a;
-    float h = dot(p - a, ab) / max(dot(ab, ab), 1e-6);
+float segment_distance(vec2 p, vec2 a, vec2 b, float metric_x) {
+    vec2 pm = vec2(p.x * metric_x, p.y);
+    vec2 am = vec2(a.x * metric_x, a.y);
+    vec2 bm = vec2(b.x * metric_x, b.y);
+    vec2 ab = bm - am;
+    float h = dot(pm - am, ab) / max(dot(ab, ab), 1e-6);
     h = clamp(h, 0.0, 1.0);
-    return length((a + ab * h) - p);
+    return length((am + ab * h) - pm);
 }
 
 vec2 catmull(vec2 p0, vec2 p1, vec2 p2, vec2 p3, float t) {
@@ -107,7 +110,7 @@ vec2 catmull(vec2 p0, vec2 p1, vec2 p2, vec2 p3, float t) {
     );
 }
 
-float contour_distance(vec2 p, int count) {
+float contour_distance(vec2 p, int count, float metric_x) {
     float d = 10.0;
     for (int i = 0; i < GOO_SOURCE_COUNT; i++) {
         if (i >= count) break;
@@ -119,7 +122,7 @@ float contour_distance(vec2 p, int count) {
         for (int s = 1; s <= CURVE_SUB_STEPS; s++) {
             float t = float(s) / float(CURVE_SUB_STEPS);
             vec2 cur = catmull(p0, p1, p2, p3, t);
-            d = min(d, segment_distance(p, prev, cur));
+            d = min(d, segment_distance(p, prev, cur, metric_x));
             prev = cur;
         }
     }
@@ -142,8 +145,8 @@ bool point_in_polygon(vec2 p, int count) {
     return inside;
 }
 
-float contour_signed_distance(vec2 p, int count) {
-    float d = contour_distance(p, count);
+float contour_signed_distance(vec2 p, int count, float metric_x) {
+    float d = contour_distance(p, count, metric_x);
     bool inside = point_in_polygon(p, count);
     return inside ? -d : d;
 }
@@ -197,7 +200,8 @@ void main() {
     }
 
     float drive = clamp(u_bass_energy * 0.40 + u_overall_energy * 0.34 + u_mid_energy * 0.19 + u_high_energy * 0.07, 0.0, 1.3);
-    float sd = contour_signed_distance(uv, count);
+    float metric_x = inner_w / max(inner_h, 1.0);
+    float sd = contour_signed_distance(uv, count, metric_x);
 
     // Keep threshold meaningful for contour scale bias.
     float threshold_bias = (clamp(u_goo_threshold, 0.0, 1.0) - 0.5) * 0.07;
