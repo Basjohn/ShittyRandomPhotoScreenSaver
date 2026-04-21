@@ -194,6 +194,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_growth: float = 3.5
         self._osc_growth: float = 2.0
         self._bubble_growth: float = 3.0
+        self._goo_growth: float = 3.0
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False
         self._osc_line_offset_bias: float = 0.0
@@ -1087,6 +1088,7 @@ class SpotifyVisualizerWidget(QWidget):
             'blob': self._blob_growth,
             'sine_wave': self._sine_wave_growth,
             'bubble': self._bubble_growth,
+            'goo': getattr(self, '_goo_growth', 3.0),
         }.get(mode)
         return preferred_height(mode, self._base_height, growth)
 
@@ -1124,6 +1126,7 @@ class SpotifyVisualizerWidget(QWidget):
             'spectrum': self._spectrum_growth,
             'oscilloscope': self._osc_growth,
             'sine_wave': self._sine_wave_growth,
+            'goo': getattr(self, '_goo_growth', 3.0),
         }.get(mode)
         if growth is not None and growth <= 1.0:
             base = self._base_height

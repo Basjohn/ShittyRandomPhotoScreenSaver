@@ -177,6 +177,23 @@ def build_goo_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     spec_row.addWidget(tab.goo_specular_density_label)
 
     # --- Motion ---------------------------------------------------------------
+    growth_row = _aligned_row(motion_bucket, "Card Height:")
+    tab.goo_growth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.goo_growth.setMinimum(100)
+    tab.goo_growth.setMaximum(500)
+    val = int(tab._default_float("spotify_visualizer", "goo_growth", 3.0) * 100)
+    tab.goo_growth.setValue(max(100, min(500, val)))
+    tab.goo_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.goo_growth.setTickInterval(50)
+    bind_setting_signal(
+        tab,
+        tab.goo_growth.valueChanged,
+        updater=lambda v: tab.goo_growth_label.setText(f"{v / 100.0:.1f}x"),
+    )
+    growth_row.addWidget(tab.goo_growth)
+    tab.goo_growth_label = QLabel(f"{val / 100.0:.1f}x")
+    growth_row.addWidget(tab.goo_growth_label)
+
     core_row = _aligned_row(motion_bucket, "Core Size:")
     tab.goo_core_size = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.goo_core_size.setMinimum(6)

@@ -177,19 +177,40 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
     prev_ts = getattr(widget, '_goo_last_tick_ts', 0.0) or 0.0
     widget._goo_last_tick_ts = now_ts
     dt = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
+    playing = bool(widget._spotify_playing)
+    if not playing:
+        # Keep Goo subtly alive at idle without driving FFT/engine reads.
+        dt *= 0.55
 
     engine = widget._engine
-    try:
-        energy = engine.get_energy_bands() if engine is not None else None
-    except Exception:
-        energy = None
+    if playing:
+        try:
+            energy = engine.get_energy_bands() if engine is not None else None
+        except Exception:
+            energy = None
+    else:
+        # Bubble/Sine idle path parity: deterministic low-amplitude motion source
+        # while paused so shape stability can be tuned visually.
+        from widgets.spotify_visualizer.energy_bands import EnergyBands
+
+        idle_phase = now_ts
+        idle_bass = 0.015 + 0.008 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
+        idle_mid = 0.013 + 0.006 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
+        idle_high = 0.010 + 0.004 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
+        idle_overall = 0.015
+        energy = EnergyBands(
+            bass=idle_bass,
+            mid=idle_mid,
+            high=idle_high,
+            overall=idle_overall,
+        )
 
     try:
         solve_goo_field_step(
             state,
             dt=dt,
             energy_bands=energy,
-            playing=bool(widget._spotify_playing),
+            playing=playing,
             core_size=float(getattr(widget, '_goo_core_size', 0.18)),
             edge_inward_depth=float(getattr(widget, '_goo_edge_inward_depth', 0.18)),
             boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),

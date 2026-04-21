@@ -237,6 +237,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         bubble_big_size_clamp=model.bubble_big_size_clamp,
         bubble_big_specular_max_size=model.bubble_big_specular_max_size,
         bubble_growth=model.bubble_growth,
+        goo_growth=model.goo_growth,
         bubble_trail_strength=model.bubble_trail_strength,
         bubble_tail_opacity=model.bubble_tail_opacity,
         # Goo

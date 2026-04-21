@@ -61,6 +61,10 @@ def load_goo_mode_settings(
         tab.goo_specular_density.setValue(max(0, min(100, v)))
         tab.goo_specular_density_label.setText(f"{v}%")
     # --- Motion sliders ------------------------------------------------------
+    if hasattr(tab, "goo_growth"):
+        v = int(tab._config_float("spotify_visualizer", config, "goo_growth", 3.0) * 100)
+        tab.goo_growth.setValue(max(100, min(500, v)))
+        tab.goo_growth_label.setText(f"{v / 100.0:.1f}x")
     if hasattr(tab, "goo_core_size"):
         v = int(tab._config_float("spotify_visualizer", config, "goo_core_size", 0.18) * 100)
         v = max(6, min(30, v))
@@ -101,6 +105,7 @@ def collect_goo_mode_settings(tab) -> dict[str, Any]:
         ),
         "goo_shadow_strength": (tab.goo_shadow_strength.value() if hasattr(tab, "goo_shadow_strength") else 30) / 100.0,
         "goo_specular_density": (tab.goo_specular_density.value() if hasattr(tab, "goo_specular_density") else 30) / 100.0,
+        "goo_growth": (tab.goo_growth.value() if hasattr(tab, "goo_growth") else 300) / 100.0,
         "goo_core_size": (tab.goo_core_size.value() if hasattr(tab, "goo_core_size") else 18) / 100.0,
         "goo_edge_inward_depth": (
             (tab.goo_edge_inward_depth.value() if hasattr(tab, "goo_edge_inward_depth") else 18) / 100.0

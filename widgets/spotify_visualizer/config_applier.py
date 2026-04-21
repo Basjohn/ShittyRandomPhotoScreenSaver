@@ -468,6 +468,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
     if 'osc_growth' in kwargs:
         widget._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
+    if 'goo_growth' in kwargs:
+        widget._goo_growth = max(1.0, min(5.0, float(kwargs['goo_growth'])))
     if 'osc_speed' in kwargs:
         widget._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
     if 'osc_line_dim' in kwargs:
