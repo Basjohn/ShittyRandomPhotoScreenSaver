@@ -180,7 +180,7 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
     playing = bool(widget._spotify_playing)
     if not playing:
         # Keep Goo subtly alive at idle without driving FFT/engine reads.
-        dt *= 0.55
+        dt *= 0.58
 
     engine = widget._engine
     if playing:
@@ -194,10 +194,10 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
         from widgets.spotify_visualizer.energy_bands import EnergyBands
 
         idle_phase = now_ts
-        idle_bass = 0.015 + 0.008 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
-        idle_mid = 0.013 + 0.006 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
-        idle_high = 0.010 + 0.004 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
-        idle_overall = 0.015
+        idle_bass = 0.017 + 0.009 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
+        idle_mid = 0.0145 + 0.0065 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
+        idle_high = 0.011 + 0.0045 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
+        idle_overall = 0.017
         energy = EnergyBands(
             bass=idle_bass,
             mid=idle_mid,
@@ -414,7 +414,7 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     if (
         widget._waiting_for_fresh_engine_frame
         and not widget._spotify_playing
-        and str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "oscilloscope", "spectrum"}
+        and str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "oscilloscope", "spectrum", "goo"}
     ):
         widget._waiting_for_fresh_engine_frame = False
         widget._pending_engine_generation = -1

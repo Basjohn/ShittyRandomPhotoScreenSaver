@@ -281,3 +281,53 @@ def test_overlay_accumulated_time_advances_for_paused_sine_but_not_spectrum(qt_a
     assert t3 == pytest.approx(t2)
 
     overlay.deleteLater()
+
+
+@pytest.mark.qt
+def test_goo_inward_depth_drives_void_size_monotonically(qt_app):
+    overlay = SpotifyBarsGLOverlay(parent=None)
+    qt_app.processEvents()
+
+    base_rect = QRect(0, 0, 420, 220)
+    base_bars = [0.0] * 16
+    fill = QColor(200, 200, 200, 230)
+    border = QColor(255, 255, 255, 255)
+
+    # Keep energies fixed; vary only inward depth and assert monotonic response.
+    overlay._energy_bands = EnergyBands(bass=0.10, mid=0.08, high=0.06, overall=0.09)
+    overlay.set_state(
+        rect=base_rect,
+        bars=base_bars,
+        bar_count=16,
+        segments=18,
+        fill_color=fill,
+        border_color=border,
+        fade=1.0,
+        playing=False,
+        visible=True,
+        vis_mode="goo",
+        goo_edge_inward_depth=0.05,
+    )
+    low_void = float(getattr(overlay, "_goo_void_size", 0.0))
+
+    overlay._energy_bands = EnergyBands(bass=0.10, mid=0.08, high=0.06, overall=0.09)
+    overlay.set_state(
+        rect=base_rect,
+        bars=base_bars,
+        bar_count=16,
+        segments=18,
+        fill_color=fill,
+        border_color=border,
+        fade=1.0,
+        playing=False,
+        visible=True,
+        vis_mode="goo",
+        goo_edge_inward_depth=0.35,
+    )
+    high_void = float(getattr(overlay, "_goo_void_size", 0.0))
+
+    assert 0.008 <= low_void <= 0.060
+    assert 0.008 <= high_void <= 0.060
+    assert high_void > low_void
+
+    overlay.deleteLater()

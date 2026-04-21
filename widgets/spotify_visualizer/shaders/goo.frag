@@ -25,10 +25,12 @@ uniform float u_goo_inward_outline_width;
 uniform float u_goo_shadow_strength;
 uniform float u_goo_specular_density;
 uniform float u_goo_void_size;
+uniform float u_goo_edge_inward_depth;
 uniform float u_goo_threshold;
 
 const int GOO_SOURCE_COUNT = 64;
 const int CURVE_SUB_STEPS = 4;
+const float TAU = 6.28318530718;
 uniform vec4 u_goo_sources[GOO_SOURCE_COUNT];
 
 vec3 permute(vec3 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
@@ -156,6 +158,67 @@ float sd_round_rect_px(vec2 p, vec2 half_size, float radius) {
     return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 
+float wrap_angle_dist(float a, float b) {
+    float d = mod(abs(a - b), TAU);
+    return min(d, TAU - d);
+}
+
+float section_envelope(float ang, float center, float width) {
+    float d = wrap_angle_dist(ang, center);
+    float x = 1.0 - smoothstep(width, width * 1.65, d);
+    return x * x * (3.0 - 2.0 * x); // smootherstep
+}
+
+float edge_deform_field(float theta, float t, float drive, float inward_depth, float playing01) {
+    // Asymmetric music-steered packets with phase warp; avoids corner-pair cycles.
+    float music = drive * 0.75 + u_bass_energy * 0.45 + u_mid_energy * 0.30 + u_high_energy * 0.22;
+    // Keep motion gentler while preserving strong amplitude reactivity.
+    float phase = t * (0.13 + 0.10 * music);
+
+    float warp =
+        sin(theta * 3.0 + phase * 0.40 + u_mid_energy * 4.7) * 0.22 +
+        sin(theta * 5.0 - phase * 0.62 + u_high_energy * 6.1 + 1.4) * 0.12 +
+        sin(theta * 7.0 + phase * 0.29 + u_bass_energy * 3.8 + 2.2) * 0.08;
+    float th = theta + warp * 0.32;
+
+    float c1 = mod(phase * 0.46 + u_bass_energy * 5.3 + 0.4, TAU);
+    float c2 = mod(-phase * 0.71 + u_mid_energy * 4.1 + 2.0, TAU);
+    float c3 = mod(phase * 1.02 + u_high_energy * 5.7 + 4.1, TAU);
+    float c4 = mod(-phase * 0.34 + u_overall_energy * 3.3 + 5.5, TAU);
+
+    float width = mix(1.12, 0.64, clamp(drive * 1.15, 0.0, 1.0));
+    float e1 = section_envelope(th, c1, width * 0.95);
+    float e2 = section_envelope(th, c2, width * 1.08);
+    float e3 = section_envelope(th, c3, width * 0.86);
+    float e4 = section_envelope(th, c4, width * 1.18);
+    float sections = e1 * 0.33 + e2 * 0.27 + e3 * 0.24 + e4 * 0.16;
+
+    float carrier = 0.5 + 0.5 * sin(th * 2.0 + phase * 0.52 + sin(phase * 0.17) * 1.3);
+    float tex = fbm(
+        vec2(cos(th), sin(th)) * 1.6 + vec2(11.3, 37.1),
+        t * 0.07 + u_overall_energy * 0.35
+    ) * 0.5 + 0.5;
+    float field = sections * mix(0.78, 1.15, carrier) * mix(0.88, 1.10, tex * 0.55);
+    // Smooth saturation (not hard clamp).
+    float field_norm = field / (1.0 + 0.65 * field);
+
+    float paused_amp = inward_depth * (0.44 + 0.10 * (0.5 + 0.5 * sin(t * 0.31))) * 0.66;
+    float playing_amp = inward_depth * (0.28 + music * 1.00);
+    float amp = mix(paused_amp, playing_amp, playing01);
+    return field_norm * amp;
+}
+
+float outer_base_radius_px(float theta, float hx, float hy, float n) {
+    float c = cos(theta);
+    float s = sin(theta);
+    float tx = pow(abs(c) / max(hx, 1e-3), n);
+    float ty = pow(abs(s) / max(hy, 1e-3), n);
+    // Keep epsilon extremely small; larger clamps collapse radius to a tiny
+    // constant and fill the whole card.
+    float denom = max(1e-30, tx + ty);
+    return pow(denom, -1.0 / n);
+}
+
 void main() {
     float width = max(1.0, u_resolution.x);
     float height = max(1.0, u_resolution.y);
@@ -200,6 +263,7 @@ void main() {
     }
 
     float drive = clamp(u_bass_energy * 0.40 + u_overall_energy * 0.34 + u_mid_energy * 0.19 + u_high_energy * 0.07, 0.0, 1.3);
+    float playing01 = float(u_playing > 0);
     float metric_x = inner_w / max(inner_h, 1.0);
     float sd = contour_signed_distance(uv, count, metric_x);
 
@@ -217,9 +281,22 @@ void main() {
     float min_dim = min(inner_w, inner_h);
     float aa_px = max(aa * min_dim, 1.0);
     float inset_px = (0.028 + drive * 0.010) * min_dim + clamp(u_goo_void_size, 0.0, 0.10) * min_dim * 0.55;
-    float corner_r = max(10.0, min_dim * 0.16);
-    vec2 half_inner = vec2(inner_w * 0.5 - inset_px, inner_h * 0.5 - inset_px);
-    float sd_outer_inner = sd_round_rect_px(p_px, half_inner, corner_r);
+    float inward_depth = clamp(u_goo_edge_inward_depth, 0.0, 0.45);
+    float theta = atan(p_px.y, p_px.x);
+    float rho = length(p_px);
+
+    float hx = max(8.0, inner_w * 0.5 - inset_px);
+    float hy = max(8.0, inner_h * 0.5 - inset_px);
+    float base_r = outer_base_radius_px(theta, hx, hy, 4.6);
+
+    float deform_raw_px = max(0.0, edge_deform_field(theta, u_time, drive, inward_depth, playing01) * min_dim * 0.48);
+    float safe_floor_px = max(5.0, min_dim * 0.03);
+    float safe_span_px = max(0.001, base_r - safe_floor_px);
+    // Topology-preserving smooth normalization: no hard cutoff, no disconnects.
+    float inward_px = safe_span_px * (1.0 - exp(-deform_raw_px / safe_span_px));
+    float boundary_r = base_r - inward_px;
+
+    float sd_outer_inner = rho - boundary_r;
     float outer_fill = smoothstep(-aa_px, aa_px, sd_outer_inner);
     float inward_ow_px = max(1.0, inward_ow * min_dim);
     float outer_outline = 1.0 - smoothstep(inward_ow_px, inward_ow_px + aa_px, abs(sd_outer_inner));

@@ -68,6 +68,36 @@ def _max_turn_angle(points: list[list[float]]) -> float:
     return max_ang
 
 
+def _has_self_intersection(points: list[list[float]]) -> bool:
+    pts = [(float(p[0]), float(p[1])) for p in points if p[2] > 0.0]
+    n = len(pts)
+    if n < 4:
+        return False
+
+    def _orient(a, b, c) -> float:
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def _segments_intersect(a, b, c, d) -> bool:
+        o1 = _orient(a, b, c)
+        o2 = _orient(a, b, d)
+        o3 = _orient(c, d, a)
+        o4 = _orient(c, d, b)
+        return (o1 * o2 < 0.0) and (o3 * o4 < 0.0)
+
+    for i in range(n):
+        a = pts[i]
+        b = pts[(i + 1) % n]
+        for j in range(i + 1, n):
+            # Skip identical and adjacent edges (including wrapped adjacency).
+            if j == i or j == (i + 1) % n or (i == 0 and j == n - 1):
+                continue
+            c = pts[j]
+            d = pts[(j + 1) % n]
+            if _segments_intersect(a, b, c, d):
+                return True
+    return False
+
+
 def test_contour_keeps_center_void_and_soft_curvature_idle():
     state = GooFieldState()
     bands = EnergyBands(bass=0.0, mid=0.0, high=0.0, overall=0.0)
@@ -80,6 +110,7 @@ def test_contour_keeps_center_void_and_soft_curvature_idle():
     assert max(radii) <= 0.24, f"contour expanded too far: max_radius={max(radii):.3f}"
     # Hard anti-sharpness assertion.
     assert _max_turn_angle(points) < 0.80
+    assert not _has_self_intersection(points), "spline contour self-intersected at idle"
 
 
 def test_packed_points_stay_inside_boundary_margin():
@@ -132,3 +163,38 @@ def test_source_count_is_clamped_to_minimum_for_smooth_contour():
     points = pack_sources_for_upload(state, 8, boundary_margin=0.01)
     assert len(state.sources) >= GOO_SOURCE_COUNT_MIN
     assert len(points) >= GOO_SOURCE_COUNT_MIN
+
+
+def test_core_size_min_max_envelope_remains_stable():
+    # Low core size should still keep a small but stable center radius.
+    low = GooFieldState()
+    low_bands = EnergyBands(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+    for _ in range(180):
+        _step(low, bands=low_bands, core_size=0.06)
+    low_points = pack_sources_for_upload(low, 64, boundary_margin=0.01)
+    low_r = _contour_radii(low_points)
+    assert low_r
+    assert min(low_r) >= 0.035
+    assert max(low_r) <= 0.070
+
+    # High core size should scale up but remain bounded and smooth.
+    high = GooFieldState()
+    high_bands = EnergyBands(bass=0.0, mid=0.0, high=0.0, overall=0.0)
+    for _ in range(180):
+        _step(high, bands=high_bands, core_size=0.30)
+    high_points = pack_sources_for_upload(high, 64, boundary_margin=0.01)
+    high_r = _contour_radii(high_points)
+    assert high_r
+    assert min(high_r) >= 0.090
+    assert max(high_r) <= 0.140
+    assert not _has_self_intersection(high_points)
+
+
+def test_shader_outer_radius_guard_uses_tiny_epsilon_regression():
+    # Regression guard for full-card collapse bug:
+    # large epsilon in outer_base_radius denominator collapses radius.
+    import pathlib
+
+    shader_path = pathlib.Path("widgets/spotify_visualizer/shaders/goo.frag")
+    src = shader_path.read_text(encoding="utf-8")
+    assert "max(1e-30, tx + ty)" in src

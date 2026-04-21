@@ -1921,6 +1921,10 @@ class SpotifyVisualizerWidget(QWidget):
             logger.debug("[SPOTIFY_VIS] Failed to schedule startup reveal fallback", exc_info=True)
             _maybe_reveal()
 
+    def _mode_allows_idle_reveal(self) -> bool:
+        """Return True when the current mode should reveal while paused."""
+        return str(getattr(self, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "goo"}
+
     def _arm_staged_startup(self, *, reason: str) -> None:
         try:
             self.hide()
@@ -1938,7 +1942,9 @@ class SpotifyVisualizerWidget(QWidget):
             reason=reason,
             request_refresh_if_missing=True,
         )
-        self._startup_require_playing_before_reveal = not self._spotify_playing
+        self._startup_require_playing_before_reveal = (
+            (not self._spotify_playing) and (not self._mode_allows_idle_reveal())
+        )
 
     def _begin_hot_start(self, *, reason: str, reset_reason: str) -> None:
         if self._startup_hot_start_started:
@@ -1953,7 +1959,9 @@ class SpotifyVisualizerWidget(QWidget):
             reason=reason,
             request_refresh_if_missing=False,
         )
-        self._startup_require_playing_before_reveal = not self._spotify_playing
+        self._startup_require_playing_before_reveal = (
+            (not self._spotify_playing) and (not self._mode_allows_idle_reveal())
+        )
 
         try:
             engine = get_shared_spotify_beat_engine(self._bar_count)

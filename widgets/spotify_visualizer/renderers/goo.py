@@ -36,6 +36,7 @@ def get_uniform_names() -> list[str]:
         "u_goo_shadow_strength",
         "u_goo_specular_density",
         "u_goo_void_size",
+        "u_goo_edge_inward_depth",
         "u_goo_threshold",
         "u_goo_sources",
     ]
@@ -67,6 +68,7 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_goo_shadow_strength", s._goo_shadow_strength)
     _set1f(gl, u, "u_goo_specular_density", s._goo_specular_density)
     _set1f(gl, u, "u_goo_void_size", getattr(s, "_goo_void_size", 0.025))
+    _set1f(gl, u, "u_goo_edge_inward_depth", getattr(s, "_goo_edge_inward_depth", 0.18))
     _set1f(gl, u, "u_goo_threshold", getattr(s, "_goo_threshold", 0.5))
 
     def _upload_source_array(uniform_name: str, source_data) -> bool:
