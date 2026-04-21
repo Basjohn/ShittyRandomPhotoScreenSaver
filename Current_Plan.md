@@ -504,6 +504,8 @@ Historical detail for completed failures/fixes belongs in [Docs/Historical_Bugs.
 
 - [ ] Full provider-swap soak (Spotify ↔ MusicBee) during long no-audio mode-switch sessions to confirm no stale idle/active gating state appears.
 - [ ] Final cross-mode custom-slot/preset cleanup sweep (Bubble/Spectrum/Sine/Oscilloscope/Blob) to ensure no legacy keys reappear through tools.
+- [ ] **Settings Dialog Flicker / Taskbar Ghost** — Fixed 2026-04-21. Removed premature `raise_()`/`activateWindow()`, changed `Window` → `Dialog` flag, added `WA_ShowWithoutActivating` guard. Awaiting user runtime confirmation. See `Docs/Historical_Bugs.md`.
+- [x] **Context Menu "Change Visualizer" submenu** — Implemented 2026-04-21. Gate-aware submenu placed below "Change Transition", triggers full mode-switch crossfade path. Files: `context_menu.py`, `display_context_menu.py`, `display_setup.py`, `display_widget.py`, `mode_transition.py`, `spotify_visualizer_widget.py`.
 
 ## Runtime Watchlist
 

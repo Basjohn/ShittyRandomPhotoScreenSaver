@@ -198,3 +198,13 @@ def test_shader_outer_radius_guard_uses_tiny_epsilon_regression():
     shader_path = pathlib.Path("widgets/spotify_visualizer/shaders/goo.frag")
     src = shader_path.read_text(encoding="utf-8")
     assert "max(1e-30, tx + ty)" in src
+
+
+def test_shader_wrap_angle_distance_is_branch_cut_safe():
+    # Regression guard for left-edge seam/notch artifacts in shader-only
+    # outer boundary deformation.
+    import pathlib
+
+    shader_path = pathlib.Path("widgets/spotify_visualizer/shaders/goo.frag")
+    src = shader_path.read_text(encoding="utf-8")
+    assert "mod((a - b) + PI, TAU) - PI" in src

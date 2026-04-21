@@ -156,13 +156,6 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
                 init_ms,
                 since_request_ms,
             )
-            try:
-                dialog.raise_()
-                dialog.activateWindow()
-                logger.info("Settings dialog raised + activated (%.1f ms since request)", (time.perf_counter() - request_start) * 1000)
-            except Exception:
-                logger.debug("Failed to raise/activate settings dialog", exc_info=True)
-            # Result intentionally ignored - dialog handles its own state
             exec_start = time.perf_counter()
             logger.info("Entering settings dialog exec (%.1f ms since request)", (exec_start - request_start) * 1000)
             _ = dialog.exec()

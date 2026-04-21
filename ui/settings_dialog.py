@@ -539,15 +539,20 @@ class SettingsDialog(QDialog):
     
     def _setup_window(self) -> None:
         """Setup window properties."""
-        # Frameless window with custom title bar
+        # Frameless dialog — Dialog type avoids creating a premature taskbar
+        # entry during construction (Window type does), which prevents the
+        # ghost-frame / taskbar flash on Windows.  All custom chrome (title
+        # bar, resize grip, drag, acrylic) is independent of native flags.
         self.setWindowFlags(
-            Qt.WindowType.Window |
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowSystemMenuHint
+            Qt.WindowType.Dialog |
+            Qt.WindowType.FramelessWindowHint
         )
         
         # Enable transparency for drop shadow
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        # Prevent accidental early activation from producing ghost frames.
+        # Cleared in showEvent so exec() can properly activate the window.
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         
         # Minimum size tuned to the reference layout so that all tabs
         # (especially About/Widgets) render without clipping. The width
@@ -1597,6 +1602,9 @@ class SettingsDialog(QDialog):
     
     def showEvent(self, event):
         super().showEvent(event)
+        # Clear the construction-time activation guard so the window can
+        # receive focus normally now that it has visible content.
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
         # Enable Windows acrylic blur-behind on first show
         if not self._acrylic_applied:
             self._acrylic_applied = True

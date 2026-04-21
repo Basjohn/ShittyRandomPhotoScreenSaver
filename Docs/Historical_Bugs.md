@@ -463,17 +463,38 @@ Section by date and type.
 - **Validation needed:** determine whether the repaired migration now fixes the real editor UI the user sees and whether runtime behavior also follows the upgraded linear lane layout.
 - **Anti-pattern warning:** do not paper over this with fragile one-shot cleanup hooks that only work when Windows allows a graceful exit path.
 
-## 2026-04-08 — Settings Dialog Flicker / Placeholder Regression Follow-Up (Unresolved, Low Priority)
+## 2026-04-21 — Settings Dialog Flicker / Taskbar Ghost (Unresolved — Active Investigation)
 
-- [X] COMPLETELY FUCKED
-- [ ] PARTIAL
+- [ ] COMPLETELY FUCKED
+- [X] PARTIAL
 - [ ] AWAITING VALIDATION
 - [ ] SOLVED
 
-- **Current symptom:** the main resolved entry records this as fixed, but the user later re-raised it as unresolved in some form, albeit lower priority than before.
-- **Current understanding:** the worst historical flicker regression was fixed, but this bug family is not considered permanently closed until future runtime use keeps holding.
-- **Why this lives here:** the archived resolved entry is still valuable, but the ledger also needs an unresolved marker so future recurrences are tracked without rewriting history.
-- **Validation needed:** confirm current builds no longer show the old bad placeholder/flicker behavior in the settings handoff path across the same monitor/layout combinations that previously reproduced it.
+- **Symptom:** When the settings dialog is summoned, the taskbar flickers and a small window with the SRPSS app icon briefly appears (typically centered on Display 0) before the dialog renders. This affects title bars / taskbar of OTHER applications (e.g. the IDE on Display 0) even though the dialog targets Display 1. Present in both engine mode (via `dialog.exec()`) and config mode (`--s`, via `dialog.show()` + `app.exec()`).
+- **Earlier partial fixes (kept, each individually valid):**
+  - **Fix A:** Removed premature `raise_()` / `activateWindow()` in `engine_handlers.py` — these were redundant with `exec()` internals and could produce ghost frames.
+  - **Fix B:** Changed window flags from `Window | FramelessWindowHint | WindowSystemMenuHint` to `Dialog | FramelessWindowHint` — the `Window` type created an unnecessary independent taskbar entry during HWND allocation.
+  - **Fix C:** Added `WA_ShowWithoutActivating` during construction, cleared in `showEvent` — prevents incidental Win32 activation during `__init__`.
+  - These fixes eliminated a separate "tiny ghost window" artifact from the old window type. The primary flicker (taskbar + Display 0 title bars + small icon window) **persists** after all three.
+- **Systematic isolation via `tools/flicker_test.py` (13 variants tested):**
+  - Variants 1-7: Basic QDialogs with every combination of flags/attributes (`FramelessWindowHint`, `WA_TranslucentBackground`, `Dialog`, `Window`, `Tool`, stylesheets). **None flickered.**
+  - Variant 8: Font registration via `QFontDatabase.addApplicationFont`. **No flicker.**
+  - Variant 9: Font registration + `QGuiApplication.setFont()` global font change. **No flicker.**
+  - Variant 10: Full flags + real `dark.qss` stylesheet (256ms show). **No flicker.**
+  - Variant 11: Full flags + 200 child widgets (QGroupBox/QLabel/QPushButton/QCheckBox/QComboBox). **No flicker.**
+  - Variant 12: All combined — font reg + global font + large QSS + 200 widgets (670ms construction). **No flicker.**
+  - Variant 13: Actual `SettingsDialog` construction (2260ms). **FLICKERED — tiny central window with app icon in title bar.**
+  - Variants 14-16: Same as 1/5/12 but with main.py startup steps applied first (DPI policy, `AA_UseDesktopOpenGL`, `AA_ShareOpenGLContexts`, `QSurfaceFormat.setDefaultFormat`, `app.setWindowIcon`). **None flickered.**
+  - Variant 17: Actual `SettingsDialog` + main.py setup (1960ms). **FLICKERED — same tiny window.**
+- **What this proves:**
+  - The flicker is NOT caused by window flags, attributes, `WA_TranslucentBackground`, font loading, global font changes, large stylesheets, many child widgets, construction time, or main.py OpenGL/DPI/icon setup.
+  - The flicker IS caused by something specific inside `SettingsDialog.__init__` that no mock variant reproduces — something about the specific widget tree, signal wiring, effect composition, or native API calls during its construction.
+- **Failed approaches to stop repeating:**
+  - Off-screen HWND creation (`self.move(-32000, -32000)` + snap in `showEvent`) — flicker still occurred.
+  - Focus gap theory (reordering `engine.stop()` vs `dialog.show()`) — user confirmed "not focus related AT ALL."
+  - Multi-monitor compositor / placeholder theory (Approaches A-E in the historical entry) — proven wrong; flicker occurs in standalone `--s` config mode with no engine, no compositor, no multi-monitor windowing.
+  - Acrylic blur — user confirmed "added acrylic after this issue first appeared."
+- **Current investigation direction:** Binary search within `SettingsDialog.__init__` to find the exact operation that triggers the tiny HWND with title bar. The tiny window has a standard title bar with the app icon, suggesting somewhere during construction a native HWND is created with `WS_CAPTION` style before frameless flags take effect, or a secondary HWND (tooltip, popup, or internal Qt helper) is briefly shown.
 
 ## 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)
 
