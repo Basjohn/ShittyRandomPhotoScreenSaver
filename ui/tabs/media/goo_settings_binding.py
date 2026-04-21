@@ -44,8 +44,14 @@ def load_goo_mode_settings(
     # --- Appearance sliders --------------------------------------------------
     if hasattr(tab, "goo_outline_width"):
         v = int(tab._config_float("spotify_visualizer", config, "goo_outline_width", 0.004) * 1000)
-        tab.goo_outline_width.setValue(max(0, min(50, v)))
+        v = max(0, min(12, v))
+        tab.goo_outline_width.setValue(v)
         tab.goo_outline_width_label.setText(f"{v / 1000.0:.3f}")
+    if hasattr(tab, "goo_inward_outline_width"):
+        v = int(tab._config_float("spotify_visualizer", config, "goo_inward_outline_width", 0.004) * 1000)
+        v = max(0, min(12, v))
+        tab.goo_inward_outline_width.setValue(v)
+        tab.goo_inward_outline_width_label.setText(f"{v / 1000.0:.3f}")
     if hasattr(tab, "goo_shadow_strength"):
         v = int(tab._config_float("spotify_visualizer", config, "goo_shadow_strength", 0.3) * 100)
         tab.goo_shadow_strength.setValue(max(0, min(100, v)))
@@ -54,28 +60,17 @@ def load_goo_mode_settings(
         v = int(tab._config_float("spotify_visualizer", config, "goo_specular_density", 0.3) * 100)
         tab.goo_specular_density.setValue(max(0, min(100, v)))
         tab.goo_specular_density_label.setText(f"{v}%")
-    if hasattr(tab, "goo_void_floor"):
-        v = int(tab._config_float("spotify_visualizer", config, "goo_void_floor", 0.15) * 100)
-        tab.goo_void_floor.setValue(max(0, min(60, v)))
-        tab.goo_void_floor_label.setText(f"{v}%")
-
     # --- Motion sliders ------------------------------------------------------
-    if hasattr(tab, "goo_advance_speed"):
-        v = int(tab._config_float("spotify_visualizer", config, "goo_advance_speed", 1.0) * 100)
-        tab.goo_advance_speed.setValue(max(10, min(300, v)))
-        tab.goo_advance_speed_label.setText(f"{v / 100.0:.2f}x")
-    if hasattr(tab, "goo_retreat_speed"):
-        v = int(tab._config_float("spotify_visualizer", config, "goo_retreat_speed", 1.0) * 100)
-        tab.goo_retreat_speed.setValue(max(10, min(300, v)))
-        tab.goo_retreat_speed_label.setText(f"{v / 100.0:.2f}x")
-    if hasattr(tab, "goo_source_count"):
-        v = int(tab._config_int("spotify_visualizer", config, "goo_source_count", 64))
-        tab.goo_source_count.setValue(max(16, min(128, v)))
-        tab.goo_source_count_label.setText(str(max(16, min(128, v))))
-    if hasattr(tab, "goo_growth"):
-        v = int(tab._config_float("spotify_visualizer", config, "goo_growth", 3.5) * 100)
-        tab.goo_growth.setValue(max(100, min(500, v)))
-        tab.goo_growth_label.setText(f"{v / 100.0:.1f}x")
+    if hasattr(tab, "goo_core_size"):
+        v = int(tab._config_float("spotify_visualizer", config, "goo_core_size", 0.18) * 100)
+        v = max(6, min(30, v))
+        tab.goo_core_size.setValue(v)
+        tab.goo_core_size_label.setText(f"{v}%")
+    if hasattr(tab, "goo_edge_inward_depth"):
+        v = int(tab._config_float("spotify_visualizer", config, "goo_edge_inward_depth", 0.18) * 100)
+        v = max(0, min(45, v))
+        tab.goo_edge_inward_depth.setValue(v)
+        tab.goo_edge_inward_depth_label.setText(f"{v}%")
 
     # --- Colors --------------------------------------------------------------
     for attr, key, default in _GOO_COLOR_DEFAULTS:
@@ -101,13 +96,15 @@ def collect_goo_mode_settings(tab) -> dict[str, Any]:
             (tab.goo_ghost_decay_slider.value() if hasattr(tab, "goo_ghost_decay_slider") else 40) / 100.0,
         ),
         "goo_outline_width": (tab.goo_outline_width.value() if hasattr(tab, "goo_outline_width") else 4) / 1000.0,
+        "goo_inward_outline_width": (
+            (tab.goo_inward_outline_width.value() if hasattr(tab, "goo_inward_outline_width") else 4) / 1000.0
+        ),
         "goo_shadow_strength": (tab.goo_shadow_strength.value() if hasattr(tab, "goo_shadow_strength") else 30) / 100.0,
         "goo_specular_density": (tab.goo_specular_density.value() if hasattr(tab, "goo_specular_density") else 30) / 100.0,
-        "goo_void_floor": (tab.goo_void_floor.value() if hasattr(tab, "goo_void_floor") else 15) / 100.0,
-        "goo_advance_speed": (tab.goo_advance_speed.value() if hasattr(tab, "goo_advance_speed") else 100) / 100.0,
-        "goo_retreat_speed": (tab.goo_retreat_speed.value() if hasattr(tab, "goo_retreat_speed") else 100) / 100.0,
-        "goo_source_count": int(tab.goo_source_count.value()) if hasattr(tab, "goo_source_count") else 64,
-        "goo_growth": (tab.goo_growth.value() if hasattr(tab, "goo_growth") else 350) / 100.0,
+        "goo_core_size": (tab.goo_core_size.value() if hasattr(tab, "goo_core_size") else 18) / 100.0,
+        "goo_edge_inward_depth": (
+            (tab.goo_edge_inward_depth.value() if hasattr(tab, "goo_edge_inward_depth") else 18) / 100.0
+        ),
         "goo_color": _qcolor_to_list(getattr(tab, "_goo_color", None), [0, 140, 220, 230]),
         "goo_outline_color": _qcolor_to_list(getattr(tab, "_goo_outline_color", None), [255, 255, 255, 255]),
         "goo_shadow_color": _qcolor_to_list(getattr(tab, "_goo_shadow_color", None), [0, 60, 110, 180]),

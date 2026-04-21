@@ -66,7 +66,7 @@ def build_goo_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         mode_key="goo",
         bucket_key="motion",
         title="Motion",
-        helper_text="Advance/retreat speed and source count still apply when hidden.",
+        helper_text="Core size and inward edge depth still apply when hidden.",
         default_expanded=True,
     )
     _, ghost_bucket = build_collapsible_bucket(
@@ -113,11 +113,12 @@ def build_goo_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     outline_row = _aligned_row(appearance_bucket, "Outline Width:")
     tab.goo_outline_width = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.goo_outline_width.setMinimum(0)
-    tab.goo_outline_width.setMaximum(50)
+    tab.goo_outline_width.setMaximum(12)
     val = int(tab._default_float("spotify_visualizer", "goo_outline_width", 0.008) * 1000)
-    tab.goo_outline_width.setValue(max(0, min(50, val)))
+    val = max(0, min(12, val))
+    tab.goo_outline_width.setValue(val)
     tab.goo_outline_width.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.goo_outline_width.setTickInterval(5)
+    tab.goo_outline_width.setTickInterval(1)
     bind_setting_signal(
         tab,
         tab.goo_outline_width.valueChanged,
@@ -126,6 +127,24 @@ def build_goo_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     outline_row.addWidget(tab.goo_outline_width)
     tab.goo_outline_width_label = QLabel(f"{val / 1000.0:.3f}")
     outline_row.addWidget(tab.goo_outline_width_label)
+
+    inward_outline_row = _aligned_row(appearance_bucket, "Inward Line Width:")
+    tab.goo_inward_outline_width = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.goo_inward_outline_width.setMinimum(0)
+    tab.goo_inward_outline_width.setMaximum(12)
+    val = int(tab._default_float("spotify_visualizer", "goo_inward_outline_width", 0.004) * 1000)
+    val = max(0, min(12, val))
+    tab.goo_inward_outline_width.setValue(val)
+    tab.goo_inward_outline_width.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.goo_inward_outline_width.setTickInterval(1)
+    bind_setting_signal(
+        tab,
+        tab.goo_inward_outline_width.valueChanged,
+        updater=lambda v: tab.goo_inward_outline_width_label.setText(f"{v / 1000.0:.3f}"),
+    )
+    inward_outline_row.addWidget(tab.goo_inward_outline_width)
+    tab.goo_inward_outline_width_label = QLabel(f"{val / 1000.0:.3f}")
+    inward_outline_row.addWidget(tab.goo_inward_outline_width_label)
 
     shadow_row = _aligned_row(appearance_bucket, "Shadow Strength:")
     tab.goo_shadow_strength = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -157,84 +176,36 @@ def build_goo_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.goo_specular_density_label = QLabel(f"{val}%")
     spec_row.addWidget(tab.goo_specular_density_label)
 
-    void_row = _aligned_row(appearance_bucket, "Void Floor:")
-    tab.goo_void_floor = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.goo_void_floor.setMinimum(0)
-    tab.goo_void_floor.setMaximum(60)
-    val = int(tab._default_float("spotify_visualizer", "goo_void_floor", 0.15) * 100)
-    tab.goo_void_floor.setValue(max(0, min(60, val)))
-    bind_setting_signal(
-        tab,
-        tab.goo_void_floor.valueChanged,
-        updater=lambda v: tab.goo_void_floor_label.setText(f"{v}%"),
-    )
-    void_row.addWidget(tab.goo_void_floor)
-    tab.goo_void_floor_label = QLabel(f"{val}%")
-    void_row.addWidget(tab.goo_void_floor_label)
-
     # --- Motion ---------------------------------------------------------------
-    advance_row = _aligned_row(motion_bucket, "Advance Speed:")
-    tab.goo_advance_speed = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.goo_advance_speed.setMinimum(10)
-    tab.goo_advance_speed.setMaximum(300)
-    val = int(tab._default_float("spotify_visualizer", "goo_advance_speed", 1.0) * 100)
-    tab.goo_advance_speed.setValue(max(10, min(300, val)))
+    core_row = _aligned_row(motion_bucket, "Core Size:")
+    tab.goo_core_size = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.goo_core_size.setMinimum(6)
+    tab.goo_core_size.setMaximum(30)
+    val = int(tab._default_float("spotify_visualizer", "goo_core_size", 0.18) * 100)
+    tab.goo_core_size.setValue(max(6, min(30, val)))
     bind_setting_signal(
         tab,
-        tab.goo_advance_speed.valueChanged,
-        updater=lambda v: tab.goo_advance_speed_label.setText(f"{v / 100.0:.2f}x"),
+        tab.goo_core_size.valueChanged,
+        updater=lambda v: tab.goo_core_size_label.setText(f"{v}%"),
     )
-    advance_row.addWidget(tab.goo_advance_speed)
-    tab.goo_advance_speed_label = QLabel(f"{val / 100.0:.2f}x")
-    advance_row.addWidget(tab.goo_advance_speed_label)
+    core_row.addWidget(tab.goo_core_size)
+    tab.goo_core_size_label = QLabel(f"{val}%")
+    core_row.addWidget(tab.goo_core_size_label)
 
-    retreat_row = _aligned_row(motion_bucket, "Retreat Speed:")
-    tab.goo_retreat_speed = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.goo_retreat_speed.setMinimum(10)
-    tab.goo_retreat_speed.setMaximum(300)
-    val = int(tab._default_float("spotify_visualizer", "goo_retreat_speed", 1.0) * 100)
-    tab.goo_retreat_speed.setValue(max(10, min(300, val)))
+    inward_row = _aligned_row(motion_bucket, "Inward Depth:")
+    tab.goo_edge_inward_depth = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.goo_edge_inward_depth.setMinimum(0)
+    tab.goo_edge_inward_depth.setMaximum(45)
+    val = int(tab._default_float("spotify_visualizer", "goo_edge_inward_depth", 0.18) * 100)
+    tab.goo_edge_inward_depth.setValue(max(0, min(45, val)))
     bind_setting_signal(
         tab,
-        tab.goo_retreat_speed.valueChanged,
-        updater=lambda v: tab.goo_retreat_speed_label.setText(f"{v / 100.0:.2f}x"),
+        tab.goo_edge_inward_depth.valueChanged,
+        updater=lambda v: tab.goo_edge_inward_depth_label.setText(f"{v}%"),
     )
-    retreat_row.addWidget(tab.goo_retreat_speed)
-    tab.goo_retreat_speed_label = QLabel(f"{val / 100.0:.2f}x")
-    retreat_row.addWidget(tab.goo_retreat_speed_label)
-
-    src_row = _aligned_row(motion_bucket, "Source Count:")
-    tab.goo_source_count = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.goo_source_count.setMinimum(4)
-    tab.goo_source_count.setMaximum(32)
-    tab.goo_source_count.setSingleStep(4)
-    val = int(tab._default_int("spotify_visualizer", "goo_source_count", 32))
-    tab.goo_source_count.setValue(max(4, min(32, val)))
-    bind_setting_signal(
-        tab,
-        tab.goo_source_count.valueChanged,
-        updater=lambda v: tab.goo_source_count_label.setText(str(v)),
-    )
-    src_row.addWidget(tab.goo_source_count)
-    tab.goo_source_count_label = QLabel(str(val))
-    src_row.addWidget(tab.goo_source_count_label)
-
-    growth_row = _aligned_row(motion_bucket, "Card Height:")
-    tab.goo_growth = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.goo_growth.setMinimum(100)
-    tab.goo_growth.setMaximum(500)
-    val = int(tab._default_float("spotify_visualizer", "goo_growth", 3.5) * 100)
-    tab.goo_growth.setValue(max(100, min(500, val)))
-    tab.goo_growth.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.goo_growth.setTickInterval(50)
-    bind_setting_signal(
-        tab,
-        tab.goo_growth.valueChanged,
-        updater=lambda v: tab.goo_growth_label.setText(f"{v / 100.0:.1f}x"),
-    )
-    growth_row.addWidget(tab.goo_growth)
-    tab.goo_growth_label = QLabel(f"{val / 100.0:.1f}x")
-    growth_row.addWidget(tab.goo_growth_label)
+    inward_row.addWidget(tab.goo_edge_inward_depth)
+    tab.goo_edge_inward_depth_label = QLabel(f"{val}%")
+    inward_row.addWidget(tab.goo_edge_inward_depth_label)
 
     # --- Ghost (advanced) -----------------------------------------------------
     toggle_row = _aligned_row(ghost_bucket, "")

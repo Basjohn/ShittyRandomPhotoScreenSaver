@@ -32,6 +32,7 @@ def get_uniform_names() -> list[str]:
         "u_goo_outline_color",
         "u_goo_shadow_color",
         "u_goo_outline_width",
+        "u_goo_inward_outline_width",
         "u_goo_shadow_strength",
         "u_goo_specular_density",
         "u_goo_void_size",
@@ -62,9 +63,10 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set_color4(gl, u, "u_goo_outline_color", s._goo_outline_color)
     _set_color4(gl, u, "u_goo_shadow_color", s._goo_shadow_color)
     _set1f(gl, u, "u_goo_outline_width", s._goo_outline_width)
+    _set1f(gl, u, "u_goo_inward_outline_width", getattr(s, "_goo_inward_outline_width", s._goo_outline_width))
     _set1f(gl, u, "u_goo_shadow_strength", s._goo_shadow_strength)
     _set1f(gl, u, "u_goo_specular_density", s._goo_specular_density)
-    _set1f(gl, u, "u_goo_void_size", getattr(s, "_goo_void_size", s._goo_void_floor))
+    _set1f(gl, u, "u_goo_void_size", getattr(s, "_goo_void_size", 0.025))
     _set1f(gl, u, "u_goo_threshold", getattr(s, "_goo_threshold", 0.5))
 
     def _upload_source_array(uniform_name: str, source_data) -> bool:

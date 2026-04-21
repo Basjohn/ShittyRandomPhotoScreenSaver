@@ -1977,16 +1977,14 @@ class TestVisualizerSettingsSnapshotNormalization:
         normalized = normalize_visualizer_section_mapping(
             {
                 "mode": "goo",
-                "goo_source_count": 64,
-                "goo_growth": 3.5,
-                "goo_advance_speed": 1.2,
+                "goo_core_size": 0.38,
+                "goo_edge_inward_depth": 0.24,
             },
             apply_preset_overlay=False,
         )
 
-        assert normalized["goo_source_count"] == 64
-        assert normalized["goo_growth"] == pytest.approx(3.5)
-        assert normalized["goo_advance_speed"] == pytest.approx(1.2)
+        assert normalized["goo_core_size"] == pytest.approx(0.38)
+        assert normalized["goo_edge_inward_depth"] == pytest.approx(0.24)
 
     def test_model_roundtrip_omits_retired_compat_settings_keys(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -2015,15 +2013,15 @@ class TestVisualizerSettingsSnapshotNormalization:
         model = SpotifyVisualizerSettings.from_mapping(
             {
                 "mode": "goo",
-                "goo_source_count": 48,
-                "goo_growth": 4.0,
+                "goo_core_size": 0.39,
+                "goo_edge_inward_depth": 0.21,
             },
             apply_preset_overlay=False,
         )
 
         saved = model.to_dict()
-        assert saved["widgets.spotify_visualizer.goo_source_count"] == 48
-        assert saved["widgets.spotify_visualizer.goo_growth"] == pytest.approx(4.0)
+        assert saved["widgets.spotify_visualizer.goo_core_size"] == pytest.approx(0.39)
+        assert saved["widgets.spotify_visualizer.goo_edge_inward_depth"] == pytest.approx(0.21)
         assert "widgets.spotify_visualizer.goo_gap_min" not in saved
         assert "widgets.spotify_visualizer.goo_edge_pressure" not in saved
         assert "widgets.spotify_visualizer.goo_core_pressure" not in saved

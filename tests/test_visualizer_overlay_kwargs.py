@@ -103,13 +103,16 @@ def test_goo_gpu_kwargs_include_unified_sources(qt_app):
     stub_engine = _StubEngine()
     widget._goo_boundary_margin = 0.01
     widget._goo_sources = [[0.1, 0.1, 0.08, 0.9], [0.5, 0.5, 0.06, 0.7]]
+    widget._goo_inward_outline_width = 0.005
 
     extras = build_gpu_push_extra_kwargs(widget, "goo", stub_engine)
 
     assert extras["goo_boundary_margin"] == pytest.approx(0.01)
     assert extras["goo_sources"] == [[0.1, 0.1, 0.08, 0.9], [0.5, 0.5, 0.06, 0.7]]
-    assert "goo_source_count" in extras
-    assert extras["goo_source_count"] == 64
+    assert "goo_core_size" in extras
+    assert extras["goo_core_size"] == pytest.approx(0.18)
+    assert "goo_edge_inward_depth" in extras
+    assert extras["goo_inward_outline_width"] == pytest.approx(0.005)
 
     widget.deleteLater()
 

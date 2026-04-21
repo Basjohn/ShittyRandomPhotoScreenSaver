@@ -1,5 +1,5 @@
 #version 330 core
-// Goo Mode — unified liquid field with noise-perturbed organic edges.
+// Goo Mode -- spline contour ring renderer (vector-smooth, no sharp corners).
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -21,17 +21,16 @@ uniform vec4 u_goo_color;
 uniform vec4 u_goo_outline_color;
 uniform vec4 u_goo_shadow_color;
 uniform float u_goo_outline_width;
+uniform float u_goo_inward_outline_width;
 uniform float u_goo_shadow_strength;
 uniform float u_goo_specular_density;
 uniform float u_goo_void_size;
 uniform float u_goo_threshold;
 
-
 const int GOO_SOURCE_COUNT = 64;
+const int CURVE_SUB_STEPS = 4;
 uniform vec4 u_goo_sources[GOO_SOURCE_COUNT];
 
-
-// ---- Simplex-like 2D noise for organic edge perturbation ----
 vec3 permute(vec3 x) { return mod(((x * 34.0) + 1.0) * x, 289.0); }
 
 float snoise(vec2 v) {
@@ -58,7 +57,6 @@ float snoise(vec2 v) {
     return 130.0 * dot(m, g);
 }
 
-// Fractal Brownian Motion for multi-octave organic noise
 float fbm(vec2 p, float t) {
     float val = 0.0;
     float amp = 0.5;
@@ -72,28 +70,87 @@ float fbm(vec2 p, float t) {
     return val;
 }
 
-// ---- Metaball field ----
-float metaball_influence(float r2) {
-    float q = max(r2, 0.0);
-    // Localized influence — sources form distinct tendrils, not one solid mass.
-    // Neighbors merge only when overlapping, creating bridges and gaps.
-    float core  = exp(-q * 3.2);   // sharp core definition
-    float skirt = exp(-q * 1.1);   // moderate reach for neighbor merging
-    return core * 0.55 + skirt * 0.35;
+int wrap_idx(int i, int n) {
+    int r = i % n;
+    return (r < 0) ? (r + n) : r;
 }
 
-float sample_field(vec2 p) {
-    float f = 0.0;
+vec2 goo_point(int i) {
+    return u_goo_sources[i].xy;
+}
+
+int goo_point_count() {
+    int count = 0;
     for (int i = 0; i < GOO_SOURCE_COUNT; i++) {
-        vec4 src = u_goo_sources[i];
-        float rad = max(src.z, 0.0001);
-        float energy = clamp(src.w, 0.0, 1.6);
-        if (rad < 0.001 && energy < 0.001) continue;
-        vec2 d = p - src.xy;
-        float r2 = dot(d, d) / (rad * rad);
-        f += metaball_influence(r2) * (0.60 + 0.90 * energy);
+        if (u_goo_sources[i].z > 0.001) {
+            count += 1;
+        }
     }
-    return f;
+    return count;
+}
+
+float segment_distance(vec2 p, vec2 a, vec2 b) {
+    vec2 ab = b - a;
+    float h = dot(p - a, ab) / max(dot(ab, ab), 1e-6);
+    h = clamp(h, 0.0, 1.0);
+    return length((a + ab * h) - p);
+}
+
+vec2 catmull(vec2 p0, vec2 p1, vec2 p2, vec2 p3, float t) {
+    float t2 = t * t;
+    float t3 = t2 * t;
+    return 0.5 * (
+        (2.0 * p1) +
+        (-p0 + p2) * t +
+        (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 +
+        (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3
+    );
+}
+
+float contour_distance(vec2 p, int count) {
+    float d = 10.0;
+    for (int i = 0; i < GOO_SOURCE_COUNT; i++) {
+        if (i >= count) break;
+        vec2 p0 = goo_point(wrap_idx(i - 1, count));
+        vec2 p1 = goo_point(i);
+        vec2 p2 = goo_point(wrap_idx(i + 1, count));
+        vec2 p3 = goo_point(wrap_idx(i + 2, count));
+        vec2 prev = p1;
+        for (int s = 1; s <= CURVE_SUB_STEPS; s++) {
+            float t = float(s) / float(CURVE_SUB_STEPS);
+            vec2 cur = catmull(p0, p1, p2, p3, t);
+            d = min(d, segment_distance(p, prev, cur));
+            prev = cur;
+        }
+    }
+    return d;
+}
+
+bool point_in_polygon(vec2 p, int count) {
+    bool inside = false;
+    for (int i = 0; i < GOO_SOURCE_COUNT; i++) {
+        if (i >= count) break;
+        vec2 a = goo_point(i);
+        vec2 b = goo_point(wrap_idx(i + 1, count));
+        bool crosses = ((a.y > p.y) != (b.y > p.y));
+        if (!crosses) continue;
+        float denom = b.y - a.y;
+        if (abs(denom) < 1e-6) continue;
+        float x_at_y = ((b.x - a.x) * (p.y - a.y) / denom) + a.x;
+        if (p.x < x_at_y) inside = !inside;
+    }
+    return inside;
+}
+
+float contour_signed_distance(vec2 p, int count) {
+    float d = contour_distance(p, count);
+    bool inside = point_in_polygon(p, count);
+    return inside ? -d : d;
+}
+
+float sd_round_rect_px(vec2 p, vec2 half_size, float radius) {
+    vec2 q = abs(p) - (half_size - vec2(radius));
+    return length(max(q, vec2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
 }
 
 void main() {
@@ -103,7 +160,6 @@ void main() {
     float fb_h = height * dpr;
     vec2 fc = vec2(gl_FragCoord.x / dpr, (fb_h - gl_FragCoord.y) / dpr);
 
-    // Card interior clipping (same family as bubble shader).
     float border_w = max(1.0, u_border_width);
     float card_radius = 8.0;
     float inner_radius = max(0.0, card_radius - border_w);
@@ -130,71 +186,70 @@ void main() {
     }
 
     vec2 uv = vec2((fc.x - border_w) / inner_w, (fc.y - border_w) / inner_h);
-    float aa = max(1.5 / max(inner_h, 1.0), 0.0015);
-    // Higher threshold — only strong field regions are liquid,
-    // naturally carving large voids between source clusters.
-    float threshold = clamp(u_goo_threshold * 0.85, 0.30, 0.65);
-    float ow = max(0.003, u_goo_outline_width * 2.0);
+    float aa = max(1.15 / max(inner_h, 1.0), 0.0010);
+    float ow = clamp(u_goo_outline_width, 0.00035, 0.010);
+    float inward_ow = clamp(u_goo_inward_outline_width, 0.00025, 0.010);
 
-    // Energy drive for noise amplitude
-    float drive = clamp(u_bass_energy * 0.40 + u_overall_energy * 0.35 + u_mid_energy * 0.25, 0.0, 1.3);
+    int count = goo_point_count();
+    if (count < 3) {
+        fragColor = vec4(0.0);
+        return;
+    }
 
-    // Strong coordinate warp — creates the organic blobby edges from the mock.
-    float noise_scale = 3.5 + drive * 2.0;
-    float noise_amp = 0.08 + drive * 0.10;
-    vec2 warp = vec2(
-        fbm(uv * noise_scale, u_time * 0.5),
-        fbm(uv * noise_scale + vec2(43.0, 17.0), u_time * 0.5 + 100.0)
-    ) * noise_amp;
+    float drive = clamp(u_bass_energy * 0.40 + u_overall_energy * 0.34 + u_mid_energy * 0.19 + u_high_energy * 0.07, 0.0, 1.3);
+    float sd = contour_signed_distance(uv, count);
 
-    vec2 warped_uv = uv + warp;
+    // Keep threshold meaningful for contour scale bias.
+    float threshold_bias = (clamp(u_goo_threshold, 0.0, 1.0) - 0.5) * 0.07;
+    sd += threshold_bias;
 
-    // Sample the unified metaball field
-    float field = sample_field(warped_uv);
+    float center_fill = 1.0 - smoothstep(-aa, aa, sd);
+    // Center outline follows the exact same spline contour as fill.
+    float outline = 1.0 - smoothstep(ow, ow + aa, abs(sd));
 
-    // Noise-based field disruption — breaks the field into complex topology
-    // with tendrils, bridges, and isolated pools like the mock.
-    float disrupt = fbm(uv * 4.5 + vec2(7.0, 13.0), u_time * 0.35) * 0.18;
-    field -= disrupt;
+    // Outer reactive base layer: rounded and even on all four sides.
+    vec2 inner_center = vec2(inner_w * 0.5, inner_h * 0.5);
+    vec2 p_px = vec2(fc.x - border_w, fc.y - border_w) - inner_center;
+    float min_dim = min(inner_w, inner_h);
+    float aa_px = max(aa * min_dim, 1.0);
+    float inset_px = (0.028 + drive * 0.010) * min_dim + clamp(u_goo_void_size, 0.0, 0.10) * min_dim * 0.55;
+    float corner_r = max(10.0, min_dim * 0.16);
+    vec2 half_inner = vec2(inner_w * 0.5 - inset_px, inner_h * 0.5 - inset_px);
+    float sd_outer_inner = sd_round_rect_px(p_px, half_inner, corner_r);
+    float outer_fill = smoothstep(-aa_px, aa_px, sd_outer_inner);
+    float inward_ow_px = max(1.0, inward_ow * min_dim);
+    float outer_outline = 1.0 - smoothstep(inward_ow_px, inward_ow_px + aa_px, abs(sd_outer_inner));
 
-    float liquid = smoothstep(threshold - aa, threshold + aa, field);
+    // Subtle shadow on the center boundary only.
+    float shadow = (1.0 - smoothstep(0.0, 0.020, sd)) * smoothstep(-0.030, -0.004, sd) * 0.45;
+    shadow *= clamp(u_goo_shadow_strength, 0.0, 1.0);
 
-    // Shadow: offset field sample (flat 2D silhouette)
-    vec2 shadow_offset = vec2(0.012, -0.014);
-    float shadow_field = sample_field(warped_uv - shadow_offset);
-    float shadow_disrupt = fbm((uv - shadow_offset) * 4.5 + vec2(7.0, 13.0), u_time * 0.35) * 0.18;
-    shadow_field -= shadow_disrupt;
-    float shadow_liquid = smoothstep(threshold - aa, threshold + aa, shadow_field);
-    float shadow_band = shadow_liquid * (1.0 - liquid);
+    // Specular streaks only on filled center near the inner border.
+    float spec_density = clamp(u_goo_specular_density * 1.35, 0.0, 1.0);
+    float edge_center = center_fill * smoothstep(-0.020, -0.002, sd);
+    float spec_noise = fbm(uv * 8.5 + vec2(17.0, 31.0), u_time * 0.18 + drive * 0.3) * 0.5 + 0.5;
+    float spec_mask = smoothstep(0.69, 0.87, spec_noise);
+    float specular = edge_center * spec_mask * spec_density * (0.65 + drive * 0.35);
 
-    // Outline: band around the threshold
-    float outline = smoothstep(threshold - ow * 1.8, threshold - ow * 0.15, field)
-                   * (1.0 - smoothstep(threshold + ow * 0.15, threshold + ow * 1.8, field));
-
-    // Specular: thin streak marks along the liquid interior near edges
-    // Uses field gradient direction + noise for organic streak placement
-    float spec_density = clamp(u_goo_specular_density * 1.6, 0.0, 1.0);
-    float field_interior = smoothstep(threshold, threshold + 0.12, field);  // only inside liquid
-    float field_near_edge = 1.0 - smoothstep(threshold + 0.01, threshold + 0.18, field);  // near liquid edge
-    float spec_noise = snoise(uv * 28.0 + u_time * 0.15);
-    float spec_noise2 = snoise(uv * 45.0 - u_time * 0.22 + vec2(77.0, 33.0));
-    // Thin streaks: high threshold on noise product
-    float spec_raw = smoothstep(0.55, 0.80, spec_noise * 0.5 + 0.5)
-                   * smoothstep(0.50, 0.75, spec_noise2 * 0.5 + 0.5);
-    float specular = spec_raw * field_interior * field_near_edge * spec_density;
-
-    // Composite: shadow → fill → outline → specular
     vec3 col = vec3(0.0);
     float alpha = 0.0;
 
-    float shadow_alpha = clamp(shadow_band * u_goo_shadow_strength * 0.85, 0.0, 1.0);
-    col = mix(col, u_goo_shadow_color.rgb, shadow_alpha);
-    alpha = max(alpha, shadow_alpha * u_goo_shadow_color.a);
+    vec3 outer_base = mix(u_goo_shadow_color.rgb, u_goo_color.rgb, 0.78);
+    float outer_alpha = outer_fill * (0.58 + drive * 0.16) * clamp(u_goo_color.a, 0.0, 1.0);
+    col = mix(col, outer_base, outer_alpha);
+    alpha = max(alpha, outer_alpha);
 
-    col = mix(col, u_goo_color.rgb, liquid);
-    alpha = max(alpha, liquid * u_goo_color.a);
+    float outer_outline_alpha = outer_outline * u_goo_outline_color.a * 0.95;
+    col = mix(col, u_goo_outline_color.rgb, outer_outline_alpha);
+    alpha = max(alpha, outer_outline_alpha);
 
-    float outline_alpha = clamp(outline, 0.0, 1.0) * u_goo_outline_color.a;
+    col = mix(col, u_goo_shadow_color.rgb, shadow);
+    alpha = max(alpha, shadow * u_goo_shadow_color.a);
+
+    col = mix(col, u_goo_color.rgb, center_fill);
+    alpha = max(alpha, center_fill * u_goo_color.a);
+
+    float outline_alpha = outline * u_goo_outline_color.a;
     col = mix(col, u_goo_outline_color.rgb, outline_alpha);
     alpha = max(alpha, outline_alpha);
 

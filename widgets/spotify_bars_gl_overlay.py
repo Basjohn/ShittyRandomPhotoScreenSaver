@@ -341,14 +341,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._goo_outline_color: QColor = QColor(255, 255, 255, 255)
         self._goo_shadow_color: QColor = QColor(0, 60, 110, 180)
         self._goo_outline_width: float = 0.008
+        self._goo_inward_outline_width: float = 0.004
         self._goo_shadow_strength: float = 0.3
         self._goo_specular_density: float = 0.3
-        self._goo_void_floor: float = 0.15
+        self._goo_core_size: float = 0.18
+        self._goo_edge_inward_depth: float = 0.18
         self._goo_void_size: float = 0.25
         self._goo_threshold: float = 0.5
-        self._goo_advance_speed: float = 1.0
-        self._goo_retreat_speed: float = 1.0
-        self._goo_source_count: int = 64
         self._goo_sources: list = []
         self._goo_boundary_margin: float = 0.01
         self._goo_boundary_clamp_count: int = 0
@@ -652,12 +651,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         goo_outline_color: list | None = None,
         goo_shadow_color: list | None = None,
         goo_outline_width: float = 0.008,
+        goo_inward_outline_width: float = 0.004,
         goo_shadow_strength: float = 0.3,
         goo_specular_density: float = 0.3,
-        goo_void_floor: float = 0.15,
-        goo_advance_speed: float = 1.0,
-        goo_retreat_speed: float = 1.0,
-        goo_source_count: int = 64,
+        goo_core_size: float = 0.18,
+        goo_edge_inward_depth: float = 0.18,
         goo_sources: list | None = None,
         goo_boundary_margin: float = 0.01,
         goo_ghosting_enabled: bool = False,
@@ -1377,25 +1375,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._goo_outline_color = QColor(*goo_outline_color) if not isinstance(goo_outline_color, QColor) else QColor(goo_outline_color)
         if goo_shadow_color is not None:
             self._goo_shadow_color = QColor(*goo_shadow_color) if not isinstance(goo_shadow_color, QColor) else QColor(goo_shadow_color)
-        self._goo_outline_width = max(0.0, min(0.1, float(goo_outline_width)))
+        self._goo_outline_width = max(0.0, min(0.012, float(goo_outline_width)))
+        self._goo_inward_outline_width = max(0.0, min(0.012, float(goo_inward_outline_width)))
         self._goo_shadow_strength = max(0.0, min(1.0, float(goo_shadow_strength)))
         self._goo_specular_density = max(0.0, min(1.0, float(goo_specular_density)))
-        self._goo_void_floor = max(0.0, min(1.0, float(goo_void_floor)))
-        self._goo_advance_speed = max(0.0, min(4.0, float(goo_advance_speed)))
-        self._goo_retreat_speed = max(0.0, min(4.0, float(goo_retreat_speed)))
-        self._goo_source_count = max(16, min(128, int(goo_source_count)))
+        self._goo_core_size = max(0.06, min(0.30, float(goo_core_size)))
+        self._goo_edge_inward_depth = max(0.0, min(0.45, float(goo_edge_inward_depth)))
         if goo_sources is not None:
             self._goo_sources = list(goo_sources)
         self._goo_boundary_margin = max(0.005, min(0.10, float(goo_boundary_margin)))
         self._goo_ghosting_enabled = bool(goo_ghosting_enabled)
         self._goo_ghost_alpha = max(0.0, min(1.0, float(goo_ghost_alpha)))
         self._goo_ghost_decay = max(0.1, min(1.0, float(goo_ghost_decay)))
-        # Derive runtime void_size from the void_floor setting + overall energy.
-        # Keep this conservative: the core field must remain visible (mock-parity),
-        # so center trimming can shape contour but never hollow the mode out.
+        # Derive runtime void band width from inward depth + energy.
         _overall = float(getattr(self._energy_bands, 'overall', 0.0) or 0.0)
-        base_void = self._goo_void_floor * 0.22
-        self._goo_void_size = max(0.0, min(0.10, base_void + 0.02 - min(0.03, _overall * 0.02)))
+        inward = self._goo_edge_inward_depth
+        self._goo_void_size = max(0.008, min(0.060, 0.010 + inward * 0.08 + min(0.012, _overall * 0.008)))
 
         # Legacy global ghost fields — still written for backward compat but
         # renderers MUST read mode-specific fields above.

@@ -668,21 +668,17 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'goo_shadow_color' in kwargs:
         widget._goo_shadow_color = list(kwargs['goo_shadow_color']) if kwargs['goo_shadow_color'] is not None else None
     if 'goo_outline_width' in kwargs:
-        widget._goo_outline_width = max(0.0, min(0.1, float(kwargs['goo_outline_width'])))
+        widget._goo_outline_width = max(0.0, min(0.012, float(kwargs['goo_outline_width'])))
+    if 'goo_inward_outline_width' in kwargs:
+        widget._goo_inward_outline_width = max(0.0, min(0.012, float(kwargs['goo_inward_outline_width'])))
     if 'goo_shadow_strength' in kwargs:
         widget._goo_shadow_strength = max(0.0, min(1.0, float(kwargs['goo_shadow_strength'])))
     if 'goo_specular_density' in kwargs:
         widget._goo_specular_density = max(0.0, min(1.0, float(kwargs['goo_specular_density'])))
-    if 'goo_void_floor' in kwargs:
-        widget._goo_void_floor = max(0.0, min(1.0, float(kwargs['goo_void_floor'])))
-    if 'goo_advance_speed' in kwargs:
-        widget._goo_advance_speed = max(0.0, min(4.0, float(kwargs['goo_advance_speed'])))
-    if 'goo_retreat_speed' in kwargs:
-        widget._goo_retreat_speed = max(0.0, min(4.0, float(kwargs['goo_retreat_speed'])))
-    if 'goo_source_count' in kwargs:
-        widget._goo_source_count = max(4, min(128, int(kwargs['goo_source_count'])))
-    if 'goo_growth' in kwargs:
-        widget._goo_growth = max(0.5, min(10.0, float(kwargs['goo_growth'])))
+    if 'goo_core_size' in kwargs:
+        widget._goo_core_size = max(0.06, min(0.30, float(kwargs['goo_core_size'])))
+    if 'goo_edge_inward_depth' in kwargs:
+        widget._goo_edge_inward_depth = max(0.0, min(0.45, float(kwargs['goo_edge_inward_depth'])))
     if 'goo_ghosting_enabled' in kwargs:
         widget._goo_ghosting_enabled = bool(kwargs['goo_ghosting_enabled'])
     if 'goo_ghost_alpha' in kwargs:
@@ -1086,12 +1082,11 @@ def _append_goo_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['goo_outline_color'] = getattr(widget, '_goo_outline_color', None)
     extra['goo_shadow_color'] = getattr(widget, '_goo_shadow_color', None)
     extra['goo_outline_width'] = float(getattr(widget, '_goo_outline_width', 0.008))
+    extra['goo_inward_outline_width'] = float(getattr(widget, '_goo_inward_outline_width', 0.004))
     extra['goo_shadow_strength'] = float(getattr(widget, '_goo_shadow_strength', 0.3))
     extra['goo_specular_density'] = float(getattr(widget, '_goo_specular_density', 0.3))
-    extra['goo_void_floor'] = float(getattr(widget, '_goo_void_floor', 0.15))
-    extra['goo_advance_speed'] = float(getattr(widget, '_goo_advance_speed', 1.0))
-    extra['goo_retreat_speed'] = float(getattr(widget, '_goo_retreat_speed', 1.0))
-    extra['goo_source_count'] = int(getattr(widget, '_goo_source_count', 64))
+    extra['goo_core_size'] = float(getattr(widget, '_goo_core_size', 0.18))
+    extra['goo_edge_inward_depth'] = float(getattr(widget, '_goo_edge_inward_depth', 0.18))
     extra['goo_boundary_margin'] = float(getattr(widget, '_goo_boundary_margin', 0.01))
     extra['goo_sources'] = list(getattr(widget, '_goo_sources', []))
     extra['goo_ghosting_enabled'] = bool(getattr(widget, '_goo_ghosting_enabled', False))

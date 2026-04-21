@@ -13,11 +13,8 @@
         "goo_outline_width": 0.008,
         "goo_shadow_strength": 0.3,
         "goo_specular_density": 0.3,
-        "goo_void_floor": 0.15,
-        "goo_advance_speed": 1.0,
-        "goo_retreat_speed": 1.0,
-        "goo_source_count": 64,
-        "goo_growth": 3.5,
+        "goo_core_size": 0.18,
+        "goo_edge_inward_depth": 0.18,
         "goo_ghosting_enabled": false,
         "goo_ghost_alpha": 0.0,
         "goo_ghost_decay": 0.4

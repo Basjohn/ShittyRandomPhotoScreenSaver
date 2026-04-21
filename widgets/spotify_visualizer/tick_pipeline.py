@@ -163,6 +163,7 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
         return
 
     from widgets.spotify_visualizer.goo_liquid_field import (
+        GOO_SOURCE_COUNT_MAX,
         GooFieldState,
         pack_sources_for_upload,
         solve_goo_field_step,
@@ -189,11 +190,8 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
             dt=dt,
             energy_bands=energy,
             playing=bool(widget._spotify_playing),
-            advance_speed=float(getattr(widget, '_goo_advance_speed', 1.0)),
-            retreat_speed=float(getattr(widget, '_goo_retreat_speed', 1.0)),
-            source_count=int(getattr(widget, '_goo_source_count', 64)),
-            growth=float(getattr(widget, '_goo_growth', 3.5)),
-            void_floor=float(getattr(widget, '_goo_void_floor', 0.15)),
+            core_size=float(getattr(widget, '_goo_core_size', 0.18)),
+            edge_inward_depth=float(getattr(widget, '_goo_edge_inward_depth', 0.18)),
             boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
             seed=id(widget) & 0xFFFFFFFF,
         )
@@ -203,7 +201,8 @@ def dispatch_goo_field(widget: Any, now_ts: float) -> None:
 
     sources = pack_sources_for_upload(
         state,
-        int(getattr(widget, '_goo_source_count', 64)),
+        GOO_SOURCE_COUNT_MAX,
+        aspect=float(max(1, int(widget.width()))) / float(max(1, int(widget.height()))),
         boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
     )
     widget._goo_sources = sources
