@@ -109,6 +109,14 @@ def test_devcurve_gpu_kwargs_include_curve_payload(qt_app):
     assert extras["devcurve_curve_bass"] == [0.35, 0.45, 0.4, 0.5]
     assert "devcurve_layer_transients_enabled" in extras
     assert "devcurve_layer_bass_order" in extras
+    assert "devcurve_layer_bass_outline_color" in extras
+    assert "devcurve_layer_bass_outline_width" in extras
+    assert "devcurve_foreground_layer_id" in extras
+    assert "devcurve_foreground_shadow_enabled" in extras
+    assert "devcurve_foreground_shadow_alpha" in extras
+    assert "devcurve_foreground_specular_enabled" in extras
+    assert "devcurve_foreground_specular_width" in extras
+    assert "devcurve_outline_alpha" not in extras
 
     widget.deleteLater()
 

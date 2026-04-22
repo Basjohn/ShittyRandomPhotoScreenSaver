@@ -152,7 +152,7 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 |-----|---------|-------|
 | `widgets.spotify_visualizer.visualizers_enabled` | `True` | Master toggle exposed on the Visualizers subtab. Gates all Beat Visualizer controls; runtime still requires Media widget enabled to spawn the overlay. |
 | `widgets.spotify_visualizer.enabled` | `True` | Per-mode Beat Visualizer enable (within the subtab). |
-| `widgets.spotify_visualizer.mode` | `"blob"` | spectrum/oscilloscope/sine_wave/blob/bubble (helix/starfield deprecated) |
+| `widgets.spotify_visualizer.mode` | `"blob"` | spectrum/oscilloscope/sine_wave/blob/bubble/devcurve (devcurve is dev-gated by `--devcurve`; helix/starfield deprecated) |
 | `widgets.spotify_visualizer.monitor` | `"ALL"` | |
 | `widgets.spotify_visualizer.bar_count` | `21` | Legacy placeholder; runtime bar counts now resolved per-mode via `SpotifyVisualizerSettings`. |
 | `widgets.spotify_visualizer.sine_line_offset_bias` | `0.7` | Controls both vertical line spread and per-line energy tint (0 = all lines share bass mix, 1 = spreads lines apart and leans lines 2/3 toward mid/high energy). |
@@ -241,6 +241,31 @@ The shipped curated tree is now regression-audited so modernized preset authorin
 | `bubble_small_size_max` | `0.018` | Max radius for small bubbles |
 | `bubble_growth` | `3.0` | Size multiplier |
 | `bubble_trail_strength` | `0.0` | *Temporarily disabled.* Slider is greyed out until gradient-taper trails are rebuilt |
+
+#### Spotify Visualizer — Dev Curve Mode
+| Key | Default | Notes |
+|-----|---------|-------|
+| `preset_devcurve` | `0` | Preset index for Dev Curve mode |
+| `devcurve_growth` | `3.0` | Global deformation gain |
+| `devcurve_idle_motion` | `0.20` | Constant low-energy idle motion |
+| `devcurve_idle_speed` | `0.60` | Idle motion evolution speed |
+| `devcurve_smoothness` | `0.55` | Additional smoothing strength (higher = smoother, less lumpy) |
+| `devcurve_active_layer` | `"bass"` | Currently selected layer in the shaper UI (all enabled layers still render) |
+| `devcurve_layer_<src>_shape_nodes` | `[[0.0,0.58],[0.35,0.64],[0.70,0.52],[1.0,0.60]]` | Canonical per-layer spline profile (`src` = bass/vocals/mids/transients) |
+| `devcurve_layer_<src>_order` | `1..4` | Layer compositing order for active enabled layers |
+| `devcurve_layer_<src>_alpha` | per-layer | Fill opacity per energy layer |
+| `devcurve_layer_<src>_outline_color` | `[255,255,255,255]` | Per-layer outline color (alpha enforced to 255) |
+| `devcurve_layer_<src>_outline_width` | `0.006` | Per-layer outline thickness |
+| `devcurve_foreground_shadow_enabled` | `False` | Enable dynamic full-width foreground shadow |
+| `devcurve_foreground_shadow_alpha` | `0.36` | Foreground shadow opacity |
+| `devcurve_foreground_shadow_darken` | `0.42` | Foreground shadow darken factor vs. foreground fill |
+| `devcurve_foreground_shadow_offset` | `0.10` | Foreground shadow downward offset |
+| `devcurve_foreground_specular_enabled` | `False` | Enable dynamic foreground specular highlight |
+| `devcurve_foreground_specular_alpha` | `0.78` | Foreground specular opacity |
+| `devcurve_foreground_specular_width` | `0.022` | Foreground specular band width |
+| `devcurve_foreground_specular_offset` | `0.028` | Foreground specular vertical offset |
+| `devcurve_foreground_specular_crest_bias` | `1.05` | Crest/curvature weighting for specular placement |
+| `devcurve_ghosting_enabled` | `False` | Dev Curve-local ghost path toggle |
 
 ### Workers
 | Key | Default |

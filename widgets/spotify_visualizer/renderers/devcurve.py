@@ -17,22 +17,28 @@ def get_uniform_names() -> list[str]:
         "u_playing",
         "u_ghost_alpha",
         "u_devcurve_sample_count",
-        "u_devcurve_outline_width",
-        "u_devcurve_outline_alpha",
         "u_devcurve_base_level",
         "u_devcurve_layer_bass_color",
+        "u_devcurve_layer_bass_outline_color",
+        "u_devcurve_layer_bass_outline_width",
         "u_devcurve_layer_bass_enabled",
         "u_devcurve_layer_bass_alpha",
         "u_devcurve_curve_bass",
         "u_devcurve_layer_vocals_color",
+        "u_devcurve_layer_vocals_outline_color",
+        "u_devcurve_layer_vocals_outline_width",
         "u_devcurve_layer_vocals_enabled",
         "u_devcurve_layer_vocals_alpha",
         "u_devcurve_curve_vocals",
         "u_devcurve_layer_mids_color",
+        "u_devcurve_layer_mids_outline_color",
+        "u_devcurve_layer_mids_outline_width",
         "u_devcurve_layer_mids_enabled",
         "u_devcurve_layer_mids_alpha",
         "u_devcurve_curve_mids",
         "u_devcurve_layer_transients_color",
+        "u_devcurve_layer_transients_outline_color",
+        "u_devcurve_layer_transients_outline_width",
         "u_devcurve_layer_transients_enabled",
         "u_devcurve_layer_transients_alpha",
         "u_devcurve_curve_transients",
@@ -40,6 +46,16 @@ def get_uniform_names() -> list[str]:
         "u_devcurve_order1",
         "u_devcurve_order2",
         "u_devcurve_order3",
+        "u_devcurve_foreground_layer_id",
+        "u_devcurve_foreground_shadow_enabled",
+        "u_devcurve_foreground_shadow_alpha",
+        "u_devcurve_foreground_shadow_darken",
+        "u_devcurve_foreground_shadow_offset",
+        "u_devcurve_foreground_specular_enabled",
+        "u_devcurve_foreground_specular_alpha",
+        "u_devcurve_foreground_specular_width",
+        "u_devcurve_foreground_specular_offset",
+        "u_devcurve_foreground_specular_crest_bias",
     ]
 
 
@@ -65,26 +81,32 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     )
 
     _set1i(gl, u, "u_devcurve_sample_count", int(getattr(s, "_devcurve_sample_count", DEVCURVE_SAMPLE_COUNT_MAX)))
-    _set1f(gl, u, "u_devcurve_outline_width", float(getattr(s, "_devcurve_outline_width", 0.006)))
-    _set1f(gl, u, "u_devcurve_outline_alpha", float(getattr(s, "_devcurve_outline_alpha", 1.0)))
     _set1f(gl, u, "u_devcurve_base_level", float(getattr(s, "_devcurve_base_level", 0.58)))
 
     _set_color4(gl, u, "u_devcurve_layer_bass_color", getattr(s, "_devcurve_layer_bass_color", None))
+    _set_color4(gl, u, "u_devcurve_layer_bass_outline_color", getattr(s, "_devcurve_layer_bass_outline_color", None))
+    _set1f(gl, u, "u_devcurve_layer_bass_outline_width", float(getattr(s, "_devcurve_layer_bass_outline_width", 0.006)))
     _set1i(gl, u, "u_devcurve_layer_bass_enabled", 1 if bool(getattr(s, "_devcurve_layer_bass_enabled", True)) else 0)
     _set1f(gl, u, "u_devcurve_layer_bass_alpha", float(getattr(s, "_devcurve_layer_bass_alpha", 0.55)) if bool(getattr(s, "_devcurve_layer_bass_enabled", True)) else 0.0)
     _upload_curve(gl, u, "u_devcurve_curve_bass", getattr(s, "_devcurve_curve_bass", None))
 
     _set_color4(gl, u, "u_devcurve_layer_vocals_color", getattr(s, "_devcurve_layer_vocals_color", None))
+    _set_color4(gl, u, "u_devcurve_layer_vocals_outline_color", getattr(s, "_devcurve_layer_vocals_outline_color", None))
+    _set1f(gl, u, "u_devcurve_layer_vocals_outline_width", float(getattr(s, "_devcurve_layer_vocals_outline_width", 0.006)))
     _set1i(gl, u, "u_devcurve_layer_vocals_enabled", 1 if bool(getattr(s, "_devcurve_layer_vocals_enabled", True)) else 0)
     _set1f(gl, u, "u_devcurve_layer_vocals_alpha", float(getattr(s, "_devcurve_layer_vocals_alpha", 0.42)) if bool(getattr(s, "_devcurve_layer_vocals_enabled", True)) else 0.0)
     _upload_curve(gl, u, "u_devcurve_curve_vocals", getattr(s, "_devcurve_curve_vocals", None))
 
     _set_color4(gl, u, "u_devcurve_layer_mids_color", getattr(s, "_devcurve_layer_mids_color", None))
+    _set_color4(gl, u, "u_devcurve_layer_mids_outline_color", getattr(s, "_devcurve_layer_mids_outline_color", None))
+    _set1f(gl, u, "u_devcurve_layer_mids_outline_width", float(getattr(s, "_devcurve_layer_mids_outline_width", 0.006)))
     _set1i(gl, u, "u_devcurve_layer_mids_enabled", 1 if bool(getattr(s, "_devcurve_layer_mids_enabled", True)) else 0)
     _set1f(gl, u, "u_devcurve_layer_mids_alpha", float(getattr(s, "_devcurve_layer_mids_alpha", 0.46)) if bool(getattr(s, "_devcurve_layer_mids_enabled", True)) else 0.0)
     _upload_curve(gl, u, "u_devcurve_curve_mids", getattr(s, "_devcurve_curve_mids", None))
 
     _set_color4(gl, u, "u_devcurve_layer_transients_color", getattr(s, "_devcurve_layer_transients_color", None))
+    _set_color4(gl, u, "u_devcurve_layer_transients_outline_color", getattr(s, "_devcurve_layer_transients_outline_color", None))
+    _set1f(gl, u, "u_devcurve_layer_transients_outline_width", float(getattr(s, "_devcurve_layer_transients_outline_width", 0.006)))
     _set1i(gl, u, "u_devcurve_layer_transients_enabled", 1 if bool(getattr(s, "_devcurve_layer_transients_enabled", True)) else 0)
     _set1f(gl, u, "u_devcurve_layer_transients_alpha", float(getattr(s, "_devcurve_layer_transients_alpha", 0.66)) if bool(getattr(s, "_devcurve_layer_transients_enabled", True)) else 0.0)
     _upload_curve(gl, u, "u_devcurve_curve_transients", getattr(s, "_devcurve_curve_transients", None))
@@ -109,4 +131,24 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1i(gl, u, "u_devcurve_order1", layer_id[final_order[1]])
     _set1i(gl, u, "u_devcurve_order2", layer_id[final_order[2]])
     _set1i(gl, u, "u_devcurve_order3", layer_id[final_order[3]])
+    _set1i(gl, u, "u_devcurve_foreground_layer_id", int(getattr(s, "_devcurve_foreground_layer_id", -1)))
+    _set1i(
+        gl,
+        u,
+        "u_devcurve_foreground_shadow_enabled",
+        1 if bool(getattr(s, "_devcurve_foreground_shadow_enabled", False)) else 0,
+    )
+    _set1f(gl, u, "u_devcurve_foreground_shadow_alpha", float(getattr(s, "_devcurve_foreground_shadow_alpha", 0.36)))
+    _set1f(gl, u, "u_devcurve_foreground_shadow_darken", float(getattr(s, "_devcurve_foreground_shadow_darken", 0.42)))
+    _set1f(gl, u, "u_devcurve_foreground_shadow_offset", float(getattr(s, "_devcurve_foreground_shadow_offset", 0.10)))
+    _set1i(
+        gl,
+        u,
+        "u_devcurve_foreground_specular_enabled",
+        1 if bool(getattr(s, "_devcurve_foreground_specular_enabled", False)) else 0,
+    )
+    _set1f(gl, u, "u_devcurve_foreground_specular_alpha", float(getattr(s, "_devcurve_foreground_specular_alpha", 0.78)))
+    _set1f(gl, u, "u_devcurve_foreground_specular_width", float(getattr(s, "_devcurve_foreground_specular_width", 0.022)))
+    _set1f(gl, u, "u_devcurve_foreground_specular_offset", float(getattr(s, "_devcurve_foreground_specular_offset", 0.028)))
+    _set1f(gl, u, "u_devcurve_foreground_specular_crest_bias", float(getattr(s, "_devcurve_foreground_specular_crest_bias", 1.05)))
     return True

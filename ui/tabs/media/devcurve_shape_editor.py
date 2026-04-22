@@ -65,6 +65,8 @@ _ARROW_HEAD_HALF_WIDTH = 5
 _ARROW_HEAD_HEIGHT = 8
 _MAX_NODES = 5
 _MIN_NODES = 1
+_SOFT_SNAP_THRESHOLD_PX = 14.0
+_SOFT_SNAP_BLEND = 0.45
 
 _PADDING_LEFT = 32
 _PADDING_RIGHT = 12
@@ -421,6 +423,23 @@ class DevCurveShapeEditor(QWidget):
         ny = max(0.0, min(1.0, ny))
         return nx, ny
 
+    def _soft_snap_axis(self, value_px: float, guides_px: List[float]) -> float:
+        nearest = min(guides_px, key=lambda g: abs(value_px - g))
+        dist = abs(value_px - nearest)
+        if dist >= _SOFT_SNAP_THRESHOLD_PX:
+            return value_px
+        # Gentle magnetic pull: strongest near guide, but never hard-lock.
+        pull = (1.0 - (dist / _SOFT_SNAP_THRESHOLD_PX)) * _SOFT_SNAP_BLEND
+        return value_px + (nearest - value_px) * max(0.0, min(1.0, pull))
+
+    def _apply_soft_snap(self, px: float, py: float) -> Tuple[float, float]:
+        er = self._edit_rect()
+        x_guides = [er.left() + er.width() * frac for frac in (0.0, 0.25, 0.50, 0.75, 1.0)]
+        y_guides = [er.bottom() - er.height() * frac for frac in (0.0, 0.25, 0.50, 0.75, 1.0)]
+        snapped_x = self._soft_snap_axis(px, x_guides)
+        snapped_y = self._soft_snap_axis(py, y_guides)
+        return snapped_x, snapped_y
+
     def _active_notches(self) -> List[List]:
         return self._notches_mirrored if self._mirrored else self._notches_linear
 
@@ -506,7 +525,8 @@ class DevCurveShapeEditor(QWidget):
                 # Only allow adding nodes inside the editable region
                 er = self._edit_rect()
                 if er.contains(QPointF(px, py)):
-                    nx, ny = self._pixel_to_node(px, py)
+                    snap_x, snap_y = self._apply_soft_snap(px, py)
+                    nx, ny = self._pixel_to_node(snap_x, snap_y)
                     self._nodes.append([nx, ny])
                     self._nodes.sort(key=lambda n: n[0])
                     self._drag_index = next(
@@ -540,7 +560,8 @@ class DevCurveShapeEditor(QWidget):
             return
 
         if self._drag_index >= 0:
-            nx, ny = self._pixel_to_node(px, py)
+            snap_x, snap_y = self._apply_soft_snap(px, py)
+            nx, ny = self._pixel_to_node(snap_x, snap_y)
             self._nodes[self._drag_index] = [nx, ny]
             self._nodes.sort(key=lambda n: n[0])
             for i, n in enumerate(self._nodes):

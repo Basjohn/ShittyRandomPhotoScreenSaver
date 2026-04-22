@@ -666,10 +666,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'devcurve_active_layer' in kwargs:
         active = str(kwargs['devcurve_active_layer']).strip().lower()
         widget._devcurve_active_layer = active if active in {'bass', 'vocals', 'mids', 'transients'} else 'bass'
-    if 'devcurve_outline_width' in kwargs:
-        widget._devcurve_outline_width = max(0.001, min(0.020, float(kwargs['devcurve_outline_width'])))
-    if 'devcurve_outline_alpha' in kwargs:
-        widget._devcurve_outline_alpha = max(0.0, min(1.0, float(kwargs['devcurve_outline_alpha'])))
     if 'devcurve_base_level' in kwargs:
         widget._devcurve_base_level = max(0.10, min(0.90, float(kwargs['devcurve_base_level'])))
     if 'devcurve_motion_power' in kwargs:
@@ -686,6 +682,24 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._devcurve_ghost_alpha = max(0.0, min(1.0, float(kwargs['devcurve_ghost_alpha'])))
     if 'devcurve_ghost_decay' in kwargs:
         widget._devcurve_ghost_decay = max(0.1, min(1.0, float(kwargs['devcurve_ghost_decay'])))
+    if 'devcurve_foreground_shadow_enabled' in kwargs:
+        widget._devcurve_foreground_shadow_enabled = bool(kwargs['devcurve_foreground_shadow_enabled'])
+    if 'devcurve_foreground_shadow_alpha' in kwargs:
+        widget._devcurve_foreground_shadow_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_alpha'])))
+    if 'devcurve_foreground_shadow_darken' in kwargs:
+        widget._devcurve_foreground_shadow_darken = max(0.0, min(1.0, float(kwargs['devcurve_foreground_shadow_darken'])))
+    if 'devcurve_foreground_shadow_offset' in kwargs:
+        widget._devcurve_foreground_shadow_offset = max(0.0, min(0.45, float(kwargs['devcurve_foreground_shadow_offset'])))
+    if 'devcurve_foreground_specular_enabled' in kwargs:
+        widget._devcurve_foreground_specular_enabled = bool(kwargs['devcurve_foreground_specular_enabled'])
+    if 'devcurve_foreground_specular_alpha' in kwargs:
+        widget._devcurve_foreground_specular_alpha = max(0.0, min(1.0, float(kwargs['devcurve_foreground_specular_alpha'])))
+    if 'devcurve_foreground_specular_width' in kwargs:
+        widget._devcurve_foreground_specular_width = max(0.002, min(0.120, float(kwargs['devcurve_foreground_specular_width'])))
+    if 'devcurve_foreground_specular_offset' in kwargs:
+        widget._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(kwargs['devcurve_foreground_specular_offset'])))
+    if 'devcurve_foreground_specular_crest_bias' in kwargs:
+        widget._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(kwargs['devcurve_foreground_specular_crest_bias'])))
     for src in ('bass', 'vocals', 'mids', 'transients'):
         en_key = f'devcurve_layer_{src}_enabled'
         color_key = f'devcurve_layer_{src}_color'
@@ -693,18 +707,27 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         power_key = f'devcurve_layer_{src}_power'
         offset_key = f'devcurve_layer_{src}_offset'
         order_key = f'devcurve_layer_{src}_order'
+        outline_color_key = f'devcurve_layer_{src}_outline_color'
+        outline_width_key = f'devcurve_layer_{src}_outline_width'
         if en_key in kwargs:
             setattr(widget, f'_devcurve_layer_{src}_enabled', bool(kwargs[en_key]))
         if color_key in kwargs:
             c = _color_or_none(kwargs[color_key])
             if c is not None:
                 setattr(widget, f'_devcurve_layer_{src}_color', c)
+        if outline_color_key in kwargs:
+            oc = _color_or_none(kwargs[outline_color_key])
+            if oc is not None:
+                oc.setAlpha(255)
+                setattr(widget, f'_devcurve_layer_{src}_outline_color', oc)
         if alpha_key in kwargs:
             setattr(widget, f'_devcurve_layer_{src}_alpha', max(0.0, min(1.0, float(kwargs[alpha_key]))))
         if power_key in kwargs:
             setattr(widget, f'_devcurve_layer_{src}_power', max(0.0, min(3.0, float(kwargs[power_key]))))
         if offset_key in kwargs:
             setattr(widget, f'_devcurve_layer_{src}_offset', max(-0.45, min(0.45, float(kwargs[offset_key]))))
+        if outline_width_key in kwargs:
+            setattr(widget, f'_devcurve_layer_{src}_outline_width', max(0.001, min(0.020, float(kwargs[outline_width_key]))))
         if order_key in kwargs:
             setattr(widget, f'_devcurve_layer_{src}_order', max(1, min(4, int(kwargs[order_key]))))
         shape_key = f'devcurve_layer_{src}_shape_nodes'
@@ -1103,8 +1126,6 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
 
 def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     """Attach GL-safe Dev Curve extras for the compositor overlay."""
-    extra['devcurve_outline_width'] = float(getattr(widget, '_devcurve_outline_width', 0.006))
-    extra['devcurve_outline_alpha'] = float(getattr(widget, '_devcurve_outline_alpha', 1.0))
     extra['devcurve_base_level'] = float(getattr(widget, '_devcurve_base_level', 0.58))
     extra['devcurve_sample_count'] = int(getattr(widget, '_devcurve_sample_count', 96))
     extra['devcurve_curve_bass'] = list(getattr(widget, '_devcurve_curve_bass', []))
@@ -1115,6 +1136,14 @@ def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['devcurve_layer_vocals_color'] = getattr(widget, '_devcurve_layer_vocals_color', None)
     extra['devcurve_layer_mids_color'] = getattr(widget, '_devcurve_layer_mids_color', None)
     extra['devcurve_layer_transients_color'] = getattr(widget, '_devcurve_layer_transients_color', None)
+    extra['devcurve_layer_bass_outline_color'] = getattr(widget, '_devcurve_layer_bass_outline_color', None)
+    extra['devcurve_layer_vocals_outline_color'] = getattr(widget, '_devcurve_layer_vocals_outline_color', None)
+    extra['devcurve_layer_mids_outline_color'] = getattr(widget, '_devcurve_layer_mids_outline_color', None)
+    extra['devcurve_layer_transients_outline_color'] = getattr(widget, '_devcurve_layer_transients_outline_color', None)
+    extra['devcurve_layer_bass_outline_width'] = float(getattr(widget, '_devcurve_layer_bass_outline_width', 0.006))
+    extra['devcurve_layer_vocals_outline_width'] = float(getattr(widget, '_devcurve_layer_vocals_outline_width', 0.006))
+    extra['devcurve_layer_mids_outline_width'] = float(getattr(widget, '_devcurve_layer_mids_outline_width', 0.006))
+    extra['devcurve_layer_transients_outline_width'] = float(getattr(widget, '_devcurve_layer_transients_outline_width', 0.006))
     extra['devcurve_layer_bass_alpha'] = float(getattr(widget, '_devcurve_layer_bass_alpha', 0.55))
     extra['devcurve_layer_vocals_alpha'] = float(getattr(widget, '_devcurve_layer_vocals_alpha', 0.42))
     extra['devcurve_layer_mids_alpha'] = float(getattr(widget, '_devcurve_layer_mids_alpha', 0.46))
@@ -1130,5 +1159,15 @@ def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['devcurve_ghosting_enabled'] = bool(getattr(widget, '_devcurve_ghosting_enabled', False))
     extra['devcurve_ghost_alpha'] = float(getattr(widget, '_devcurve_ghost_alpha', 0.0))
     extra['devcurve_ghost_decay'] = float(getattr(widget, '_devcurve_ghost_decay', 0.4))
+    extra['devcurve_foreground_layer_id'] = int(getattr(widget, '_devcurve_foreground_layer_id', -1))
+    extra['devcurve_foreground_shadow_enabled'] = bool(getattr(widget, '_devcurve_foreground_shadow_enabled', False))
+    extra['devcurve_foreground_shadow_alpha'] = float(getattr(widget, '_devcurve_foreground_shadow_alpha', 0.36))
+    extra['devcurve_foreground_shadow_darken'] = float(getattr(widget, '_devcurve_foreground_shadow_darken', 0.42))
+    extra['devcurve_foreground_shadow_offset'] = float(getattr(widget, '_devcurve_foreground_shadow_offset', 0.10))
+    extra['devcurve_foreground_specular_enabled'] = bool(getattr(widget, '_devcurve_foreground_specular_enabled', False))
+    extra['devcurve_foreground_specular_alpha'] = float(getattr(widget, '_devcurve_foreground_specular_alpha', 0.78))
+    extra['devcurve_foreground_specular_width'] = float(getattr(widget, '_devcurve_foreground_specular_width', 0.022))
+    extra['devcurve_foreground_specular_offset'] = float(getattr(widget, '_devcurve_foreground_specular_offset', 0.028))
+    extra['devcurve_foreground_specular_crest_bias'] = float(getattr(widget, '_devcurve_foreground_specular_crest_bias', 1.05))
 
 

@@ -13,26 +13,32 @@ uniform float u_ghost_alpha;
 uniform float u_rainbow_hue_offset;
 
 uniform int u_devcurve_sample_count;
-uniform float u_devcurve_outline_width;
-uniform float u_devcurve_outline_alpha;
 uniform float u_devcurve_base_level;
 
 uniform vec4 u_devcurve_layer_bass_color;
+uniform vec4 u_devcurve_layer_bass_outline_color;
+uniform float u_devcurve_layer_bass_outline_width;
 uniform int u_devcurve_layer_bass_enabled;
 uniform float u_devcurve_layer_bass_alpha;
 uniform float u_devcurve_curve_bass[96];
 
 uniform vec4 u_devcurve_layer_vocals_color;
+uniform vec4 u_devcurve_layer_vocals_outline_color;
+uniform float u_devcurve_layer_vocals_outline_width;
 uniform int u_devcurve_layer_vocals_enabled;
 uniform float u_devcurve_layer_vocals_alpha;
 uniform float u_devcurve_curve_vocals[96];
 
 uniform vec4 u_devcurve_layer_mids_color;
+uniform vec4 u_devcurve_layer_mids_outline_color;
+uniform float u_devcurve_layer_mids_outline_width;
 uniform int u_devcurve_layer_mids_enabled;
 uniform float u_devcurve_layer_mids_alpha;
 uniform float u_devcurve_curve_mids[96];
 
 uniform vec4 u_devcurve_layer_transients_color;
+uniform vec4 u_devcurve_layer_transients_outline_color;
+uniform float u_devcurve_layer_transients_outline_width;
 uniform int u_devcurve_layer_transients_enabled;
 uniform float u_devcurve_layer_transients_alpha;
 uniform float u_devcurve_curve_transients[96];
@@ -40,6 +46,16 @@ uniform int u_devcurve_order0;
 uniform int u_devcurve_order1;
 uniform int u_devcurve_order2;
 uniform int u_devcurve_order3;
+uniform int u_devcurve_foreground_layer_id;
+uniform int u_devcurve_foreground_shadow_enabled;
+uniform float u_devcurve_foreground_shadow_alpha;
+uniform float u_devcurve_foreground_shadow_darken;
+uniform float u_devcurve_foreground_shadow_offset;
+uniform int u_devcurve_foreground_specular_enabled;
+uniform float u_devcurve_foreground_specular_alpha;
+uniform float u_devcurve_foreground_specular_width;
+uniform float u_devcurve_foreground_specular_offset;
+uniform float u_devcurve_foreground_specular_crest_bias;
 
 float _sample_curve(const float curve[96], float x, int count) {
     int n = clamp(count, 2, 96);
@@ -82,16 +98,16 @@ vec3 _apply_rainbow(vec3 rgb) {
     return _hsv2rgb(hsv);
 }
 
-vec4 _draw_layer(float yCurve, vec4 color, int enabled, float alphaScale, float outlineAlpha, float x, float y, float aa, float ow) {
+vec4 _draw_layer(float yCurve, vec4 color, vec4 outlineColor, int enabled, float alphaScale, float x, float y, float aa, float ow) {
     if (enabled == 0) return vec4(0.0);
     // Fill below the curve (liquid body sits under the spline line).
     float inside = smoothstep(-aa, aa, y - yCurve);
     float edge = 1.0 - smoothstep(ow, ow + aa, abs(y - yCurve));
     float fillA = inside * clamp(alphaScale, 0.0, 1.0) * clamp(color.a, 0.0, 1.0);
-    float lineA = edge * clamp(outlineAlpha, 0.0, 1.0);
+    float lineA = edge * clamp(outlineColor.a, 0.0, 1.0);
     vec3 rgb = _apply_rainbow(color.rgb);
     vec4 outColor = vec4(rgb, fillA);
-    outColor = _blend_over(outColor, vec4(vec3(1.0), lineA));
+    outColor = _blend_over(outColor, vec4(outlineColor.rgb, lineA));
     return outColor;
 }
 
@@ -127,6 +143,35 @@ float _layer_alpha_by_id(int layerId) {
     return u_devcurve_layer_transients_alpha;
 }
 
+vec4 _layer_outline_color_by_id(int layerId) {
+    if (layerId == 0) return u_devcurve_layer_bass_outline_color;
+    if (layerId == 1) return u_devcurve_layer_vocals_outline_color;
+    if (layerId == 2) return u_devcurve_layer_mids_outline_color;
+    return u_devcurve_layer_transients_outline_color;
+}
+
+float _layer_outline_width_by_id(int layerId) {
+    if (layerId == 0) return u_devcurve_layer_bass_outline_width;
+    if (layerId == 1) return u_devcurve_layer_vocals_outline_width;
+    if (layerId == 2) return u_devcurve_layer_mids_outline_width;
+    return u_devcurve_layer_transients_outline_width;
+}
+
+float _sample_curve_slope(int layerId, float x, int sampleCount) {
+    float dx = max(1.0 / float(sampleCount), 0.004);
+    float yL = _sample_curve_by_id(layerId, x - dx, sampleCount);
+    float yR = _sample_curve_by_id(layerId, x + dx, sampleCount);
+    return (yR - yL) / max(2.0 * dx, 1e-4);
+}
+
+float _sample_curve_curvature(int layerId, float x, int sampleCount) {
+    float dx = max(1.0 / float(sampleCount), 0.004);
+    float yL = _sample_curve_by_id(layerId, x - dx, sampleCount);
+    float yC = _sample_curve_by_id(layerId, x, sampleCount);
+    float yR = _sample_curve_by_id(layerId, x + dx, sampleCount);
+    return (yL - 2.0 * yC + yR) / max(dx * dx, 1e-4);
+}
+
 void main() {
     float width = max(1.0, u_resolution.x);
     float height = max(1.0, u_resolution.y);
@@ -157,7 +202,6 @@ void main() {
 
     vec2 uv = vec2((fc.x - border_w) / inner_w, (fc.y - border_w) / inner_h);
     float aa = max(1.15 / max(inner_h, 1.0), 0.0010);
-    float ow = clamp(u_devcurve_outline_width, 0.0004, 0.015);
     int sampleCount = clamp(u_devcurve_sample_count, 2, 96);
 
     vec4 col = vec4(0.0);
@@ -170,10 +214,43 @@ void main() {
     float y1 = _sample_curve_by_id(layer1, uv.x, sampleCount);
     float y2 = _sample_curve_by_id(layer2, uv.x, sampleCount);
     float y3 = _sample_curve_by_id(layer3, uv.x, sampleCount);
-    col = _blend_over(col, _draw_layer(y0, _layer_color_by_id(layer0), _layer_enabled_by_id(layer0), _layer_alpha_by_id(layer0), u_devcurve_outline_alpha, uv.x, uv.y, aa, ow));
-    col = _blend_over(col, _draw_layer(y1, _layer_color_by_id(layer1), _layer_enabled_by_id(layer1), _layer_alpha_by_id(layer1), u_devcurve_outline_alpha, uv.x, uv.y, aa, ow));
-    col = _blend_over(col, _draw_layer(y2, _layer_color_by_id(layer2), _layer_enabled_by_id(layer2), _layer_alpha_by_id(layer2), u_devcurve_outline_alpha, uv.x, uv.y, aa, ow));
-    col = _blend_over(col, _draw_layer(y3, _layer_color_by_id(layer3), _layer_enabled_by_id(layer3), _layer_alpha_by_id(layer3), u_devcurve_outline_alpha, uv.x, uv.y, aa, ow));
+    float ow0 = clamp(_layer_outline_width_by_id(layer0), 0.0004, 0.015);
+    float ow1 = clamp(_layer_outline_width_by_id(layer1), 0.0004, 0.015);
+    float ow2 = clamp(_layer_outline_width_by_id(layer2), 0.0004, 0.015);
+    float ow3 = clamp(_layer_outline_width_by_id(layer3), 0.0004, 0.015);
+    col = _blend_over(col, _draw_layer(y0, _layer_color_by_id(layer0), _layer_outline_color_by_id(layer0), _layer_enabled_by_id(layer0), _layer_alpha_by_id(layer0), uv.x, uv.y, aa, ow0));
+    col = _blend_over(col, _draw_layer(y1, _layer_color_by_id(layer1), _layer_outline_color_by_id(layer1), _layer_enabled_by_id(layer1), _layer_alpha_by_id(layer1), uv.x, uv.y, aa, ow1));
+    col = _blend_over(col, _draw_layer(y2, _layer_color_by_id(layer2), _layer_outline_color_by_id(layer2), _layer_enabled_by_id(layer2), _layer_alpha_by_id(layer2), uv.x, uv.y, aa, ow2));
+    col = _blend_over(col, _draw_layer(y3, _layer_color_by_id(layer3), _layer_outline_color_by_id(layer3), _layer_enabled_by_id(layer3), _layer_alpha_by_id(layer3), uv.x, uv.y, aa, ow3));
+
+    int fgId = clamp(u_devcurve_foreground_layer_id, -1, 3);
+    if (fgId >= 0 && _layer_enabled_by_id(fgId) != 0) {
+        float yFg = _sample_curve_by_id(fgId, uv.x, sampleCount);
+        float fgInside = smoothstep(-aa, aa, uv.y - yFg);
+        vec4 fgColor = _layer_color_by_id(fgId);
+        float fgAlpha = clamp(_layer_alpha_by_id(fgId), 0.0, 1.0) * clamp(fgColor.a, 0.0, 1.0);
+
+        if (u_devcurve_foreground_shadow_enabled != 0) {
+            float shadowY = yFg + clamp(u_devcurve_foreground_shadow_offset, 0.0, 0.45);
+            float shadowInside = smoothstep(-aa, aa, uv.y - shadowY);
+            float shadowA = shadowInside * clamp(u_devcurve_foreground_shadow_alpha, 0.0, 1.0) * fgAlpha;
+            vec3 shadowRgb = fgColor.rgb * (1.0 - clamp(u_devcurve_foreground_shadow_darken, 0.0, 1.0));
+            col = _blend_over(col, vec4(shadowRgb, shadowA));
+        }
+
+        if (u_devcurve_foreground_specular_enabled != 0) {
+            float specY = yFg + clamp(u_devcurve_foreground_specular_offset, -0.20, 0.20);
+            float specW = clamp(u_devcurve_foreground_specular_width, 0.002, 0.120);
+            float specBand = 1.0 - smoothstep(specW, specW + aa * 1.6, abs(uv.y - specY));
+            float slope = abs(_sample_curve_slope(fgId, uv.x, sampleCount));
+            float curvature = _sample_curve_curvature(fgId, uv.x, sampleCount);
+            float slopeMask = 1.0 - smoothstep(0.04, 0.40, slope);
+            float crestMask = clamp(max(curvature, 0.0) * clamp(u_devcurve_foreground_specular_crest_bias, 0.0, 2.0) * 0.08, 0.0, 1.0);
+            float sparkleMask = specBand * fgInside * slopeMask * mix(0.35, 1.0, crestMask);
+            float specA = sparkleMask * clamp(u_devcurve_foreground_specular_alpha, 0.0, 1.0);
+            col = _blend_over(col, vec4(vec3(1.0), specA));
+        }
+    }
 
     col.a *= u_fade;
     fragColor = col;

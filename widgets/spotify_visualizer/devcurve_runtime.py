@@ -92,6 +92,50 @@ def _phase_rand(seed: float, idx: int) -> float:
     return math.sin(seed * 0.017 + idx * 1.3127) * 43758.5453
 
 
+def _compute_specular_slots(curve: List[float], *, max_slots: int = 2) -> List[List[float]]:
+    """Return crest-anchored highlight slots as [x, y_shader, strength]."""
+    n = len(curve)
+    if n < 5:
+        return [[0.0, 0.0, 0.0] for _ in range(max_slots)]
+
+    candidates: List[tuple[float, float, float, float]] = []
+    for i in range(1, n - 1):
+        y0 = float(curve[i - 1])
+        y1 = float(curve[i])
+        y2 = float(curve[i + 1])
+        if y1 < y0 or y1 < y2:
+            continue
+        curvature = max(0.0, (2.0 * y1) - y0 - y2)
+        prominence = max(0.0, y1 - ((y0 + y2) * 0.5))
+        score = (y1 * 0.72) + (prominence * 3.2) + (curvature * 6.5)
+        if score <= 0.22:
+            continue
+        x = i / max(1, n - 1)
+        y_shader = _clamp(1.0 - y1, 0.02, 0.98)
+        strength = _clamp((score - 0.22) / 0.85, 0.0, 1.0)
+        candidates.append((score, x, y_shader, strength))
+
+    if not candidates:
+        idx = max(range(n), key=lambda k: curve[k])
+        x = idx / max(1, n - 1)
+        y_shader = _clamp(1.0 - float(curve[idx]), 0.02, 0.98)
+        candidates.append((1.0, x, y_shader, 0.65))
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    selected: List[List[float]] = []
+    min_spacing = 0.14
+    for _score, x, y_shader, strength in candidates:
+        if any(abs(x - existing[0]) < min_spacing for existing in selected):
+            continue
+        selected.append([float(x), float(y_shader), float(strength)])
+        if len(selected) >= max_slots:
+            break
+
+    while len(selected) < max_slots:
+        selected.append([0.0, 0.0, 0.0])
+    return selected
+
+
 @dataclass
 class DevCurveRuntimeState:
     phase: float = 0.0
@@ -254,10 +298,21 @@ def solve_devcurve_frame(
             _LAYER_INDEX[src],
         ),
     )
+    enabled_order = [
+        src for src in draw_order if bool(layer_settings.get(src, {}).get("enabled", True))
+    ]
+    foreground_layer = enabled_order[-1] if enabled_order else ""
+    foreground_layer_id = _LAYER_INDEX.get(foreground_layer, -1)
+    specular_slots: List[List[float]] = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    if foreground_layer and foreground_layer in layers_out:
+        specular_slots = _compute_specular_slots(layers_out[foreground_layer], max_slots=2)
 
     return {
         "layers": layers_out,
         "draw_order": draw_order,
+        "foreground_layer": foreground_layer,
+        "foreground_layer_id": foreground_layer_id,
+        "specular_slots": specular_slots,
         "sample_count": DEVCURVE_SAMPLE_COUNT,
         "smoothness_max_step": state.smoothness_max_step,
         "active_amplitude": state.active_amplitude,

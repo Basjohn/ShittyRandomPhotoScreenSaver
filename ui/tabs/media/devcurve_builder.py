@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QButtonGroup, QCheckBox, QLabel, QPushButton, QSlider, QVBoxLayout
 
 from ui.styled_popup import ColorSwatchButton
@@ -23,12 +24,12 @@ _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
 _LAYER_LABEL = {"bass": "Bass", "vocals": "Vocals", "mids": "Mids", "transients": "Transients"}
 _TOOLTIP_LAYER_BUTTON = "Pick the active layer to edit its spline shape, color, and per-layer controls."
 _TOOLTIP_LAYER_COLOR = "Color for the currently selected active layer."
+_TOOLTIP_LAYER_OUTLINE_COLOR = "Outline color for the active layer. Outline alpha is always fully opaque."
+_TOOLTIP_LAYER_OUTLINE_WIDTH = "Outline thickness for the active layer."
 _TOOLTIP_LAYER_ENABLED = "Enable/disable this layer's rendering and audio response."
 _TOOLTIP_LAYER_ALPHA = "Fill opacity for this layer only."
 _TOOLTIP_LAYER_OFFSET = "Vertical lane offset for this layer before audio deformation."
 _TOOLTIP_LAYER_ORDER = "Layer stack order. Higher numbers render on top of lower numbers."
-_TOOLTIP_OUTLINE_WIDTH = "Spline border thickness."
-_TOOLTIP_OUTLINE_OPACITY = "Spline border opacity, independent from layer fill opacity."
 _TOOLTIP_BASE_LEVEL = "Global baseline height for all Dev Curve layers."
 _TOOLTIP_MOTION_POWER = "Master reactive deformation gain for all layers."
 _TOOLTIP_IDLE_MOTION = "Constant low-energy wobble while idle or between beats."
@@ -38,11 +39,20 @@ _TOOLTIP_CARD_HEIGHT = "Height multiplier for the visualizer card area."
 _TOOLTIP_GHOST_ENABLED = "Enable a lightweight trail to inspect motion history."
 _TOOLTIP_GHOST_OPACITY = "Opacity of the trail overlay."
 _TOOLTIP_GHOST_DECAY = "How quickly the trail fades."
+_TOOLTIP_FG_SHADOW_ENABLED = "Enable a dynamic full-width shadow fill tied to the current foreground layer."
+_TOOLTIP_FG_SHADOW_ALPHA = "Opacity of the dynamic foreground shadow."
+_TOOLTIP_FG_SHADOW_DARKEN = "How much darker the shadow is than the foreground layer color."
+_TOOLTIP_FG_SHADOW_OFFSET = "Vertical offset of the foreground shadow below the foreground spline."
+_TOOLTIP_FG_SPECULAR_ENABLED = "Enable a dynamic crest-following specular highlight on the foreground layer."
+_TOOLTIP_FG_SPECULAR_ALPHA = "Opacity of the foreground specular highlight."
+_TOOLTIP_FG_SPECULAR_WIDTH = "Thickness of the specular band around the foreground spline."
+_TOOLTIP_FG_SPECULAR_OFFSET = "Vertical offset for the specular band relative to the foreground spline."
+_TOOLTIP_FG_SPECULAR_CREST_BIAS = "Bias toward crest zones based on local curvature."
 _LAYER_DEFAULTS = {
-    "bass": {"color": [82, 167, 255, 230], "alpha": 55, "power": 100, "offset": 0, "order": 1, "x": 0.15},
-    "vocals": {"color": [136, 190, 255, 220], "alpha": 42, "power": 100, "offset": -1, "order": 2, "x": 0.40},
-    "mids": {"color": [100, 145, 255, 220], "alpha": 46, "power": 100, "offset": 1, "order": 3, "x": 0.65},
-    "transients": {"color": [215, 240, 255, 240], "alpha": 66, "power": 115, "offset": 0, "order": 4, "x": 0.88},
+    "bass": {"color": [82, 167, 255, 230], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 55, "power": 100, "offset": 0, "order": 1, "x": 0.15},
+    "vocals": {"color": [136, 190, 255, 220], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 42, "power": 100, "offset": -1, "order": 2, "x": 0.40},
+    "mids": {"color": [100, 145, 255, 220], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 46, "power": 100, "offset": 1, "order": 3, "x": 0.65},
+    "transients": {"color": [215, 240, 255, 240], "outline_color": [255, 255, 255, 255], "outline_width": 6, "alpha": 66, "power": 115, "offset": 0, "order": 4, "x": 0.88},
 }
 
 
@@ -120,6 +130,15 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         title="Core",
         helper_text="Global curve motion and fill styling.",
         default_expanded=True,
+    )
+    _, foreground_fx_bucket = build_collapsible_bucket(
+        tab,
+        normal_layout,
+        mode_key="devcurve",
+        bucket_key="foreground_fx",
+        title="Foreground FX",
+        helper_text="Optional dynamic shadow/specular effects for the current top layer.",
+        default_expanded=False,
     )
     _, ghost_bucket = build_collapsible_bucket(
         tab,
@@ -201,6 +220,27 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     active_color_row.addWidget(tab.devcurve_active_layer_order)
     active_color_row.addWidget(tab.devcurve_active_layer_order_label)
     active_color_row.addStretch()
+    active_outline_row = add_builder_swatch_row(shaper_bucket, "Outline:", label_width=LABEL_WIDTH)[1]
+    tab.devcurve_active_layer_outline_color_btn = ColorSwatchButton(title="Choose Active Dev Curve Layer Outline Color")
+    tab.devcurve_active_layer_outline_color_btn.setToolTip(_TOOLTIP_LAYER_OUTLINE_COLOR)
+    active_outline_row.addWidget(tab.devcurve_active_layer_outline_color_btn)
+    tab.devcurve_active_layer_outline_width = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.devcurve_active_layer_outline_width.setMinimum(1)
+    tab.devcurve_active_layer_outline_width.setMaximum(20)
+    tab.devcurve_active_layer_outline_width.setValue(6)
+    tab.devcurve_active_layer_outline_width.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.devcurve_active_layer_outline_width.setTickInterval(1)
+    tab.devcurve_active_layer_outline_width.setSingleStep(1)
+    tab.devcurve_active_layer_outline_width.setPageStep(1)
+    tab.devcurve_active_layer_outline_width.setFixedWidth(120)
+    tab.devcurve_active_layer_outline_width.setToolTip(_TOOLTIP_LAYER_OUTLINE_WIDTH)
+    tab.devcurve_active_layer_outline_width_label = QLabel("0.006")
+    tab.devcurve_active_layer_outline_width_label.setToolTip(_TOOLTIP_LAYER_OUTLINE_WIDTH)
+    active_outline_row.addSpacing(12)
+    active_outline_row.addWidget(QLabel("Width:"))
+    active_outline_row.addWidget(tab.devcurve_active_layer_outline_width)
+    active_outline_row.addWidget(tab.devcurve_active_layer_outline_width_label)
+    active_outline_row.addStretch()
 
     def _on_shape_change(_value=None):
         tab._force_visualizer_preset_to_custom("devcurve")
@@ -216,6 +256,15 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     for src in _LAYER_ORDER:
         order_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_order", _LAYER_DEFAULTS[src]["order"]))
         setattr(tab, f"_devcurve_layer_{src}_order", max(1, min(4, order_default)))
+        outline_width_default = int(tab._default_float("spotify_visualizer", f"devcurve_layer_{src}_outline_width", _LAYER_DEFAULTS[src]["outline_width"] / 1000.0) * 1000.0)
+        setattr(tab, f"_devcurve_layer_{src}_outline_width", max(1, min(20, outline_width_default)))
+        oc = tab._color_from_default(
+            "spotify_visualizer",
+            f"devcurve_layer_{src}_outline_color",
+            _LAYER_DEFAULTS[src]["outline_color"],
+        )
+        oc.setAlpha(255)
+        setattr(tab, f"_devcurve_layer_{src}_outline_color", oc)
 
     def _enabled_layers() -> list[str]:
         enabled: list[str] = []
@@ -297,6 +346,14 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         sync = getattr(tab, f"_devcurve_layer_{src}_color", None)
         if sync is not None:
             tab.devcurve_active_layer_color_btn.set_color(sync)
+        outline_sync = getattr(tab, f"_devcurve_layer_{src}_outline_color", None)
+        if outline_sync is not None:
+            tab.devcurve_active_layer_outline_color_btn.set_color(outline_sync)
+        outline_w = int(getattr(tab, f"_devcurve_layer_{src}_outline_width", 6))
+        tab.devcurve_active_layer_outline_width.blockSignals(True)
+        tab.devcurve_active_layer_outline_width.setValue(max(1, min(20, outline_w)))
+        tab.devcurve_active_layer_outline_width.blockSignals(False)
+        tab.devcurve_active_layer_outline_width_label.setText(f"{outline_w / 1000.0:.3f}")
         _sync_active_layer_order_ui()
 
     def _on_active_layer_color(color) -> None:
@@ -307,6 +364,25 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         tab._force_visualizer_preset_to_custom("devcurve")
         tab._save_settings()
 
+    def _on_active_layer_outline_color(color) -> None:
+        src = str(getattr(tab, "_devcurve_active_layer", "bass")).lower()
+        if src not in _LAYER_ORDER:
+            src = "bass"
+        color.setAlpha(255)
+        setattr(tab, f"_devcurve_layer_{src}_outline_color", color)
+        tab._force_visualizer_preset_to_custom("devcurve")
+        tab._save_settings()
+
+    def _on_active_layer_outline_width_change(value: int) -> None:
+        src = str(getattr(tab, "_devcurve_active_layer", "bass")).lower()
+        if src not in _LAYER_ORDER:
+            src = "bass"
+        v = max(1, min(20, int(value)))
+        setattr(tab, f"_devcurve_layer_{src}_outline_width", v)
+        tab.devcurve_active_layer_outline_width_label.setText(f"{v / 1000.0:.3f}")
+        tab._force_visualizer_preset_to_custom("devcurve")
+        tab._save_settings()
+
     def _on_active_layer_order_change(value: int) -> None:
         src = str(getattr(tab, "_devcurve_active_layer", "bass")).lower()
         if src not in _LAYER_ORDER:
@@ -314,6 +390,8 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         _normalize_layer_orders(target_src=src, target_rank=int(value), save=True)
 
     tab.devcurve_active_layer_color_btn.color_changed.connect(_on_active_layer_color)
+    tab.devcurve_active_layer_outline_color_btn.color_changed.connect(_on_active_layer_outline_color)
+    tab.devcurve_active_layer_outline_width.valueChanged.connect(_on_active_layer_outline_width_change)
     tab.devcurve_active_layer_order.valueChanged.connect(_on_active_layer_order_change)
 
     for src, btn in tab.devcurve_layer_buttons.items():
@@ -367,30 +445,6 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     _normalize_layer_orders(save=False)
     _apply_active_layer_ui(str(getattr(tab, "_devcurve_active_layer", "bass")))
 
-    _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_outline_width",
-        label="Outline Width:",
-        min_v=1,
-        max_v=20,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_outline_width", 0.006) * 1000),
-        fmt=lambda v: f"{v / 1000.0:.3f}",
-        auto_switch=True,
-    )
-    tab.devcurve_outline_width.setToolTip(_TOOLTIP_OUTLINE_WIDTH)
-    _add_slider(
-        tab,
-        core_bucket,
-        attr="devcurve_outline_opacity",
-        label="Outline Opacity:",
-        min_v=0,
-        max_v=100,
-        value=int(tab._default_float("spotify_visualizer", "devcurve_outline_alpha", 1.0) * 100),
-        fmt=lambda v: f"{v}%",
-        auto_switch=True,
-    )
-    tab.devcurve_outline_opacity.setToolTip(_TOOLTIP_OUTLINE_OPACITY)
     _add_slider(
         tab,
         core_bucket,
@@ -465,6 +519,137 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     grow.setToolTip(_TOOLTIP_CARD_HEIGHT)
     grow.setTickPosition(QSlider.TickPosition.TicksBelow)
     grow.setTickInterval(50)
+
+    fx_toggle_row = _row(foreground_fx_bucket, "")
+    tab.devcurve_foreground_shadow_enabled = QCheckBox("Shadow")
+    tab.devcurve_foreground_shadow_enabled.setProperty("circleIndicator", True)
+    tab.devcurve_foreground_shadow_enabled.setChecked(
+        tab._default_bool("spotify_visualizer", "devcurve_foreground_shadow_enabled", False)
+    )
+    tab.devcurve_foreground_shadow_enabled.setToolTip(_TOOLTIP_FG_SHADOW_ENABLED)
+    bind_setting_signal(tab, tab.devcurve_foreground_shadow_enabled.stateChanged, auto_switch=True)
+    fx_toggle_row.addWidget(tab.devcurve_foreground_shadow_enabled)
+    tab.devcurve_foreground_specular_enabled = QCheckBox("Specular")
+    tab.devcurve_foreground_specular_enabled.setProperty("circleIndicator", True)
+    tab.devcurve_foreground_specular_enabled.setChecked(
+        tab._default_bool("spotify_visualizer", "devcurve_foreground_specular_enabled", False)
+    )
+    tab.devcurve_foreground_specular_enabled.setToolTip(_TOOLTIP_FG_SPECULAR_ENABLED)
+    bind_setting_signal(tab, tab.devcurve_foreground_specular_enabled.stateChanged, auto_switch=True)
+    fx_toggle_row.addSpacing(16)
+    fx_toggle_row.addWidget(tab.devcurve_foreground_specular_enabled)
+    fx_toggle_row.addStretch()
+
+    _shadow_alpha = _add_slider(
+        tab,
+        foreground_fx_bucket,
+        attr="devcurve_foreground_shadow_alpha",
+        label="Shadow Alpha:",
+        min_v=0,
+        max_v=100,
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_alpha", 0.36) * 100),
+        fmt=lambda v: f"{v}%",
+        auto_switch=True,
+    )
+    _shadow_alpha.setToolTip(_TOOLTIP_FG_SHADOW_ALPHA)
+    _shadow_darken = _add_slider(
+        tab,
+        foreground_fx_bucket,
+        attr="devcurve_foreground_shadow_darken",
+        label="Shadow Darken:",
+        min_v=0,
+        max_v=100,
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_darken", 0.42) * 100),
+        fmt=lambda v: f"{v}%",
+        auto_switch=True,
+    )
+    _shadow_darken.setToolTip(_TOOLTIP_FG_SHADOW_DARKEN)
+    _shadow_offset = _add_slider(
+        tab,
+        foreground_fx_bucket,
+        attr="devcurve_foreground_shadow_offset",
+        label="Shadow Offset:",
+        min_v=0,
+        max_v=45,
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_shadow_offset", 0.10) * 100),
+        fmt=lambda v: f"{v / 100.0:.2f}",
+        auto_switch=True,
+    )
+    _shadow_offset.setToolTip(_TOOLTIP_FG_SHADOW_OFFSET)
+
+    _spec_alpha = _add_slider(
+        tab,
+        foreground_fx_bucket,
+        attr="devcurve_foreground_specular_alpha",
+        label="Specular Alpha:",
+        min_v=0,
+        max_v=100,
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_alpha", 0.78) * 100),
+        fmt=lambda v: f"{v}%",
+        auto_switch=True,
+    )
+    _spec_alpha.setToolTip(_TOOLTIP_FG_SPECULAR_ALPHA)
+    _spec_width = _add_slider(
+        tab,
+        foreground_fx_bucket,
+        attr="devcurve_foreground_specular_width",
+        label="Specular Width:",
+        min_v=2,
+        max_v=120,
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_width", 0.022) * 1000),
+        fmt=lambda v: f"{v / 1000.0:.3f}",
+        auto_switch=True,
+    )
+    _spec_width.setToolTip(_TOOLTIP_FG_SPECULAR_WIDTH)
+    _spec_offset = _add_slider(
+        tab,
+        foreground_fx_bucket,
+        attr="devcurve_foreground_specular_offset",
+        label="Specular Offset:",
+        min_v=-20,
+        max_v=20,
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_offset", 0.028) * 100),
+        fmt=lambda v: f"{v / 100.0:+.2f}",
+        auto_switch=True,
+    )
+    _spec_offset.setToolTip(_TOOLTIP_FG_SPECULAR_OFFSET)
+    _spec_crest = _add_slider(
+        tab,
+        foreground_fx_bucket,
+        attr="devcurve_foreground_specular_crest_bias",
+        label="Specular Crest Bias:",
+        min_v=0,
+        max_v=200,
+        value=int(tab._default_float("spotify_visualizer", "devcurve_foreground_specular_crest_bias", 1.05) * 100),
+        fmt=lambda v: f"{v / 100.0:.2f}x",
+        auto_switch=True,
+    )
+    _spec_crest.setToolTip(_TOOLTIP_FG_SPECULAR_CREST_BIAS)
+
+    tab._devcurve_foreground_shadow_rows = [
+        getattr(_shadow_alpha, "_row_widget"),
+        getattr(_shadow_darken, "_row_widget"),
+        getattr(_shadow_offset, "_row_widget"),
+    ]
+    tab._devcurve_foreground_specular_rows = [
+        getattr(_spec_alpha, "_row_widget"),
+        getattr(_spec_width, "_row_widget"),
+        getattr(_spec_offset, "_row_widget"),
+        getattr(_spec_crest, "_row_widget"),
+    ]
+
+    def _update_foreground_fx_visibility() -> None:
+        shadow_on = bool(tab.devcurve_foreground_shadow_enabled.isChecked())
+        for row in getattr(tab, "_devcurve_foreground_shadow_rows", []):
+            row.setVisible(shadow_on)
+        spec_on = bool(tab.devcurve_foreground_specular_enabled.isChecked())
+        for row in getattr(tab, "_devcurve_foreground_specular_rows", []):
+            row.setVisible(spec_on)
+
+    tab._devcurve_update_foreground_fx_visibility = _update_foreground_fx_visibility
+    tab.devcurve_foreground_shadow_enabled.stateChanged.connect(lambda _state: _update_foreground_fx_visibility())
+    tab.devcurve_foreground_specular_enabled.stateChanged.connect(lambda _state: _update_foreground_fx_visibility())
+    _update_foreground_fx_visibility()
 
     g_row = _row(ghost_bucket, "")
     tab.devcurve_ghost_enabled = QCheckBox("Enable Ghosting")

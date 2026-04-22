@@ -53,8 +53,6 @@ class _ShapeEditor:
 
 class _Tab:
     def __init__(self):
-        self.devcurve_outline_width = _Slider(); self.devcurve_outline_width_label = _Label()
-        self.devcurve_outline_opacity = _Slider(); self.devcurve_outline_opacity_label = _Label()
         self.devcurve_base_level = _Slider(); self.devcurve_base_level_label = _Label()
         self.devcurve_motion_power = _Slider(); self.devcurve_motion_power_label = _Label()
         self.devcurve_idle_motion = _Slider(); self.devcurve_idle_motion_label = _Label()
@@ -65,6 +63,15 @@ class _Tab:
         self.devcurve_ghost_enabled = _Check()
         self.devcurve_ghost_opacity = _Slider(); self.devcurve_ghost_opacity_label = _Label()
         self.devcurve_ghost_decay = _Slider(); self.devcurve_ghost_decay_label = _Label()
+        self.devcurve_foreground_shadow_enabled = _Check()
+        self.devcurve_foreground_shadow_alpha = _Slider(); self.devcurve_foreground_shadow_alpha_label = _Label()
+        self.devcurve_foreground_shadow_darken = _Slider(); self.devcurve_foreground_shadow_darken_label = _Label()
+        self.devcurve_foreground_shadow_offset = _Slider(); self.devcurve_foreground_shadow_offset_label = _Label()
+        self.devcurve_foreground_specular_enabled = _Check()
+        self.devcurve_foreground_specular_alpha = _Slider(); self.devcurve_foreground_specular_alpha_label = _Label()
+        self.devcurve_foreground_specular_width = _Slider(); self.devcurve_foreground_specular_width_label = _Label()
+        self.devcurve_foreground_specular_offset = _Slider(); self.devcurve_foreground_specular_offset_label = _Label()
+        self.devcurve_foreground_specular_crest_bias = _Slider(); self.devcurve_foreground_specular_crest_bias_label = _Label()
         for src in ("bass", "vocals", "mids", "transients"):
             setattr(self, f"devcurve_layer_{src}_enabled", _Check())
             setattr(self, f"devcurve_layer_{src}_alpha", _Slider())
@@ -82,23 +89,43 @@ def test_devcurve_binding_load_and_collect_roundtrip():
     tab = _Tab()
     seen = []
     cfg = {
-        "devcurve_outline_width": 0.009,
-        "devcurve_outline_alpha": 0.88,
         "devcurve_base_level": 0.61,
         "devcurve_smoothness": 0.72,
         "devcurve_growth": 2.8,
         "devcurve_layer_bass_shape_nodes": [[0.0, 0.52], [1.0, 0.66]],
         "devcurve_layer_bass_alpha": 0.74,
         "devcurve_layer_bass_order": 3,
+        "devcurve_layer_bass_outline_color": [12, 34, 56, 180],
+        "devcurve_layer_bass_outline_width": 0.009,
+        "devcurve_foreground_shadow_enabled": True,
+        "devcurve_foreground_shadow_alpha": 0.41,
+        "devcurve_foreground_shadow_darken": 0.47,
+        "devcurve_foreground_shadow_offset": 0.11,
+        "devcurve_foreground_specular_enabled": True,
+        "devcurve_foreground_specular_alpha": 0.83,
+        "devcurve_foreground_specular_width": 0.029,
+        "devcurve_foreground_specular_offset": 0.05,
+        "devcurve_foreground_specular_crest_bias": 1.22,
     }
     load_devcurve_mode_settings(tab, cfg, sync_color_button=lambda btn, attr: seen.append((btn, attr)))
     payload = collect_devcurve_mode_settings(tab)
-    assert payload["devcurve_outline_width"] == 0.009
-    assert payload["devcurve_outline_alpha"] == 0.88
     assert payload["devcurve_base_level"] == 0.61
     assert payload["devcurve_smoothness"] == 0.72
     assert payload["devcurve_growth"] == 2.8
     assert payload["devcurve_layer_bass_shape_nodes"] == [[0.0, 0.52], [1.0, 0.66]]
     assert payload["devcurve_layer_bass_alpha"] == 0.74
     assert payload["devcurve_layer_bass_order"] == 3
+    assert payload["devcurve_layer_bass_outline_color"] == [12, 34, 56, 255]
+    assert payload["devcurve_layer_bass_outline_width"] == 0.009
+    assert payload["devcurve_foreground_shadow_enabled"] is True
+    assert payload["devcurve_foreground_shadow_alpha"] == 0.41
+    assert payload["devcurve_foreground_shadow_darken"] == 0.47
+    assert payload["devcurve_foreground_shadow_offset"] == 0.11
+    assert payload["devcurve_foreground_specular_enabled"] is True
+    assert payload["devcurve_foreground_specular_alpha"] == 0.83
+    assert payload["devcurve_foreground_specular_width"] == 0.029
+    assert payload["devcurve_foreground_specular_offset"] == 0.05
+    assert payload["devcurve_foreground_specular_crest_bias"] == 1.22
+    assert "devcurve_outline_width" not in payload
+    assert "devcurve_outline_alpha" not in payload
     assert seen == []

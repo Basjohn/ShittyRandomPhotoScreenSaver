@@ -340,8 +340,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_ghost_decay: float = 0.4
 
         # Dev Curve mode defaults (safe no-op values so upload_uniforms always works)
-        self._devcurve_outline_width: float = 0.006
-        self._devcurve_outline_alpha: float = 1.0
         self._devcurve_base_level: float = 0.58
         self._devcurve_sample_count: int = 96
         self._devcurve_curve_bass: list = []
@@ -352,6 +350,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._devcurve_layer_vocals_color: QColor = QColor(136, 190, 255, 210)
         self._devcurve_layer_mids_color: QColor = QColor(100, 145, 255, 210)
         self._devcurve_layer_transients_color: QColor = QColor(215, 240, 255, 240)
+        self._devcurve_layer_bass_outline_color: QColor = QColor(255, 255, 255, 255)
+        self._devcurve_layer_vocals_outline_color: QColor = QColor(255, 255, 255, 255)
+        self._devcurve_layer_mids_outline_color: QColor = QColor(255, 255, 255, 255)
+        self._devcurve_layer_transients_outline_color: QColor = QColor(255, 255, 255, 255)
+        self._devcurve_layer_bass_outline_width: float = 0.006
+        self._devcurve_layer_vocals_outline_width: float = 0.006
+        self._devcurve_layer_mids_outline_width: float = 0.006
+        self._devcurve_layer_transients_outline_width: float = 0.006
         self._devcurve_layer_bass_alpha: float = 0.55
         self._devcurve_layer_vocals_alpha: float = 0.42
         self._devcurve_layer_mids_alpha: float = 0.46
@@ -364,6 +370,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._devcurve_layer_vocals_order: int = 2
         self._devcurve_layer_mids_order: int = 3
         self._devcurve_layer_transients_order: int = 4
+        self._devcurve_foreground_layer_id: int = -1
+        self._devcurve_foreground_shadow_enabled: bool = False
+        self._devcurve_foreground_shadow_alpha: float = 0.36
+        self._devcurve_foreground_shadow_darken: float = 0.42
+        self._devcurve_foreground_shadow_offset: float = 0.10
+        self._devcurve_foreground_specular_enabled: bool = False
+        self._devcurve_foreground_specular_alpha: float = 0.78
+        self._devcurve_foreground_specular_width: float = 0.022
+        self._devcurve_foreground_specular_offset: float = 0.028
+        self._devcurve_foreground_specular_crest_bias: float = 1.05
         self._devcurve_ghosting_enabled: bool = False
         self._devcurve_ghost_alpha: float = 0.0
         self._devcurve_ghost_decay: float = 0.4
@@ -660,8 +676,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_trail_strength: float = 0.0,
         bubble_tail_opacity: float = 0.0,
         # Dev Curve mode
-        devcurve_outline_width: float = 0.006,
-        devcurve_outline_alpha: float = 1.0,
         devcurve_base_level: float = 0.58,
         devcurve_sample_count: int = 96,
         devcurve_curve_bass: list | None = None,
@@ -672,6 +686,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         devcurve_layer_vocals_color: QColor | list | None = None,
         devcurve_layer_mids_color: QColor | list | None = None,
         devcurve_layer_transients_color: QColor | list | None = None,
+        devcurve_layer_bass_outline_color: QColor | list | None = None,
+        devcurve_layer_vocals_outline_color: QColor | list | None = None,
+        devcurve_layer_mids_outline_color: QColor | list | None = None,
+        devcurve_layer_transients_outline_color: QColor | list | None = None,
+        devcurve_layer_bass_outline_width: float = 0.006,
+        devcurve_layer_vocals_outline_width: float = 0.006,
+        devcurve_layer_mids_outline_width: float = 0.006,
+        devcurve_layer_transients_outline_width: float = 0.006,
         devcurve_layer_bass_alpha: float = 0.55,
         devcurve_layer_vocals_alpha: float = 0.42,
         devcurve_layer_mids_alpha: float = 0.46,
@@ -684,6 +706,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         devcurve_layer_vocals_order: int = 2,
         devcurve_layer_mids_order: int = 3,
         devcurve_layer_transients_order: int = 4,
+        devcurve_foreground_layer_id: int = -1,
+        devcurve_foreground_shadow_enabled: bool = False,
+        devcurve_foreground_shadow_alpha: float = 0.36,
+        devcurve_foreground_shadow_darken: float = 0.42,
+        devcurve_foreground_shadow_offset: float = 0.10,
+        devcurve_foreground_specular_enabled: bool = False,
+        devcurve_foreground_specular_alpha: float = 0.78,
+        devcurve_foreground_specular_width: float = 0.022,
+        devcurve_foreground_specular_offset: float = 0.028,
+        devcurve_foreground_specular_crest_bias: float = 1.05,
         devcurve_ghosting_enabled: bool = False,
         devcurve_ghost_alpha: float = 0.0,
         devcurve_ghost_decay: float = 0.4,
@@ -1395,8 +1427,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_ghost_decay = max(0.1, min(1.0, float(bubble_ghost_decay)))
 
         # Dev Curve mode state -----------------------------------------------------
-        self._devcurve_outline_width = max(0.001, min(0.020, float(devcurve_outline_width)))
-        self._devcurve_outline_alpha = max(0.0, min(1.0, float(devcurve_outline_alpha)))
         self._devcurve_base_level = max(0.10, min(0.90, float(devcurve_base_level)))
         self._devcurve_sample_count = max(2, min(96, int(devcurve_sample_count)))
         if devcurve_curve_bass is not None:
@@ -1415,6 +1445,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._devcurve_layer_mids_color = QColor(*devcurve_layer_mids_color) if not isinstance(devcurve_layer_mids_color, QColor) else QColor(devcurve_layer_mids_color)
         if devcurve_layer_transients_color is not None:
             self._devcurve_layer_transients_color = QColor(*devcurve_layer_transients_color) if not isinstance(devcurve_layer_transients_color, QColor) else QColor(devcurve_layer_transients_color)
+        if devcurve_layer_bass_outline_color is not None:
+            self._devcurve_layer_bass_outline_color = QColor(*devcurve_layer_bass_outline_color) if not isinstance(devcurve_layer_bass_outline_color, QColor) else QColor(devcurve_layer_bass_outline_color)
+            self._devcurve_layer_bass_outline_color.setAlpha(255)
+        if devcurve_layer_vocals_outline_color is not None:
+            self._devcurve_layer_vocals_outline_color = QColor(*devcurve_layer_vocals_outline_color) if not isinstance(devcurve_layer_vocals_outline_color, QColor) else QColor(devcurve_layer_vocals_outline_color)
+            self._devcurve_layer_vocals_outline_color.setAlpha(255)
+        if devcurve_layer_mids_outline_color is not None:
+            self._devcurve_layer_mids_outline_color = QColor(*devcurve_layer_mids_outline_color) if not isinstance(devcurve_layer_mids_outline_color, QColor) else QColor(devcurve_layer_mids_outline_color)
+            self._devcurve_layer_mids_outline_color.setAlpha(255)
+        if devcurve_layer_transients_outline_color is not None:
+            self._devcurve_layer_transients_outline_color = QColor(*devcurve_layer_transients_outline_color) if not isinstance(devcurve_layer_transients_outline_color, QColor) else QColor(devcurve_layer_transients_outline_color)
+            self._devcurve_layer_transients_outline_color.setAlpha(255)
+        self._devcurve_layer_bass_outline_width = max(0.001, min(0.020, float(devcurve_layer_bass_outline_width)))
+        self._devcurve_layer_vocals_outline_width = max(0.001, min(0.020, float(devcurve_layer_vocals_outline_width)))
+        self._devcurve_layer_mids_outline_width = max(0.001, min(0.020, float(devcurve_layer_mids_outline_width)))
+        self._devcurve_layer_transients_outline_width = max(0.001, min(0.020, float(devcurve_layer_transients_outline_width)))
         self._devcurve_layer_bass_alpha = max(0.0, min(1.0, float(devcurve_layer_bass_alpha)))
         self._devcurve_layer_vocals_alpha = max(0.0, min(1.0, float(devcurve_layer_vocals_alpha)))
         self._devcurve_layer_mids_alpha = max(0.0, min(1.0, float(devcurve_layer_mids_alpha)))
@@ -1427,6 +1473,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._devcurve_layer_vocals_order = max(1, min(4, int(devcurve_layer_vocals_order)))
         self._devcurve_layer_mids_order = max(1, min(4, int(devcurve_layer_mids_order)))
         self._devcurve_layer_transients_order = max(1, min(4, int(devcurve_layer_transients_order)))
+        self._devcurve_foreground_layer_id = max(-1, min(3, int(devcurve_foreground_layer_id)))
+        self._devcurve_foreground_shadow_enabled = bool(devcurve_foreground_shadow_enabled)
+        self._devcurve_foreground_shadow_alpha = max(0.0, min(1.0, float(devcurve_foreground_shadow_alpha)))
+        self._devcurve_foreground_shadow_darken = max(0.0, min(1.0, float(devcurve_foreground_shadow_darken)))
+        self._devcurve_foreground_shadow_offset = max(0.0, min(0.45, float(devcurve_foreground_shadow_offset)))
+        self._devcurve_foreground_specular_enabled = bool(devcurve_foreground_specular_enabled)
+        self._devcurve_foreground_specular_alpha = max(0.0, min(1.0, float(devcurve_foreground_specular_alpha)))
+        self._devcurve_foreground_specular_width = max(0.002, min(0.120, float(devcurve_foreground_specular_width)))
+        self._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(devcurve_foreground_specular_offset)))
+        self._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(devcurve_foreground_specular_crest_bias)))
         self._devcurve_ghosting_enabled = bool(devcurve_ghosting_enabled)
         self._devcurve_ghost_alpha = max(0.0, min(1.0, float(devcurve_ghost_alpha)))
         self._devcurve_ghost_decay = max(0.1, min(1.0, float(devcurve_ghost_decay)))

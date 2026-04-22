@@ -9,10 +9,10 @@ from PySide6.QtGui import QColor
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 
 _LAYER_DEFAULTS = {
-    "bass": {"color": [82, 167, 255, 230], "alpha": 0.55, "power": 1.0, "offset": 0.00, "enabled": True, "order": 1},
-    "vocals": {"color": [136, 190, 255, 220], "alpha": 0.42, "power": 1.0, "offset": -0.01, "enabled": True, "order": 2},
-    "mids": {"color": [100, 145, 255, 220], "alpha": 0.46, "power": 1.0, "offset": 0.01, "enabled": True, "order": 3},
-    "transients": {"color": [215, 240, 255, 240], "alpha": 0.66, "power": 1.15, "offset": 0.00, "enabled": True, "order": 4},
+    "bass": {"color": [82, 167, 255, 230], "outline_color": [255, 255, 255, 255], "outline_width": 0.006, "alpha": 0.55, "power": 1.0, "offset": 0.00, "enabled": True, "order": 1},
+    "vocals": {"color": [136, 190, 255, 220], "outline_color": [255, 255, 255, 255], "outline_width": 0.006, "alpha": 0.42, "power": 1.0, "offset": -0.01, "enabled": True, "order": 2},
+    "mids": {"color": [100, 145, 255, 220], "outline_color": [255, 255, 255, 255], "outline_width": 0.006, "alpha": 0.46, "power": 1.0, "offset": 0.01, "enabled": True, "order": 3},
+    "transients": {"color": [215, 240, 255, 240], "outline_color": [255, 255, 255, 255], "outline_width": 0.006, "alpha": 0.66, "power": 1.15, "offset": 0.00, "enabled": True, "order": 4},
 }
 _DEFAULT_SHAPE_NODES = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
 
@@ -30,16 +30,6 @@ def load_devcurve_mode_settings(
     _ = sync_color_button
     config = spotify_vis_config if isinstance(spotify_vis_config, Mapping) else {}
 
-    if hasattr(tab, "devcurve_outline_width"):
-        v = int(float(config.get("devcurve_outline_width", 0.006)) * 1000.0)
-        v = max(1, min(20, v))
-        tab.devcurve_outline_width.setValue(v)
-        tab.devcurve_outline_width_label.setText(f"{v / 1000.0:.3f}")
-    if hasattr(tab, "devcurve_outline_opacity"):
-        v = int(float(config.get("devcurve_outline_alpha", 1.0)) * 100.0)
-        v = max(0, min(100, v))
-        tab.devcurve_outline_opacity.setValue(v)
-        tab.devcurve_outline_opacity_label.setText(f"{v}%")
     if hasattr(tab, "devcurve_base_level"):
         v = int(float(config.get("devcurve_base_level", 0.58)) * 100.0)
         v = max(10, min(90, v))
@@ -122,6 +112,15 @@ def load_devcurve_mode_settings(
             setattr(tab, f"_devcurve_layer_{src}_color", QColor(*defaults["color"]))
         if hasattr(tab, f"devcurve_layer_{src}_color_btn"):
             sync_color_button(f"devcurve_layer_{src}_color_btn", f"_devcurve_layer_{src}_color")
+        outline_width = int(float(config.get(f"devcurve_layer_{src}_outline_width", defaults["outline_width"])) * 1000.0)
+        setattr(tab, f"_devcurve_layer_{src}_outline_width", max(1, min(20, outline_width)))
+        outline_color_data = config.get(f"devcurve_layer_{src}_outline_color", defaults["outline_color"])
+        try:
+            oc = QColor(*outline_color_data)
+        except Exception:
+            oc = QColor(*defaults["outline_color"])
+        oc.setAlpha(255)
+        setattr(tab, f"_devcurve_layer_{src}_outline_color", oc)
 
     apply_active_ui = getattr(tab, "_devcurve_apply_active_layer_ui", None)
     if callable(apply_active_ui):
@@ -129,6 +128,53 @@ def load_devcurve_mode_settings(
     normalize_layer_orders = getattr(tab, "_devcurve_normalize_layer_orders", None)
     if callable(normalize_layer_orders):
         normalize_layer_orders(save=False)
+
+    if hasattr(tab, "devcurve_foreground_shadow_enabled"):
+        tab.devcurve_foreground_shadow_enabled.setChecked(
+            bool(config.get("devcurve_foreground_shadow_enabled", False))
+        )
+    if hasattr(tab, "devcurve_foreground_specular_enabled"):
+        tab.devcurve_foreground_specular_enabled.setChecked(
+            bool(config.get("devcurve_foreground_specular_enabled", False))
+        )
+    if hasattr(tab, "devcurve_foreground_shadow_alpha"):
+        v = int(float(config.get("devcurve_foreground_shadow_alpha", 0.36)) * 100.0)
+        v = max(0, min(100, v))
+        tab.devcurve_foreground_shadow_alpha.setValue(v)
+        tab.devcurve_foreground_shadow_alpha_label.setText(f"{v}%")
+    if hasattr(tab, "devcurve_foreground_shadow_darken"):
+        v = int(float(config.get("devcurve_foreground_shadow_darken", 0.42)) * 100.0)
+        v = max(0, min(100, v))
+        tab.devcurve_foreground_shadow_darken.setValue(v)
+        tab.devcurve_foreground_shadow_darken_label.setText(f"{v}%")
+    if hasattr(tab, "devcurve_foreground_shadow_offset"):
+        v = int(float(config.get("devcurve_foreground_shadow_offset", 0.10)) * 100.0)
+        v = max(0, min(45, v))
+        tab.devcurve_foreground_shadow_offset.setValue(v)
+        tab.devcurve_foreground_shadow_offset_label.setText(f"{v / 100.0:.2f}")
+    if hasattr(tab, "devcurve_foreground_specular_alpha"):
+        v = int(float(config.get("devcurve_foreground_specular_alpha", 0.78)) * 100.0)
+        v = max(0, min(100, v))
+        tab.devcurve_foreground_specular_alpha.setValue(v)
+        tab.devcurve_foreground_specular_alpha_label.setText(f"{v}%")
+    if hasattr(tab, "devcurve_foreground_specular_width"):
+        v = int(float(config.get("devcurve_foreground_specular_width", 0.022)) * 1000.0)
+        v = max(2, min(120, v))
+        tab.devcurve_foreground_specular_width.setValue(v)
+        tab.devcurve_foreground_specular_width_label.setText(f"{v / 1000.0:.3f}")
+    if hasattr(tab, "devcurve_foreground_specular_offset"):
+        v = int(float(config.get("devcurve_foreground_specular_offset", 0.028)) * 100.0)
+        v = max(-20, min(20, v))
+        tab.devcurve_foreground_specular_offset.setValue(v)
+        tab.devcurve_foreground_specular_offset_label.setText(f"{v / 100.0:+.2f}")
+    if hasattr(tab, "devcurve_foreground_specular_crest_bias"):
+        v = int(float(config.get("devcurve_foreground_specular_crest_bias", 1.05)) * 100.0)
+        v = max(0, min(200, v))
+        tab.devcurve_foreground_specular_crest_bias.setValue(v)
+        tab.devcurve_foreground_specular_crest_bias_label.setText(f"{v / 100.0:.2f}x")
+    update_fx_visibility = getattr(tab, "_devcurve_update_foreground_fx_visibility", None)
+    if callable(update_fx_visibility):
+        update_fx_visibility()
 
     if hasattr(tab, "devcurve_ghost_enabled"):
         tab.devcurve_ghost_enabled.setChecked(bool(config.get("devcurve_ghosting_enabled", False)))
@@ -147,8 +193,6 @@ def load_devcurve_mode_settings(
 
 def collect_devcurve_mode_settings(tab) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "devcurve_outline_width": (tab.devcurve_outline_width.value() if hasattr(tab, "devcurve_outline_width") else 6) / 1000.0,
-        "devcurve_outline_alpha": (tab.devcurve_outline_opacity.value() if hasattr(tab, "devcurve_outline_opacity") else 100) / 100.0,
         "devcurve_base_level": (tab.devcurve_base_level.value() if hasattr(tab, "devcurve_base_level") else 58) / 100.0,
         "devcurve_motion_power": (tab.devcurve_motion_power.value() if hasattr(tab, "devcurve_motion_power") else 100) / 100.0,
         "devcurve_idle_motion": (tab.devcurve_idle_motion.value() if hasattr(tab, "devcurve_idle_motion") else 20) / 100.0,
@@ -159,6 +203,37 @@ def collect_devcurve_mode_settings(tab) -> dict[str, Any]:
         "devcurve_ghosting_enabled": tab.devcurve_ghost_enabled.isChecked() if hasattr(tab, "devcurve_ghost_enabled") else False,
         "devcurve_ghost_alpha": (tab.devcurve_ghost_opacity.value() if hasattr(tab, "devcurve_ghost_opacity") else 0) / 100.0,
         "devcurve_ghost_decay": (tab.devcurve_ghost_decay.value() if hasattr(tab, "devcurve_ghost_decay") else 40) / 100.0,
+        "devcurve_foreground_shadow_enabled": (
+            tab.devcurve_foreground_shadow_enabled.isChecked()
+            if hasattr(tab, "devcurve_foreground_shadow_enabled")
+            else False
+        ),
+        "devcurve_foreground_shadow_alpha": (
+            (tab.devcurve_foreground_shadow_alpha.value() if hasattr(tab, "devcurve_foreground_shadow_alpha") else 36) / 100.0
+        ),
+        "devcurve_foreground_shadow_darken": (
+            (tab.devcurve_foreground_shadow_darken.value() if hasattr(tab, "devcurve_foreground_shadow_darken") else 42) / 100.0
+        ),
+        "devcurve_foreground_shadow_offset": (
+            (tab.devcurve_foreground_shadow_offset.value() if hasattr(tab, "devcurve_foreground_shadow_offset") else 10) / 100.0
+        ),
+        "devcurve_foreground_specular_enabled": (
+            tab.devcurve_foreground_specular_enabled.isChecked()
+            if hasattr(tab, "devcurve_foreground_specular_enabled")
+            else False
+        ),
+        "devcurve_foreground_specular_alpha": (
+            (tab.devcurve_foreground_specular_alpha.value() if hasattr(tab, "devcurve_foreground_specular_alpha") else 78) / 100.0
+        ),
+        "devcurve_foreground_specular_width": (
+            (tab.devcurve_foreground_specular_width.value() if hasattr(tab, "devcurve_foreground_specular_width") else 22) / 1000.0
+        ),
+        "devcurve_foreground_specular_offset": (
+            (tab.devcurve_foreground_specular_offset.value() if hasattr(tab, "devcurve_foreground_specular_offset") else 3) / 100.0
+        ),
+        "devcurve_foreground_specular_crest_bias": (
+            (tab.devcurve_foreground_specular_crest_bias.value() if hasattr(tab, "devcurve_foreground_specular_crest_bias") else 105) / 100.0
+        ),
     }
 
     layer_strengths = {}
@@ -191,6 +266,16 @@ def collect_devcurve_mode_settings(tab) -> dict[str, Any]:
         payload[f"devcurve_layer_{src}_color"] = _qcolor_to_list(
             getattr(tab, f"_devcurve_layer_{src}_color", None),
             defaults["color"],
+        )
+        outline_color = getattr(tab, f"_devcurve_layer_{src}_outline_color", None)
+        outline_color_list = _qcolor_to_list(outline_color, defaults["outline_color"])
+        if len(outline_color_list) < 4:
+            outline_color_list = list(outline_color_list) + [255]
+        outline_color_list[3] = 255
+        payload[f"devcurve_layer_{src}_outline_color"] = outline_color_list
+        payload[f"devcurve_layer_{src}_outline_width"] = max(
+            0.001,
+            min(0.020, float(getattr(tab, f"_devcurve_layer_{src}_outline_width", int(defaults["outline_width"] * 1000))) / 1000.0),
         )
         layer_nodes = layer_nodes_map.get(src)
         payload[f"devcurve_layer_{src}_shape_nodes"] = (

@@ -261,6 +261,8 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
     draw_order = frame.get("draw_order", ["bass", "vocals", "mids", "transients"])
     if isinstance(draw_order, list) and len(draw_order) == 4:
         widget._devcurve_draw_order = list(draw_order)
+    widget._devcurve_foreground_layer = str(frame.get("foreground_layer", "") or "")
+    widget._devcurve_foreground_layer_id = int(frame.get("foreground_layer_id", -1))
     widget._devcurve_smoothness_max_step = float(frame.get("smoothness_max_step", 0.0))
     widget._devcurve_active_amplitude = float(frame.get("active_amplitude", 0.0))
     widget._devcurve_idle_amplitude = float(frame.get("idle_amplitude", 0.0))
@@ -272,12 +274,13 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
             logger.debug(
                 (
                     "[SPOTIFY_VIS][DEVCURVE] mode=%s idle_amp=%.4f active_amp=%.4f smooth_step=%.5f "
-                    "E[b=%.3f v=%.3f m=%.3f t=%.3f]"
+                    "fg=%s E[b=%.3f v=%.3f m=%.3f t=%.3f]"
                 ),
                 "layered",
                 widget._devcurve_idle_amplitude,
                 widget._devcurve_active_amplitude,
                 widget._devcurve_smoothness_max_step,
+                str(getattr(widget, "_devcurve_foreground_layer", "")),
                 float(e.get("bass", 0.0)),
                 float(e.get("vocals", 0.0)),
                 float(e.get("mids", 0.0)),
