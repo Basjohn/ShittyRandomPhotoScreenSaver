@@ -468,8 +468,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
     if 'osc_growth' in kwargs:
         widget._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
-    if 'goo_growth' in kwargs:
-        widget._goo_growth = max(1.0, min(5.0, float(kwargs['goo_growth'])))
+    if 'devcurve_growth' in kwargs:
+        widget._devcurve_growth = max(1.0, min(5.0, float(kwargs['devcurve_growth'])))
     if 'osc_speed' in kwargs:
         widget._osc_speed = max(0.1, min(1.0, float(kwargs['osc_speed'])))
     if 'osc_line_dim' in kwargs:
@@ -662,31 +662,54 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'sine_heartbeat' in kwargs:
         widget._sine_heartbeat = max(0.0, min(1.0, float(kwargs['sine_heartbeat'])))
 
-    # --- Goo --------------------------------------------------------------
-    if 'goo_color' in kwargs:
-        widget._goo_color = list(kwargs['goo_color']) if kwargs['goo_color'] is not None else None
-    if 'goo_outline_color' in kwargs:
-        widget._goo_outline_color = list(kwargs['goo_outline_color']) if kwargs['goo_outline_color'] is not None else None
-    if 'goo_shadow_color' in kwargs:
-        widget._goo_shadow_color = list(kwargs['goo_shadow_color']) if kwargs['goo_shadow_color'] is not None else None
-    if 'goo_outline_width' in kwargs:
-        widget._goo_outline_width = max(0.0, min(0.012, float(kwargs['goo_outline_width'])))
-    if 'goo_inward_outline_width' in kwargs:
-        widget._goo_inward_outline_width = max(0.0, min(0.012, float(kwargs['goo_inward_outline_width'])))
-    if 'goo_shadow_strength' in kwargs:
-        widget._goo_shadow_strength = max(0.0, min(1.0, float(kwargs['goo_shadow_strength'])))
-    if 'goo_specular_density' in kwargs:
-        widget._goo_specular_density = max(0.0, min(1.0, float(kwargs['goo_specular_density'])))
-    if 'goo_core_size' in kwargs:
-        widget._goo_core_size = max(0.06, min(0.30, float(kwargs['goo_core_size'])))
-    if 'goo_edge_inward_depth' in kwargs:
-        widget._goo_edge_inward_depth = max(0.0, min(0.45, float(kwargs['goo_edge_inward_depth'])))
-    if 'goo_ghosting_enabled' in kwargs:
-        widget._goo_ghosting_enabled = bool(kwargs['goo_ghosting_enabled'])
-    if 'goo_ghost_alpha' in kwargs:
-        widget._goo_ghost_alpha = max(0.0, min(1.0, float(kwargs['goo_ghost_alpha'])))
-    if 'goo_ghost_decay' in kwargs:
-        widget._goo_ghost_decay = max(0.1, min(1.0, float(kwargs['goo_ghost_decay'])))
+    # --- Dev Curve --------------------------------------------------------------
+    if 'devcurve_active_layer' in kwargs:
+        active = str(kwargs['devcurve_active_layer']).strip().lower()
+        widget._devcurve_active_layer = active if active in {'bass', 'vocals', 'mids', 'transients'} else 'bass'
+    if 'devcurve_outline_width' in kwargs:
+        widget._devcurve_outline_width = max(0.001, min(0.020, float(kwargs['devcurve_outline_width'])))
+    if 'devcurve_outline_alpha' in kwargs:
+        widget._devcurve_outline_alpha = max(0.0, min(1.0, float(kwargs['devcurve_outline_alpha'])))
+    if 'devcurve_base_level' in kwargs:
+        widget._devcurve_base_level = max(0.10, min(0.90, float(kwargs['devcurve_base_level'])))
+    if 'devcurve_motion_power' in kwargs:
+        widget._devcurve_motion_power = max(0.0, min(3.0, float(kwargs['devcurve_motion_power'])))
+    if 'devcurve_idle_motion' in kwargs:
+        widget._devcurve_idle_motion = max(0.0, min(1.5, float(kwargs['devcurve_idle_motion'])))
+    if 'devcurve_idle_speed' in kwargs:
+        widget._devcurve_idle_speed = max(0.05, min(2.0, float(kwargs['devcurve_idle_speed'])))
+    if 'devcurve_smoothness' in kwargs:
+        widget._devcurve_smoothness = max(0.0, min(1.0, float(kwargs['devcurve_smoothness'])))
+    if 'devcurve_ghosting_enabled' in kwargs:
+        widget._devcurve_ghosting_enabled = bool(kwargs['devcurve_ghosting_enabled'])
+    if 'devcurve_ghost_alpha' in kwargs:
+        widget._devcurve_ghost_alpha = max(0.0, min(1.0, float(kwargs['devcurve_ghost_alpha'])))
+    if 'devcurve_ghost_decay' in kwargs:
+        widget._devcurve_ghost_decay = max(0.1, min(1.0, float(kwargs['devcurve_ghost_decay'])))
+    for src in ('bass', 'vocals', 'mids', 'transients'):
+        en_key = f'devcurve_layer_{src}_enabled'
+        color_key = f'devcurve_layer_{src}_color'
+        alpha_key = f'devcurve_layer_{src}_alpha'
+        power_key = f'devcurve_layer_{src}_power'
+        offset_key = f'devcurve_layer_{src}_offset'
+        order_key = f'devcurve_layer_{src}_order'
+        if en_key in kwargs:
+            setattr(widget, f'_devcurve_layer_{src}_enabled', bool(kwargs[en_key]))
+        if color_key in kwargs:
+            c = _color_or_none(kwargs[color_key])
+            if c is not None:
+                setattr(widget, f'_devcurve_layer_{src}_color', c)
+        if alpha_key in kwargs:
+            setattr(widget, f'_devcurve_layer_{src}_alpha', max(0.0, min(1.0, float(kwargs[alpha_key]))))
+        if power_key in kwargs:
+            setattr(widget, f'_devcurve_layer_{src}_power', max(0.0, min(3.0, float(kwargs[power_key]))))
+        if offset_key in kwargs:
+            setattr(widget, f'_devcurve_layer_{src}_offset', max(-0.45, min(0.45, float(kwargs[offset_key]))))
+        if order_key in kwargs:
+            setattr(widget, f'_devcurve_layer_{src}_order', max(1, min(4, int(kwargs[order_key]))))
+        shape_key = f'devcurve_layer_{src}_shape_nodes'
+        if shape_key in kwargs and isinstance(kwargs[shape_key], list):
+            setattr(widget, f'_devcurve_layer_{src}_shape_nodes', list(kwargs[shape_key]))
 
     # --- Bubble -----------------------------------------------------------
     if 'bubble_big_bass_pulse' in kwargs:
@@ -1073,25 +1096,39 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
         _append_blob_visual_extras(extra, widget)
     elif mode_str == 'bubble':
         _append_bubble_visual_extras(extra, widget)
-    elif mode_str == 'goo':
-        _append_goo_visual_extras(extra, widget)
+    elif mode_str == 'devcurve':
+        _append_devcurve_visual_extras(extra, widget)
     return extra
 
 
-def _append_goo_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Attach GL-safe Goo mode extras for the compositor overlay."""
-    extra['goo_color'] = getattr(widget, '_goo_color', None)
-    extra['goo_outline_color'] = getattr(widget, '_goo_outline_color', None)
-    extra['goo_shadow_color'] = getattr(widget, '_goo_shadow_color', None)
-    extra['goo_outline_width'] = float(getattr(widget, '_goo_outline_width', 0.008))
-    extra['goo_inward_outline_width'] = float(getattr(widget, '_goo_inward_outline_width', 0.004))
-    extra['goo_shadow_strength'] = float(getattr(widget, '_goo_shadow_strength', 0.3))
-    extra['goo_specular_density'] = float(getattr(widget, '_goo_specular_density', 0.3))
-    extra['goo_core_size'] = float(getattr(widget, '_goo_core_size', 0.18))
-    extra['goo_edge_inward_depth'] = float(getattr(widget, '_goo_edge_inward_depth', 0.18))
-    extra['goo_boundary_margin'] = float(getattr(widget, '_goo_boundary_margin', 0.01))
-    extra['goo_edge_sources'] = list(getattr(widget, '_goo_edge_sources', []))
-    extra['goo_core_sources'] = list(getattr(widget, '_goo_core_sources', []))
-    extra['goo_ghosting_enabled'] = bool(getattr(widget, '_goo_ghosting_enabled', False))
-    extra['goo_ghost_alpha'] = float(getattr(widget, '_goo_ghost_alpha', 0.0))
-    extra['goo_ghost_decay'] = float(getattr(widget, '_goo_ghost_decay', 0.4))
+def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach GL-safe Dev Curve extras for the compositor overlay."""
+    extra['devcurve_outline_width'] = float(getattr(widget, '_devcurve_outline_width', 0.006))
+    extra['devcurve_outline_alpha'] = float(getattr(widget, '_devcurve_outline_alpha', 1.0))
+    extra['devcurve_base_level'] = float(getattr(widget, '_devcurve_base_level', 0.58))
+    extra['devcurve_sample_count'] = int(getattr(widget, '_devcurve_sample_count', 96))
+    extra['devcurve_curve_bass'] = list(getattr(widget, '_devcurve_curve_bass', []))
+    extra['devcurve_curve_vocals'] = list(getattr(widget, '_devcurve_curve_vocals', []))
+    extra['devcurve_curve_mids'] = list(getattr(widget, '_devcurve_curve_mids', []))
+    extra['devcurve_curve_transients'] = list(getattr(widget, '_devcurve_curve_transients', []))
+    extra['devcurve_layer_bass_color'] = getattr(widget, '_devcurve_layer_bass_color', None)
+    extra['devcurve_layer_vocals_color'] = getattr(widget, '_devcurve_layer_vocals_color', None)
+    extra['devcurve_layer_mids_color'] = getattr(widget, '_devcurve_layer_mids_color', None)
+    extra['devcurve_layer_transients_color'] = getattr(widget, '_devcurve_layer_transients_color', None)
+    extra['devcurve_layer_bass_alpha'] = float(getattr(widget, '_devcurve_layer_bass_alpha', 0.55))
+    extra['devcurve_layer_vocals_alpha'] = float(getattr(widget, '_devcurve_layer_vocals_alpha', 0.42))
+    extra['devcurve_layer_mids_alpha'] = float(getattr(widget, '_devcurve_layer_mids_alpha', 0.46))
+    extra['devcurve_layer_transients_alpha'] = float(getattr(widget, '_devcurve_layer_transients_alpha', 0.66))
+    extra['devcurve_layer_bass_enabled'] = bool(getattr(widget, '_devcurve_layer_bass_enabled', True))
+    extra['devcurve_layer_vocals_enabled'] = bool(getattr(widget, '_devcurve_layer_vocals_enabled', True))
+    extra['devcurve_layer_mids_enabled'] = bool(getattr(widget, '_devcurve_layer_mids_enabled', True))
+    extra['devcurve_layer_transients_enabled'] = bool(getattr(widget, '_devcurve_layer_transients_enabled', True))
+    extra['devcurve_layer_bass_order'] = int(getattr(widget, '_devcurve_layer_bass_order', 1))
+    extra['devcurve_layer_vocals_order'] = int(getattr(widget, '_devcurve_layer_vocals_order', 2))
+    extra['devcurve_layer_mids_order'] = int(getattr(widget, '_devcurve_layer_mids_order', 3))
+    extra['devcurve_layer_transients_order'] = int(getattr(widget, '_devcurve_layer_transients_order', 4))
+    extra['devcurve_ghosting_enabled'] = bool(getattr(widget, '_devcurve_ghosting_enabled', False))
+    extra['devcurve_ghost_alpha'] = float(getattr(widget, '_devcurve_ghost_alpha', 0.0))
+    extra['devcurve_ghost_decay'] = float(getattr(widget, '_devcurve_ghost_decay', 0.4))
+
+

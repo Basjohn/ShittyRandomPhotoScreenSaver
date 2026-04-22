@@ -46,9 +46,9 @@ from ui.tabs.media.bubble_settings_binding import (
     collect_bubble_mode_settings,
     load_bubble_mode_settings,
 )
-from ui.tabs.media.goo_settings_binding import (
-    collect_goo_mode_settings,
-    load_goo_mode_settings,
+from ui.tabs.media.devcurve_settings_binding import (
+    collect_devcurve_mode_settings,
+    load_devcurve_mode_settings,
 )
 from ui.tabs.media.oscilloscope_settings_binding import (
     collect_oscilloscope_mode_settings,
@@ -650,16 +650,16 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     from ui.tabs.media.blob_builder import build_blob_ui, build_blob_growth
     from ui.tabs.media.sine_wave_builder import build_sine_wave_ui
     from ui.tabs.media.bubble_builder import build_bubble_ui
-    from core.dev_gates import is_goo_enabled
-    from ui.tabs.media.goo_builder import build_goo_ui
+    from core.dev_gates import is_devcurve_enabled
+    from ui.tabs.media.devcurve_builder import build_devcurve_ui
 
     build_spectrum_ui(tab, _svctl)
     build_oscilloscope_ui(tab, _svctl)
     build_blob_ui(tab, _svctl)
     build_sine_wave_ui(tab, _svctl)
     build_bubble_ui(tab, _svctl)
-    if is_goo_enabled():
-        build_goo_ui(tab, _svctl)
+    if is_devcurve_enabled():
+        build_devcurve_ui(tab, _svctl)
 
     # Append growth sliders that were originally added after sine section
     build_blob_growth(tab)
@@ -840,9 +840,9 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         spotify_vis_config,
         sync_color_button=_apply_color_to_button,
     )
-    from core.dev_gates import is_goo_enabled
-    if is_goo_enabled():
-        load_goo_mode_settings(
+    from core.dev_gates import is_devcurve_enabled
+    if is_devcurve_enabled():
+        load_devcurve_mode_settings(
             tab,
             spotify_vis_config,
             sync_color_button=_apply_color_to_button,
@@ -938,8 +938,8 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         spotify_vis_config.update(collect_blob_mode_settings(tab))
     elif _cur_mode == 'bubble':
         spotify_vis_config.update(collect_bubble_mode_settings(tab))
-    elif _cur_mode == 'goo':
-        spotify_vis_config.update(collect_goo_mode_settings(tab))
+    elif _cur_mode == 'devcurve':
+        spotify_vis_config.update(collect_devcurve_mode_settings(tab))
     collect_per_mode_technical_controls(tab, spotify_vis_config, current_mode=_cur_mode)
 
     def _per_mode_value(key: str, fallback):
@@ -967,3 +967,5 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     collect_visualizer_preset_indices(tab, spotify_vis_config)
 
     return media_config, spotify_vis_config
+
+

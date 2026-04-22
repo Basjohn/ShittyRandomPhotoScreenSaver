@@ -96,25 +96,19 @@ def test_blob_renderer_exposes_inward_liquid_uniforms():
 
 
 @pytest.mark.qt
-def test_goo_gpu_kwargs_include_dual_sources(qt_app):
+def test_devcurve_gpu_kwargs_include_curve_payload(qt_app):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qt_app.processEvents()
 
     stub_engine = _StubEngine()
-    widget._goo_boundary_margin = 0.01
-    widget._goo_edge_sources = [[0.1, 0.1, 0.40, 0.9], [0.9, 0.1, 0.41, 0.7]]
-    widget._goo_core_sources = [[0.45, 0.45, 0.09, 0.9], [0.55, 0.45, 0.09, 0.7]]
-    widget._goo_inward_outline_width = 0.005
+    widget._devcurve_sample_count = 4
+    widget._devcurve_curve_bass = [0.35, 0.45, 0.4, 0.5]
 
-    extras = build_gpu_push_extra_kwargs(widget, "goo", stub_engine)
-
-    assert extras["goo_boundary_margin"] == pytest.approx(0.01)
-    assert extras["goo_edge_sources"] == [[0.1, 0.1, 0.40, 0.9], [0.9, 0.1, 0.41, 0.7]]
-    assert extras["goo_core_sources"] == [[0.45, 0.45, 0.09, 0.9], [0.55, 0.45, 0.09, 0.7]]
-    assert "goo_core_size" in extras
-    assert extras["goo_core_size"] == pytest.approx(0.18)
-    assert "goo_edge_inward_depth" in extras
-    assert extras["goo_inward_outline_width"] == pytest.approx(0.005)
+    extras = build_gpu_push_extra_kwargs(widget, "devcurve", stub_engine)
+    assert extras["devcurve_sample_count"] == 4
+    assert extras["devcurve_curve_bass"] == [0.35, 0.45, 0.4, 0.5]
+    assert "devcurve_layer_transients_enabled" in extras
+    assert "devcurve_layer_bass_order" in extras
 
     widget.deleteLater()
 
@@ -286,7 +280,7 @@ def test_overlay_accumulated_time_advances_for_paused_sine_but_not_spectrum(qt_a
 
 
 @pytest.mark.qt
-def test_goo_inward_depth_drives_void_size_monotonically(qt_app):
+def test_devcurve_set_state_applies_curve_payload(qt_app):
     overlay = SpotifyBarsGLOverlay(parent=None)
     qt_app.processEvents()
 
@@ -295,8 +289,6 @@ def test_goo_inward_depth_drives_void_size_monotonically(qt_app):
     fill = QColor(200, 200, 200, 230)
     border = QColor(255, 255, 255, 255)
 
-    # Keep energies fixed; vary only inward depth and assert monotonic response.
-    overlay._energy_bands = EnergyBands(bass=0.10, mid=0.08, high=0.06, overall=0.09)
     overlay.set_state(
         rect=base_rect,
         bars=base_bars,
@@ -307,29 +299,11 @@ def test_goo_inward_depth_drives_void_size_monotonically(qt_app):
         fade=1.0,
         playing=False,
         visible=True,
-        vis_mode="goo",
-        goo_edge_inward_depth=0.05,
+        vis_mode="devcurve",
+        devcurve_sample_count=4,
+        devcurve_curve_bass=[0.3, 0.4, 0.35, 0.45],
     )
-    low_void = float(getattr(overlay, "_goo_void_size", 0.0))
-
-    overlay._energy_bands = EnergyBands(bass=0.10, mid=0.08, high=0.06, overall=0.09)
-    overlay.set_state(
-        rect=base_rect,
-        bars=base_bars,
-        bar_count=16,
-        segments=18,
-        fill_color=fill,
-        border_color=border,
-        fade=1.0,
-        playing=False,
-        visible=True,
-        vis_mode="goo",
-        goo_edge_inward_depth=0.35,
-    )
-    high_void = float(getattr(overlay, "_goo_void_size", 0.0))
-
-    assert 0.008 <= low_void <= 0.060
-    assert 0.008 <= high_void <= 0.060
-    assert high_void > low_void
+    assert overlay._devcurve_sample_count == 4
+    assert overlay._devcurve_curve_bass == [0.3, 0.4, 0.35, 0.45]
 
     overlay.deleteLater()

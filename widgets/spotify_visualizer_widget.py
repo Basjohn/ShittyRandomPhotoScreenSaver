@@ -194,7 +194,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._blob_growth: float = 3.5
         self._osc_growth: float = 2.0
         self._bubble_growth: float = 3.0
-        self._goo_growth: float = 3.0
+        self._devcurve_growth: float = 3.0
         self._osc_speed: float = 1.0
         self._osc_line_dim: bool = False
         self._osc_line_offset_bias: float = 0.0
@@ -768,7 +768,7 @@ class SpotifyVisualizerWidget(QWidget):
             'blob': VisualizerMode.BLOB,
             'sine_wave': VisualizerMode.SINE_WAVE,
             'bubble': VisualizerMode.BUBBLE,
-            'goo': VisualizerMode.GOO,
+            'devcurve': VisualizerMode.DEVCURVE,
         }
         vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
         mode_changed = vm != self._vis_mode
@@ -825,7 +825,7 @@ class SpotifyVisualizerWidget(QWidget):
                 "blob": VisualizerMode.BLOB,
                 "sine_wave": VisualizerMode.SINE_WAVE,
                 "bubble": VisualizerMode.BUBBLE,
-                "goo": VisualizerMode.GOO,
+                "devcurve": VisualizerMode.DEVCURVE,
             }.get(mode_name, self._vis_mode)
         except Exception:
             target_mode = self._vis_mode
@@ -1088,7 +1088,7 @@ class SpotifyVisualizerWidget(QWidget):
             'blob': self._blob_growth,
             'sine_wave': self._sine_wave_growth,
             'bubble': self._bubble_growth,
-            'goo': getattr(self, '_goo_growth', 3.0),
+            'devcurve': getattr(self, '_devcurve_growth', 3.0),
         }.get(mode)
         return preferred_height(mode, self._base_height, growth)
 
@@ -1126,7 +1126,7 @@ class SpotifyVisualizerWidget(QWidget):
             'spectrum': self._spectrum_growth,
             'oscilloscope': self._osc_growth,
             'sine_wave': self._sine_wave_growth,
-            'goo': getattr(self, '_goo_growth', 3.0),
+            'devcurve': getattr(self, '_devcurve_growth', 3.0),
         }.get(mode)
         if growth is not None and growth <= 1.0:
             base = self._base_height
@@ -1923,7 +1923,7 @@ class SpotifyVisualizerWidget(QWidget):
 
     def _mode_allows_idle_reveal(self) -> bool:
         """Return True when the current mode should reveal while paused."""
-        return str(getattr(self, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "goo"}
+        return str(getattr(self, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "devcurve"}
 
     def _arm_staged_startup(self, *, reason: str) -> None:
         try:
@@ -2600,4 +2600,6 @@ class SpotifyVisualizerWidget(QWidget):
         """Delegates to widgets.spotify_visualizer.tick_helpers."""
         from widgets.spotify_visualizer.tick_helpers import log_perf_snapshot
         log_perf_snapshot(self, reset=reset)
+
+
 

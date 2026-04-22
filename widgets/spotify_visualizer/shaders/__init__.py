@@ -34,7 +34,7 @@ _ALL_SHADER_FILES: Dict[str, str] = {
     "blob": "blob.frag",
     "sine_wave": "sine_wave.frag",
     "bubble": "bubble.frag",
-    "goo": "goo.frag",
+    "devcurve": "devcurve.frag",
 }
 
 
@@ -118,3 +118,5 @@ def load_all_fragment_shaders() -> Dict[str, str]:
     are silently skipped.
     """
     return preload_fragment_shaders()
+
+

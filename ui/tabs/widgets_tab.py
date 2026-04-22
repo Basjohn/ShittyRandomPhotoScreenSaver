@@ -128,6 +128,7 @@ _VISUALIZER_ADVANCED_ROOT_ATTRS = {
     "sine_wave": ("_sine_advanced", "_sine_advanced_host"),
     "blob": ("_blob_advanced",),
     "bubble": ("_bubble_advanced",),
+    "devcurve": ("_devcurve_normal", "_devcurve_advanced", "_devcurve_advanced_host"),
 }
 
 
@@ -784,6 +785,17 @@ class WidgetsTab(QWidget):
                 'visualizers_enabled', 'vis_enabled_checkbox',
                 'vis_border_opacity', 'vis_ghost_enabled',
                 'vis_ghost_opacity_slider', 'vis_ghost_decay_slider',
+                'devcurve_outline_width', 'devcurve_base_level',
+                'devcurve_motion_power', 'devcurve_idle_motion',
+                'devcurve_idle_speed', 'devcurve_outline_opacity',
+                'devcurve_smoothness',
+                'devcurve_growth',
+                'devcurve_active_layer_order',
+                'devcurve_ghost_enabled', 'devcurve_ghost_opacity', 'devcurve_ghost_decay',
+                'devcurve_layer_bass_enabled', 'devcurve_layer_bass_alpha', 'devcurve_layer_bass_offset',
+                'devcurve_layer_vocals_enabled', 'devcurve_layer_vocals_alpha', 'devcurve_layer_vocals_offset',
+                'devcurve_layer_mids_enabled', 'devcurve_layer_mids_alpha', 'devcurve_layer_mids_offset',
+                'devcurve_layer_transients_enabled', 'devcurve_layer_transients_alpha', 'devcurve_layer_transients_offset',
                 'reddit_enabled', 'reddit_subreddit', 'reddit_items',
                 'reddit_position', 'reddit_monitor_combo',
                 'reddit_font_combo', 'reddit_font_size', 'reddit_margin',
@@ -1532,7 +1544,7 @@ class WidgetsTab(QWidget):
             'blob': getattr(self, '_blob_settings_container', None),
             'sine_wave': getattr(self, '_sine_wave_settings_container', None),
             'bubble': getattr(self, '_bubble_settings_container', None),
-            'goo': getattr(self, '_goo_settings_container', None),
+            'devcurve': getattr(self, '_devcurve_settings_container', None),
         }
         for m, container in containers.items():
             if container is not None:
@@ -1759,3 +1771,5 @@ class WidgetsTab(QWidget):
         config['spotify_visualizer'] = self._build_current_spotify_visualizer_config(base_visualizer)
         
         return config
+
+

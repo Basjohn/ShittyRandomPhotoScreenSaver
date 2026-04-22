@@ -153,94 +153,137 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
 # Bubble simulation dispatch
 # ------------------------------------------------------------------
 
-def dispatch_goo_field(widget: Any, now_ts: float) -> None:
-    """Advance the Goo dual-spline field on the UI thread (~64 sources/layer)."""
-    if widget._vis_mode_str != 'goo':
+def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
+    """Advance Dev Curve runtime and publish sampled curve arrays."""
+    if widget._vis_mode_str != 'devcurve':
         return
 
-    from widgets.spotify_visualizer.goo_liquid_field import (
-        GOO_SOURCE_COUNT_MAX,
-        GooDualFieldState,
-        pack_dual_sources_for_upload,
-        solve_goo_dual_field_step,
+    from widgets.spotify_visualizer.devcurve_runtime import (
+        DevCurveRuntimeState,
+        solve_devcurve_frame,
     )
+    from widgets.spotify_visualizer.energy_bands import EnergyBands
 
-    state = getattr(widget, '_goo_field_state', None)
+    state = getattr(widget, '_devcurve_runtime_state', None)
     if state is None:
-        state = GooDualFieldState()
-        widget._goo_field_state = state
+        state = DevCurveRuntimeState()
+        widget._devcurve_runtime_state = state
 
-    prev_ts = getattr(widget, '_goo_last_tick_ts', 0.0) or 0.0
-    widget._goo_last_tick_ts = now_ts
+    prev_ts = getattr(widget, '_devcurve_last_tick_ts', 0.0) or 0.0
+    widget._devcurve_last_tick_ts = now_ts
     dt = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
     playing = bool(widget._spotify_playing)
-    if not playing:
-        # Keep Goo subtly alive at idle without driving FFT/engine reads.
-        dt *= 0.58
 
     engine = widget._engine
+    transient_bus = None
     if playing:
         try:
             energy = engine.get_energy_bands() if engine is not None else None
+            transient_bus = engine.get_transient_energy_bands() if engine is not None else None
         except Exception:
             energy = None
+            transient_bus = None
     else:
         # Bubble/Sine idle path parity: deterministic low-amplitude motion source
         # while paused so shape stability can be tuned visually.
-        from widgets.spotify_visualizer.energy_bands import EnergyBands
-
         idle_phase = now_ts
-        idle_bass = 0.017 + 0.009 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
-        idle_mid = 0.0145 + 0.0065 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
-        idle_high = 0.011 + 0.0045 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
-        idle_overall = 0.017
+        idle_bass = 0.018 + 0.010 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
+        idle_mid = 0.015 + 0.007 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
+        idle_high = 0.012 + 0.005 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
         energy = EnergyBands(
             bass=idle_bass,
             mid=idle_mid,
             high=idle_high,
-            overall=idle_overall,
+            overall=0.018,
         )
+
+    layer_settings = {
+        "bass": {
+            "enabled": bool(getattr(widget, "_devcurve_layer_bass_enabled", True)),
+            "power": float(getattr(widget, "_devcurve_layer_bass_power", 1.0)),
+            "offset": float(getattr(widget, "_devcurve_layer_bass_offset", 0.0)),
+            "order": int(getattr(widget, "_devcurve_layer_bass_order", 1)),
+        },
+        "vocals": {
+            "enabled": bool(getattr(widget, "_devcurve_layer_vocals_enabled", True)),
+            "power": float(getattr(widget, "_devcurve_layer_vocals_power", 1.0)),
+            "offset": float(getattr(widget, "_devcurve_layer_vocals_offset", 0.0)),
+            "order": int(getattr(widget, "_devcurve_layer_vocals_order", 2)),
+        },
+        "mids": {
+            "enabled": bool(getattr(widget, "_devcurve_layer_mids_enabled", True)),
+            "power": float(getattr(widget, "_devcurve_layer_mids_power", 1.0)),
+            "offset": float(getattr(widget, "_devcurve_layer_mids_offset", 0.0)),
+            "order": int(getattr(widget, "_devcurve_layer_mids_order", 3)),
+        },
+        "transients": {
+            "enabled": bool(getattr(widget, "_devcurve_layer_transients_enabled", True)),
+            "power": float(getattr(widget, "_devcurve_layer_transients_power", 1.0)),
+            "offset": float(getattr(widget, "_devcurve_layer_transients_offset", 0.0)),
+            "order": int(getattr(widget, "_devcurve_layer_transients_order", 4)),
+        },
+    }
+    default_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
+    layer_shape_nodes = {
+        "bass": list(getattr(widget, "_devcurve_layer_bass_shape_nodes", default_nodes)),
+        "vocals": list(getattr(widget, "_devcurve_layer_vocals_shape_nodes", default_nodes)),
+        "mids": list(getattr(widget, "_devcurve_layer_mids_shape_nodes", default_nodes)),
+        "transients": list(getattr(widget, "_devcurve_layer_transients_shape_nodes", default_nodes)),
+    }
 
     try:
-        solve_goo_dual_field_step(
+        frame = solve_devcurve_frame(
             state,
             dt=dt,
+            now_ts=now_ts,
+            layer_shape_nodes=layer_shape_nodes,
+            base_level=float(getattr(widget, "_devcurve_base_level", 0.58)),
+            motion_power=float(getattr(widget, "_devcurve_motion_power", 1.0)),
+            idle_motion=float(getattr(widget, "_devcurve_idle_motion", 0.20)),
+            idle_speed=float(getattr(widget, "_devcurve_idle_speed", 0.60)),
+            smoothness=float(getattr(widget, "_devcurve_smoothness", 0.55)),
+            growth=float(getattr(widget, "_devcurve_growth", 3.0)),
+            layer_settings=layer_settings,
             energy_bands=energy,
+            transient_bus=transient_bus,
             playing=playing,
-            core_size=float(getattr(widget, '_goo_core_size', 0.18)),
-            edge_inward_depth=float(getattr(widget, '_goo_edge_inward_depth', 0.18)),
-            boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
-            aspect=float(max(1, int(widget.width()))) / float(max(1, int(widget.height()))),
-            seed=id(widget) & 0xFFFFFFFF,
         )
     except Exception:
-        logger.debug("[SPOTIFY_VIS][GOO] solve step failed", exc_info=True)
+        logger.debug("[SPOTIFY_VIS][DEVCURVE] runtime solve failed", exc_info=True)
         return
 
-    edge_sources, core_sources = pack_dual_sources_for_upload(
-        state,
-        GOO_SOURCE_COUNT_MAX,
-        aspect=float(max(1, int(widget.width()))) / float(max(1, int(widget.height()))),
-        boundary_margin=float(getattr(widget, '_goo_boundary_margin', 0.01)),
-    )
-    widget._goo_edge_sources = edge_sources
-    widget._goo_core_sources = core_sources
+    layer_map = frame.get("layers", {}) if isinstance(frame.get("layers", {}), dict) else {}
+    widget._devcurve_sample_count = int(frame.get("sample_count", 0))
+    widget._devcurve_curve_bass = list(layer_map.get("bass", []))
+    widget._devcurve_curve_vocals = list(layer_map.get("vocals", []))
+    widget._devcurve_curve_mids = list(layer_map.get("mids", []))
+    widget._devcurve_curve_transients = list(layer_map.get("transients", []))
+    draw_order = frame.get("draw_order", ["bass", "vocals", "mids", "transients"])
+    if isinstance(draw_order, list) and len(draw_order) == 4:
+        widget._devcurve_draw_order = list(draw_order)
+    widget._devcurve_smoothness_max_step = float(frame.get("smoothness_max_step", 0.0))
+    widget._devcurve_active_amplitude = float(frame.get("active_amplitude", 0.0))
+    widget._devcurve_idle_amplitude = float(frame.get("idle_amplitude", 0.0))
 
-    widget._goo_gap_violation_count = int(getattr(state, "gap_violation_count", 0))
-    widget._goo_boundary_clamp_count = int(getattr(state, "boundary_clamp_count", 0))
-    widget._goo_source_saturation_ratio = float(getattr(state, "source_saturation_ratio", 0.0))
     if is_viz_diagnostics_enabled():
-        last_diag = float(getattr(widget, "_goo_diag_last_log_ts", 0.0) or 0.0)
-        if now_ts - last_diag >= 0.75:
+        last_diag = float(getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0)
+        if now_ts - last_diag >= 0.80:
+            e = frame.get("energies", {}) if isinstance(frame.get("energies", {}), dict) else {}
             logger.debug(
-                "[SPOTIFY_VIS][GOO][DIAG] gap_violations=%d boundary_clamps=%d saturation=%.3f edge_count=%d core_count=%d",
-                widget._goo_gap_violation_count,
-                widget._goo_boundary_clamp_count,
-                widget._goo_source_saturation_ratio,
-                len(edge_sources),
-                len(core_sources),
+                (
+                    "[SPOTIFY_VIS][DEVCURVE] mode=%s idle_amp=%.4f active_amp=%.4f smooth_step=%.5f "
+                    "E[b=%.3f v=%.3f m=%.3f t=%.3f]"
+                ),
+                "layered",
+                widget._devcurve_idle_amplitude,
+                widget._devcurve_active_amplitude,
+                widget._devcurve_smoothness_max_step,
+                float(e.get("bass", 0.0)),
+                float(e.get("vocals", 0.0)),
+                float(e.get("mids", 0.0)),
+                float(e.get("transients", 0.0)),
             )
-            widget._goo_diag_last_log_ts = now_ts
+            widget._devcurve_diag_last_log_ts = now_ts
 
 
 def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
@@ -415,7 +458,7 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     if (
         widget._waiting_for_fresh_engine_frame
         and not widget._spotify_playing
-        and str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "oscilloscope", "spectrum", "goo"}
+        and str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "oscilloscope", "spectrum", "devcurve"}
     ):
         widget._waiting_for_fresh_engine_frame = False
         widget._pending_engine_generation = -1
@@ -742,8 +785,8 @@ def on_tick(widget: Any) -> None:
     # Bubble simulation dispatch
     dispatch_bubble_simulation(widget, now_ts)
 
-    # Goo liquid field solve (UI-thread, cheap: ~32 sources)
-    dispatch_goo_field(widget, now_ts)
+    # DEVCURVE liquid field solve (UI-thread, cheap: ~32 sources)
+    dispatch_devcurve_field(widget, now_ts)
 
     # GPU frame push
     first_frame = not widget._has_pushed_first_frame
@@ -762,3 +805,5 @@ def on_tick(widget: Any) -> None:
     _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
     if _tick_elapsed > 50.0 and is_perf_metrics_enabled():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
+
+

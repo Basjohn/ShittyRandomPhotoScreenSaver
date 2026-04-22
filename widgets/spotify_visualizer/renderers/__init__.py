@@ -32,9 +32,9 @@ from widgets.spotify_visualizer.renderers.bubble import (
     get_uniform_names as bubble_uniform_names,
     upload_uniforms as bubble_upload,
 )
-from widgets.spotify_visualizer.renderers.goo import (
-    get_uniform_names as goo_uniform_names,
-    upload_uniforms as goo_upload,
+from widgets.spotify_visualizer.renderers.devcurve import (
+    get_uniform_names as devcurve_uniform_names,
+    upload_uniforms as devcurve_upload,
 )
 
 RENDERERS = {
@@ -43,7 +43,7 @@ RENDERERS = {
     'blob': (blob_uniform_names, blob_upload),
     'sine_wave': (sine_wave_uniform_names, sine_wave_upload),
     'bubble': (bubble_uniform_names, bubble_upload),
-    'goo': (goo_uniform_names, goo_upload),
+    'devcurve': (devcurve_uniform_names, devcurve_upload),
 }
 
 
@@ -61,3 +61,5 @@ def upload_mode_uniforms(mode: str, gl, u: dict, state) -> bool:
     if entry is None:
         return False
     return entry[1](gl, u, state)
+
+

@@ -2,7 +2,7 @@
 
 Gates are activated via command-line flags:
     python main.py --debug -devblob   # enable Blob mode
-    python main.py --debug -devgoo    # enable Goo mode
+    python main.py --debug --devcurve # enable Dev Curve mode
 
 Both flags are stripped from sys.argv before screensaver mode parsing.
 Tests can call ``force_gate()`` to enable gates without CLI flags.
@@ -14,14 +14,14 @@ from __future__ import annotations
 import sys
 
 _DEV_BLOB: bool = False
-_DEV_GOO: bool = False
+_DEV_CURVE: bool = False
 
 
 def _init_from_argv() -> None:
     """Read dev-gate flags from sys.argv.  Called once at import time."""
-    global _DEV_BLOB, _DEV_GOO
+    global _DEV_BLOB, _DEV_CURVE
     _DEV_BLOB = "-devblob" in sys.argv
-    _DEV_GOO = "-devgoo" in sys.argv
+    _DEV_CURVE = "--devcurve" in sys.argv
 
 
 def is_blob_enabled() -> bool:
@@ -29,18 +29,18 @@ def is_blob_enabled() -> bool:
     return _DEV_BLOB
 
 
-def is_goo_enabled() -> bool:
-    """True when Goo mode should be visible in UI / preset swaps."""
-    return _DEV_GOO
+def is_devcurve_enabled() -> bool:
+    """True when Dev Curve mode should be visible in UI / preset swaps."""
+    return _DEV_CURVE
 
 
-def force_gate(*, blob: bool | None = None, goo: bool | None = None) -> None:
+def force_gate(*, blob: bool | None = None, devcurve: bool | None = None) -> None:
     """Override gate state programmatically (for tests)."""
-    global _DEV_BLOB, _DEV_GOO
+    global _DEV_BLOB, _DEV_CURVE
     if blob is not None:
         _DEV_BLOB = blob
-    if goo is not None:
-        _DEV_GOO = goo
+    if devcurve is not None:
+        _DEV_CURVE = devcurve
 
 
 _init_from_argv()

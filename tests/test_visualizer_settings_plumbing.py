@@ -1773,7 +1773,7 @@ class TestVisualizerPresetDefaultResolution:
 class TestVisualizerModeRegistryContract:
     def test_registry_matches_preset_modes_and_has_stable_preset_keys(self):
         from core.dev_gates import force_gate
-        force_gate(blob=True, goo=True)
+        force_gate(blob=True, devcurve=True)
         from core.settings.visualizer_mode_registry import (
             VISUALIZER_MODE_IDS,
             iter_visualizer_mode_descriptors,
@@ -1793,6 +1793,13 @@ class TestVisualizerModeRegistryContract:
 
         for mode in VISUALIZER_MODE_IDS:
             assert get_missing_preset_fallback_index(mode) == 0
+
+    def test_unknown_mode_falls_back_to_default_mode(self):
+        from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_mode_registry import get_default_visualizer_mode_id
+
+        model = SpotifyVisualizerSettings.from_mapping({"mode": "goo"}, apply_preset_overlay=False)
+        assert model.mode == get_default_visualizer_mode_id()
 
     def test_resolve_all_preset_indices_from_mapping_uses_registry_for_sparse_input(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
@@ -1971,20 +1978,20 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert normalized["bubble_bounce_same_only"] is True
         assert normalized["bubble_collision_pop_mode"] == "one"
 
-    def test_section_normalizer_preserves_goo_unified_field_keys(self):
+    def test_section_normalizer_preserves_devcurve_keys(self):
         from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
         normalized = normalize_visualizer_section_mapping(
             {
-                "mode": "goo",
-                "goo_core_size": 0.38,
-                "goo_edge_inward_depth": 0.24,
+                "mode": "devcurve",
+                "devcurve_base_level": 0.62,
+                "devcurve_motion_power": 1.75,
             },
             apply_preset_overlay=False,
         )
 
-        assert normalized["goo_core_size"] == pytest.approx(0.38)
-        assert normalized["goo_edge_inward_depth"] == pytest.approx(0.24)
+        assert normalized["devcurve_base_level"] == pytest.approx(0.62)
+        assert normalized["devcurve_motion_power"] == pytest.approx(1.75)
 
     def test_model_roundtrip_omits_retired_compat_settings_keys(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -2007,24 +2014,22 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert saved["widgets.spotify_visualizer.blob_input_gain"] == pytest.approx(1.2)
         assert saved["widgets.spotify_visualizer.blob_stretch"] == pytest.approx(0.52)
 
-    def test_model_roundtrip_preserves_goo_unified_field_keys(self):
+    def test_model_roundtrip_preserves_devcurve_keys(self):
         from core.settings.models import SpotifyVisualizerSettings
 
         model = SpotifyVisualizerSettings.from_mapping(
             {
-                "mode": "goo",
-                "goo_core_size": 0.39,
-                "goo_edge_inward_depth": 0.21,
+                "mode": "devcurve",
+                "devcurve_base_level": 0.39,
+                "devcurve_motion_power": 1.21,
             },
             apply_preset_overlay=False,
         )
 
         saved = model.to_dict()
-        assert saved["widgets.spotify_visualizer.goo_core_size"] == pytest.approx(0.39)
-        assert saved["widgets.spotify_visualizer.goo_edge_inward_depth"] == pytest.approx(0.21)
-        assert "widgets.spotify_visualizer.goo_gap_min" not in saved
-        assert "widgets.spotify_visualizer.goo_edge_pressure" not in saved
-        assert "widgets.spotify_visualizer.goo_core_pressure" not in saved
+        assert saved["widgets.spotify_visualizer.devcurve_base_level"] == pytest.approx(0.39)
+        assert saved["widgets.spotify_visualizer.devcurve_motion_power"] == pytest.approx(1.21)
+        assert "widgets.spotify_visualizer.goo_core_size" not in saved
 
 
 class TestVisualizerModeBinding:
@@ -2282,7 +2287,7 @@ class TestVisualizerModeBinding:
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
         from core.dev_gates import force_gate
-        force_gate(blob=True, goo=False)
+        force_gate(blob=True, devcurve=False)
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_preset_indices,
             load_visualizer_preset_indices,

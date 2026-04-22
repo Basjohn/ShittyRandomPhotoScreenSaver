@@ -38,7 +38,7 @@ class VisualizerMode(Enum):
     BLOB = auto()           # Organic reactive metaball
     SINE_WAVE = auto()      # Pure sine wave with audio-reactive amplitude
     BUBBLE = auto()         # Sound-reactive bubble/water tank flow
-    GOO = auto()            # Reactive liquid pool (dev-gated)
+    DEVCURVE = auto()            # Reactive liquid pool (dev-gated)
 
 
 @dataclass
@@ -490,3 +490,4 @@ class SpotifyVisualizerAudioWorker(QObject):
         """Delegates to widgets.spotify_visualizer.bar_computation."""
         from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
         return compute_bars_from_samples(self, samples)
+
