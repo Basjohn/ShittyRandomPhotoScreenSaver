@@ -56,6 +56,9 @@ def get_uniform_names() -> list[str]:
         "u_devcurve_foreground_specular_width",
         "u_devcurve_foreground_specular_offset",
         "u_devcurve_foreground_specular_crest_bias",
+        "u_devcurve_specular_slot0",
+        "u_devcurve_specular_slot1",
+        "u_devcurve_specular_slot2",
     ]
 
 
@@ -151,4 +154,34 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1f(gl, u, "u_devcurve_foreground_specular_width", float(getattr(s, "_devcurve_foreground_specular_width", 0.022)))
     _set1f(gl, u, "u_devcurve_foreground_specular_offset", float(getattr(s, "_devcurve_foreground_specular_offset", 0.028)))
     _set1f(gl, u, "u_devcurve_foreground_specular_crest_bias", float(getattr(s, "_devcurve_foreground_specular_crest_bias", 1.05)))
+    _slot0 = getattr(s, "_devcurve_specular_slot0", [0.0, 0.0, 0.0])
+    _slot1 = getattr(s, "_devcurve_specular_slot1", [0.0, 0.0, 0.0])
+    _slot2 = getattr(s, "_devcurve_specular_slot2", [0.0, 0.0, 0.0])
+    _loc0 = u.get("u_devcurve_specular_slot0", -1)
+    if _loc0 >= 0:
+        gl.glUniform4f(
+            _loc0,
+            float(_slot0[0] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 0 else 0.0),
+            float(_slot0[1] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 1 else 0.0),
+            float(_slot0[2] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 2 else 0.0),
+            float(_slot0[3] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 3 else 0.0),
+        )
+    _loc1 = u.get("u_devcurve_specular_slot1", -1)
+    if _loc1 >= 0:
+        gl.glUniform4f(
+            _loc1,
+            float(_slot1[0] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 0 else 0.0),
+            float(_slot1[1] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 1 else 0.0),
+            float(_slot1[2] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 2 else 0.0),
+            float(_slot1[3] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 3 else 0.0),
+        )
+    _loc2 = u.get("u_devcurve_specular_slot2", -1)
+    if _loc2 >= 0:
+        gl.glUniform4f(
+            _loc2,
+            float(_slot2[0] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 0 else 0.0),
+            float(_slot2[1] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 1 else 0.0),
+            float(_slot2[2] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 2 else 0.0),
+            float(_slot2[3] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 3 else 0.0),
+        )
     return True

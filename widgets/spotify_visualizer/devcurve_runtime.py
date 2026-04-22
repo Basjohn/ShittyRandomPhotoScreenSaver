@@ -10,6 +10,8 @@ from typing import Dict, List
 
 
 DEVCURVE_SAMPLE_COUNT = 96
+DEVCURVE_FOREGROUND_ACTIVE_TRAVEL_RATE = 0.23 / 1.35
+DEVCURVE_SPECULAR_ACTIVE_TRAVEL_RATE = DEVCURVE_FOREGROUND_ACTIVE_TRAVEL_RATE
 _LAYER_ORDER = ("bass", "vocals", "mids", "transients")
 _LAYER_INDEX = {name: idx for idx, name in enumerate(_LAYER_ORDER)}
 
@@ -92,48 +94,106 @@ def _phase_rand(seed: float, idx: int) -> float:
     return math.sin(seed * 0.017 + idx * 1.3127) * 43758.5453
 
 
-def _compute_specular_slots(curve: List[float], *, max_slots: int = 2) -> List[List[float]]:
-    """Return crest-anchored highlight slots as [x, y_shader, strength]."""
+def _sample_curve_y_shader(curve: List[float], x: float) -> float:
+    if not curve:
+        return 0.5
     n = len(curve)
-    if n < 5:
-        return [[0.0, 0.0, 0.0] for _ in range(max_slots)]
+    p = _clamp(x, 0.0, 1.0) * (n - 1)
+    i0 = int(math.floor(p))
+    i1 = min(i0 + 1, n - 1)
+    t = p - i0
+    y = curve[i0] + (curve[i1] - curve[i0]) * t
+    return _clamp(1.0 - y, 0.02, 0.98)
 
-    candidates: List[tuple[float, float, float, float]] = []
-    for i in range(1, n - 1):
-        y0 = float(curve[i - 1])
-        y1 = float(curve[i])
-        y2 = float(curve[i + 1])
-        if y1 < y0 or y1 < y2:
-            continue
-        curvature = max(0.0, (2.0 * y1) - y0 - y2)
-        prominence = max(0.0, y1 - ((y0 + y2) * 0.5))
-        score = (y1 * 0.72) + (prominence * 3.2) + (curvature * 6.5)
-        if score <= 0.22:
-            continue
-        x = i / max(1, n - 1)
-        y_shader = _clamp(1.0 - y1, 0.02, 0.98)
-        strength = _clamp((score - 0.22) / 0.85, 0.0, 1.0)
-        candidates.append((score, x, y_shader, strength))
 
-    if not candidates:
-        idx = max(range(n), key=lambda k: curve[k])
-        x = idx / max(1, n - 1)
-        y_shader = _clamp(1.0 - float(curve[idx]), 0.02, 0.98)
-        candidates.append((1.0, x, y_shader, 0.65))
+def _sample_curve_slope_shader(curve: List[float], x: float) -> float:
+    if not curve:
+        return 0.0
+    dx = 1.0 / max(8.0, float(len(curve) - 1))
+    y_l = _sample_curve_y_shader(curve, x - dx)
+    y_r = _sample_curve_y_shader(curve, x + dx)
+    return (y_r - y_l) / max(2.0 * dx, 1e-4)
 
-    candidates.sort(key=lambda item: item[0], reverse=True)
-    selected: List[List[float]] = []
-    min_spacing = 0.14
-    for _score, x, y_shader, strength in candidates:
-        if any(abs(x - existing[0]) < min_spacing for existing in selected):
-            continue
-        selected.append([float(x), float(y_shader), float(strength)])
-        if len(selected) >= max_slots:
-            break
 
-    while len(selected) < max_slots:
-        selected.append([0.0, 0.0, 0.0])
-    return selected
+def _visibility_from_stream_x(x: float) -> float:
+    in_left = _smoothstep((x + 0.16) / 0.18)
+    in_right = _smoothstep((1.24 - x) / 0.18)
+    return _clamp(in_left * in_right, 0.0, 1.0)
+
+
+def _spawn_specular_stream(
+    state: "DevCurveRuntimeState",
+    *,
+    slot_idx: int,
+    initial: bool,
+) -> Dict[str, float]:
+    seed = state.specular_spawn_counter * 17.0 + slot_idx * 3.71 + 11.0
+    r0 = 0.5 + 0.5 * math.sin(seed * 1.923)
+    r1 = 0.5 + 0.5 * math.sin(seed * 2.417 + 1.73)
+    r2 = 0.5 + 0.5 * math.sin(seed * 3.117 + 0.61)
+    if initial:
+        x = 1.06 - slot_idx * 0.52
+    else:
+        x = 1.14 + (r0 - 0.5) * 0.09
+    return {
+        "x": float(x),
+        "speed": 1.0,
+        "strength": 0.66 + r2 * 0.20,
+        "variant": r0,
+    }
+
+
+def _ensure_specular_streams(state: "DevCurveRuntimeState") -> None:
+    streams = state.specular_streams
+    if len(streams) == 3:
+        return
+    streams.clear()
+    for idx in range(3):
+        streams.append(_spawn_specular_stream(state, slot_idx=idx, initial=True))
+
+
+def _update_specular_streams(
+    state: "DevCurveRuntimeState",
+    *,
+    dt: float,
+    curve: List[float],
+    energy_drive: float,
+    idle_speed: float,
+) -> List[List[float]]:
+    _ensure_specular_streams(state)
+    slots: List[List[float]] = []
+    idle_rate = _clamp(float(idle_speed), 0.0, 2.0) * 0.28 / 2.0
+    active_mix = _smoothstep(_clamp(energy_drive / 0.35, 0.0, 1.0))
+    material_rate = idle_rate + (DEVCURVE_SPECULAR_ACTIVE_TRAVEL_RATE - idle_rate) * active_mix
+    state.foreground_travel_rate = material_rate
+    state.specular_travel_rate = material_rate
+    for idx, stream in enumerate(state.specular_streams):
+        x = float(stream.get("x", 1.0))
+        strength = float(stream.get("strength", 0.75))
+        variant = _clamp(float(stream.get("variant", 0.5)), 0.0, 1.0)
+        x -= dt * material_rate
+
+        if x < -0.40:
+            state.specular_spawn_counter += 1
+            spawned = _spawn_specular_stream(state, slot_idx=idx, initial=False)
+            x = float(spawned["x"])
+            strength = float(spawned["strength"])
+            variant = float(spawned["variant"])
+
+        target_strength = _clamp(0.48 + energy_drive * 0.58 + (strength - 0.66) * 0.35, 0.30, 1.0)
+        strength += (target_strength - strength) * _clamp(dt / 0.20, 0.06, 0.30)
+        stream["x"] = x
+        stream["speed"] = 1.0
+        stream["strength"] = strength
+        stream["variant"] = variant
+
+        x_curve = _clamp(x, 0.0, 1.0)
+        y = _sample_curve_y_shader(curve, x_curve)
+        y = _clamp(y + (variant - 0.5) * 0.010, 0.02, 0.98)
+        visibility = _visibility_from_stream_x(x)
+        amp = _clamp(strength * visibility, 0.0, 1.0)
+        slots.append([float(x), float(y), float(amp), float(variant)])
+    return slots
 
 
 @dataclass
@@ -146,6 +206,16 @@ class DevCurveRuntimeState:
     smoothness_max_step: float = 0.0
     active_amplitude: float = 0.0
     idle_amplitude: float = 0.0
+    foreground_travel_rate: float = 0.0
+    specular_travel_rate: float = 0.0
+    specular_streams: List[Dict[str, float]] = field(
+        default_factory=lambda: [
+            {"x": 1.06, "speed": 0.26, "strength": 0.72, "variant": 0.08},
+            {"x": 0.54, "speed": 0.24, "strength": 0.70, "variant": 0.42},
+            {"x": 0.02, "speed": 0.22, "strength": 0.68, "variant": 0.76},
+        ]
+    )
+    specular_spawn_counter: int = 0
 
 
 def _layer_energy_map(eb, transient_bus, playing: bool) -> Dict[str, float]:
@@ -303,9 +373,24 @@ def solve_devcurve_frame(
     ]
     foreground_layer = enabled_order[-1] if enabled_order else ""
     foreground_layer_id = _LAYER_INDEX.get(foreground_layer, -1)
-    specular_slots: List[List[float]] = [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]
+    specular_slots: List[List[float]] = [[0.0, 0.0, 0.0, 0.0] for _ in range(3)]
     if foreground_layer and foreground_layer in layers_out:
-        specular_slots = _compute_specular_slots(layers_out[foreground_layer], max_slots=2)
+        curve = layers_out[foreground_layer]
+        energy_drive = _clamp(
+            state.smooth_energy.get("bass", 0.0) * 0.34
+            + state.smooth_energy.get("vocals", 0.0) * 0.33
+            + state.smooth_energy.get("mids", 0.0) * 0.23
+            + state.smooth_energy.get("transients", 0.0) * 0.10,
+            0.0,
+            2.0,
+        )
+        specular_slots = _update_specular_streams(
+            state,
+            dt=dt,
+            curve=curve,
+            energy_drive=energy_drive,
+            idle_speed=idle_speed,
+        )
 
     return {
         "layers": layers_out,
@@ -317,5 +402,8 @@ def solve_devcurve_frame(
         "smoothness_max_step": state.smoothness_max_step,
         "active_amplitude": state.active_amplitude,
         "idle_amplitude": state.idle_amplitude,
+        "foreground_travel_rate": state.foreground_travel_rate,
+        "foreground_travel_pos": math.fmod(max(0.0, float(now_ts)) * state.foreground_travel_rate, 1.0),
+        "specular_travel_rate": state.specular_travel_rate,
         "energies": dict(state.smooth_energy),
     }

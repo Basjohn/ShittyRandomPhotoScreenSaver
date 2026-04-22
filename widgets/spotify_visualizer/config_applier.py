@@ -1169,5 +1169,26 @@ def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['devcurve_foreground_specular_width'] = float(getattr(widget, '_devcurve_foreground_specular_width', 0.022))
     extra['devcurve_foreground_specular_offset'] = float(getattr(widget, '_devcurve_foreground_specular_offset', 0.028))
     extra['devcurve_foreground_specular_crest_bias'] = float(getattr(widget, '_devcurve_foreground_specular_crest_bias', 1.05))
+    _slot0 = getattr(widget, '_devcurve_specular_slot0', [0.0, 0.0, 0.0])
+    _slot1 = getattr(widget, '_devcurve_specular_slot1', [0.0, 0.0, 0.0])
+    _slot2 = getattr(widget, '_devcurve_specular_slot2', [0.0, 0.0, 0.0])
+    extra['devcurve_specular_slot0'] = [
+        max(-1.5, min(2.5, float(_slot0[0] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 0 else 0.0))),
+        max(0.0, min(1.0, float(_slot0[1] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 1 else 0.0))),
+        max(0.0, min(1.0, float(_slot0[2] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 2 else 0.0))),
+        max(0.0, min(1.0, float(_slot0[3] if isinstance(_slot0, (list, tuple)) and len(_slot0) > 3 else 0.0))),
+    ]
+    extra['devcurve_specular_slot1'] = [
+        max(-1.5, min(2.5, float(_slot1[0] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 0 else 0.0))),
+        max(0.0, min(1.0, float(_slot1[1] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 1 else 0.0))),
+        max(0.0, min(1.0, float(_slot1[2] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 2 else 0.0))),
+        max(0.0, min(1.0, float(_slot1[3] if isinstance(_slot1, (list, tuple)) and len(_slot1) > 3 else 0.0))),
+    ]
+    extra['devcurve_specular_slot2'] = [
+        max(-1.5, min(2.5, float(_slot2[0] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 0 else 0.0))),
+        max(0.0, min(1.0, float(_slot2[1] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 1 else 0.0))),
+        max(0.0, min(1.0, float(_slot2[2] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 2 else 0.0))),
+        max(0.0, min(1.0, float(_slot2[3] if isinstance(_slot2, (list, tuple)) and len(_slot2) > 3 else 0.0))),
+    ]
 
 

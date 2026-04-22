@@ -220,3 +220,67 @@ def test_devcurve_foreground_layer_disables_when_all_layers_off():
     )
     assert frame["foreground_layer"] == ""
     assert frame["foreground_layer_id"] == -1
+
+
+def test_devcurve_specular_slots_are_bounded_and_present():
+    state = DevCurveRuntimeState()
+    frame = solve_devcurve_frame(
+        state,
+        dt=0.016,
+        now_ts=7.0,
+        playing=True,
+        energy_bands=EnergyBands(bass=0.8, mid=0.6, high=0.5, overall=0.7),
+        transient_bus=TransientEnergyBands(bass_transient=0.7, mid_transient=0.3, high_transient=0.2),
+        layer_shape_nodes=_layer_shapes(),
+        base_level=0.58,
+        motion_power=1.2,
+        idle_motion=0.2,
+        idle_speed=0.7,
+        smoothness=0.55,
+        growth=3.0,
+        layer_settings=_layer_defaults(),
+    )
+    slots = frame.get("specular_slots")
+    assert isinstance(slots, list)
+    assert len(slots) == 3
+    for slot in slots:
+        assert isinstance(slot, list)
+        assert len(slot) == 4
+        assert -0.6 <= float(slot[0]) <= 1.5
+        assert 0.0 <= float(slot[1]) <= 1.0
+        assert 0.0 <= float(slot[2]) <= 1.0
+        assert 0.0 <= float(slot[3]) <= 1.0
+
+
+def test_devcurve_specular_slots_move_left_without_in_view_teleport():
+    state = DevCurveRuntimeState()
+    kwargs = dict(
+        dt=0.016,
+        playing=True,
+        energy_bands=EnergyBands(bass=0.9, mid=0.7, high=0.6, overall=0.8),
+        transient_bus=TransientEnergyBands(bass_transient=0.8, mid_transient=0.3, high_transient=0.2),
+        layer_shape_nodes=_layer_shapes(),
+        base_level=0.58,
+        motion_power=1.2,
+        idle_motion=0.2,
+        idle_speed=0.7,
+        smoothness=0.55,
+        growth=3.0,
+        layer_settings=_layer_defaults(),
+    )
+    frame1 = solve_devcurve_frame(state, now_ts=8.0, **kwargs)
+    frame2 = solve_devcurve_frame(state, now_ts=8.016, **kwargs)
+    slots1 = frame1["specular_slots"]
+    slots2 = frame2["specular_slots"]
+    assert len(slots1) == len(slots2) == 3
+    deltas = []
+    for i in range(3):
+        assert float(slots2[i][0]) < float(slots1[i][0])
+        deltas.append(float(slots1[i][0]) - float(slots2[i][0]))
+    assert max(deltas) - min(deltas) < 0.00001
+    assert math.isclose(
+        float(frame2["specular_travel_rate"]),
+        float(frame2["foreground_travel_rate"]),
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )

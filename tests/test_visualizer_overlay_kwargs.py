@@ -116,6 +116,9 @@ def test_devcurve_gpu_kwargs_include_curve_payload(qt_app):
     assert "devcurve_foreground_shadow_alpha" in extras
     assert "devcurve_foreground_specular_enabled" in extras
     assert "devcurve_foreground_specular_width" in extras
+    assert "devcurve_specular_slot0" in extras
+    assert "devcurve_specular_slot1" in extras
+    assert "devcurve_specular_slot2" in extras
     assert "devcurve_outline_alpha" not in extras
 
     widget.deleteLater()

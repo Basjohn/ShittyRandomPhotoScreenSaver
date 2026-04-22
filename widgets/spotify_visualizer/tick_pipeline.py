@@ -263,9 +263,39 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
         widget._devcurve_draw_order = list(draw_order)
     widget._devcurve_foreground_layer = str(frame.get("foreground_layer", "") or "")
     widget._devcurve_foreground_layer_id = int(frame.get("foreground_layer_id", -1))
+    slots = frame.get("specular_slots", [])
+    if isinstance(slots, list) and slots:
+        s0 = slots[0] if len(slots) > 0 and isinstance(slots[0], list) else [0.0, 0.0, 0.0, 0.0]
+        s1 = slots[1] if len(slots) > 1 and isinstance(slots[1], list) else [0.0, 0.0, 0.0, 0.0]
+        s2 = slots[2] if len(slots) > 2 and isinstance(slots[2], list) else [0.0, 0.0, 0.0, 0.0]
+        widget._devcurve_specular_slot0 = [
+            max(-1.5, min(2.5, float(s0[0] if len(s0) > 0 else 0.0))),
+            max(0.0, min(1.0, float(s0[1] if len(s0) > 1 else 0.0))),
+            max(0.0, min(1.0, float(s0[2] if len(s0) > 2 else 0.0))),
+            max(0.0, min(1.0, float(s0[3] if len(s0) > 3 else 0.0))),
+        ]
+        widget._devcurve_specular_slot1 = [
+            max(-1.5, min(2.5, float(s1[0] if len(s1) > 0 else 0.0))),
+            max(0.0, min(1.0, float(s1[1] if len(s1) > 1 else 0.0))),
+            max(0.0, min(1.0, float(s1[2] if len(s1) > 2 else 0.0))),
+            max(0.0, min(1.0, float(s1[3] if len(s1) > 3 else 0.0))),
+        ]
+        widget._devcurve_specular_slot2 = [
+            max(-1.5, min(2.5, float(s2[0] if len(s2) > 0 else 0.0))),
+            max(0.0, min(1.0, float(s2[1] if len(s2) > 1 else 0.0))),
+            max(0.0, min(1.0, float(s2[2] if len(s2) > 2 else 0.0))),
+            max(0.0, min(1.0, float(s2[3] if len(s2) > 3 else 0.0))),
+        ]
+    else:
+        widget._devcurve_specular_slot0 = [0.0, 0.0, 0.0, 0.0]
+        widget._devcurve_specular_slot1 = [0.0, 0.0, 0.0, 0.0]
+        widget._devcurve_specular_slot2 = [0.0, 0.0, 0.0, 0.0]
     widget._devcurve_smoothness_max_step = float(frame.get("smoothness_max_step", 0.0))
     widget._devcurve_active_amplitude = float(frame.get("active_amplitude", 0.0))
     widget._devcurve_idle_amplitude = float(frame.get("idle_amplitude", 0.0))
+    widget._devcurve_foreground_travel_rate = float(frame.get("foreground_travel_rate", 0.0))
+    widget._devcurve_foreground_travel_pos = float(frame.get("foreground_travel_pos", 0.0))
+    widget._devcurve_specular_travel_rate = float(frame.get("specular_travel_rate", 0.0))
 
     if is_viz_diagnostics_enabled():
         last_diag = float(getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0)
@@ -274,7 +304,7 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
             logger.debug(
                 (
                     "[SPOTIFY_VIS][DEVCURVE] mode=%s idle_amp=%.4f active_amp=%.4f smooth_step=%.5f "
-                    "fg=%s E[b=%.3f v=%.3f m=%.3f t=%.3f]"
+                    "fg=%s E[b=%.3f v=%.3f m=%.3f t=%.3f] fg_rate=%.4f fg_pos=%.3f spec_rate=%.4f S[x=%.3f/%.3f/%.3f]"
                 ),
                 "layered",
                 widget._devcurve_idle_amplitude,
@@ -285,6 +315,12 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
                 float(e.get("vocals", 0.0)),
                 float(e.get("mids", 0.0)),
                 float(e.get("transients", 0.0)),
+                float(getattr(widget, "_devcurve_foreground_travel_rate", 0.0)),
+                float(getattr(widget, "_devcurve_foreground_travel_pos", 0.0)),
+                float(getattr(widget, "_devcurve_specular_travel_rate", 0.0)),
+                float((getattr(widget, "_devcurve_specular_slot0", [0.0]) or [0.0])[0]),
+                float((getattr(widget, "_devcurve_specular_slot1", [0.0]) or [0.0])[0]),
+                float((getattr(widget, "_devcurve_specular_slot2", [0.0]) or [0.0])[0]),
             )
             widget._devcurve_diag_last_log_ts = now_ts
 

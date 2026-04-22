@@ -380,6 +380,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._devcurve_foreground_specular_width: float = 0.022
         self._devcurve_foreground_specular_offset: float = 0.028
         self._devcurve_foreground_specular_crest_bias: float = 1.05
+        self._devcurve_specular_slot0: list[float] = [0.0, 0.0, 0.0, 0.0]
+        self._devcurve_specular_slot1: list[float] = [0.0, 0.0, 0.0, 0.0]
+        self._devcurve_specular_slot2: list[float] = [0.0, 0.0, 0.0, 0.0]
         self._devcurve_ghosting_enabled: bool = False
         self._devcurve_ghost_alpha: float = 0.0
         self._devcurve_ghost_decay: float = 0.4
@@ -716,6 +719,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         devcurve_foreground_specular_width: float = 0.022,
         devcurve_foreground_specular_offset: float = 0.028,
         devcurve_foreground_specular_crest_bias: float = 1.05,
+        devcurve_specular_slot0: list | tuple | None = None,
+        devcurve_specular_slot1: list | tuple | None = None,
+        devcurve_specular_slot2: list | tuple | None = None,
         devcurve_ghosting_enabled: bool = False,
         devcurve_ghost_alpha: float = 0.0,
         devcurve_ghost_decay: float = 0.4,
@@ -1483,6 +1489,27 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._devcurve_foreground_specular_width = max(0.002, min(0.120, float(devcurve_foreground_specular_width)))
         self._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(devcurve_foreground_specular_offset)))
         self._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(devcurve_foreground_specular_crest_bias)))
+        _slot0 = devcurve_specular_slot0 if isinstance(devcurve_specular_slot0, (list, tuple)) else (0.0, 0.0, 0.0)
+        _slot1 = devcurve_specular_slot1 if isinstance(devcurve_specular_slot1, (list, tuple)) else (0.0, 0.0, 0.0)
+        _slot2 = devcurve_specular_slot2 if isinstance(devcurve_specular_slot2, (list, tuple)) else (0.0, 0.0, 0.0)
+        self._devcurve_specular_slot0 = [
+            max(-1.5, min(2.5, float(_slot0[0] if len(_slot0) > 0 else 0.0))),
+            max(0.0, min(1.0, float(_slot0[1] if len(_slot0) > 1 else 0.0))),
+            max(0.0, min(1.0, float(_slot0[2] if len(_slot0) > 2 else 0.0))),
+            max(0.0, min(1.0, float(_slot0[3] if len(_slot0) > 3 else 0.0))),
+        ]
+        self._devcurve_specular_slot1 = [
+            max(-1.5, min(2.5, float(_slot1[0] if len(_slot1) > 0 else 0.0))),
+            max(0.0, min(1.0, float(_slot1[1] if len(_slot1) > 1 else 0.0))),
+            max(0.0, min(1.0, float(_slot1[2] if len(_slot1) > 2 else 0.0))),
+            max(0.0, min(1.0, float(_slot1[3] if len(_slot1) > 3 else 0.0))),
+        ]
+        self._devcurve_specular_slot2 = [
+            max(-1.5, min(2.5, float(_slot2[0] if len(_slot2) > 0 else 0.0))),
+            max(0.0, min(1.0, float(_slot2[1] if len(_slot2) > 1 else 0.0))),
+            max(0.0, min(1.0, float(_slot2[2] if len(_slot2) > 2 else 0.0))),
+            max(0.0, min(1.0, float(_slot2[3] if len(_slot2) > 3 else 0.0))),
+        ]
         self._devcurve_ghosting_enabled = bool(devcurve_ghosting_enabled)
         self._devcurve_ghost_alpha = max(0.0, min(1.0, float(devcurve_ghost_alpha)))
         self._devcurve_ghost_decay = max(0.1, min(1.0, float(devcurve_ghost_decay)))

@@ -56,6 +56,9 @@ uniform float u_devcurve_foreground_specular_alpha;
 uniform float u_devcurve_foreground_specular_width;
 uniform float u_devcurve_foreground_specular_offset;
 uniform float u_devcurve_foreground_specular_crest_bias;
+uniform vec4 u_devcurve_specular_slot0;
+uniform vec4 u_devcurve_specular_slot1;
+uniform vec4 u_devcurve_specular_slot2;
 
 float _sample_curve(const float curve[96], float x, int count) {
     int n = clamp(count, 2, 96);
@@ -172,6 +175,53 @@ float _sample_curve_curvature(int layerId, float x, int sampleCount) {
     return (yL - 2.0 * yC + yR) / max(dx * dx, 1e-4);
 }
 
+float _specular_visibility(float x) {
+    float inLeft = smoothstep(-0.16, 0.02, x);
+    float inRight = 1.0 - smoothstep(1.00, 1.24, x);
+    return clamp(inLeft * inRight, 0.0, 1.0);
+}
+
+float _hash11(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
+
+float _specular_blob(vec2 uv, vec4 slot, int layerId, int sampleCount, float width, float yOffset, float crestBias, float aa) {
+    float amp = clamp(slot.z, 0.0, 1.0);
+    if (amp <= 1e-4) return 0.0;
+    float x = slot.x;
+    float variant = clamp(slot.w, 0.0, 1.0);
+    float r1 = _hash11(variant * 31.7 + 1.3);
+    float r2 = _hash11(variant * 47.1 + 2.9);
+    float r3 = _hash11(variant * 59.4 + 4.1);
+    float xCurve = clamp(uv.x, 0.0, 1.0);
+    float yCurve = _sample_curve_by_id(layerId, xCurve, sampleCount);
+    float slope = _sample_curve_slope(layerId, xCurve, sampleCount);
+    float curvature = _sample_curve_curvature(layerId, xCurve, sampleCount);
+    float widthScale = mix(0.92, 1.58, r1) * mix(0.92, 1.18, amp);
+    float rx = max(0.009, width * widthScale);
+    float u = (uv.x - x) / max(rx, 1e-4);
+    float absU = abs(u);
+    float ry = max(0.0042, rx * mix(0.26, 0.40, r2));
+    float crest = clamp(abs(curvature) * max(crestBias, 0.1) * 0.08, 0.0, 1.0);
+    float offset = max(0.010, yOffset) * mix(0.82, 1.18, r3);
+    float centerBend = ry * (
+        0.034 * sin((u + variant * 0.73) * 3.14159)
+        + 0.018 * sin((u * 2.0 + variant) * 3.14159)
+        + crest * 0.020 * sin((u * 1.5 + r1) * 3.14159)
+    );
+    float yScale = 1.0
+        + 0.035 * sin((u + variant) * 6.28318)
+        + crest * 0.025 * sin((u * 1.5 + r1) * 3.14159);
+    float curveNormalScale = inversesqrt(1.0 + slope * slope);
+    float dy = (uv.y - (yCurve + offset + centerBend)) * curveNormalScale;
+    float v = dy / max(ry * clamp(yScale, 0.94, 1.07), 1e-4);
+    float shape = pow(absU, 2.85) + pow(abs(v), 2.35) - 1.0;
+    float edge = max(fwidth(shape) * 0.45, 0.0008);
+    float mask = 1.0 - smoothstep(-edge, edge, shape);
+    float vis = _specular_visibility(x);
+    return clamp(mask * vis * smoothstep(0.05, 0.22, amp), 0.0, 1.0);
+}
+
 void main() {
     float width = max(1.0, u_resolution.x);
     float height = max(1.0, u_resolution.y);
@@ -239,15 +289,16 @@ void main() {
         }
 
         if (u_devcurve_foreground_specular_enabled != 0) {
-            float specY = yFg + clamp(u_devcurve_foreground_specular_offset, -0.20, 0.20);
             float specW = clamp(u_devcurve_foreground_specular_width, 0.002, 0.120);
-            float specBand = 1.0 - smoothstep(specW, specW + aa * 1.6, abs(uv.y - specY));
-            float slope = abs(_sample_curve_slope(fgId, uv.x, sampleCount));
-            float curvature = _sample_curve_curvature(fgId, uv.x, sampleCount);
-            float slopeMask = 1.0 - smoothstep(0.04, 0.40, slope);
-            float crestMask = clamp(max(curvature, 0.0) * clamp(u_devcurve_foreground_specular_crest_bias, 0.0, 2.0) * 0.08, 0.0, 1.0);
-            float sparkleMask = specBand * fgInside * slopeMask * mix(0.35, 1.0, crestMask);
-            float specA = sparkleMask * clamp(u_devcurve_foreground_specular_alpha, 0.0, 1.0);
+            float yOffset = max(0.010, clamp(u_devcurve_foreground_specular_offset, -0.20, 0.20));
+            float crestBias = clamp(u_devcurve_foreground_specular_crest_bias, 0.0, 2.0);
+            float slot0 = _specular_blob(uv, u_devcurve_specular_slot0, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            float slot1 = _specular_blob(uv, u_devcurve_specular_slot1, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            float slot2 = _specular_blob(uv, u_devcurve_specular_slot2, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            float sparkleMask = max(max(slot0, slot1), slot2) * fgInside;
+            float clearAt = max(0.006, yOffset * 0.42);
+            float clearanceMask = smoothstep(clearAt, clearAt + aa * 0.65, uv.y - yFg);
+            float specA = sparkleMask * clearanceMask * clamp(u_devcurve_foreground_specular_alpha, 0.0, 1.0);
             col = _blend_over(col, vec4(vec3(1.0), specA));
         }
     }

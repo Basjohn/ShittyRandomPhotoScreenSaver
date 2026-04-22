@@ -16,6 +16,9 @@ def test_devcurve_shader_source_available():
     assert "u_devcurve_foreground_layer_id" in src
     assert "u_devcurve_foreground_shadow_enabled" in src
     assert "u_devcurve_foreground_specular_enabled" in src
+    assert "u_devcurve_specular_slot0" in src
+    assert "u_devcurve_specular_slot1" in src
+    assert "u_devcurve_specular_slot2" in src
     assert "u_devcurve_outline_alpha" not in src
 
 
@@ -26,4 +29,7 @@ def test_devcurve_renderer_uniform_manifest_uses_layer_outline_uniforms():
     assert "u_devcurve_foreground_layer_id" in uniforms
     assert "u_devcurve_foreground_shadow_alpha" in uniforms
     assert "u_devcurve_foreground_specular_crest_bias" in uniforms
+    assert "u_devcurve_specular_slot0" in uniforms
+    assert "u_devcurve_specular_slot1" in uniforms
+    assert "u_devcurve_specular_slot2" in uniforms
     assert "u_devcurve_outline_alpha" not in uniforms
