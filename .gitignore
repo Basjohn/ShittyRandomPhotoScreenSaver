@@ -1,70 +1,80 @@
-# Ignore system files
+# OS / desktop noise
 .DS_Store
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
-# Node.js / frontend build files
-node_modules/
-dist/
-build/
-.cache/
-.tmp/
-release/
-*.ps1
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg
-*.egg-info/
-.env/
-.ruff_cache/
-
-# Logs and runtime data
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-cache/reddit/*.json
-temp/
-settings/
-docs/
-bak/
-archive/
-*.log
-audits/
-htmlcov/
-.coverage
-.coverage.*
-/logs
-agent.md
-*.bak
-
-# IDE and editor files
+# Editor / IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS-specific junk
-ehthumbs.db
-Desktop.ini
+# Node / frontend deps and build output
+node_modules/
+dist/
+build/
+build_deps/
+.cache/
+.tmp/
 
-# Git-specific
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*.egg
+*.egg-info/
+.venv/
+venv/
+env/
+ENV/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.hypothesis/
+.pytype/
+
+# Coverage and test artifacts
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Runtime logs and local app data
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+*.bak
+/logs/
+/temp/
+/cache/reddit/*.json
+/audits/
+/archive/
+/bak/
+/settings/
+/tests_tmp_appdata/
+agent.md
+
+# Build/release binary artifacts
+release/
+*.exe
+*.scr
+
+# Secrets / credentials (keep templates tracked)
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+
+# Git conflict leftovers
 .gitignore~
 *.orig
 
-# Custom: reusable utility modules you don’t want tracked
+# Local utility sandbox
 MyReuseableUtilityModules/
-build/
-build_deps/
-release/
-dist/
-
-# Optional: ignore environment or credentials files
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Big Shit GIT Sucks With
-*.exe
-*.scr

@@ -1156,6 +1156,26 @@ def test_repair_tool_keeps_missing_optional_spectrum_and_osc_keys_missing_in_sou
     assert "osc_ghost_line3_enabled" not in osc_cleaned
 
 
+def test_restore_visualizer_snapshot_clears_mode_technical_keys_absent_from_payload():
+    cfg = {
+        "mode": "spectrum",
+        "spectrum_dynamic_floor": True,
+        "spectrum_manual_floor": 0.91,
+        "spectrum_growth": 2.0,
+    }
+    payload = {
+        "mode": "spectrum",
+        "spectrum_growth": 1.2,
+    }
+
+    changed = vp.restore_visualizer_snapshot("spectrum", cfg, payload)
+
+    assert changed is True
+    assert cfg["spectrum_growth"] == pytest.approx(1.2)
+    assert "spectrum_dynamic_floor" not in cfg
+    assert "spectrum_manual_floor" not in cfg
+
+
 def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monkeypatch):
     root = tmp_path
     mode = "blob"
@@ -1366,6 +1386,85 @@ def test_sine_wave_6_line_preset_roundtrip_preserves_all_line_settings():
         assert "sine_line4_shift" in sv, f"{preset_path.name} missing sine_line4_shift"
         assert "sine_line5_shift" in sv, f"{preset_path.name} missing sine_line5_shift"
         assert "sine_line6_shift" in sv, f"{preset_path.name} missing sine_line6_shift"
+
+
+def test_repair_file_preserves_authored_metadata_and_non_visualizer_blocks(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "spectrum"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    preset_path = mode_dir / "preset_1_authored.json"
+    preset_path.write_text(
+        json.dumps(
+            {
+                "name": "Preset 1 (Authored Name)",
+                "description": "Do not mutate metadata",
+                "preset_index": 0,
+                "author_note": "keep me",
+                "widgets": {"clock": {"enabled": False}},
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": mode,
+                            "spectrum_growth": 2.75,
+                            "spectrum_dynamic_floor": False,
+                            "bubble_growth": 9.9,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
+
+    repair.repair_file(preset_path, mode)
+
+    repaired = json.loads(preset_path.read_text(encoding="utf-8"))
+    sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
+    assert repaired["name"] == "Preset 1 (Authored Name)"
+    assert repaired["description"] == "Do not mutate metadata"
+    assert repaired["author_note"] == "keep me"
+    assert repaired["widgets"]["clock"]["enabled"] is False
+    assert repaired.get("visualizer_preset_override") is None
+    assert sv["spectrum_growth"] == pytest.approx(2.75)
+    assert sv["spectrum_dynamic_floor"] is False
+    assert "bubble_growth" not in sv
+
+
+def test_repair_file_bootstraps_parseable_snapshot_block_from_flat_settings_payload(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "spectrum"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    preset_path = mode_dir / "preset_1_flat.json"
+    preset_path.write_text(
+        json.dumps(
+            {
+                "name": "Preset 1 (Flat)",
+                "preset_index": 0,
+                "settings": {
+                    "mode": mode,
+                    "spectrum_growth": 1.9,
+                    "bubble_growth": 7.7,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(repair, "ROOT", root)
+    monkeypatch.setattr(repair, "_BACKUP_ROOT", root / "temp" / "visualizer_preset_backups")
+
+    repair.repair_file(preset_path, mode)
+
+    repaired = json.loads(preset_path.read_text(encoding="utf-8"))
+    sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
+    assert sv["mode"] == mode
+    assert sv["spectrum_growth"] == pytest.approx(1.9)
+    assert "bubble_growth" not in sv
 
 
 def test_oscilloscope_6_line_preset_roundtrip_preserves_all_line_settings():

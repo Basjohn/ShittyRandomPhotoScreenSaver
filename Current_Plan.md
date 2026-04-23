@@ -2,7 +2,13 @@
 
 Last updated: 2026-04-23
 
-This file is intentionally short. It tracks only active work and near-term validation.
+This file tracks active work and near-term validation.
+
+## Guardrails
+- Keep this aligned with `Spec.md`, `Index.md`, `Docs/Guardrails.md`, and `Docs/Historical_Bugs.md`.
+- Keep harnesses/probes intact unless explicitly asked to retire them.
+- Treat `presets/visualizer_modes/` as the authored preset source tree.
+- Do not close visual/runtime bugs from tests alone when symptoms are user-visible.
 
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
@@ -14,13 +20,18 @@ This file is intentionally short. It tracks only active work and near-term valid
 - Preset repair/reindex round-trip checks after visualizer schema changes.
 - Settings destructive-flow checks (reset/import) when touching settings architecture.
 
-## Operational Guardrails
-- Harnesses and probes remain first-class tooling (`tools/flicker_test.py`, `tools/winprobe_observer.py`, helper harnesses).
-- `presets/visualizer_modes/` remains the authored preset source tree.
-- Do not close visual/runtime bugs from tests alone when the symptom is user-visible timing or rendering behavior.
+## Runtime Watchlist
+- Settings dialog startup/show/focus regressions.
+- Visualizer mode-switch state bleed across shared seams.
+- Preset repair/reindex drift from authored payload intent.
+- Settings cache stale-read behavior after section/root writes.
 
 ## Documentation Rule
-- Put architecture in `Spec.md`.
-- Put module map in `Index.md`.
-- Put policy in `Docs/Guardrails.md`.
-- Put dated bug narratives in `Docs/Historical_Bugs.md`.
+- Architecture: `Spec.md`
+- Module map: `Index.md`
+- Policy: `Docs/Guardrails.md`
+- Dated regressions: `Docs/Historical_Bugs.md`
+
+## Idea Box
+1. Add a lightweight “doc drift” check that flags stale references between `Spec.md`, `Index.md`, and `Current_Plan.md`.
+2. Add a tiny harness smoke command list to this file so recurring investigations are one-command repeatable.

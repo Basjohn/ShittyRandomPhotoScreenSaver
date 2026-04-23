@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QPoint, QRect, Qt
 from core.settings.visualizer_presets import (
     VISUALIZER_CUSTOM_STORAGE_KEY,
     get_custom_preset_index,
+    get_preset_settings,
     get_preset_count,
 )
 from rendering.input_handler import InputHandler
@@ -400,3 +401,48 @@ def test_runtime_cycle_custom_roundtrip_preserves_known_custom_keys(settings_man
     assert restored.get("blob_constant_wobble") == pytest.approx(1.42), (
         "Custom snapshot should restore blob_constant_wobble after round-trip"
     )
+
+
+def test_runtime_cycle_enforces_curated_spectrum_technical_keys_without_losing_custom(settings_manager):
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+    wm._refresh_spotify_visualizer_config = MagicMock()
+
+    mode = "spectrum"
+    custom_index = get_custom_preset_index(mode)
+    curated = get_preset_settings(mode, 0)
+    assert curated, "Expected at least one curated spectrum preset"
+    assert "spectrum_dynamic_floor" in curated
+    assert "spectrum_manual_floor" in curated
+
+    curated_dynamic_floor = bool(curated["spectrum_dynamic_floor"])
+    curated_manual_floor = float(curated["spectrum_manual_floor"])
+    custom_dynamic_floor = not curated_dynamic_floor
+    custom_manual_floor = 0.11 if abs(curated_manual_floor - 0.11) > 1e-9 else 0.89
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg.update(
+        {
+            "mode": mode,
+            "preset_spectrum": custom_index,
+            "spectrum_dynamic_floor": custom_dynamic_floor,
+            "spectrum_manual_floor": custom_manual_floor,
+            "spectrum_growth": 1.42,
+        }
+    )
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    assert wm.cycle_visualizer_preset(mode, 1) is True
+    after_curated = (settings_manager.get("widgets", {}) or {}).get("spotify_visualizer", {}) or {}
+    assert after_curated.get("preset_spectrum") == 0
+    assert bool(after_curated.get("spectrum_dynamic_floor")) is curated_dynamic_floor
+    assert float(after_curated.get("spectrum_manual_floor")) == pytest.approx(curated_manual_floor)
+
+    assert wm.cycle_visualizer_preset(mode, -1) is True
+    restored = (settings_manager.get("widgets", {}) or {}).get("spotify_visualizer", {}) or {}
+    assert restored.get("preset_spectrum") == custom_index
+    assert bool(restored.get("spectrum_dynamic_floor")) is custom_dynamic_floor
+    assert float(restored.get("spectrum_manual_floor")) == pytest.approx(custom_manual_floor)

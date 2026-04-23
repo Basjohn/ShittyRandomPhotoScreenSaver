@@ -255,11 +255,14 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     if not sections:
         raise ValueError("File does not contain any spotify_visualizer settings block")
 
-    base: Dict[str, Any] = {}
-
+    sanitized: Dict[str, Any] = {}
     original_filtered: Dict[str, Any] = {}
+    migrated_keys: set[str] = set()
+    mode_prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
+    primary_prefix = _canonical_mode_prefix(mode)
     for section in sections:
         section_payload = dict(section)
+        original_section = dict(section_payload)
         raw_filtered = vp._filter_settings_for_mode(mode, dict(section_payload))  # type: ignore[attr-defined]
         if mode == "spectrum":
             section_payload = _promote_legacy_spectrum_lane_scalars(section_payload)
@@ -278,7 +281,39 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
             ):
                 if promoted_key in filtered:
                     original_filtered[promoted_key] = filtered[promoted_key]
-        base.update(filtered)
+        sanitized.update(filtered)
+
+        if mode == "oscilloscope" and "osc_sensitivity" in original_section:
+            if "osc_line_amplitude" in filtered:
+                migrated_keys.add("osc_line_amplitude")
+        if mode == "sine_wave" and "sine_min_height" in original_section:
+            if "sine_card_adaptation" in filtered:
+                migrated_keys.add("sine_card_adaptation")
+        if mode == "spectrum":
+            if (
+                "spectrum_single_piece" in original_section
+                or "spectrum_render_mode" in original_section
+            ) and "spectrum_render_mode" in filtered:
+                migrated_keys.add("spectrum_render_mode")
+            if (
+                "spectrum_rainbow_per_bar" in original_section
+                or "rainbow_per_bar" in original_section
+            ) and "spectrum_unique_colors" in filtered:
+                migrated_keys.add("spectrum_unique_colors")
+        if "rainbow_enabled" in original_section and f"{primary_prefix}rainbow_enabled" in filtered:
+            migrated_keys.add(f"{primary_prefix}rainbow_enabled")
+        if "rainbow_speed" in original_section and f"{primary_prefix}rainbow_speed" in filtered:
+            migrated_keys.add(f"{primary_prefix}rainbow_speed")
+        for prefix in mode_prefixes:
+            if not prefix:
+                continue
+            doubled = f"{prefix}{prefix}"
+            for key in original_section.keys():
+                if not isinstance(key, str) or not key.startswith(doubled):
+                    continue
+                normalized = f"{prefix}{key[len(doubled):]}"
+                if normalized in filtered:
+                    migrated_keys.add(normalized)
 
     authored_keys = set(original_filtered.keys())
     promoted_mode_keys = {
@@ -286,17 +321,13 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
         for suffix in _MANDATORY_TECH_SUFFIXES
         if suffix in original_filtered
     }
-
-    sanitized_full = vp.normalize_visualizer_mode_payload(mode, base)  # type: ignore[attr-defined]
-    sanitized = {
-        key: value
-        for key, value in sanitized_full.items()
-        if key in authored_keys or key in promoted_mode_keys or key == "mode"
-    }
+    allowed_keys = authored_keys | promoted_mode_keys | migrated_keys | {"mode"}
+    sanitized = {key: value for key, value in sanitized.items() if key in allowed_keys}
     if mode == "spectrum" and "spectrum_notch_positions_linear" in sanitized:
         sanitized["spectrum_notch_positions_linear"] = _normalize_spectrum_linear_notches(
             sanitized["spectrum_notch_positions_linear"]
         )
+    sanitized["mode"] = mode
     _promote_global_technical_settings(mode, sanitized)
     _strip_deprecated_curated_keys(mode, sanitized)
 
@@ -456,6 +487,68 @@ def _build_clean_payload(path: Path, payload: Mapping[str, Any], mode: str, clea
         updated_paths.append("widgets")
 
     return lean, updated_paths
+
+
+def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[str, Any]) -> list[str]:
+    """Patch visualizer payload blocks in place without rebuilding authored metadata."""
+    updated_paths: list[str] = []
+    cleaned_block = deepcopy(dict(cleaned))
+
+    snapshot = payload.get("snapshot")
+    if isinstance(snapshot, dict):
+        widgets_section = snapshot.get("widgets")
+        if isinstance(widgets_section, dict) and isinstance(widgets_section.get("spotify_visualizer"), Mapping):
+            widgets_section["spotify_visualizer"] = deepcopy(cleaned_block)
+            updated_paths.append("snapshot.widgets.spotify_visualizer")
+
+        backup_section = snapshot.get("custom_preset_backup")
+        if isinstance(backup_section, dict):
+            dotted_prefix = "widgets.spotify_visualizer."
+            dotted_keys = [
+                key for key in list(backup_section.keys())
+                if isinstance(key, str) and key.startswith(dotted_prefix)
+            ]
+            for key in dotted_keys:
+                backup_section.pop(key, None)
+            if dotted_keys:
+                for key, value in cleaned_block.items():
+                    backup_section[f"{dotted_prefix}{key}"] = deepcopy(value)
+                updated_paths.append("snapshot.custom_preset_backup")
+
+    if isinstance(payload.get("spotify_visualizer"), Mapping):
+        payload["spotify_visualizer"] = deepcopy(cleaned_block)
+        updated_paths.append("spotify_visualizer")
+
+    settings_section = payload.get("settings")
+    if isinstance(settings_section, dict):
+        dotted_prefix = "widgets.spotify_visualizer."
+        dotted_keys = [
+            key for key in list(settings_section.keys())
+            if isinstance(key, str) and key.startswith(dotted_prefix)
+        ]
+        if dotted_keys:
+            for key in dotted_keys:
+                settings_section.pop(key, None)
+            for key, value in cleaned_block.items():
+                settings_section[f"{dotted_prefix}{key}"] = deepcopy(value)
+            updated_paths.append("settings")
+
+    if updated_paths:
+        # De-duplicate while preserving first-seen order for stable reporting.
+        return list(dict.fromkeys(updated_paths))
+
+    # Fallback: ensure a canonical visualizer section exists when no known target
+    # section was present in the source payload.
+    snapshot_map = payload.get("snapshot")
+    if not isinstance(snapshot_map, dict):
+        snapshot_map = {}
+        payload["snapshot"] = snapshot_map
+    widgets_map = snapshot_map.get("widgets")
+    if not isinstance(widgets_map, dict):
+        widgets_map = {}
+        snapshot_map["widgets"] = widgets_map
+    widgets_map["spotify_visualizer"] = deepcopy(cleaned_block)
+    return ["snapshot.widgets.spotify_visualizer"]
 
 
 def _ensure_backup(path: Path) -> Path:
@@ -640,10 +733,11 @@ def repair_file(path: Path, mode: str) -> Tuple[Path, Dict[str, Any]]:
         raise ValueError("Payload root must be a JSON object")
 
     cleaned, stats = _sanitize_settings(mode, payload)
-    lean_payload, updated_paths = _build_clean_payload(path, payload, mode, cleaned)
+    patched_payload = deepcopy(payload)
+    updated_paths = _apply_cleaned_payload_in_place(patched_payload, cleaned)
 
     backup_path = _ensure_backup(path)
-    new_text = json.dumps(lean_payload, indent=2, sort_keys=True)
+    new_text = json.dumps(patched_payload, indent=2, sort_keys=True)
     path.write_text(new_text + "\n", encoding="utf-8")
 
     stats = {

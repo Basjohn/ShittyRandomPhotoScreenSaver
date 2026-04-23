@@ -1,0 +1,690 @@
+"""
+Presets module for SRPSS.
+
+Provides predefined widget configurations that users can quickly switch between.
+The "Custom" preset preserves user's manual settings.
+
+## Adding New Presets
+
+To add a new preset:
+
+1. Add a new entry to PRESET_DEFINITIONS dict below
+2. Set 'order' to position in slider (0=leftmost, higher=right)
+3. Define all widget settings that differ from defaults
+4. Custom preset is always rightmost (order=999)
+
+Example:
+    "my_preset": PresetDefinition(
+        name="My Preset",
+        description="Description shown in UI",
+        order=2,  # Position between existing presets
+        settings={
+            "widgets.clock.enabled": True,
+            "widgets.clock.position": "Top Right",
+            # ... other settings
+        }
+    )
+
+The slider will automatically accommodate new notches with even spacing.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from copy import deepcopy
+
+from core.logging.logger import get_logger
+
+if TYPE_CHECKING:
+    from core.settings.settings_manager import SettingsManager
+
+logger = get_logger(__name__)
+
+_LEGACY_DISPLAY_KEYS = {
+    "display.refresh_sync",
+    "display.refresh_adaptive",
+    "display.render_backend_mode",
+    "display.hw_accel",
+}
+
+
+def _is_legacy_display_key(key: str) -> bool:
+    if not isinstance(key, str):
+        return False
+    return key.strip().lower() in _LEGACY_DISPLAY_KEYS
+
+
+def _normalize_visualizer_section_in_widgets_snapshot(widgets_snapshot: Dict[str, Any]) -> Dict[str, Any]:
+    """Return *widgets_snapshot* with a canonical spotify_visualizer section.
+
+    Custom preset backup save/restore is one of the last older flows that still
+    copies the whole widgets section directly. Normalize the visualizer payload
+    here so legacy/sparse visualizer data cannot bypass the shared correction
+    seam on save or restore.
+    """
+    if not isinstance(widgets_snapshot, dict):
+        return widgets_snapshot
+
+    normalized_snapshot = deepcopy(widgets_snapshot)
+    spotify_vis = normalized_snapshot.get("spotify_visualizer")
+    if isinstance(spotify_vis, dict):
+        from core.settings.visualizer_settings_snapshot import (
+            normalize_visualizer_section_mapping,
+        )
+
+        normalized_snapshot["spotify_visualizer"] = normalize_visualizer_section_mapping(
+            spotify_vis,
+            apply_preset_overlay=False,
+        )
+    return normalized_snapshot
+
+
+@dataclass
+class PresetDefinition:
+    """Definition of a preset configuration."""
+    name: str
+    description: str
+    order: int  # Position in slider (0=leftmost, 999=Custom always rightmost)
+    settings: Dict[str, Any] = field(default_factory=dict)
+    is_custom: bool = False  # True only for the Custom preset
+
+
+# =============================================================================
+# PRESET DEFINITIONS
+# =============================================================================
+# Add new presets here. Order determines slider position (lower = left).
+# Custom preset (order=999) is always rightmost and handled specially.
+
+PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
+    "purist": PresetDefinition(
+        name="Purist",
+        description="Just the wallpapers and transitions, best performance.",
+        order=0,
+        settings={
+            "widgets.clock.enabled": False,
+            "widgets.clock2.enabled": False,
+            "widgets.clock3.enabled": False,
+            "widgets.weather.enabled": False,
+            "widgets.media.enabled": False,
+            "widgets.reddit.enabled": False,
+            "widgets.reddit2.enabled": False,
+            "widgets.spotify_visualizer.enabled": False,
+            "widgets.media.spotify_volume_enabled": False,
+        }
+    ),
+    
+    "essentials": PresetDefinition(
+        name="Essentials",
+        description="Weather and Clock, very high performance.",
+        order=1,
+        settings={
+            # Clock: Enabled, Analog, Top Right, All Displays
+            "widgets.clock.enabled": True,
+            "widgets.clock.display_mode": "analog",
+            "widgets.clock.position": "Top Right",
+            "widgets.clock.monitor": "ALL",
+            "widgets.clock2.enabled": False,
+            "widgets.clock3.enabled": False,
+            # Weather: Enabled, Top Left, All Displays
+            "widgets.weather.enabled": True,
+            "widgets.weather.position": "Top Left",
+            "widgets.weather.monitor": "ALL",
+            # Everything else disabled
+            "widgets.media.enabled": False,
+            "widgets.reddit.enabled": False,
+            "widgets.reddit2.enabled": False,
+            "widgets.spotify_visualizer.enabled": False,
+            "widgets.media.spotify_volume_enabled": False,
+        }
+    ),
+    
+    "media": PresetDefinition(
+        name="Media",
+        description="Spotify, Weather and Clock, a good middle ground.",
+        order=2,
+        settings={
+            # Clock: Enabled, Analog, Top Right, All Displays
+            "widgets.clock.enabled": True,
+            "widgets.clock.display_mode": "analog",
+            "widgets.clock.position": "Top Right",
+            "widgets.clock.monitor": "ALL",
+            "widgets.clock2.enabled": False,
+            "widgets.clock3.enabled": False,
+            # Weather: Enabled, Top Left, All Displays
+            "widgets.weather.enabled": True,
+            "widgets.weather.position": "Top Left",
+            "widgets.weather.monitor": "ALL",
+            # Media: Enabled, Bottom Left, Active Display (monitor 1)
+            "widgets.media.enabled": True,
+            "widgets.media.position": "Bottom Left",
+            "widgets.media.monitor": 1,
+            "widgets.media.spotify_volume_enabled": True,
+            # Visualizer: Enabled (follows media)
+            "widgets.spotify_visualizer.enabled": True,
+            # Reddit disabled
+            "widgets.reddit.enabled": False,
+            "widgets.reddit2.enabled": False,
+        }
+    ),
+    
+    "full_monty": PresetDefinition(
+        name="Full Monty",
+        description="Everything all at once because processors and RAM deserve punishment!",
+        order=3,
+        settings={
+            # Display: fill mode, same image off, all monitors
+            "display.mode": "fill",
+            "display.same_image_all_monitors": False,
+            "display.show_on_monitors": "ALL",
+            # Timing & transitions
+            "timing.interval": 45,
+            "transitions.type": "Ripple",
+            "transitions.duration_ms": 7200,
+            "transitions.direction": "Random",
+            "transitions.easing": "Auto",
+            "transitions.random_always": False,
+            "transitions.ripple.ripple_count": 1,
+            # Transition pool
+            "transitions.pool.3D Block Spins": True,
+            "transitions.pool.Blinds": True,
+            "transitions.pool.Block Puzzle Flip": True,
+            "transitions.pool.Crossfade": True,
+            "transitions.pool.Crumble": True,
+            "transitions.pool.Diffuse": True,
+            "transitions.pool.Particle": True,
+            "transitions.pool.Ripple": True,
+            "transitions.pool.Slide": True,
+            "transitions.pool.Warp Dissolve": True,
+            "transitions.pool.Wipe": True,
+            # Accessibility
+            "accessibility.dimming.enabled": False,
+            "accessibility.pixel_shift.enabled": True,
+            "accessibility.pixel_shift.rate": 1,
+            # Shadows
+            "widgets.shadows.enabled": True,
+            "widgets.shadows.blur_radius": 18,
+            "widgets.shadows.color": [0, 0, 0, 255],
+            "widgets.shadows.frame_opacity": 0.77,
+            "widgets.shadows.offset": [4, 4],
+            "widgets.shadows.text_opacity": 0.33,
+            # Clock: Analog, Top Right, all displays
+            "widgets.clock.enabled": True,
+            "widgets.clock.display_mode": "analog",
+            "widgets.clock.position": "Top Right",
+            "widgets.clock.monitor": "ALL",
+            "widgets.clock.format": "24h",
+            "widgets.clock.show_seconds": True,
+            "widgets.clock.show_numerals": True,
+            "widgets.clock.show_timezone": True,
+            "widgets.clock.show_background": True,
+            "widgets.clock.analog_face_shadow": True,
+            "widgets.clock.analog_shadow_intense": True,
+            "widgets.clock.bg_color": [35, 35, 35, 255],
+            "widgets.clock.bg_opacity": 0.6,
+            "widgets.clock.border_color": [255, 255, 255, 255],
+            "widgets.clock.border_opacity": 1.0,
+            "widgets.clock.color": [255, 255, 255, 230],
+            "widgets.clock.font_family": "Segoe UI",
+            "widgets.clock.font_size": 60,
+            "widgets.clock.margin": 30,
+            "widgets.clock2.enabled": False,
+            "widgets.clock3.enabled": False,
+            # Weather: Top Left, all displays (location excluded — user-specific)
+            "widgets.weather.enabled": True,
+            "widgets.weather.position": "Top Left",
+            "widgets.weather.monitor": "ALL",
+            "widgets.weather.font_family": "Segoe UI",
+            "widgets.weather.font_size": 24,
+            "widgets.weather.icon_alignment": "RIGHT",
+            "widgets.weather.icon_size": 96,
+            "widgets.weather.intense_shadow": True,
+            "widgets.weather.margin": 30,
+            "widgets.weather.show_background": True,
+            "widgets.weather.show_condition_icon": True,
+            "widgets.weather.show_details_row": True,
+            "widgets.weather.show_forecast": True,
+            "widgets.weather.bg_color": [35, 35, 35, 255],
+            "widgets.weather.bg_opacity": 0.6,
+            "widgets.weather.border_color": [255, 255, 255, 255],
+            "widgets.weather.border_opacity": 1.0,
+            "widgets.weather.color": [255, 255, 255, 230],
+            # Media: Bottom Left, Display 0-3 (uses index 2 as primary like .sst)
+            "widgets.media.enabled": True,
+            "widgets.media.position": "Bottom Left",
+            "widgets.media.monitor": 2,
+            "widgets.media.artwork_size": 200,
+            "widgets.media.font_family": "Segoe UI",
+            "widgets.media.font_size": 20,
+            "widgets.media.intense_shadow": True,
+            "widgets.media.margin": 30,
+            "widgets.media.rounded_artwork_border": True,
+            "widgets.media.show_background": True,
+            "widgets.media.show_controls": True,
+            "widgets.media.show_header_frame": True,
+            "widgets.media.spotify_volume_enabled": True,
+            "widgets.media.spotify_volume_fill_color": [255, 255, 255, 230],
+            "widgets.media.bg_color": [35, 35, 35, 255],
+            "widgets.media.bg_opacity": 0.6,
+            "widgets.media.border_color": [255, 255, 255, 255],
+            "widgets.media.border_opacity": 1.0,
+            "widgets.media.color": [255, 255, 255, 230],
+            # Spotify Visualizer: Oscilloscope mode, full config from .sst
+            "widgets.spotify_visualizer.enabled": True,
+            "widgets.spotify_visualizer.mode": "oscilloscope",
+            "widgets.spotify_visualizer.bar_fill_color": [255, 255, 255, 230],
+            "widgets.spotify_visualizer.bar_border_color": [255, 255, 255, 255],
+            "widgets.spotify_visualizer.bar_border_opacity": 1.0,
+            "widgets.spotify_visualizer.oscilloscope_adaptive_sensitivity": True,
+            "widgets.spotify_visualizer.oscilloscope_sensitivity": 1.0,
+            "widgets.spotify_visualizer.oscilloscope_dynamic_floor": True,
+            "widgets.spotify_visualizer.oscilloscope_dynamic_range_enabled": True,
+            "widgets.spotify_visualizer.oscilloscope_manual_floor": 1.0,
+            "widgets.spotify_visualizer.oscilloscope_bar_count": 21,
+            "widgets.spotify_visualizer.spectrum_growth": 1.5,
+            # Oscilloscope settings
+            "widgets.spotify_visualizer.osc_glow_enabled": True,
+            "widgets.spotify_visualizer.osc_glow_intensity": 0.3,
+            "widgets.spotify_visualizer.osc_glow_color": [0, 200, 255, 255],
+            "widgets.spotify_visualizer.osc_reactive_glow": True,
+            "widgets.spotify_visualizer.osc_line_color": [255, 255, 255, 255],
+            "widgets.spotify_visualizer.osc_line_count": 3,
+            "widgets.spotify_visualizer.osc_line_dim": True,
+            "widgets.spotify_visualizer.osc_line_amplitude": 7.5,
+            "widgets.spotify_visualizer.osc_smoothing": 0.9,
+            "widgets.spotify_visualizer.osc_speed": 0.35,
+            "widgets.spotify_visualizer.osc_line2_color": [255, 255, 255, 255],
+            "widgets.spotify_visualizer.osc_line2_glow_color": [2, 166, 255, 255],
+            "widgets.spotify_visualizer.osc_line3_color": [255, 255, 255, 255],
+            "widgets.spotify_visualizer.osc_line3_glow_color": [0, 238, 179, 255],
+            # Blob settings
+            "widgets.spotify_visualizer.blob_color": [0, 105, 243, 230],
+            "widgets.spotify_visualizer.blob_edge_color": [89, 175, 255, 255],
+            "widgets.spotify_visualizer.blob_glow_color": [0, 196, 255, 180],
+            "widgets.spotify_visualizer.blob_glow_intensity": 0.6,
+            "widgets.spotify_visualizer.blob_outline_color": [0, 111, 255, 255],
+            "widgets.spotify_visualizer.blob_pulse": 1.75,
+            "widgets.spotify_visualizer.blob_reactive_glow": True,
+            "widgets.spotify_visualizer.blob_size": 0.5,
+            "widgets.spotify_visualizer.blob_width": 0.9,
+            "widgets.spotify_visualizer.blob_growth": 3.99,
+            # Reddit 1: All, Bottom Center
+            "widgets.reddit.enabled": True,
+            "widgets.reddit.subreddit": "All",
+            "widgets.reddit.position": "Bottom Center",
+            "widgets.reddit.limit": 20,
+            "widgets.reddit.monitor": 2,
+            "widgets.reddit.exit_on_click": True,
+            "widgets.reddit.font_family": "Segoe UI",
+            "widgets.reddit.font_size": 14,
+            "widgets.reddit.intense_shadow": True,
+            "widgets.reddit.margin": 30,
+            "widgets.reddit.show_background": True,
+            "widgets.reddit.show_separators": True,
+            "widgets.reddit.bg_color": [35, 35, 35, 255],
+            "widgets.reddit.bg_opacity": 0.6,
+            "widgets.reddit.border_color": [255, 255, 255, 255],
+            "widgets.reddit.border_opacity": 1.0,
+            "widgets.reddit.color": [255, 255, 255, 230],
+            # Reddit 2: Games, Bottom Right
+            "widgets.reddit2.enabled": True,
+            "widgets.reddit2.subreddit": "Games",
+            "widgets.reddit2.position": "Bottom Right",
+            "widgets.reddit2.limit": 20,
+            "widgets.reddit2.monitor": 2,
+        }
+    ),
+    
+    "custom": PresetDefinition(
+        name="Custom",
+        description="Your personal configuration, saved automatically.",
+        order=999,  # Always rightmost
+        settings={},  # Custom uses saved settings, not predefined
+        is_custom=True,
+    ),
+}
+
+
+def get_ordered_presets() -> List[str]:
+    """Return the retired global preset slider order (Custom only)."""
+    return ["custom"]
+
+
+def get_preset_count() -> int:
+    """Return the number of available presets."""
+    return len(get_ordered_presets())
+
+
+def get_preset_by_index(index: int) -> Optional[str]:
+    """Get preset key by slider index (0-based)."""
+    ordered = get_ordered_presets()
+    if 0 <= index < len(ordered):
+        return ordered[index]
+    return None
+
+
+def get_preset_index(preset_key: str) -> int:
+    """Get slider index for a preset key."""
+    ordered = get_ordered_presets()
+    try:
+        return ordered.index(preset_key)
+    except ValueError:
+        # Default to Custom (last)
+        return len(ordered) - 1
+
+
+def is_mc_mode() -> bool:
+    """Check if running in MC (Media Center) mode."""
+    import sys
+    try:
+        exe_name = str(getattr(sys, "argv", [""])[0]).lower()
+        return (
+            "srpss mc" in exe_name
+            or "srpss_mc" in exe_name
+            or "srpss media center" in exe_name
+            or "srpss_media_center" in exe_name
+            or "main_mc.py" in exe_name
+        )
+    except Exception:
+        return False
+
+
+def adjust_settings_for_mc_mode(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Adjust preset settings for MC mode.
+    
+    In MC mode, single-display placements use display 2 instead of display 1,
+    and "ALL" placements also use display 2.
+    """
+    if not is_mc_mode():
+        return settings
+    
+    adjusted = deepcopy(settings)
+
+    widgets = adjusted.get("widgets")
+    if isinstance(widgets, dict):
+        for widget_key in (
+            "clock",
+            "clock2",
+            "clock3",
+            "weather",
+            "media",
+            "reddit",
+            "reddit2",
+            "spotify_visualizer",
+        ):
+            section = widgets.get(widget_key)
+            if not isinstance(section, dict):
+                continue
+            monitor_value = section.get("monitor")
+            if monitor_value == "ALL" or monitor_value == 1:
+                section["monitor"] = 2
+
+    return adjusted
+
+
+def apply_preset(settings_manager: "SettingsManager", preset_key: str) -> bool:
+    """Apply a preset to the settings manager.
+    
+    Args:
+        settings_manager: The SettingsManager instance
+        preset_key: Key of the preset to apply (e.g., "purist", "custom")
+        
+    Returns:
+        True if preset was applied successfully, False otherwise
+    """
+    # Global presets are retired: keep only the custom compatibility path.
+    if preset_key != "custom":
+        logger.info("[PRESETS] Global presets retired; rejecting apply for %s", preset_key)
+        return False
+    return True
+
+
+def _save_custom_backup(settings_manager: "SettingsManager") -> None:
+    """Save current settings to custom backup.
+    
+    Captures all major categories as nested JSON-friendly snapshots so the
+    resulting payload can be written directly by :class:`JsonSettingsStore`.
+    """
+
+    categories = ["widgets", "display", "transitions", "accessibility", "sources"]
+    structured_sections = {"widgets", "transitions"}
+    backup: Dict[str, Any] = {}
+
+    # Widgets / transitions already live as structured sections; copy directly.
+    for section in structured_sections:
+        value = settings_manager.get(section, {})
+        if isinstance(value, dict) and value:
+            if section == "widgets":
+                value = _normalize_visualizer_section_in_widgets_snapshot(value)
+            backup[section] = deepcopy(value)
+
+    # Remaining sections are stored as dotted keys; reconstruct nested maps.
+    all_keys = settings_manager.get_all_keys()
+    for category in categories:
+        if category in structured_sections:
+            continue
+        snapshot = _collect_category_snapshot(settings_manager, all_keys, category)
+        if snapshot:
+            backup[category] = snapshot
+
+    settings_manager.set("custom_preset_backup", backup)
+    logger.debug(
+        "[PRESETS] Saved custom backup with %d sections", len(backup)
+    )
+
+
+def _restore_custom_backup(settings_manager: "SettingsManager") -> None:
+    """Restore settings from the nested custom backup payload."""
+
+    backup = settings_manager.get("custom_preset_backup", {})
+
+    if not isinstance(backup, dict) or not backup:
+        logger.debug("[PRESETS] No custom backup to restore")
+        return
+
+    # Widgets and transitions can be restored as structured sections.
+    widgets_snapshot = backup.get("widgets")
+    if isinstance(widgets_snapshot, dict):
+        normalized_widgets_snapshot = _normalize_visualizer_section_in_widgets_snapshot(widgets_snapshot)
+        for dotted, value in _iter_flattened_entries("widgets", normalized_widgets_snapshot):
+            _set_nested_setting(settings_manager, dotted, deepcopy(value))
+
+    transitions_snapshot = backup.get("transitions")
+    if isinstance(transitions_snapshot, dict):
+        settings_manager.set("transitions", deepcopy(transitions_snapshot))
+
+    for category, payload in backup.items():
+        if category in {"widgets", "transitions"}:
+            continue
+        if isinstance(payload, dict):
+            for dotted, value in _iter_flattened_entries(category, payload):
+                if _is_legacy_display_key(dotted):
+                    logger.debug("[PRESETS] Skipping legacy display key in custom backup restore: %s", dotted)
+                    continue
+                settings_manager.set(dotted, deepcopy(value))
+        else:
+            settings_manager.set(category, deepcopy(payload))
+
+    logger.debug(
+        "[PRESETS] Restored custom backup with %d sections", len(backup)
+    )
+
+
+def _collect_category_snapshot(
+    settings_manager: "SettingsManager", all_keys: List[str], category: str
+) -> Dict[str, Any]:
+    """Reconstruct nested data for dotted sections like display/sources."""
+
+    prefix = f"{category}."
+    snapshot: Dict[str, Any] = {}
+
+    for key in all_keys:
+        if not key.startswith(prefix):
+            continue
+        tail = key[len(prefix):]
+        value = settings_manager.get(key)
+        if value is None:
+            continue
+        _assign_nested_value(snapshot, tail.split("."), deepcopy(value))
+
+    return snapshot
+
+
+def _assign_nested_value(target: Dict[str, Any], parts: List[str], value: Any) -> None:
+    """Assign *value* into *target* following *parts* path."""
+
+    current = target
+    for part in parts[:-1]:
+        node = current.get(part)
+        if not isinstance(node, dict):
+            node = {}
+            current[part] = node
+        current = node
+    current[parts[-1]] = value
+
+
+def _iter_flattened_entries(prefix: str, payload: Dict[str, Any]):
+    """Yield dotted keys for nested data under *prefix*."""
+
+    for key, value in payload.items():
+        dotted = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            yield from _iter_flattened_entries(dotted, value)
+        else:
+            yield dotted, value
+
+
+def _set_nested_setting(settings_manager: "SettingsManager", dotted_key: str, value: Any) -> None:
+    """Set a nested setting using dot notation.
+    
+    Example: _set_nested_setting(sm, "widgets.clock.enabled", True)
+    """
+    parts = dotted_key.split(".")
+    
+    if len(parts) < 2:
+        settings_manager.set(dotted_key, value)
+        return
+    
+    # For widget settings like "widgets.clock.enabled"
+    if parts[0] == "widgets" and len(parts) >= 3:
+        section = parts[1]  # e.g., "clock"
+        key = ".".join(parts[2:])  # e.g., "enabled"
+        
+        # Get current widgets dict
+        widgets = settings_manager.get("widgets", {})
+        if not isinstance(widgets, dict):
+            widgets = {}
+        
+        # Get or create section
+        if section not in widgets or not isinstance(widgets.get(section), dict):
+            widgets[section] = {}
+        
+        # Set the value - handle nested keys like "spotify_volume_enabled"
+        if "." in key:
+            # Further nested key, need to drill down
+            current = widgets[section]
+            key_parts = key.split(".")
+            for part in key_parts[:-1]:
+                if part not in current or not isinstance(current.get(part), dict):
+                    current[part] = {}
+                current = current[part]
+            current[key_parts[-1]] = value
+        else:
+            widgets[section][key] = value
+        
+        # Save back
+        settings_manager.set("widgets", widgets)
+    else:
+        # For other nested settings, use direct set
+        settings_manager.set(dotted_key, value)
+
+
+def get_current_preset_info(settings_manager: "SettingsManager") -> Dict[str, Any]:
+    """Get information about the currently selected preset.
+    
+    Returns:
+        Dict with 'key', 'name', 'description', 'index'
+    """
+    _ = settings_manager
+    preset = PRESET_DEFINITIONS["custom"]
+    
+    return {
+        "key": "custom",
+        "name": preset.name,
+        "description": preset.description,
+        "index": get_preset_index("custom"),
+    }
+
+
+def reset_non_custom_presets(settings_manager: "SettingsManager") -> None:
+    """Reset all preset definitions to their defaults, preserving Custom preset.
+    
+    This resets the preset definitions themselves (stored in custom_preset_backup
+    for Custom) but does NOT change the currently active preset selection.
+    
+    Use case: User has modified presets and wants to restore them to defaults
+    without losing their Custom preset configuration.
+    """
+    _ = settings_manager
+    logger.info("[PRESETS] Global preset reset requested but presets are retired")
+
+
+def check_and_switch_to_custom(settings_manager: "SettingsManager") -> bool:
+    """Check if current settings match the active preset, switch to custom if not.
+    
+    This should be called after user manually changes widget settings in the UI.
+    If the current preset is not "custom" and settings have diverged, it will:
+    1. Save current settings as custom backup
+    2. Switch preset marker to "custom"
+    
+    Returns:
+        True if switched to custom, False if still on original preset
+    """
+    _ = settings_manager
+    return False
+
+
+def _get_nested_setting(settings_manager: "SettingsManager", dotted_key: str) -> Any:
+    """Get a nested setting using dot notation.
+    
+    Example: _get_nested_setting(sm, "widgets.clock.enabled") -> True
+    """
+    parts = dotted_key.split(".")
+    
+    if len(parts) < 2:
+        return settings_manager.get(dotted_key)
+    
+    # For widget settings like "widgets.clock.enabled"
+    if parts[0] == "widgets" and len(parts) >= 3:
+        section = parts[1]  # e.g., "clock"
+        key = ".".join(parts[2:])  # e.g., "enabled"
+        
+        widgets = settings_manager.get("widgets", {})
+        if not isinstance(widgets, dict):
+            return None
+        
+        section_data = widgets.get(section)
+        if not isinstance(section_data, dict):
+            return None
+        
+        # Handle nested keys
+        if "." in key:
+            current = section_data
+            key_parts = key.split(".")
+            for part in key_parts[:-1]:
+                if not isinstance(current, dict):
+                    return None
+                current = current.get(part)
+                if current is None:
+                    return None
+            return current.get(key_parts[-1]) if isinstance(current, dict) else None
+        else:
+            return section_data.get(key)
+    else:
+        # For other nested settings
+        return settings_manager.get(dotted_key)
+
+
+def are_general_presets_enabled() -> bool:
+    """Global/general presets are retired and always disabled."""
+    return False
+
