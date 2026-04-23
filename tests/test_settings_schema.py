@@ -257,7 +257,6 @@ class TestSettingsSchema:
             "widgets.clock.enabled",
             "widgets.weather.enabled",
             "widgets.media.enabled",
-            "preset"
         ]
         
         for key in required_keys:

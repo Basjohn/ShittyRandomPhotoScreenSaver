@@ -117,7 +117,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --viz - Enable visualizer logging
     - --viz-diagnostics (or --viz-diag) - Enable Spotify visualizer diagnostics
     - -devblob - Enable dev-gated Blob visualizer mode
-    - --devcurve - Enable dev-gated Dev Curve visualizer mode
+    - --devcurve - Legacy no-op flag kept for compatibility
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)

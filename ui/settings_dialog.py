@@ -22,10 +22,9 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPaint
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.mc import is_mc_build
-from core.settings.presets import are_general_presets_enabled
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
-from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab, PresetsTab
+from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab
 from ui.styled_popup import StyledPopup
 from ui.tabs import shared_styles
 from ui.widgets.control_shadow import apply_shadows_to_inputs
@@ -468,9 +467,7 @@ class SettingsDialog(QDialog):
         self._background_build_scheduled = False
         self._background_tab_queue: list[int] = []
         self._acrylic_applied = False
-        self._presets_signal_connected = False
         cache = get_settings_dialog_cache()
-        self._ordered_presets = cache.ordered_presets
         stored_scroll = self._settings.get('ui.last_tab_scroll', {})
         if isinstance(stored_scroll, dict):
             for key, value in stored_scroll.items():
@@ -479,11 +476,7 @@ class SettingsDialog(QDialog):
                 except (TypeError, ValueError):
                     pass
         self._suppress_scroll_capture: bool = False
-        self._general_presets_enabled = are_general_presets_enabled()
-        self._tab_keys = ["sources", "display", "transitions", "widgets", "accessibility"]
-        if self._general_presets_enabled:
-            self._tab_keys.append("presets")
-        self._tab_keys.append("about")
+        self._tab_keys = ["sources", "display", "transitions", "widgets", "accessibility", "about"]
         self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
         self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
         self._tab_button_by_key: Dict[str, TabButton] = {}
@@ -636,8 +629,6 @@ class SettingsDialog(QDialog):
         self.widgets_tab_btn = TabButton("Widgets", "🕐")
         # Accessibility icon: wheelchair symbol for universal accessibility
         self.accessibility_tab_btn = TabButton("Accessibility", "♿")
-        # Presets icon: sliders/controls symbol for configuration presets
-        self.presets_tab_btn = TabButton("Presets", "🎚") if self._general_presets_enabled else None
         self.about_tab_btn = TabButton("About", "ℹ️")
 
         self._tab_button_by_key = {
@@ -648,8 +639,6 @@ class SettingsDialog(QDialog):
             "accessibility": self.accessibility_tab_btn,
             "about": self.about_tab_btn,
         }
-        if self._general_presets_enabled and self.presets_tab_btn is not None:
-            self._tab_button_by_key["presets"] = self.presets_tab_btn
         self.tab_buttons = [self._tab_button_by_key[key] for key in self._tab_keys]
         
         for btn in self.tab_buttons:
@@ -678,9 +667,6 @@ class SettingsDialog(QDialog):
             "accessibility": lambda: AccessibilityTab(self._settings),
             "about": self._create_about_tab,
         }
-        if self._general_presets_enabled:
-            self._tab_builders["presets"] = lambda: PresetsTab(self._settings)
-
         for key in self._tab_keys:
             placeholder = QWidget()
             placeholder.setObjectName(f"{key}_placeholder")
@@ -764,13 +750,6 @@ class SettingsDialog(QDialog):
         # blur-behind can show through semi-transparent backgrounds.
         for scroll in widget.findChildren(QScrollArea):
             scroll.viewport().setAutoFillBackground(False)
-
-        if key == "presets" and not self._presets_signal_connected and hasattr(widget, "settings_reloaded"):
-            try:
-                widget.settings_reloaded.connect(self._reload_all_tab_settings)
-                self._presets_signal_connected = True
-            except Exception:
-                logger.debug("Failed to connect presets tab refresh signal", exc_info=True)
 
         # Restore view state + scroll as soon as the tab exists so subsections pick up saved positions.
         self._restore_tab_view_state(index, widget)
@@ -1481,23 +1460,10 @@ class SettingsDialog(QDialog):
                 )
                 return
 
-            # Apply imported settings to Custom preset
-            try:
-                from core.settings.presets import apply_preset
-                # Switch to custom preset and save imported settings as custom backup
-                self._settings.set("preset", "custom")
-                apply_preset(self._settings, "custom")
-                logger.info("[SETTINGS] Imported settings applied to Custom preset")
-            except Exception:
-                logger.debug("Failed to apply imported settings to Custom preset", exc_info=True)
-
             # Reload all tabs so the UI reflects the imported configuration
             # immediately.
             try:
                 self._reload_all_tab_settings()
-                # Also refresh presets tab to show Custom is selected
-                if hasattr(self, "presets_tab"):
-                    self.presets_tab.refresh()
             except Exception:
                 logger.debug("Failed to reload settings tabs after SST import", exc_info=True)
 

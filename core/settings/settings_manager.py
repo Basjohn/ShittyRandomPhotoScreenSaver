@@ -31,6 +31,7 @@ class SettingsManager(QObject):
     # Signal emitted when settings change
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
+    _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.12
     _MANUAL_FLOOR_MAX = 1.0
@@ -104,6 +105,10 @@ class SettingsManager(QObject):
             self.cleanup_obsolete_settings()
         except Exception:
             logger.debug("Settings cleanup failed", exc_info=True)
+        try:
+            self.cleanup_legacy_global_preset_state()
+        except Exception:
+            logger.debug("Legacy global preset cleanup failed", exc_info=True)
 
         # Diagnostic snapshot so widget enable/monitor issues can be traced
         # without guessing what QSettings returned on this machine. The
@@ -254,6 +259,8 @@ class SettingsManager(QObject):
             defaults['widgets'] = dict(canonical_widgets)
         
         for key, value in defaults.items():
+            if key in self._LEGACY_GLOBAL_PRESET_KEYS:
+                continue
             if key == 'widgets':
                 # Merge any existing widgets map with canonical defaults so
                 # that legacy configs gain new sections (e.g. media) without
@@ -513,6 +520,19 @@ class SettingsManager(QObject):
         'display.fps_cap',
     })
 
+    def cleanup_legacy_global_preset_state(self) -> List[str]:
+        """Remove retired global preset schema keys from persisted settings."""
+        removed: List[str] = []
+        with self._lock:
+            for key in self._LEGACY_GLOBAL_PRESET_KEYS:
+                if self._settings.contains(key):
+                    self._settings.remove(key)
+                    removed.append(key)
+            if removed:
+                self._settings.sync()
+                logger.info("Removed legacy global preset keys: %s", removed)
+        return removed
+
     def cleanup_obsolete_settings(self) -> List[str]:
         """Remove obsolete/invalid settings from the JSON store.
         
@@ -557,17 +577,8 @@ class SettingsManager(QObject):
                 old_value = self._settings.value(key)
                 self._settings.setValue(key, value)
 
-            # Invalidate cache entries for this key (P2 optimization)
-            if self._cache_enabled:
-                prefixes = {key}
-                root_key = key.split('.')[0] if '.' in key else key
-                prefixes.add(root_key)
-                keys_to_remove = [
-                    cache_k for cache_k in self._cache
-                    if any(cache_k.startswith(f"{prefix}:") for prefix in prefixes)
-                ]
-                for cache_k in keys_to_remove:
-                    del self._cache[cache_k]
+            # Invalidate cache entries for this key/root (P2 optimization)
+            self._invalidate_cache_for_key_locked(key)
 
             # Immediate sync for critical settings to prevent data loss
             root_key = key.split('.')[0] if '.' in key else key
@@ -592,6 +603,31 @@ class SettingsManager(QObject):
             logger.debug("Setting changed: %s: %r -> %r", key, old_value, value)
         else:
             logger.debug("Setting changed: %s", key)
+
+    def _invalidate_cache_for_key_locked(self, key: str) -> None:
+        """Invalidate cached values tied to *key* (and descendants)."""
+        if not self._cache_enabled:
+            return
+        key_text = str(key or "")
+        if not key_text:
+            self._cache.clear()
+            return
+        key_root = key_text.split(".", 1)[0]
+        keys_to_remove: list[str] = []
+        for cache_key in list(self._cache.keys()):
+            cache_name = cache_key.split(":", 1)[0]
+            if not cache_name:
+                keys_to_remove.append(cache_key)
+                continue
+            if (
+                cache_name == key_text
+                or cache_name.startswith(f"{key_text}.")
+                or cache_name == key_root
+                or cache_name.startswith(f"{key_root}.")
+            ):
+                keys_to_remove.append(cache_key)
+        for cache_key in keys_to_remove:
+            self._cache.pop(cache_key, None)
 
     def set_many(self, values: Mapping[str, Any]) -> None:
         """Set multiple settings in one call."""
@@ -756,26 +792,6 @@ class SettingsManager(QObject):
                 self._settings.setValue('display.hw_accel', expected_hw)
                 repairs['display.hw_accel'] = "Missing key"
             
-            # Validate spotify visualizer sensitivity - must be in valid range (0.25-2.5)
-            # Fix for corrupted sensitivity values that cause poor visualizer performance
-            vis_sensitivity = self._settings.value('widgets.spotify_visualizer.sensitivity')
-            if vis_sensitivity is not None:
-                try:
-                    sens_val = float(vis_sensitivity)
-                    # If sensitivity is below 0.5, it's likely corrupted - reset to default 1.0
-                    if sens_val < 0.5:
-                        logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} < 0.5 (likely corrupted)")
-                        self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
-                        repairs['widgets.spotify_visualizer.sensitivity'] = f"Out of range: {sens_val}"
-                    elif sens_val > 2.5:
-                        logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: {sens_val} > 2.5")
-                        self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
-                        repairs['widgets.spotify_visualizer.sensitivity'] = f"Out of range: {sens_val}"
-                except (ValueError, TypeError):
-                    logger.warning(f"Repairing widgets.spotify_visualizer.sensitivity: invalid value {vis_sensitivity!r}")
-                    self._settings.setValue('widgets.spotify_visualizer.sensitivity', 1.0)
-                    repairs['widgets.spotify_visualizer.sensitivity'] = f"Invalid value: {vis_sensitivity!r}"
-
             # Validate widgets - must be dict
             widgets = self._settings.value('widgets')
             if widgets is not None and not isinstance(widgets, Mapping):
@@ -929,38 +945,22 @@ class SettingsManager(QObject):
         logger.debug(f"Registered change handler for {key}")
     
     def reset_to_defaults(self) -> None:
-        """Reset all settings to default values, preserving user-specific data.
-        
-        Preserved settings (not reset):
-        - sources.folders (user's image folders)
-        - sources.rss_feeds (user's RSS feeds)  
-        - widgets.weather.location (auto-detected or user-set)
-        - widgets.weather.latitude (auto-detected)
-        - widgets.weather.longitude (auto-detected)
-        """
-        from core.settings.defaults import get_default_settings
+        """Reset all settings to default values, preserving configured user data."""
+        from core.settings.defaults import PRESERVE_ON_RESET, get_default_settings
         
         with self._lock:
             # Preserve user-specific data before clearing
-            preserved: dict = {}
-            
-            # Preserve source folders and feeds
-            folders = self._settings.value('sources.folders')
-            if folders:
-                preserved['sources.folders'] = folders
-            rss_feeds = self._settings.value('sources.rss_feeds')
-            if rss_feeds:
-                preserved['sources.rss_feeds'] = rss_feeds
-            
-            # Preserve weather location/geo data from widgets map
-            widgets_raw = self._settings.value('widgets')
-            if isinstance(widgets_raw, Mapping):
-                widgets_map = dict(widgets_raw)
-                weather = widgets_map.get('weather', {})
-                if isinstance(weather, Mapping):
-                    for key in ('location', 'latitude', 'longitude'):
-                        if key in weather:
-                            preserved[f'widgets.weather.{key}'] = weather[key]
+            preserved: dict[str, Any] = {}
+            for key in sorted(PRESERVE_ON_RESET):
+                structured_present = self._contains_structured_key_locked(key)
+                if structured_present is None and not self._settings.contains(key):
+                    continue
+                if structured_present is False:
+                    continue
+                value = self.get(key, self._MISSING)
+                if value is self._MISSING:
+                    continue
+                preserved[key] = deepcopy(value)
             
             # Clear and apply canonical defaults
             self._settings.clear()
@@ -986,6 +986,8 @@ class SettingsManager(QObject):
                 return items
             
             for section, value in defaults.items():
+                if section in self._LEGACY_GLOBAL_PRESET_KEYS:
+                    continue
                 if section in nested_sections:
                     # Store as nested dict
                     self._settings.setValue(section, value)
@@ -997,14 +999,13 @@ class SettingsManager(QObject):
                 else:
                     self._settings.setValue(section, value)
             
-            # Restore preserved user-specific data using flat dot-notation keys
-            if 'sources.folders' in preserved:
-                self._settings.setValue('sources.folders', preserved['sources.folders'])
-            
-            if 'sources.rss_feeds' in preserved:
-                self._settings.setValue('sources.rss_feeds', preserved['sources.rss_feeds'])
-            
-            # Restore weather geo data into the nested widgets dict
+            # Restore preserved values using the same structured-key contract.
+            for key, value in preserved.items():
+                handled, _old = self._set_structured_value_locked(key, deepcopy(value))
+                if not handled:
+                    self._settings.setValue(key, deepcopy(value))
+
+            # Keep normalized visualizer defaults after any weather/widget restore.
             widgets = self._settings.value('widgets', {})
             if isinstance(widgets, Mapping):
                 widgets_dict = dict(widgets)
@@ -1014,14 +1015,6 @@ class SettingsManager(QObject):
                         vis_defaults,
                         apply_preset_overlay=False,
                     )
-                weather = widgets_dict.get('weather', {})
-                if isinstance(weather, Mapping):
-                    weather_dict = dict(weather)
-                    for key in ('location', 'latitude', 'longitude'):
-                        pkey = f'widgets.weather.{key}'
-                        if pkey in preserved:
-                            weather_dict[key] = preserved[pkey]
-                    widgets_dict['weather'] = weather_dict
                     self._settings.setValue('widgets', widgets_dict)
             
             self._settings.sync()
@@ -1059,18 +1052,7 @@ class SettingsManager(QObject):
             removed = self._remove_structured_key_locked(key)
             if not removed:
                 self._settings.remove(key)
-
-            if self._cache_enabled:
-                prefixes = {key}
-                root_key = key.split('.')[0] if isinstance(key, str) and '.' in key else key
-                if root_key:
-                    prefixes.add(root_key)
-                keys_to_remove = [
-                    cache_k for cache_k in self._cache
-                    if any(cache_k.startswith(f"{prefix}:") for prefix in prefixes if prefix)
-                ]
-                for cache_k in keys_to_remove:
-                    del self._cache[cache_k]
+            self._invalidate_cache_for_key_locked(str(key))
 
         logger.debug(f"Removed setting: {key}")
     
@@ -1233,6 +1215,7 @@ class SettingsManager(QObject):
         with self._lock:
             old_value = self._settings.value(section)
             self._settings.setValue(section, mapping)
+            self._invalidate_cache_for_key_locked(section)
 
             root_key = section.split('.')[0] if '.' in section else section
             if root_key in self._CRITICAL_KEYS or section in self._CRITICAL_KEYS:

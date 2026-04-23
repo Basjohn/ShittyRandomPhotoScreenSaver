@@ -775,6 +775,10 @@ def test_blob_curated_payload_parser_preserves_directional_shaper_nodes():
 
 @pytest.mark.qt
 def test_widgets_tab_blob_preset_payload_preserves_directional_shaper_nodes(qt_app, tmp_path):
+    from core.dev_gates import force_gate, is_blob_enabled
+
+    prior_blob_gate = is_blob_enabled()
+    force_gate(blob=True)
     manager = SettingsManager(
         organization="Test",
         application=f"BlobShaperPreset_{uuid.uuid4().hex}",
@@ -819,6 +823,7 @@ def test_widgets_tab_blob_preset_payload_preserves_directional_shaper_nodes(qt_a
         assert sv["blob_shape_reaction_nodes"] == react_nodes
         assert sv["blob_shape_energy_nodes"] == energy_nodes
     finally:
+        force_gate(blob=prior_blob_gate)
         tab.deleteLater()
 
 
@@ -841,6 +846,8 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
     mode_key,
     mode_value,
 ):
+    from core.dev_gates import force_gate, is_blob_enabled
+
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
     (curated_root / mode).mkdir(parents=True)
@@ -850,6 +857,9 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
 
+    prior_blob_gate = is_blob_enabled()
+    if mode == "blob":
+        force_gate(blob=True)
     manager = SettingsManager(
         organization="Test",
         application=f"PresetSaveOverwrite_{uuid.uuid4().hex}",
@@ -906,6 +916,8 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
             for key in preset.settings
         )
     finally:
+        if mode == "blob":
+            force_gate(blob=prior_blob_gate)
         vp._PRESETS[mode] = original_presets
         tab.deleteLater()
 
@@ -1200,12 +1212,12 @@ def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monk
 
     thunder_payload = json.loads((mode_dir / "preset_2_thunder.json").read_text(encoding="utf-8"))
     assert thunder_payload["preset_index"] == 1
-    assert thunder_payload["name"] == "Preset 2 (Thunder)"
+    assert thunder_payload["name"] == "Thunder"
     assert thunder_payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] == 2.0
 
     delta_payload = json.loads((mode_dir / "preset_3_delta.json").read_text(encoding="utf-8"))
     assert delta_payload["preset_index"] == 2
-    assert delta_payload["name"] == "Preset 3 (Delta)"
+    assert delta_payload["name"] == "Preset 4 (Delta)"
     assert delta_payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] == 4.0
 
 
@@ -1249,7 +1261,7 @@ def test_reindex_curated_presets_normalizes_first_remaining_slot_to_preset_1(tmp
 
     second_payload = json.loads((mode_dir / "preset_1_second.json").read_text(encoding="utf-8"))
     assert second_payload["preset_index"] == 0
-    assert second_payload["name"] == "Preset 1 (Second)"
+    assert second_payload["name"] == "Preset 2 (Second)"
     assert second_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 2.0
 
 
@@ -1285,7 +1297,44 @@ def test_reindex_curated_presets_unwraps_nested_preset_name_suffixes(tmp_path, m
     assert results
     _old_path, new_path, _backup = results[0]
     payload = json.loads(new_path.read_text(encoding="utf-8"))
-    assert payload["name"] == "Preset 1 (Slobber)"
+    assert payload["name"] == "Preset 4 (Preset 4 (Preset 4 (Slobber)))"
+
+
+def test_reindex_curated_presets_preserves_arbitrary_fields_and_devcurve_payload(tmp_path, monkeypatch):
+    root = tmp_path
+    mode = "devcurve"
+    mode_dir = root / "presets" / "visualizer_modes" / mode
+    mode_dir.mkdir(parents=True)
+    source = mode_dir / "preset_3_spline.json"
+    source.write_text(
+        json.dumps(
+            {
+                "name": "Spline V1",
+                "preset_index": 2,
+                "author_note": "keep me",
+                "snapshot": {
+                    "widgets": {
+                        "spotify_visualizer": {
+                            "mode": mode,
+                            "devcurve_growth": 3.14,
+                        }
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(repair, "ROOT", root)
+
+    results = repair.reindex_mode_presets(mode)
+
+    assert results
+    _old_path, new_path, _backup = results[0]
+    payload = json.loads(new_path.read_text(encoding="utf-8"))
+    assert payload["preset_index"] == 0
+    assert payload["name"] == "Spline V1"
+    assert payload["author_note"] == "keep me"
+    assert payload["snapshot"]["widgets"]["spotify_visualizer"]["devcurve_growth"] == pytest.approx(3.14)
 
 
 def test_sine_wave_6_line_preset_roundtrip_preserves_all_line_settings():

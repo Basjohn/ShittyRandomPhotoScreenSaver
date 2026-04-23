@@ -119,6 +119,28 @@ class TestSettingsManagerNestedKeys:
         assert result["weather"]["enabled"] is False
 
 
+class TestSettingsManagerCacheInvalidation:
+    def test_set_widgets_root_invalidates_dotted_cache(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set("widgets", {"clock": {"enabled": True}})
+        assert manager.get("widgets.clock.enabled") is True
+
+        widgets = manager.get("widgets")
+        widgets["clock"]["enabled"] = False
+        manager.set("widgets", widgets)
+
+        assert manager.get("widgets.clock.enabled") is False
+
+    def test_set_section_invalidates_descendant_cache(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set("transitions.type", "Fade")
+        assert manager.get("transitions.type") == "Fade"
+
+        manager.set_section("transitions", {"type": "Slide"})
+
+        assert manager.get("transitions.type") == "Slide"
+
+
 class TestSettingsManagerChangeNotifications:
     def test_settings_changed_signal_emitted(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)

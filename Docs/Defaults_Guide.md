@@ -152,7 +152,7 @@ Reddit2 defaults to `enabled: True`, `position: "Bottom Right"`, `subreddit: "Ga
 |-----|---------|-------|
 | `widgets.spotify_visualizer.visualizers_enabled` | `True` | Master toggle exposed on the Visualizers subtab. Gates all Beat Visualizer controls; runtime still requires Media widget enabled to spawn the overlay. |
 | `widgets.spotify_visualizer.enabled` | `True` | Per-mode Beat Visualizer enable (within the subtab). |
-| `widgets.spotify_visualizer.mode` | `"blob"` | spectrum/oscilloscope/sine_wave/blob/bubble/devcurve (devcurve is dev-gated by `--devcurve`; helix/starfield deprecated) |
+| `widgets.spotify_visualizer.mode` | `"blob"` | spectrum/oscilloscope/sine_wave/blob/bubble/devcurve (devcurve is available (legacy `--devcurve` flag is a no-op); helix/starfield deprecated) |
 | `widgets.spotify_visualizer.monitor` | `"ALL"` | |
 | `widgets.spotify_visualizer.bar_count` | `21` | Legacy placeholder; runtime bar counts now resolved per-mode via `SpotifyVisualizerSettings`. |
 | `widgets.spotify_visualizer.sine_line_offset_bias` | `0.7` | Controls both vertical line spread and per-line energy tint (0 = all lines share bass mix, 1 = spreads lines apart and leans lines 2/3 toward mid/high energy). |
@@ -242,10 +242,10 @@ The shipped curated tree is now regression-audited so modernized preset authorin
 | `bubble_growth` | `3.0` | Size multiplier |
 | `bubble_trail_strength` | `0.0` | *Temporarily disabled.* Slider is greyed out until gradient-taper trails are rebuilt |
 
-#### Spotify Visualizer — Dev Curve Mode
+#### Spotify Visualizer — Spline Curve Mode
 | Key | Default | Notes |
 |-----|---------|-------|
-| `preset_devcurve` | `0` | Preset index for Dev Curve mode |
+| `preset_devcurve` | `0` | Preset index for Spline Curve mode |
 | `devcurve_growth` | `3.0` | Global deformation gain |
 | `devcurve_idle_motion` | `0.20` | Constant low-energy idle motion |
 | `devcurve_idle_speed` | `0.60` | Idle motion evolution speed |
@@ -265,7 +265,7 @@ The shipped curated tree is now regression-audited so modernized preset authorin
 | `devcurve_foreground_specular_width` | `0.022` | Foreground specular band width |
 | `devcurve_foreground_specular_offset` | `0.028` | Foreground specular vertical offset |
 | `devcurve_foreground_specular_crest_bias` | `1.05` | Crest/curvature weighting for specular placement |
-| `devcurve_ghosting_enabled` | `False` | Dev Curve-local ghost path toggle |
+| `devcurve_ghosting_enabled` | `False` | Spline Curve-local ghost path toggle |
 
 ### Workers
 | Key | Default |
@@ -497,3 +497,4 @@ For the complete set of project policies and guardrails, refer to `Docs/Guardrai
 - **Cache staleness** — If you modify settings outside `SettingsManager.set()`, the cache won't update. Always go through the manager.
 - **MC vs Standard confusion** — They use separate JSON files. A setting changed in MC mode won't appear in standard mode and vice versa.
 - **`PRESERVE_ON_RESET`** — If you add a user-specific key (like API keys or geo data), add it to this set.
+

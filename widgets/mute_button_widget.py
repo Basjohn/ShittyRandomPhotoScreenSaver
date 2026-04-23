@@ -37,6 +37,7 @@ class MuteButtonWidget(QWidget):
         self._thread_manager: Optional[ThreadManager] = None
         self._has_faded_in: bool = False
         self._mute_poll_active: bool = False
+        self._spotify_secondary_stage_started: bool = False
 
         # Visual feedback on click
         self._feedback_alpha: float = 0.0
@@ -93,6 +94,11 @@ class MuteButtonWidget(QWidget):
 
     def sync_visibility_with_anchor(self) -> None:
         """Show/hide based on anchor media widget visibility and enabled state."""
+        if (
+            getattr(self, "_spotify_secondary_stage_registered", False)
+            and not self._spotify_secondary_stage_started
+        ):
+            return
         sync_anchor_dependent_visibility(
             self,
             anchor=self._anchor_media,
@@ -120,6 +126,7 @@ class MuteButtonWidget(QWidget):
             if duration_ms is None
             else max(0, int(duration_ms))
         )
+        self.update_position()
         if resolved_duration_ms <= 0:
             self.show()
             self.raise_()
@@ -167,6 +174,22 @@ class MuteButtonWidget(QWidget):
             self.show()
             self.raise_()
             self._has_faded_in = True
+
+    def begin_spotify_secondary_stage(self) -> None:
+        """Start mute button reveal during the Spotify secondary startup pass."""
+        if not self._enabled or not self._available:
+            return
+        anchor = self._anchor_media
+        if anchor is None:
+            return
+        try:
+            if not anchor.isVisible():
+                return
+        except Exception:
+            return
+        self._spotify_secondary_stage_started = True
+        self.update_position()
+        self.sync_visibility_with_anchor()
 
     def update_position(self) -> None:
         """Position the button relative to the anchored media widget.

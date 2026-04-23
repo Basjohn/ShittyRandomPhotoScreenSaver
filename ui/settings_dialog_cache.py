@@ -10,7 +10,6 @@ from typing import Any, Dict, List
 from PySide6.QtGui import QFontDatabase
 
 from core.settings.defaults import get_default_settings
-from core.settings.presets import get_ordered_presets
 from core.settings.storage_paths import get_cache_dir
 
 
@@ -21,7 +20,6 @@ class SettingsDialogCacheData:
     defaults_generation: float
     defaults: Dict[str, Any]
     widget_defaults: Dict[str, Any]
-    ordered_presets: List[str]
     font_families: List[str]
     last_refresh_ts: float
 
@@ -58,7 +56,6 @@ def _load_persisted_cache() -> SettingsDialogCacheData | None:
             defaults_generation=float(data["defaults_generation"]),
             defaults=data["defaults"],
             widget_defaults=data.get("widget_defaults", {}),
-            ordered_presets=data.get("ordered_presets", []),
             font_families=data.get("font_families", []),
             last_refresh_ts=float(data.get("last_refresh_ts", 0.0)),
         )
@@ -90,7 +87,6 @@ def get_settings_dialog_cache() -> SettingsDialogCacheData:
 
     defaults = get_default_settings()
     widget_defaults = defaults.get("widgets", {}) if isinstance(defaults, dict) else {}
-    ordered_presets = get_ordered_presets()
 
     font_db = QFontDatabase()
     font_families = list(font_db.families())
@@ -99,7 +95,6 @@ def get_settings_dialog_cache() -> SettingsDialogCacheData:
         defaults_generation=generation,
         defaults=defaults,
         widget_defaults=widget_defaults,
-        ordered_presets=ordered_presets,
         font_families=font_families,
         last_refresh_ts=time.time(),
     )

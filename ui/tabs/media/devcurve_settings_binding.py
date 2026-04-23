@@ -1,4 +1,4 @@
-"""Dev Curve settings load/save binding helpers."""
+"""Spline Curve settings load/save binding helpers."""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -285,3 +285,4 @@ def collect_devcurve_mode_settings(tab) -> dict[str, Any]:
 
 
 __all__ = ["load_devcurve_mode_settings", "collect_devcurve_mode_settings"]
+

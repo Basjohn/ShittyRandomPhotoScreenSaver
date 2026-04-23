@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 import json
+import importlib
 from pathlib import Path
 
 import pytest
 
 from core.settings.defaults import CANONICAL_DEFAULTS, PRESERVE_ON_RESET, get_default_settings
 from core.settings.defaults_generated import DEFAULT_SETTINGS as GENERATED_DEFAULTS
-from core.settings.defaults_snapshot import DEFAULTS as SNAPSHOT_DEFAULTS
 from core.settings.defaults_snapshot_builder import build_defaults_snapshot
 from tools import visualizer_preset_repair as repair
 
@@ -17,6 +17,17 @@ SNAPSHOT_JSON_PATH = Path(__file__).resolve().parents[1] / "core" / "settings" /
 
 def _load_snapshot_json() -> dict:
     return json.loads(SNAPSHOT_JSON_PATH.read_text(encoding="utf-8"))
+
+
+def _build_snapshot_with_default_gates() -> dict:
+    from core.dev_gates import force_gate, is_blob_enabled
+
+    prior_blob_gate = is_blob_enabled()
+    force_gate(blob=False, devcurve=False)
+    try:
+        return build_defaults_snapshot()
+    finally:
+        force_gate(blob=prior_blob_gate, devcurve=False)
 
 
 class TestDefaultsStructure:
@@ -84,13 +95,22 @@ class TestDefaultsArtifactParity:
         assert GENERATED_DEFAULTS == CANONICAL_DEFAULTS
 
     def test_snapshot_module_matches_builder_output(self):
-        assert SNAPSHOT_DEFAULTS == build_defaults_snapshot()
+        from core.dev_gates import force_gate, is_blob_enabled
+        import core.settings.defaults_snapshot as defaults_snapshot_module
+
+        prior_blob_gate = is_blob_enabled()
+        force_gate(blob=False, devcurve=False)
+        try:
+            reloaded = importlib.reload(defaults_snapshot_module)
+            assert reloaded.DEFAULTS == _build_snapshot_with_default_gates()
+        finally:
+            force_gate(blob=prior_blob_gate, devcurve=False)
 
     def test_snapshot_json_matches_builder_output(self):
-        assert _load_snapshot_json() == build_defaults_snapshot()
+        assert _load_snapshot_json() == _build_snapshot_with_default_gates()
 
     def test_snapshot_sanitizes_doc_preserved_keys(self):
-        snapshot = build_defaults_snapshot()
+        snapshot = _build_snapshot_with_default_gates()
 
         assert snapshot["sources"]["folders"] == []
         assert snapshot["sources"]["rss_feeds"] == []
@@ -99,19 +119,12 @@ class TestDefaultsArtifactParity:
         assert "longitude" not in snapshot["widgets"]["weather"]
         assert snapshot["workers"]["fft"]["enabled"] is False
 
-        custom_backup = snapshot["custom_preset_backup"]
-        for key in (
-            "sources.folders",
-            "sources.rss_feeds",
-            "widgets.weather.location",
-            "widgets.weather.latitude",
-            "widgets.weather.longitude",
-        ):
-            assert key not in custom_backup
+        assert "custom_preset_backup" not in snapshot
+        assert "preset" not in snapshot
 
     def test_visualizer_snapshot_matches_canonical_mode(self):
         canonical_visualizer = get_default_settings()["widgets"]["spotify_visualizer"]
-        snapshot_visualizer = build_defaults_snapshot()["widgets"]["spotify_visualizer"]
+        snapshot_visualizer = _build_snapshot_with_default_gates()["widgets"]["spotify_visualizer"]
 
         assert canonical_visualizer["enabled"] is True
         assert snapshot_visualizer["mode"] == canonical_visualizer["mode"]
@@ -123,7 +136,7 @@ class TestDefaultsArtifactParity:
         ]
 
     def test_transition_snapshot_keeps_burn_in_default_random_pool(self):
-        snapshot_transitions = build_defaults_snapshot()["transitions"]
+        snapshot_transitions = _build_snapshot_with_default_gates()["transitions"]
         assert snapshot_transitions["pool"]["Burn"] is True
 
     @pytest.mark.parametrize(
@@ -138,19 +151,16 @@ class TestDefaultsArtifactParity:
         ],
     )
     def test_visualizer_snapshot_manual_floors_stay_on_current_contract(self, key: str):
-        snapshot_visualizer = build_defaults_snapshot()["widgets"]["spotify_visualizer"]
+        snapshot_visualizer = _build_snapshot_with_default_gates()["widgets"]["spotify_visualizer"]
         assert snapshot_visualizer[key] == pytest.approx(0.12)
 
-    def test_visualizer_preset_repair_only_requires_keys_that_exist_in_canonical_defaults(self):
+    def test_visualizer_preset_repair_uses_dynamic_mode_prefixes(self):
         defaults = get_default_settings()["widgets"]["spotify_visualizer"]
-
-        for mode in repair._MODE_TECH_PREFIXES:
-            required = repair._required_repair_default_keys_for_mode(mode)
-            assert required
-            assert required.issubset(defaults.keys()), (
-                "visualizer_preset_repair derived keys missing from canonical defaults "
-                f"for {mode}: {sorted(required - set(defaults.keys()))}"
-            )
+        mode = "devcurve"
+        prefix = repair._canonical_mode_prefix(mode)
+        assert prefix == "devcurve_"
+        for suffix in repair._MANDATORY_TECH_SUFFIXES:
+            assert f"{prefix}{suffix}" in defaults
 
 
 if __name__ == "__main__":

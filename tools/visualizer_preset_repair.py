@@ -71,13 +71,6 @@ _DEPRECATED_BLOB_AUTHORED_KEYS: Tuple[str, ...] = (
     "blob_stretch_y_bias",
 )
 
-_MODE_TECH_PREFIXES: Dict[str, str] = {
-    "spectrum": "spectrum_",
-    "bubble": "bubble_",
-    "blob": "blob_",
-    "sine_wave": "sine_wave_",
-    "oscilloscope": "oscilloscope_",
-}
 _BLOB_SHAPER_ONLY_KEYS: Tuple[str, ...] = (
     "blob_shape_base_nodes",
     "blob_shape_reaction_nodes",
@@ -166,7 +159,6 @@ class ReindexEntry:
     path: Path
     payload: Dict[str, Any]
     current_index: int | None
-    suffix: str | None
 
 
 def _load_visualizer_defaults() -> Dict[str, Any]:
@@ -192,10 +184,15 @@ def _canonical_mode_prefix(mode: str) -> str:
     return f"{mode}_"
 
 
+def _mode_tech_prefix(mode: str) -> str:
+    """Return the canonical per-mode technical key prefix for *mode*."""
+    return _canonical_mode_prefix(mode)
+
+
 def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> None:
     """Copy legacy global tech settings (e.g. manual_floor) into per-mode keys."""
 
-    prefix = _MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))
+    prefix = _mode_tech_prefix(mode)
     for suffix in _MANDATORY_TECH_SUFFIXES:
         global_key = suffix
         mode_key = f"{prefix}{suffix}"
@@ -207,7 +204,7 @@ def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> 
 
 def _strip_deprecated_curated_keys(mode: str, sanitized: Dict[str, Any]) -> None:
     """Curated authored payloads should not keep deprecated compat keys alive."""
-    prefix = _MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))
+    prefix = _mode_tech_prefix(mode)
     for suffix in _DEPRECATED_COMPAT_TECH_SUFFIXES:
         sanitized.pop(suffix, None)
         sanitized.pop(f"{prefix}{suffix}", None)
@@ -285,7 +282,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
 
     authored_keys = set(original_filtered.keys())
     promoted_mode_keys = {
-        f"{_MODE_TECH_PREFIXES.get(mode, _canonical_mode_prefix(mode))}{suffix}"
+        f"{_mode_tech_prefix(mode)}{suffix}"
         for suffix in _MANDATORY_TECH_SUFFIXES
         if suffix in original_filtered
     }
@@ -486,58 +483,6 @@ def _ensure_backup(path: Path) -> Path:
     return primary
 
 
-def _reindex_preset_name(original_name: str, target_index: int) -> str:
-    """Canonicalize a preset display name to ``Preset N`` plus one clean suffix."""
-    if not original_name:
-        return f"Preset {target_index + 1}"
-
-    suffix = _suffix_from_payload_name(original_name)
-    while isinstance(suffix, str) and re.match(r"^preset[\s_-]*\d+", suffix, flags=re.IGNORECASE):
-        nested = _suffix_from_payload_name(suffix)
-        if not nested or nested == suffix:
-            break
-        suffix = nested
-
-    if suffix:
-        return f"Preset {target_index + 1} ({suffix})"
-    return f"Preset {target_index + 1}"
-
-
-def _cleanup_suffix_text(value: str | None) -> str | None:
-    if not value:
-        return None
-    cleaned = re.sub(r"[_-]+", " ", str(value)).strip()
-    cleaned = cleaned.strip("() ")
-    return cleaned or None
-
-
-def _suffix_from_payload_name(name: Any) -> str | None:
-    if not isinstance(name, str):
-        return None
-    candidate = name.strip()
-    if not candidate:
-        return None
-    match = re.match(r"^preset[\s_-]*\d+(?:[\s_-]*\((.+)\)|[\s_-]+(.+))?$", candidate, flags=re.IGNORECASE)
-    if match:
-        return _cleanup_suffix_text(match.group(1) or match.group(2))
-    return _cleanup_suffix_text(candidate)
-
-
-def _suffix_from_path_stem(path: Path) -> str | None:
-    inferred = vp._infer_suffix_from_name(path.stem)  # type: ignore[attr-defined]
-    if inferred:
-        return _cleanup_suffix_text(inferred)
-    stem = re.sub(r"^preset[\s_-]*\d+[\s_-]*", "", path.stem, flags=re.IGNORECASE).strip()
-    return _cleanup_suffix_text(stem)
-
-
-def _slugify_suffix(suffix: str | None) -> str:
-    if not suffix:
-        return ""
-    slug = re.sub(r"[^a-z0-9]+", "_", suffix.lower()).strip("_")
-    return slug
-
-
 def _load_reindex_entry(mode: str, path: Path) -> ReindexEntry:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -545,13 +490,11 @@ def _load_reindex_entry(mode: str, path: Path) -> ReindexEntry:
     current_index = payload.get("preset_index")
     if not isinstance(current_index, int):
         current_index = vp._infer_preset_index_from_name(path.stem)  # type: ignore[attr-defined]
-    suffix = _suffix_from_payload_name(payload.get("name")) or _suffix_from_path_stem(path)
     return ReindexEntry(
         mode=mode,
         path=path,
         payload=payload,
         current_index=current_index,
-        suffix=suffix,
     )
 
 
@@ -583,8 +526,6 @@ def _ordered_reindex_entries(entries: List[ReindexEntry]) -> List[ReindexEntry]:
 def _canonical_reindexed_payload(entry: ReindexEntry, target_index: int) -> Dict[str, Any]:
     payload = deepcopy(entry.payload)
     payload["preset_index"] = target_index
-    original_name = str(entry.payload.get("name") or "").strip()
-    payload["name"] = _reindex_preset_name(original_name, target_index)
     return payload
 
 
@@ -1024,7 +965,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--reindex-curated",
         action="store_true",
-        help="Normalize curated preset indices, names, and filenames into sequential preset slots per mode.",
+        help="Normalize curated preset indices and filenames into sequential preset slots per mode.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 

@@ -246,24 +246,14 @@ def test_about_tab_uses_replace_visualizers_button(qapp, settings_manager, anima
     assert dialog.reset_visualizers_btn is dialog.replace_visualizers_btn
 
 
-def test_settings_dialog_hides_general_presets_tab_by_default(
-    qapp, settings_manager, animation_manager, monkeypatch
-):
-    monkeypatch.delenv("SRPSS_ENABLE_GENERAL_PRESETS", raising=False)
-    dialog = SettingsDialog(settings_manager, animation_manager)
-
-    assert "presets" not in dialog._tab_keys
-    assert dialog.presets_tab_btn is None
-
-
-def test_settings_dialog_shows_general_presets_tab_when_env_enabled(
+def test_settings_dialog_does_not_expose_legacy_presets_tab(
     qapp, settings_manager, animation_manager, monkeypatch
 ):
     monkeypatch.setenv("SRPSS_ENABLE_GENERAL_PRESETS", "1")
     dialog = SettingsDialog(settings_manager, animation_manager)
 
-    assert "presets" in dialog._tab_keys
-    assert dialog.presets_tab_btn is not None
+    assert "presets" not in dialog._tab_keys
+    assert dialog._tab_index_for_key("presets") == -1
 
 
 def test_replace_visualizers_source_root_is_script_safe(qapp, settings_manager, animation_manager):

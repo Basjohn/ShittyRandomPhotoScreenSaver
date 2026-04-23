@@ -1,4 +1,4 @@
-"""Dev Curve visualizer UI builder (gated by ``--devcurve``)."""
+"""Spline Curve visualizer UI builder."""
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -30,7 +30,7 @@ _TOOLTIP_LAYER_ENABLED = "Enable/disable this layer's rendering and audio respon
 _TOOLTIP_LAYER_ALPHA = "Fill opacity for this layer only."
 _TOOLTIP_LAYER_OFFSET = "Vertical lane offset for this layer before audio deformation."
 _TOOLTIP_LAYER_ORDER = "Layer stack order. Higher numbers render on top of lower numbers."
-_TOOLTIP_BASE_LEVEL = "Global baseline height for all Dev Curve layers."
+_TOOLTIP_BASE_LEVEL = "Global baseline height for all Spline Curve layers."
 _TOOLTIP_MOTION_POWER = "Master reactive deformation gain for all layers."
 _TOOLTIP_IDLE_MOTION = "Constant low-energy wobble while idle or between beats."
 _TOOLTIP_IDLE_SPEED = "Travel speed of the low-energy idle wobble."
@@ -199,7 +199,7 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     layer_row.addStretch()
 
     active_color_row = add_builder_swatch_row(shaper_bucket, "Layer Color:", label_width=LABEL_WIDTH)[1]
-    tab.devcurve_active_layer_color_btn = ColorSwatchButton(title="Choose Active Dev Curve Layer Color")
+    tab.devcurve_active_layer_color_btn = ColorSwatchButton(title="Choose Active Spline Curve Layer Color")
     tab.devcurve_active_layer_color_btn.setToolTip(_TOOLTIP_LAYER_COLOR)
     active_color_row.addWidget(tab.devcurve_active_layer_color_btn)
     from ui.tabs.widgets_tab import NoWheelSlider
@@ -221,7 +221,7 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     active_color_row.addWidget(tab.devcurve_active_layer_order_label)
     active_color_row.addStretch()
     active_outline_row = add_builder_swatch_row(shaper_bucket, "Outline:", label_width=LABEL_WIDTH)[1]
-    tab.devcurve_active_layer_outline_color_btn = ColorSwatchButton(title="Choose Active Dev Curve Layer Outline Color")
+    tab.devcurve_active_layer_outline_color_btn = ColorSwatchButton(title="Choose Active Spline Curve Layer Outline Color")
     tab.devcurve_active_layer_outline_color_btn.setToolTip(_TOOLTIP_LAYER_OUTLINE_COLOR)
     active_outline_row.addWidget(tab.devcurve_active_layer_outline_color_btn)
     tab.devcurve_active_layer_outline_width = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -683,3 +683,4 @@ def build_devcurve_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         auto_switch=True,
     )
     tab.devcurve_ghost_decay.setToolTip(_TOOLTIP_GHOST_DECAY)
+

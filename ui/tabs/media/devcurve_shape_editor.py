@@ -1,10 +1,10 @@
-"""Interactive Dev Curve shape editor — node-based spline control.
+"""Interactive Spline Curve shape editor — node-based spline control.
 
 Left-click on empty space adds a control node (up to MAX_NODES).
 Right-click on a node removes it (minimum 1 must remain).
 Drag nodes to reshape the bar-height profile curve.
 
-Dev Curve uses the full width editor by default (left→right), with
+Spline Curve uses the full width editor by default (left→right), with
 explicit lane markers for Bass/Vocals/Mids/Transients.
 """
 from __future__ import annotations
@@ -206,7 +206,7 @@ def interpolate_nodes_mirrored(nodes: List[List[float]], num_bars: int) -> List[
 # ── Widget ───────────────────────────────────────────────────────────
 
 class DevCurveShapeEditor(QWidget):
-    """Interactive node-based Dev Curve shape editor widget.
+    """Interactive node-based Spline Curve shape editor widget.
 
     In mirrored mode the **visible editing area** is the left half of the
     plot (representing the center→edge half of the spectrum).  The right
@@ -864,3 +864,4 @@ class DevCurveShapeEditor(QWidget):
                 Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
                 label,
             )
+

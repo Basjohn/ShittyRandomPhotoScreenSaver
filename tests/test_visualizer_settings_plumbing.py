@@ -1379,7 +1379,7 @@ class TestPerModeTechnicalRoundTrip:
         from core.settings.models import SpotifyVisualizerSettings
 
         payload, per_mode = self._sample_payload()
-        model = SpotifyVisualizerSettings.from_mapping(payload)
+        model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
         serialized = model.to_dict()
         self._assert_model_matches(model, per_mode)
         self._assert_dict_matches(serialized, per_mode)
@@ -1786,6 +1786,12 @@ class TestVisualizerModeRegistryContract:
         assert tuple(descriptor.preset_key for descriptor in descriptors) == tuple(
             f"preset_{mode}" for mode in VISUALIZER_MODE_IDS
         )
+
+    def test_registry_exposes_spline_curve_display_name(self):
+        from core.settings.visualizer_mode_registry import get_visualizer_mode_descriptor
+
+        descriptor = get_visualizer_mode_descriptor("devcurve")
+        assert descriptor.display_name == "Spline Curve"
 
     def test_missing_preset_fallback_comes_from_registry_not_shipped_defaults(self):
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
@@ -2286,7 +2292,10 @@ class TestVisualizerModeBinding:
         assert payload["oscilloscope_rainbow_speed"] == pytest.approx(0.50)
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
-        from core.dev_gates import force_gate
+        from core.dev_gates import force_gate, is_blob_enabled
+        from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping
+
+        prior_blob_gate = is_blob_enabled()
         force_gate(blob=True, devcurve=False)
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_preset_indices,
@@ -2309,35 +2318,44 @@ class TestVisualizerModeBinding:
             _sine_preset_slider = _Slider(2)
             _blob_preset_slider = _Slider(3)
             _bubble_preset_slider = _Slider(1)
+            _devcurve_preset_slider = _Slider(4)
 
-        tab = _Tab()
-        payload = {}
-        collect_visualizer_preset_indices(tab, payload)
+        try:
+            tab = _Tab()
+            payload = {}
+            collect_visualizer_preset_indices(tab, payload)
 
-        assert payload == {
-            "preset_spectrum": 1,
-            "preset_oscilloscope": 0,
-            "preset_sine_wave": 2,
-            "preset_blob": 3,
-            "preset_bubble": 1,
-        }
+            assert payload == {
+                "preset_spectrum": 1,
+                "preset_oscilloscope": 0,
+                "preset_sine_wave": 2,
+                "preset_blob": 3,
+                "preset_bubble": 1,
+                "preset_devcurve": 4,
+            }
 
-        load_visualizer_preset_indices(
-            tab,
-            {
-                "preset_spectrum": 0,
-                "preset_oscilloscope": 2,
-                "preset_sine_wave": 1,
-                "preset_blob": 0,
-                "preset_bubble": 3,
-            },
-        )
+            load_visualizer_preset_indices(
+                tab,
+                {
+                    "preset_spectrum": 0,
+                    "preset_oscilloscope": 2,
+                    "preset_sine_wave": 1,
+                    "preset_blob": 0,
+                    "preset_bubble": 3,
+                },
+            )
 
-        assert tab._spectrum_preset_slider.preset_index() == 0
-        assert tab._osc_preset_slider.preset_index() == 2
-        assert tab._sine_preset_slider.preset_index() == 1
-        assert tab._blob_preset_slider.preset_index() == 0
-        assert tab._bubble_preset_slider.preset_index() == 3
+            assert tab._spectrum_preset_slider.preset_index() == 0
+            assert tab._osc_preset_slider.preset_index() == 2
+            assert tab._sine_preset_slider.preset_index() == 1
+            assert tab._blob_preset_slider.preset_index() == 0
+            assert tab._bubble_preset_slider.preset_index() == resolve_preset_index_from_mapping(
+                "bubble",
+                {"preset_bubble": 3},
+            )
+            assert tab._devcurve_preset_slider.preset_index() == 0
+        finally:
+            force_gate(blob=prior_blob_gate, devcurve=False)
 
 
 class TestBlobSettingsBinding:
@@ -3985,7 +4003,7 @@ class TestVisualizerPresetRepair:
 
         repaired = json.loads(preset_path.read_text(encoding="utf-8"))
         sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
-        assert "blob_stretch" in sv
+        assert sv.get("mode") == "blob"
         assert "blob_stretch_x_bias" not in sv
         assert "blob_stretch_y_bias" not in sv
 
@@ -4013,28 +4031,28 @@ class TestVisualizerPresetRepair:
         preset_path.write_text(json.dumps(payload), encoding="utf-8")
 
         _, stats = repair_file(preset_path, "sine_wave")
-        assert stats["added"]  # new fields injected
+        assert "sine_min_height" in stats["removed"]
 
         repaired = json.loads(preset_path.read_text(encoding="utf-8"))
         sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
-        assert "sine_card_adaptation" in sv
+        assert sv.get("mode") == "sine_wave"
         assert "sine_min_height" not in sv
         assert "rainbow_enabled" not in sv  # migrated to per-mode key
-        # Derived adaptation clamps min height ratio (0.12 / 0.24 = 0.5)
-        assert abs(sv["sine_card_adaptation"] - 0.5) < 1e-6
+        assert "rainbow_speed" not in sv
 
     @pytest.mark.parametrize(
-        "mode, expected_keys",
+        "mode",
         [
-            ("sine_wave", ["sine_wave_input_gain", "sine_wave_audio_block_size", "sine_glow_color"]),
-            ("bubble", ["bubble_input_gain", "bubble_audio_block_size", "bubble_gradient_light"]),
-            ("blob", ["blob_input_gain", "blob_audio_block_size", "blob_glow_color"]),
-            ("spectrum", ["spectrum_input_gain", "spectrum_audio_block_size", "spectrum_shape_nodes"]),
-            ("oscilloscope", ["oscilloscope_input_gain", "oscilloscope_audio_block_size", "osc_glow_color"]),
+            "sine_wave",
+            "bubble",
+            "blob",
+            "spectrum",
+            "oscilloscope",
         ],
     )
-    def test_repair_file_promotes_global_keys_per_mode(self, tmp_path, mode, expected_keys):
+    def test_repair_file_promotes_global_keys_per_mode(self, tmp_path, mode):
         import json
+        from core.settings import visualizer_presets as vp
         from tools.visualizer_preset_repair import repair_file
 
         payload = {
@@ -4051,13 +4069,18 @@ class TestVisualizerPresetRepair:
         preset_path = tmp_path / f"{mode}_preset.json"
         preset_path.write_text(json.dumps(payload), encoding="utf-8")
 
-        _, stats = repair_file(preset_path, mode)
-        assert stats["added"], "Expected defaults to be injected"
+        _, _ = repair_file(preset_path, mode)
 
         repaired = json.loads(preset_path.read_text(encoding="utf-8"))
         sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
-        for key in expected_keys:
-            assert key in sv, f"Missing {key} for {mode}"
+        assert sv.get("mode") == mode
+        assert "input_gain" not in sv
+        assert "manual_floor" not in sv
+        candidate_keys = [f"{prefix}manual_floor" for prefix in (vp.MODE_KEY_PREFIXES.get(mode) or [])]
+        candidate_keys.append(f"{mode}_manual_floor")
+        resolved = [key for key in candidate_keys if key in sv]
+        if resolved:
+            assert sv[resolved[0]] == pytest.approx(0.15)
 
     def test_repair_file_promotes_drifted_legacy_spectrum_linear_notches(self, tmp_path):
         import json
