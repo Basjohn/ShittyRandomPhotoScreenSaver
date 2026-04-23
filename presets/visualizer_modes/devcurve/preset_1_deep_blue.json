@@ -1,64 +1,206 @@
 {
-  "description": "Default Dev Curve reference preset.",
   "mode": "devcurve",
   "name": "Preset 1 (Deep Blue)",
   "preset_index": 0,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "devcurve",
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "mode": "devcurve",
-        "devcurve_active_layer": "bass",
-        "devcurve_base_level": 0.58,
-        "devcurve_motion_power": 1.0,
-        "devcurve_idle_motion": 0.20,
-        "devcurve_idle_speed": 0.60,
+        "monitor": "ALL",
+        "bar_fill_color": [
+          0,
+          0,
+          0,
+          130
+        ],
+        "bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bar_border_opacity": 1.0,
+        "devcurve_growth": 5.0,
+        "devcurve_active_layer": "vocals",
+        "devcurve_layer_bass_shape_nodes": [
+          [
+            0.0,
+            0.49829931972789154
+          ],
+          [
+            0.24913194444444434,
+            0.491496598639456
+          ],
+          [
+            0.7508680555555554,
+            0.49829931972789154
+          ],
+          [
+            1.0,
+            0.501700680272109
+          ]
+        ],
+        "devcurve_layer_vocals_shape_nodes": [
+          [
+            0.0,
+            0.5357142857142857
+          ],
+          [
+            0.2508680555555555,
+            0.5357142857142857
+          ],
+          [
+            0.7630208333333334,
+            0.5459183673469388
+          ],
+          [
+            1.0,
+            0.5459183673469388
+          ]
+        ],
+        "devcurve_layer_mids_shape_nodes": [
+          [
+            0.0,
+            0.321428571428572
+          ],
+          [
+            0.251736111111111,
+            0.33503401360544316
+          ],
+          [
+            0.7491319444444443,
+            0.34863945578231315
+          ],
+          [
+            1.0,
+            0.34183673469387815
+          ]
+        ],
+        "devcurve_layer_transients_shape_nodes": [
+          [
+            0.0,
+            0.030612244897959183
+          ],
+          [
+            0.24913194444444434,
+            0.030612244897959183
+          ],
+          [
+            0.7508680555555554,
+            0.02040816326530612
+          ],
+          [
+            1.0,
+            0.02721088435374169
+          ]
+        ],
+        "devcurve_base_level": 0.3,
+        "devcurve_motion_power": 1.37,
+        "devcurve_idle_motion": 0.3,
+        "devcurve_idle_speed": 0.5,
+        "devcurve_smoothness": 0.6,
         "devcurve_layer_bass_enabled": true,
-        "devcurve_layer_bass_shape_nodes": [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]],
-        "devcurve_layer_bass_color": [82, 167, 255, 230],
-        "devcurve_layer_bass_outline_color": [255, 255, 255, 255],
-        "devcurve_layer_bass_outline_width": 0.006,
-        "devcurve_layer_bass_alpha": 0.55,
-        "devcurve_layer_bass_power": 1.0,
+        "devcurve_layer_bass_color": [
+          28,
+          28,
+          134,
+          230
+        ],
+        "devcurve_layer_bass_alpha": 0.4,
+        "devcurve_layer_bass_power": 3.0,
         "devcurve_layer_bass_offset": 0.0,
+        "devcurve_layer_bass_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_bass_outline_width": 0.006,
+        "devcurve_layer_bass_order": 1,
         "devcurve_layer_vocals_enabled": true,
-        "devcurve_layer_vocals_shape_nodes": [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]],
-        "devcurve_layer_vocals_color": [136, 190, 255, 220],
-        "devcurve_layer_vocals_outline_color": [255, 255, 255, 255],
-        "devcurve_layer_vocals_outline_width": 0.006,
-        "devcurve_layer_vocals_alpha": 0.42,
-        "devcurve_layer_vocals_power": 1.0,
+        "devcurve_layer_vocals_color": [
+          76,
+          100,
+          255,
+          220
+        ],
+        "devcurve_layer_vocals_alpha": 0.97,
+        "devcurve_layer_vocals_power": 3.0,
         "devcurve_layer_vocals_offset": -0.01,
+        "devcurve_layer_vocals_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_vocals_outline_width": 0.006,
+        "devcurve_layer_vocals_order": 4,
         "devcurve_layer_mids_enabled": true,
-        "devcurve_layer_mids_shape_nodes": [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]],
-        "devcurve_layer_mids_color": [100, 145, 255, 220],
-        "devcurve_layer_mids_outline_color": [255, 255, 255, 255],
-        "devcurve_layer_mids_outline_width": 0.006,
-        "devcurve_layer_mids_alpha": 0.46,
+        "devcurve_layer_mids_color": [
+          100,
+          145,
+          255,
+          220
+        ],
+        "devcurve_layer_mids_alpha": 0.35,
         "devcurve_layer_mids_power": 1.0,
         "devcurve_layer_mids_offset": 0.01,
+        "devcurve_layer_mids_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_mids_outline_width": 0.006,
+        "devcurve_layer_mids_order": 3,
         "devcurve_layer_transients_enabled": true,
-        "devcurve_layer_transients_shape_nodes": [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]],
-        "devcurve_layer_transients_color": [215, 240, 255, 240],
-        "devcurve_layer_transients_outline_color": [255, 255, 255, 255],
-        "devcurve_layer_transients_outline_width": 0.006,
-        "devcurve_layer_transients_alpha": 0.66,
-        "devcurve_layer_transients_power": 1.15,
+        "devcurve_layer_transients_color": [
+          142,
+          67,
+          255,
+          240
+        ],
+        "devcurve_layer_transients_alpha": 0.39,
+        "devcurve_layer_transients_power": 2.3461538461538503,
         "devcurve_layer_transients_offset": 0.0,
-        "devcurve_ghosting_enabled": false,
-        "devcurve_ghost_alpha": 0.0,
+        "devcurve_layer_transients_outline_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_layer_transients_outline_width": 0.006,
+        "devcurve_layer_transients_order": 2,
+        "devcurve_ghosting_enabled": true,
+        "devcurve_ghost_alpha": 0.2,
         "devcurve_ghost_decay": 0.4,
-        "devcurve_foreground_shadow_enabled": false,
-        "devcurve_foreground_shadow_alpha": 0.36,
-        "devcurve_foreground_shadow_darken": 0.42,
-        "devcurve_foreground_shadow_offset": 0.10,
-        "devcurve_foreground_specular_enabled": false,
-        "devcurve_foreground_specular_alpha": 0.78,
-        "devcurve_foreground_specular_width": 0.022,
-        "devcurve_foreground_specular_offset": 0.028,
-        "devcurve_foreground_specular_crest_bias": 1.05
+        "devcurve_foreground_shadow_enabled": true,
+        "devcurve_foreground_shadow_alpha": 0.4,
+        "devcurve_foreground_shadow_darken": 0.9,
+        "devcurve_foreground_shadow_offset": 0.2,
+        "devcurve_foreground_specular_enabled": true,
+        "devcurve_foreground_specular_alpha": 0.99,
+        "devcurve_foreground_specular_width": 0.061,
+        "devcurve_foreground_specular_offset": 0.07,
+        "devcurve_foreground_specular_crest_bias": 1.76,
+        "devcurve_dynamic_floor": true,
+        "devcurve_manual_floor": 0.12,
+        "devcurve_dynamic_range_enabled": false,
+        "devcurve_agc_strength": 0.1,
+        "devcurve_input_gain": 1.0,
+        "devcurve_kick_lane_gain": 1.0,
+        "devcurve_transient_pulse_gain": 1.0,
+        "devcurve_transient_clamp": 1.5,
+        "devcurve_audio_block_size": 0,
+        "devcurve_adaptive_sensitivity": false,
+        "devcurve_sensitivity": 1.0,
+        "devcurve_bar_count": 30,
+        "devcurve_rainbow_enabled": false,
+        "devcurve_rainbow_speed": 0.5,
+        "mode": "devcurve"
       }
     }
-  }
+  },
+  "description": "Saved from current Settings state."
 }
-
-

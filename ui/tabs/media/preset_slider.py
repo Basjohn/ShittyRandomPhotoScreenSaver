@@ -169,7 +169,6 @@ class VisualizerPresetSlider(QWidget):
             "QPushButton { font-size: 9pt; padding: 2px 8px; }"
         )
         self._edit_btn.clicked.connect(self._open_preset_json)
-        self._edit_btn.setVisible(True)
         row.addWidget(self._edit_btn)
 
         self._custom_action_btn = QPushButton("Move To Custom")

@@ -1,8 +1,66 @@
-In this document neatly arrange, date and detail significant bugs that were fixed in the project.
-Include failed solutions and reasoning why the final solution worked. Never remove from this document unless asked, use it as a guide to avoid falling back into bad habbits.
-Section by date and type.
+Track significant bugs with clear dates, failed attempts, and final fixes.
+Keep this document as the long-term anti-regression memory for the project.
 
-## 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)
+## Quick Navigation (Numbered IDs)
+
+### Active / Unresolved
+1. [U-01 — 2026-04-17 — Blob False-Positive Visual Pass: Wrong Limiter Geometry + Runtime Transport Drift + Math-Only Tests (Unresolved)](#U-01)
+2. [U-02 — 2026-04-10 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Unresolved)](#U-02)
+3. [U-03 — 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)](#U-03)
+4. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
+
+### Recently Resolved
+1. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+2. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+3. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+4. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+5. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+6. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+7. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+
+### Archived / Legacy Context
+1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
+2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
+3. [A-03 — 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.](#A-03)
+4. [A-04 — 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch) - COMPLETELY UNRESOLVED, ALL KEYS (Except S in Screensaver build Winlogon runtime! Vital Clue!) CURRENTLY NEVER WORK, APPROACH IS FLAWED, DO NOT TOUCH WITHOUT HEAVY RESEARCH.](#A-04)
+5. [A-05 — 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)](#A-05)
+
+### Resolved Archive
+1. [R-07 — 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Resolved)](#R-07)
+2. [R-08 — 2026-02-26 / 2026-03-05 — Pixel Shift Visualizer Bleed-Through (Resolved)](#R-08)
+3. [R-09 — 2026-03-05 — Settings Spinbox/LineEdit Fill Regression (Resolved)](#R-09)
+4. [R-10 — 2026-03-06 — Widget C++ Object Already Deleted on Provider Switch (Resolved)](#R-10)
+5. [R-11 — 2026-03-14 — Visualizer Preset Tooling Regression (Resolved)](#R-11)
+6. [R-12 — 2026-04-09 — Runtime Custom Slot Replaced While Cycling Presets (Resolved)](#R-12)
+7. [R-13 — 2026-04-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted (Resolved)](#R-13)
+8. [R-14 — 2026-04-17 — Blob Inward-Liquid Runtime Handoff Broke GL Overlay Push (Resolved In Code, Visual Validation Pending)](#R-14)
+9. [R-15 — 2026-04-18 — Frozen Curated Presets Silently Fell Back to Onefile Tree (Resolved)](#R-15)
+10. [R-16 — 2026-04-18 — One-Dir Runtime Misdetected As Script + Curated Slot Drift (Resolved)](#R-16)
+11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
+
+
+
+
+## Section 1 — Resolved / Closed (Recent)
+
+<a id="R-18"></a>
+### [R-18] 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Final state:** the transient taskbar/titlebar ghost during settings startup was removed without disabling startup switches or custom styling.
+- **Root cause:** a redundant `setVisible(True)` call for the visualizer preset slider edit button in `ui/tabs/media/preset_slider.py` was triggering transient helper windows (`Qt691QWindowIcon`) during construction.
+- **What proved it:** automated harness isolation (`tools/flicker_test.py`) plus external HWND observer traces (`tools/winprobe_observer.py`) reproduced and then eliminated the ghost across targeted and full-dialog variants.
+- **Final fix:** remove the redundant explicit visibility call and keep the existing widget default visibility behavior.
+- **Why it worked:** the fix removed the actual constructor-time native-window trigger instead of masking behavior (no startup-flag restrictions, no style rollback).
+- **Harness note:** keep the flicker harness + observer pair; they are now part of the regression toolbelt for this bug family.
+
+
+<a id="R-01"></a>
+### [R-01] 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -36,7 +94,9 @@ Section by date and type.
   - prefer forged-corner paint over true outer-window rounding for this dialog family
   - treat “almost invisible bleed with no collateral regressions” as the practical success bar here, not a quest for perfect geometry at any cost
 
-## 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)
+
+<a id="R-02"></a>
+### [R-02] 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -85,7 +145,9 @@ Section by date and type.
   - do not trust preview/script success as proof of real SCR behavior
   - for this feature family, Windows launch authority matters more than queue semantics once queueing already works
 
-## 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)
+
+<a id="R-03"></a>
+### [R-03] 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -113,7 +175,9 @@ Section by date and type.
   - do not use unbounded time-based shift magnitudes in renderer fallback paths
   - preserve authored direction semantics across all fallback layers
 
-## 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)
+
+<a id="R-04"></a>
+### [R-04] 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -145,7 +209,9 @@ Section by date and type.
   - do not add post-overlay re-merge phases in visualizer preset hydration
   - if curated presets are selected, partial technical carry-over from prior custom state is a correctness bug, not a convenience feature
 
-## 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)
+
+<a id="R-05"></a>
+### [R-05] 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -174,10 +240,58 @@ Section by date and type.
   - duplicate-slot file path precedence parity test
   - snapshot override cannot rename curated slot labels
 
-######                        ######
-#### UNRESOLVED BELOW THIS LINE ####
 
-## 2026-04-17 — Blob False-Positive Visual Pass: Wrong Limiter Geometry + Runtime Transport Drift + Math-Only Tests (Unresolved)
+
+
+<a id="R-06"></a>
+### [R-06] 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Final resolved state:** All three MERGE/pollution bugs in preset loading/saving were fixed. Preset application uses CLEAR-then-APPLY at every layer, and saving only collects current-mode settings.
+- **What finally worked:** Three distinct fixes across two sessions:
+  1. **Loading path fix (2026-04-11):** Changed `apply_preset_to_config()` in `core/settings/visualizer_presets.py` to use CLEAR-then-APPLY pattern. Clears all mode-specific keys not present in the preset before applying the preset's settings.
+  2. **Saving path fix (2026-04-11):** Modified `save_media_settings()` in `ui/tabs/widgets_tab_media.py` to only collect settings for the current visualizer mode instead of collecting from all modes.
+  3. **Call-site fix (2026-04-12):** Both callers of `apply_preset_to_config` (`_on_visualizer_preset_changed` in `widgets_tab.py` and `cycle_visualizer_preset` in `widget_manager.py`) used `.update()` to merge the clean result back into the live config dict. `.update()` only adds/overwrites — it never removes stale mode-specific keys that `apply_preset_to_config` had cleared. Replaced with `restore_visualizer_snapshot()` which does proper in-place CLEAR-then-APPLY.
+- **Why the final solution worked:** It addressed all three root causes:
+  1. MERGE semantic inside `apply_preset_to_config`: The old `merged.update(preset_settings)` only overwrote keys present in the preset.
+  2. Cross-mode pollution in saving: The old save path collected settings from ALL modes.
+  3. Call-site MERGE: Even after fix #1, the callers used `.update()` to merge the returned clean dict back into the live config, re-introducing the exact same stale-key problem at the call site.
+- **Symptoms before fix:**
+  - Custom settings (shaper, others) were overriding preset application
+  - User got "stuck" on shaped blob even after explicitly choosing unshaped presets
+  - Reset did not clear the stuck state
+  - Selecting "The Mighty Blob" in settings showed selected but rendered Preset 3 behavior
+  - Custom slot may not have been surviving hotswapping
+  - When user saved a custom preset (e.g., Bubble Preset 4 → Custom → Save As Preset 9), the saved preset contained incorrect reactions and behavior due to pollution from other modes' default values
+- **Root causes:**
+  1. **BUG #1 - MERGE Semantic:** `apply_preset_to_config()` used `merged.update(preset_settings)` which only overwrote keys present in preset. Keys not in preset (e.g., `blob_shaper_enabled`) persisted from previous config.
+  2. **BUG #2 - Cross-Mode Pollution:** `save_media_settings()` collected settings from ALL modes (`collect_spectrum_mode_settings()`, `collect_bubble_mode_settings()`, etc.). Inactive modes returned fallback defaults that polluted saved presets.
+  3. **BUG #3 - Call-Site MERGE:** `_on_visualizer_preset_changed` and `cycle_visualizer_preset` used `vis_config.update(applied)` to merge the clean result of `apply_preset_to_config` back into the live dict. Since `.update()` only adds/overwrites, stale mode-specific keys (like `blob_shaper_enabled: true` from Custom) survived into curated presets that never declared them.
+- **Affected modes:** ALL visualizer modes (Blob, Spectrum, Bubble, Sine Wave, Oscilloscope) were affected by the MERGE bugs. The pollution bug affected any user who saved custom presets.
+- **Verification:** 11 cycling tests pass (including 2 new regression tests for Bug #3), 295 broader tests pass. Manual verification confirms no cross-mode pollution.
+- **Defense in depth:** All three layers are now fixed:
+  1. Loading: `apply_preset_to_config` clears mode-specific keys before applying presets
+  2. Call sites: Use `restore_visualizer_snapshot()` instead of `.update()` for proper CLEAR-then-APPLY
+  3. Saving: Only collects current mode settings (prevents cross-mode pollution)
+  4. Export: `extract_visualizer_snapshot()` filters to only mode-specific keys
+- **Takeaways:**
+  - Preset application must use REPLACE semantics at EVERY layer, not just inside the config builder — callers that merge the result back must also purge stale keys
+  - `.update()` is never safe for applying preset results because it only adds; it cannot remove
+  - Preset saving should be mode-scoped, not mode-agnostic
+  - The normalization layer is defense-in-depth but should not be relied on as the primary guard
+  - Users who saved custom presets during the buggy period may need to re-save them to remove pollution
+- **Documentation:** Full investigation retained in `Docs/Visualizer_Preset_Override_Bug_Investigation.md`
+
+
+
+## Section 2 — Unresolved / Active Investigation (Includes Archived Open Threads)
+
+<a id="U-01"></a>
+### [U-01] 2026-04-17 — Blob False-Positive Visual Pass: Wrong Limiter Geometry + Runtime Transport Drift + Math-Only Tests (Unresolved)
 
 - [ ] COMPLETELY FUCKED
 - [x] PARTIAL
@@ -260,7 +374,9 @@ Section by date and type.
   - tests fail when Blob visually regresses into "circle with tint/glow" even if the math helpers still look reasonable on paper
 - **Loop-avoidance lesson:** for Blob, do not let "compiled," "uploaded," "non-flat profile," or "green tests" substitute for the actual product target. If the user still sees a rigid circle and no border liquid, the issue remains open.
 
-## 2026-04-10 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Unresolved)
+
+<a id="U-02"></a>
+### [U-02] 2026-04-10 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Unresolved)
 
 - [ ] COMPLETELY FUCKED
 - [x] PARTIAL
@@ -406,49 +522,9 @@ Section by date and type.
     - big bubbles are the hero/readability layer and should avoid big-big overlap whenever possible
     - promoted small bubbles must obey the big-bubble overlap rules while promoted
 
-## 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)
 
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-- **Final resolved state:** All three MERGE/pollution bugs in preset loading/saving were fixed. Preset application uses CLEAR-then-APPLY at every layer, and saving only collects current-mode settings.
-- **What finally worked:** Three distinct fixes across two sessions:
-  1. **Loading path fix (2026-04-11):** Changed `apply_preset_to_config()` in `core/settings/visualizer_presets.py` to use CLEAR-then-APPLY pattern. Clears all mode-specific keys not present in the preset before applying the preset's settings.
-  2. **Saving path fix (2026-04-11):** Modified `save_media_settings()` in `ui/tabs/widgets_tab_media.py` to only collect settings for the current visualizer mode instead of collecting from all modes.
-  3. **Call-site fix (2026-04-12):** Both callers of `apply_preset_to_config` (`_on_visualizer_preset_changed` in `widgets_tab.py` and `cycle_visualizer_preset` in `widget_manager.py`) used `.update()` to merge the clean result back into the live config dict. `.update()` only adds/overwrites — it never removes stale mode-specific keys that `apply_preset_to_config` had cleared. Replaced with `restore_visualizer_snapshot()` which does proper in-place CLEAR-then-APPLY.
-- **Why the final solution worked:** It addressed all three root causes:
-  1. MERGE semantic inside `apply_preset_to_config`: The old `merged.update(preset_settings)` only overwrote keys present in the preset.
-  2. Cross-mode pollution in saving: The old save path collected settings from ALL modes.
-  3. Call-site MERGE: Even after fix #1, the callers used `.update()` to merge the returned clean dict back into the live config, re-introducing the exact same stale-key problem at the call site.
-- **Symptoms before fix:**
-  - Custom settings (shaper, others) were overriding preset application
-  - User got "stuck" on shaped blob even after explicitly choosing unshaped presets
-  - Reset did not clear the stuck state
-  - Selecting "The Mighty Blob" in settings showed selected but rendered Preset 3 behavior
-  - Custom slot may not have been surviving hotswapping
-  - When user saved a custom preset (e.g., Bubble Preset 4 → Custom → Save As Preset 9), the saved preset contained incorrect reactions and behavior due to pollution from other modes' default values
-- **Root causes:**
-  1. **BUG #1 - MERGE Semantic:** `apply_preset_to_config()` used `merged.update(preset_settings)` which only overwrote keys present in preset. Keys not in preset (e.g., `blob_shaper_enabled`) persisted from previous config.
-  2. **BUG #2 - Cross-Mode Pollution:** `save_media_settings()` collected settings from ALL modes (`collect_spectrum_mode_settings()`, `collect_bubble_mode_settings()`, etc.). Inactive modes returned fallback defaults that polluted saved presets.
-  3. **BUG #3 - Call-Site MERGE:** `_on_visualizer_preset_changed` and `cycle_visualizer_preset` used `vis_config.update(applied)` to merge the clean result of `apply_preset_to_config` back into the live dict. Since `.update()` only adds/overwrites, stale mode-specific keys (like `blob_shaper_enabled: true` from Custom) survived into curated presets that never declared them.
-- **Affected modes:** ALL visualizer modes (Blob, Spectrum, Bubble, Sine Wave, Oscilloscope) were affected by the MERGE bugs. The pollution bug affected any user who saved custom presets.
-- **Verification:** 11 cycling tests pass (including 2 new regression tests for Bug #3), 295 broader tests pass. Manual verification confirms no cross-mode pollution.
-- **Defense in depth:** All three layers are now fixed:
-  1. Loading: `apply_preset_to_config` clears mode-specific keys before applying presets
-  2. Call sites: Use `restore_visualizer_snapshot()` instead of `.update()` for proper CLEAR-then-APPLY
-  3. Saving: Only collects current mode settings (prevents cross-mode pollution)
-  4. Export: `extract_visualizer_snapshot()` filters to only mode-specific keys
-- **Takeaways:**
-  - Preset application must use REPLACE semantics at EVERY layer, not just inside the config builder — callers that merge the result back must also purge stale keys
-  - `.update()` is never safe for applying preset results because it only adds; it cannot remove
-  - Preset saving should be mode-scoped, not mode-agnostic
-  - The normalization layer is defense-in-depth but should not be relied on as the primary guard
-  - Users who saved custom presets during the buggy period may need to re-save them to remove pollution
-- **Documentation:** Full investigation retained in `Docs/Visualizer_Preset_Override_Bug_Investigation.md`
-
-## 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)
+<a id="U-03"></a>
+### [U-03] 2026-04-08 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Unresolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -463,12 +539,16 @@ Section by date and type.
 - **Validation needed:** determine whether the repaired migration now fixes the real editor UI the user sees and whether runtime behavior also follows the upgraded linear lane layout.
 - **Anti-pattern warning:** do not paper over this with fragile one-shot cleanup hooks that only work when Windows allows a graceful exit path.
 
-## 2026-04-21 — Settings Dialog Flicker / Taskbar Ghost (Unresolved — Active Investigation)
+
+<a id="U-04"></a>
+### [U-04] 2026-04-21 — Settings Dialog Flicker / Taskbar Ghost (Investigation Archive; Superseded by [R-18](#R-18))
 
 - [ ] COMPLETELY FUCKED
 - [X] PARTIAL
 - [ ] AWAITING VALIDATION
-- [ ] SOLVED
+- [x] SOLVED
+
+- **Status note:** this investigation thread is kept for timeline context; the resolved outcome is tracked in **R-18 (2026-04-23)**.
 
 - **Symptom:** When the settings dialog is summoned, the taskbar flickers and a small window with the SRPSS app icon briefly appears (typically centered on Display 0) before the dialog renders. This affects title bars / taskbar of OTHER applications (e.g. the IDE on Display 0) even though the dialog targets Display 1. Present in both engine mode (via `dialog.exec()`) and config mode (`--s`, via `dialog.show()` + `app.exec()`).
 - **Earlier partial fixes (kept, each individually valid):**
@@ -495,8 +575,38 @@ Section by date and type.
   - Multi-monitor compositor / placeholder theory (Approaches A-E in the historical entry) — proven wrong; flicker occurs in standalone `--s` config mode with no engine, no compositor, no multi-monitor windowing.
   - Acrylic blur — user confirmed "added acrylic after this issue first appeared."
 - **Current investigation direction:** Binary search within `SettingsDialog.__init__` to find the exact operation that triggers the tiny HWND with title bar. The tiny window has a standard title bar with the app icon, suggesting somewhere during construction a native HWND is created with `WS_CAPTION` style before frameless flags take effect, or a secondary HWND (tooltip, popup, or internal Qt helper) is briefly shown.
+- **2026-04-23 follow-up isolation (new):**
+  - Added auto-close harness behavior in `tools/flicker_test.py` (default `10s`) plus new targeted variants `34-36`.
+  - `v34` (`force_widgets_initial_no_hydration`): **~2271ms construct**, **45** `QComboBoxPrivateContainer` helper frames already present **before** `show()`.
+  - `v35` (`force_sources_initial_no_hydration`): **~519ms construct**, **0** helper frames before/after show.
+  - `v36` (`force_sources_hydrate_without_widgets`): **~519ms construct**, then **15** helper frames after show (non-widgets tabs only).
+  - Interpretation: the strongest construction-time pressure/flicker candidate is the **Widgets tab build path**, especially when it is initial-tab or hydrated immediately.
+- **2026-04-23 automation upgrade (new):**
+  - Added external observer `tools/winprobe_observer.py` and wired it into `tools/flicker_test.py` per variant run (`SRPSS_FLICKER_EXTERNAL_WINPROBE=1`).
+  - This captures transient native HWNDs + foreground changes across the **entire** variant lifecycle (constructor + show), not just post-show.
+  - In failing paths (`v13`, `v34`), observer repeatedly reports transient tiny caption windows:
+    - class `Qt691QWindowIcon`
+    - size ~`105x59`
+    - title `python` (harness process title)
+    - each appearance briefly steals foreground before focus returns to Codex window.
+  - In control paths (`v35`, `v36`, `v18`), these transient `Qt691QWindowIcon` windows/foreground steals are absent when Widgets build pressure is removed.
+- **Important correction (why earlier env A/B could still fail):**
+  - `SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES=1` was being undermined by `_restore_last_tab_selection()`, which could switch back to saved Widgets tab after init.
+  - Fixed: when force-initial-sources is enabled, last-tab restore is now skipped so the A/B toggle behavior is actually deterministic.
+- **2026-04-23 root-cause breakthrough (new):**
+  - Isolated to `ui/tabs/media/preset_slider.py` inside `VisualizerPresetSlider._build_ui()`.
+  - The explicit `self._edit_btn.setVisible(True)` call (redundant, default is already visible) consistently triggered the transient `Qt691QWindowIcon` caption windows during startup construction.
+  - Removing that single call eliminated the startup taskbar/titlebar ghost in automated repro paths:
+    - `tools/flicker_test.py v54` (plain dialog + six `VisualizerPresetSlider` instances): tiny caption windows removed.
+    - `v48` (SettingsDialog visualizers-only): tiny caption windows removed.
+    - `v13` (full real SettingsDialog): tiny caption windows removed.
+- **Immediate next step (actionable):**
+  - Run live user validation in the actual startup path (normal settings open and `--s`) to confirm the ghost is gone outside harness.
+  - If validated, flip this issue from `PARTIAL` to `SOLVED` and archive older hydration-deferral workaround options as no longer needed for this bug family.
 
-## 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)
+
+<a id="U-05"></a>
+### [U-05] 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)
 
 - [x] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -508,7 +618,13 @@ Section by date and type.
 - **Constraint note:** do not casually tweak this family without heavy research; keep the archived resolved sub-contracts intact unless a replacement model is clearly better.
 - **Validation needed:** isolate why Winlogon runtime still accepts `S` while the broader key family fails, and distinguish script-mode, MC, and real screensaver input behavior instead of treating them as one environment.
 
-## MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
+
+
+
+## Section 3 — Archived / Legacy Investigation Context
+
+<a id="A-01"></a>
+### [A-01] MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived
 
 - [ ] COMPLETELY FUCKED
 - [X] PARTIAL
@@ -549,57 +665,11 @@ Section by date and type.
 Mitigation last resort, but unacceptable as early builds of this project did not have this bug.
 
 
-######
-#### RESOLVED BELOW THIS LINE ####
-##
-##
-
-## 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Resolved)
-
-- [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [ ] AWAITING VALIDATION
-- [x] SOLVED
-
-**Symptoms**
-- Primary overlays could sit behind a compositor-only dead gap and then appear too abruptly instead of following a coordinated fade wave.
-- The Spotify visualizer could enter later than before but still in a bad state: jittery first frames, fallback-timer reveal, and occasional startup-side audio restart noise.
-- Cold start, mode-cycle recovery, and settings-return recovery could behave differently, which pointed to orchestration drift rather than one isolated renderer bug.
-
-**Root Cause**
-- `WidgetManager` / `FadeCoordinator` were the real owners of primary fade state, but Spotify secondary-stage timing still depended on display-local fade/runtime fields.
-- That split let coordinator logs look healthy while the live visualizer still followed a different runtime schedule.
-- Shared fade behavior also had helper-level leaks: some widgets waited for the first animation tick to become visible, and several callers carried timing literals that were not actually authoritative.
-
-**Fixes**
-- Moved Spotify secondary-stage scheduling back under manager-owned control, with display-local fields treated as mirrored readable state rather than a second source of truth.
-- Removed the old primary startup dead-gap and fixed the shared fade helper so widgets can become visible immediately at opacity `0.0`.
-- Centralized startup contracts into:
-  - `rendering/overlay_startup_policy.py` for display-side startup timing
-  - `widgets/spotify_visualizer/startup_contract.py` for visualizer staged-startup state
-- Delayed visualizer hot-start/reveal behind the centralized Spotify secondary stage, seeded from anchor/media state, and prewarmed shader/overlay work while hidden.
-- Blocked the delayed-play startup branch from revealing via fallback before real playback becomes live.
-- Restored proper duration-override forwarding so shared fade timing is real policy, not decorative literals.
-
-**Validation**
-- Latest user-validated runs covered all three comparison paths:
-  - cold start with music already playing
-  - full mode cycle back to Spectrum
-  - settings open/close and return
-- In those runs:
-  - primary fade begins at compositor-ready
-  - the visualizer reveals through `fresh_frame_ready_delay`, not `fallback_timer`
-  - `Audio capture unhealthy, restarting...` no longer appears during startup
-  - startup behavior now matches the healthier recovery paths closely enough to close the bug
-
-**Takeaways**
-- Keep shared fade ownership centralized. Do not reintroduce display-local scheduling logic that can diverge from manager/coordinator state.
-- Prefer narrow mirrored runtime-readable state over duplicate decision-making state.
-- If startup needs more polish later, tune it from the shared fade/startup contracts instead of adding visualizer-specific timing hacks.
-- Occasional future fade-softness polish is a separate UX tuning topic, not a reason to reopen this resolved startup bug unless the old parity failure returns.
 
 
-## 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)
+
+<a id="A-02"></a>
+### [A-02] 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -630,7 +700,9 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - Gate GPU pushes on fresh FFT generations whenever smoothing state is invalidated.
 - Keep regression tests that cover the exact gating contract so future plumbing changes cannot reintroduce stale-state persistence.
 
-## 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.
+
+<a id="A-03"></a>
+### [A-03] 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -659,7 +731,9 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - Do not reintroduce shield-style masking as a first response.
 - Keep the settings launch path explicit and test-guarded: hide displays cleanly, paint Settings quickly, and avoid event-loop race hacks.
 
-## 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch) - COMPLETELY UNRESOLVED, ALL KEYS (Except S in Screensaver build Winlogon runtime! Vital Clue!) CURRENTLY NEVER WORK, APPROACH IS FLAWED, DO NOT TOUCH WITHOUT HEAVY RESEARCH.
+
+<a id="A-04"></a>
+### [A-04] 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch) - COMPLETELY UNRESOLVED, ALL KEYS (Except S in Screensaver build Winlogon runtime! Vital Clue!) CURRENTLY NEVER WORK, APPROACH IS FLAWED, DO NOT TOUCH WITHOUT HEAVY RESEARCH.
 
 - [ ] COMPLETELY FUCKED
 - [x] PARTIAL
@@ -698,7 +772,9 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - Top-level transparent Halo windows are not equivalent to real compositor passthrough in this project; preserving forwarded ownership is safer than assuming Qt click-through will land on the right target.
 - When a bug family only partly resolves, keep the resolved sub-contracts documented separately so later work does not accidentally unwind them while chasing the remaining visual issue.
 
-## 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)
+
+<a id="A-05"></a>
+### [A-05] 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -744,7 +820,59 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - When a slider supports `0`, never read it through truthy fallback logic.
 - Record retired experimental branches explicitly; otherwise Blob work tends to bounce back to the same two failed ideas.
 
-## 2026-02-26 / 2026-03-05 — Pixel Shift Visualizer Bleed-Through (Resolved)
+
+
+## Section 4 — Resolved Archive (Historical)
+
+<a id="R-07"></a>
+### [R-07] 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+**Symptoms**
+- Primary overlays could sit behind a compositor-only dead gap and then appear too abruptly instead of following a coordinated fade wave.
+- The Spotify visualizer could enter later than before but still in a bad state: jittery first frames, fallback-timer reveal, and occasional startup-side audio restart noise.
+- Cold start, mode-cycle recovery, and settings-return recovery could behave differently, which pointed to orchestration drift rather than one isolated renderer bug.
+
+**Root Cause**
+- `WidgetManager` / `FadeCoordinator` were the real owners of primary fade state, but Spotify secondary-stage timing still depended on display-local fade/runtime fields.
+- That split let coordinator logs look healthy while the live visualizer still followed a different runtime schedule.
+- Shared fade behavior also had helper-level leaks: some widgets waited for the first animation tick to become visible, and several callers carried timing literals that were not actually authoritative.
+
+**Fixes**
+- Moved Spotify secondary-stage scheduling back under manager-owned control, with display-local fields treated as mirrored readable state rather than a second source of truth.
+- Removed the old primary startup dead-gap and fixed the shared fade helper so widgets can become visible immediately at opacity `0.0`.
+- Centralized startup contracts into:
+  - `rendering/overlay_startup_policy.py` for display-side startup timing
+  - `widgets/spotify_visualizer/startup_contract.py` for visualizer staged-startup state
+- Delayed visualizer hot-start/reveal behind the centralized Spotify secondary stage, seeded from anchor/media state, and prewarmed shader/overlay work while hidden.
+- Blocked the delayed-play startup branch from revealing via fallback before real playback becomes live.
+- Restored proper duration-override forwarding so shared fade timing is real policy, not decorative literals.
+
+**Validation**
+- Latest user-validated runs covered all three comparison paths:
+  - cold start with music already playing
+  - full mode cycle back to Spectrum
+  - settings open/close and return
+- In those runs:
+  - primary fade begins at compositor-ready
+  - the visualizer reveals through `fresh_frame_ready_delay`, not `fallback_timer`
+  - `Audio capture unhealthy, restarting...` no longer appears during startup
+  - startup behavior now matches the healthier recovery paths closely enough to close the bug
+
+**Takeaways**
+- Keep shared fade ownership centralized. Do not reintroduce display-local scheduling logic that can diverge from manager/coordinator state.
+- Prefer narrow mirrored runtime-readable state over duplicate decision-making state.
+- If startup needs more polish later, tune it from the shared fade/startup contracts instead of adding visualizer-specific timing hacks.
+- Occasional future fade-softness polish is a separate UX tuning topic, not a reason to reopen this resolved startup bug unless the old parity failure returns.
+
+
+
+<a id="R-08"></a>
+### [R-08] 2026-02-26 / 2026-03-05 — Pixel Shift Visualizer Bleed-Through (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -783,7 +911,9 @@ Both were registered with `PixelShiftManager` (PSM), but they are **dependent wi
 - `QOpenGLWidget` overlays that track their source widget's geometry every tick are especially vulnerable to double-shift because the per-tick `setGeometry()` resets any PSM offset, creating visible jitter.
 - The volume widget was already excluded from PSM for the same reason (comment in `display_setup.py`). The vis card and GL overlay should have followed the same pattern from the start.
 
-## 2026-03-05 — Settings Spinbox/LineEdit Fill Regression (Resolved)
+
+<a id="R-09"></a>
+### [R-09] 2026-03-05 — Settings Spinbox/LineEdit Fill Regression (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -822,7 +952,9 @@ This descendant selector has **specificity 002** (two type selectors), which bea
 **Status**
 - ✅ **Resolved** — Visually confirmed `#282828` fill on all spinboxes, entry boxes, and line edits.
 
-## 2026-03-06 — Widget C++ Object Already Deleted on Provider Switch (Resolved)
+
+<a id="R-10"></a>
+### [R-10] 2026-03-06 — Widget C++ Object Already Deleted on Provider Switch (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -855,7 +987,9 @@ except RuntimeError:
 - Use `try/except RuntimeError` around a lightweight Qt accessor (`objectName()`) as the validity check.
 - This is distinct from the `Shiboken.isValid()` pattern used for background-thread callbacks — deferred main-thread timers need the same protection.
 
-## 2026-03-14 — Visualizer Preset Tooling Regression (Resolved)
+
+<a id="R-11"></a>
+### [R-11] 2026-03-14 — Visualizer Preset Tooling Regression (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -881,7 +1015,9 @@ except RuntimeError:
 - Always merge snapshot backup sections *before* the primary widget payload so curated presets remain authoritative.
 - Repair-tool outputs must include human-friendly names; otherwise it’s impossible to tell curated presets apart in the UI.
 
-## 2026-04-09 — Runtime Custom Slot Replaced While Cycling Presets (Resolved)
+
+<a id="R-12"></a>
+### [R-12] 2026-04-09 — Runtime Custom Slot Replaced While Cycling Presets (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -911,7 +1047,9 @@ except RuntimeError:
 - `Custom` is not just another preset index; it is a live user-owned snapshot that must be preserved consistently across UI and runtime code paths.
 - If the same workflow exists in settings UI and runtime interaction, both paths need to share the same helper/contract instead of re-implementing it separately.
 
-## 2026-04-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted (Resolved)
+
+<a id="R-13"></a>
+### [R-13] 2026-04-13 — Visualizer Sine/Oscilloscope Lines 4-6 Settings Never Persisted (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -976,7 +1114,9 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - Keep this entry because the bug was unusually sneaky: the user-facing symptom looked like one cross-mode persistence failure, but the real failure chain spanned save merge semantics, model normalization, runtime config bridging, UI builder wiring, and overlay state storage.
 - Future regressions that look like "custom settings randomly reverted" should be checked against this entire chain before assuming a single save-path bug.
 
-## 2026-04-17 — Blob Inward-Liquid Runtime Handoff Broke GL Overlay Push (Resolved In Code, Visual Validation Pending)
+
+<a id="R-14"></a>
+### [R-14] 2026-04-17 — Blob Inward-Liquid Runtime Handoff Broke GL Overlay Push (Resolved In Code, Visual Validation Pending)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -1021,7 +1161,9 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - Shader support alone is insufficient; the GL uniform lookup table and mode-specific uploader must also know about the new fields.
 - When logs suggest a visualizer "fell back", verify whether the real failure is a shared transport exception before diagnosing the renderer itself.
 
-## 2026-04-18 — Frozen Curated Presets Silently Fell Back to Onefile Tree (Resolved)
+
+<a id="R-15"></a>
+### [R-15] 2026-04-18 — Frozen Curated Presets Silently Fell Back to Onefile Tree (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -1047,7 +1189,9 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - It removed ambiguous runtime source selection entirely: frozen curated reads now have one authoritative root regardless of bootstrap outcome.
 - This aligns SCR and MC with the same machine-wide curated preset contract.
 
-## 2026-04-18 — One-Dir Runtime Misdetected As Script + Curated Slot Drift (Resolved)
+
+<a id="R-16"></a>
+### [R-16] 2026-04-18 — One-Dir Runtime Misdetected As Script + Curated Slot Drift (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
@@ -1068,7 +1212,9 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - Hardened curated parsing to prefer filename-derived slot (`preset_N_*.json`) over payload index, while snapshot override parsing keeps payload-index behavior.
 - Added regression tests for both detection paths and filename-slot precedence.
 
-## 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)
+
+<a id="R-17"></a>
+### [R-17] 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL

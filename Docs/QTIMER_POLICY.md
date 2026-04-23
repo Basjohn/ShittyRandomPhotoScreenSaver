@@ -1,42 +1,31 @@
 # QTimer Policy
 
-## When to Use QTimer (UI-thread only)
+Last updated: 2026-04-23
 
-QTimer is acceptable **only** for UI-thread-bound work that must synchronize with Qt's event loop:
+Use QTimer only for UI-thread timing work. Use ThreadManager for background work.
 
-- **Debounce timers** in settings dialogs (`QTimer.singleShot(300, ...)` for save delay)
-- **Deferred widget updates** (`QTimer.singleShot(0, ...)` to defer to next event loop iteration)
-- **Frame-rate animation ticks** in `core/animation/animator.py` (vsync-coupled, must stay on UI thread)
-- **Overlay fade timers** in `widgets/overlay_timers.py` (centralized, UI-thread by design)
+## 1. Allowed QTimer Use
+- UI debounce in settings dialogs.
+- Deferred UI work on next event-loop tick.
+- UI animation/fade scheduling that is explicitly UI-thread owned.
+- Small UI-state coordination timers tied to widget lifecycle.
 
-## When to Use ThreadManager Instead
+## 2. Not Allowed for QTimer
+- Network polling.
+- File/IO background work.
+- Compute-heavy work.
+- Long-running retries/backoff loops.
 
-All background/async work **must** go through `core/threading/manager.py`:
+These belong in `ThreadManager` IO/compute tasks.
 
-- **Periodic polling** (system mute state, API refresh, health checks)
-- **Compute tasks** (FFT processing, image loading, bar smoothing)
-- **IO tasks** (file reads, network requests, cache operations)
-- **Delayed non-UI work** (use `submit_io_task` with sleep, not QTimer)
+## 3. Implementation Rules
+- Mark intentional UI-thread timers clearly in code comments.
+- Ensure recurring timers are stopped/cleaned during teardown.
+- Avoid hidden timer proliferation in deep widget internals when shared lifecycle helpers exist.
 
-## Intentional UI-Thread QTimer Locations
-
-| File | Count | Purpose |
-|------|------:|---------|
-| `ui/settings_dialog.py` | 3 | Save debounce, deferred layout updates |
-| `ui/styled_popup.py` | 1 | Auto-dismiss timeout |
-| `ui/system_tray.py` | 1 | Deferred tray icon update |
-| `ui/tabs/widgets_tab.py` | 1 | Deferred visibility update |
-| `core/animation/animator.py` | 8 | Frame-rate animation ticks (vsync-coupled) |
-| `widgets/overlay_timers.py` | 6 | Centralized overlay fade/show timers |
-| `engine/screensaver_engine.py` | 7 | Engine lifecycle (startup, shutdown, transition scheduling) |
-| `rendering/widget_manager.py` | 7 | Widget refresh coordination |
-| `widgets/media_widget.py` | 5 | Progress bar, animation timing |
-
-## Rules
-
-0. WHENEVER POSSIBLE USE LOCKFREE SAFE THREADING THROUGH THREADMANAGER. SPSC QUEUES or Atomics. Rlock/Mutex avoided.
-1. **Never** use `QTimer` for background work — use `ThreadManager.submit_io_task()` or `submit_compute_task()`
-2. **Never** use raw `threading.Thread()` or `ThreadPoolExecutor()` for business logic
-3. `QTimer.singleShot(0, fn)` is acceptable for deferring UI work to the next event loop tick
-4. All new QTimer usage must be documented with `# UI-thread timer (intentional)` comment
-5. Recurring QTimers should be registered with `ResourceManager` for deterministic cleanup
+## 4. Regression Prevention
+Before adding a timer, verify:
+- why it cannot be event-driven,
+- why it cannot run in ThreadManager,
+- teardown path prevents orphaned timers,
+- tests cover lifecycle and timing-sensitive behavior.

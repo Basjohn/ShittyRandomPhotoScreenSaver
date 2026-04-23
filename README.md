@@ -1,192 +1,54 @@
 # ShittyRandomPhotoScreenSaver (SRPSS)
-<img width="625" height="202" alt="How dare you hover your cursor here!" src="https://github.com/user-attachments/assets/cbc989a9-a057-49ae-a23a-750d92f6f37c" />
 
-ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver that is suprisingly less shit than the majority of ancient decrepid screensavers around today. Born from my sheer exhaustion of still using a screensaver from 2005 to do less than what this does.
+Last updated: 2026-04-23
 
+SRPSS is a Windows screensaver and media-center runtime focused on image rotation, GPU transitions, and overlay widgets.
 
-![SSRPSClean](https://github.com/user-attachments/assets/8957ae6e-913a-4475-b063-85dec5e248e4)
+## Highlights
+- Multi-source image rotation (folders + RSS/JSON feeds).
+- Multi-monitor rendering with GL-first transitions.
+- Overlay widgets (clock, weather, media, Reddit, visualizer).
+- Settings dialog with live apply and JSON persistence.
+- Separate screensaver and media-center runtime profiles.
 
+## Runtime Entrypoints
+- `main.py` -> screensaver runtime.
+- `main_mc.py` -> media-center runtime.
 
+## Settings
+- Canonical settings store: `%APPDATA%/SRPSS/settings_v2.json`.
+- MC profile: `%APPDATA%/SRPSS_MC/settings_v2.json`.
+- Settings API is provided by `core/settings/settings_manager.py`.
 
-Shitty Showcase of Vizualisers & Transitions
+## Visualizer Notes
+- Mode registry is centralized in `core/settings/visualizer_mode_registry.py`.
+- Spline Curve is the user-facing name for internal id `devcurve`.
+- Blob remains behind `-devblob`.
 
----
+## Useful CLI Flags
+- `--debug`, `-d`
+- `--viz`
+- `--viz-diagnostics`, `--viz-diag`
+- `--fresh`
+- `-devblob`
+- `--devcurve` (compatibility no-op)
 
-## Features
+## Useful Environment Variables
+- `SRPSS_ENABLE_DEV`
+- `SRPSS_VIZ_DIAGNOSTICS`
+- `SRPSS_PERF_METRICS`
+- `SRPSS_FORCE_SOUNDDEVICE`
+- `SRPSS_DISABLE_LOGGING`
+- `SRPSS_FORCE_LOG_DIR`
 
-- **Random Image Slideshow**
-  - Local folders (recursive) as primary source
-  - Optional RSS/JSON image feeds (e.g. curated Reddit wallpaper feeds)
-  - Mixed mode (folders + RSS) support with ratio control
-  - High‑quality scaling with optional sharpening
-  - Transitions:
-    - Ripple
-    - 3D Block Spin (Actual 3D like 1998!)
-    - Crumble (More work than it was worth!)
-    - Particle (Somehow does not look shit!)
-    - Warp Dissolve
-    - Crossfade
-    - Slide
-    - Wipe
-    - Diffuse
-    - Block Puzzle Flip
-    - Blinds
+## Development
+- Canonical architecture: `Spec.md`
+- Code map: `Index.md`
+- Policies: `Docs/Guardrails.md`
+- Defaults: `Docs/Defaults_Guide.md`
+- Tests: `Docs/TestSuite.md`
+- Visualizer contracts: `Docs/Visualizer_Reference.md`
 
-  - Multi‑monitor aware: same image on all screens or independent images per screen
-
-- **Overlay widgets**
-  - **Clock widgets** (up to three): 12h/24h, multiple time zones, analogue or digital
-  - **Weather widget** using Open‑Meteo (no API key) with location autodetect on first run
-  - **Media widget** (Spotify now‑playing) with optional controls and artwork
-  - **Spotify beat visualizer** paired with the media widget – thin GPU bar overlay with a 1‑bar idle floor and a configurable ghosting trail (opacity + decay), with an automatic software fallback on non‑GL stacks
-  - **Reddit widget** showing top posts from a configured subreddit
-  Widget requests are welcome, the engine is robust enough to handle all sorts of your weird kinky shit.
-
-- **Settings dialog (config mode)**
-  - Dark, frameless UI
-  - Tabs:
-    - **Sources** – folders + RSS/JSON feeds
-    - **Display** – mode, interval, sharpen, pan & scan, monitor selection
-    - **Transitions** – transition type, duration, directions, per‑type tuning
-    - **Widgets** – clock(s), weather, media, Spotify visualizer, Reddit (You'll need to configure these to your liking! Geolocation is kinda shit.)
-    - **Accessibility** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
-    - **Presets** - Preset system to get going fast with an auto-saving custom preset for your personalization. 
-    - **About** – version, credits, SST-based settings Import/Export (human‑readable JSON snapshot per profile) and emergency defaults button
-    
-- **Hard‑exit mode & interaction gating**
-  - Optional "hard‑exit" mode: mouse movement/clicks no longer exit; only keyboard, context menu or reddit links exit.
-  - Ctrl‑driven halo to interact with overlays (e.g. media controls, Reddit links) while the screensaver stays active.
-
-  Why? Because you can actually click those reddit links! You can actually control Spotify through its controls in the widget! I never clicked the clock or weather though, you probably shouldn't     try it.
-
-  Cntrl holding gives you a temporary interaction mode that makes you able to move/see/click the mouse without exiting (but if you click a reddit link we're going to exit and take you to the         comments so you can join everyone else in not reading the article/source)  
-
-  Hard Exit on the other hand makes nothing except ESC/RightClick/Reddit links close the screensaver. (This is replicated in the SRPSS_MC release version)
-  While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
-
-  MC/Media Center Builds are designed for Hard Exit especially. These come with it turned on and run in the background with minimal resource usage.
-
-  (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)  
----
-
-## Keyboard & Mouse Controls
-
-### While the screensaver is running
-
-- **Hotkeys (do not exit)**
-  - `Z` – Previous image
-  - `X` – Next image
-  - `C` – Cycle transition type
-  - `S` – Open settings dialog (stops the saver, shows the config UI)
-[Keys do not work on MC Builds, only mouse and mouse context.]
-
-- **Exit keys (always exit)**
-  - `Esc` – Exit screensaver
-  - `Q` – Exit screensaver
-
-- **Other keys**
-  - **Normal mode** (hard‑exit OFF, Ctrl not held):
-    - *Any other key* exits the screensaver (e.g. Space, Enter, arrows, letters, numbers).
-  - **Hard‑exit mode** (hard‑exit ON) or **Ctrl interaction mode**:
-    - Non‑hotkey keys are ignored; only `Esc`/`Q` exit and `Z/X/C/S` perform their actions.
-
-- **Mouse**
-  - **Normal mode** (hard‑exit OFF):
-    - Move the mouse beyond a small threshold → exits the screensaver.
-    - Any mouse button click → exits the screensaver.
-  - **Hard‑exit mode** (hard‑exit ON):
-    - Mouse movement and clicks **do not exit**, Double Clicks advance to the next image; use `Esc` or `Q` to exit.
-  - **Right Click Context Menu**
-    - Right Click while holding Ctrl and a glorious context menu is born.
-    - Use it for quick accurate transition and settings changes.
-    - 
-
-- **Ctrl halo interaction**
-  - Hold `Ctrl` to show a halo/cursor proxy over the active display.
-  - While Ctrl/halo is active, mouse clicks can interact with overlay widgets
-    (e.g. media controls, Reddit links) without immediately exiting.
-  - Right Click while holding Ctrl and a glorious context menu is born.
-
----
-
-## Settings Dialog
-
-You can open the settings dialog in two ways:
-
-- From Windows Screen Saver Settings, by clicking **Settings...** for SRPSS (see below).
-- From the running screensaver itself by pressing `S`.
-
-The settings dialog lets you:
-
-- Configure image sources (folders + RSS/JSON feeds)
-- Change display mode, interval, sharpen, and refresh sync
-- Choose the active transition with deep per‑type options
-- Enable/disable and style each overlay widget with sliders in your sliders.
-- Enable **HARD Exit** becauseyou'refuckinghardcore (input.hard_exit)
-
-All changes are applied immediately and persisted between runs.
-
----
-
-## Development & Testing
-
-SRPSS targets **Python 3.11** on Windows. Use the wrappers and docs below so logs/tests behave:
-
-- **Interpreter**: follow `Docs/DEV_ENV.md` for the recommended `python -3.11` launchers.
-- **Running tests**: use the logging-first wrapper so runs are captured under `logs/`:
-
-  ```powershell
-  python tests/pytest.py                # run full suite
-  python tests/pytest.py tests/test_perf_dt_max.py -vv
-  ```
-
-- **Perf/diagnostics**:
-  - Set `SRPSS_PERF_METRICS=1` before launching the saver to collect widget/transition timings.
-  - Check `Docs/Performance_Base_Line_2_5.md` for current performance targets and log commands.
-
-- **Docs**: `Spec.md` and `Index.md` are the canonical references for architecture/module mapping; `Docs/10_WIDGET_GUIDELINES.md` covers overlay styling/lifecycle rules.
-
-Keep contributions aligned with the centralized managers (ThreadManager, ResourceManager, SettingsManager) and the widget/theming policies documented above—rogue threads/shadows will be mocked relentlessly.
-
-## Installation & Usage (Windows 10 / 11)
-
-Download a version, ideally the setup version if you want it to actually work.
-
-### 1. Run the installer.
-
-1. Yeah that's literally it.
-2. Really.
-
-### 2. Set SRPSS as your screensaver
-
-Check the open screensaver settings box in the installer (or leave it checked) and it will even take your lazy ass there.
-
-In the **Screen Saver Settings** dialog:
-
-1. Open the **Screen saver** dropdown.
-2. Select **SRPSS** (this is the name of the `SRPSS.scr` file).
-3. Optionally adjust **Wait** time and **On resume, display logon screen**.
-4. Click **Apply** and **OK**.
-
-### 3. Settings
-  - Set your sources! Either a folder (or multiple) on your system with your wallpapers or RSS/JSON feeds or....both, yeah, both actually works.
-  - If you are exceptionally lazy about your sources just click the "Just Make It Work" button at the bottom of the sources tab. It will just work.
-  
-  - Clock does a decent job figuring out your timezone, you can have multiple timezones and up to 3 clocks, optionally digital or analogue and with different regions per display.
-  - Weather does a really bad job of figuring out where you are but has awesome autocomplete so just start typing your City name and click the suggestion.
-  - Reddit can be set to any subreddit you want.
-  - Pro tip, don't set widgets to appear at the same location on the same screen. By default they don't.
-
-## Versioning
-
-Version information is centralised in `versioning.py` and used by both runtime and build tooling and Inno installer is used for this to actually fucking work.
-
-- Application name: `ShittyRandomPhotoScreenSaver`
-- Executable name: `SRPSS`
-- Version string: `APP_VERSION`
-
-## Credits
-
-https://basmilius.github.io/ For the pillaged weather icons!
-
-This README focuses on wasting your time.
+## Packaging
+- Installer scripts: `scripts/SRPSS_Installer.iss`, `scripts/SRPSS_MediaCenter_Installer.iss`.
+- Version source: `versioning.py`.

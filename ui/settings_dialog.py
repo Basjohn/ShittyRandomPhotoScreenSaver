@@ -477,6 +477,12 @@ class SettingsDialog(QDialog):
                     pass
         self._suppress_scroll_capture: bool = False
         self._tab_keys = ["sources", "display", "transitions", "widgets", "accessibility", "about"]
+        self._force_initial_sources_tab = os.getenv(
+            "SRPSS_SETTINGS_FORCE_INITIAL_TAB_SOURCES", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
+        self._skip_widgets_hydration = os.getenv(
+            "SRPSS_SETTINGS_SKIP_WIDGETS_HYDRATION", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self._tab_state_cache: Dict[str, Dict[str, Any]] = {}
         self._tab_scroll_widgets: Dict[int, Optional[QScrollArea]] = {}
         self._tab_button_by_key: Dict[str, TabButton] = {}
@@ -525,6 +531,10 @@ class SettingsDialog(QDialog):
         try:
             index = int(stored)
         except Exception:
+            index = 0
+        # Diagnostic toggle for U-04 isolation:
+        # force a lightweight initial tab so we can compare startup behavior.
+        if self._force_initial_sources_tab:
             index = 0
         if index < 0 or index >= len(self._tab_keys):
             index = 0
@@ -657,14 +667,17 @@ class SettingsDialog(QDialog):
         # Create actual tabs lazily
         cache = get_settings_dialog_cache()
         self._tab_builders = {
-            "sources": lambda: SourcesTab(self._settings),
-            "display": lambda: DisplayTab(self._settings),
-            "transitions": lambda: TransitionsTab(self._settings),
+            # Build tabs with the stacked-widget as parent immediately so
+            # constructors never run as transient top-level windows.
+            "sources": lambda: SourcesTab(self._settings, parent=self.content_stack),
+            "display": lambda: DisplayTab(self._settings, parent=self.content_stack),
+            "transitions": lambda: TransitionsTab(self._settings, parent=self.content_stack),
             "widgets": lambda: WidgetsTab(
                 self._settings,
+                parent=self.content_stack,
                 widget_defaults=cache.widget_defaults,
             ),
-            "accessibility": lambda: AccessibilityTab(self._settings),
+            "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
             "about": self._create_about_tab,
         }
         for key in self._tab_keys:
@@ -766,7 +779,15 @@ class SettingsDialog(QDialog):
         return widget
 
     def _hydrate_remaining_tabs_async(self) -> None:
-        remaining = [i for i in range(len(self._tab_keys)) if i not in self._built_tab_indices]
+        # Diagnostic toggle for U-04 isolation:
+        # excludes Widgets from immediate background hydration to avoid
+        # heavy constructor-side work before first stable paint.
+        remaining = [
+            i
+            for i in range(len(self._tab_keys))
+            if i not in self._built_tab_indices
+            and (not self._skip_widgets_hydration or self._tab_key_for_index(i) != "widgets")
+        ]
         if not remaining:
             return
         self._background_tab_queue.extend(remaining)
@@ -1043,6 +1064,8 @@ class SettingsDialog(QDialog):
             logger.debug("Failed to persist last tab index", exc_info=True)
 
     def _restore_last_tab_selection(self) -> None:
+        if self._force_initial_sources_tab:
+            return
         stored = self._settings.get('ui.last_tab_index', 0)
         try:
             index = int(stored)
