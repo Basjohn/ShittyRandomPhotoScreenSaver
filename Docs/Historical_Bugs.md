@@ -22,7 +22,7 @@ Keep this document as the long-term anti-regression memory for the project.
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
 3. [A-03 — 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.](#A-03)
-4. [A-04 — 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch) - COMPLETELY UNRESOLVED, ALL KEYS (Except S in Screensaver build Winlogon runtime! Vital Clue!) CURRENTLY NEVER WORK, APPROACH IS FLAWED, DO NOT TOUCH WITHOUT HEAVY RESEARCH.](#A-04)
+4. [A-04 — 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Historical Partial Fixes Archived; superseded by U-05 current matrix)](#A-04)
 5. [A-05 — 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)](#A-05)
 
 ### Resolved Archive
@@ -613,10 +613,48 @@ Keep this document as the long-term anti-regression memory for the project.
 - [ ] AWAITING VALIDATION
 - [ ] SOLVED
 
-- **Current symptom:** user note says all keys currently never work again except `S` in real screensaver Winlogon runtime, which is an important clue and makes the previously "partially resolved" archive entry unsafe to treat as the present truth.
-- **Why this is important:** it suggests the current approach is flawed at a deeper routing/focus/runtime-boundary level rather than being only a small Halo follow-up.
-- **Constraint note:** do not casually tweak this family without heavy research; keep the archived resolved sub-contracts intact unless a replacement model is clearly better.
-- **Validation needed:** isolate why Winlogon runtime still accepts `S` while the broader key family fails, and distinguish script-mode, MC, and real screensaver input behavior instead of treating them as one environment.
+- **Current symptom matrix (2026-04-23 user validation):**
+  - **MC runtime (`main_mc.py`) after clicking into SRPSS window (any display/setup):**
+    - Media keys fail while SRPSS remains focused.
+    - Media keys begin working again when context menu is opened or when focus shifts to another application.
+    - Normal control keys do not work in this state.
+  - **Normal mode Windows preview runtime:** all keys work, including media keys.
+  - **Normal mode Winlogon runtime:** all media keys fail; most other keys fail; `S` still works and opens Settings.
+- **Why this is important:** this is no longer a "single MC key bug." It is a cross-runtime input ownership/routing split with different behavior by launch surface and focus state.
+- **Active priority (2026-04-24):** make MC runtime key behavior perfect and reproducible before touching Winlogon. Winlogon may share a root cause, but it is a different runtime surface and should not steer the next fix.
+- **Non-negotiable MC window contract:** fixes must preserve the MC surface as no normal taskbar entry, no Alt-Tab entry, and topmost/no-fall-behind. Normal-window comparisons are reference data only, not candidate fixes.
+- **Critical clue:** `S` working in Winlogon while media keys fail suggests at least one keyboard path remains alive, but media-key capture/dispatch path diverges by runtime.
+- **Constraint note:** do not casually tweak this family without heavy research; keep archived sub-fixes intact unless a replacement model is proven by runtime matrix + harness evidence.
+- **Validation needed:** first isolate the exact MC breakpoint between focused MC failure and context-menu/external-focus recovery. Preview and Winlogon remain reference points, not the next active target.
+- **False suspects ruled out (2026-04-23 harness split runs):**
+  - Generic app hotkey handling is not dead: focused MC harness captures `C key pressed - cycle transition requested`.
+  - Synthetic media VK route is not dead: focused MC harness captures `InputHandler` media-key detection.
+  - Injected native appcommand dispatch is not dead: focused MC harness captures `[WIN_APPCOMMAND]` in verbose logs.
+  - Therefore, broad "all key plumbing is broken" is not an accurate root-cause model.
+  - Important limit: these are synthetic/injected probe results. They do not reproduce the user's physical-key MC failure.
+- **Live-profile parity update (2026-04-23):**
+  - Harness now validates MC runtime contract before scoring probes (MC tool/splash window class, display creation, `show_on_screen`, GL compositor creation).
+  - In elevated live-profile run, matrix initially showed:
+    - `focused_idle`: Qt media pass, native appcommand pass, `C` pass
+    - `focused_clicked`: Qt media fail, native appcommand pass, `C` fail
+  - This narrows the active breakage to post-click focused input routing/state, while native appcommand ingress remains alive.
+  - Native key-message probe extension (`WM_KEYDOWN/UP` for `C`) passes in `focused_clicked` while synthetic `SendInput` `C` fails, further ruling out downstream transition handler breakage.
+  - Additional evidence review showed these failing `focused_clicked` cells were contaminated by focus theft in setup: click preparation could foreground external browser windows (Firefox) instead of keeping SRPSS focused.
+  - Harness now marks such `focused_clicked` samples as invalid/blocked (`focused_clicked_unstable_focus_or_overlay_focus_steal`) rather than scoring them as real focused-MC failures.
+  - Harness click-safety guard now disables Reddit interaction surfaces in mirrored/isolated harness profiles so focused-click automation cannot trigger outbound Reddit actions during investigation runs.
+  - Mirrored-safe A/B run (`2026-04-23 22:31`) confirms both `focused_idle` and `focused_clicked` pass across strict + realistic policies when scenario validity is enforced.
+  - After edge-first click targeting + invalid-row blocking landed, repeated live-profile runs produced valid focused SRPSS samples where both `focused_idle` and `focused_clicked` passed all probes (Qt media, native appcommand, native key-message `C`, transition `C`) across strict and realistic focus policies.
+  - Result: previously observed `focused_clicked` failures are now treated as harness setup artifacts, not confirmed app-path regressions.
+  - Result limit: the harness has not yet simulated the real-world failure. It has proved controlled synthetic/injected MC paths can work, which means the next harness target is physical/hardware ingress or an observer-backed workflow that captures the user's actual failing input.
+- **What remains unresolved after ruling these out:**
+  - Real hardware media-key ingress under user repro conditions still needs explicit automated/native proof (not only synthetic or injected messages).
+  - Normal control-key failure in focused MC still needs the same physical/hardware-ingress treatment.
+  - Newest user observation (2026-04-24): MC starts with physical keys working while unfocused; bringing MC into focus is the transition that makes keys fail.
+  - Harness response: `tools/media_key_reality_harness.py --scenario focus_transition` now captures unfocused-working and focused-failing phases in one report.
+  - Splash-window experiment is ruled out as a product fix: it shares the key/focus issue and becomes unstable after focus changes. Keep it only as a diagnostic comparison.
+  - Native-style evidence from the current Tool baseline shows the intended guardrail shape (`WS_EX_TOOLWINDOW` + topmost), so the next investigation stays inside that contract rather than testing normal windows.
+  - MC focused-click harness parity is stable only for controlled probes; remaining gap is proving/isolating divergence between synthetic/injected probes and physical hardware key ingress on user machines.
+  - Winlogon asymmetry (`S` works while media keys fail) is deferred until MC is understood or the MC root cause clearly requires Winlogon comparison.
 
 
 
@@ -733,12 +771,16 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 
 
 <a id="A-04"></a>
-### [A-04] 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Partially Resolved; Halo Click Path Still Under Watch) - COMPLETELY UNRESOLVED, ALL KEYS (Except S in Screensaver build Winlogon runtime! Vital Clue!) CURRENTLY NEVER WORK, APPROACH IS FLAWED, DO NOT TOUCH WITHOUT HEAVY RESEARCH.
+### [A-04] 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Historical Partial Fixes Archived; superseded by [U-05](#U-05))
 
 - [ ] COMPLETELY FUCKED
 - [x] PARTIAL
 - [ ] AWAITING VALIDATION
 - [ ] SOLVED
+
+**Archive scope note**
+- This entry records March 2026 partial improvements only.
+- Current runtime truth is tracked in [U-05](#U-05); do not treat this section alone as current behavior status.
 
 **Symptoms**
 - MC hotkeys and media keys could stop working after interaction clicks.

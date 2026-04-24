@@ -5,6 +5,7 @@ import logging
 import time
 import sys
 import ctypes
+import os
 try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:  # pragma: no cover - optional dependency
@@ -95,7 +96,7 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
 # Toggle for MC window style experiments. Leave False to use the historical
 # Qt.Tool behavior (keeps MC windows off the taskbar/Alt+Tab); switch to True
 # when testing the splash-style flag.
-MC_USE_SPLASH_FLAGS = False
+MC_USE_SPLASH_FLAGS = os.environ.get("SRPSS_MC_WINDOW_FLAGS", "").strip().lower() == "splash"
 
 # Windows-specific constants for diagnostics and input handling
 WM_APPCOMMAND = 0x0319
