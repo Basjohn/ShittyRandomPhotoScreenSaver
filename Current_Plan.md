@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 
 This file tracks active work and near-term validation.
 
@@ -23,22 +23,24 @@ This file tracks active work and near-term validation.
 ## Focused Active Plan — Media Key / Input Matrix (U-05)
 - Objective: make MC runtime key behavior perfect and reliable first, then use that understanding to approach Winlogon separately.
 - Constraint: no runtime/input behavior edits until matrix evidence + code-path analysis converge on one primary resolution candidate.
-- Current truth: the harness has not fully reproduced the user's real-world MC failure yet. It has proven that synthetic/injected paths can work when setup is controlled, and that the remaining gap is the real MC focus/physical-input transition under the guardrail window style.
+- Current truth: **hardware ingress validator reproduces the real-world MC failure**. Manual mouse click into SRPSS on a secondary display causes keys to be "eaten"; programmatic `SetForegroundWindow` and `SendInput` clicks do NOT.
+- **Speculative hypothesis**: the bug may be in Qt-side focus/activation/mouse side effects, not Windows focus routing. Requires validation by isolating specific widgets/event filters that capture input after manual click.
 - Priority order: MC real-world repro fidelity first; Winlogon investigation is deferred until MC behavior is understood and reliable.
 - Non-negotiable MC window guardrails: never appear in the normal taskbar, never appear in Alt-Tab, and never fall behind other windows.
 - Normal-window or normal-build comparisons are not candidate fixes. They are already known to handle keys, but they do not satisfy MC requirements.
 
 ### Runtime Matrix To Lock
-- MC runtime focused after in-window click: media keys fail, control keys fail.
+- MC runtime focused after **manual** in-window click on Display 1: media keys "eaten", control keys fail. Defocusing to Display 0 restores keys.
+- MC runtime focused after **programmatic** focus (`SetForegroundWindow`): keys work. This does NOT reproduce the bug.
 - Normal Windows Preview runtime: all keys work.
 - Normal Winlogon runtime: media keys fail, most keys fail, `S` works. This is tracked as a later phase, not the next active target.
 
 ### Phase 1 — Evidence Freeze (No-Edit)
-- [ ] Capture a faithful MC-only reproduction that matches the user's failure: focused SRPSS, physical media key fails, normal control keys fail, focus-loss recovers media keys.
-- [ ] Capture two-phase MC evidence: physical keys while MC is unfocused and working, then the same physical keys after MC is brought into focus and failing.
-- [ ] Capture logs (`--debug`) for the exact MC key batches only after the harness can represent the real failure state.
-- [ ] Record focus owner transitions at each MC step (before click, after click, after focus-loss, after alt-tab).
-- [ ] Archive one MC evidence bundle in `/logs` with timestamp, profile mode, focus state, and whether the sample used physical or synthetic keys.
+- [x] Capture a faithful MC-only reproduction: manual click into SRPSS on Display 1 causes media keys and hotkeys to be "eaten". Defocusing to Display 0 restores keys.
+- [x] Capture two-phase MC evidence: unfocused keys work, manual click into SRPSS causes failure, programmatic focus does NOT cause failure.
+- [x] Capture logs (`--debug`) for MC key batches via `hardware_ingress_validator.py`.
+- [x] Record focus owner transitions at each MC step (before manual click, after manual click, after programmatic focus).
+- [x] Archive MC evidence bundles in `logs/hardware_ingress/` with timestamps.
 
 ### Phase 2 — Harness Build Plan (Automation-First)
 - [x] Add a media-key matrix runner harness (sequence-driven, repeatable).
@@ -56,11 +58,11 @@ This file tracks active work and near-term validation.
 - [x] Add MC runtime contract guard (window/flag/display/compositor checks) so harness fails when MC surface is not actually built.
 - [x] Add live-profile parity mode (elevated execution path) and explicit profile mode reporting.
 - [x] Block invalid `focused_clicked` samples when focus is stolen during click setup (mark as blocked with explicit reason instead of scoring false failures).
-- [ ] Add hardware-ingress validation layer (separate from synthetic injection).
+- [x] Add hardware-ingress validation layer (`tools/hardware_ingress_validator.py`) — correlates real physical key events with SRPSS log responses, separate from synthetic injection.
 - [x] Add one-command compare runner for focus-policy A/B (`tools/media_key_matrix_compare.py`).
 - [x] Add deterministic click-safe targeting so `focused_clicked` can be exercised without browser/overlay focus diversion.
 - [x] Add mirrored-profile safety guard to disable Reddit click surfaces in harness-owned profiles during click scenarios.
-- [ ] Add an MC reality mode that does not rely on synthetic success as proof: target real focused window, wait for user/hardware media key input or capture OS-level hardware ingress, and compare against internal logs.
+- [x] Add an MC reality mode that does not rely on synthetic success as proof: `tools/hardware_ingress_validator.py` targets real focused window, captures OS-level hardware ingress via WH_KEYBOARD_LL, and correlates against SRPSS internal logs.
 - [x] Add two-phase MC reality mode (`focus_transition`) for unfocused-working vs focused-failing capture.
 - [x] Add a guarded splash-window flag experiment for harness diagnosis.
 - [x] Treat splash-window mode as ruled out for product behavior unless repeated focus-change stability is proven.
@@ -71,13 +73,16 @@ This file tracks active work and near-term validation.
 - [x] Trace Raw Input lifecycle in `core/windows/media_key_rawinput.py`.
 - [x] Trace focus/interaction gating in `rendering/display_input.py` and `rendering/input_handler.py`.
 - [x] Diff launch/runtime surface assumptions between `main.py` and `main_mc.py`.
-- [ ] Build an MC-only flow map: focus state -> message ingress -> dispatch -> handler outcome.
-- [ ] Explain why the real-world focused MC state fails when synthetic/injected focused MC samples pass.
+- [x] Build an MC-only flow map: focus state -> message ingress -> dispatch -> handler outcome.
+- [x] Explain why the real-world focused MC state fails when synthetic/injected focused MC samples pass: **manual mouse click into SRPSS causes the failure; programmatic focus does not.** The bug is in the manual click/activation path, not focus ownership itself.
 - [ ] Map the native activation/focus behavior of MC `Qt.Tool` windows while preserving `WS_EX_TOOLWINDOW`/topmost/no-taskbar/no-Alt-Tab guardrails.
-- [ ] Investigate why clicking MC changes physical key routing even when the native guardrail style remains tool/topmost.
+- [x] Investigate why clicking MC changes physical key routing even when the native guardrail style remains tool/topmost: **manual click alters Qt input handling state (likely widget focus or mouse-grab side effects) while programmatic SetForegroundWindow does not.**
 - [ ] Verify any candidate fix keeps `WS_EX_TOOLWINDOW`/topmost semantics and does not introduce `WS_EX_APPWINDOW` or normal taskbar/Alt-Tab behavior.
 - [x] Re-run divergence analysis only on valid `focused_clicked` samples (no focus theft); previous failing rows were contaminated by external foreground takeover.
-- [ ] Extend analysis to physical hardware ingress parity vs synthetic/injected paths.
+- [x] Extend analysis to physical hardware ingress parity vs synthetic/injected paths using `hardware_ingress_validator.py`.
+  - Finding: PowerToys remaps PgUp/PgDn to Volume Up/Down, causing media keys to appear as `injected=true` in `WH_KEYBOARD_LL`. Validator now accounts for this.
+  - Finding: **Manual click focus reproduces the bug** (C fails). Programmatic focus does NOT reproduce it (C works).
+  - Implication: fix must target the manual click/activation side effects, not focus routing.
 - [x] Validate mirrored-safe strict/realistic A/B parity after focus-steal fix and click safety guard.
 
 ### Phase 4 — Resolution Gate (Edit Permission Boundary)
@@ -86,8 +91,10 @@ This file tracks active work and near-term validation.
 - [ ] Do not implement until expected outcomes are explicitly mapped and risk-reviewed.
 
 ### Exit Criteria
-- [ ] Harness reproduces the user-reported MC failure, not just synthetic-path passes.
+- [x] Harness reproduces the user-reported MC failure: **manual click into SRPSS on secondary display causes keys to be "eaten"**; programmatic focus does not.
 - [ ] MC focused/unfocused behavior is consistent for media keys and normal control keys.
+- [ ] Identify exact Qt widget or focus state that "eats" keys after manual mouse click.
+- [ ] Propose fix targeting Qt-side focus/activation side effects, not Windows focus routing.
 - [ ] Final MC fix preserves: no taskbar entry, no Alt-Tab entry, and topmost/no-fall-behind behavior.
 - [ ] Winlogon `S`-works clue is promoted only after MC is solved or the MC root cause clearly requires Winlogon comparison.
 - [ ] `Docs/Historical_Bugs.md` and `Docs/MEDIAKEYDEBUG.md` updated with final before/after matrix.

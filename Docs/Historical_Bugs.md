@@ -566,6 +566,27 @@ Keep this document as the long-term anti-regression memory for the project.
   - Native-style evidence from the current Tool baseline shows the intended guardrail shape (`WS_EX_TOOLWINDOW` + topmost), so the next investigation stays inside that contract rather than testing normal windows.
   - MC focused-click harness parity is stable only for controlled probes; remaining gap is proving/isolating divergence between synthetic/injected probes and physical hardware key ingress on user machines.
   - Winlogon asymmetry (`S` works while media keys fail) is deferred until MC is understood or the MC root cause clearly requires Winlogon comparison.
+- **2026-04-25 Research + Code Analysis (new):**
+  - **Hardware ingress validator confirms real-world repro**: manual click into SRPSS on Display 1 causes keys to be "eaten". Programmatic `SetForegroundWindow` and `SendInput` mouse clicks do NOT reproduce the bug.
+  - **PowerToys remapping accounted for**: PgUp/PgDn remapped to Volume Up/Down appear as `injected=true` in `WH_KEYBOARD_LL`.
+  - **Online research findings** (8 independent sources mapped in `Docs/MEDIAKEYDEBUG.md` Section 7.1):
+    - `Qt::Tool` / `WS_EX_TOOLWINDOW` windows exhibit documented anomalous focus/keyboard behavior on Windows.
+    - `activateWindow()` is unreliable when app is not already foreground (QTBUG-14062).
+    - Key events are LOST during focus transitions between Qt widgets.
+    - `WS_EX_TOOLWINDOW` + manual click produces "focus cursor present but no keyboard capture" — direct symptom match.
+    - Tool windows can steal focus unexpectedly on `showNormal()` / activation.
+    - AutoKey issue reveals distinction between **focused window** (keyboard target) vs **active window** (title bar highlight). Manual click may make SRPSS "active" but not "focused".
+    - `Qt::WindowDoesNotAcceptFocus` is insufficient on Windows; native `WS_EX_NOACTIVATE` is required.
+    - Embedded/native child HWNDs cause focus routing problems (Qt forum QTBUG-40320).
+  - **Code analysis identified 8 compounding issues** (full detail in `Docs/MEDIAKEYDEBUG.md` Section 7.2):
+    - **Issue 7 (Severity: HIGH)**: Overlay widgets may have default `StrongFocus`/`ClickFocus` policies. Manual click routes focus to a child widget that doesn't handle keys. Programmatic focus bypasses child routing. This is the **strongest candidate**.
+    - **Issue 6 (Severity: MODERATE-HIGH)**: GL compositor (`QOpenGLWidget`) has its own native window. Click on compositor area may give focus to compositor widget instead of DisplayWidget.
+    - **Issue 2 (Severity: MODERATE)**: `_restore_mc_input_focus()` uses `MouseFocusReason` which may route focus to child widgets.
+    - **Issue 3 (Severity: LOW-MODERATE)**: `CursorHaloWidget` is a separate top-level `Qt.Tool` window that may interfere with focus ownership.
+    - Other issues (focus policy toggling, coordinator stale state, Raw Input per-window registration, `perform_activation_refresh()` lack of focus restore) ruled out or low severity.
+  - **Synthesized root-cause model** (speculative): Manual click triggers Qt focus routing to a child widget (overlay/GL compositor). Child widget doesn't handle keys → keys "eaten". Programmatic `SetForegroundWindow` sets focus on top-level DisplayWidget, bypassing child routing. `Qt.Tool` / `WS_EX_TOOLWINDOW` exposes this edge case; normal `Qt.SplashScreen` builds don't.
+  - **Testable hypotheses documented** (7 hypotheses in `Docs/MEDIAKEYDEBUG.md` Section 7.4). Strongest test: set `NoFocus` on all child widgets (H1) or GL compositor alone (H2).
+- Winlogon asymmetry (`S` works while media keys fail) is deferred until MC is understood or the MC root cause clearly requires Winlogon comparison.
 
 
 

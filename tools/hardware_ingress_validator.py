@@ -22,9 +22,9 @@ if os.name != "nt":
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+    sys.path.insert(0, str(ROOT))  # noqa: E402
 
-from media_key_matrix_harness import (
+from media_key_matrix_harness import (  # noqa: E402
     LogTail,
     _collect_tails,
     _evaluate_runtime_contract,
@@ -37,19 +37,22 @@ from media_key_matrix_harness import (
     _wait_for_optional_log_file,
     _wait_for_window,
 )
-from media_key_reality_harness import (
+from media_key_reality_harness import (  # noqa: E402
     _capture_input_events, _make_appdata, _native_window_styles, _vk_name,
 )
 
 MEDIA_VK = {0xAD, 0xAE, 0xAF, 0xB0, 0xB1, 0xB2, 0xB3}
-CTRL_VK = {0x43, 0x53}
-INTERESTING = MEDIA_VK | CTRL_VK
+PHYSICAL_MEDIA_VK = {0x21, 0x22}  # PgUp/PgDn used with PowerToys remap
+CTRL_VK = {0x43, 0x53}  # C (cycle), S (settings)
+HOTKEY_VK = {0x58}  # X (next image)
+INTERESTING = MEDIA_VK | PHYSICAL_MEDIA_VK | CTRL_VK | HOTKEY_VK
 RESPONSE_PATTERNS = ["[WIN_APPCOMMAND]", "[RAW_INPUT]", "media key", "InputHandler", "cycle transition", "open_settings"]
 
 @dataclass
 class PhaseResult:
     phase: str
     hardware_keys: int = 0
+    injected_media_keys: int = 0
     focused_keys: int = 0
     unfocused_keys: int = 0
     passes: int = 0
@@ -62,6 +65,30 @@ def _focus_label(ev: Dict[str, Any], target_hwnd: int) -> str:
         return "unknown"
     return "focused" if int(fg.get("hwnd", 0)) == int(target_hwnd) else "unfocused"
 
+
+def _get_display_index(hwnd: int) -> int:
+    """Return monitor index (0-based) for a window."""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        hmon = user32.MonitorFromWindow(wintypes.HWND(hwnd), 2)  # MONITOR_DEFAULTTONEAREST
+        if not hmon:
+            return -1
+        # enumerate monitors to find index
+        monitors: list[int] = []
+        def _enum_proc(h_monitor, hdc, rect, data):
+            monitors.append(int(h_monitor))
+            return 1
+        MONITORENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HMONITOR, wintypes.HDC, ctypes.POINTER(wintypes.RECT), wintypes.LPARAM)
+        user32.EnumDisplayMonitors(None, None, MONITORENUMPROC(_enum_proc), 0)
+        try:
+            return monitors.index(int(hmon))
+        except ValueError:
+            return -1
+    except Exception:
+        return -1
+
 def _find_resp(lines: List[str]) -> Optional[str]:
     for line in lines:
         low = line.lower()
@@ -73,7 +100,14 @@ def _validate_phase(phase: str, events: List[Dict[str, Any]], target_hwnd: int, 
     pr = PhaseResult(phase=phase)
     keydowns = [e for e in events if e.get("message") in {"WM_KEYDOWN", "WM_SYSKEYDOWN"}]
     for ev in keydowns:
-        if ev.get("injected") or int(ev.get("vk", 0)) not in INTERESTING:
+        vk = int(ev.get("vk", 0))
+        is_media = vk in MEDIA_VK
+        is_interesting = vk in INTERESTING
+        # Count injected media keys (e.g., PowerToys remapped PgUp/PgDn -> Volume)
+        if ev.get("injected") and is_media:
+            pr.injected_media_keys += 1
+            # Still validate: injected media keys are real user input via remappers
+        elif ev.get("injected") or not is_interesting:
             continue
         pr.hardware_keys += 1
         foc = _focus_label(ev, target_hwnd)
@@ -98,6 +132,7 @@ def _write_md(path: Path, payload: Dict[str, Any]) -> None:
              f"- Response timeout: `{payload['response_timeout_s']}s`", ""]
     lines += ["## Summary", "",
               f"- Total hardware keys: `{payload['summary']['total_hardware_keys']}`",
+              f"- Injected media keys (PowerToys/etc): `{payload['summary'].get('injected_media_keys', 0)}`",
               f"- Media keys: `{payload['summary']['media_keys']}`",
               f"- Control keys: `{payload['summary']['control_keys']}`",
               f"- Passes: `{payload['summary']['passes']}`",
@@ -105,6 +140,7 @@ def _write_md(path: Path, payload: Dict[str, Any]) -> None:
     for ph in payload.get("phases", []):
         lines += [f"### Phase: `{ph['phase']}`", "",
                   f"- Hardware keys: `{ph['hardware_keys']}`",
+                  f"- Injected media keys: `{ph.get('injected_media_keys', 0)}`",
                   f"  - Focused: `{ph['focused_keys']}`",
                   f"  - Unfocused: `{ph['unfocused_keys']}`",
                   f"- Passes: `{ph['passes']}`", f"- Failures: `{ph['failures']}`", ""]
@@ -116,13 +152,44 @@ def _write_md(path: Path, payload: Dict[str, Any]) -> None:
                 lines.append(
                     f"| `{_vk_name(int(ev.get('vk',0)))}` | `{ev.get('vk_name','')}` | "
                     f"`{r['focus_state']}` | `{'PASS' if r['responded'] else 'FAIL'}` | "
-                    f"`{r.get('matched_log_line','')[:50]}` |"
+                    f"`{(r.get('matched_log_line') or '')[:50]}` |"
                 )
             lines.append("")
     lines += ["## Log Excerpt", "", "```text"]
     lines += payload.get("log_excerpt", [])
     lines += ["```", ""]
     path.write_text("\n".join(lines), encoding="utf-8")
+
+def _banner(text: str) -> None:
+    import sys
+    print("\n" + "=" * 60)
+    print(text)
+    print("=" * 60 + "\n")
+    sys.stdout.flush()
+
+
+def _beep(freq: int = 800, dur: int = 300) -> None:
+    try:
+        import winsound
+        winsound.Beep(freq, dur)
+    except Exception:
+        pass
+
+
+def _countdown(seconds: float, label: str = "Time remaining") -> None:
+    import sys
+    end = time.time() + seconds
+    last = -1
+    while time.time() < end:
+        rem = int(end - time.time()) + 1
+        if rem != last:
+            last = rem
+            sys.stdout.write(f"\r[{label}] {rem}s   ")
+            sys.stdout.flush()
+        time.sleep(0.1)
+    sys.stdout.write("\r" + " " * 40 + "\r")
+    sys.stdout.flush()
+
 
 def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
     ts = time.strftime("%Y%m%d_%H%M%S")
@@ -155,8 +222,11 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
             tails.append(LogTail(vlog))
 
         if args.scenario == "manual_focus":
-            print("[VALIDATOR] Manual focus: click/focus SRPSS now.")
-            time.sleep(max(0.0, args.manual_focus_seconds))
+            _beep(800, 200)
+            _banner("MANUAL FOCUS PHASE")
+            print("Click / focus the SRPSS MC window now.")
+            sys.stdout.flush()
+            _countdown(args.manual_focus_seconds, "Focus window")
             prep = {"scenario": args.scenario, "focus_ok": True}
         elif args.scenario == "focus_transition":
             prep = {"scenario": args.scenario, "focus_ok": True}
@@ -172,39 +242,81 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
         phases: List[PhaseResult] = []
 
         if args.scenario == "focus_transition":
-            print("[VALIDATOR] Phase 1: unfocused. Press real keys now.")
+            _beep(600, 200)
+            _banner("PHASE 1 / 3 -- UNFOCUSED (keys should WORK)")
+            print("SRPSS is running but NOT focused.")
+            print("Press your real media keys now (e.g., Volume Up/Down, Play/Pause).")
+            print("Also try the 'C' key.\n")
+            print("DO NOT click SRPSS yet.")
+            sys.stdout.flush()
             p1 = _capture_input_events(args.observe_seconds, target.hwnd, "unfocused_before_click")
             key_events.extend(p1["keyboard_events"])
+            detected = len([e for e in p1["keyboard_events"] if e.get("message") in {"WM_KEYDOWN", "WM_SYSKEYDOWN"}])
+            print(f"\n[PHASE 1 COMPLETE] Keydowns detected: {detected}")
             lines = _collect_tails(tails, 1.2, poll_s=0.12)
             phases.append(_validate_phase("unfocused_before_click", p1["keyboard_events"], target.hwnd, lines))
 
-            print(f"[VALIDATOR] Phase 2: click/focus SRPSS. Waiting {args.manual_focus_seconds:.1f}s...")
+            _beep(800, 200)
+            _banner("PHASE 2 / 3 -- MANUAL CLICK / FOCUS SRPSS")
+            print("NOW: Click inside the SRPSS MC window with YOUR MOUSE.")
+            print("This simulates the real user repro path.")
+            print(f"You have {args.manual_focus_seconds:.1f}s to click it...\n")
+            sys.stdout.flush()
             setup = _capture_input_events(args.manual_focus_seconds, target.hwnd, "focus_setup")
             key_events.extend(setup["keyboard_events"])
             focus_ok = bool((fg := _foreground_window()) and int(fg.hwnd) == int(target.hwnd))
-            if not focus_ok:
-                print("[VALIDATOR] WARNING: SRPSS not foreground for phase 2.")
+            if focus_ok:
+                print("\n[PHASE 2 COMPLETE] SRPSS is now focused. Good.")
+            else:
+                _banner("WARNING: SRPSS IS NOT FOCUSED")
+                print("Click it now if you missed it.")
 
-            print("[VALIDATOR] Phase 3: focused. Press same real keys again.")
+            _beep(1000, 200)
+            _banner("PHASE 3 / 3 -- FOCUSED AFTER MANUAL CLICK")
+            focus_ok = bool((fg := _foreground_window()) and int(fg.hwnd) == int(target.hwnd))
+            if focus_ok:
+                print("SRPSS is focused. Good.")
+            else:
+                print("WARNING: SRPSS is NOT focused. Attempting to refocus...")
+                sys.stdout.flush()
+                _force_foreground(target.hwnd)
+                focus_ok = bool((fg := _foreground_window()) and int(fg.hwnd) == int(target.hwnd))
+                print(f"Refocus result: {'OK' if focus_ok else 'FAILED'}")
+            sys.stdout.flush()
+            print("Press the SAME real media keys again (Volume Up/Down, Play/Pause).")
+            print("Also try 'C' again.\n")
+            sys.stdout.flush()
             p2 = _capture_input_events(args.observe_seconds, target.hwnd, "focused_after_click")
             key_events.extend(p2["keyboard_events"])
+            detected2 = len([e for e in p2["keyboard_events"] if e.get("message") in {"WM_KEYDOWN", "WM_SYSKEYDOWN"}])
+            print(f"\n[PHASE 3 COMPLETE] Keydowns detected: {detected2}")
+            lines = _collect_tails(tails, 1.2, poll_s=0.12)
+            phases.append(_validate_phase("focus_setup", setup["keyboard_events"], target.hwnd, lines))
             lines = _collect_tails(tails, 1.2, poll_s=0.12)
             phases.append(_validate_phase("focused_after_click", p2["keyboard_events"], target.hwnd, lines))
         else:
+            _beep(800, 200)
+            _banner("SINGLE PHASE CAPTURE")
             if not focus_ok:
-                print("[VALIDATOR] WARNING: SRPSS not foreground.")
-            print(f"[VALIDATOR] Capture {args.observe_seconds:.1f}s. Press real keys now.")
+                _banner("WARNING: SRPSS IS NOT FOCUSED")
+                print("Results may not reflect focused-MC behavior.")
+            else:
+                print("SRPSS is focused.")
+            print("Press your real media keys now (Volume Up/Down, Play/Pause).")
+            print("Also try the 'C' key.")
+            sys.stdout.flush()
             cap = _capture_input_events(args.observe_seconds, target.hwnd, args.scenario)
             key_events = cap["keyboard_events"]
             lines = _collect_tails(tails, 1.2, poll_s=0.12)
             phases.append(_validate_phase(args.scenario, key_events, target.hwnd, lines))
 
         total_h = sum(p.hardware_keys for p in phases)
+        total_inj = sum(p.injected_media_keys for p in phases)
         media = ctrl = uncls = pss = fls = 0
         for ph in phases:
             for r in ph.results:
                 vk = int(r["event"].get("vk", 0))
-                if vk in MEDIA_VK:
+                if vk in MEDIA_VK or vk in PHYSICAL_MEDIA_VK:
                     media += 1
                 elif vk in CTRL_VK:
                     ctrl += 1
@@ -229,7 +341,9 @@ def run_validation(args: argparse.Namespace) -> Dict[str, Any]:
             "output_dir": str(out_dir), "keyboard_events": key_events,
             "phases": [p.__dict__ for p in phases],
             "summary": {
-                "total_hardware_keys": total_h, "media_keys": media,
+                "total_hardware_keys": total_h,
+                "injected_media_keys": total_inj,
+                "media_keys": media,
                 "control_keys": ctrl, "unclassified": uncls,
                 "passes": pss, "failures": fls,
             },

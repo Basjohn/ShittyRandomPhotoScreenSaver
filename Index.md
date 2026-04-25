@@ -85,6 +85,7 @@ Living map of the current SRPSS codebase.
 | `tools/winprobe_observer.py` | External transient HWND observer |
 | `tools/reddit_helper_task_harness.py` | Scheduled-task helper smoke test |
 | `tools/regen_qrc.py` | Regenerate Qt icon resource module |
+| `tools/hardware_ingress_validator.py` | Hardware-ingress validation layer for U-05 — correlates real physical key events with SRPSS log responses |
 
 ## Runtime Environment Variables
 
