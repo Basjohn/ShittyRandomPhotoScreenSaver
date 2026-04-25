@@ -43,7 +43,7 @@ Validated user matrix (2026-04-23):
 
 1. **MC runtime (`main_mc.py`) after clicking into SRPSS window**
    - Media keys fail while SRPSS is focused.
-   - Media keys work again when context menu opens or focus shifts to another app.
+   - Media keys work again when focus shifts to another app.
    - Normal control keys do not work in this mode.
 2. **Normal mode, Windows Preview runtime**
    - All keys work, including media keys.
@@ -71,13 +71,13 @@ Active priority: solve MC focused behavior first. Winlogon is a separate runtime
 1. Which event ingress paths are active per runtime (`WM_APPCOMMAND`, `WM_KEYDOWN/UP`, Raw Input)?
 2. What focus/foreground transitions change media-key behavior in MC?
 3. Why do physical media/control keys fail in user MC while synthetic/injected harness probes pass?
-4. Is context-menu success in MC a focus ownership change, a message-route change, or both?
+4. Is focus-loss recovery in MC a focus ownership change, a message-route change, or both?
 5. Why does `S` survive in Winlogon while media keys fail? Deferred until MC is understood.
 
 ## 4. No-Edit Investigation Checklist (Live)
 
-- [ ] Capture baseline MC logs for the exact user sequence: focus SRPSS, physical media key, physical control key, context menu/external focus recovery.
-- [ ] Trace focused vs unfocused MC transitions (before click, after click, after context menu, after alt-tab).
+- [ ] Capture baseline MC logs for the exact user sequence: focus SRPSS, physical media key, physical control key, external focus recovery.
+- [ ] Trace focused vs unfocused MC transitions (before click, after click, after focus-loss, after alt-tab).
 - [ ] Confirm which window receives native messages in each MC state.
 - [ ] Verify whether Raw Input registration is live and still dispatching in each MC state.
 - [ ] Confirm native style/ex-style remains guardrail-compliant (`WS_EX_TOOLWINDOW`, topmost, no taskbar/Alt-Tab) for every candidate path.
@@ -128,7 +128,7 @@ Next harness upgrades (required for MC diagnosis):
 - [x] Add two-phase MC reality mode (`focus_transition`) to capture unfocused-working vs focused-failing behavior in one report.
 - [x] Test the existing splash-window flag path as a diagnostic only; do not treat it as a fix.
 - [x] Add native HWND style/ex-style dumps to the reality harness.
-- [ ] Add a focused-MC context-menu/external-focus recovery scenario for contrast.
+- [ ] Add a focused-MC external-focus recovery scenario for contrast.
 - [ ] Research and map the native Win32/Qt activation contract for MC `Qt.Tool` windows while preserving the existing no-taskbar/no-Alt-Tab/topmost contract.
 - [ ] Defer Winlogon-oriented probe capture until MC behavior is reliable.
 - [ ] Add post-click native key-message correlation probe (`WM_KEYDOWN`/`WM_SYSKEYDOWN` path evidence) to explain why `C` fails after click while AppCommand still passes.
@@ -149,7 +149,6 @@ Quick automation commands:
 - `rendering/display_native_events.py`
 - `core/windows/media_key_rawinput.py`
 - `rendering/display_input.py`
-- `rendering/display_context_menu.py`
 - `rendering/input_handler.py`
 - Runtime entry/launch-path differences in `main.py` and `main_mc.py`
 

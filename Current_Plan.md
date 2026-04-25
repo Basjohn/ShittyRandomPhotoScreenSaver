@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-04-24
+Last updated: 2026-04-25
 
 This file tracks active work and near-term validation.
 
@@ -12,11 +12,11 @@ This file tracks active work and near-term validation.
 
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
-- Continue visualizer quality work in unresolved mode-specific bug families from `Docs/Historical_Bugs.md`.
+- Resolve U-05 (MC Keyboard Focus / Ctrl Halo Runtime Input Family).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 
 ## Open Validation
-- Runtime confirmation for unresolved historical bug entries only.
+- Runtime confirmation for U-05 MC focus/input matrix.
 - Preset repair/reindex round-trip checks after visualizer schema changes.
 - Settings destructive-flow checks (reset/import) when touching settings architecture.
 
@@ -30,15 +30,14 @@ This file tracks active work and near-term validation.
 
 ### Runtime Matrix To Lock
 - MC runtime focused after in-window click: media keys fail, control keys fail.
-- MC runtime with context menu open or external app focused: media keys recover (diagnostic only, not primary target path).
 - Normal Windows Preview runtime: all keys work.
 - Normal Winlogon runtime: media keys fail, most keys fail, `S` works. This is tracked as a later phase, not the next active target.
 
 ### Phase 1 — Evidence Freeze (No-Edit)
-- [ ] Capture a faithful MC-only reproduction that matches the user's failure: focused SRPSS, physical media key fails, normal control keys fail, context menu/external focus recovers media keys.
+- [ ] Capture a faithful MC-only reproduction that matches the user's failure: focused SRPSS, physical media key fails, normal control keys fail, focus-loss recovers media keys.
 - [ ] Capture two-phase MC evidence: physical keys while MC is unfocused and working, then the same physical keys after MC is brought into focus and failing.
 - [ ] Capture logs (`--debug`) for the exact MC key batches only after the harness can represent the real failure state.
-- [ ] Record focus owner transitions at each MC step (before click, after click, after context menu, after alt-tab).
+- [ ] Record focus owner transitions at each MC step (before click, after click, after focus-loss, after alt-tab).
 - [ ] Archive one MC evidence bundle in `/logs` with timestamp, profile mode, focus state, and whether the sample used physical or synthetic keys.
 
 ### Phase 2 — Harness Build Plan (Automation-First)
@@ -63,7 +62,6 @@ This file tracks active work and near-term validation.
 - [x] Add mirrored-profile safety guard to disable Reddit click surfaces in harness-owned profiles during click scenarios.
 - [ ] Add an MC reality mode that does not rely on synthetic success as proof: target real focused window, wait for user/hardware media key input or capture OS-level hardware ingress, and compare against internal logs.
 - [x] Add two-phase MC reality mode (`focus_transition`) for unfocused-working vs focused-failing capture.
-- [ ] Add explicit context-menu/open-focus recovery scenario for MC as a diagnostic contrast, without treating it as the primary target path.
 - [x] Add a guarded splash-window flag experiment for harness diagnosis.
 - [x] Treat splash-window mode as ruled out for product behavior unless repeated focus-change stability is proven.
 - [x] Add native HWND style/ex-style reporting to the MC reality harness.
@@ -72,7 +70,6 @@ This file tracks active work and near-term validation.
 - [x] Trace media-key ingress path in `rendering/display_native_events.py`.
 - [x] Trace Raw Input lifecycle in `core/windows/media_key_rawinput.py`.
 - [x] Trace focus/interaction gating in `rendering/display_input.py` and `rendering/input_handler.py`.
-- [ ] Trace context-menu/focus side effects in `rendering/display_context_menu.py`.
 - [x] Diff launch/runtime surface assumptions between `main.py` and `main_mc.py`.
 - [ ] Build an MC-only flow map: focus state -> message ingress -> dispatch -> handler outcome.
 - [ ] Explain why the real-world focused MC state fails when synthetic/injected focused MC samples pass.
