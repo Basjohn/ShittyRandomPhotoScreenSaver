@@ -88,6 +88,16 @@ def _restore_mc_input_focus(widget, reason: str) -> None:
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
+    # Re-raise cursor halo so it stays visually above DisplayWidget after
+    # activation/focus restoration.  The halo is a separate top-level
+    # Tool window; raising the parent widget can push it behind.
+    try:
+        hint = getattr(widget, "_ctrl_cursor_hint", None)
+        if hint is not None:
+            hint.raise_()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+
 
 def _refresh_halo_after_interaction_click(widget, pos) -> None:
     """Keep the halo alive after interactive clicks in hard-exit mode."""

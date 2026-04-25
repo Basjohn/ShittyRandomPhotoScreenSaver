@@ -314,7 +314,7 @@ Several of the code issues identified above are not unique to U-05; they are lat
 4. **H4 (Overlay Widget Specific)**: Only one specific overlay widget causes focus theft. **Ruled out by H1** — H1 blanket-disabled focus on all children and bug persisted.
 5. **H5 (Native Window Handle Collision)**: The GL compositor's internal native window handle receives focus. **Ruled out by H1** — included in blanket NoFocus test.
 6. **H6 (Qt.Tool Focus Routing Bug)**: Switching MC window from `Qt.Tool` to `Qt.SplashScreen` prevents the bug. **Not viable** — breaks no-taskbar/no-Alt-Tab contract; already tested and ruled out.
-7. **H7 (_restore_mc_input_focus Race)**: Calling `_restore_mc_input_focus()` with a small delay after mouse press prevents the bug. **This is the actual fix candidate** — the function exists but is DEAD CODE. Wiring it into `handle_mousePressEvent` after widget click routing is the proposed resolution.
+7. **H7 (_restore_mc_input_focus Race)**: Calling `_restore_mc_input_focus()` with a small delay after mouse press prevents the bug. **RESOLVED (2026-04-25)** — `_restore_mc_input_focus()` was dead code. Wiring it into `handle_mousePressEvent` at 3 return points (context menu click, handled widget click, unhandled interaction click) fixed the media key bug. See Section 11.
 
 ### 7.5 Resolution Acceptance Criteria
 
@@ -395,6 +395,41 @@ The codebase already has multiple mitigations:
 ## 10. Recommended Next Steps (Research-Only)
 
 1. **Add focus-state logging**: Log `QApplication.focusWidget()`, `QApplication.activeWindow()`, and the native HWND with `GetFocus()`/`GetForegroundWindow()` after every mouse click in MC mode. This will confirm which widget holds focus when keys fail.
-2. **Wire `_restore_mc_input_focus` into click handler**: The dead code function already implements the correct fix (`raise_`, `activateWindow`, `requestActivate`, `setFocus`). It needs to be called at the end of `handle_mousePressEvent` when in MC mode and the click was not an exit.
+2. ~~**Wire `_restore_mc_input_focus` into click handler**~~ — **DONE (2026-04-25)**. Wired into `handle_mousePressEvent` at 3 return points. Media keys now work after manual click in MC mode.
 3. **Do NOT modify focus policies on children**: This destabilizes the shadow system and does not fix the root cause.
 4. **Shadow hardening**: Consider adding `QPixmapCache.clear()` call inside `_restore_mc_input_focus` or after focus transitions to prevent cache corruption when focus is restored.
+
+## 11. Final Fix — `_restore_mc_input_focus` Wired (2026-04-25)
+
+### 11.1 What Was Changed
+
+`rendering/display_input.py::handle_mousePressEvent()` now calls `_restore_mc_input_focus(widget, reason)` at 3 return points within the `hard_exit`/`ctrl_mode` branches:
+
+1. **After right-click context menu** (`"context_menu_click"`) — restores focus after menu popup closes
+2. **After handled widget click** (`"widget_click_handled"`) — restores focus after Reddit/media/Spotify clicks
+3. **After unhandled interaction click** (`"widget_click_unhandled"`) — restores focus after clicking empty areas in interaction mode
+
+The fall-through exit path was NOT touched (app is exiting there, no point).
+
+### 11.2 Why It Works
+
+- Before: manual click left focus on the clicked child widget (e.g., media widget label, compositor native window). Media keys were delivered to that child, which did not handle them.
+- After: `_restore_mc_input_focus()` runs `raise_()`, `activateWindow()`, `requestActivate()`, and `setFocus()` on `DisplayWidget`, returning keyboard ownership to the top-level window. Media keys now route correctly through `nativeEvent()`/`WM_APPCOMMAND`.
+
+### 11.3 Halo Side-Effect and Fix
+
+**Side effect**: `widget.raise_()` in `_restore_mc_input_focus` pushed the cursor halo behind `DisplayWidget` in the z-order, making it invisible. Only Ctrl-press or mouse-move (which re-raise the halo via `show_ctrl_cursor_hint`) brought it back.
+
+**Fix**: Added `hint.raise_()` at the end of `_restore_mc_input_focus` to re-raise the cursor halo after `DisplayWidget` activation. The halo is a separate top-level `Qt.Tool` window with `WindowDoesNotAcceptFocus`, so `raise_()` only affects z-order, not keyboard focus.
+
+### 11.4 Build Variants Affected
+
+- **MC build**: Fixed. Manual clicks no longer break media keys.
+- **Normal build**: Unaffected (exits on click, so focus restoration is irrelevant).
+- **No taskbar/Alt-Tab behavior preserved**: `Qt.Tool` + `WS_EX_TOOLWINDOW` unchanged.
+
+### 11.5 Prevention Rules Added to Guardrails
+
+- Never manipulate focus policies on large widget trees at runtime (triggers `styleChange` cascades that corrupt `QPixmapCache` for shadows).
+- Always verify dead code is actually wired into call chains before declaring a fix complete.
+- When restoring focus to a top-level window that has a separate top-level overlay (halo), always re-raise the overlay to maintain z-order.

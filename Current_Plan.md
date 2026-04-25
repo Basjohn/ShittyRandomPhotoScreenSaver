@@ -127,11 +127,12 @@ These are ticking bombs even if not the U-05 root cause. Fix after U-05 is resol
 - [x] Wire `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing (implemented 2026-04-25).
   - Added at 3 return points within `hard_exit/ctrl_mode` branches: context menu click, handled widget click, unhandled interaction click.
   - NOT added to fall-through exit path (app is exiting there, no point).
-  - **Ready for manual test**.
-- [ ] MC focused/unfocused behavior is consistent for media keys and normal control keys.
-- [ ] Final MC fix preserves: no taskbar entry, no Alt-Tab entry, and topmost/no-fall-behind behavior.
+  - **User manually tested: WORKS** — media keys, `C`, `S` all work after manual click in MC mode.
+- [x] Cursor halo side-effect fixed: `widget.raise_()` in `_restore_mc_input_focus` pushed halo behind DisplayWidget. Added `hint.raise_()` at end to re-raise halo after focus restoration. Safe because halo has `WindowDoesNotAcceptFocus`.
+- [x] MC focused/unfocused behavior is consistent for media keys and normal control keys.
+- [x] Final MC fix preserves: no taskbar entry, no Alt-Tab entry, and topmost/no-fall-behind behavior.
 - [ ] Winlogon `S`-works clue is promoted only after MC is solved or the MC root cause clearly requires Winlogon comparison.
-- [ ] `Docs/Historical_Bugs.md` and `Docs/MEDIAKEYDEBUG.md` updated with final before/after matrix.
+- [x] `Docs/Historical_Bugs.md` and `Docs/MEDIAKEYDEBUG.md` updated with final fix documentation.
 
 ## Runtime Watchlist
 - Settings dialog startup/show/focus regressions.

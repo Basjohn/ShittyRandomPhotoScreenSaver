@@ -597,6 +597,11 @@ Keep this document as the long-term anti-regression memory for the project.
   - **This is the root cause**: After ANY widget click in MC mode, focus is never restored to `DisplayWidget`. Media keys are delivered to the child widget that received the click, which does not handle them. `SetForegroundWindow` bypasses this by resetting top-level window focus.
   - Revised model: Not "child widget focus theft" (H1 was wrong), but "no focus restoration after click". The child widget legitimately receives focus on click; the bug is that `handle_mousePressEvent` never calls `_restore_mc_input_focus()` to return focus to `DisplayWidget`.
   - **Next step**: Wire `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing (MC mode, non-exit clicks).
+- **2026-04-25 FIX APPLIED — `_restore_mc_input_focus` WIRED and HALO SIDE-EFFECT RESOLVED**:
+  - `_restore_mc_input_focus()` wired into `handle_mousePressEvent` at 3 return points within `hard_exit`/`ctrl_mode` branches: after context menu click, after handled widget click, after unhandled interaction click.
+  - **Result**: Media keys, hotkeys (`C`, `S`) now work after manual click into SRPSS MC on secondary display. MC bug is **resolved**.
+  - **Side effect**: `widget.raise_()` in `_restore_mc_input_focus` pushed cursor halo behind `DisplayWidget`, making it invisible. Fixed by adding `hint.raise_()` at end of `_restore_mc_input_focus` to re-raise the halo after `DisplayWidget` activation. Halo is a `Qt.Tool` + `WindowDoesNotAcceptFocus` window, so `raise_()` only affects z-order, not keyboard focus.
+  - **No taskbar/Alt-Tab behavior preserved**: `Qt.Tool` + `WS_EX_TOOLWINDOW` unchanged.
 - Winlogon asymmetry (`S` works while media keys fail) is deferred until MC is understood or the MC root cause clearly requires Winlogon comparison.
 
 
