@@ -263,28 +263,58 @@ Multiple independent sources confirm `Qt::Tool` / `WS_EX_TOOLWINDOW` windows exh
 - **Finding**: `_restore_mc_input_focus()` IS called after interactive clicks, which does try to reclaim focus. But if the child widget also runs its own activation logic, there may be a race.
 - **Severity**: MODERATE. The `_restore_mc_input_focus()` should handle this, but if it's called after the child widget has already eaten the focus, it may be too late.
 
-### 7.3 Synthesized Root-Cause Model (Speculative)
+#### 7.2.1 General Risk Assessment — Issues That Could Become Latent Bugs
 
-**Primary hypothesis**: When the user manually clicks into the SRPSS MC window, Qt's focus routing evaluates all child widgets under the cursor. If any overlay widget (GL compositor, media widget, visualizer, etc.) has a non-`NoFocus` policy, Qt gives focus to that child widget. The child widget does not handle key events, so:
-- Qt key events (`QKeyEvent`) are delivered to the child widget and dropped (not forwarded to DisplayWidget).
-- Native `WM_KEYDOWN` messages may still arrive at the window, but since Qt's focused widget is the child, the `nativeEvent()` handler on DisplayWidget may not be called.
-- Media keys sent via Raw Input or `WM_APPCOMMAND` also fail because the window's keyboard input state is owned by a child widget that doesn't process them.
+Several of the code issues identified above are not unique to U-05; they are latent architectural risks that could manifest in other scenarios even if they are not the primary root cause of the current bug.
 
-**Why programmatic focus works**: `SetForegroundWindow()` sets the foreground window at the Windows level. Qt's `activateWindow()` or `requestActivate()` then sets the Qt active window to the DisplayWidget top-level. This bypasses the child widget focus routing that happens during mouse click.
+| # | Issue | U-05 Severity | General Risk | Risk Scenario | Assess |
+|---|-------|---------------|------------|---------------|--------|
+| 7 | Overlay widgets default `StrongFocus`/`ClickFocus` | **HIGH** → ruled out by H1 | **LOW** | H1 test proved this is NOT the root cause. Child widgets legitimately get focus; the bug is no restoration after click. | [x] Ruled out by H1 |
+| 6 | GL compositor native HWND can receive focus | **MOD-HIGH** → ruled out by H1 | **LOW** | H1 included GL compositor; bug persisted. Not the root cause. | [x] Ruled out by H1 |
+| 9 | `_restore_mc_input_focus()` is DEAD CODE | N/A | **HIGH** | Function exists but is NEVER CALLED. After any click, focus is never restored to DisplayWidget. Primary root cause. | [ ] Wire into click handler |
+| 2 | `_restore_mc_input_focus()` uses `MouseFocusReason` | MODERATE | **MOD-HIGH** | If/when wired into click handler, `MouseFocusReason` may still route focus incorrectly. Should use `ActiveWindowFocusReason`. | [ ] Assess focus-restore reason consistency |
+| 5 | Raw Input registered per-window | LOW | **MODERATE** | User switches to another window on same display → Raw Input stops even though SRPSS still visible. | [ ] Assess global Raw Input registration |
+| 3 | `CursorHaloWidget` is separate top-level Tool window | LOW-MOD | LOW-MOD | Halo could interfere with focus in normal builds if shown/hidden rapidly. | [ ] Assess halo focus interactions |
+| 8 | `perform_activation_refresh()` does not restore focus | MODERATE | MODERATE | Any code calling this expecting focus restoration is silently broken. | [ ] Assess activation-refresh contract |
+| 1 | `setWindowFlag()` during init (pre-show) | Ruled out | LOW | Future refactor might move flag changes post-show and cause hide/show flicker. | [ ] Audit all setWindowFlag calls |
+| 4 | Coordinator stale focus state after crash | LOW | LOW | Only relevant after unclean shutdown; self-healing on next claim. | [ ] Assess crash-recovery focus reset |
 
-**Why defocusing to Display 0 restores keys**: When focus leaves SRPSS entirely, the next key press goes through Windows' normal routing. Since SRPSS is no longer the foreground window, the keys pass through to the system (Spotify/Windows volume). When the user clicks back into SRPSS, the focus routing bug reoccurs.
+**Action:** Even if a particular issue is not the U-05 root cause, items marked HIGH general risk should be fixed proactively because they represent ticking bombs in the focus architecture.
 
-**Why this only affects MC builds**: Normal builds use `Qt.SplashScreen` instead of `Qt.Tool`. `Qt.SplashScreen` does not set `WS_EX_TOOLWINDOW`, so Windows treats it as a normal popup window with standard focus behavior. The tool window style is what exposes the edge case.
+## 7.3 Synthesized Root-Cause Model (REVISED 2026-04-25)
+
+**Root cause**: `_restore_mc_input_focus()` in `rendering/display_input.py` is **dead code** — defined but never called. After ANY widget click in MC mode, `handle_mousePressEvent` does NOT restore focus to `DisplayWidget`.
+
+**What happens on manual click**:
+1. User clicks on an overlay widget (MediaWidget, Reddit link, visualizer area, etc.)
+2. Qt routes focus to the clicked child widget (legitimate behavior — child widgets accept focus by default)
+3. `handle_mousePressEvent` processes the click (widget routing, Reddit URL, media play/pause, etc.)
+4. Function returns without calling `_restore_mc_input_focus()`
+5. Focus remains on the child widget
+6. Media keys and hotkeys are delivered to the child widget, which does not handle them → keys "eaten"
+
+**Why programmatic focus works**: `SetForegroundWindow()` resets the Windows foreground window to the `DisplayWidget` HWND. Qt follows by setting the active/focused widget back to `DisplayWidget`, bypassing whatever child widget had focus.
+
+**Why defocusing to Display 0 restores keys**: When SRPSS loses all focus, media keys pass through Windows' default routing to the system (Spotify/Windows volume). Clicking back into SRPSS repeats the bug because focus again lands on a child widget.
+
+**Why H1 (NoFocus on all children) failed**: The issue is not child widget focus theft — the child widgets legitimately receive focus on click. The issue is that focus is NEVER restored to `DisplayWidget` after the click handler finishes. H1 only prevented focus from going to children, which didn't help because:
+- Some widgets (GL compositor native window, top-level windows) still receive focus outside Qt's focus policy system
+- The real fix is restoring focus, not preventing children from receiving it
+- H1 destabilized the focus tree and caused shadow cache corruption as a side effect
+
+**Why this only affects MC builds**: In normal builds, window activation/focus behavior differs due to `Qt.SplashScreen` vs `Qt.Tool` window flags and `WS_EX_TOOLWINDOW`. The specific code path that omits focus restoration is in the `hard_exit` / interaction-mode branch of `handle_mousePressEvent`, which is more heavily exercised in MC mode. Also, normal builds exit on click, so the focus-never-restored bug is masked by the application exiting.
+
+**Previous hypothesis (child widget focus theft) — ruled out by H1 test**: Incorrect. Child widgets legitimately get focus; the bug is the missing restoration step.
 
 ### 7.4 Testable Hypotheses (No-Edit Phase)
 
-1. **H1 (Child Widget Focus Theft)**: Setting `setFocusPolicy(Qt.FocusPolicy.NoFocus)` on ALL child widgets of DisplayWidget prevents the key-eating bug after manual click.
-2. **H2 (GL Compositor Focus Theft)**: Explicitly setting `NoFocus` on the GL compositor widget alone prevents the bug.
-3. **H3 (Cursor Halo Interference)**: Disabling the cursor halo prevents the bug.
-4. **H4 (Overlay Widget Specific)**: Only one specific overlay widget (media, visualizer, Reddit, etc.) causes focus theft. Binary search through disabling widgets will identify it.
-5. **H5 (Native Window Handle Collision)**: The GL compositor's internal native window handle receives `WM_MOUSEACTIVATE` and returns a value that prevents proper keyboard focus transfer. Querying the compositor's native window focus state will show it has focus instead of DisplayWidget.
-6. **H6 (Qt.Tool Focus Routing Bug)**: Switching MC window from `Qt.Tool` to `Qt.SplashScreen` (with `WS_EX_TOOLWINDOW` removed via `SetWindowLong`) prevents the bug while breaking no-taskbar/no-Alt-Tab behavior.
-7. **H7 (_restore_mc_input_focus Race)**: Calling `_restore_mc_input_focus()` with a small delay (`QTimer.singleShot`) after mouse press allows the focus routing to settle and prevents the bug.
+1. **H1 (Child Widget Focus Theft)**: ~~Setting `setFocusPolicy(Qt.FocusPolicy.NoFocus)` on ALL child widgets of DisplayWidget prevents the key-eating bug after manual click.~~ **FAILED (2026-04-25)** — Bug persists. Also caused frequent shadow cache corruption. Root cause is not child focus theft.
+2. **H2 (GL Compositor Focus Theft)**: Explicitly setting `NoFocus` on the GL compositor widget alone prevents the bug. **Ruled out by H1** — H1 included compositor and did not fix.
+3. **H3 (Cursor Halo Interference)**: Disabling the cursor halo prevents the bug. **Not tested** — halo is a core interaction feature; removal is non-viable.
+4. **H4 (Overlay Widget Specific)**: Only one specific overlay widget causes focus theft. **Ruled out by H1** — H1 blanket-disabled focus on all children and bug persisted.
+5. **H5 (Native Window Handle Collision)**: The GL compositor's internal native window handle receives focus. **Ruled out by H1** — included in blanket NoFocus test.
+6. **H6 (Qt.Tool Focus Routing Bug)**: Switching MC window from `Qt.Tool` to `Qt.SplashScreen` prevents the bug. **Not viable** — breaks no-taskbar/no-Alt-Tab contract; already tested and ruled out.
+7. **H7 (_restore_mc_input_focus Race)**: Calling `_restore_mc_input_focus()` with a small delay after mouse press prevents the bug. **This is the actual fix candidate** — the function exists but is DEAD CODE. Wiring it into `handle_mousePressEvent` after widget click routing is the proposed resolution.
 
 ### 7.5 Resolution Acceptance Criteria
 
@@ -293,3 +323,78 @@ Multiple independent sources confirm `Qt::Tool` / `WS_EX_TOOLWINDOW` windows exh
 - Fix does not switch MC to splash semantics unless repeated focus-change behavior is proven stable.
 - Winlogon runtime media-key behavior is handled as a separate follow-up once MC is stable.
 - Historical bug entry (`U-05`) updated with before/after matrix and retained guardrails.
+
+## 8. H1 Test — Failure Analysis (2026-04-25)
+
+### 8.1 H1 Did NOT Fix Media Keys
+
+**Test**: Set `Qt.FocusPolicy.NoFocus` on ALL descendant `QWidget` instances of `DisplayWidget` via recursive `findChildren(QWidget)` traversal. Called at end of `setup_widgets()`.
+
+**Result**: Media keys still fail after manual click. H1 hypothesis (child widget focus theft) is **incorrect**.
+
+**Side effect**: Shadow corruption on `MediaWidget` and `RedditWidget` became **frequent** (was occasional before). Context menu clear-cache restored correct shadows.
+
+### 8.2 Critical Discovery: `_restore_mc_input_focus` is DEAD CODE
+
+A grep for all calls to `_restore_mc_input_focus()` across the entire codebase (excluding docs/tests):
+
+```
+rendering/display_input.py     — DEFINITION only
+```
+
+**It is NEVER invoked in the main application.** The function was added in a previous "final fix" commit but was never wired into the `handle_mousePressEvent` call chain.
+
+**Implication**: After ANY mouse click on an overlay widget in MC mode, focus is **never restored** to `DisplayWidget`. The child widget that received the click retains focus, and media keys are delivered to a widget that does not handle them.
+
+**Why this fits the evidence**:
+- Manual click → focus goes to child widget (or stays on it) → keys fail because no one handles them
+- Programmatic `SetForegroundWindow` → resets top-level window focus → keys work
+- Click to Display 0 → SRPSS loses ALL focus → keys pass through to system → works
+- H1 (NoFocus on children) didn't help because the issue isn't theft — it's that **nothing restores focus to the top-level widget after a click**
+
+### 8.3 Why H1 Made Shadow Corruption Frequent
+
+The shadow system (`widgets/shadow_utils.py`) uses `QGraphicsDropShadowEffect` plus `QPixmapCache` for rendering. `rendering/widget_effects.py::invalidate_overlay_effects()` is called on `focusInEvent` (see `display_widget.py:1505`).
+
+**H1 triggered MORE focus transitions**:
+1. Setting `NoFocus` on ~30+ descendant widgets destabilized Qt's focus tree
+2. When user clicked, Qt's focus routing bounced around trying to find a widget that could accept focus
+3. Each focus transition fired `focusInEvent`/`focusOutEvent`
+4. Each focus event called `invalidate_overlay_effects("focus_in")`
+5. Invalidation does `eff.setEnabled(False); eff.setEnabled(True)` rapidly
+6. Rapid enable/disable cycles on `QGraphicsDropShadowEffect` can corrupt Qt's internal pixmap cache
+7. Result: doubled/dropped shadows until `QPixmapCache.clear()` is called (context menu clear does this)
+
+**Without H1**: occasional shadow corruption happens naturally when focus transitions occur (e.g., clicking in/out, menu popups). With H1: focus tree is so unstable that it happens on almost every click.
+
+### 8.4 Shadow Corruption — Mechanism (Partial Understanding)
+
+`QGraphicsDropShadowEffect` works by:
+1. Rendering the source widget to a `QPixmap`
+2. Blurring the pixmap
+3. Drawing it offset behind the widget
+
+`QPixmapCache` is used internally by Qt for these intermediate pixmaps. When the effect is rapidly disabled/enabled (as in `invalidate_overlay_effects`), the cache entry may not be fully invalidated. If a stale cached pixmap is reused while a new effect is being computed, visual artifacts appear (doubled shadows, ghost images).
+
+The codebase already has multiple mitigations:
+- `invalidate_overlay_effects` with `refresh_effects=True` (menu triggers) recreates effects entirely
+- `clear_cached_shadow_for_widget()` calls `QPixmapCache.clear()` globally
+- `spotify_visualizer_widget.py` tracks `_pending_shadow_cache_invalidation`
+- Context menu clear forces a full cache flush
+
+**Prevention rule**: Never manipulate focus policies on large widget trees during runtime. Focus policy changes trigger `styleChange`/`updateGeometry` cascades, which cause repaints, which stress the shadow pixmap cache.
+
+## 9. Revised Root-Cause Model
+
+**Primary cause**: `handle_mousePressEvent` in `rendering/display_input.py` does NOT call `_restore_mc_input_focus()` after widget click routing. After a click on any overlay widget, keyboard focus remains on the clicked widget (or its native child window). Media keys are delivered to the focused widget, which does not handle them.
+
+**Why `SetForegroundWindow` works**: It resets the Windows foreground window and Qt active window to `DisplayWidget`, bypassing whatever child widget had focus.
+
+**Why only MC builds**: In normal builds, the `Qt.SplashScreen` window + `WS_EX_TOOLWINDOW` combination may cause Qt to handle focus differently (e.g., focus remains on the top-level widget by default). In MC builds, the explicit window flag toggling during `__init__` plus the `hard_exit` interaction mode creates a code path where focus is never reclaimed.
+
+## 10. Recommended Next Steps (Research-Only)
+
+1. **Add focus-state logging**: Log `QApplication.focusWidget()`, `QApplication.activeWindow()`, and the native HWND with `GetFocus()`/`GetForegroundWindow()` after every mouse click in MC mode. This will confirm which widget holds focus when keys fail.
+2. **Wire `_restore_mc_input_focus` into click handler**: The dead code function already implements the correct fix (`raise_`, `activateWindow`, `requestActivate`, `setFocus`). It needs to be called at the end of `handle_mousePressEvent` when in MC mode and the click was not an exit.
+3. **Do NOT modify focus policies on children**: This destabilizes the shadow system and does not fix the root cause.
+4. **Shadow hardening**: Consider adding `QPixmapCache.clear()` call inside `_restore_mc_input_focus` or after focus transitions to prevent cache corruption when focus is restored.

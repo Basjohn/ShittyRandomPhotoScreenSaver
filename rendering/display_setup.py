@@ -666,3 +666,5 @@ def reuse_persistent_gl_overlays(widget) -> None:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             continue
 
+
+

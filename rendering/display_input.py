@@ -314,6 +314,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                     logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             # Fallback: direct context menu show
             widget._show_context_menu(event.globalPosition().toPoint())
+            _restore_mc_input_focus(widget, "context_menu_click")
             event.accept()
             return
         # Normal mode without Ctrl - fall through to exit
@@ -437,10 +438,12 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         QTimer.singleShot(800, _bring_browser_foreground_mc)
                 
+            _restore_mc_input_focus(widget, "widget_click_handled")
             event.accept()
             return
 
         # In interaction mode, don't exit on unhandled clicks
+        _restore_mc_input_focus(widget, "widget_click_unhandled")
         event.accept()
         return
 

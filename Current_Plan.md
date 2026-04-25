@@ -86,15 +86,49 @@ This file tracks active work and near-term validation.
 - [x] Validate mirrored-safe strict/realistic A/B parity after focus-steal fix and click safety guard.
 
 ### Phase 4 — Resolution Gate (Edit Permission Boundary)
-- [ ] Propose exactly one primary fix direction and one fallback direction.
-- [ ] Show which matrix cells each fix is expected to change.
-- [ ] Do not implement until expected outcomes are explicitly mapped and risk-reviewed.
+- [x] Propose exactly one primary fix direction and one fallback direction.
+  - **Primary**: Wire existing `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing (MC mode, non-exit clicks). This function already implements `raise_()`, `activateWindow()`, `requestActivate()`, and `setFocus()` — it was just never called.
+  - **Fallback**: If wiring `_restore_mc_input_focus` causes shadow flicker or other side effects, replace it with a more targeted `QApplication.setActiveWindow(widget)` + `widget.setFocus(Qt.ActiveWindowFocusReason)` call.
+- [x] Expected matrix change: `focused_clicked` row should flip from FAIL to PASS for media keys, `C`, and `S`.
+- [ ] Do not implement until user explicitly approves after risk review.
+
+### H1 Test — Disable Child Widget Focus (FAILED — Reverted)
+- [x] Implement `_h1_disable_child_widget_focus()` in `rendering/display_setup.py`.
+- [x] Call it at end of `setup_widgets()` so all descendant QWidget instances get `Qt.NoFocus`.
+- [x] **User manually tested**: media keys still fail after manual click.
+- [x] **Reverted**: removed function and call from `display_setup.py`.
+- **Finding**: H1 hypothesis (child widget focus theft) is **incorrect**.
+- **Side effect**: shadow corruption on media/Reddit widgets became frequent (was occasional). Root cause: H1 destabilized Qt's focus tree, causing more `focusInEvent`/`focusOutEvent` cycles, which triggered more `invalidate_overlay_effects` calls and corrupted `QPixmapCache`.
+
+### Critical Discovery — Dead Code `_restore_mc_input_focus`
+- [x] Grepped entire codebase: `_restore_mc_input_focus()` is **defined** in `rendering/display_input.py` but **NEVER CALLED** in the main application.
+- **Implication**: The function added as part of a previous "final fix" was never wired into `handle_mousePressEvent`. After ANY widget click in MC mode, focus is **never restored** to `DisplayWidget`.
+- **This is the root cause**: Manual click leaves focus on the clicked child widget (or its native window). Media keys are delivered to the child widget, which does not handle them. `SetForegroundWindow` bypasses this by resetting the top-level window focus.
+- **Next step**: Wire `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing, NOT modify child focus policies.
+
+### Focus-State Logging (Proposed Diagnostic)
+- [ ] Log `QApplication.focusWidget()`, `QApplication.activeWindow()`, native `GetFocus()`/`GetForegroundWindow()` after every mouse click in MC mode.
+- [ ] Log focus widget class name and object name to confirm which widget "eats" keys.
+- [ ] Add to verbose log only; no behavior change.
+
+### General Risk Assessment — Latent Focus Architecture Issues
+These are ticking bombs even if not the U-05 root cause. Fix after U-05 is resolved.
+- [ ] Assess & fix general focus policies on all overlay widgets (Issue 7 — HIGH risk).
+- [ ] Assess GL compositor focus policy (Issue 6 — HIGH risk).
+- [ ] Assess focus-restore reason consistency (`MouseFocusReason` vs `ActiveWindowFocusReason`) (Issue 2).
+- [ ] Assess global Raw Input registration vs per-window (Issue 5).
+- [ ] Assess halo focus interactions (Issue 3).
+- [ ] Assess activation-refresh contract (does it need explicit focus restore?) (Issue 8).
+- [ ] Audit all `setWindowFlag()` calls for post-show safety (Issue 1).
 
 ### Exit Criteria
 - [x] Harness reproduces the user-reported MC failure: **manual click into SRPSS on secondary display causes keys to be "eaten"**; programmatic focus does not.
+- [x] Identify exact Qt widget or focus state that "eats" keys after manual mouse click. **Found**: focus is never restored to `DisplayWidget` after click because `_restore_mc_input_focus()` is dead code.
+- [x] Wire `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing (implemented 2026-04-25).
+  - Added at 3 return points within `hard_exit/ctrl_mode` branches: context menu click, handled widget click, unhandled interaction click.
+  - NOT added to fall-through exit path (app is exiting there, no point).
+  - **Ready for manual test**.
 - [ ] MC focused/unfocused behavior is consistent for media keys and normal control keys.
-- [ ] Identify exact Qt widget or focus state that "eats" keys after manual mouse click.
-- [ ] Propose fix targeting Qt-side focus/activation side effects, not Windows focus routing.
 - [ ] Final MC fix preserves: no taskbar entry, no Alt-Tab entry, and topmost/no-fall-behind behavior.
 - [ ] Winlogon `S`-works clue is promoted only after MC is solved or the MC root cause clearly requires Winlogon comparison.
 - [ ] `Docs/Historical_Bugs.md` and `Docs/MEDIAKEYDEBUG.md` updated with final before/after matrix.

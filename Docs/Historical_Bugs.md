@@ -586,6 +586,17 @@ Keep this document as the long-term anti-regression memory for the project.
     - Other issues (focus policy toggling, coordinator stale state, Raw Input per-window registration, `perform_activation_refresh()` lack of focus restore) ruled out or low severity.
   - **Synthesized root-cause model** (speculative): Manual click triggers Qt focus routing to a child widget (overlay/GL compositor). Child widget doesn't handle keys → keys "eaten". Programmatic `SetForegroundWindow` sets focus on top-level DisplayWidget, bypassing child routing. `Qt.Tool` / `WS_EX_TOOLWINDOW` exposes this edge case; normal `Qt.SplashScreen` builds don't.
   - **Testable hypotheses documented** (7 hypotheses in `Docs/MEDIAKEYDEBUG.md` Section 7.4). Strongest test: set `NoFocus` on all child widgets (H1) or GL compositor alone (H2).
+- **2026-04-25 H1 Test — FAILED and REVERTED**:
+  - H1 (recursive `setFocusPolicy(Qt.NoFocus)` on all child widgets) did **NOT** fix media keys. Bug persists after manual click.
+  - H1 introduced **frequent shadow corruption** on `MediaWidget` and `RedditWidget` (doubled drop shadows). Was occasional before H1.
+  - **Shadow corruption mechanism**: H1 destabilized Qt's focus tree (~30+ widgets got NoFocus simultaneously). Each click caused Qt focus routing to bounce between widgets trying to find one that accepts focus. Each focus transition fired `focusInEvent`/`focusOutEvent`, which called `invalidate_overlay_effects("focus_in")`. Rapid `eff.setEnabled(False); eff.setEnabled(True)` cycles on `QGraphicsDropShadowEffect` corrupted Qt's internal `QPixmapCache`. Context menu clear-cache restored correct shadows.
+  - **Prevention rule**: Never manipulate focus policies on large widget trees during runtime. Focus policy changes trigger `styleChange`/`updateGeometry` cascades that stress the shadow pixmap cache.
+- **2026-04-25 Critical Discovery — `_restore_mc_input_focus` is DEAD CODE**:
+  - Grepped entire codebase (excluding docs/tests): `_restore_mc_input_focus()` in `rendering/display_input.py` is **defined but NEVER CALLED**.
+  - The function was added as part of a previous "final fix" commit but was never wired into `handle_mousePressEvent`.
+  - **This is the root cause**: After ANY widget click in MC mode, focus is never restored to `DisplayWidget`. Media keys are delivered to the child widget that received the click, which does not handle them. `SetForegroundWindow` bypasses this by resetting top-level window focus.
+  - Revised model: Not "child widget focus theft" (H1 was wrong), but "no focus restoration after click". The child widget legitimately receives focus on click; the bug is that `handle_mousePressEvent` never calls `_restore_mc_input_focus()` to return focus to `DisplayWidget`.
+  - **Next step**: Wire `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing (MC mode, non-exit clicks).
 - Winlogon asymmetry (`S` works while media keys fail) is deferred until MC is understood or the MC root cause clearly requires Winlogon comparison.
 
 
