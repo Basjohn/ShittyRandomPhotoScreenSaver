@@ -121,11 +121,7 @@ class MuteButtonWidget(QWidget):
         40×36 widget creates a disproportionate cache area that is prone
         to corruption artifacts visible as dark rectangles.
         """
-        resolved_duration_ms = (
-            ShadowFadeProfile.default_duration_ms()
-            if duration_ms is None
-            else max(0, int(duration_ms))
-        )
+        resolved_duration_ms = 500 if duration_ms is None else max(0, int(duration_ms))
         self.update_position()
         if resolved_duration_ms <= 0:
             self.show()
@@ -133,44 +129,15 @@ class MuteButtonWidget(QWidget):
             self._has_faded_in = True
             return
         try:
-            from PySide6.QtWidgets import QGraphicsOpacityEffect
-            from PySide6.QtCore import QVariantAnimation, QEasingCurve
-
-            # Remove any stale graphics effect (e.g. leftover drop shadow)
-            if self.graphicsEffect() is not None:
-                self.setGraphicsEffect(None)
-
-            opacity_fx = QGraphicsOpacityEffect(self)
-            opacity_fx.setOpacity(0.0)
-            self.setGraphicsEffect(opacity_fx)
-            self.show()
-            self.raise_()
-
-            anim = QVariantAnimation(self)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setDuration(resolved_duration_ms)
-            anim.setEasingCurve(ShadowFadeProfile.EASING)
-
-            def _on_value(val):
-                try:
-                    opacity_fx.setOpacity(float(val))
-                except Exception:
-                    pass
-
-            def _on_finished():
-                try:
-                    self.setGraphicsEffect(None)
-                except Exception:
-                    pass
-                self._has_faded_in = True
-
-            anim.valueChanged.connect(_on_value)
-            anim.finished.connect(_on_finished)
-            anim.start()
-            self._fade_anim = anim  # prevent GC
+            ShadowFadeProfile.start_fade_in(
+                self,
+                None,
+                duration_ms=resolved_duration_ms,
+                has_background_frame=False,
+                apply_shadow_on_finish=False,
+                on_finished=lambda: setattr(self, '_has_faded_in', True),
+            )
         except Exception:
-            logger.debug("[MUTE_BTN] _start_widget_fade_in fallback", exc_info=True)
             self.show()
             self.raise_()
             self._has_faded_in = True

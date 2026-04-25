@@ -1,0 +1,488 @@
+# Gmail Widget — Full Implementation Plan
+
+Version: 1.0 | Date: 2026-04-26 | Status: Planning
+Decision: Adapt archive code; do not rewrite.
+Scope: Bring archive/gmail_feature/ into production as a dev-gated overlay widget.
+
+---
+
+## 1. Executive Summary
+
+The archived Gmail widget already uses BaseOverlayWidget, ThreadManager, ShadowFadeProfile, and modern google-auth-oauthlib flows. The work is integration and hardening, not reconstruction.
+
+### Target Architecture
+
+core/gmail/              # Relocated + hardened oauth + client
+core/windows/dpapi.py    # NEW: Windows token encryption
+core/windows/secure_url_launcher.py  # REFACTOR: generic bridge
+core/audio/              # NEW: QtMultimedia OGG player
+widgets/gmail_widget.py  # Relocated + adapted
+widgets/gmail_components.py
+ui/tabs/widgets_tab_gmail.py
+core/settings/models.py   # APPEND: GmailWidgetSettings
+core/settings/defaults.py # APPEND: Gmail defaults
+core/dev_gates.py         # APPEND: is_gmail_enabled()
+images/google-gmail.png   # EXISTING (PNG only — no SVG)
+images/gmail-envelope.png # NEW
+
+---
+
+## 2. Phase 0 — Pre-Flight & Repository Hardening
+
+**Goal:** Prevent credential leakage before any Gmail code enters the active tree.
+
+- [ ] **P0.1** Add `**/client_secrets.json` to `.gitignore`.
+- [ ] **P0.2** Add `**/gmail_token*.pickle` and `**/gmail_token*.enc` to `.gitignore`.
+- [ ] **P0.3** Create `core/gmail/` directory with empty `__init__.py`.
+- [ ] **P0.4** Verify `images/google-gmail.png` exists and is ≤ 10KB.
+- [ ] **P0.5** Source/create `images/gmail-envelope.png` (32x32 PNG).
+- [ ] **P0.6** Verify `resources/tutuogg.ogg` exists.
+- [ ] **P0.7** Pin `google-auth-oauthlib`, `google-auth`, `google-api-python-client` in `requirements.txt`.
+- [ ] **P0.8** Verify `PySide6.QtMultimedia` is available.
+
+---
+
+## 3. Phase 1 — Foundation: Core Module Relocation & Hardening
+
+**Goal:** Move OAuth and client into `core/gmail/`. Harden paths, encrypt tokens, fix secure-desktop URL launching. Must be standalone testable before widget is imported.
+
+### 3.1 Relocation
+
+- [ ] **P1.1** Copy `archive/gmail_feature/gmail_oauth.py` → `core/gmail/gmail_oauth.py`.
+- [ ] **P1.2** Copy `archive/gmail_feature/gmail_client.py` → `core/gmail/gmail_client.py`.
+- [ ] **P1.3** Create `core/gmail/__init__.py` re-exporting `GmailOAuthManager`, `GmailClient`, `EmailMetadata`.
+
+### 3.2 Path Hardening
+
+**Problem:** Archive hardcodes `../../client_secrets.json`. This breaks when moved to `core/gmail/`.
+
+- [ ] **P1.4** Audit `core/paths.py` for `get_app_data_dir()` helper.
+- [ ] **P1.5** If missing, create `core/paths.py` with centralized AppData resolution.
+- [ ] **P1.6** Modify `GmailOAuthManager.__init__` to accept `credentials_path` and `token_path` params.
+- [ ] **P1.7** Default `credentials_path` = `get_app_data_dir() / "client_secrets.json"`.
+- [ ] **P1.8** Default `token_path` = `get_app_data_dir() / "gmail_token.enc"`.
+- [ ] **P1.9** If `credentials_path` missing, raise `GmailConfigError` with actionable message.
+- [ ] **P1.10** Ensure error is logged at `ERROR` level (not swallowed).
+
+### 3.3 Token Encryption (DPAPI)
+
+**Reasoning:** Token pickle is unencrypted in `%APPDATA%`. Windows DPAPI encrypts to user+machine without key management.
+
+- [ ] **P1.11** Create `core/windows/dpapi.py` with `encrypt_user_data()` / `decrypt_user_data()` via `ctypes` + `CryptProtectData`.
+- [ ] **P1.12** Add non-Windows fallback: plain pickle with logged `WARNING`.
+- [ ] **P1.13** Update `GmailOAuthManager` to use DPAPI instead of raw pickle.
+- [ ] **P1.14** Add migration: if legacy `.pickle` exists, encrypt to `.enc`, then delete `.pickle`.
+- [ ] **P1.15** Add test `tests/test_dpapi_roundtrip.py`.
+
+### 3.4 Secure Desktop URL Launching
+
+**Problem:** `webbrowser.open()` fails in `.scr` SYSTEM/secure-desktop mode. Reddit solves this via a helper bridge.
+
+- [ ] **P1.16** Read `core/windows/url_launcher.py` and `core/windows/reddit_helper_bridge.py`.
+- [ ] **P1.17** Determine if bridge is already generic or Reddit-specific.
+- [ ] **P1.18** If Reddit-specific, refactor into `core/windows/secure_url_launcher.py` with generic `open_url(url: str)`.
+- [ ] **P1.19** Update `GmailClient.open_message_in_browser()` to use `open_url()`.
+- [ ] **P1.20** Update `GmailWidget.handle_click()` header click to use `open_url()`.
+- [ ] **P1.21** Update `RedditWidget` to generic launcher only if trivial.
+- [ ] **P1.22** Add test `tests/test_secure_url_launcher.py`.
+
+### 3.5 GmailClient Thread Safety & Resilience
+
+`google-api-python-client` `Resource` objects are **not thread-safe**.
+
+- [ ] **P1.23** Verify whether `self._service` is cached or rebuilt per call.
+- [ ] **P1.24** If cached, add `threading.Lock()` around all API calls.
+- [ ] **P1.25** Ensure `EmailMetadata` dataclass is frozen/hashable.
+- [ ] **P1.26** Add defensive timeout (default 30s) to all API calls.
+- [ ] **P1.27** Add retry with exponential backoff for `HttpError 500/503`.
+- [ ] **P1.28** Log all API calls at `DEBUG` with sanitized params.
+
+### 3.6 GmailOAuthManager Hardening
+
+- [ ] **P1.29** Verify `revoke()` exists and calls Google revoke endpoint.
+- [ ] **P1.30** Add `clear_local_credentials()` — deletes encrypted token and resets state.
+- [ ] **P1.31** Use **random ephemeral port** for local server (not fixed 8080). Google allows any localhost port without Console registration.
+- [ ] **P1.32** Add local server timeout (5 minutes) to prevent indefinite hang.
+- [ ] **P1.33** Add `state` CSRF parameter to OAuth flow.
+- [ ] **P1.34** Ensure `redirect_uri` has trailing slash (`http://localhost:{port}/`) per Google validation rules.
+
+---
+
+## 4. Phase 2 — Widget Adaptation & Integration
+
+**Goal:** Relocate widget to `widgets/gmail_widget.py`, fix imports, align with current `BaseOverlayWidget` API, replace SVG with PNG, add envelope icon.
+
+### 4.1 Relocation & Import Fix
+
+- [ ] **P2.1** Copy `archive/gmail_feature/gmail_widget.py` → `widgets/gmail_widget.py`.
+- [ ] **P2.2** Update imports to new locations (`core.gmail`, `core.windows.secure_url_launcher`).
+- [ ] **P2.3** Create `widgets/gmail_components.py` with `GmailPosition` enum (mirror `reddit_components.py` pattern).
+
+### 4.2 BaseOverlayWidget API Alignment
+
+- [ ] **P2.4** Read `widgets/base_overlay_widget.py` and compare `__init__` signature against archive usage.
+- [ ] **P2.5** Verify `overlay_name="gmail"` is accepted.
+- [ ] **P2.6** Verify `_shadow_config` attribute exists.
+- [ ] **P2.7** Verify `_apply_base_styling()` still exists.
+- [ ] **P2.8** Verify `_update_content()` is the correct refresh hook.
+- [ ] **P2.9** Document any API drift and adjust widget code.
+
+### 4.3 Asset Loading: PNG Only, No SVG
+
+**Reasoning:** User explicitly stated SVG causes engine slowdown. Archive tries SVG first then PNG fallback. We will use PNG exclusively.
+
+- [ ] **P2.10** Rewrite `_load_brand_pixmap()` to load `images/google-gmail.png` **only**.
+- [ ] **P2.11** Delete SVG fallback code entirely (remove dead code).
+- [ ] **P2.12** If PNG missing, log WARNING and draw text "Gmail" fallback instead of crashing.
+- [ ] **P2.13** Implement `_load_envelope_pixmap()` for `images/gmail-envelope.png`.
+- [ ] **P2.14** If envelope PNG missing, draw lightweight `QPainterPath` envelope shape as fallback.
+
+### 4.4 Envelope Icon Paint Logic (New)
+
+**Requirement:** Envelope icon next to unread emails; read emails show dim/no icon.
+
+- [ ] **P2.15** In `_paint_emails()`, add envelope column before sender/time.
+- [ ] **P2.16** Unread: envelope icon in bright color (white or `#FFCC00`).
+- [ ] **P2.17** Read: envelope icon in dim gray or omitted (configurable).
+- [ ] **P2.18** Add `show_envelope_icon: bool` setting (default True).
+- [ ] **P2.19** Adjust column widths: envelope 16px + 4px margin.
+- [ ] **P2.20** Cache scaled envelope QPixmap to avoid per-frame re-scale.
+
+### 4.5 Secure URL Integration in Widget
+
+- [ ] **P2.21** Replace `import webbrowser` and `webbrowser.open(...)` in `handle_click()` with `open_url(...)`.
+- [ ] **P2.22** Header click opens `https://mail.google.com` via `open_url()`.
+- [ ] **P2.23** Row click opens `https://mail.google.com/mail/u/0/#all/{message_id}` via `open_url()`.
+- [ ] **P2.24** Add fallback: if `open_url()` raises, log ERROR and try `webbrowser.open()` as last resort.
+
+### 4.6 Action Menu & Hover Hardening
+
+- [ ] **P2.25** Verify `QMenu` stylesheet in `_show_action_menu()` does not conflict with application dark theme.
+- [ ] **P2.26** Ensure action callbacks (`_mark_as_read`, etc.) run on UI thread.
+- [ ] **P2.27** Add `shiboken6.isValid()` guard in all lambdas connected to `QMenu` actions.
+- [ ] **P2.28** Ensure `_hover_timer` is stopped in `cleanup()`.
+
+---
+
+## 5. Phase 3 — Settings Architecture & Persistence
+
+**Goal:** Integrate Gmail widget with `SettingsManager`, models, defaults, and UI tab.
+
+### 5.1 Settings Model
+
+- [ ] **P3.1** Read `core/settings/models.py` to understand dataclass pattern (e.g., `RedditWidgetSettings`).
+- [ ] **P3.2** Create `GmailWidgetSettings` dataclass:
+  - `enabled: bool = False`
+  - `position: str = "top_left"`
+  - `limit: int = 5`
+  - `refresh_minutes: int = 5`
+  - `filter_label: str = "INBOX"`
+  - `show_sender: bool = True`
+  - `show_subject: bool = True`
+  - `show_actions: bool = True`
+  - `show_envelope_icon: bool = True`
+  - `desaturate_when_no_unread: bool = True`
+  - `play_sound_on_new_mail: bool = False`
+  - `sound_volume_percent: int = 50`
+  - `sound_file_path: str = "resources/tutuogg.ogg"`
+- [ ] **P3.3** Add `from_settings()` and `to_mapping()` methods following existing pattern.
+- [ ] **P3.4** Add `GmailWidgetSettings` field to the top-level `AppSettings` dataclass.
+
+### 5.2 Defaults
+
+- [ ] **P3.5** Add Gmail defaults to `core/settings/defaults.py` matching model fields.
+
+### 5.3 Widget Settings Integration
+
+- [ ] **P3.6** Modify `GmailWidget.__init__` to accept `settings: Optional[GmailWidgetSettings]`.
+- [ ] **P3.7** If settings provided, apply all fields during init; otherwise use defaults.
+- [ ] **P3.8** Add `apply_settings(settings: GmailWidgetSettings)` method for live updates from dialog.
+- [ ] **P3.9** Ensure `set_limit()`, `set_refresh_interval()`, etc. update internal state and persist via `SettingsManager`.
+- [ ] **P3.10** Add `on_settings_changed` signal or callback registration.
+
+### 5.4 Settings UI Tab
+
+- [ ] **P3.11** Read `ui/tabs/widgets_tab_reddit.py` as reference for layout and styling.
+- [ ] **P3.12** Create `ui/tabs/widgets_tab_gmail.py` with:
+  - Enable checkbox (gated by dev flag — if dev gate off, show "Enable (requires -devgmail)" disabled).
+  - Position dropdown (top_left, top_right, bottom_left, bottom_right).
+  - Limit spinner (5–10).
+  - Refresh interval spinner (1–60 minutes).
+  - Filter label line edit (INBOX, CATEGORY_PRIMARY, etc.).
+  - Show sender / show subject / show actions / show envelope icon checkboxes.
+  - Desaturate logo when no unread checkbox.
+  - Sound group box:
+    - Play sound on new mail checkbox.
+    - Volume slider (0–100).
+    - Sound file picker (default `resources/tutuogg.ogg`).
+- [ ] **P3.13** Implement `load_settings(settings: AppSettings)` and `save_settings() -> dict`.
+- [ ] **P3.14** Add tab to `ui/settings_dialog.py` (or wherever tab registry is defined).
+- [ ] **P3.15** Ensure tab follows existing custom dark styling.
+
+---
+
+## 6. Phase 4 — Dev Gating & Lifecycle Registration
+
+**Goal:** Hide Gmail widget behind `-devgmail` CLI flag. Register in overlay lifecycle.
+
+### 6.1 Dev Gate
+
+- [ ] **P4.1** Read `core/dev_gates.py` to understand `is_blob_enabled()`, `is_goo_enabled()` pattern.
+- [ ] **P4.2** Add `is_gmail_enabled() -> bool` reading `-devgmail` from `sys.argv`.
+- [ ] **P4.3** Add `force_gmail_gate(enabled: bool)` for tests (mirror `force_gate()` pattern).
+- [ ] **P4.4** Add `-devgmail` to `main.py` filtered args set (if args filtering exists).
+
+### 6.2 Widget Lifecycle Registration
+
+- [ ] **P4.5** Read `rendering/widget_manager.py` or `engine/display_manager.py` to find where `RedditWidget`, `WeatherWidget`, etc. are instantiated.
+- [ ] **P4.6** Add `GmailWidget` instantiation in the same location, guarded by `is_gmail_enabled()`.
+- [ ] **P4.7** Ensure Gmail widget respects `OverlayPosition` and does not collide with other corner widgets.
+- [ ] **P4.8** Add `gmail` to overlay fade sync registration.
+- [ ] **P4.9** Ensure widget is destroyed/cleaned up on screensaver exit (call `cleanup()` in teardown path).
+- [ ] **P4.10** Add settings tab visibility gating: if `is_gmail_enabled()` is False, tab may be hidden or show "dev flag required" placeholder.
+
+### 6.3 Widget Factory (if applicable)
+
+- [ ] **P4.11** Check `rendering/widget_factories.py` for a factory pattern.
+- [ ] **P4.12** If factories exist, add `GmailWidgetFactory` or equivalent registration.
+- [ ] **P4.13** Ensure factory passes `SettingsManager` or `AppSettings` into widget constructor.
+
+---
+
+## 7. Phase 5 — Notification Sound System (OGG)
+
+**Goal:** Play OGG sound when new unread emails arrive **after** session start. Volume adjustable. Default `resources/tutuogg.ogg`.
+
+### 7.1 Audio Infrastructure
+
+- [ ] **P5.1** Verify `PySide6.QtMultimedia` is importable: `from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput`.
+- [ ] **P5.2** If `QtMultimedia` unavailable, evaluate `pygame.mixer` or `sounddevice` + `soundfile` as fallback. **Preference:** `QtMultimedia` (bundled with PySide6, no extra dependency).
+- [ ] **P5.3** Create `core/audio/__init__.py`.
+- [ ] **P5.4** Create `core/audio/notification_sound.py`:
+  ```python
+  class NotificationSoundPlayer:
+      def __init__(self, file_path: str, volume_percent: int = 50) -> None: ...
+      def play(self) -> None: ...
+      def set_volume(self, percent: int) -> None: ...
+      def set_file_path(self, path: str) -> None: ...
+  ```
+- [ ] **P5.5** Use `QMediaPlayer` + `QAudioOutput`. Set `audioOutput.setVolume(volume_percent / 100.0)`.
+- [ ] **P5.6** Handle OGG via `QMediaPlayer` (QtMultimedia supports OGG via built-in plugins).
+- [ ] **P5.7** Ensure player is parented to a long-lived QObject (e.g., `QApplication.instance()`) to prevent GC mid-playback.
+- [ ] **P5.8** Add error handling: if file missing or format unsupported, log WARNING and disable sound for the session.
+- [ ] **P5.9** Add test `tests/test_notification_sound.py` with a mock/stub.
+
+### 7.2 New-Mail Detection
+
+**Requirement:** Sound only for mail that arrives **after** the session starts. Not a startup blast for pre-existing unread.
+
+- [ ] **P5.10** In `GmailWidget`, maintain `self._seen_message_ids: set[str]`.
+- [ ] **P5.11** On first fetch after `start()`, populate `_seen_message_ids` with all returned message IDs. **Do not play sound.**
+- [ ] **P5.12** On subsequent fetches, compute `new_ids = returned_ids - _seen_message_ids`.
+- [ ] **P5.13** If `new_ids` non-empty and `play_sound_on_new_mail` is True, call `NotificationSoundPlayer.play()`.
+- [ ] **P5.14** Add `_seen_message_ids` to `cleanup()` reset (clear on stop/start cycle).
+- [ ] **P5.15** Ensure sound plays on UI thread (QtMultimedia `QMediaPlayer` is thread-safe for `play()`, but initialization should be on UI thread).
+
+### 7.3 Volume & File Settings Wiring
+
+- [ ] **P5.16** In `GmailWidget.apply_settings()`, pass `sound_file_path` and `sound_volume_percent` to `NotificationSoundPlayer`.
+- [ ] **P5.17** Ensure volume changes apply immediately (no restart required).
+- [ ] **P5.18** Ensure file path changes apply on next `play()` call (no reload required).
+
+---
+
+## 8. Phase 6 — Testing, Validation & Sign-Off
+
+### 8.1 Unit Tests
+
+- [ ] **P6.1** `tests/test_gmail_oauth.py` — mock Google token endpoint, verify PKCE params, verify DPAPI encrypt/decrypt roundtrip.
+- [ ] **P6.2** `tests/test_gmail_client.py` — mock `googleapiclient.discovery.build`, verify `list_messages()`, `mark_as_read()`, `archive_message()` return correct `EmailMetadata`.
+- [ ] **P6.3** `tests/test_gmail_widget.py` — instantiate widget with mock settings, verify `paintEvent` does not crash with empty email list, verify `handle_click` returns False for miss.
+- [ ] **P6.4** `tests/test_gmail_components.py` — verify `GmailPosition` enum values.
+
+### 8.2 Integration Tests
+
+- [ ] **P6.5** `tests/test_gmail_settings_roundtrip.py` — create `GmailWidgetSettings`, serialize via `to_mapping()`, deserialize via `from_settings()`, assert equality.
+- [ ] **P6.6** `tests/test_gmail_dev_gate.py` — verify widget is only instantiated when `-devgmail` is in `sys.argv` (or `force_gmail_gate(True)`).
+
+### 8.3 Secure Desktop Tests
+
+- [ ] **P6.7** Manual test: Run as `.scr` preview, click Gmail header → browser opens via helper bridge.
+- [ ] **P6.8** Manual test: Run as `.scr` preview, click email row → specific email opens via helper bridge.
+- [ ] **P6.9** Manual test: Verify `webbrowser.open()` fallback does not crash in preview mode (it will work in normal mode, fail silently in SYSTEM mode — acceptable if bridge works).
+
+### 8.4 Memory & Resource Tests
+
+- [ ] **P6.10** Run widget through 50 start/stop cycles in test harness; verify no `QTimer` or `QMenu` leaks via `shiboken6.getAll()` (if available) or manual audit.
+- [ ] **P6.11** Verify `cleanup()` stops all timers and deletes `QMenu` references.
+
+### 8.5 Performance Tests
+
+- [ ] **P6.12** Profile `paintEvent` with 10 emails: ensure < 5ms per frame on 1080p.
+- [ ] **P6.13** Verify envelope pixmap cache is effective (no per-frame `QPixmap::scaled`).
+
+### 8.6 Sign-Off Checklist
+
+- [ ] **P6.14** No `client_secrets.json` in git (verify `git status`).
+- [ ] **P6.15** No `gmail_token*.pickle` or `*.enc` in git.
+- [ ] **P6.16** All new code passes `ruff check --fix`.
+- [ ] **P6.17** All tests pass.
+- [ ] **P6.18** `Index.md` updated with new files/classes.
+- [ ] **P6.19** `Docs/Guardrails.md` updated with Gmail-specific security notes (if any new patterns).
+- [ ] **P6.20** Archive directory `archive/gmail_feature/` deleted or marked deprecated after sign-off.
+
+---
+
+## 9. Security Anti-Leak Policy & Credential Hygiene
+
+**Goal:** Ensure zero credential material ever enters the repository, build artifacts, or logs.
+
+### 9.1 Repository-Level Guards
+
+- [ ] **S1.1** `.gitignore` must contain `**/client_secrets.json`, `**/gmail_token*`, `**/gmail_credentials*`, `**/*.pickle` (catch all pickle, not just Gmail).
+- [ ] **S1.2** Add a `pre-commit` guard (or CI step) that greps for `"client_id"` / `"client_secret"` patterns in non-archive Python files and fails if found. This is defense-in-depth in case someone accidentally hardcodes after the initial refactor.
+- [ ] **S1.3** `client_secrets.json` path must be runtime-resolved only; no `pathlib.Path(__file__).parent / "client_secrets.json"` patterns that could be committed.
+- [ ] **S1.4** Add `GmailConfigError` string to `Docs/Guardrails.md` under "Never commit" section.
+
+### 9.2 Runtime Leak Prevention
+
+- [ ] **S1.5** `GmailOAuthManager` must never log the `client_secret` value, even at `DEBUG`. Log only that credentials were loaded, not their content.
+- [ ] **S1.6** Token file (even encrypted) must have `FILE_ATTRIBUTE_HIDDEN` on Windows and restrictive ACL (`0600` equivalent) if OS supports it.
+- [ ] **S1.7** On widget/auth failure, the error tooltip / UI message must never display the `client_id`, `redirect_uri`, or token file path to the user (paths can leak machine info). Use generic messages: "Gmail credentials missing. See log."
+- [ ] **S1.8** `EmailMetadata` must never include `body` or `snippet` fields — metadata-only by design. Add a dataclass `__post_init__` assert if needed.
+- [ ] **S1.9** `gmail_client.py` request logging must sanitize `message_id` from URLs? No — message IDs are not sensitive. But ensure no `body` / `raw` params are ever in the URL or logged.
+- [ ] **S1.10** If token refresh fails with `invalid_grant`, the manager must auto-clear local credentials (encrypted token deleted) and require re-auth. Do not retry indefinitely with a stale refresh token.
+
+### 9.3 Build / Distribution Safety
+
+- [ ] **S1.11** Build script (PyInstaller / cx_Freeze) must verify `client_secrets.json` is **not** bundled into the executable unless explicitly injected at build time. If it is bundled, it is exposed to binary extraction.
+- [ ] **S1.12** Document in `README.md` that `client_secrets.json` is a runtime dependency placed by the user (or build script) into `%APPDATA%/SRPSS/`.
+- [ ] **S1.13** If distributing, consider using a backend proxy for token exchange instead of Desktop app client secret. This is the only way to keep the secret truly secret. Mark as **Phase 2 / future work**.
+
+---
+
+## 10. Paint & Performance Guardrails
+
+**Goal:** Prevent the Gmail widget from becoming a CPU/GPU hog via unnecessary paint events, per-frame allocations, or unbounded email list growth.
+
+### 10.1 Paint Event Discipline
+
+- [ ] **PG1.1** `paintEvent()` must be pure — no network calls, no file I/O, no token refresh. All data must be pre-fetched and stored in widget attributes before `update()` is called.
+- [ ] **PG1.2** Email list must be capped at `limit` (default 5, max 10) **at fetch time**, not at paint time. Never paint more rows than configured.
+- [ ] **PG1.3** `QPainter` state changes (font, pen, brush) must be minimized. Set font once at start of email section, not per-row.
+- [ ] **PG1.4** Row background rects must be batched: draw all alternating backgrounds in one pass, then all text, then all icons. Avoid state thrashing.
+- [ ] **PG1.5** Envelope pixmap must be **cached at scale** once when `limit` or widget geometry changes, not in `paintEvent`. Cache key = `(envelope_path, target_width, target_height)`.
+- [ ] **PG1.6** Gmail logo pixmap must be cached identically. Reload only on explicit `reload_assets()` call or widget resize.
+- [ ] **PG1.7** Use `QStyleHints` / `QFontMetrics.horizontalAdvance()` once and cache results; do not re-measure strings per frame.
+- [ ] **PG1.8** Hit rects (`_email_hit_rects`, `_action_hit_rects`) must be recomputed only on data change or resize, not per `paintEvent`.
+- [ ] **PG1.9** `update()` must not be called from `paintEvent` (infinite recursion trap). Use `QTimer.singleShot(0, self.update)` only if absolutely necessary.
+
+### 10.2 Geometry & Visibility Guards
+
+- [ ] **PG1.10** If widget `isHidden()` or parent `DisplayWidget` is not in overlay-visible state, `paintEvent` should early-return after logging a single WARNING (not spam).
+- [ ] **PG1.11** Email fetch timer must be stopped when widget is hidden (power saving). Resume on show.
+- [ ] **PG1.12** `QMenu` created in `_show_action_menu()` must be a singleton member, not re-created per click. Destroy on widget `cleanup()`.
+
+### 10.3 Memory Pressure
+
+- [ ] **PG1.13** `EmailMetadata` objects must not hold references to `GmailClient` or `QPixmap`. Keep them plain dataclasses.
+- [ ] **PG1.14** If email list fetch returns > `limit`, truncate immediately. Do not store unbounded lists.
+
+---
+
+## 11. Transition Deferral & ThreadManager Integration
+
+**Goal:** Prevent email refresh/network I/O from stalling the UI thread during screen transitions (photo crossfades, visualizer mode switches, etc.).
+
+### 11.1 Fetch Timing Policy
+
+- [ ] **TD1.1** Email refresh must use `ThreadManager.submit_io_task()`, never the UI thread.
+- [ ] **TD1.2** Results must be applied via `ThreadManager.invoke_in_ui_thread(lambda: self._apply_fetched_emails(data))`.
+- [ ] **TD1.3** If a transition is in progress (e.g., `TransitionManager.is_transitioning()` or `DisplayWidget._transition_state != idle`), the fetched result must be **queued** and applied only after transition completes. Do not force `update()` mid-transition.
+- [ ] **TD1.4** If fetch takes longer than transition, the UI update can happen post-transition. If fetch finishes before transition ends, hold the data in `_pending_email_update: Optional[List[EmailMetadata]]` and apply in a transition-finished callback.
+- [ ] **TD1.5** Use `QTimer.singleShot(0, ...)` or `OverlayTimerHandle` (already used for refresh) for the next refresh, but jitter the interval by ±10% to avoid thundering herd if multiple widgets refresh simultaneously.
+- [ ] **TD1.6** If a fetch is already in-flight when the timer fires again, skip the new fetch. Use an `atomic bool` or `threading.Lock()` to guard `_fetch_in_progress`.
+- [ ] **TD1.7** On widget `stop()` / `cleanup()`, cancel any in-flight future (if `ThreadManager` supports it) or at least set `_cancelled = True` so the callback ignores stale results.
+
+### 11.2 OAuth Flow Timing
+
+- [ ] **TD1.8** The initial OAuth browser-launch + local server callback must happen on a background thread (`submit_io_task`), but the browser-open call itself (`webbrowser.open()` or `open_url()`) must be on UI thread? Actually `webbrowser.open()` is safe from background threads on Windows. Use IO task for server, UI invoke for the URL open to ensure bridge is ready.
+- [ ] **TD1.9** Local server timeout (5 min) must be a `threading.Timer` or `socket.settimeout()`, not a busy-wait. Shutdown the server socket immediately upon receiving the callback to free the port.
+
+---
+
+## 12. AV False Positive Avoidance
+
+**Goal:** Prevent Windows Defender or other AV from flagging the screensaver due to Gmail-specific behavior patterns.
+
+### 12.1 Behavioral Patterns to Avoid
+
+- [ ] **AV1.1** Do **not** spawn a hidden/`pythonw.exe` subprocess for OAuth callback server. Use an in-thread `HTTPServer` (already in archive). Subprocess spawning from a `.scr` is a common AV heuristic for trojans.
+- [ ] **AV1.2** Do **not** write `.bat`, `.vbs`, `.ps1`, or `.exe` files to disk at runtime for URL launching. Use the existing helper bridge process (already present for Reddit) or `QDesktopServices.openUrl()`.
+- [ ] **AV1.3** Do **not** use `ctypes.windll.shell32.ShellExecuteA` with `runas` or hidden window flags for URL opening. This triggers UAC/AV heuristics.
+- [ ] **AV1.4** The DPAPI `ctypes` calls are safe (standard Windows API), but ensure we only import `ctypes.wintypes` inside the Windows branch, not at module top-level on Linux.
+- [ ] **AV1.5** Avoid creating files in unusual locations. All Gmail files must go to `%APPDATA%/SRPSS/` (standard user-local path).
+- [ ] **AV1.6** Do **not** use `urllib.request` with a custom `SSLContext` that disables certificate verification. The archive may do this for local testing — verify and remove if present.
+- [ ] **AV1.7** Do **not** download executable content (`.exe`, `.dll`) from the internet as part of Gmail auth. The archive only fetches JSON from Google — verify no dynamic download behavior exists.
+- [ ] **AV1.8** If using `google-auth-oauthlib`'s `run_local_server()`, it spawns a temporary `HTTPServer` on localhost. This is safe but may trigger network-firewall prompts on first run. Document this for users.
+- [ ] **AV1.9** All new `.py` files should have standard docstrings and no obfuscated/encoded strings. AV flags encoded payload patterns.
+- [ ] **AV1.10** Do **not** use `eval()`, `exec()`, `compile()`, or `__import__` dynamically for Gmail module loading. Use standard imports.
+
+### 12.2 Build Artifact Hygiene
+
+- [ ] **AV1.11** Ensure `core/windows/dpapi.py` is not flagged as ransomware-like by AV due to `CryptProtectData` usage. This is rare but can happen with overly aggressive heuristics. If flagged, add the `.scr` to AV exclusions (document for users) or use `keyring` library as alternative.
+- [ ] **AV1.12** The `google-api-python-client` package contains generated `.json` discovery documents. Ensure these are not flagged as suspicious data files by AV (rare but possible with heuristics looking at large embedded JSON). Not actionable by us, but worth noting.
+
+---
+
+---
+
+## Appendix A: Complete File Mapping
+
+| New / Moved File | Source | Purpose |
+|---|---|---|
+| `core/gmail/__init__.py` | NEW | Re-exports |
+| `core/gmail/gmail_oauth.py` | `archive/gmail_feature/gmail_oauth.py` | OAuth manager |
+| `core/gmail/gmail_client.py` | `archive/gmail_feature/gmail_client.py` | API client |
+| `core/windows/dpapi.py` | NEW | DPAPI encrypt/decrypt |
+| `core/windows/secure_url_launcher.py` | REFACTOR from `reddit_helper_bridge.py` | Generic URL bridge |
+| `core/audio/__init__.py` | NEW | Audio re-exports |
+| `core/audio/notification_sound.py` | NEW | OGG player |
+| `core/paths.py` | NEW (or APPEND) | Centralized AppData helper |
+| `widgets/gmail_widget.py` | `archive/gmail_feature/gmail_widget.py` | Overlay widget |
+| `widgets/gmail_components.py` | NEW | Position enum, re-exports |
+| `ui/tabs/widgets_tab_gmail.py` | NEW | Settings dialog tab |
+| `core/settings/models.py` | APPEND | `GmailWidgetSettings` dataclass |
+| `core/settings/defaults.py` | APPEND | Gmail defaults |
+| `core/dev_gates.py` | APPEND | `is_gmail_enabled()` |
+| `images/gmail-envelope.png` | NEW | Envelope icon asset |
+
+## Appendix B: Dependency Audit
+
+| Package | Version | Purpose | Already Present? |
+|---|---|---|---|
+| `google-auth-oauthlib` | ≥1.0.0 | OAuth flow | Verify |
+| `google-auth` | ≥2.0.0 | Auth credentials | Verify |
+| `google-api-python-client` | ≥2.0.0 | Gmail REST API | Verify |
+| `PySide6` | (existing) | QtMultimedia for sound | Verify `QtMultimedia` sub-module |
+
+## Appendix C: Security Checklist
+
+- [ ] `client_secrets.json` never committed.
+- [ ] Token file encrypted at rest (DPAPI or fallback).
+- [ ] Token file path is user-local (`%APPDATA%`), not repo-local.
+- [ ] OAuth `state` parameter used for CSRF protection.
+- [ ] Local OAuth server uses random port + timeout.
+- [ ] Scopes minimized (`gmail.metadata` + `gmail.modify` only).
+- [ ] No message body content ever logged or stored.
+- [ ] URL launching goes through secure-desktop bridge in `.scr` mode.
+- [ ] `GmailConfigError` raised early if credentials missing (fail-closed).
+- [ ] `clear_local_credentials()` available for user-initiated revocation.
+
+## Appendix D: OAuth Consent Screen & Verification Notes
+
+Because `gmail.modify` is a **sensitive scope**, Google requires verification for public use.
+
+- **Testing mode:** Works indefinitely for up to 100 test users. Refresh tokens expire every 7 days. **Sufficient for a dev-gated personal feature.**
+- **Publish mode:** Requires privacy policy, Terms of Service, and a YouTube video demonstrating scope usage. Refresh tokens do not expire. Only needed if distributing to non-developer users.
+- **Recommendation:** Stay in Testing mode. Document this limitation in `README.md` or `Docs/Gmail_Widget.md`.

@@ -12,11 +12,16 @@ This file tracks active work and near-term validation.
 
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
-- Resolve U-05 (MC Keyboard Focus / Ctrl Halo Runtime Input Family).
+- **U-05 RESOLVED (2026-04-25)**: MC Keyboard Focus / Ctrl Halo Runtime Input Family fixed via wiring dead code `_restore_mc_input_focus`.
+- **GMAIL WIDGET**: See `Docs/Gmail_Widget_Plan.md` for full scoped implementation plan (8 phases + 4 appendices). Adapt archive code to production as dev-gated overlay widget with secure-desktop URL launching, DPAPI token encryption, settings UI, and OGG notification sound. Plan covers credential hygiene, paint performance guardrails, transition deferral, and AV false-positive avoidance.
+- Investigate MuteButtonWidget fade-in race with `invalidate_overlay_effects` (~1/10 failure).
+- Investigate transition random mode distribution skew report (Diffuse 60-70% observed).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 
 ## Open Validation
-- Runtime confirmation for U-05 MC focus/input matrix.
+- U-05 MC focus/input matrix: **RESOLVED**, awaiting long-term stability confirmation.
+- Mute button fade-in reliability under startup event pressure.
+- Transition random mode actual distribution vs expected uniform (needs log analysis over 50+ rotations).
 - Preset repair/reindex round-trip checks after visualizer schema changes.
 - Settings destructive-flow checks (reset/import) when touching settings architecture.
 
@@ -146,7 +151,60 @@ These are ticking bombs even if not the U-05 root cause. Fix after U-05 is resol
 - Policy: `Docs/Guardrails.md`
 - Dated regressions: `Docs/Historical_Bugs.md`
 
+## Post-U-05 Analysis — Two Anomalies (2026-04-25)
+
+### Anomaly 1 — Mute Button Fade-In ~1/10 Failure
+
+**Symptom**: Global audio mute button (MuteButtonWidget) occasionally fails to fade in during secondary startup stage.
+
+**Root cause identified**: Race condition between `MuteButtonWidget._start_widget_fade_in()` and `invalidate_overlay_effects()`.
+
+**Mechanism**:
+1. Mute button used its own bespoke `QGraphicsOpacityEffect` + `QVariantAnimation` fade, NOT `ShadowFadeProfile`.
+2. The bespoke animation used `_fade_anim` as its attribute name, but `_invalidate_widget_effect()` only checked for `_shadowfade_anim` / `_shadowfade_shadow_anim` before recreating effects.
+3. During the ~1700ms fade window, `invalidate_overlay_effects()` could fire. Since the animation guard didn't recognize `_fade_anim`, `_recreate_effect()` was called mid-animation.
+4. `_recreate_effect()` replaced the `QGraphicsOpacityEffect` while the animation was still updating the old (now destroyed) effect via its closure. The new effect was never updated.
+
+**Fix applied (2026-04-25)**: Replaced bespoke fade implementation with `ShadowFadeProfile.start_fade_in(..., apply_shadow_on_finish=False, on_finished=...)`. This gives the mute button the same protections all other overlay widgets have:
+- Stops existing animations before starting new ones
+- Uses `_shadowfade_anim` which `_invalidate_widget_effect()` recognizes and protects
+- Includes `Shiboken.isValid()` guard in `valueChanged` to gracefully handle destroyed effects
+- No drop shadow is applied (preserving the original design constraint)
+
+**File**: `widgets/mute_button_widget.py` `_start_widget_fade_in()`
+
+### Anomaly 2 — Diffuse Transition Over-Represented at 60-70%
+
+**Code audit result**: The random transition selection uses `random.choice(candidates)` from a uniformly populated list. Mathematically impossible to produce 60-70% for any single item with the intended pool size.
+
+**Selection paths checked**:
+- Engine `_prepare_random_transition_if_needed()` → `random.choice(candidates)` from `available` list
+- Factory `_pick_random_transition()` → `random.choice(candidates)` from `available` list
+- Both use Python stdlib `random` with no seeding manipulation
+
+**Default pool state discrepancy**:
+- `core/settings/default_settings.py` canonical defaults: `transitions.type='Slide'`, `random_always=False`, pool has `Blinds=False`, `Crossfade=False`
+- `core/settings/presets.py` preset defaults: pool has ALL items `True`
+- This means fresh installs vs preset-restored installs have different default pools.
+
+**Likely explanations**:
+1. **Perception bias**: Diffuse is visually distinctive (block-grid dissolve). Human memory overweight distinctive events.
+2. **Small actual pool**: User's `settings_v2.json` may have fewer pool entries enabled than expected. `to_bool()` converts malformed values to `True`, but missing keys default to `True`. Unlikely to shrink pool accidentally.
+3. **Non-random mode active**: Default `transitions.type='Slide'` with `random_always=False` means NO random selection at all — it always uses Slide. User must have explicitly enabled random mode.
+4. **Insufficient sample size**: 10-20 observations is not statistically significant for an 11-item uniform distribution.
+
+**Debug message assessment — "Requested X but instantiating Y"**:
+- The `INFO` log message from `TransitionFactory._log_selection()` is **purely informational, safe, and performant**.
+- When `random_mode=True`, `requested` = `transitions.type` (user's last manual selection, e.g. 'Block Puzzle Flip'), `actual` = `transitions.random_choice` (the resolved random pick).
+- The factory always reads `transitions.random_choice` before instantiation. The `requested` string is only used for logging, never for caching or transition creation.
+- **No "incorrect caching" risk**: `SettingsManager.set('transitions.random_choice')` is synchronous in-memory; the factory reads the current value. There is no stale cache.
+- **Minor inefficiency**: `_prepare_random_transition_if_needed()` is called twice per timer rotation (once in `_on_rotation_timer`, once inside `_show_next_image`), causing one wasted RNG call. Harmless but could be cleaned up.
+- **Minor UX note**: The log wording "Requested X but instantiating Y" sounds like a mismatch/bug. Rewording to "Random mode: resolved 'X' → 'Y'" would be clearer.
+
+**Recommendation**: Check `screensaver.log` for the line `Random transition choice for this rotation: {choice}` over 50+ rotations to confirm actual distribution. If Diffuse is genuinely >30%, the pool is smaller than expected or there's a non-code factor (e.g. transition instantiation failing and falling back to a default — but fallback is Crossfade, not Diffuse).
+
 ## Idea Box
 1. Add a lightweight “doc drift” check that flags stale references between `Spec.md`, `Index.md`, and `Current_Plan.md`.
 2. Add a tiny harness smoke command list to this file so recurring investigations are one-command repeatable.
 3. Deferred Winlogon-targeted automation pass: compare `S` path vs media path evidence only after MC focused behavior is understood.
+4. Add a transition-distribution logger that counts transition types over a session and reports skew at shutdown.
