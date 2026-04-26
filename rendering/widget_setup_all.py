@@ -268,6 +268,29 @@ def setup_all_widgets(
             if widget is not None:
                 _ensure_thread_manager(widget, 'imgur')
 
+    # Create Gmail widget via factory (gated by --devgmail CLI flag)
+    from core.dev_gates import is_gmail_enabled
+    if is_gmail_enabled():
+        gmail_factory = mgr._factory_registry.get_factory("gmail")
+        gmail_settings = widgets_config.get('gmail', {})
+        monitor_sel = gmail_settings.get('monitor', 'ALL')
+        if _show_on_this_monitor(monitor_sel):
+            if SettingsManager.to_bool(gmail_settings.get('enabled', False), False):
+                mgr.add_expected_overlay("gmail")
+
+            widget = _reuse_existing_widget('gmail_widget', 'gmail')
+            if widget is None and gmail_factory:
+                gmail_settings_with_shadow = dict(gmail_settings) if isinstance(gmail_settings, dict) else {}
+                gmail_settings_with_shadow['_shadows_config'] = shadows_config
+                widget = gmail_factory.create(mgr._parent, gmail_settings_with_shadow)
+                if widget:
+                    mgr.register_widget("gmail", widget)
+                    created['gmail_widget'] = widget
+                    mgr._bind_parent_attribute('gmail_widget', widget)
+
+            if widget is not None:
+                _ensure_thread_manager(widget, 'gmail')
+
     # Create Spotify widgets (require media widget) - still use direct methods
     # as they have complex media widget anchoring logic
     media_widget = created.get('media_widget')

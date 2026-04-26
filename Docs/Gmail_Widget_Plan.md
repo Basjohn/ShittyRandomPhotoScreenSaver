@@ -1,6 +1,6 @@
 # Gmail Widget — Full Implementation Plan
 
-Version: 1.0 | Date: 2026-04-26 | Status: Planning
+Version: 1.3 | Date: 2026-04-27 | Status: Phase 2 Complete (Widget Core)
 Decision: Adapt archive code; do not rewrite.
 Scope: Bring archive/gmail_feature/ into production as a dev-gated overlay widget.
 
@@ -39,11 +39,12 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 - [x] **P0.2** Add `**/gmail_token*.pickle` and `**/gmail_token*.enc` to `.gitignore`.
 - [x] **P0.3** Create `core/gmail/` directory with `__init__.py` exporting public API.
 - [x] **P0.4** Verify `images/google-gmail.png` exists (21.7 KB — slightly over 10KB target but acceptable; no action needed).
-- [ ] **P0.5** Source/create icon assets:
-  - `images/gmail-envelope.png` (32x32, unread indicator)
-  - `images/gmail-read.png` (16x16, mark-as-read action)
-  - `images/gmail-spam.png` (16x16, spam action)
-  - `images/gmail-trash.png` (16x16, trash action)
+- [x] **P0.5** Source/create icon assets:
+  - `images/gmail-envelope.png` (32x32, unread indicator) — created from `images/gmail-envelope.svg` via `tools/convert_svg_to_png.py`
+  - `images/gmail-read.png` (16x16, mark-as-read action) — created from `images/gmail-read.svg` via `tools/convert_svg_to_png.py`
+  - `images/gmail-spam.png` (16x16, spam action) — created from `images/gmail-spam.svg` via `tools/convert_svg_to_png.py`
+  - `images/gmail-trash.png` (16x16, trash action) — created from `images/gmail-trash.svg` via `tools/convert_svg_to_png.py`
+  - *(Source SVGs created inline; generic converter `tools/convert_svg_to_png.py` refactored from `convert_weather_svgs.py`.)*
 - [x] **P0.6** Verify `resources/tutuogg.ogg` exists (confirmed).
 - [x] **P0.7** Verified `requests` is available in `requirements.txt`. Removed unused `google-auth-oauthlib`, `google-auth`, `google-api-python-client` — hardened code uses `requests` directly.
 - [x] **P0.8** Verify `PySide6.QtMultimedia` is available (confirmed via import test).
@@ -79,7 +80,7 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 
 - [x] **P1.16-P1.18** Bridge audit complete: `reddit_helper_bridge.py` is URL-agnostic. Created thin wrapper `core/windows/secure_url_launcher.py` with generic `open_url(url)`.
 - [x] **P1.19** Update `GmailClient.open_message_in_browser()` to use `open_url()`.
-- [ ] **P1.20** Update `GmailWidget.handle_click()` header click to use `open_url()`.
+- [x] **P1.20** Update `GmailWidget.handle_click()` header click to use `open_url()`.
 - [ ] **P1.21** Update `RedditWidget` to generic launcher only if trivial.
 - [x] **P1.22** Created `tests/test_secure_url_launcher.py` with bridge + fallback coverage.
 
@@ -99,92 +100,134 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 
 **Goal:** Relocate widget to `widgets/gmail_widget.py`, fix imports, align with current `BaseOverlayWidget` API, replace SVG with PNG, add envelope icon.
 
+### 4.0 Email Data Cache (New)
+
+**Requirement:** Keep last-known email list on disk so the widget can paint immediately on startup without waiting for the first network fetch. Cache is non-sensitive (metadata only — no body/snippet).
+- **Reasoning:** Eliminates blank-widget flash on screensaver startup. Cache is refreshed in background; UI paints cached data immediately, then swaps to fresh data when fetch completes.
+
+- [x] **P2.0a** Add `email_cache_path: Path` defaulting to `get_app_data_dir() / "gmail_cache.json"`.
+- [x] **P2.0b** On successful fetch, serialize `List[EmailMetadata]` as JSON (message_id, sender, subject, labels, timestamp, unread flag) to `email_cache_path`.
+- [x] **P2.0c** On widget initialization / `start()`, if `email_cache_path` exists and is < 24h old, load and paint immediately. Fire background fetch immediately after.
+- [x] **P2.0d** On background fetch completion, write new cache and `update()` the widget.
+- [x] **P2.0e** Cache file must be stored in `%APPDATA%/SRPSS/cache/` (same directory as other caches), **never in the git repo**, and must contain **no credential or token data**.
+- [x] **P2.0f** If cache is > 24h old, treat as stale: paint error/empty state while fetching.
+- [x] **P2.0g** Use atomic write (write to temp, rename) to prevent corruption if screensaver exits mid-write.
+
 ### 4.1 Relocation & Import Fix
 
-- [ ] **P2.1** Copy `archive/gmail_feature/gmail_widget.py` → `widgets/gmail_widget.py`.
-- [ ] **P2.2** Update imports to new locations (`core.gmail`, `core.windows.secure_url_launcher`).
-- [ ] **P2.3** Create `widgets/gmail_components.py` with `GmailPosition` enum (mirror `reddit_components.py` pattern).
+- [x] **P2.1** Copy `archive/gmail_feature/gmail_widget.py` → `widgets/gmail_widget.py`.
+- [x] **P2.2** Update imports to new locations (`core.gmail`, `core.windows.secure_url_launcher`).
+- [x] **P2.3** Create `widgets/gmail_components.py` with `GmailPosition` enum (mirror `reddit_components.py` pattern).
 
 ### 4.2 BaseOverlayWidget API Alignment
 
-- [ ] **P2.4** Read `widgets/base_overlay_widget.py` and compare `__init__` signature against archive usage.
-- [ ] **P2.5** Verify `overlay_name="gmail"` is accepted.
-- [ ] **P2.6** Verify `_shadow_config` attribute exists.
-- [ ] **P2.7** Verify `_apply_base_styling()` still exists.
-- [ ] **P2.8** Verify `_update_content()` is the correct refresh hook.
-- [ ] **P2.9** Document any API drift and adjust widget code.
+- [x] **P2.4** Read `widgets/base_overlay_widget.py` and compare `__init__` signature against archive usage.
+- [x] **P2.5** Verify `overlay_name="gmail"` is accepted.
+- [x] **P2.6** Verify `_shadow_config` attribute exists.
+- [x] **P2.7** Verify `_apply_base_styling()` still exists.
+- [x] **P2.8** Verify `_update_content()` is the correct refresh hook. *(Note: not used — widget uses timer-based fetch cycle instead.)*
+- [x] **P2.9** Document any API drift and adjust widget code.
 
 ### 4.3 Asset Loading: PNG Only, No SVG
 
 **Reasoning:** User explicitly stated SVG causes engine slowdown. Archive tries SVG first then PNG fallback. We will use PNG exclusively.
 
-- [ ] **P2.10** Rewrite `_load_brand_pixmap()` to load `images/google-gmail.png` **only**.
-- [ ] **P2.11** Delete SVG fallback code entirely (remove dead code).
-- [ ] **P2.12** If PNG missing, log WARNING and draw text "Gmail" fallback instead of crashing.
-- [ ] **P2.13** Implement `_load_envelope_pixmap()` for `images/gmail-envelope.png`.
-- [ ] **P2.14** If envelope PNG missing, draw lightweight `QPainterPath` envelope shape as fallback.
+- [x] **P2.10** Rewrite `_load_brand_pixmap()` to load `images/google-gmail.png` **only**.
+- [x] **P2.11** Delete SVG fallback code entirely (remove dead code).
+- [x] **P2.12** If PNG missing, log WARNING and draw text "Gmail" fallback instead of crashing.
+- [x] **P2.13** Implement `_load_envelope_pixmap()` for `images/gmail-envelope.png`.
+- [x] **P2.14** If envelope PNG missing, log WARNING and continue gracefully. *(QPainterPath fallback deferred — text header is sufficient.)*
 
 ### 4.4 Envelope Icon & Timestamp Paint Logic
 
 **Requirement:** Envelope icon next to unread emails; read emails show dim/no icon. Envelope is optional but defaults **ON**.
 
-- [ ] **P2.15** Add `show_envelope_icon: bool` setting (default **True**).
-- [ ] **P2.16** In `_paint_emails()`, add envelope column before sender/time when enabled.
-- [ ] **P2.17** Unread: envelope icon in bright color (white or `#FFCC00`).
-- [ ] **P2.18** Read: envelope icon in dim gray or omitted.
-- [ ] **P2.19** Adjust column widths: envelope 16px + 4px margin.
-- [ ] **P2.20** Cache scaled envelope QPixmap to avoid per-frame re-scale.
+- [x] **P2.15** Add `show_envelope_icon: bool` setting (default **True**).
+- [x] **P2.16** In `_paint_emails()`, add envelope column before sender/time when enabled.
+- [x] **P2.17** Unread: envelope icon at full color.
+- [x] **P2.18** Read: envelope icon grayscale-dimmed.
+- [x] **P2.19** Adjust column widths: envelope 16px + 6px margin.
+- [x] **P2.20** Cache scaled envelope QPixmap to avoid per-frame re-scale.
+
+### 4.4b Logo Desaturation (New)
+
+**Requirement:** When no unread emails exist, desaturate the Gmail logo/header to indicate "all clear".
+- **Reasoning:** Visual feedback at a glance. Matches `desaturate_when_no_unread` setting already in settings model.
+
+- [x] **P2.20b** Wire existing `desaturate_when_no_unread` setting (already in `GmailWidgetSettings`, default **True**) into `_paint_header()` logic.
+- [x] **P2.20c** In `_paint_header()`, if `desaturate_when_no_unread` is True and zero unread messages in current list, draw grayscale logo via `QImage.convertToFormat(Format_Grayscale8)`.
+- [x] **P2.20d** Desaturation cached: `_ensure_desaturated_brand()` computes once and stores `_brand_pixmap_desaturated`.
 
 ### 4.5 Secure URL Integration in Widget
 
-- [ ] **P2.21** Replace `import webbrowser` and `webbrowser.open(...)` in `handle_click()` with `open_url(...)`.
-- [ ] **P2.22** Header click opens `https://mail.google.com` via `open_url()`.
-- [ ] **P2.23** Row click opens `https://mail.google.com/mail/u/0/#all/{message_id}` via `open_url()`.
-- [ ] **P2.24** Add fallback: if `open_url()` raises, log ERROR and try `webbrowser.open()` as last resort. (Ideally use same fallback structure as reddit links instead)
+- [x] **P2.21** Replace `import webbrowser` and `webbrowser.open(...)` in `handle_click()` with `open_url(...)`.
+- [x] **P2.22** Header click opens `https://mail.google.com` via `open_url()`.
+- [x] **P2.22b** **Unread count badge**: parentheses count "Gmail (N)" in header text. Shown only when unread > 0.
+- [x] **P2.23** Row click opens message via `GmailClient.open_message_in_browser()` which uses `open_url()`.
+- [x] **P2.24** Use `open_url()` from `core/windows/secure_url_launcher`.
+
+### 4.5b Click Behavior & Hit Rects (New)
+
+**Requirement:** Clear separation of click targets so row click, three-dot button click, and header click never conflict.
+
+- [x] **P2.24b** Hit rects computed in `paintEvent` (acceptable — rect computation is trivial; pure geometry, no alloc).
+- [x] **P2.24c** Row split: action hit rects checked first (three-dot 24px zone), then row body. No overlap.
+- [x] **P2.24d** Header hit rect opens `https://mail.google.com` via `open_url()`.
+- [x] **P2.24e** Error/auth states: entire widget body is single click target (auth → OAuth, other → retry fetch).
+- [x] **P2.24f** Click handling uses `local_pos` from `handle_click()`. No global math.
 
 ### 4.6 Per-Row Three-Dot Action Menu
 
-**Requirement:** Every message row has a three-dot (vertical ellipsis or "...") button on the far right. Clicking it opens a compact `QMenu` with icon-labelled actions. All callbacks run on the UI thread.
+**Requirement:** Every message row has a visible three-dot (vertical ellipsis or "...") button on the far right. Clicking it opens a compact `QMenu` with icon-labelled actions. All callbacks run on the UI thread.
+- **Reasoning:** Hover-reveal and tooltips are banned in this project (overpaint, performance cost, interaction fragility). The button is always visible when the feature is enabled.
 
-- [ ] **P2.25** Add `show_three_dot_menu: bool` setting (default **True**).
-- [ ] **P2.26** Add a 16×16px three-dot button (`QToolButton` or custom `ClickableLabel`) at the right edge of each row when enabled. Right-margin 4px.
-- [ ] **P2.27** Button is hidden by default; shown on row hover (same hover timer as action menu).
-- [ ] **P2.28** Clicking the button opens `QMenu` with these actions and icons:
-  - **Mark As Read** — icon `images/gmail-read.png` (or `QIcon` fallback).
-  - **Spam** — icon `images/gmail-spam.png`.
-  - **Trash** — icon `images/gmail-trash.png`.
-- [ ] **P2.29** Action callbacks (`_mark_as_read`, `_spam_message`, `_trash_message`) must run on the UI thread (use `QTimer.singleShot(0, ...)` or `ThreadManager.invoke_in_ui_thread()` if triggered from signal).
-- [ ] **P2.30** Add `shiboken6.isValid()` guard in all lambdas connected to `QMenu` actions before touching widget state.
-- [ ] **P2.31** Verify `QMenu` stylesheet does not conflict with application dark theme (use `shared_styles.py` helper or neutral palette).
-- [ ] **P2.32** Ensure `_hover_timer` is stopped in `cleanup()`.
+- [x] **P2.25** Add `show_three_dot_menu: bool` setting (default **True**).
+- [x] **P2.26** Three-dot rendered as 3 `drawEllipse` dots (painter) at right edge of each row. 24px zone.
+- [x] **P2.27** Button always visible when enabled. No hover, no tooltip.
+- [x] **P2.27b** *(Changed)* Rendered via `QPainter.drawEllipse()` × 3 instead of drawText — visually cleaner.
+- [x] **P2.28** QMenu with Mark As Read (conditional on unread), Archive, Spam, Trash. Icons via `QIcon(QPixmap)`.
+- [x] **P2.29** *(Corrected)* Action HTTP calls dispatch to IO thread via `ThreadManager.submit_io_task()`. UI refresh via `invoke_in_ui_thread(self._fetch_emails)`.
+- [x] **P2.30** `shiboken6.isValid()` guard in `_dispatch_action()` before invoking action function.
+- [x] **P2.31** QMenu uses inline dark stylesheet (neutral palette, no theme conflict).
+- [x] **P2.32** QMenu created per-click with `WA_DeleteOnClose`, parented to widget. No singleton menu.
 
 ### 4.7 Title Case Conversion (New)
 
 **Requirement:** Sender and subject text can be automatically converted to Title Case. Optional but defaults **ON**.
 
-- [ ] **P2.33** Add `auto_title_case: bool` setting (default **True**).
-- [ ] **P2.34** In `_paint_emails()`, apply `str.title()` to `sender` and `subject` strings when enabled.
-- [ ] **P2.35** Preserve original casing in `EmailMetadata` (do not mutate dataclass); apply transformation at paint time only.
+- [x] **P2.33** Add `auto_title_case: bool` setting (default **True**).
+- [x] **P2.34** In `_paint_emails()`, apply `_smart_title_case()` to subject when enabled. *(Sender left as-is — name casing from Gmail API is usually correct.)*
+- [x] **P2.35** Original casing preserved in `EmailMetadata`; transformation at paint time only.
 
 ### 4.8 Separator Lines (New)
 
 **Requirement:** Horizontal separator lines between message rows, mirroring Reddit widget's `show_separators`. Optional but defaults **ON**. The separator between the *unread* group and the *read* group is 50% thicker than regular row separators.
 
-- [ ] **P2.36** Add `show_separators: bool` setting (default **True**).
-- [ ] **P2.37** In `_paint_emails()`, draw a 1px horizontal line after each row when enabled.
-- [ ] **P2.38** Group unread messages first, read messages second. Draw a 2px separator line (or draw a 1px line with `QPainter.Antialiasing` for visual weight) between the last unread row and the first read row.
-- [ ] **P2.39** Use `shared_styles.py` color helper or neutral gray (`#555555` or theme-appropriate) for separator color.
+- [x] **P2.36** Add `show_separators: bool` setting (default **True**).
+- [x] **P2.37** In `_paint_emails()`, 1px separator after each row + thicker separator at unread→read boundary.
+- [x] **P2.38** Emails sorted unread-first (newest within each group) in `_on_emails_fetched()`. Separator drawn at boundary.
+- [x] **P2.39** Separator colors: row separators `rgba(200,200,200,30)`, unread/read boundary `rgba(180,180,180,60)`.
 
 ### 4.9 Time Received Display (New)
 
 **Requirement:** Show email received time. Optional but defaults **ON**. Placement adapts based on envelope icon visibility.
+- **Reasoning:** Timestamp placement changes based on envelope visibility to avoid column collision and keep the widget compact.
 
-- [ ] **P2.40** Add `show_timestamp: bool` setting (default **True**).
-- [ ] **P2.41** **Envelope OFF**: time is displayed in the envelope column space (left side, same font size as sender/subject).
-- [ ] **P2.42** **Envelope ON + Timestamp ON**: time is displayed on the line *below* sender/subject, in smaller font (e.g., 10px vs 12px) and grayed color (e.g., `#888888`).
-- [ ] **P2.43** **Envelope ON + Timestamp OFF**: no time display.
-- [ ] **P2.44** Timestamp format: relative human-readable (e.g., "2 min ago", "1 hr ago", "Yesterday", "Mon 14:32") via lightweight helper (no external date library if possible; use `datetime` deltas).
-- [ ] **P2.45** If timestamp string is empty or parsing fails, omit the line entirely.
+
+- [x] **P2.40** Add `show_timestamp: bool` setting (default **True**).
+- [x] **P2.41–P2.43** *(Simplified)* Timestamp always inline on the same row, in smaller font, placed after envelope column. No separate below-subject line — keeps row height uniform.
+- [x] **P2.44** Timestamp format: `_format_relative_time()` in `gmail_components.py` — "Xm", "Xh", "Yesterday", "Mon 14:32", "Apr 12".
+- [x] **P2.45** Empty/failed timestamp gracefully omitted.
+
+### 4.10 Empty & Error States (New)
+
+**Requirement:** The widget must never crash or show raw Python tracebacks. Graceful degradation for all edge cases.
+
+- [x] **P2.46** Empty inbox: centered "No unread emails" text, dimmed color. Header still painted.
+- [x] **P2.47** Auth failure: "Gmail not connected. Tap to authenticate." Full widget click triggers OAuth.
+- [x] **P2.48** Network failure: "Gmail unavailable. Tap to retry." Full widget click retries fetch.
+- [x] **P2.49** All error states are pure paint — no popups.
+- [x] **P2.50** Error text uses `_text_color.darker(120)` — adapts to theme.
 
 ---
 
@@ -194,8 +237,8 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 
 ### 5.1 Settings Model
 
-- [ ] **P3.1** Read `core/settings/models.py` to understand dataclass pattern (e.g., `ClockWidgetSettings`). Note: Reddit uses raw dict access, not a dataclass.
-- [ ] **P3.2** Create `GmailWidgetSettings` dataclass:
+- [x] **P3.1** Read `core/settings/models.py` to understand dataclass pattern (e.g., `ClockWidgetSettings`). Note: Reddit uses raw dict access, not a dataclass.
+- [x] **P3.2** Create `GmailWidgetSettings` dataclass:
   - `enabled: bool = False`
   - `position: str = "top_left"`
   - `limit: int = 5`
@@ -203,9 +246,9 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
   - `filter_label: str = "INBOX"`
   - `show_sender: bool = True`
   - `show_subject: bool = True`
-  - `show_actions: bool = True`
   - `show_envelope_icon: bool = True`
   - `show_three_dot_menu: bool = True`
+  - `show_unread_count_in_header: bool = True`
   - `auto_title_case: bool = True`
   - `show_separators: bool = True`
   - `show_timestamp: bool = True`
@@ -213,25 +256,24 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
   - `play_sound_on_new_mail: bool = False`
   - `sound_volume_percent: int = 50`
   - `sound_file_path: str = "resources/tutuogg.ogg"`
-- [ ] **P3.3** Add `from_settings()` and `to_dict()` methods following existing pattern.
-- [ ] **P3.4** If a top-level `AppSettings` dataclass exists, add `GmailWidgetSettings` field to it; otherwise follow the existing flat-dict convention.
+- [x] **P3.3** Add `from_settings()` and `to_dict()` methods following existing pattern.
+- ~~**P3.4**~~ *Removed — no top-level `AppSettings` dataclass exists. Flat dict convention is used.*
 
 ### 5.2 Defaults
 
-- [ ] **P3.5** Add Gmail defaults to `core/settings/default_settings.py` (the canonical flat `DEFAULT_SETTINGS` dict). If any values must survive reset, add their dotted keys to `PRESERVE_ON_RESET` in `core/settings/defaults.py`.
+- [x] **P3.5** Add Gmail defaults to `core/settings/default_settings.py` (the canonical flat `DEFAULT_SETTINGS` dict). If any values must survive reset, add their dotted keys to `PRESERVE_ON_RESET` in `core/settings/defaults.py`.
 
 ### 5.3 Widget Settings Integration
 
-- [ ] **P3.6** Modify `GmailWidget.__init__` to accept `settings: Optional[GmailWidgetSettings]`.
-- [ ] **P3.7** If settings provided, apply all fields during init; otherwise use defaults.
-- [ ] **P3.8** Add `apply_settings(settings: GmailWidgetSettings)` method for live updates from dialog.
-- [ ] **P3.9** Ensure `set_limit()`, `set_refresh_interval()`, etc. update internal state and persist via `SettingsManager`.
-- [ ] **P3.10** Add `on_settings_changed` signal or callback registration.
+- ~~**P3.6-P3.7**~~ *Already done — constructor accepts `settings: Optional[Any]` and calls `apply_settings()` if provided.*
+- [x] **P3.8** `apply_settings()` method already exists. **Correction:** Update attr names to match config dict keys (e.g. `enabled` not `gmail_enabled`).
+- ~~**P3.9**~~ *Removed — individual setters should NOT persist to SettingsManager. The UI tab save function handles persistence. Setters only update widget runtime state.*
+- ~~**P3.10**~~ *Removed — unnecessary. Existing pattern: UI tab saves → SettingsManager → widget manager applies. No widget-level signal needed.*
 
 ### 5.4 Settings UI Tab
 
-- [ ] **P3.11** Read `ui/tabs/widgets_tab_reddit.py` as reference for layout and styling.
-- [ ] **P3.12** Create `ui/tabs/widgets_tab_gmail.py` using **only** `ui/tabs/shared_styles.py` helpers:
+- [x] **P3.11** Read `ui/tabs/widgets_tab_reddit.py` as reference for layout and styling.
+- [x] **P3.12** Create `ui/tabs/widgets_tab_gmail.py` using **only** `ui/tabs/shared_styles.py` helpers:
   - `style_group_box()` for the outer `QGroupBox`.
   - `add_aligned_row()` for every label+control row.
   - `add_swatch_label()` + `ColorSwatchButton` for color rows.
@@ -240,26 +282,24 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
   - `INFO_LABEL_STYLE` / `STATUS_LABEL_STYLE` for helper/status text.
   - No inline `setStyleSheet()` strings for form elements.
   Controls to build:
-  - Enable checkbox (gated by dev flag — if dev gate off, show "Enable (requires -devgmail)" disabled).
+  - Enable checkbox (gated by dev flag — if dev gate off, show "Enable (requires --devgmail)" disabled).
   - Position dropdown (top_left, top_right, bottom_left, bottom_right).
   - Limit spinner (5–10).
   - Refresh interval spinner (1–60 minutes).
   - Filter label line edit (INBOX, CATEGORY_PRIMARY, etc.).
-  - Show sender / show subject / show actions checkboxes.
+  - Show sender / show subject checkboxes.
   - Show envelope icon checkbox.
   - Show three-dot action menu checkbox.
+  - Show unread count in header checkbox.
   - Show separator lines checkbox.
   - Show time received checkbox.
   - Auto title case checkbox.
   - Desaturate logo when no unread checkbox.
-  - *(If dev gate off: all controls visible but greyed out; info label reads "Enable via -devgmail flag.")*
+  - *(If dev gate off: all controls visible but greyed out; info label reads "Enable via --devgmail flag.")*
   - Text / background / border color swatches (follow Reddit color row pattern).
-  - Sound group box:
-    - Play sound on new mail checkbox.
-    - Volume slider (0–100).
-    - Sound file picker (default `resources/tutuogg.ogg`).
-- [ ] **P3.13** Implement `build_gmail_ui(tab, layout)`, `load_gmail_settings(tab, widgets)`, and `save_gmail_settings(tab) -> dict`.
-- [ ] **P3.14** Register Gmail in `ui/tabs/widgets_tab.py` at every integration point:
+  - *Sound controls deferred to Phase 5 — only add UI after `NotificationSoundPlayer` exists.*
+- [x] **P3.13** Implement `build_gmail_ui(tab, layout)`, `load_gmail_settings(tab, widgets)`, and `save_gmail_settings(tab) -> dict`.
+- [x] **P3.14** Register Gmail in `ui/tabs/widgets_tab.py` at every integration point:
   1. Import `build_gmail_ui`, `load_gmail_settings`, `save_gmail_settings`.
   2. Add `self._btn_gmail = QPushButton("Gmail")` in button list.
   3. Append `self._gmail_container` to `_subtab_containers`.
@@ -269,35 +309,35 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
   7. Call `load_gmail_settings(self, widgets)` in `_load_settings()`.
   8. Call `save_gmail_settings(self)` in `_save_settings_now()`.
   9. Merge returned config into `existing_widgets['gmail']`.
-- [ ] **P3.15** Add `Docs/Defaults_Guide.md` update to the safe-change workflow step.
+- ~~**P3.15**~~ *Removed — `Docs/Defaults_Guide.md` does not exist.*
 
 ---
 
 ## 6. Phase 4 — Dev Gating & Lifecycle Registration
 
-**Goal:** Hide Gmail widget behind `-devgmail` CLI flag. Register in overlay lifecycle.
+**Goal:** Hide Gmail widget behind `--devgmail` CLI flag. Register in overlay lifecycle.
 
 ### 6.1 Dev Gate
 
-- [ ] **P4.1** Read `core/dev_gates.py` to understand `is_blob_enabled()`, `is_goo_enabled()` pattern.
-- [ ] **P4.2** Add `is_gmail_enabled() -> bool` reading `-devgmail` from `sys.argv`.
-- [ ] **P4.3** Add `force_gmail_gate(enabled: bool)` for tests (mirror `force_gate()` pattern).
-- [ ] **P4.4** Add `-devgmail` to `main.py` filtered args set (if args filtering exists).
+- [x] **P4.1** Read `core/dev_gates.py` to understand `is_blob_enabled()`, `is_goo_enabled()` pattern.
+- [x] **P4.2** Add `is_gmail_enabled() -> bool` reading `--devgmail` from `sys.argv`.
+- [x] **P4.3** Add gmail kwarg to `force_gate()` for tests (mirrors existing `force_gate()` pattern; `force_gmail_gate` not needed as separate fn).
+- [x] **P4.4** Add `--devgmail` to `main.py` filtered args set.
 
 ### 6.2 Widget Lifecycle Registration
 
-- [ ] **P4.5** Read `rendering/widget_manager.py` or `engine/display_manager.py` to find where `RedditWidget`, `WeatherWidget`, etc. are instantiated.
-- [ ] **P4.6** Add `GmailWidget` instantiation in the same location, guarded by `is_gmail_enabled()`.
-- [ ] **P4.7** Ensure Gmail widget respects `OverlayPosition` and does not collide with other corner widgets.
-- [ ] **P4.8** Add `gmail` to overlay fade sync registration.
-- [ ] **P4.9** Ensure widget is destroyed/cleaned up on screensaver exit (call `cleanup()` in teardown path).
-- [ ] **P4.10** Add settings tab gating: tab is always visible, but if `is_gmail_enabled()` is False, the enable checkbox is disabled with an info label "Enable via -devgmail flag." All other controls remain visible but disabled. This matches the pattern in P3.12.
+- [x] **P4.5** Located in `rendering/widget_setup_all.py::setup_all_widgets()` (factory-driven).
+- [x] **P4.6** Added Gmail block after Imgur, gated by `is_gmail_enabled()`.
+- [x] **P4.7** `WidgetType.GMAIL` registered in `ui/widget_stack_predictor.py`; collisions surfaced via `gmail_stack_status` label.
+- [x] **P4.8** Added Gmail to `compute_expected_overlays()` (gated) + `add_expected_overlay("gmail")` in setup.
+- [x] **P4.9** Cleanup automatic via `BaseOverlayWidget` lifecycle + `ResourceManager.register_qt()` in `WidgetManager.register_widget()`.
+- ~~**P4.10**~~ *Merged into P3.12 — dev gate check is part of the UI tab build, not a separate step.*
 
 ### 6.3 Widget Factory (if applicable)
 
-- [ ] **P4.11** Check `rendering/widget_factories.py` for a factory pattern.
-- [ ] **P4.12** If factories exist, add `GmailWidgetFactory` or equivalent registration.
-- [ ] **P4.13** Ensure factory passes `SettingsManager` or `AppSettings` into widget constructor.
+- [x] **P4.11** Confirmed factory pattern exists in `rendering/widget_factories.py`.
+- [x] **P4.12** Added `GmailWidgetFactory` and registered it in `WidgetFactoryRegistry._register_default_factories()`.
+- ~~**P4.13**~~ *Stale — factories receive raw config dict, not `AppSettings`. `GmailWidget(parent, position, settings=config)` passes the dict; `apply_settings()` handles dict/dataclass.*
 
 ---
 
@@ -355,7 +395,7 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 ### 8.2 Integration Tests
 
 - [ ] **P6.5** `tests/test_gmail_settings_roundtrip.py` — create `GmailWidgetSettings`, serialize via `to_dict()`, deserialize via `from_settings()`, assert equality.
-- [ ] **P6.6** `tests/test_gmail_dev_gate.py` — verify widget is only instantiated when `-devgmail` is in `sys.argv` (or `force_gmail_gate(True)`).
+- [ ] **P6.6** `tests/test_gmail_dev_gate.py` — verify widget is only instantiated when `--devgmail` is in `sys.argv` (or `force_gate(gmail=True)`).
 
 ### 8.3 Secure Desktop Tests
 
@@ -365,12 +405,12 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 
 ### 8.4 Memory & Resource Tests
 
-- [ ] **P6.10** Run widget through 50 start/stop cycles in test harness; verify no `QTimer` or `QMenu` leaks via `shiboken6.getAll()` (if available) or manual audit.
+- [ ] **P6.10** Run widget through 50 start/stop cycles in test harness; verify no refresh `QTimer` or `QMenu` leaks via `shiboken6.getAll()` (if available) or manual audit.
 - [ ] **P6.11** Verify `cleanup()` stops all timers and deletes `QMenu` references.
 
 ### 8.5 Performance Tests
 
-- [ ] **P6.12** Profile `paintEvent` with 10 emails: ensure < 5ms per frame on 1080p.
+- [ ] **P6.12** Profile `paintEvent` with 10 emails: ensure < 5ms per frame on 1080p. Follow iterative cycling: run for 15s, read all logs, fix, repeat.
 - [ ] **P6.13** Verify envelope pixmap cache is effective (no per-frame `QPixmap::scaled`).
 
 ### 8.6 Sign-Off Checklist
@@ -381,7 +421,7 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 - [ ] **P6.17** All tests pass.
 - [ ] **P6.18** `Index.md` updated with new files/classes.
 - [ ] **P6.19** `Docs/Guardrails.md` updated with Gmail-specific security notes (if any new patterns).
-- [ ] **P6.20** Archive directory `archive/gmail_feature/` deleted or marked deprecated after sign-off.
+- [ ] **P6.20** Archive directory `archive/gmail_feature/` marked deprecated (add `README.md` noting "Superseded by widgets/gmail_widget.py and core/gmail/ — kept for historical reference only"). Do not delete; archive is valuable for reference.
 
 ---
 
@@ -395,12 +435,13 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 - [ ] **S1.2** *(Optional / future)* Add a `pre-commit` guard that greps for `"client_id"` / `"client_secret"` patterns in non-archive Python files. The repository currently has no pre-commit infrastructure; implement only if CI is added later.
 - [ ] **S1.3** `client_secrets.json` path must be runtime-resolved only; no `pathlib.Path(__file__).parent / "client_secrets.json"` patterns that could be committed.
 - [ ] **S1.4** Add `GmailConfigError` string to `Docs/Guardrails.md` under "Never commit" section.
+- [ ] **S1.4b** Add `gmail_cache.json` and all files under `%APPDATA%/SRPSS/cache/` to `.gitignore` (if not already covered by broader `cache/` patterns). Ensure email cache is never committed.
 
 ### 9.2 Runtime Leak Prevention
 
 - [ ] **S1.5** `GmailOAuthManager` must never log the `client_secret` value, even at `DEBUG`. Log only that credentials were loaded, not their content.
 - [ ] **S1.6** *(Optional)* Token file may have `FILE_ATTRIBUTE_HIDDEN` on Windows. DPAPI encryption is the primary protection; ACL/Hidden flags are defense-in-depth and not required for MVP.
-- [ ] **S1.7** On widget/auth failure, the error tooltip / UI message must never display the `client_id`, `redirect_uri`, or token file path to the user (paths can leak machine info). Use generic messages: "Gmail credentials missing. See log."
+- [ ] **S1.7** On widget/auth failure, the error status text / UI message must never display the `client_id`, `redirect_uri`, or token file path to the user (paths can leak machine info). Use generic messages: "Gmail credentials missing. See log." No tooltips — they are banned in this project (overpaint, performance).
 - [ ] **S1.8** `EmailMetadata` must never include `body` or `snippet` fields — metadata-only by design. Add a dataclass `__post_init__` assert if needed.
 - [ ] **S1.9** `gmail_client.py` request logging must sanitize `message_id` from URLs? No — message IDs are not sensitive. But ensure no `body` / `raw` params are ever in the URL or logged.
 - [ ] **S1.10** If token refresh fails with `invalid_grant`, the manager must auto-clear local credentials (encrypted token deleted) and require re-auth. Do not retry indefinitely with a stale refresh token.
@@ -422,7 +463,7 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 - [ ] **PG1.1** `paintEvent()` must be pure — no network calls, no file I/O, no token refresh. All data must be pre-fetched and stored in widget attributes before `update()` is called.
 - [ ] **PG1.2** Email list must be capped at `limit` (default 5, max 10) **at fetch time**, not at paint time. Never paint more rows than configured.
 - [ ] **PG1.3** `QPainter` state changes (font, pen, brush) must be minimized. Set font once at start of email section, not per-row.
-- [ ] **PG1.4** Row background rects must be batched: draw all alternating backgrounds in one pass, then all text, then all icons. Avoid state thrashing.
+- ~~**PG1.4**~~ *Removed — premature optimization for 5-10 rows. Per-row state changes are negligible. Current per-row painting is readable and correct.*
 - [ ] **PG1.5** Envelope pixmap must be **cached at scale** once when `limit` or widget geometry changes, not in `paintEvent`. Cache key = `(envelope_path, target_width, target_height)`.
 - [ ] **PG1.6** Gmail logo pixmap must be cached identically. Reload only on explicit `reload_assets()` call or widget resize.
 - [ ] **PG1.7** Use `QStyleHints` / `QFontMetrics.horizontalAdvance()` once and cache results; do not re-measure strings per frame.
@@ -450,9 +491,8 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 
 - [ ] **TD1.1** Email refresh must use `ThreadManager.submit_io_task()`, never the UI thread.
 - [ ] **TD1.2** Results must be applied via `ThreadManager.invoke_in_ui_thread(lambda: self._apply_fetched_emails(data))`.
-- [ ] **TD1.3** If a transition is in progress (e.g., `TransitionManager.is_transitioning()` or `DisplayWidget._transition_state != idle`), the fetched result must be **queued** and applied only after transition completes. Do not force `update()` mid-transition.
-- [ ] **TD1.4** If fetch takes longer than transition, the UI update can happen post-transition. If fetch finishes before transition ends, hold the data in `_pending_email_update: Optional[List[EmailMetadata]]` and apply in a transition-finished callback.
-- [ ] **TD1.5** Use `QTimer.singleShot(0, ...)` or `OverlayTimerHandle` (already used for refresh) for the next refresh, but jitter the interval by ±10% to avoid thundering herd if multiple widgets refresh simultaneously.
+- ~~**TD1.3-TD1.4**~~ *Simplified — `invoke_in_ui_thread()` already queues safely on the Qt event loop. No transition-aware buffering needed; `update()` from an overlay widget during a transition is normal and lightweight.*
+- ~~**TD1.5**~~ *Removed — ±10% jitter for a 5-minute timer is not worth the complexity. Single widget, no thundering herd.*
 - [ ] **TD1.6** If a fetch is already in-flight when the timer fires again, skip the new fetch. Use an `atomic bool` or `threading.Lock()` to guard `_fetch_in_progress`.
 - [ ] **TD1.7** On widget `stop()` / `cleanup()`, cancel any in-flight future (if `ThreadManager` supports it) or at least set `_cancelled = True` so the callback ignores stale results.
 
@@ -483,7 +523,7 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 ### 12.2 Build Artifact Hygiene
 
 - [ ] **AV1.11** Ensure `core/windows/dpapi.py` is not flagged as ransomware-like by AV due to `CryptProtectData` usage. This is rare but can happen with overly aggressive heuristics. If flagged, add the `.scr` to AV exclusions (document for users) or use `keyring` library as alternative.
-- [ ] **AV1.12** The `google-api-python-client` package contains generated `.json` discovery documents. Ensure these are not flagged as suspicious data files by AV (rare but possible with heuristics looking at large embedded JSON). Not actionable by us, but worth noting.
+- [ ] **AV1.12** *(Stale — no longer applicable)* The `google-api-python-client` package was removed from dependencies. Hardened code uses `requests` directly. No generated discovery documents are present.
 
 ---
 

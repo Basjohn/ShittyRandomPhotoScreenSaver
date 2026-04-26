@@ -48,6 +48,8 @@ yarn-error.log*
 /logs/
 /temp/
 /cache/reddit/*.json
+/cache/*/*.json
+/cache/**/*.json
 /audits/
 /archive/
 /bak/

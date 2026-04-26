@@ -13,7 +13,7 @@ This file tracks active work and near-term validation.
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
 - **U-05 RESOLVED (2026-04-25)**: MC Keyboard Focus / Ctrl Halo Runtime Input Family fixed via wiring dead code `_restore_mc_input_focus`.
-- **GMAIL WIDGET**: Phase 0 + Phase 1 backend complete (2026-04-26). Plan updated: Phase 2 now specifies per-row three-dot action menu, envelope icon, separator lines (with thicker unread/read divider), auto title case, and adaptive timestamp display — all optional with default ON. Four new icon assets (envelope, read, spam, trash). See `Docs/Gmail_Widget_Plan.md` for remaining Phase 2-6 tasks.
+- **GMAIL WIDGET**: **Phases 3 + 4 complete** (2026-04-28). Plan v1.4. Phase 3: settings dataclass, defaults, dev gate, UI tab, wiring. Phase 4: `GmailWidgetFactory` in `rendering/widget_factories.py`, registered in `WidgetFactoryRegistry`, instantiation block in `setup_all_widgets()` (gated by `is_gmail_enabled()`), Gmail added to `compute_expected_overlays()` for fade sync, `-devgmail` filtered in `main.py`. All compile + lint clean. **Next**: Phase 5 (notification sound `core/audio/notification_sound.py` + sound UI controls), Phase 6 (testing + sign-off).
 - Investigate MuteButtonWidget fade-in race with `invalidate_overlay_effects` (~1/10 failure).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 

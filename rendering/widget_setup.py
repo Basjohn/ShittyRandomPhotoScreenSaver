@@ -131,6 +131,18 @@ def compute_expected_overlays(
     reddit2_monitor = reddit2_settings.get('monitor', 'ALL')
     if reddit2_enabled and resolve_monitor_visibility(reddit2_monitor, screen_index):
         expected.add("reddit2")
+
+    # Gmail (dev-gated)
+    try:
+        from core.dev_gates import is_gmail_enabled
+        if is_gmail_enabled():
+            gmail_settings = widgets_map.get('gmail', {})
+            gmail_enabled = SettingsManager.to_bool(gmail_settings.get('enabled', False), False)
+            gmail_monitor = gmail_settings.get('monitor', 'ALL')
+            if gmail_enabled and resolve_monitor_visibility(gmail_monitor, screen_index):
+                expected.add("gmail")
+    except Exception as exc:
+        logger.debug("[WIDGET_SETUP] Gmail expected-overlay check suppressed: %s", exc)
     
     # Media
     media_settings = widgets_map.get('media', {})

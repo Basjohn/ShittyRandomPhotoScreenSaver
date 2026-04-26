@@ -93,6 +93,7 @@ class WidgetType(Enum):
     MEDIA = "media"
     REDDIT = "reddit"
     REDDIT2 = "reddit2"
+    GMAIL = "gmail"
     SPOTIFY_VIS = "spotify_visualizer"
 
 

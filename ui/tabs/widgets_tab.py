@@ -182,6 +182,10 @@ class WidgetsTab(QWidget):
         self._reddit_color = self._color_from_default('reddit', 'color', [255, 255, 255, 230])
         self._reddit_bg_color = self._color_from_default('reddit', 'bg_color', [64, 64, 64, 255])
         self._reddit_border_color = self._color_from_default('reddit', 'border_color', [128, 128, 128, 255])
+        # Gmail widget colors
+        self._gmail_color = self._color_from_default('gmail', 'color', [255, 255, 255, 230])
+        self._gmail_bg_color = self._color_from_default('gmail', 'bg_color', [35, 35, 35, 255])
+        self._gmail_border_color = self._color_from_default('gmail', 'border_color', [255, 255, 255, 255])
         # Imgur widget colors
         self._imgur_color = self._color_from_default('imgur', 'color', [255, 255, 255, 230])
         self._imgur_bg_color = self._color_from_default('imgur', 'bg_color', [35, 35, 35, 255])
@@ -476,6 +480,7 @@ class WidgetsTab(QWidget):
         self._btn_media = QPushButton("Media")
         self._btn_visualizers = QPushButton("Visualizers")
         self._btn_reddit = QPushButton("Reddit")
+        self._btn_gmail = QPushButton("Gmail")
         self._btn_defaults = QPushButton("Defaults")
         
         # Imgur button - gated by SRPSS_ENABLE_DEV
@@ -509,6 +514,7 @@ class WidgetsTab(QWidget):
             self._btn_media,
             self._btn_visualizers,
             self._btn_reddit,
+            self._btn_gmail,
             self._btn_defaults,
         ]
         if dev_features_enabled:
@@ -531,6 +537,7 @@ class WidgetsTab(QWidget):
         from ui.tabs.widgets_tab_weather import build_weather_ui
         from ui.tabs.widgets_tab_media import build_media_ui, build_visualizers_ui
         from ui.tabs.widgets_tab_reddit import build_reddit_ui
+        from ui.tabs.widgets_tab_gmail import build_gmail_ui
 
         section_start = time.perf_counter()
         self._clocks_container = build_clock_ui(self, layout)
@@ -557,10 +564,13 @@ class WidgetsTab(QWidget):
         self._perf_log("build_reddit_ui", section_start)
         layout.addWidget(self._reddit_container)
 
+        section_start = time.perf_counter()
+        self._gmail_container = build_gmail_ui(self, layout)
+        self._perf_log("build_gmail_ui", section_start)
+        layout.addWidget(self._gmail_container)
+
         self._defaults_container = self._build_defaults_section()
         layout.addWidget(self._defaults_container)
-
-        # NOTE: Gmail widget removed - archived in archive/gmail_feature/
 
         # Imgur widget group - gated by SRPSS_ENABLE_DEV
         if dev_features_enabled:
@@ -596,6 +606,7 @@ class WidgetsTab(QWidget):
             self._media_container,
             self._visualizers_container,
             self._reddit_container,
+            self._gmail_container,
             self._defaults_container,
         ]
         if dev_features_enabled and hasattr(self, '_imgur_container'):
@@ -751,6 +762,7 @@ class WidgetsTab(QWidget):
         from ui.tabs.widgets_tab_weather import load_weather_settings
         from ui.tabs.widgets_tab_media import load_media_settings
         from ui.tabs.widgets_tab_reddit import load_reddit_settings
+        from ui.tabs.widgets_tab_gmail import load_gmail_settings
         from ui.tabs.widgets_tab_imgur import load_imgur_settings
 
         # Block all signals during load to prevent unintended saves
@@ -805,6 +817,16 @@ class WidgetsTab(QWidget):
                 'reddit2_enabled', 'reddit2_subreddit', 'reddit2_items',
                 'reddit2_position', 'reddit2_monitor_combo',
                 'reddit_exit_on_click',
+                'gmail_enabled', 'gmail_position', 'gmail_monitor_combo',
+                'gmail_limit', 'gmail_refresh', 'gmail_filter_label',
+                'gmail_font_combo', 'gmail_font_size', 'gmail_margin',
+                'gmail_show_sender', 'gmail_show_subject',
+                'gmail_show_envelope', 'gmail_show_three_dot',
+                'gmail_show_unread_count', 'gmail_show_separators',
+                'gmail_show_timestamp', 'gmail_auto_title_case',
+                'gmail_desaturate', 'gmail_show_background',
+                'gmail_intense_shadow', 'gmail_bg_opacity',
+                'gmail_border_opacity',
             ]
             for attr_name in _widget_attrs:
                 w = getattr(self, attr_name, None)
@@ -836,6 +858,7 @@ class WidgetsTab(QWidget):
             load_weather_settings(self, widgets)
             load_media_settings(self, widgets)
             load_reddit_settings(self, widgets)
+            load_gmail_settings(self, widgets)
             load_imgur_settings(self, widgets)
 
         finally:
@@ -1252,8 +1275,6 @@ class WidgetsTab(QWidget):
             self._imgur_border_color = color
             self._save_settings()
 
-    # Gmail methods removed - archived in archive/gmail_feature/
-    
     _SAVE_COALESCE_MS = 200
 
     def _save_settings(self) -> None:
@@ -1284,6 +1305,7 @@ class WidgetsTab(QWidget):
         from ui.tabs.widgets_tab_weather import save_weather_settings
         from ui.tabs.widgets_tab_media import save_media_settings
         from ui.tabs.widgets_tab_reddit import save_reddit_settings
+        from ui.tabs.widgets_tab_gmail import save_gmail_settings
         from ui.tabs.widgets_tab_imgur import save_imgur_settings
 
         try:
@@ -1296,6 +1318,7 @@ class WidgetsTab(QWidget):
         weather_config = save_weather_settings(self)
         media_config, spotify_vis_config = save_media_settings(self)
         reddit_config, reddit2_config = save_reddit_settings(self)
+        gmail_config = save_gmail_settings(self)
 
         existing_widgets = self._settings.get('widgets', {})
         if not isinstance(existing_widgets, dict):
@@ -1353,7 +1376,7 @@ class WidgetsTab(QWidget):
         if imgur_config is not None:
             existing_widgets['imgur'] = imgur_config
 
-        # Gmail config - archived, see archive/gmail_feature/
+        existing_widgets['gmail'] = gmail_config
 
         try:
             logger.debug(
@@ -1649,6 +1672,7 @@ class WidgetsTab(QWidget):
                 (WidgetType.MEDIA, 'media_stack_status', 'media_position', 'media_monitor_combo'),
                 (WidgetType.REDDIT, 'reddit_stack_status', 'reddit_position', 'reddit_monitor_combo'),
                 (WidgetType.REDDIT2, 'reddit2_stack_status', 'reddit2_position', 'reddit2_monitor_combo'),
+                (WidgetType.GMAIL, 'gmail_stack_status', 'gmail_position', 'gmail_monitor_combo'),
             ]
             
             for widget_type, status_attr, pos_attr, mon_attr in status_mappings:
@@ -1762,6 +1786,14 @@ class WidgetsTab(QWidget):
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
         
+        # Gmail
+        config['gmail'] = {
+            'enabled': getattr(self, 'gmail_enabled', None) and self.gmail_enabled.isChecked(),
+            'position': getattr(self, 'gmail_position', None) and self.gmail_position.currentText() or 'Top Left',
+            'monitor': getattr(self, 'gmail_monitor_combo', None) and self.gmail_monitor_combo.currentText() or 'ALL',
+            'limit': getattr(self, 'gmail_limit', None) and self.gmail_limit.value() or 5,
+        }
+
         # Spotify Visualizer
         stored_widgets = self._settings.get("widgets", {}) or {}
         base_visualizer = {}

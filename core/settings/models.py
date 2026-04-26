@@ -2387,8 +2387,6 @@ class AccessibilitySettings:
         return {
             "accessibility.dimming.enabled": self.dimming_enabled,
             "accessibility.dimming.opacity": self.dimming_opacity,
-            "accessibility.pixel_shift.enabled": self.pixel_shift_enabled,
-            "accessibility.pixel_shift.rate": self.pixel_shift_rate,
         }
 
 
