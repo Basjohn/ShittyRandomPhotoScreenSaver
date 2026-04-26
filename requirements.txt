@@ -24,6 +24,8 @@ winrt-Windows.Storage.Streams>=2.0.0
 sounddevice>=0.4.6
 pycaw>=20230407
 
+# Gmail integration (uses requests directly; no google-auth-oauthlib needed)
+
 # Testing (dev only)
 pytest>=7.4.0
 pytest-qt>=4.2.0

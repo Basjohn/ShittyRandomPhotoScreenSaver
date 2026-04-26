@@ -1,3 +1,6 @@
+The MC BUILD issues in this have been SOLVED. Winlogon remains requiring testing.
+
+
 # Media Key Debug Notes
 
 Last updated: 2026-04-25

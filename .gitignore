@@ -71,6 +71,10 @@ release/
 *.pfx
 id_rsa
 id_ed25519
+**/client_secrets.json
+**/gmail_token*
+**/gmail_credentials*
+**/*.pickle
 
 # Git conflict leftovers
 .gitignore~
