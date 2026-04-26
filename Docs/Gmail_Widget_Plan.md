@@ -8,7 +8,7 @@ Scope: Bring archive/gmail_feature/ into production as a dev-gated overlay widge
 
 ## 1. Executive Summary
 
-The archived Gmail widget already uses BaseOverlayWidget, ThreadManager, ShadowFadeProfile, and modern google-auth-oauthlib flows. The work is integration and hardening, not reconstruction.
+The archived Gmail widget already uses BaseOverlayWidget, ThreadManager, ShadowFadeProfile, and standard OAuth 2.0 PKCE flows implemented via `requests` (no `google-auth-oauthlib`). The work is integration and hardening, not reconstruction.
 
 ### Target Architecture
 
@@ -24,7 +24,10 @@ core/settings/default_settings.py # APPEND: Gmail defaults (canonical dict)
 core/settings/defaults.py      # APPEND: PRESERVE_ON_RESET keys if any
 core/dev_gates.py         # APPEND: is_gmail_enabled()
 images/google-gmail.png   # EXISTING (PNG only — no SVG)
-images/gmail-envelope.png # NEW
+images/gmail-envelope.png # NEW (32x32, unread indicator)
+images/gmail-read.png     # NEW (16x16, mark-as-read action icon)
+images/gmail-spam.png     # NEW (16x16, spam action icon)
+images/gmail-trash.png    # NEW (16x16, trash action icon)
 
 ---
 
@@ -36,7 +39,11 @@ images/gmail-envelope.png # NEW
 - [x] **P0.2** Add `**/gmail_token*.pickle` and `**/gmail_token*.enc` to `.gitignore`.
 - [x] **P0.3** Create `core/gmail/` directory with `__init__.py` exporting public API.
 - [x] **P0.4** Verify `images/google-gmail.png` exists (21.7 KB — slightly over 10KB target but acceptable; no action needed).
-- [ ] **P0.5** Source/create `images/gmail-envelope.png` (32x32 PNG).
+- [ ] **P0.5** Source/create icon assets:
+  - `images/gmail-envelope.png` (32x32, unread indicator)
+  - `images/gmail-read.png` (16x16, mark-as-read action)
+  - `images/gmail-spam.png` (16x16, spam action)
+  - `images/gmail-trash.png` (16x16, trash action)
 - [x] **P0.6** Verify `resources/tutuogg.ogg` exists (confirmed).
 - [x] **P0.7** Verified `requests` is available in `requirements.txt`. Removed unused `google-auth-oauthlib`, `google-auth`, `google-api-python-client` — hardened code uses `requests` directly.
 - [x] **P0.8** Verify `PySide6.QtMultimedia` is available (confirmed via import test).
@@ -63,7 +70,7 @@ images/gmail-envelope.png # NEW
 
 **Reasoning:** Token pickle is unencrypted in `%APPDATA%`. Windows DPAPI encrypts to user+machine without key management.
 
-- [x] **P1.11-P1.14** DPAPI module created at `core/windows/dpapi.py` with Windows `CryptProtectData` and non-Windows plain fallback. Integrated into `GmailOAuthManager` with legacy JSON migration path. (Is this safe on Git for credentials?)
+- [x] **P1.11-P1.14** DPAPI module created at `core/windows/dpapi.py` with Windows `CryptProtectData` and non-Windows plain fallback. Integrated into `GmailOAuthManager` with legacy JSON migration path. DPAPI ciphertext is safe to commit accidentally (bound to user+machine), but `.gitignore` still excludes token files as defense-in-depth.
 - [x] **P1.15** DPAPI roundtrip covered by `tests/test_gmail_backend_smoke.py` (test_dpapi_roundtrip).
 
 ### 3.4 Secure Desktop URL Launching
@@ -117,14 +124,14 @@ images/gmail-envelope.png # NEW
 - [ ] **P2.13** Implement `_load_envelope_pixmap()` for `images/gmail-envelope.png`.
 - [ ] **P2.14** If envelope PNG missing, draw lightweight `QPainterPath` envelope shape as fallback.
 
-### 4.4 Envelope Icon Paint Logic (New)
+### 4.4 Envelope Icon & Timestamp Paint Logic
 
-**Requirement:** Envelope icon next to unread emails; read emails show dim/no icon.
+**Requirement:** Envelope icon next to unread emails; read emails show dim/no icon. Envelope is optional but defaults **ON**.
 
-- [ ] **P2.15** In `_paint_emails()`, add envelope column before sender/time.
-- [ ] **P2.16** Unread: envelope icon in bright color (white or `#FFCC00`).
-- [ ] **P2.17** Read: envelope icon in dim gray or omitted (configurable).
-- [ ] **P2.18** Add `show_envelope_icon: bool` setting (default True).
+- [ ] **P2.15** Add `show_envelope_icon: bool` setting (default **True**).
+- [ ] **P2.16** In `_paint_emails()`, add envelope column before sender/time when enabled.
+- [ ] **P2.17** Unread: envelope icon in bright color (white or `#FFCC00`).
+- [ ] **P2.18** Read: envelope icon in dim gray or omitted.
 - [ ] **P2.19** Adjust column widths: envelope 16px + 4px margin.
 - [ ] **P2.20** Cache scaled envelope QPixmap to avoid per-frame re-scale.
 
@@ -135,12 +142,49 @@ images/gmail-envelope.png # NEW
 - [ ] **P2.23** Row click opens `https://mail.google.com/mail/u/0/#all/{message_id}` via `open_url()`.
 - [ ] **P2.24** Add fallback: if `open_url()` raises, log ERROR and try `webbrowser.open()` as last resort. (Ideally use same fallback structure as reddit links instead)
 
-### 4.6 Action Menu & Hover Hardening
+### 4.6 Per-Row Three-Dot Action Menu
 
-- [ ] **P2.25** Verify `QMenu` stylesheet in `_show_action_menu()` does not conflict with application dark theme.
-- [ ] **P2.26** Ensure action callbacks (`_mark_as_read`, etc.) run on UI thread.
-- [ ] **P2.27** Add `shiboken6.isValid()` guard in all lambdas connected to `QMenu` actions.
-- [ ] **P2.28** Ensure `_hover_timer` is stopped in `cleanup()`.
+**Requirement:** Every message row has a three-dot (vertical ellipsis or "...") button on the far right. Clicking it opens a compact `QMenu` with icon-labelled actions. All callbacks run on the UI thread.
+
+- [ ] **P2.25** Add `show_three_dot_menu: bool` setting (default **True**).
+- [ ] **P2.26** Add a 16×16px three-dot button (`QToolButton` or custom `ClickableLabel`) at the right edge of each row when enabled. Right-margin 4px.
+- [ ] **P2.27** Button is hidden by default; shown on row hover (same hover timer as action menu).
+- [ ] **P2.28** Clicking the button opens `QMenu` with these actions and icons:
+  - **Mark As Read** — icon `images/gmail-read.png` (or `QIcon` fallback).
+  - **Spam** — icon `images/gmail-spam.png`.
+  - **Trash** — icon `images/gmail-trash.png`.
+- [ ] **P2.29** Action callbacks (`_mark_as_read`, `_spam_message`, `_trash_message`) must run on the UI thread (use `QTimer.singleShot(0, ...)` or `ThreadManager.invoke_in_ui_thread()` if triggered from signal).
+- [ ] **P2.30** Add `shiboken6.isValid()` guard in all lambdas connected to `QMenu` actions before touching widget state.
+- [ ] **P2.31** Verify `QMenu` stylesheet does not conflict with application dark theme (use `shared_styles.py` helper or neutral palette).
+- [ ] **P2.32** Ensure `_hover_timer` is stopped in `cleanup()`.
+
+### 4.7 Title Case Conversion (New)
+
+**Requirement:** Sender and subject text can be automatically converted to Title Case. Optional but defaults **ON**.
+
+- [ ] **P2.33** Add `auto_title_case: bool` setting (default **True**).
+- [ ] **P2.34** In `_paint_emails()`, apply `str.title()` to `sender` and `subject` strings when enabled.
+- [ ] **P2.35** Preserve original casing in `EmailMetadata` (do not mutate dataclass); apply transformation at paint time only.
+
+### 4.8 Separator Lines (New)
+
+**Requirement:** Horizontal separator lines between message rows, mirroring Reddit widget's `show_separators`. Optional but defaults **ON**. The separator between the *unread* group and the *read* group is 50% thicker than regular row separators.
+
+- [ ] **P2.36** Add `show_separators: bool` setting (default **True**).
+- [ ] **P2.37** In `_paint_emails()`, draw a 1px horizontal line after each row when enabled.
+- [ ] **P2.38** Group unread messages first, read messages second. Draw a 2px separator line (or draw a 1px line with `QPainter.Antialiasing` for visual weight) between the last unread row and the first read row.
+- [ ] **P2.39** Use `shared_styles.py` color helper or neutral gray (`#555555` or theme-appropriate) for separator color.
+
+### 4.9 Time Received Display (New)
+
+**Requirement:** Show email received time. Optional but defaults **ON**. Placement adapts based on envelope icon visibility.
+
+- [ ] **P2.40** Add `show_timestamp: bool` setting (default **True**).
+- [ ] **P2.41** **Envelope OFF**: time is displayed in the envelope column space (left side, same font size as sender/subject).
+- [ ] **P2.42** **Envelope ON + Timestamp ON**: time is displayed on the line *below* sender/subject, in smaller font (e.g., 10px vs 12px) and grayed color (e.g., `#888888`).
+- [ ] **P2.43** **Envelope ON + Timestamp OFF**: no time display.
+- [ ] **P2.44** Timestamp format: relative human-readable (e.g., "2 min ago", "1 hr ago", "Yesterday", "Mon 14:32") via lightweight helper (no external date library if possible; use `datetime` deltas).
+- [ ] **P2.45** If timestamp string is empty or parsing fails, omit the line entirely.
 
 ---
 
@@ -161,6 +205,10 @@ images/gmail-envelope.png # NEW
   - `show_subject: bool = True`
   - `show_actions: bool = True`
   - `show_envelope_icon: bool = True`
+  - `show_three_dot_menu: bool = True`
+  - `auto_title_case: bool = True`
+  - `show_separators: bool = True`
+  - `show_timestamp: bool = True`
   - `desaturate_when_no_unread: bool = True`
   - `play_sound_on_new_mail: bool = False`
   - `sound_volume_percent: int = 50`
@@ -197,8 +245,14 @@ images/gmail-envelope.png # NEW
   - Limit spinner (5–10).
   - Refresh interval spinner (1–60 minutes).
   - Filter label line edit (INBOX, CATEGORY_PRIMARY, etc.).
-  - Show sender / show subject / show actions / show envelope icon checkboxes.
+  - Show sender / show subject / show actions checkboxes.
+  - Show envelope icon checkbox.
+  - Show three-dot action menu checkbox.
+  - Show separator lines checkbox.
+  - Show time received checkbox.
+  - Auto title case checkbox.
   - Desaturate logo when no unread checkbox.
+  - *(If dev gate off: all controls visible but greyed out; info label reads "Enable via -devgmail flag.")*
   - Text / background / border color swatches (follow Reddit color row pattern).
   - Sound group box:
     - Play sound on new mail checkbox.
@@ -237,7 +291,7 @@ images/gmail-envelope.png # NEW
 - [ ] **P4.7** Ensure Gmail widget respects `OverlayPosition` and does not collide with other corner widgets.
 - [ ] **P4.8** Add `gmail` to overlay fade sync registration.
 - [ ] **P4.9** Ensure widget is destroyed/cleaned up on screensaver exit (call `cleanup()` in teardown path).
-- [ ] **P4.10** Add settings tab visibility gating: if `is_gmail_enabled()` is False, tab may be hidden or show "dev flag required" placeholder.
+- [ ] **P4.10** Add settings tab gating: tab is always visible, but if `is_gmail_enabled()` is False, the enable checkbox is disabled with an info label "Enable via -devgmail flag." All other controls remain visible but disabled. This matches the pattern in P3.12.
 
 ### 6.3 Widget Factory (if applicable)
 
@@ -266,7 +320,7 @@ images/gmail-envelope.png # NEW
   ```
 - [ ] **P5.5** Use `QMediaPlayer` + `QAudioOutput`. Set `audioOutput.setVolume(volume_percent / 100.0)`.
 - [ ] **P5.6** Handle OGG via `QMediaPlayer` (QtMultimedia supports OGG via built-in plugins).
-- [ ] **P5.7** Ensure player is parented to a long-lived QObject (e.g., `QApplication.instance()`) to prevent GC mid-playback.
+- [ ] **P5.7** Parent `QMediaPlayer` to `QApplication.instance()` (or a dedicated long-lived QObject singleton) — **NOT** the widget itself. If the widget is destroyed during playback (e.g., screensaver exit), a widget-parented player will cut off audio. Use a singleton `NotificationSoundPlayer` that outlives individual widget instances.
 - [ ] **P5.8** Add error handling: if file missing or format unsupported, log WARNING and disable sound for the session.
 - [ ] **P5.9** Add test `tests/test_notification_sound.py` with a mock/stub.
 
@@ -294,7 +348,7 @@ images/gmail-envelope.png # NEW
 ### 8.1 Unit Tests
 
 - [ ] **P6.1** `tests/test_gmail_oauth.py` — mock Google token endpoint, verify PKCE params, verify DPAPI encrypt/decrypt roundtrip.
-- [ ] **P6.2** `tests/test_gmail_client.py` — mock `googleapiclient.discovery.build`, verify `list_messages()`, `mark_as_read()`, `archive_message()` return correct `EmailMetadata`.
+- [ ] **P6.2** `tests/test_gmail_client.py` — mock `requests.get` / `requests.post` (or `responses` library), verify `list_messages()`, `mark_as_read()`, `archive_message()` return correct `EmailMetadata`.
 - [ ] **P6.3** `tests/test_gmail_widget.py` — instantiate widget with mock settings, verify `paintEvent` does not crash with empty email list, verify `handle_click` returns False for miss.
 - [ ] **P6.4** `tests/test_gmail_components.py` — verify `GmailPosition` enum values.
 
@@ -338,14 +392,14 @@ images/gmail-envelope.png # NEW
 ### 9.1 Repository-Level Guards
 
 - [ ] **S1.1** `.gitignore` must contain `**/client_secrets.json`, `**/gmail_token*`, `**/gmail_credentials*`, `**/*.pickle` (catch all pickle, not just Gmail).
-- [ ] **S1.2** Add a `pre-commit` guard (or CI step) that greps for `"client_id"` / `"client_secret"` patterns in non-archive Python files and fails if found. This is defense-in-depth in case someone accidentally hardcodes after the initial refactor.
+- [ ] **S1.2** *(Optional / future)* Add a `pre-commit` guard that greps for `"client_id"` / `"client_secret"` patterns in non-archive Python files. The repository currently has no pre-commit infrastructure; implement only if CI is added later.
 - [ ] **S1.3** `client_secrets.json` path must be runtime-resolved only; no `pathlib.Path(__file__).parent / "client_secrets.json"` patterns that could be committed.
 - [ ] **S1.4** Add `GmailConfigError` string to `Docs/Guardrails.md` under "Never commit" section.
 
 ### 9.2 Runtime Leak Prevention
 
 - [ ] **S1.5** `GmailOAuthManager` must never log the `client_secret` value, even at `DEBUG`. Log only that credentials were loaded, not their content.
-- [ ] **S1.6** Token file (even encrypted) must have `FILE_ATTRIBUTE_HIDDEN` on Windows and restrictive ACL (`0600` equivalent) if OS supports it.
+- [ ] **S1.6** *(Optional)* Token file may have `FILE_ATTRIBUTE_HIDDEN` on Windows. DPAPI encryption is the primary protection; ACL/Hidden flags are defense-in-depth and not required for MVP.
 - [ ] **S1.7** On widget/auth failure, the error tooltip / UI message must never display the `client_id`, `redirect_uri`, or token file path to the user (paths can leak machine info). Use generic messages: "Gmail credentials missing. See log."
 - [ ] **S1.8** `EmailMetadata` must never include `body` or `snippet` fields — metadata-only by design. Add a dataclass `__post_init__` assert if needed.
 - [ ] **S1.9** `gmail_client.py` request logging must sanitize `message_id` from URLs? No — message IDs are not sensitive. But ensure no `body` / `raw` params are ever in the URL or logged.
@@ -379,7 +433,7 @@ images/gmail-envelope.png # NEW
 
 - [ ] **PG1.10** If widget `isHidden()` or parent `DisplayWidget` is not in overlay-visible state, `paintEvent` should early-return after logging a single WARNING (not spam).
 - [ ] **PG1.11** Email fetch timer must be stopped when widget is hidden (power saving). Resume on show.
-- [ ] **PG1.12** `QMenu` created in `_show_action_menu()` must be a singleton member, not re-created per click. Destroy on widget `cleanup()`.
+- [ ] **PG1.12** `QMenu` created in `_show_action_menu()` should be created per-click (standard Qt pattern), parented to the widget, and all references cleared in `cleanup()` to avoid dangling pointers. Avoid singleton menus with dynamically swapped actions — they are harder to reason about and more error-prone.
 
 ### 10.3 Memory Pressure
 
@@ -404,7 +458,7 @@ images/gmail-envelope.png # NEW
 
 ### 11.2 OAuth Flow Timing
 
-- [ ] **TD1.8** The initial OAuth browser-launch + local server callback must happen on a background thread (`submit_io_task`), but the browser-open call itself (`webbrowser.open()` or `open_url()`) must be on UI thread? Actually `webbrowser.open()` is safe from background threads on Windows. Use IO task for server, UI invoke for the URL open to ensure bridge is ready.
+- [ ] **TD1.8** The initial OAuth browser-launch + local server callback should use `ThreadManager.submit_io_task()` for the server. The URL open (`webbrowser.open()` / `open_url()` / bridge enqueue) is thread-safe and can be called directly from the IO task — no need to bounce through UI thread invoke.
 - [ ] **TD1.9** Local server timeout (5 min) must be a `threading.Timer` or `socket.settimeout()`, not a busy-wait. Shutdown the server socket immediately upon receiving the callback to free the port.
 
 ---
@@ -422,7 +476,7 @@ images/gmail-envelope.png # NEW
 - [ ] **AV1.5** Avoid creating files in unusual locations. All Gmail files must go to `%APPDATA%/SRPSS/` (standard user-local path).
 - [ ] **AV1.6** Do **not** use `urllib.request` with a custom `SSLContext` that disables certificate verification. The archive may do this for local testing — verify and remove if present.
 - [ ] **AV1.7** Do **not** download executable content (`.exe`, `.dll`) from the internet as part of Gmail auth. The archive only fetches JSON from Google — verify no dynamic download behavior exists.
-- [ ] **AV1.8** If using `google-auth-oauthlib`'s `run_local_server()`, it spawns a temporary `HTTPServer` on localhost. This is safe but may trigger network-firewall prompts on first run. Document this for users.
+- [ ] **AV1.8** The in-thread `HTTPServer` on localhost may trigger a Windows Defender firewall prompt on first run. Document this in user-facing docs.
 - [ ] **AV1.9** All new `.py` files should have standard docstrings and no obfuscated/encoded strings. AV flags encoded payload patterns.
 - [ ] **AV1.10** Do **not** use `eval()`, `exec()`, `compile()`, or `__import__` dynamically for Gmail module loading. Use standard imports.
 
@@ -453,16 +507,17 @@ images/gmail-envelope.png # NEW
 | `core/settings/models.py` | APPEND | `GmailWidgetSettings` dataclass |
 | `core/settings/defaults.py` | APPEND | Gmail defaults |
 | `core/dev_gates.py` | APPEND | `is_gmail_enabled()` |
-| `images/gmail-envelope.png` | NEW | Envelope icon asset |
+| `images/gmail-envelope.png` | NEW | Envelope icon asset (32×32) |
+| `images/gmail-read.png`     | NEW | Mark-as-read action icon (16×16) |
+| `images/gmail-spam.png`     | NEW | Spam action icon (16×16) |
+| `images/gmail-trash.png`    | NEW | Trash action icon (16×16) |
 
 ## Appendix B: Dependency Audit
 
 | Package | Version | Purpose | Already Present? |
 |---|---|---|---|
-| `google-auth-oauthlib` | ≥1.0.0 | OAuth flow | Verify |
-| `google-auth` | ≥2.0.0 | Auth credentials | Verify |
-| `google-api-python-client` | ≥2.0.0 | Gmail REST API | Verify |
-| `PySide6` | (existing) | QtMultimedia for sound | Verify `QtMultimedia` sub-module |
+| `requests` | (existing) | Gmail REST API + OAuth token exchange | Yes |
+| `PySide6.QtMultimedia` | (bundled with PySide6) | OGG notification sound | Verify sub-module importable |
 
 ## Appendix C: Security Checklist
 
@@ -471,7 +526,7 @@ images/gmail-envelope.png # NEW
 - [ ] Token file path is user-local (`%APPDATA%`), not repo-local.
 - [ ] OAuth `state` parameter used for CSRF protection.
 - [ ] Local OAuth server uses random port + timeout.
-- [ ] Scopes minimized (`gmail.metadata` + `gmail.modify` only).
+- [ ] Scopes minimized (`gmail.readonly` + `gmail.modify`). `gmail.metadata` alone is insufficient for header-based sender/subject extraction; `gmail.readonly` is the minimal scope for our metadata-only use case.
 - [ ] No message body content ever logged or stored.
 - [ ] URL launching goes through secure-desktop bridge in `.scr` mode.
 - [ ] `GmailConfigError` raised early if credentials missing (fail-closed).

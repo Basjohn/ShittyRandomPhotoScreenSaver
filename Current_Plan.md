@@ -13,7 +13,7 @@ This file tracks active work and near-term validation.
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
 - **U-05 RESOLVED (2026-04-25)**: MC Keyboard Focus / Ctrl Halo Runtime Input Family fixed via wiring dead code `_restore_mc_input_focus`.
-- **GMAIL WIDGET**: Phase 0 + Phase 1 backend complete (2026-04-26). `.gitignore`, `requirements.txt`, `core/gmail/` (OAuth+client hardened with DPAPI, requests, threading.Lock), `core/windows/dpapi.py`, `core/windows/secure_url_launcher.py` all implemented. See `Docs/Gmail_Widget_Plan.md` for remaining Phase 2-6 tasks.
+- **GMAIL WIDGET**: Phase 0 + Phase 1 backend complete (2026-04-26). Plan updated: Phase 2 now specifies per-row three-dot action menu, envelope icon, separator lines (with thicker unread/read divider), auto title case, and adaptive timestamp display — all optional with default ON. Four new icon assets (envelope, read, spam, trash). See `Docs/Gmail_Widget_Plan.md` for remaining Phase 2-6 tasks.
 - Investigate MuteButtonWidget fade-in race with `invalidate_overlay_effects` (~1/10 failure).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 
