@@ -19,6 +19,14 @@ This file tracks active work and near-term validation.
   - Phase 5: `NotificationSoundPlayer` singleton (`core/audio/notification_sound.py`), new-mail detection in `GmailWidget` (first fetch skips sound, subsequent fetches play sound only for new unread IDs), sound UI controls (enable, file path, browse/test, volume slider), full load/save wiring, factory applies settings.
   - Fixes: `webbrowser.open(url, new=1)` for OAuth new-window behavior; Gmail settings tab + subtab button fully gated by `is_gmail_enabled()` in `widgets_tab.py`.
   - **Next**: Phase 6 (final testing + sign-off).
+- **GMAIL WIDGET — THREADING AUDIT** (2026-04-27): Comprehensive ThreadManager migration. See `Docs/Gmail_Widget_Plan.md` Appendix E.
+  - [ ] Fix `gmail_widget.py` — replace raw `QTimer` + `threading.Thread` with `ThreadManager`
+  - [ ] Fix `gmail_oauth.py` — replace raw locks/threads with `ThreadManager`, add server cleanup
+  - [ ] Fix `gmail_backend.py` — replace raw locks with `ThreadManager`, fix `_last_error`/`_last_unread_count` races
+  - [ ] Fix `gmail_client.py` — replace raw `threading.Lock` with `ThreadManager`
+  - [ ] Fix `gmail_imap.py` — move `import re` to top, ensure thread safety
+  - [ ] Fix `widgets_tab_gmail.py` — offload DPAPI/network to `ThreadManager`
+  - [ ] Fix `gmail_widget.py` — resource cleanup (`QMenu`, `_sound_player`)
 - Investigate MuteButtonWidget fade-in race with `invalidate_overlay_effects` (~1/10 failure).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 

@@ -1,6 +1,6 @@
 # Gmail Widget — Full Implementation Plan
 
-Version: 2.0 | Date: 2026-04-27 | Status: Phases 0–5 Complete, Phase 7 Active
+Version: 2.0 | Date: 2026-04-27 | Status: Phases 0–5 Complete, Phase 6 Active
 Decision: Adapt archive code; do not rewrite.
 Scope: Bring archive/gmail_feature/ into production as a dev-gated overlay widget.
 
@@ -76,7 +76,49 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 
 ---
 
-## 3. Phase 7 — Widget Polish & Settings UI Reorganisation
+## 3. Phase 6 — Testing, Validation & Sign-Off
+
+### 3.1 Unit Tests
+
+- [ ] **P6.1** `tests/test_gmail_oauth.py` — mock Google token endpoint, verify PKCE params, verify DPAPI encrypt/decrypt roundtrip.
+- [ ] **P6.2** `tests/test_gmail_client.py` — mock `requests.get` / `requests.post` (or `responses` library), verify `list_messages()`, `mark_as_read()`, `archive_message()` return correct `EmailMetadata`.
+- [ ] **P6.3** `tests/test_gmail_widget.py` — instantiate widget with mock settings, verify `paintEvent` does not crash with empty email list, verify `handle_click` returns False for miss.
+- [ ] **P6.4** `tests/test_gmail_components.py` — verify `GmailPosition` enum values.
+
+### 3.2 Integration Tests
+
+- [ ] **P6.5** `tests/test_gmail_settings_roundtrip.py` — construct a flat settings dict with all new Phase 6 keys, pass through `GmailWidget.apply_settings()`, assert all attributes match. Also verify `save_gmail_settings()` in the UI tab produces a dict containing the same keys.
+- [ ] **P6.6** `tests/test_gmail_dev_gate.py` — verify widget is only instantiated when `--devgmail` is in `sys.argv` (or `force_gate(gmail=True)`).
+
+### 3.3 Secure Desktop Tests
+
+- [ ] **P6.7** Manual test: Run as `.scr` preview, click Gmail header → browser opens via helper bridge.
+- [ ] **P6.8** Manual test: Run as `.scr` preview, click email row → specific email opens via helper bridge.
+- [ ] **P6.9** Manual test: Verify `webbrowser.open()` fallback does not crash in preview mode (it will work in normal mode, fail silently in SYSTEM mode — acceptable if bridge works).
+
+### 3.4 Memory & Resource Tests
+
+- [ ] **P6.10** Run widget through 50 start/stop cycles in test harness; verify no refresh `QTimer` or `QMenu` leaks via `shiboken6.getAll()` (if available) or manual audit.
+- [ ] **P6.11** Verify `cleanup()` stops all timers and deletes `QMenu` references.
+
+### 3.5 Performance Tests
+
+- [ ] **P6.12** Profile `paintEvent` with 10 emails: ensure < 5ms per frame on 1080p. Follow iterative cycling: run for 15s, read all logs, fix, repeat.
+- [ ] **P6.13** Verify envelope pixmap cache is effective (no per-frame `QPixmap::scaled`).
+
+### 3.6 Sign-Off Checklist
+
+- [ ] **P6.14** No `client_secrets.json` in git (verify `git status`).
+- [ ] **P6.15** No `gmail_token*.pickle` or `*.enc` in git.
+- [ ] **P6.16** All new code passes `ruff check --fix`.
+- [ ] **P6.17** All tests pass.
+- [ ] **P6.18** `Index.md` updated with new files/classes.
+- [ ] **P6.19** `Docs/Guardrails.md` updated with Gmail-specific security notes (if any new patterns).
+- [ ] **P6.20** Archive directory `archive/gmail_feature/` marked deprecated (add `README.md` noting "Superseded by widgets/gmail_widget.py and core/gmail/ — kept for historical reference only"). Do not delete; archive is valuable for reference.
+
+---
+
+## 4. Phase 7 — Widget Polish & Settings UI Reorganisation
 
 **Goal:** Fix all reported UI/UX and customisation issues. Add per-element font and colour controls, width and padding options, header framing, separator customisation, and reorganise the settings UI into styled collapsible buckets. Ensure widget positioning matches other overlays and minimum width is comparable.
 
@@ -86,7 +128,7 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 
 ---
 
-### 7.1 Positioning — "Top Center" and "Center" Draw in Top-Left
+### 4.1 Positioning — "Top Center" and "Center" Draw in Top-Left
 
 **Root Cause:** `GmailPosition` enum (`widgets/gmail_components.py`) only defines four corner values (`TOP_LEFT`, `TOP_RIGHT`, `BOTTOM_LEFT`, `BOTTOM_RIGHT`). The settings UI (`widgets_tab_gmail.py`) offers nine positions (including `Top Center`, `Center`, `Middle Left`, etc.). When `GmailPosition.from_string("top_center")` is called, it raises `ValueError` and falls back to `TOP_LEFT`. Additionally, `GmailWidget.__init__` does `OverlayPosition(position.value)` which will also fail for non-corner values, causing the widget to default to `TOP_LEFT`.
 
@@ -103,20 +145,26 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 
 ---
 
-### 7.2 Widget Width — Minimum Width Too Small, No Customisation
+### 4.2 Widget Width — Minimum Width Too Small, No Customisation
 
-**Problem:** The Gmail widget’s implicit width is driven entirely by `adjustSize()` based on paint content. It is currently narrower than every other widget because email subjects/senders are aggressively truncated and there is no enforced minimum. Other widgets (Reddit, Imgur, Weather) either have a `setMinimumWidth()` call or width is derived from card-size settings.
+**Problem:** The Gmail widget's implicit width is driven entirely by `adjustSize()` based on paint content. The current `__init__` calls `self.setMinimumWidth(400)`, yet in the screenshot the widget is clearly much narrower than Reddit and Weather widgets, suggesting the minimum width is being ignored or overridden (likely by `adjustSize()` called after paint, or by DPI scaling not being applied). Other widgets (Reddit, Imgur, Weather) either have a `setMinimumWidth()` call that actually sticks, or width is derived from card-size settings.
 
 **Implementation Detail:**
-- [ ] **P7.2.1** Add `min_width: int` setting (default **320**, matching Reddit widget default).
-- [ ] **P7.2.2** Add `max_width: int` setting (default **520**, preventing absurdly wide cards on ultrawide monitors).
-- [ ] **P7.2.3** In `GmailWidget.apply_settings()`, call `self.setMinimumWidth(min_width)` and `self.setMaximumWidth(max_width)` (or clamp via `adjustSize()` logic).
-- [ ] **P7.2.4** In `_paint_emails()`, respect the max width: `available_width = min(self.width() - left - margins.right() - 10, self._max_width - left - margins.right() - 10)` if max_width is set.
-- [ ] **P7.2.5** In `widgets_tab_gmail.py`, add a "Size" bucket row with `min_width` and `max_width` spinners (range 200–800, step 10).
+- [ ] **P7.2.1** Investigate why `setMinimumWidth(400)` is not taking effect — check if `adjustSize()` overrides it, if DPI scaling is not being applied to the minimum, or if `resize()` is being called elsewhere with a smaller size. Also verify whether `self.setMinimumWidth()` is called before or after `BaseOverlayWidget` parent logic.
+- [ ] **P7.2.2** Add `min_width: int` setting (default **320**, matching Reddit widget default). The widget's base width should match other widgets (Reddit, Weather, Media) when set to the same minimum.
+- [ ] **P7.2.3** Add `max_width: int` setting (default **600**, preventing absurdly wide cards on ultrawide monitors).
+- [ ] **P7.2.4** In `GmailWidget.apply_settings()`, call `self.setMinimumWidth(min_width)` and `self.setMaximumWidth(max_width)`. Ensure `adjustSize()` respects these bounds (may need to override `minimumSizeHint()` or clamp the result of `adjustSize()` rather than trusting it blindly).
+- [ ] **P7.2.5** In `_paint_emails()`, respect the max width: `available_width = min(self.width() - left - margins.right() - 10, self._max_width - left - margins.right() - 10)` if max_width is set.
+- [ ] **P7.2.6** **Width distribution logic for positioning:**
+  - If widget is **centered** (`TOP_CENTER`, `CENTER`, `BOTTOM_CENTER`): extra width beyond content-natural-width is divided equally between left and right. `self.move(center_x - self.width() / 2, y)`.
+  - If widget is **left-positioned** (`TOP_LEFT`, `MIDDLE_LEFT`, `BOTTOM_LEFT`): extra width goes to the right. The left edge stays anchored.
+  - If widget is **right-positioned** (`TOP_RIGHT`, `MIDDLE_RIGHT`, `BOTTOM_RIGHT`): extra width goes to the left. The right edge stays anchored.
+  - This ensures the widget grows outward from its logical anchor point, matching how Reddit/Weather behave.
+- [ ] **P7.2.7** In `widgets_tab_gmail.py`, add a "Size" bucket row with `min_width` and `max_width` spinners (range 200–800, step 10).
 
 ---
 
-### 7.3 Padding / Content Alignment — Header, Posts, Envelopes Hug Left Edge
+### 4.3 Padding / Content Alignment — Header, Posts, Envelopes Hug Left Edge
 
 **Problem:** `_paint_header()`, `_paint_emails()`, and empty/error states all start their drawing at `margins.left()` with zero additional padding. Other widgets add explicit horizontal padding (e.g. Reddit header starts at `margins.left() - 4` with `pad_x = 8` inside the frame; Imgur uses `rect.left() + 15`).
 
@@ -131,7 +179,7 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 
 ---
 
-### 7.4 Header Border / Frame — Missing Around Logo + Header Text
+### 4.4 Header Border / Frame — Missing Around Logo + Header Text
 
 **Reference:** Reddit widget uses `_paint_header_frame()` (`widgets/reddit_widget.py:1445`) which calls `draw_rounded_rect_with_shadow()`. Imgur widget mirrors the same pattern (`widgets/imgur/widget.py:967–1046`).
 
@@ -144,7 +192,7 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 
 ---
 
-### 7.5 Envelope Vertical Alignment — Not Centre-Matched to Text
+### 4.5 Envelope Vertical Alignment — Not Centre-Matched to Text
 
 **Problem:** In `_paint_emails()` (`widgets/gmail_widget.py:~574–585`), the envelope pixmap is drawn at `env_x = left` and a fixed vertical offset. It is not vertically centred to the text baseline/height, causing it to sit too high or too low relative to the sender/subject line.
 
@@ -156,7 +204,7 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 
 ---
 
-### 7.6 Separator Customisation — No Colour, Thickness, or Style Controls
+### 4.6 Separator Customisation — No Colour, Thickness, or Style Controls
 
 **Problem:** Separators are hard-coded in `_paint_emails()`:
 - Row separators: `QColor(200, 200, 200, 30)`
@@ -173,23 +221,23 @@ There is no user control.
 
 ---
 
-### 7.7 Per-Element Font Controls — Header, Subject, Time, Sender Should Be Independent
+### 4.7 Per-Element Font Controls — Header, Subject, Time, Sender Should Be Independent
 
 **Problem:** The widget currently uses a single `self._font_family` + `self._font_size` for everything. Header uses `self._header_font_pt` but still the same family. Subject, sender, and time all share the same base font.
 
 **Implementation Detail:**
 - [ ] **P7.7.1** Add `header_font_family: str` setting (default inherits widget font family).
 - [ ] **P7.7.2** Add `header_font_size: int` setting (already partially exists as `self._header_font_pt`; promote to full setting).
-- [ ] **P7.7.3** Add `header_font_weight: str` setting (default `"Bold"`, choices: `Normal`, `Bold`, `Black`).
+- [ ] **P7.7.3** Add `header_font_weight: str` setting (default `"Bold"`, choices: `Light`, `Normal`, `Bold`, `Black`).
 - [ ] **P7.7.4** Add `subject_font_family: str` setting (default inherits widget font family).
 - [ ] **P7.7.5** Add `subject_font_size: int` setting (default = widget font size).
-- [ ] **P7.7.6** Add `subject_font_weight: str` setting (default `"Normal"`, choices: `Normal`, `Bold`, `Black`).
+- [ ] **P7.7.6** Add `subject_font_weight: str` setting (default `"Normal"`, choices: `Light`, `Normal`, `Bold`, `Black`).
 - [ ] **P7.7.7** Add `sender_font_family: str` setting (default inherits widget font family).
 - [ ] **P7.7.8** Add `sender_font_size: int` setting (default = widget font size − 1).
-- [ ] **P7.7.9** Add `sender_font_weight: str` setting (default `"Normal"`).
+- [ ] **P7.7.9** Add `sender_font_weight: str` setting (default `"Normal"`, choices: `Light`, `Normal`, `Bold`, `Black`).
 - [ ] **P7.7.10** Add `time_font_family: str` setting (default inherits widget font family).
 - [ ] **P7.7.11** Add `time_font_size: int` setting (default = widget font size − 2).
-- [ ] **P7.7.12** Add `time_font_weight: str` setting (default `"Normal"`).
+- [ ] **P7.7.12** Add `time_font_weight: str` setting (default `"Normal"`, choices: `Light`, `Normal`, `Bold`, `Black`).
 - [ ] **P7.7.13** Update `GmailWidget.__init__` / `apply_settings()` to read all new font keys.
 - [ ] **P7.7.14** Update `_paint_header()` to use `QFont(self._header_font_family, self._header_font_size, header_weight)`.
 - [ ] **P7.7.15** Update `_paint_emails()` subject line to use `QFont(self._subject_font_family, self._subject_font_size, subject_weight)`.
@@ -199,7 +247,7 @@ There is no user control.
 
 ---
 
-### 7.8 Per-Element Colour Controls — Unread vs Read, Date, Header, Subject, Sender, Time
+### 4.8 Per-Element Colour Controls — Unread vs Read, Date, Header, Subject, Sender, Time
 
 **Problem:** Only a single `self._text_color` exists. Unread emails are distinguished by `QFont.Weight.Bold` only — there is no colour differentiation. Date/time uses the same colour as everything else.
 
@@ -218,7 +266,7 @@ There is no user control.
 
 ---
 
-### 7.9 Text Truncation Limits — Maximum Sender Length and Maximum Subject Length
+### 4.9 Text Truncation Limits — Maximum Sender Length and Maximum Subject Length
 
 **Problem:** Sender and subject elision widths are hard-coded (sender `max(150, available_width // 3)`; subject `available_width - time_width - sender_width - env_width - 30`). The user wants explicit max-length controls.
 
@@ -231,7 +279,7 @@ There is no user control.
 
 ---
 
-### 7.10 Settings UI Reorganisation — Styled Collapsible Buckets
+### 4.10 Settings UI Reorganisation — Styled Collapsible Buckets
 
 **Reference:** The visualiser builder tabs use nested `QGroupBox` containers created via `style_group_box()` (`ui/tabs/shared_styles.py`), each with a title, vertical layout, and `setCheckable(True)` for collapsibility. Examples in `widgets_tab_media.py:509–628` ("Visualizers" group containing "Beat Visualizer" sub-group) and `widgets_tab.py` (visualiser technical buckets with persisted expand/collapse state).
 
@@ -239,7 +287,7 @@ There is no user control.
 - [ ] **P7.10.1** Import `QGroupBox` in `widgets_tab_gmail.py` (already present).
 - [ ] **P7.10.2** Create top-level `QGroupBox("Gmail Widget")` already exists — keep it as the outer shell.
 - [ ] **P7.10.3** Inside the outer group, create collapsible sub-buckets (each is a `QGroupBox` with `style_group_box()` applied):
-  - **"Backend & Auth"** — backend combo (IMAP vs OAuth), IMAP server/port settings, IMAP email/password fields + Save & Test, OAuth info label + Authorise button, shared Account status + Sign Out button.
+  - **"Backend & Auth"** — backend combo (IMAP vs OAuth), IMAP email/password + Save & Test, OAuth info label + Authorise button, shared Account status + Sign Out button.
   - **"Position & Size"** — position dropdown, min width, max width, content padding left/right/top spinners.
   - **"Visibility"** — show sender, show subject, show envelope, show timestamp, show separators, show three-dot menu, show unread count in header, auto title-case, desaturate when no unread.
   - **"Header"** — show header border checkbox, header font family/size/weight, header text colour swatch.
@@ -257,53 +305,11 @@ There is no user control.
 
 ---
 
-## 4. Phase 6 — Testing, Validation & Sign-Off
-
-### 4.1 Unit Tests
-
-- [ ] **P6.1** `tests/test_gmail_oauth.py` — mock Google token endpoint, verify PKCE params, verify DPAPI encrypt/decrypt roundtrip.
-- [ ] **P6.2** `tests/test_gmail_client.py` — mock `requests.get` / `requests.post` (or `responses` library), verify `list_messages()`, `mark_as_read()`, `archive_message()` return correct `EmailMetadata`.
-- [ ] **P6.3** `tests/test_gmail_widget.py` — instantiate widget with mock settings, verify `paintEvent` does not crash with empty email list, verify `handle_click` returns False for miss.
-- [ ] **P6.4** `tests/test_gmail_components.py` — verify `GmailPosition` enum values.
-
-### 4.2 Integration Tests
-
-- [ ] **P6.5** `tests/test_gmail_settings_roundtrip.py` — construct a flat settings dict with all new Phase 7 keys, pass through `GmailWidget.apply_settings()`, assert all attributes match. Also verify `save_gmail_settings()` in the UI tab produces a dict containing the same keys.
-- [ ] **P6.6** `tests/test_gmail_dev_gate.py` — verify widget is only instantiated when `--devgmail` is in `sys.argv` (or `force_gate(gmail=True)`).
-
-### 4.3 Secure Desktop Tests
-
-- [ ] **P6.7** Manual test: Run as `.scr` preview, click Gmail header → browser opens via helper bridge.
-- [ ] **P6.8** Manual test: Run as `.scr` preview, click email row → specific email opens via helper bridge.
-- [ ] **P6.9** Manual test: Verify `webbrowser.open()` fallback does not crash in preview mode (it will work in normal mode, fail silently in SYSTEM mode — acceptable if bridge works).
-
-### 4.4 Memory & Resource Tests
-
-- [ ] **P6.10** Run widget through 50 start/stop cycles in test harness; verify no refresh `QTimer` or `QMenu` leaks via `shiboken6.getAll()` (if available) or manual audit.
-- [ ] **P6.11** Verify `cleanup()` stops all timers and deletes `QMenu` references.
-
-### 4.5 Performance Tests
-
-- [ ] **P6.12** Profile `paintEvent` with 10 emails: ensure < 5ms per frame on 1080p. Follow iterative cycling: run for 15s, read all logs, fix, repeat.
-- [ ] **P6.13** Verify envelope pixmap cache is effective (no per-frame `QPixmap::scaled`).
-
-### 4.6 Sign-Off Checklist
-
-- [ ] **P6.14** No `client_secrets.json` in git (verify `git status`).
-- [ ] **P6.15** No `gmail_token*.pickle` or `*.enc` in git.
-- [ ] **P6.16** All new code passes `ruff check --fix`.
-- [ ] **P6.17** All tests pass.
-- [ ] **P6.18** `Index.md` updated with new files/classes.
-- [ ] **P6.19** `Docs/Guardrails.md` updated with Gmail-specific security notes (if any new patterns).
-- [ ] **P6.20** Archive directory `archive/gmail_feature/` marked deprecated (add `README.md` noting "Superseded by widgets/gmail_widget.py and core/gmail/ — kept for historical reference only"). Do not delete; archive is valuable for reference.
-
----
-
-## 9. Security Anti-Leak Policy & Credential Hygiene
+## 5. Security Anti-Leak Policy & Credential Hygiene
 
 **Goal:** Ensure zero credential material ever enters the repository, build artifacts, or logs.
 
-### 9.1 Repository-Level Guards
+### 5.1 Repository-Level Guards
 
 - [ ] **S1.1** `.gitignore` must contain `**/client_secrets.json`, `**/gmail_token*`, `**/gmail_credentials*`, `**/*.pickle` (catch all pickle, not just Gmail).
 - [ ] **S1.2** *(Optional / future)* Add a `pre-commit` guard that greps for `"client_id"` / `"client_secret"` patterns in non-archive Python files. The repository currently has no pre-commit infrastructure; implement only if CI is added later.
@@ -311,7 +317,7 @@ There is no user control.
 - [ ] **S1.4** Add `GmailConfigError` string + Gmail credential file patterns to `Docs/Guardrails.md` under "Mandatory — Every Commit" section (credential leakage prevention).
 - [ ] **S1.4b** Add `gmail_cache.json` and all files under `%APPDATA%/SRPSS/cache/` to `.gitignore` (if not already covered by broader `cache/` patterns). Ensure email cache is never committed.
 
-### 9.2 Runtime Leak Prevention
+### 5.2 Runtime Leak Prevention
 
 - [ ] **S1.5** `GmailOAuthManager` must never log the `client_secret` value, even at `DEBUG`. Log only that credentials were loaded, not their content.
 - [ ] **S1.6** *(Optional)* Token file may have `FILE_ATTRIBUTE_HIDDEN` on Windows. DPAPI encryption is the primary protection; ACL/Hidden flags are defense-in-depth and not required for MVP.
@@ -320,7 +326,7 @@ There is no user control.
 - [ ] **S1.9** `gmail_client.py` request logging must sanitize `message_id` from URLs? No — message IDs are not sensitive. But ensure no `body` / `raw` params are ever in the URL or logged.
 - [ ] **S1.10** If token refresh fails with `invalid_grant`, the manager must auto-clear local credentials (encrypted token deleted) and require re-auth. Do not retry indefinitely with a stale refresh token.
 
-### 9.3 Build / Distribution Safety
+### 5.3 Build / Distribution Safety
 
 - [ ] **S1.11** Build script (PyInstaller / cx_Freeze) must verify `client_secrets.json` is **not** bundled into the executable unless explicitly injected at build time. If it is bundled, it is exposed to binary extraction.
 - [ ] **S1.12** Document in `README.md` that `client_secrets.json` is a runtime dependency placed by the user (or build script) into `%APPDATA%/SRPSS/`.
@@ -328,11 +334,11 @@ There is no user control.
 
 ---
 
-## 10. Paint & Performance Guardrails
+## 6. Paint & Performance Guardrails
 
 **Goal:** Prevent the Gmail widget from becoming a CPU/GPU hog via unnecessary paint events, per-frame allocations, or unbounded email list growth.
 
-### 10.1 Paint Event Discipline
+### 6.1 Paint Event Discipline
 
 - [ ] **PG1.1** `paintEvent()` must be pure — no network calls, no file I/O, no token refresh. All data must be pre-fetched and stored in widget attributes before `update()` is called.
 - [ ] **PG1.2** Email list must be capped at `limit` (default 5, max 10) **at fetch time**, not at paint time. Never paint more rows than configured.
@@ -344,24 +350,24 @@ There is no user control.
 - [ ] **PG1.8** Hit rects (`_email_hit_rects`, `_action_hit_rects`) must be recomputed only on data change or resize, not per `paintEvent`.
 - [ ] **PG1.9** `update()` must not be called from `paintEvent` (infinite recursion trap). Use `QTimer.singleShot(0, self.update)` only if absolutely necessary.
 
-### 10.2 Geometry & Visibility Guards
+### 6.2 Geometry & Visibility Guards
 
 - [ ] **PG1.10** If widget `isHidden()` or parent `DisplayWidget` is not in overlay-visible state, `paintEvent` should early-return after logging a single WARNING (not spam).
 - [ ] **PG1.11** Email fetch timer must be stopped when widget is hidden (power saving). Resume on show.
 - [ ] **PG1.12** `QMenu` created in `_show_action_menu()` should be created per-click (standard Qt pattern), parented to the widget, and all references cleared in `cleanup()` to avoid dangling pointers. Avoid singleton menus with dynamically swapped actions — they are harder to reason about and more error-prone.
 
-### 10.3 Memory Pressure
+### 6.3 Memory Pressure
 
 - [ ] **PG1.13** `EmailMetadata` objects must not hold references to `GmailClient` or `QPixmap`. Keep them plain dataclasses.
 - [ ] **PG1.14** If email list fetch returns > `limit`, truncate immediately. Do not store unbounded lists.
 
 ---
 
-## 11. Transition Deferral & ThreadManager Integration
+## 7. Transition Deferral & ThreadManager Integration
 
 **Goal:** Prevent email refresh/network I/O from stalling the UI thread during screen transitions (photo crossfades, visualizer mode switches, etc.).
 
-### 11.1 Fetch Timing Policy
+### 7.1 Fetch Timing Policy
 
 - [ ] **TD1.1** Email refresh must use `ThreadManager.submit_io_task()`, never the UI thread.
 - [ ] **TD1.2** Results must be applied via `ThreadManager.invoke_in_ui_thread(lambda: self._apply_fetched_emails(data))`.
@@ -370,18 +376,18 @@ There is no user control.
 - [ ] **TD1.6** If a fetch is already in-flight when the timer fires again, skip the new fetch. Use an `atomic bool` or `threading.Lock()` to guard `_fetch_in_progress`.
 - [ ] **TD1.7** On widget `stop()` / `cleanup()`, cancel any in-flight future (if `ThreadManager` supports it) or at least set `_cancelled = True` so the callback ignores stale results.
 
-### 11.2 OAuth Flow Timing
+### 7.2 OAuth Flow Timing
 
 - [ ] **TD1.8** The initial OAuth browser-launch + local server callback should use `ThreadManager.submit_io_task()` for the server. The URL open (`webbrowser.open()` / `open_url()` / bridge enqueue) is thread-safe and can be called directly from the IO task — no need to bounce through UI thread invoke.
 - [ ] **TD1.9** Local server timeout (5 min) must be a `threading.Timer` or `socket.settimeout()`, not a busy-wait. Shutdown the server socket immediately upon receiving the callback to free the port.
 
 ---
 
-## 12. AV False Positive Avoidance
+## 8. AV False Positive Avoidance
 
 **Goal:** Prevent Windows Defender or other AV from flagging the screensaver due to Gmail-specific behavior patterns.
 
-### 12.1 Behavioral Patterns to Avoid
+### 8.1 Behavioral Patterns to Avoid
 
 - [ ] **AV1.1** Do **not** spawn a hidden/`pythonw.exe` subprocess for OAuth callback server. Use an in-thread `HTTPServer` (already in archive). Subprocess spawning from a `.scr` is a common AV heuristic for trojans.
 - [ ] **AV1.2** Do **not** write `.bat`, `.vbs`, `.ps1`, or `.exe` files to disk at runtime for URL launching. Use the existing helper bridge process (already present for Reddit) or `QDesktopServices.openUrl()`.
@@ -394,7 +400,7 @@ There is no user control.
 - [ ] **AV1.9** All new `.py` files should have standard docstrings and no obfuscated/encoded strings. AV flags encoded payload patterns.
 - [ ] **AV1.10** Do **not** use `eval()`, `exec()`, `compile()`, or `__import__` dynamically for Gmail module loading. Use standard imports.
 
-### 12.2 Build Artifact Hygiene
+### 8.2 Build Artifact Hygiene
 
 - [ ] **AV1.11** Ensure `core/windows/dpapi.py` is not flagged as ransomware-like by AV due to `CryptProtectData` usage. This is rare but can happen with overly aggressive heuristics. If flagged, add the `.scr` to AV exclusions (document for users) or use `keyring` library as alternative.
 - [ ] **AV1.12** *(Stale — no longer applicable)* The `google-api-python-client` package was removed from dependencies. Hardened code uses `requests` directly. No generated discovery documents are present.
@@ -453,3 +459,105 @@ Because `gmail.metadata` is a **restricted scope**, Google requires CASA audit f
 - **Testing mode:** Works indefinitely for up to 100 test users. Refresh tokens expire every 7 days. **Sufficient for a dev-gated personal feature.**
 - **Publish mode:** Requires privacy policy, Terms of Service, and a YouTube video demonstrating scope usage. Refresh tokens do not expire. Only needed if distributing to non-developer users.
 - **Recommendation:** Stay in Testing mode. Document this limitation in `README.md` or `Docs/Gmail_Widget.md`.
+
+---
+
+## Appendix E: Threading & Concurrency Audit Findings
+
+**Date:** 2026-04-27
+**Audited files:** `gmail_oauth.py`, `gmail_imap.py`, `gmail_client.py`, `gmail_backend.py`, `gmail_widget.py`, `widgets_tab_gmail.py`
+**Goal:** Identify race conditions, memory leaks, raw threading, and UI-thread blocking.
+
+### E.1 Executive Summary
+
+**7 Critical, 5 High, 6 Medium, 4 Low.** Raw `threading.Lock()` / `threading.Thread()` and `QTimer` usage is pervasive. The widget spawns raw background threads that touch Qt state without `run_on_ui_thread()`. DPAPI encryption and IMAP network calls happen on the UI thread, causing hangs.
+
+---
+
+### E.2 Critical Issues — Must Fix Before Release
+
+| # | File | Line (approx) | Issue | Fix |
+|---|------|---------------|-------|-----|
+| 1 | `gmail_widget.py` | 60–61 | Raw `QTimer` for refresh timer. | Replace with `ThreadManager` periodic scheduling or register `QTimer` via `ResourceManager`. |
+| 2 | `gmail_widget.py` | 457 | `threading.Thread(target=self._fetch_thread).start()` — raw thread. | Use `ThreadManager.submit_io_task()` for background fetch. |
+| 3 | `gmail_widget.py` | 457 | `_fetch_thread` calls `self.update()` and `self._request_fade_in()` from non-UI thread without `ThreadManager.run_on_ui_thread()`. | Wrap all Qt calls in `run_on_ui_thread()`. |
+| 4 | `gmail_widget.py` | 457 | `_fetch_thread` sets `_emails`, `_unread_count`, `_has_displayed_valid_data` from background thread; `paintEvent` reads them from UI thread — data race on plain attributes. | Update shared state via `run_on_ui_thread()` or use `queue.SimpleQueue` for results. |
+| 5 | `gmail_oauth.py` | 48 | `self._lock = threading.Lock()` — raw lock. | Replace with `ThreadManager` lock abstraction or queue-based coordination. |
+| 6 | `gmail_oauth.py` | 94 | `threading.Thread(target=self._wait_for_auth).start()` — raw thread for OAuth callback server. No cancel/kill path if user closes settings. | Use `ThreadManager.submit_io_task()`; add `threading.Event` for cancellation and `server.shutdown()` cleanup. |
+| 7 | `gmail_backend.py` | 28–29 | `_instance_lock = threading.Lock()`, `_init_lock = threading.Lock()` — raw locks in singleton. | Replace with `ThreadManager` lock or `threading.Lock` only if no Qt dependency. |
+| 8 | `gmail_client.py` | 56 | `self._lock = threading.Lock()` — raw lock (same pattern as oauth/imap). | Same fix as #5. |
+
+---
+
+### E.3 High Issues — Should Fix Before Release
+
+| # | File | Line (approx) | Issue | Fix |
+|---|------|---------------|-------|-----|
+| 9 | `gmail_oauth.py` | 130–131 | `HTTPServer` runs on raw thread with no `server_timeout`, no `shutdown()` call, no cleanup path. Thread leaks every auth attempt. | Add `socketserver.ThreadingHTTPServer` with explicit `server.shutdown()` + `server.server_close()` in finally block. Track server instance for cleanup. |
+| 10 | `gmail_widget.py` | 457 | `_fetch_thread` catches exceptions but only logs — no UI notification. Widget stays in "loading" state forever on failure. | On exception, call `run_on_ui_thread(self._on_fetch_error, exc)`. |
+| 11 | `gmail_imap.py` | 153 | `import re` inside `_fetch_message_metadata()` — re-imported on every message fetch. | Move `import re` to top of file. |
+| 12 | `gmail_backend.py` | 205 | `_last_error` set in `_on_error()` without lock. `last_error` property (line 73) reads without lock. | Wrap `_last_error` access in `ThreadManager` lock or use `threading.Lock`. |
+| 13 | `gmail_backend.py` | 179 | `_last_unread_count` set in `_update_unread_count()` without lock. `unread_count` property (line 83) reads without lock. | Same fix as #12. |
+
+---
+
+### E.4 Medium Issues — Fix Before Stable
+
+| # | File | Line (approx) | Issue | Fix |
+|---|------|---------------|-------|-----|
+| 14 | `gmail_backend.py` | 117–120 | `_backend_mode`, `_imap_client`, `_oauth_client` swapped without lock. A concurrent `refresh()` could read `_backend_mode='imap'` but `_imap_client=None` briefly. | Use a single `threading.Lock` around backend swap, or use atomic reference assignment if possible. |
+| 15 | `gmail_backend.py` | 167 | `_refresh()` spawns raw `threading.Thread` for IMAP `get_unread_count()` / `list_messages()`. | Use `ThreadManager.submit_io_task()`. |
+| 16 | `widgets_tab_gmail.py` | ~840 | `save_gmail_settings()` encrypts password with DPAPI on UI thread. Blocks settings dialog. | Offload `encrypt_data()` to `ThreadManager.submit_io_task()`. Update status label via `run_on_ui_thread()`. |
+| 17 | `widgets_tab_gmail.py` | ~700 | `_test_gmail_connection()` calls `imap_client.test_connection()` directly on UI thread — network I/O blocks dialog. | Offload to `ThreadManager.submit_io_task()`. Update result label via `run_on_ui_thread()`. |
+| 18 | `widgets_tab_gmail.py` | ~630 | `_save_and_test_credentials()` does encrypt + IMAP login on UI thread. | Same fix as #16 + #17. |
+| 19 | `gmail_widget.py` | ~545 | `QMenu` created in `__init__` but only deleted in `cleanup()`. If widget destroyed without `cleanup()`, `QMenu` leaks. | Register `QMenu` with `ResourceManager`, or connect `destroyed` signal to `cleanup()`. |
+
+---
+
+### E.5 Low Issues — Polish
+
+| # | File | Line (approx) | Issue | Fix |
+|---|------|---------------|-------|-----|
+| 20 | `gmail_oauth.py` | 62 | `self._password` stores decrypted App Password as plain string instance variable. | Clear string after use if possible (defence in depth). |
+| 21 | `gmail_imap.py` | 62 | Same as #20 — plain string password in memory. | Same fix. |
+| 22 | `gmail_oauth.py` | ~200 | `_token` dict accessed without lock in `is_authenticated` property. | Wrap in `_lock` if lock is kept, or use `ThreadManager` atomic. |
+| 23 | `gmail_widget.py` | ~180 | `_current_hover_index` is plain int, written in `mouseMoveEvent` and read in `paintEvent` — both UI thread, safe, but brittle if refactored. | Document thread assumption or use `threading.local()` if refactored to multi-thread. |
+| 24 | `gmail_widget.py` | ~60 | `_sound_player` instantiated but never explicitly stopped/disconnected in `cleanup()`. | Stop player and disconnect signals in `cleanup()`. |
+
+---
+
+### E.6 Implementation Plan — Fix Order
+
+- [ ] **gmail_widget.py** — Replace raw `QTimer` + `threading.Thread` with `ThreadManager`.
+         - Use `ThreadManager.submit_io_task()` for `_fetch_thread`.
+         - Use `ThreadManager.run_on_ui_thread()` for `update()`, `_request_fade_in()`, `_set_emails()`, `_set_error()`.
+         - Register `_refresh_timer` with `ResourceManager` or use `ThreadManager` periodic scheduling.
+
+- [ ] **gmail_oauth.py** — Replace raw `threading.Lock` + `threading.Thread` with `ThreadManager`.
+         - Replace `_lock` with `ThreadManager` lock abstraction or queue-based coordination.
+         - Use `ThreadManager.submit_io_task()` for OAuth callback server.
+         - Add `threading.Event` for cancellation and `server.shutdown()` cleanup.
+
+- [ ] **gmail_backend.py** — Replace raw locks and threads with `ThreadManager`.
+         - Use `ThreadManager` lock for `_instance_lock` / `_init_lock` (or keep `threading.Lock` if no Qt dependency).
+         - Wrap `_backend_mode` / `_imap_client` / `_oauth_client` swap in lock.
+         - Use `ThreadManager.submit_io_task()` for `_refresh()`.
+         - Use lock for `_last_error` and `_last_unread_count` access.
+
+- [ ] **gmail_client.py** — Replace raw `threading.Lock` with `ThreadManager` lock.
+         - Same pattern as `gmail_oauth.py`.
+
+- [ ] **gmail_imap.py** — Move `import re` to top of file.
+         - Ensure thread safety of `_password` access (defence in depth).
+
+- [ ] **widgets_tab_gmail.py** — Offload DPAPI + network to `ThreadManager`.
+         - `save_gmail_settings()`: offload `encrypt_data()`.
+         - `_test_gmail_connection()`: offload `test_connection()`.
+         - `_save_and_test_credentials()`: offload encrypt + login.
+         - All UI updates via `run_on_ui_thread()`.
+
+- [ ] **gmail_widget.py** — Resource cleanup.
+         - Register `QMenu` with `ResourceManager` or connect `destroyed` signal.
+         - Stop `_sound_player` and disconnect signals in `cleanup()`.
+
+---
