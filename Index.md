@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-04-23
+Last updated: 2026-04-27
 
 Living map of the current SRPSS codebase.
 
@@ -76,8 +76,10 @@ Living map of the current SRPSS codebase.
 | REST API client | `core/gmail/gmail_client.py` | Gmail REST API — metadata, labels, actions |
 | IMAP client | `core/gmail/gmail_imap.py` | IMAP + App Password — headers, unread count |
 | Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
+| Widget components | `widgets/gmail_components.py` | GmailPosition enum, formatting utilities, email cache |
 | Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, widget settings |
 | Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list, actions |
+| Dev gate | `core/dev_gates.py` | `is_gmail_enabled()`, `force_gate(gmail=...)` |
 
 ## Source Ingestion
 

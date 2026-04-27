@@ -8,7 +8,7 @@ Scope: Bring archive/gmail_feature/ into production as a dev-gated overlay widge
 
 ## 1. Executive Summary
 
-The archived Gmail widget already uses BaseOverlayWidget, ThreadManager, ShadowFadeProfile, and standard OAuth 2.0 PKCE flows implemented via `requests` (no `google-auth-oauthlib`). The work is integration and hardening, not reconstruction.
+The Gmail widget currently requires many improvements for UI/UX/Policy Adherance.
 
 ### Target Architecture
 
@@ -80,15 +80,15 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 
 ### 3.1 Unit Tests
 
-- [ ] **P6.1** `tests/test_gmail_oauth.py` — mock Google token endpoint, verify PKCE params, verify DPAPI encrypt/decrypt roundtrip.
-- [ ] **P6.2** `tests/test_gmail_client.py` — mock `requests.get` / `requests.post` (or `responses` library), verify `list_messages()`, `mark_as_read()`, `archive_message()` return correct `EmailMetadata`.
-- [ ] **P6.3** `tests/test_gmail_widget.py` — instantiate widget with mock settings, verify `paintEvent` does not crash with empty email list, verify `handle_click` returns False for miss.
-- [ ] **P6.4** `tests/test_gmail_components.py` — verify `GmailPosition` enum values.
+- [x] **P6.1** `tests/test_gmail_oauth.py` — mock Google token endpoint, verify PKCE params, verify DPAPI encrypt/decrypt roundtrip.
+- [x] **P6.2** `tests/test_gmail_client.py` — mock `requests.get` / `requests.post` (or `responses` library), verify `list_messages()`, `mark_as_read()`, `archive_message()` return correct `EmailMetadata`.
+- [x] **P6.3** `tests/test_gmail_widget.py` — instantiate widget with mock settings, verify `paintEvent` does not crash with empty email list, verify `handle_click` returns False for miss.
+- [x] **P6.4** `tests/test_gmail_components.py` — verify `GmailPosition` enum values.
 
 ### 3.2 Integration Tests
 
-- [ ] **P6.5** `tests/test_gmail_settings_roundtrip.py` — construct a flat settings dict with all new Phase 6 keys, pass through `GmailWidget.apply_settings()`, assert all attributes match. Also verify `save_gmail_settings()` in the UI tab produces a dict containing the same keys.
-- [ ] **P6.6** `tests/test_gmail_dev_gate.py` — verify widget is only instantiated when `--devgmail` is in `sys.argv` (or `force_gate(gmail=True)`).
+- [x] **P6.5** `tests/test_gmail_settings_roundtrip.py` — construct a flat settings dict with all new Phase 6 keys, pass through `GmailWidget.apply_settings()`, assert all attributes match. Also verify `save_gmail_settings()` in the UI tab produces a dict containing the same keys.
+- [x] **P6.6** `tests/test_gmail_dev_gate.py` — verify widget is only instantiated when `--devgmail` is in `sys.argv` (or `force_gate(gmail=True)`).
 
 ### 3.3 Secure Desktop Tests
 

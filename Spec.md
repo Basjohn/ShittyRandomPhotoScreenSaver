@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-04-23
+Last updated: 2026-04-27
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -91,7 +91,30 @@ Active ids:
 - Standard saver and MC maintain separate settings profiles.
 - Frozen preset resolution converges on shared ProgramData curated root.
 
-## 10. Documentation Contract
+## 11. Gmail Widget Architecture
+
+### 11.1 Dev gating
+- Gmail widget is gated by `--devgmail` CLI flag
+- Gate state managed by `core/dev_gates.py`: `is_gmail_enabled()`, `force_gate(gmail=...)`
+- Widget factory registration and rendering are gated by the flag
+
+### 11.2 Backend routing
+- Unified backend (`core/gmail/gmail_backend.py`) routes to OAuth/REST or IMAP based on config
+- OAuth mode: `core/gmail/gmail_oauth.py` (PKCE flow, DPAPI token storage)
+- IMAP mode: `core/gmail/gmail_imap.py` (App Password authentication)
+- REST client: `core/gmail/gmail_client.py` (metadata-only API calls)
+
+### 11.3 Widget contracts
+- Overlay widget: `widgets/gmail_widget.py` (email list, actions, paint events)
+- Widget components: `widgets/gmail_components.py` (GmailPosition enum, formatting, email cache)
+- Settings UI: `ui/tabs/widgets_tab_gmail.py` (backend selector, credentials, widget settings)
+
+### 11.4 Security invariants
+- OAuth tokens stored encrypted via DPAPI
+- API calls are metadata-only (no body/snippet content)
+- No credential leakage in tests (all mocked with fake data)
+
+## 12. Documentation Contract
 - `Index.md`: module map.
 - `Current_Plan.md`: active priorities only.
 - `Docs/Guardrails.md`: policy/rules.
