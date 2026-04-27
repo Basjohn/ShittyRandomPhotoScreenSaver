@@ -99,7 +99,7 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 ### 3.4 Memory & Resource Tests
 
 - [ ] **P6.10** Run widget through 50 start/stop cycles in test harness; verify no refresh `QTimer` or `QMenu` leaks via `shiboken6.getAll()` (if available) or manual audit.
-- [ ] **P6.11** Verify `cleanup()` stops all timers and deletes `QMenu` references.
+- [x] **P6.11** Verify `cleanup()` stops all timers and deletes `QMenu` references.
 
 ### 3.5 Performance Tests
 
@@ -197,10 +197,10 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 **Problem:** In `_paint_emails()` (`widgets/gmail_widget.py:~574–585`), the envelope pixmap is drawn at `env_x = left` and a fixed vertical offset. It is not vertically centred to the text baseline/height, causing it to sit too high or too low relative to the sender/subject line.
 
 **Implementation Detail:**
-- [ ] **P7.5.1** Compute `line_centre = row_y + (line_height / 2)`.
-- [ ] **P7.5.2** Compute `env_y = int(line_centre - (envelope_pixmap.height() / 2))`.
-- [ ] **P7.5.3** Clamp `env_y` so it never sits above `row_y` or below `row_y + line_height - envelope_pixmap.height()`.
-- [ ] **P7.5.4** Use the same pattern as Imgur logo vertical alignment (`widgets/imgur/widget.py:1010–1016`): `line_height = header_metrics.height(); line_centre = header_top + (line_height * 0.6); icon_half = float(logo_size) / 2.0; y_logo = int(line_centre - icon_half)`.
+- [x] **P7.5.1** Compute `line_centre = row_y + (line_height / 2)`.
+- [x] **P7.5.2** Compute `env_y = int(line_centre - (envelope_pixmap.height() / 2))`.
+- [x] **P7.5.3** Clamp `env_y` so it never sits above `row_y` or below `row_y + line_height - envelope_pixmap.height()`.
+- [x] **P7.5.4** Use the same pattern as Imgur logo vertical alignment (`widgets/imgur/widget.py:1010–1016`): `line_height = header_metrics.height(); line_centre = header_top + (line_height * 0.6); icon_half = float(logo_size) / 2.0; y_logo = int(line_centre - icon_half)`.
 
 ---
 
@@ -212,12 +212,12 @@ Phases 0–5 are fully implemented and deployed. Below is a concise summary; ful
 There is no user control.
 
 **Implementation Detail:**
-- [ ] **P7.6.1** Add `separator_color: QColor` setting (default `rgba(200,200,200,40)`).
-- [ ] **P7.6.2** Add `separator_thickness: int` setting (default **1**, range 1–4).
-- [ ] **P7.6.3** Add `boundary_separator_color: QColor` setting (default `rgba(180,180,180,80)`) — the thicker separator between unread and read groups.
-- [ ] **P7.6.4** Add `boundary_separator_thickness: int` setting (default **2**, range 1–6).
-- [ ] **P7.6.5** In `_paint_emails()`, replace hard-coded pens with `QPen(separator_color, separator_thickness)` and `QPen(boundary_color, boundary_thickness)`.
-- [ ] **P7.6.6** In `widgets_tab_gmail.py`, add a "Separators" bucket with two colour swatches + two thickness spinners.
+- [x] **P7.6.1** Add `separator_color: QColor` setting (default `rgba(200,200,200,40)`).
+- [x] **P7.6.2** Add `separator_thickness: int` setting (default **1**, range 1–4).
+- [x] **P7.6.3** Add `boundary_separator_color: QColor` setting (default `rgba(180,180,180,80)`) — the thicker separator between unread and read groups.
+- [x] **P7.6.4** Add `boundary_separator_thickness: int` setting (default **2**, range 1–6).
+- [x] **P7.6.5** In `_paint_emails()`, replace hard-coded pens with `QPen(separator_color, separator_thickness)` and `QPen(boundary_color, boundary_thickness)`.
+- [x] **P7.6.6** In `widgets_tab_gmail.py`, add a "Separators" bucket with two colour swatches + two thickness spinners.
 
 ---
 
@@ -286,7 +286,7 @@ There is no user control.
 **Implementation Detail:**
 - [ ] **P7.10.1** Import `QGroupBox` in `widgets_tab_gmail.py` (already present).
 - [ ] **P7.10.2** Create top-level `QGroupBox("Gmail Widget")` already exists — keep it as the outer shell.
-- [ ] **P7.10.3** Inside the outer group, create collapsible sub-buckets (each is a `QGroupBox` with `style_group_box()` applied):
+- [x] **P7.10.3** Inside the outer group, create collapsible sub-buckets using the established `QToolButton` arrow-toggle design from `ui/tabs/media/builder_scaffold.py`:
   - **"Backend & Auth"** — backend combo (IMAP vs OAuth), IMAP email/password + Save & Test, OAuth info label + Authorise button, shared Account status + Sign Out button.
   - **"Position & Size"** — position dropdown, min width, max width, content padding left/right/top spinners.
   - **"Visibility"** — show sender, show subject, show envelope, show timestamp, show separators, show three-dot menu, show unread count in header, auto title-case, desaturate when no unread.
@@ -298,10 +298,10 @@ There is no user control.
   - **"Sound"** — enable sound, volume slider, file path + test button.
 - [ ] **P7.10.4** Each bucket must use `style_group_box(bucket)` from `shared_styles.py` for consistent dark theming, rounded corners, and title styling.
 - [ ] **P7.10.5** Add `setCheckable(True)` and `setChecked(True)` on each bucket so users can collapse sections they do not need.
-- [ ] **P7.10.6** Persist bucket collapse states via `SettingsManager` (following visualiser bucket state pattern in `widgets_tab.py` lines 197–198, 307–336).
+- [x] **P7.10.6** Persist bucket collapse states via `SettingsManager` (following visualiser bucket state pattern in `widgets_tab.py` lines 197–198, 307–336).
 - [ ] **P7.10.7** Ensure tab layout uses `QVBoxLayout` with `setSpacing(12)` between buckets — matching visualiser tab density.
-- [ ] **P7.10.8** Move all existing flat rows (position, limit, refresh, filter, show_* toggles, colours) into their respective buckets. Do not duplicate controls.
-- [ ] **P7.10.9** The backend selector (IMAP vs OAuth) and auth buttons must remain prominent at the top of the tab even when buckets are collapsed — place the "Backend & Auth" bucket first and default it to expanded.
+- [x] **P7.10.8** Move all existing flat rows (position, limit, refresh, filter, show_* toggles, colours) into their respective buckets. Do not duplicate controls.
+- [x] **P7.10.9** The backend selector (IMAP vs OAuth) and auth buttons must remain prominent at the top of the tab even when buckets are collapsed — keep them outside all buckets.
 
 ---
 

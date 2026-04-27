@@ -4,6 +4,7 @@ Centralises repeated styling blocks and common widgets so individual tabs
 don't duplicate them.
 """
 import weakref
+from typing import Dict, Any, Optional, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QLabel,
     QSlider,
+    QToolButton,
     QSizePolicy,
     QWidget,
     QHBoxLayout,
@@ -890,3 +892,45 @@ ACCESSIBILITY_TITLE_STYLE = "font-size: 18px; font-weight: bold; color: #ffffff;
 ACCESSIBILITY_DESC_STYLE = "color: #aaaaaa; font-size: 11px; margin-bottom: 10px;"
 
 ACCESSIBILITY_SECTION_DESC_STYLE = "color: #888888; font-size: 10px; margin-top: 5px;"
+
+
+def build_bucket_toggle(
+    host_layout: QVBoxLayout,
+    title: str,
+    expanded: bool = False,
+    on_toggle: Callable[[bool], None] | None = None,
+) -> tuple[QToolButton, QWidget, QVBoxLayout]:
+    """Create a collapsible bucket toggle with arrow indicator.
+
+    Matches the established visualizer bucket design: a QToolButton with
+    a Down/Right arrow and text beside the icon.  Returns
+    ``(toggle_button, body_widget, body_layout)``.
+    """
+    toggle = QToolButton()
+    toggle.setText(title)
+    toggle.setCheckable(True)
+    toggle.setChecked(expanded)
+    toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+    toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+    toggle.setAutoRaise(True)
+
+    toggle_row = QHBoxLayout()
+    toggle_row.addWidget(toggle)
+    toggle_row.addStretch()
+    host_layout.addLayout(toggle_row)
+
+    body = QWidget()
+    body_layout = QVBoxLayout(body)
+    body_layout.setContentsMargins(12, 0, 0, 8)
+    body_layout.setSpacing(4)
+    body.setVisible(expanded)
+    host_layout.addWidget(body)
+
+    def _apply_state(checked: bool) -> None:
+        toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
+        body.setVisible(checked)
+        if on_toggle is not None:
+            on_toggle(checked)
+
+    toggle.toggled.connect(_apply_state)
+    return toggle, body, body_layout

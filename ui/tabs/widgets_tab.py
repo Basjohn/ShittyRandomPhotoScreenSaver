@@ -187,6 +187,8 @@ class WidgetsTab(QWidget):
         self._gmail_color = self._color_from_default('gmail', 'color', [255, 255, 255, 230])
         self._gmail_bg_color = self._color_from_default('gmail', 'bg_color', [35, 35, 35, 255])
         self._gmail_border_color = self._color_from_default('gmail', 'border_color', [255, 255, 255, 255])
+        self._gmail_separator_color = self._color_from_default('gmail', 'separator_color', [200, 200, 200, 40])
+        self._gmail_boundary_separator_color = self._color_from_default('gmail', 'boundary_separator_color', [180, 180, 180, 80])
         # Imgur widget colors
         self._imgur_color = self._color_from_default('imgur', 'color', [255, 255, 255, 230])
         self._imgur_bg_color = self._color_from_default('imgur', 'bg_color', [35, 35, 35, 255])
@@ -196,6 +198,7 @@ class WidgetsTab(QWidget):
         self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
         self._visualizer_tech_bucket_state: Dict[str, bool] = self._load_tech_bucket_states()
         self._visualizer_bucket_state: Dict[str, bool] = self._load_bucket_states()
+        self._gmail_bucket_state: Dict[str, bool] = self._load_gmail_bucket_states()
         self._loading = True
         self._save_coalesce_pending = False
         _ui_start = time.perf_counter()
@@ -307,6 +310,7 @@ class WidgetsTab(QWidget):
     _TECH_BUCKET_STATE_KEY = "ui.visualizer_tech_bucket_states"
     _BUCKET_STATE_KEY = "ui.visualizer_bucket_states"
     _SCROLL_POS_KEY = "ui.visualizer_scroll_positions"
+    _GMAIL_BUCKET_STATE_KEY = "ui.gmail_bucket_states"
 
     def _load_adv_states(self) -> Dict[str, bool]:
         """Load persisted advanced toggle states from SettingsManager."""
@@ -393,6 +397,30 @@ class WidgetsTab(QWidget):
         states[f"{mode}:{bucket}"] = bool(expanded)
         try:
             self._settings.set(self._BUCKET_STATE_KEY, dict(states))
+        except Exception:
+            pass
+
+    def _load_gmail_bucket_states(self) -> Dict[str, bool]:
+        """Load persisted Gmail bucket expanded states."""
+        raw = self._settings.get(self._GMAIL_BUCKET_STATE_KEY, {})
+        if isinstance(raw, dict):
+            return {str(k): bool(v) for k, v in raw.items()}
+        return {}
+
+    def get_gmail_bucket_state(self, bucket: str, default: bool = False) -> bool:
+        """Return remembered expanded state for a Gmail bucket."""
+        states = getattr(self, "_gmail_bucket_state", {})
+        return bool(states.get(bucket, default))
+
+    def set_gmail_bucket_state(self, bucket: str, expanded: bool) -> None:
+        """Persist expanded/collapsed state for a Gmail bucket."""
+        states = getattr(self, "_gmail_bucket_state", None)
+        if not isinstance(states, dict):
+            states = {}
+            self._gmail_bucket_state = states
+        states[bucket] = bool(expanded)
+        try:
+            self._settings.set(self._GMAIL_BUCKET_STATE_KEY, dict(states))
         except Exception:
             pass
 

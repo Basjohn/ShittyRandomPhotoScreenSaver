@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QMenu, QWidget
 
 from core.gmail.gmail_backend import GmailBackend
@@ -29,7 +29,7 @@ from widgets.shadow_utils import ShadowFadeProfile
 
 logger = get_logger(__name__)
 
-CACHE_MAX_AGE_HOURS = 24
+CACHE_MAX_AGE_HOURS = 72
 CACHE_DIR = get_app_data_dir() / "cache"
 CACHE_PATH = CACHE_DIR / "gmail_cache.json"
 
@@ -69,6 +69,11 @@ class GmailWidget(BaseOverlayWidget):
         self._auto_title_case = True
         self._show_unread_count_in_header = True
         self._desaturate_when_no_unread = True
+
+        self._separator_color = QColor(200, 200, 200, 40)
+        self._separator_thickness = 1
+        self._boundary_separator_color = QColor(180, 180, 180, 80)
+        self._boundary_separator_thickness = 2
 
         self._header_font_pt = max(10, int(self._font_size) + 2)
         self._header_logo_size = 24
@@ -233,6 +238,23 @@ class GmailWidget(BaseOverlayWidget):
         # the existing inbox without firing the sound for old messages.
         self._seen_message_ids = set()
         self._seen_initialised = False
+        # Explicit timer cleanup for safety (also covered by _cleanup_impl → _deactivate_impl)
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+        if self._update_timer is not None:
+            try:
+                self._update_timer.stop()
+                self._update_timer.deleteLater()
+            except Exception:
+                pass
+            self._update_timer = None
+        self._emails.clear()
+        self._row_hit_rects.clear()
+        self._action_hit_rects.clear()
         super().cleanup()
 
     # ------------------------------------------------------------------
@@ -559,7 +581,7 @@ class GmailWidget(BaseOverlayWidget):
         for i, email in enumerate(self._emails[: self._limit]):
             if prev_unread is not None and prev_unread != email.is_unread and self._show_separators:
                 sep_y = row_y - 1
-                painter.setPen(QColor(180, 180, 180, 60))
+                painter.setPen(QPen(self._boundary_separator_color, self._boundary_separator_thickness))
                 painter.drawLine(left, sep_y, left + available_width, sep_y)
                 row_y += 2
             weight = QFont.Weight.Bold if email.is_unread else QFont.Weight.Normal
@@ -573,11 +595,20 @@ class GmailWidget(BaseOverlayWidget):
                 time_width = time_fm.horizontalAdvance(time_text) + 8
             env_x = left
             env_width = 0
+            # Pre-compute line height so we can vertically centre the envelope
+            subject_font = QFont(self._font_family, base_font_pt, weight)
+            subject_fm = QFontMetrics(subject_font)
+            line_height = subject_fm.height() + 6
             if self._show_envelope_icon and self._envelope_pixmap is not None:
                 env_width = self._envelope_pixmap.width() + 6
                 env_pm = self._envelope_pixmap if email.is_unread else self._envelope_pixmap_dim
                 if env_pm is not None:
-                    painter.drawPixmap(env_x, row_y + 2, env_pm)
+                    line_centre = row_y + (line_height * 0.5)
+                    icon_half = float(env_pm.height()) / 2.0
+                    env_y = int(line_centre - icon_half)
+                    # Clamp so icon never sits above row or below row bottom
+                    env_y = max(row_y, min(env_y, row_y + line_height - env_pm.height()))
+                    painter.drawPixmap(env_x, env_y, env_pm)
             sender_width = 0
             if self._show_sender:
                 sender_font = QFont(self._font_family, base_font_pt, weight)
@@ -599,7 +630,6 @@ class GmailWidget(BaseOverlayWidget):
             subject_text = subject_fm.elidedText(
                 subject_text, Qt.TextElideMode.ElideRight, subject_max_width
             )
-            line_height = subject_fm.height() + 6
             text_y = row_y + subject_fm.ascent() + 2
             if self._show_timestamp:
                 painter.setFont(QFont(self._font_family, base_font_pt - 2, QFont.Weight.Normal))
@@ -626,7 +656,7 @@ class GmailWidget(BaseOverlayWidget):
                 painter.drawText(subject_x, text_y, subject_text)
             if self._show_separators and i < len(self._emails[: self._limit]) - 1:
                 sep_y = row_y + line_height
-                painter.setPen(QColor(200, 200, 200, 30))
+                painter.setPen(QPen(self._separator_color, self._separator_thickness))
                 painter.drawLine(left, sep_y, left + available_width, sep_y)
             row_rect = QRect(left, row_y, available_width, line_height)
             self._row_hit_rects.append((row_rect, email.id, email.subject))
@@ -790,6 +820,10 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_three_dot_menu(getattr(settings, "show_three_dot_menu", self._show_three_dot_menu))
         self.set_show_timestamp(getattr(settings, "show_timestamp", self._show_timestamp))
         self.set_show_separators(getattr(settings, "show_separators", self._show_separators))
+        self.set_separator_color(getattr(settings, "separator_color", self._separator_color))
+        self.set_separator_thickness(getattr(settings, "separator_thickness", self._separator_thickness))
+        self.set_boundary_separator_color(getattr(settings, "boundary_separator_color", self._boundary_separator_color))
+        self.set_boundary_separator_thickness(getattr(settings, "boundary_separator_thickness", self._boundary_separator_thickness))
         self.set_auto_title_case(getattr(settings, "auto_title_case", self._auto_title_case))
         self.set_show_unread_count_in_header(getattr(settings, "show_unread_count_in_header", self._show_unread_count_in_header))
         self.set_desaturate_when_no_unread(getattr(settings, "desaturate_when_no_unread", self._desaturate_when_no_unread))
@@ -806,6 +840,10 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_three_dot_menu(d.get("show_three_dot_menu", self._show_three_dot_menu))
         self.set_show_timestamp(d.get("show_timestamp", self._show_timestamp))
         self.set_show_separators(d.get("show_separators", self._show_separators))
+        self.set_separator_color(d.get("separator_color", self._separator_color))
+        self.set_separator_thickness(d.get("separator_thickness", self._separator_thickness))
+        self.set_boundary_separator_color(d.get("boundary_separator_color", self._boundary_separator_color))
+        self.set_boundary_separator_thickness(d.get("boundary_separator_thickness", self._boundary_separator_thickness))
         self.set_auto_title_case(d.get("auto_title_case", self._auto_title_case))
         self.set_show_unread_count_in_header(d.get("show_unread_count_in_header", self._show_unread_count_in_header))
         self.set_desaturate_when_no_unread(d.get("desaturate_when_no_unread", self._desaturate_when_no_unread))
@@ -842,6 +880,28 @@ class GmailWidget(BaseOverlayWidget):
 
     def set_show_separators(self, show: bool) -> None:
         self._show_separators = bool(show)
+        self.update()
+
+    def set_separator_color(self, color: Any) -> None:
+        if isinstance(color, (list, tuple)) and len(color) >= 3:
+            self._separator_color = QColor(*color)
+        elif isinstance(color, QColor):
+            self._separator_color = color
+        self.update()
+
+    def set_separator_thickness(self, thickness: int) -> None:
+        self._separator_thickness = max(1, min(4, thickness))
+        self.update()
+
+    def set_boundary_separator_color(self, color: Any) -> None:
+        if isinstance(color, (list, tuple)) and len(color) >= 3:
+            self._boundary_separator_color = QColor(*color)
+        elif isinstance(color, QColor):
+            self._boundary_separator_color = color
+        self.update()
+
+    def set_boundary_separator_thickness(self, thickness: int) -> None:
+        self._boundary_separator_thickness = max(1, min(6, thickness))
         self.update()
 
     def set_auto_title_case(self, enable: bool) -> None:
