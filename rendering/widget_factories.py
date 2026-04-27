@@ -1008,6 +1008,16 @@ class GmailWidgetFactory(WidgetFactory):
             if hasattr(widget, 'set_intense_shadow'):
                 widget.set_intense_shadow(intense_shadow)
 
+            # Notification sound
+            if hasattr(widget, 'set_play_sound_on_new_mail'):
+                widget.set_play_sound_on_new_mail(
+                    SettingsManager.to_bool(config.get('play_sound_on_new_mail', False), False)
+                )
+            if hasattr(widget, 'set_sound_file_path'):
+                widget.set_sound_file_path(config.get('sound_file_path', 'resources/tutuogg.ogg'))
+            if hasattr(widget, 'set_sound_volume_percent'):
+                widget.set_sound_volume_percent(int(config.get('sound_volume_percent', 50)))
+
             # Shadow config
             try:
                 shadows_config = config.get('_shadows_config') or {}

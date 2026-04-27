@@ -79,8 +79,11 @@ id_ed25519
 **/oauth_*.json
 **/gmail_token*
 **/gmail_credentials*
+**/gmail_imap_creds.enc
+**/gmail_backend.json
 **/*token.enc
 **/*.creds
+**/*.enc
 **/*.pickle
 
 # Git conflict leftovers

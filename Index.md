@@ -68,6 +68,17 @@ Living map of the current SRPSS codebase.
 | Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing |
 | GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface |
 
+## Gmail Integration
+
+| Module | File | Role |
+|---|---|---|
+| OAuth manager | `core/gmail/gmail_oauth.py` | OAuth 2.0 PKCE flow, token storage (DPAPI) |
+| REST API client | `core/gmail/gmail_client.py` | Gmail REST API — metadata, labels, actions |
+| IMAP client | `core/gmail/gmail_imap.py` | IMAP + App Password — headers, unread count |
+| Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
+| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, widget settings |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list, actions |
+
 ## Source Ingestion
 
 | Module | File | Role |
@@ -108,3 +119,4 @@ Living map of the current SRPSS codebase.
 | `--fresh` | Clear runtime logs at startup |
 | `-devblob` | Enable blob mode gate |
 | `--devcurve` | Compatibility no-op alias |
+| `--devgmail` | Enable Gmail widget gate |

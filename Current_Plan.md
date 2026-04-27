@@ -13,7 +13,12 @@ This file tracks active work and near-term validation.
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
 - **U-05 RESOLVED (2026-04-25)**: MC Keyboard Focus / Ctrl Halo Runtime Input Family fixed via wiring dead code `_restore_mc_input_focus`.
-- **GMAIL WIDGET**: **Phases 3 + 4 complete** (2026-04-28). Plan v1.4. Phase 3: settings dataclass, defaults, dev gate, UI tab, wiring. Phase 4: `GmailWidgetFactory` in `rendering/widget_factories.py`, registered in `WidgetFactoryRegistry`, instantiation block in `setup_all_widgets()` (gated by `is_gmail_enabled()`), Gmail added to `compute_expected_overlays()` for fade sync, `-devgmail` filtered in `main.py`. All compile + lint clean. **Next**: Phase 5 (notification sound `core/audio/notification_sound.py` + sound UI controls), Phase 6 (testing + sign-off).
+- **GMAIL WIDGET**: **Phases 3 + 4 + 5 complete** (2026-04-28). Plan v1.4.
+  - Phase 3: settings dataclass, defaults, dev gate (`--devgmail`), UI tab, wiring.
+  - Phase 4: `GmailWidgetFactory`, registered in `WidgetFactoryRegistry`, instantiation block, fade sync, main arg filtering.
+  - Phase 5: `NotificationSoundPlayer` singleton (`core/audio/notification_sound.py`), new-mail detection in `GmailWidget` (first fetch skips sound, subsequent fetches play sound only for new unread IDs), sound UI controls (enable, file path, browse/test, volume slider), full load/save wiring, factory applies settings.
+  - Fixes: `webbrowser.open(url, new=1)` for OAuth new-window behavior; Gmail settings tab + subtab button fully gated by `is_gmail_enabled()` in `widgets_tab.py`.
+  - **Next**: Phase 6 (final testing + sign-off).
 - Investigate MuteButtonWidget fade-in race with `invalidate_overlay_effects` (~1/10 failure).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 

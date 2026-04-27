@@ -27,13 +27,12 @@ from core.windows.dpapi import save_encrypted, load_encrypted
 logger = get_logger(__name__)
 
 GMAIL_SCOPES = [
-    "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.metadata",
 ]
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
-REDIRECT_HOST = "localhost"
+REDIRECT_HOST = "127.0.0.1"
 SERVER_TIMEOUT_SECONDS = 300
 
 
@@ -96,6 +95,7 @@ class GmailOAuthManager(QObject):
         super().__init__()
         self._credentials: Optional[GmailCredentials] = None
         self._client_id: Optional[str] = None
+        self._client_secret: Optional[str] = None
         self._auth_server: Optional[HTTPServer] = None
         self._auth_thread: Optional[threading.Thread] = None
         self._pkce_verifier: Optional[str] = None
@@ -103,7 +103,17 @@ class GmailOAuthManager(QObject):
         self._redirect_uri: Optional[str] = None
 
         app_data = get_app_data_dir()
-        self._credentials_path = credentials_path or (app_data / "client_secrets.json")
+
+        # Resolve credentials path: bundled resource first, then app data override
+        if credentials_path is not None:
+            self._credentials_path = credentials_path
+        else:
+            bundled = Path(__file__).resolve().parents[2] / "resources" / "client_secrets.json"
+            if bundled.exists():
+                self._credentials_path = bundled
+            else:
+                self._credentials_path = app_data / "client_secrets.json"
+
         self._token_path = token_path or (app_data / "gmail_token.enc")
         self._legacy_token_path = app_data / "gmail_credentials.json"
 
@@ -125,9 +135,12 @@ class GmailOAuthManager(QObject):
             elif "web" in data:
                 data = data["web"]
             self._client_id = data.get("client_id")
+            self._client_secret = data.get("client_secret")
             if not self._client_id:
                 raise GmailConfigError("client_secrets.json missing 'client_id'")
-            logger.info("[GMAIL_OAUTH] Loaded client configuration")
+            if not self._client_secret:
+                logger.warning("[GMAIL_OAUTH] client_secret missing from JSON")
+            logger.info("[GMAIL_OAUTH] Loaded client configuration (client_id=%s...)", self._client_id[:20] if self._client_id else "None")
         except Exception as exc:
             logger.error("[GMAIL_OAUTH] Failed to parse client_secrets.json: %s", exc)
             self._client_id = None
@@ -231,13 +244,12 @@ class GmailOAuthManager(QObject):
             return False
 
     def _open_browser(self, url: str) -> None:
-        try:
-            from core.windows.secure_url_launcher import open_url
-            open_url(url)
-        except Exception as exc:
-            logger.warning("[GMAIL_OAUTH] Bridge open failed, falling back: %s", exc)
-            import webbrowser
-            webbrowser.open(url)
+        import webbrowser
+        # new=1 opens a new browser window (not just a tab), which is
+        # critical for OAuth flows where the user must interact with
+        # the authorization page while the app stays visible.
+        webbrowser.open(url, new=1)
+        logger.debug("[GMAIL_OAUTH] Browser opened: %s", url)
 
     def _start_callback_server(self) -> None:
         """Start local HTTP server to receive OAuth callback."""
@@ -283,14 +295,19 @@ class GmailOAuthManager(QObject):
                         )
                         if "error" in params:
                             error = params["error"][0]
-                            QTimer.singleShot(0, lambda err=error: manager.auth_failed.emit(f"OAuth error: {err}"))
+                            error_desc = params.get("error_description", [""])[0]
+                            full_error = f"OAuth error: {error}"
+                            if error_desc:
+                                full_error += f" — {error_desc}"
+                            logger.error("[GMAIL_OAUTH] Callback received error: %s", full_error)
+                            QTimer.singleShot(0, lambda err=full_error: manager.auth_failed.emit(err))
                 else:
                     self.send_response(404)
                     self.end_headers()
 
         for port in range(8080, 8100):
             try:
-                self._redirect_uri = f"http://{REDIRECT_HOST}:{port}/callback/"
+                self._redirect_uri = f"http://{REDIRECT_HOST}:{port}"
                 self._auth_server = HTTPServer((REDIRECT_HOST, port), CallbackHandler)
                 self._auth_server.timeout = SERVER_TIMEOUT_SECONDS
                 break
@@ -323,6 +340,7 @@ class GmailOAuthManager(QObject):
             data = {
                 "grant_type": "authorization_code",
                 "client_id": self._client_id,
+                "client_secret": self._client_secret or "",
                 "code": code,
                 "redirect_uri": self._redirect_uri,
                 "code_verifier": self._pkce_verifier,
@@ -372,6 +390,7 @@ class GmailOAuthManager(QObject):
             data = {
                 "grant_type": "refresh_token",
                 "client_id": self._client_id,
+                "client_secret": self._client_secret or "",
                 "refresh_token": self._credentials.refresh_token,
             }
             resp = requests.post(GOOGLE_TOKEN_URL, data=data, timeout=30)

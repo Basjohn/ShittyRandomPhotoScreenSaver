@@ -10,13 +10,13 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit,
-    QSlider, QWidget, QPushButton, QMessageBox,
+    QSlider, QWidget, QPushButton,
 )
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
-from ui.styled_popup import ColorSwatchButton
+from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
     INFO_LABEL_STYLE,
@@ -71,6 +71,16 @@ def _get_gmail_oauth_manager():
         return None
 
 
+def _get_gmail_backend():
+    """Lazy-import singleton accessor for GmailBackend."""
+    try:
+        from core.gmail.gmail_backend import GmailBackend
+        return GmailBackend.instance()
+    except Exception as exc:
+        logger.error("[GMAIL_TAB] Failed to obtain GmailBackend: %s", exc)
+        return None
+
+
 def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
     """Update the auth status label and button visibility based on credential state."""
     status_label = getattr(tab, 'gmail_auth_status', None)
@@ -79,48 +89,120 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
     if status_label is None or auth_btn is None or out_btn is None:
         return
 
-    mgr = _get_gmail_oauth_manager()
-    if mgr is None:
-        status_label.setText("OAuth unavailable")
+    backend = _get_gmail_backend()
+    if backend is None:
+        status_label.setText("Gmail unavailable")
         auth_btn.setEnabled(False)
         out_btn.setEnabled(False)
         out_btn.setVisible(False)
         return
 
-    if mgr.is_authenticated:
-        status_label.setText("Signed in")
+    # Reload OAuth config in case client_secrets was added after start
+    mgr = _get_gmail_oauth_manager()
+    if mgr is not None:
+        try:
+            mgr._load_client_config()
+        except Exception:
+            pass
+
+    # Update mode-specific panel visibility
+    _update_backend_panels(tab)
+
+    status_label.setText(backend.status_text)
+
+    if backend.is_authenticated:
         auth_btn.setVisible(False)
         out_btn.setVisible(True)
         out_btn.setEnabled(True)
     else:
-        # Detect missing client_secrets.json
-        client_id = getattr(mgr, '_client_id', None)
-        if not client_id:
-            status_label.setText("Missing client_secrets.json")
-            auth_btn.setEnabled(False)
+        from core.gmail.gmail_backend import GmailBackendMode
+        if backend.mode == GmailBackendMode.IMAP:
+            auth_btn.setVisible(False)
         else:
-            status_label.setText("Not signed in")
+            auth_btn.setVisible(True)
             auth_btn.setEnabled(True)
-        auth_btn.setVisible(True)
         out_btn.setVisible(False)
+
+
+def _update_backend_panels(tab: WidgetsTab) -> None:
+    """Show/hide OAuth vs IMAP panels based on current backend mode."""
+    backend = _get_gmail_backend()
+    if backend is None:
+        return
+    from core.gmail.gmail_backend import GmailBackendMode
+    is_imap = backend.mode == GmailBackendMode.IMAP
+    oauth_panel = getattr(tab, '_gmail_oauth_panel', None)
+    imap_panel = getattr(tab, '_gmail_imap_panel', None)
+    if oauth_panel is not None:
+        oauth_panel.setVisible(not is_imap)
+    if imap_panel is not None:
+        imap_panel.setVisible(is_imap)
 
 
 def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
     """Start the OAuth flow. Non-blocking — uses internal threaded HTTP server."""
+    backend = _get_gmail_backend()
+    if backend is None:
+        StyledPopup.show_warning(tab, "Gmail", "Gmail backend unavailable.")
+        return
+
     mgr = _get_gmail_oauth_manager()
     if mgr is None:
-        QMessageBox.warning(tab, "Gmail", "OAuth subsystem unavailable.")
+        StyledPopup.show_warning(tab, "Gmail", "OAuth subsystem unavailable.")
         return
 
     # Wire signals once per tab instance
     if not getattr(tab, '_gmail_auth_signals_wired', False):
         try:
-            mgr.auth_completed.connect(lambda _creds: _refresh_gmail_auth_state(tab))
-            mgr.auth_revoked.connect(lambda: _refresh_gmail_auth_state(tab))
+            backend.auth_state_changed.connect(lambda: _refresh_gmail_auth_state(tab))
             mgr.auth_failed.connect(lambda msg: _on_gmail_auth_failed(tab, msg))
         except Exception as exc:
             logger.warning("[GMAIL_TAB] Signal wiring failed: %s", exc)
         tab._gmail_auth_signals_wired = True
+
+    try:
+        mgr._load_client_config()
+    except Exception:
+        pass
+
+    if not getattr(mgr, '_client_id', None):
+        from core.settings.storage_paths import get_app_data_dir
+        import webbrowser
+        import subprocess
+
+        app_data = get_app_data_dir()
+        popup = StyledPopup(
+            tab,
+            "OAuth Credentials Required",
+            "client_secrets.json is missing.\n\n"
+            "Google requires you to create OAuth credentials in the Cloud Console, "
+            "download the JSON, and place it in your SRPSS app data folder.\n\n"
+            f"Step 1 \u2014 Open Google Cloud Console and create OAuth 2.0 credentials.\n"
+            f"Step 2 \u2014 Download client_secrets.json.\n"
+            f"Step 3 \u2014 Place it here: {app_data}",
+            icon_type="warning",
+            buttons=[
+                ("Open Google Console", "console"),
+                ("Open App Data", "folder"),
+                ("Retry", "retry"),
+                ("Cancel", "cancel"),
+            ],
+        )
+        popup.exec()
+        result = popup.result_value
+        if result == "console":
+            webbrowser.open(
+                "https://console.cloud.google.com/apis/credentials", new=1
+            )
+        elif result == "folder":
+            subprocess.run(["explorer", str(app_data)], check=False)
+        elif result == "retry":
+            try:
+                mgr._load_client_config()
+            except Exception:
+                pass
+            _refresh_gmail_auth_state(tab)
+        return
 
     auth_btn = getattr(tab, 'gmail_authorize_btn', None)
     if auth_btn is not None:
@@ -129,9 +211,9 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
     if status_label is not None:
         status_label.setText("Browser opened — complete sign-in...")
 
-    started = mgr.start_auth_flow()
-    if not started and auth_btn is not None:
-        auth_btn.setEnabled(True)
+    success = backend.start_oauth_flow()
+    if not success:
+        pass
 
 
 def _on_gmail_auth_failed(tab: WidgetsTab, message: str) -> None:
@@ -143,32 +225,104 @@ def _on_gmail_auth_failed(tab: WidgetsTab, message: str) -> None:
     status_label = getattr(tab, 'gmail_auth_status', None)
     if status_label is not None:
         status_label.setText("Sign-in failed")
+    StyledPopup.show_warning(tab, "Gmail Sign-In", message or "Authorization failed.")
+
+
+def _on_gmail_browse_sound(tab: WidgetsTab) -> None:
+    """Open a file dialog to pick the notification sound."""
+    from PySide6.QtWidgets import QFileDialog
+    current = getattr(tab, 'gmail_sound_file', None)
+    start_dir = ""
+    if current is not None and current.text():
+        from pathlib import Path
+        p = Path(current.text())
+        if p.exists():
+            start_dir = str(p.parent)
+    path, _ = QFileDialog.getOpenFileName(
+        tab, "Choose Notification Sound", start_dir,
+        "Audio Files (*.ogg *.wav *.mp3);;All Files (*.*)",
+    )
+    if path and current is not None:
+        current.setText(path)
+
+
+def _on_gmail_test_sound(tab: WidgetsTab) -> None:
+    """Play the currently-configured sound once for testing."""
     try:
-        QMessageBox.warning(tab, "Gmail Sign-In", message or "Authorization failed.")
-    except Exception:
-        pass
+        from core.audio.notification_sound import NotificationSoundPlayer
+        player = NotificationSoundPlayer.instance()
+        path_widget = getattr(tab, 'gmail_sound_file', None)
+        vol_widget = getattr(tab, 'gmail_sound_volume', None)
+        if path_widget is not None and path_widget.text():
+            player.set_file_path(path_widget.text())
+        if vol_widget is not None:
+            player.set_volume(int(vol_widget.value()))
+        player.play()
+    except Exception as exc:
+        logger.warning("[GMAIL_TAB] Test sound failed: %s", exc)
+        StyledPopup.show_warning(tab, "Gmail", f"Test sound failed: {exc}")
 
 
 def _on_gmail_sign_out_clicked(tab: WidgetsTab) -> None:
-    """Revoke and clear local credentials."""
-    mgr = _get_gmail_oauth_manager()
-    if mgr is None:
+    """Revoke and clear credentials for the active backend."""
+    backend = _get_gmail_backend()
+    if backend is None:
         return
-    confirm = QMessageBox.question(
-        tab, "Sign Out of Gmail",
-        "Revoke Gmail access and delete the local token?",
-        QMessageBox.Yes | QMessageBox.No,
-        QMessageBox.No,
-    )
-    if confirm != QMessageBox.Yes:
+    if not StyledPopup.question(tab, "Sign Out of Gmail", "Remove Gmail credentials and sign out?"):
         return
     try:
-        if mgr.is_authenticated:
-            mgr.revoke_credentials()
-        else:
-            mgr.clear_local_credentials()
+        backend.sign_out()
     except Exception as exc:
         logger.warning("[GMAIL_TAB] Sign-out failed: %s", exc)
+    _refresh_gmail_auth_state(tab)
+
+
+def _on_gmail_backend_changed(tab: WidgetsTab, mode_text: str) -> None:
+    """Handle backend mode combo box change."""
+    from core.gmail.gmail_backend import GmailBackendMode
+    backend = _get_gmail_backend()
+    if backend is None:
+        return
+    backend.mode = GmailBackendMode.IMAP if mode_text == "IMAP (App Password)" else GmailBackendMode.OAUTH
+    _refresh_gmail_auth_state(tab)
+
+
+def _on_gmail_imap_save(tab: WidgetsTab) -> None:
+    """Save IMAP credentials and test connection."""
+    backend = _get_gmail_backend()
+    if backend is None:
+        return
+    email_field = getattr(tab, 'gmail_imap_email', None)
+    pw_field = getattr(tab, 'gmail_imap_password', None)
+    if email_field is None or pw_field is None:
+        return
+    email_addr = email_field.text().strip()
+    app_pw = pw_field.text().strip()
+    if not email_addr or not app_pw:
+        StyledPopup.show_warning(tab, "Gmail IMAP", "Email and App Password are both required.")
+        return
+
+    status_label = getattr(tab, 'gmail_auth_status', None)
+    if status_label:
+        status_label.setText("Testing connection...")
+
+    backend.save_imap_credentials(email_addr, app_pw)
+    success = backend.test_imap_connection()
+    if success:
+        if status_label:
+            status_label.setText(f"Connected (IMAP: {email_addr})")
+        StyledPopup.show_success(tab, "Gmail IMAP", "Connection successful!")
+    else:
+        if status_label:
+            status_label.setText("IMAP login failed")
+        StyledPopup.show_warning(
+            tab, "Gmail IMAP",
+            "Login failed. Check your email and app password.\n\n"
+            "Make sure:\n"
+            "  - 2-Step Verification is enabled on your Google account\n"
+            "  - You generated an App Password at myaccount.google.com/apppasswords\n"
+            "  - You entered the 16-character app password (not your regular password)"
+        )
     _refresh_gmail_auth_state(tab)
 
 
@@ -209,15 +363,93 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _gc.setSpacing(12)
 
     gmail_info = QLabel(
-        "Shows recent Gmail messages. Requires OAuth credentials "
-        "(client_secrets.json) in your SRPSS app data folder."
+        "Shows recent Gmail messages. Choose a backend below to connect."
     )
     gmail_info.setWordWrap(True)
     gmail_info.setStyleSheet(INFO_LABEL_STYLE)
     _gc.addWidget(gmail_info)
 
     # ------------------------------------------------------------------
-    # OAuth: Authorize / Sign Out
+    # Backend mode selector
+    # ------------------------------------------------------------------
+    mode_row = _aligned_row(_gc, "Backend:")
+    tab.gmail_backend_combo = StyledComboBox()
+    tab.gmail_backend_combo.addItems(["IMAP (App Password)", "OAuth (Advanced)"])
+    tab.gmail_backend_combo.setMinimumWidth(180)
+    backend = _get_gmail_backend()
+    if backend is not None:
+        from core.gmail.gmail_backend import GmailBackendMode
+        if backend.mode == GmailBackendMode.IMAP:
+            tab.gmail_backend_combo.setCurrentIndex(0)
+        else:
+            tab.gmail_backend_combo.setCurrentIndex(1)
+    tab.gmail_backend_combo.currentTextChanged.connect(
+        lambda text: _on_gmail_backend_changed(tab, text)
+    )
+    mode_row.addWidget(tab.gmail_backend_combo)
+    mode_row.addStretch()
+
+    # ------------------------------------------------------------------
+    # IMAP panel: email + app password + save/test
+    # ------------------------------------------------------------------
+    tab._gmail_imap_panel = QWidget()
+    imap_layout = QVBoxLayout(tab._gmail_imap_panel)
+    imap_layout.setContentsMargins(0, 0, 0, 0)
+    imap_layout.setSpacing(8)
+
+    imap_info = QLabel(
+        "Enter your Gmail address and an <b>App Password</b>.<br>"
+        "Create one at <a href='https://myaccount.google.com/apppasswords'>"
+        "myaccount.google.com/apppasswords</a> (requires 2-Step Verification)."
+    )
+    imap_info.setWordWrap(True)
+    imap_info.setOpenExternalLinks(True)
+    imap_info.setStyleSheet(INFO_LABEL_STYLE)
+    imap_layout.addWidget(imap_info)
+
+    email_row = _aligned_row(imap_layout, "Email:")
+    tab.gmail_imap_email = QLineEdit()
+    tab.gmail_imap_email.setPlaceholderText("you@gmail.com")
+    tab.gmail_imap_email.setMinimumWidth(260)
+    if backend is not None and getattr(backend, '_imap_email', None):
+        tab.gmail_imap_email.setText(backend._imap_email)
+    email_row.addWidget(tab.gmail_imap_email)
+    email_row.addStretch()
+
+    pw_row = _aligned_row(imap_layout, "App Password:")
+    tab.gmail_imap_password = QLineEdit()
+    tab.gmail_imap_password.setPlaceholderText("xxxx xxxx xxxx xxxx")
+    tab.gmail_imap_password.setEchoMode(QLineEdit.EchoMode.Password)
+    tab.gmail_imap_password.setMinimumWidth(260)
+    pw_row.addWidget(tab.gmail_imap_password)
+
+    tab.gmail_imap_save_btn = QPushButton("Save && Test")
+    tab.gmail_imap_save_btn.clicked.connect(lambda: _on_gmail_imap_save(tab))
+    pw_row.addWidget(tab.gmail_imap_save_btn)
+    pw_row.addStretch()
+
+    _gc.addWidget(tab._gmail_imap_panel)
+
+    # ------------------------------------------------------------------
+    # OAuth panel (shown when OAuth mode selected)
+    # ------------------------------------------------------------------
+    tab._gmail_oauth_panel = QWidget()
+    oauth_layout = QVBoxLayout(tab._gmail_oauth_panel)
+    oauth_layout.setContentsMargins(0, 0, 0, 0)
+    oauth_layout.setSpacing(8)
+
+    oauth_info = QLabel(
+        "OAuth requires a Google Cloud project with gmail.metadata scope. "
+        "This is a <b>restricted</b> scope — in Testing mode, tokens expire every 7 days."
+    )
+    oauth_info.setWordWrap(True)
+    oauth_info.setStyleSheet(INFO_LABEL_STYLE)
+    oauth_layout.addWidget(oauth_info)
+
+    _gc.addWidget(tab._gmail_oauth_panel)
+
+    # ------------------------------------------------------------------
+    # Account status / Authorize / Sign Out (shared between modes)
     # ------------------------------------------------------------------
     auth_row = _aligned_row(_gc, "Account:")
     tab.gmail_auth_status = QLabel("")
@@ -472,6 +704,52 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_border_opacity_label.setMinimumWidth(50)
     border_opacity_row.addWidget(tab.gmail_border_opacity_label)
 
+    _gc.addSpacing(8)
+
+    # ------------------------------------------------------------------
+    # Notification sound
+    # ------------------------------------------------------------------
+    tab.gmail_play_sound = QCheckBox("Play Sound on New Mail")
+    tab.gmail_play_sound.setProperty("circleIndicator", True)
+    tab.gmail_play_sound.setChecked(tab._default_bool('gmail', 'play_sound_on_new_mail', False))
+    tab.gmail_play_sound.stateChanged.connect(tab._save_settings)
+    _gc.addWidget(tab.gmail_play_sound)
+
+    # Sound file path
+    sound_path_row = _aligned_row(_gc, "Sound File:")
+    tab.gmail_sound_file = QLineEdit()
+    tab.gmail_sound_file.setText(tab._default_str('gmail', 'sound_file_path', 'resources/tutuogg.ogg'))
+    tab.gmail_sound_file.setPlaceholderText("Path to .ogg/.wav/.mp3")
+    tab.gmail_sound_file.setMinimumWidth(220)
+    tab.gmail_sound_file.textChanged.connect(tab._save_settings)
+    sound_path_row.addWidget(tab.gmail_sound_file)
+
+    tab.gmail_sound_browse_btn = QPushButton("Browse...")
+    tab.gmail_sound_browse_btn.clicked.connect(lambda: _on_gmail_browse_sound(tab))
+    sound_path_row.addWidget(tab.gmail_sound_browse_btn)
+
+    tab.gmail_sound_test_btn = QPushButton("Test")
+    tab.gmail_sound_test_btn.clicked.connect(lambda: _on_gmail_test_sound(tab))
+    sound_path_row.addWidget(tab.gmail_sound_test_btn)
+    sound_path_row.addStretch()
+
+    # Sound volume
+    sound_vol_row = _aligned_row(_gc, "Sound Volume:")
+    tab.gmail_sound_volume = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.gmail_sound_volume.setMinimum(0)
+    tab.gmail_sound_volume.setMaximum(100)
+    tab.gmail_sound_volume.setValue(tab._default_int('gmail', 'sound_volume_percent', 50))
+    tab.gmail_sound_volume.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.gmail_sound_volume.setTickInterval(10)
+    tab.gmail_sound_volume.valueChanged.connect(tab._save_settings)
+    sound_vol_row.addWidget(tab.gmail_sound_volume)
+    tab.gmail_sound_volume_label = QLabel(f"{tab.gmail_sound_volume.value()}%")
+    tab.gmail_sound_volume.valueChanged.connect(
+        lambda v: tab.gmail_sound_volume_label.setText(f"{v}%")
+    )
+    tab.gmail_sound_volume_label.setMinimumWidth(50)
+    sound_vol_row.addWidget(tab.gmail_sound_volume_label)
+
     # Disable all controls if gated
     if gmail_gated:
         tab._gmail_controls_container.setEnabled(False)
@@ -543,6 +821,12 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.gmail_border_opacity.setValue(border_opacity_pct)
     tab.gmail_border_opacity_label.setText(f"{border_opacity_pct}%")
 
+    # Sound settings
+    tab.gmail_play_sound.setChecked(tab._config_bool('gmail', gmail_config, 'play_sound_on_new_mail', False))
+    tab.gmail_sound_file.setText(tab._config_str('gmail', gmail_config, 'sound_file_path', 'resources/tutuogg.ogg'))
+    tab.gmail_sound_volume.setValue(tab._config_int('gmail', gmail_config, 'sound_volume_percent', 50))
+    tab.gmail_sound_volume_label.setText(f"{tab.gmail_sound_volume.value()}%")
+
     # Colors
     color_data = gmail_config.get('color', tab._widget_default('gmail', 'color', [255, 255, 255, 230]))
     tab._gmail_color = QColor(*color_data)
@@ -560,7 +844,15 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
     _apply_color('gmail_bg_color_btn', '_gmail_bg_color')
     _apply_color('gmail_border_color_btn', '_gmail_border_color')
 
+    # Sync backend combo from persisted GmailBackend config
+    backend = _get_gmail_backend()
+    combo = getattr(tab, 'gmail_backend_combo', None)
+    if backend is not None and combo is not None:
+        from core.gmail.gmail_backend import GmailBackendMode
+        combo.setCurrentIndex(0 if backend.mode == GmailBackendMode.IMAP else 1)
+
     _update_gmail_enabled_visibility(tab)
+    _refresh_gmail_auth_state(tab)
 
 
 def save_gmail_settings(tab: WidgetsTab) -> dict:
@@ -593,6 +885,9 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'border_color': [tab._gmail_border_color.red(), tab._gmail_border_color.green(),
                          tab._gmail_border_color.blue(), tab._gmail_border_color.alpha()],
         'border_opacity': tab.gmail_border_opacity.value() / 100.0,
+        'play_sound_on_new_mail': tab.gmail_play_sound.isChecked(),
+        'sound_file_path': tab.gmail_sound_file.text().strip() or 'resources/tutuogg.ogg',
+        'sound_volume_percent': tab.gmail_sound_volume.value(),
     }
     mon_text = tab.gmail_monitor_combo.currentText()
     gmail_config['monitor'] = mon_text if mon_text == 'ALL' else int(mon_text)

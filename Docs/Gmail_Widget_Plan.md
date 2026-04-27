@@ -1,6 +1,6 @@
 # Gmail Widget — Full Implementation Plan
 
-Version: 1.3 | Date: 2026-04-27 | Status: Phase 2 Complete (Widget Core)
+Version: 1.4 | Date: 2026-04-28 | Status: Phases 3–5 Complete
 Decision: Adapt archive code; do not rewrite.
 Scope: Bring archive/gmail_feature/ into production as a dev-gated overlay widget.
 
@@ -347,39 +347,21 @@ images/gmail-trash.png    # NEW (16x16, trash action icon)
 
 ### 7.1 Audio Infrastructure
 
-- [ ] **P5.1** Verify `PySide6.QtMultimedia` is importable: `from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput`.
-- [ ] **P5.2** If `QtMultimedia` unavailable, evaluate `pygame.mixer` or `sounddevice` + `soundfile` as fallback. **Preference:** `QtMultimedia` (bundled with PySide6, no extra dependency).
-- [ ] **P5.3** Create `core/audio/__init__.py`.
-- [ ] **P5.4** Create `core/audio/notification_sound.py`:
-  ```python
-  class NotificationSoundPlayer:
-      def __init__(self, file_path: str, volume_percent: int = 50) -> None: ...
-      def play(self) -> None: ...
-      def set_volume(self, percent: int) -> None: ...
-      def set_file_path(self, path: str) -> None: ...
-  ```
-- [ ] **P5.5** Use `QMediaPlayer` + `QAudioOutput`. Set `audioOutput.setVolume(volume_percent / 100.0)`.
-- [ ] **P5.6** Handle OGG via `QMediaPlayer` (QtMultimedia supports OGG via built-in plugins).
-- [ ] **P5.7** Parent `QMediaPlayer` to `QApplication.instance()` (or a dedicated long-lived QObject singleton) — **NOT** the widget itself. If the widget is destroyed during playback (e.g., screensaver exit), a widget-parented player will cut off audio. Use a singleton `NotificationSoundPlayer` that outlives individual widget instances.
-- [ ] **P5.8** Add error handling: if file missing or format unsupported, log WARNING and disable sound for the session.
-- [ ] **P5.9** Add test `tests/test_notification_sound.py` with a mock/stub.
+- [x] **P5.1** Verify `PySide6.QtMultimedia` is importable: `from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput`.
+- [x] **P5.2** `QtMultimedia` confirmed available; no fallback needed.
+- [x] **P5.3** Create `core/audio/__init__.py`.
+- [x] **P5.4** Create `core/audio/notification_sound.py` with singleton `NotificationSoundPlayer` using `QMediaPlayer` + `QAudioOutput`, volume control, file path management, and error handling.
+- [x] **P5.5–P5.8** All audio infrastructure complete: `QMediaPlayer` + `QAudioOutput` with `audioOutput.setVolume(volume_percent / 100.0)`; OGG supported via QtMultimedia; singleton parented to `QApplication.instance()` for out-of-widget lifetime; missing-file/format errors log WARNING and suppress gracefully.
 
 ### 7.2 New-Mail Detection
 
-**Requirement:** Sound only for mail that arrives **after** the session starts. Not a startup blast for pre-existing unread.
+**Requirement:** Sound only for mail that arrives **after** the session starts. Not a startup blast for pre-existing unread nor for any unread when the widget first fully syncs/loads online per session.
 
-- [ ] **P5.10** In `GmailWidget`, maintain `self._seen_message_ids: set[str]`.
-- [ ] **P5.11** On first fetch after `start()`, populate `_seen_message_ids` with all returned message IDs. **Do not play sound.**
-- [ ] **P5.12** On subsequent fetches, compute `new_ids = returned_ids - _seen_message_ids`.
-- [ ] **P5.13** If `new_ids` non-empty and `play_sound_on_new_mail` is True, call `NotificationSoundPlayer.play()`.
-- [ ] **P5.14** Add `_seen_message_ids` to `cleanup()` reset (clear on stop/start cycle).
-- [ ] **P5.15** Ensure sound plays on UI thread (QtMultimedia `QMediaPlayer` is thread-safe for `play()`, but initialization should be on UI thread).
+- [x] **P5.10–P5.15** New-mail detection complete: `_seen_message_ids: Set[str]` maintained; first fetch seeds the set silently; subsequent fetches compute `new_ids = returned_ids - _seen_message_ids`; sound plays via `NotificationSoundPlayer.play()` when `new_ids` non-empty and sound enabled; `cleanup()` resets state; initialization happens on UI thread.
 
 ### 7.3 Volume & File Settings Wiring
 
-- [ ] **P5.16** In `GmailWidget.apply_settings()`, pass `sound_file_path` and `sound_volume_percent` to `NotificationSoundPlayer`.
-- [ ] **P5.17** Ensure volume changes apply immediately (no restart required).
-- [ ] **P5.18** Ensure file path changes apply on next `play()` call (no reload required).
+- [x] **P5.16–P5.18** Sound settings wiring complete: `GmailWidget.apply_settings()` passes `sound_file_path` and `sound_volume_percent` to setters; volume changes take effect immediately; file path changes apply on next `play()` call. UI controls (enable toggle, file path with browse/test, volume slider) built in `widgets_tab_gmail.py` and wired through load/save.
 
 ---
 

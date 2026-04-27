@@ -35,7 +35,10 @@ def open_url(url: str, *, fallback: bool = True) -> bool:
         return False
 
     try:
-        webbrowser.open(url)
+        # new=1 forces a new browser window (not just a tab), which is
+        # important for OAuth flows where the user needs to see both the
+        # authorization page and the app simultaneously.
+        webbrowser.open(url, new=1)
         logger.debug("[URL-LAUNCH] Opened via webbrowser: %s", url)
         return True
     except Exception as exc:

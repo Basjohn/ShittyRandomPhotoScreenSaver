@@ -4,14 +4,14 @@ from __future__ import annotations
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from PySide6.QtCore import QPoint, QRect, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QWidget
 
-from core.gmail.gmail_client import EmailMetadata, GmailClient, GmailLabel
-from core.gmail.gmail_oauth import GmailOAuthManager
+from core.gmail.gmail_backend import GmailBackend
+from core.gmail.gmail_client import EmailMetadata, GmailLabel
 from core.logging.logger import get_logger
 from core.settings.storage_paths import get_app_data_dir
 from core.threading.manager import ThreadManager
@@ -50,8 +50,8 @@ class GmailWidget(BaseOverlayWidget):
         super().__init__(parent, position=overlay_pos, overlay_name="gmail")
         self._gmail_position = position
 
-        self._oauth_manager: GmailOAuthManager = GmailOAuthManager.instance()
-        self._gmail_client: Optional[GmailClient] = None
+        self._backend: GmailBackend = GmailBackend.instance()
+        self._gmail_client = None  # GmailClient or GmailImapClient
         self._emails: List[EmailMetadata] = []
         self._unread_count = 0
         self._has_displayed_valid_data = False
@@ -88,6 +88,15 @@ class GmailWidget(BaseOverlayWidget):
         self._update_timer: Optional[QTimer] = None
         self._fetch_in_progress = False
         self._fetch_lock = threading.Lock()
+
+        # New-mail detection: only fire sound for messages that arrive after
+        # the first fetch of this session. Pre-existing unread on first fetch
+        # is silently absorbed.
+        self._seen_message_ids: Set[str] = set()
+        self._seen_initialised: bool = False
+        self._play_sound_on_new_mail: bool = False
+        self._sound_file_path: str = "resources/tutuogg.ogg"
+        self._sound_volume_percent: int = 50
 
         if settings is not None:
             self.apply_settings(settings)
@@ -169,8 +178,8 @@ class GmailWidget(BaseOverlayWidget):
         logger.debug("[LIFECYCLE] GmailWidget initialized")
 
     def _activate_impl(self) -> None:
-        if self._oauth_manager.is_authenticated:
-            self._gmail_client = GmailClient(self._oauth_manager)
+        if self._backend.is_authenticated:
+            self._gmail_client = self._backend.client
         cached = self._load_email_cache()
         if cached:
             self._emails = cached
@@ -178,8 +187,14 @@ class GmailWidget(BaseOverlayWidget):
             self._has_displayed_valid_data = True
             self._update_card_height_from_content(len(self._emails))
             self.update()
+        else:
+            self._update_card_height_from_content(1)
+            self.update()
         self._schedule_timer()
         self._fetch_emails()
+
+        # Register for coordinated fade-in (must happen before compositor_ready fires)
+        self._request_fade_in()
         logger.debug("[LIFECYCLE] GmailWidget activated")
 
     def _deactivate_impl(self) -> None:
@@ -214,6 +229,10 @@ class GmailWidget(BaseOverlayWidget):
             self.deactivate()
 
     def cleanup(self) -> None:
+        # Reset new-mail detection state so a subsequent start() re-absorbs
+        # the existing inbox without firing the sound for old messages.
+        self._seen_message_ids = set()
+        self._seen_initialised = False
         super().cleanup()
 
     # ------------------------------------------------------------------
@@ -238,7 +257,9 @@ class GmailWidget(BaseOverlayWidget):
                 logger.debug("[GMAIL] Fetch already in progress, skipping")
                 return
             self._fetch_in_progress = True
-        if self._gmail_client is None or not self._oauth_manager.is_authenticated:
+        # Re-acquire client from backend each fetch in case mode/credentials changed
+        self._gmail_client = self._backend.client if self._backend.is_authenticated else None
+        if self._gmail_client is None:
             with self._fetch_lock:
                 self._fetch_in_progress = False
             logger.debug("[GMAIL] Not authenticated, skipping fetch")
@@ -246,7 +267,10 @@ class GmailWidget(BaseOverlayWidget):
             self.update()
             return
         try:
-            ThreadManager().submit_io_task(self._fetch_emails_async)
+            if self._ensure_thread_manager("GmailWidget._fetch_emails"):
+                self._thread_manager.submit_io_task(self._fetch_emails_async)
+            else:
+                self._fetch_emails_sync()
         except Exception:
             self._fetch_emails_sync()
 
@@ -258,19 +282,19 @@ class GmailWidget(BaseOverlayWidget):
             )
             unread = sum(1 for e in emails if e.is_unread)
             try:
-                ThreadManager().invoke_in_ui_thread(
-                    lambda: self._on_emails_fetched(emails, unread)
+                ThreadManager.run_on_ui_thread(
+                    self._on_emails_fetched, emails, unread
                 )
             except Exception:
-                logger.critical("[GMAIL] invoke_in_ui_thread failed, dropping fetch result")
+                logger.critical("[GMAIL] run_on_ui_thread failed, dropping fetch result")
         except Exception as exc:
             logger.error("[GMAIL] Fetch failed: %s", exc)
             try:
-                ThreadManager().invoke_in_ui_thread(
-                    lambda err=str(exc): self._on_fetch_error(err)
+                ThreadManager.run_on_ui_thread(
+                    self._on_fetch_error, str(exc)
                 )
             except Exception:
-                logger.critical("[GMAIL] invoke_in_ui_thread failed, dropping error")
+                logger.critical("[GMAIL] run_on_ui_thread failed, dropping error")
         finally:
             with self._fetch_lock:
                 self._fetch_in_progress = False
@@ -295,6 +319,7 @@ class GmailWidget(BaseOverlayWidget):
     ) -> None:
         self._emails = sorted(emails, key=lambda e: (not e.is_unread, -e.date.timestamp()))
         self._last_error = None
+        self._detect_new_mail(emails)
         if unread_count != self._unread_count:
             self._unread_count = unread_count
             self.unread_count_changed.emit(unread_count)
@@ -310,6 +335,47 @@ class GmailWidget(BaseOverlayWidget):
             self.update()
             if not self.isVisible():
                 self._request_fade_in()
+
+    def _detect_new_mail(self, emails: List[EmailMetadata]) -> None:
+        """Detect newly-arrived unread messages and play notification sound.
+
+        First fetch of the session populates the seen set without playing
+        sound (suppresses startup blast for pre-existing unread).
+        """
+        try:
+            current_unread_ids = {e.id for e in emails if getattr(e, "is_unread", False)}
+        except Exception as exc:
+            logger.debug("[GMAIL] _detect_new_mail id collection failed: %s", exc)
+            return
+
+        if not self._seen_initialised:
+            # Absorb the existing inbox quietly.
+            self._seen_message_ids = current_unread_ids
+            self._seen_initialised = True
+            return
+
+        new_ids = current_unread_ids - self._seen_message_ids
+        # Always update the seen set so messages don't re-trigger.
+        self._seen_message_ids = current_unread_ids
+
+        if not new_ids:
+            return
+        if not self._play_sound_on_new_mail:
+            return
+
+        try:
+            from core.audio.notification_sound import NotificationSoundPlayer
+            player = NotificationSoundPlayer.instance()
+            # Push current settings on every play in case the user changed
+            # path/volume mid-session.
+            if player.file_path != self._sound_file_path:
+                player.set_file_path(self._sound_file_path)
+            if player.volume_percent != self._sound_volume_percent:
+                player.set_volume(self._sound_volume_percent)
+            player.play()
+            logger.info("[GMAIL] New mail detected (%d new) — sound played", len(new_ids))
+        except Exception as exc:
+            logger.warning("[GMAIL] Notification sound failed: %s", exc)
 
     def _on_fetch_error(self, error_msg: str) -> None:
         self._last_error = error_msg
@@ -606,9 +672,9 @@ class GmailWidget(BaseOverlayWidget):
         return False
 
     def _trigger_auth_flow(self) -> None:
-        logger.info("[GMAIL] Requesting OAuth authentication")
+        logger.info("[GMAIL] Requesting authentication")
         try:
-            self._oauth_manager.start_auth_flow()
+            self._backend.start_oauth_flow()
         except Exception as e:
             logger.error("[GMAIL] Auth flow failed: %s", e)
 
@@ -669,7 +735,10 @@ class GmailWidget(BaseOverlayWidget):
         except ImportError:
             pass
         try:
-            ThreadManager().submit_io_task(lambda: action_fn(message_id))
+            if widget_ref._ensure_thread_manager("GmailWidget._dispatch_action"):
+                widget_ref._thread_manager.submit_io_task(lambda: action_fn(message_id))
+            else:
+                action_fn(message_id)
         except Exception:
             action_fn(message_id)
 
@@ -677,7 +746,7 @@ class GmailWidget(BaseOverlayWidget):
         if self._gmail_client and self._gmail_client.mark_as_read(message_id):
             logger.info("[GMAIL] Marked %s as read", message_id)
             try:
-                ThreadManager().invoke_in_ui_thread(self._fetch_emails)
+                ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
 
@@ -685,7 +754,7 @@ class GmailWidget(BaseOverlayWidget):
         if self._gmail_client and self._gmail_client.archive_message(message_id):
             logger.info("[GMAIL] Archived %s", message_id)
             try:
-                ThreadManager().invoke_in_ui_thread(self._fetch_emails)
+                ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
 
@@ -693,7 +762,7 @@ class GmailWidget(BaseOverlayWidget):
         if self._gmail_client and self._gmail_client.spam_message(message_id):
             logger.info("[GMAIL] Marked %s as spam", message_id)
             try:
-                ThreadManager().invoke_in_ui_thread(self._fetch_emails)
+                ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
 
@@ -701,7 +770,7 @@ class GmailWidget(BaseOverlayWidget):
         if self._gmail_client and self._gmail_client.trash_message(message_id):
             logger.info("[GMAIL] Trashed %s", message_id)
             try:
-                ThreadManager().invoke_in_ui_thread(self._fetch_emails)
+                ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
 
@@ -724,6 +793,9 @@ class GmailWidget(BaseOverlayWidget):
         self.set_auto_title_case(getattr(settings, "auto_title_case", self._auto_title_case))
         self.set_show_unread_count_in_header(getattr(settings, "show_unread_count_in_header", self._show_unread_count_in_header))
         self.set_desaturate_when_no_unread(getattr(settings, "desaturate_when_no_unread", self._desaturate_when_no_unread))
+        self.set_play_sound_on_new_mail(getattr(settings, "play_sound_on_new_mail", self._play_sound_on_new_mail))
+        self.set_sound_file_path(getattr(settings, "sound_file_path", self._sound_file_path))
+        self.set_sound_volume_percent(getattr(settings, "sound_volume_percent", self._sound_volume_percent))
 
     def _apply_settings_dict(self, d: Dict[str, Any]) -> None:
         self.set_limit(d.get("limit", self._limit))
@@ -737,6 +809,9 @@ class GmailWidget(BaseOverlayWidget):
         self.set_auto_title_case(d.get("auto_title_case", self._auto_title_case))
         self.set_show_unread_count_in_header(d.get("show_unread_count_in_header", self._show_unread_count_in_header))
         self.set_desaturate_when_no_unread(d.get("desaturate_when_no_unread", self._desaturate_when_no_unread))
+        self.set_play_sound_on_new_mail(d.get("play_sound_on_new_mail", self._play_sound_on_new_mail))
+        self.set_sound_file_path(d.get("sound_file_path", self._sound_file_path))
+        self.set_sound_volume_percent(d.get("sound_volume_percent", self._sound_volume_percent))
 
     def set_limit(self, limit: int) -> None:
         self._limit = max(5, min(10, limit))
@@ -780,4 +855,37 @@ class GmailWidget(BaseOverlayWidget):
     def set_desaturate_when_no_unread(self, desaturate: bool) -> None:
         self._desaturate_when_no_unread = bool(desaturate)
         self.update()
+
+    # ------------------------------------------------------------------
+    # Notification sound
+    # ------------------------------------------------------------------
+
+    def set_play_sound_on_new_mail(self, enabled: bool) -> None:
+        self._play_sound_on_new_mail = bool(enabled)
+
+    def set_sound_file_path(self, path: str) -> None:
+        path = str(path or "")
+        if path == self._sound_file_path:
+            return
+        self._sound_file_path = path
+        # Push to singleton so the next play() picks up the change.
+        try:
+            from core.audio.notification_sound import NotificationSoundPlayer
+            NotificationSoundPlayer.instance().set_file_path(path)
+        except Exception as exc:
+            logger.debug("[GMAIL] sound set_file_path defer failed: %s", exc)
+
+    def set_sound_volume_percent(self, percent: int) -> None:
+        try:
+            value = max(0, min(100, int(percent)))
+        except (TypeError, ValueError):
+            value = 50
+        if value == self._sound_volume_percent:
+            return
+        self._sound_volume_percent = value
+        try:
+            from core.audio.notification_sound import NotificationSoundPlayer
+            NotificationSoundPlayer.instance().set_volume(value)
+        except Exception as exc:
+            logger.debug("[GMAIL] sound set_volume defer failed: %s", exc)
 
