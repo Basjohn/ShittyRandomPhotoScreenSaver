@@ -14,6 +14,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional
 
+from core.gmail.gmail_deeplinks import gmail_thread_url
 from core.logging.logger import get_logger
 from core.windows.secure_url_launcher import open_url
 
@@ -50,6 +51,13 @@ class EmailMetadata:
     date: datetime
     labels: tuple[str, ...]
     is_unread: bool
+    provider: str = "gmail_api"
+    account_email: Optional[str] = None
+    imap_uid: Optional[str] = None
+    rfc822_message_id: Optional[str] = None
+    gmail_thread_id: Optional[str] = None
+    gmail_message_id: Optional[str] = None
+    open_url: Optional[str] = None
 
     def __post_init__(self):
         # Security invariant: metadata-only by design
@@ -166,6 +174,10 @@ class GmailClient:
             date=date,
             labels=labels,
             is_unread="UNREAD" in labels,
+            provider="gmail_api",
+            gmail_thread_id=data.get("threadId", message_id),
+            gmail_message_id=message_id,
+            open_url=f"https://mail.google.com/mail/u/0/#all/{data.get('threadId', message_id)}",
         )
 
     def get_unread_count(self, label_id: str = "INBOX") -> int:
@@ -226,5 +238,8 @@ class GmailClient:
 
     def open_message_in_browser(self, message_id: str) -> bool:
         """Open the Gmail web interface for a specific message."""
-        url = f"https://mail.google.com/mail/u/0/#inbox/{message_id}"
+        try:
+            url = gmail_thread_url(message_id)
+        except (TypeError, ValueError):
+            url = f"https://mail.google.com/mail/u/0/#all/{message_id}"
         return open_url(url)

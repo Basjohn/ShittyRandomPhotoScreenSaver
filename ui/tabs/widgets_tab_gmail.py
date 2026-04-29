@@ -484,6 +484,18 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         on_toggle=lambda checked: tab.set_gmail_bucket_state("layout", checked),
     )
 
+    # Monitor
+    disp_row = _aligned_row(layout_inner, "Display:")
+    tab.gmail_monitor_combo = StyledComboBox(size_variant="compact")
+    tab.gmail_monitor_combo.addItems(["ALL", "1", "2", "3"])
+    tab.gmail_monitor_combo.currentTextChanged.connect(tab._save_settings)
+    tab.gmail_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
+    tab.gmail_monitor_combo.setMinimumWidth(120)
+    disp_row.addWidget(tab.gmail_monitor_combo)
+    gmail_monitor_default = tab._widget_default('gmail', 'monitor', 'ALL')
+    tab._set_combo_text(tab.gmail_monitor_combo, str(gmail_monitor_default))
+    disp_row.addStretch()
+
     # Position
     pos_row = _aligned_row(layout_inner, "Position:")
     tab.gmail_position = StyledComboBox()
@@ -503,17 +515,17 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     pos_row.addWidget(tab.gmail_stack_status)
     pos_row.addStretch()
 
-    # Monitor
-    disp_row = _aligned_row(layout_inner, "Display:")
-    tab.gmail_monitor_combo = StyledComboBox(size_variant="compact")
-    tab.gmail_monitor_combo.addItems(["ALL", "1", "2", "3"])
-    tab.gmail_monitor_combo.currentTextChanged.connect(tab._save_settings)
-    tab.gmail_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
-    tab.gmail_monitor_combo.setMinimumWidth(120)
-    disp_row.addWidget(tab.gmail_monitor_combo)
-    gmail_monitor_default = tab._widget_default('gmail', 'monitor', 'ALL')
-    tab._set_combo_text(tab.gmail_monitor_combo, str(gmail_monitor_default))
-    disp_row.addStretch()
+    # Width
+    width_row = _aligned_row(layout_inner, "Width:")
+    tab.gmail_width = QSpinBox()
+    tab.gmail_width.setRange(200, 1200)
+    tab.gmail_width.setSingleStep(10)
+    tab.gmail_width.setValue(tab._default_int('gmail', 'width', 600))
+    tab.gmail_width.setAccelerated(True)
+    tab.gmail_width.setSuffix(" px")
+    tab.gmail_width.valueChanged.connect(tab._save_settings)
+    width_row.addWidget(tab.gmail_width)
+    width_row.addStretch()
 
     # Limit
     limit_row = _aligned_row(layout_inner, "Max Emails:")
@@ -545,6 +557,15 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_filter_label.textChanged.connect(tab._save_settings)
     filter_row.addWidget(tab.gmail_filter_label)
     filter_row.addStretch()
+
+    account_slot_row = _aligned_row(layout_inner, "Account Slot:")
+    tab.gmail_account_slot = QSpinBox()
+    tab.gmail_account_slot.setRange(0, 9)
+    tab.gmail_account_slot.setValue(tab._default_int('gmail', 'account_slot', 0))
+    tab.gmail_account_slot.setAccelerated(True)
+    tab.gmail_account_slot.valueChanged.connect(tab._save_settings)
+    account_slot_row.addWidget(tab.gmail_account_slot)
+    account_slot_row.addStretch()
 
     # Appearance bucket
     _, _, appearance_inner = build_bucket_toggle(
@@ -619,6 +640,12 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_show_unread_count.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_unread_count)
 
+    tab.gmail_show_header_border = QCheckBox("Show header border")
+    tab.gmail_show_header_border.setProperty("circleIndicator", True)
+    tab.gmail_show_header_border.setChecked(tab._default_bool('gmail', 'show_header_border', True))
+    tab.gmail_show_header_border.stateChanged.connect(tab._save_settings)
+    appearance_inner.addWidget(tab.gmail_show_header_border)
+
     tab.gmail_show_timestamp = QCheckBox("Show time received")
     tab.gmail_show_timestamp.setProperty("circleIndicator", True)
     tab.gmail_show_timestamp.setChecked(tab._default_bool('gmail', 'show_timestamp', True))
@@ -630,6 +657,50 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_auto_title_case.setChecked(tab._default_bool('gmail', 'auto_title_case', True))
     tab.gmail_auto_title_case.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_auto_title_case)
+
+    tab.gmail_clean_sender_names = QCheckBox("Clean Up Sender Names")
+    tab.gmail_clean_sender_names.setProperty("circleIndicator", True)
+    tab.gmail_clean_sender_names.setChecked(tab._default_bool('gmail', 'clean_sender_names', True))
+    tab.gmail_clean_sender_names.stateChanged.connect(tab._save_settings)
+    appearance_inner.addWidget(tab.gmail_clean_sender_names)
+
+    text_limit_row = _aligned_row(appearance_inner, "Text Limits:")
+    tab.gmail_max_sender_words = QSpinBox()
+    tab.gmail_max_sender_words.setRange(0, 20)
+    tab.gmail_max_sender_words.setSpecialValueText("Off")
+    tab.gmail_max_sender_words.setValue(tab._default_int('gmail', 'max_sender_words', 3))
+    tab.gmail_max_sender_words.setAccelerated(True)
+    tab.gmail_max_sender_words.valueChanged.connect(tab._save_settings)
+    text_limit_row.addWidget(create_inline_label("Sender words"))
+    text_limit_row.addWidget(tab.gmail_max_sender_words)
+
+    tab.gmail_sender_column_width = QSpinBox()
+    tab.gmail_sender_column_width.setRange(40, 360)
+    tab.gmail_sender_column_width.setValue(tab._default_int('gmail', 'sender_column_width', 180))
+    tab.gmail_sender_column_width.setAccelerated(True)
+    tab.gmail_sender_column_width.setSuffix(" px")
+    tab.gmail_sender_column_width.valueChanged.connect(tab._save_settings)
+    text_limit_row.addWidget(create_inline_label("Sender column"))
+    text_limit_row.addWidget(tab.gmail_sender_column_width)
+
+    tab.gmail_max_subject_words = QSpinBox()
+    tab.gmail_max_subject_words.setRange(0, 30)
+    tab.gmail_max_subject_words.setSpecialValueText("Off")
+    tab.gmail_max_subject_words.setValue(tab._default_int('gmail', 'max_subject_words', 4))
+    tab.gmail_max_subject_words.setAccelerated(True)
+    tab.gmail_max_subject_words.valueChanged.connect(tab._save_settings)
+    text_limit_row.addWidget(create_inline_label("Subject words"))
+    text_limit_row.addWidget(tab.gmail_max_subject_words)
+
+    tab.gmail_max_subject_chars = QSpinBox()
+    tab.gmail_max_subject_chars.setRange(0, 200)
+    tab.gmail_max_subject_chars.setSpecialValueText("Off")
+    tab.gmail_max_subject_chars.setValue(tab._default_int('gmail', 'max_subject_chars', 0))
+    tab.gmail_max_subject_chars.setAccelerated(True)
+    tab.gmail_max_subject_chars.valueChanged.connect(tab._save_settings)
+    text_limit_row.addWidget(create_inline_label("Subject chars"))
+    text_limit_row.addWidget(tab.gmail_max_subject_chars)
+    text_limit_row.addStretch()
 
     tab.gmail_desaturate = QCheckBox("Desaturate logo when no unread")
     tab.gmail_desaturate.setProperty("circleIndicator", True)
@@ -866,6 +937,13 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.gmail_limit.setValue(tab._config_int('gmail', gmail_config, 'limit', 5))
     tab.gmail_refresh.setValue(tab._config_int('gmail', gmail_config, 'refresh_minutes', 5))
     tab.gmail_filter_label.setText(tab._config_str('gmail', gmail_config, 'filter_label', 'INBOX'))
+    tab.gmail_account_slot.setValue(tab._config_int('gmail', gmail_config, 'account_slot', 0))
+    width_default = tab._widget_default('gmail', 'width', 600)
+    width_value = gmail_config.get('width', gmail_config.get('min_width', width_default))
+    try:
+        tab.gmail_width.setValue(int(width_value))
+    except (TypeError, ValueError):
+        tab.gmail_width.setValue(int(width_default))
     tab.gmail_font_combo.setCurrentFont(QFont(tab._config_str('gmail', gmail_config, 'font_family', 'Segoe UI')))
     tab.gmail_font_size.setValue(tab._config_int('gmail', gmail_config, 'font_size', 14))
     tab.gmail_margin.setValue(tab._config_int('gmail', gmail_config, 'margin', 30))
@@ -875,9 +953,15 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.gmail_show_envelope.setChecked(tab._config_bool('gmail', gmail_config, 'show_envelope_icon', True))
     tab.gmail_show_three_dot.setChecked(tab._config_bool('gmail', gmail_config, 'show_three_dot_menu', True))
     tab.gmail_show_unread_count.setChecked(tab._config_bool('gmail', gmail_config, 'show_unread_count_in_header', True))
+    tab.gmail_show_header_border.setChecked(tab._config_bool('gmail', gmail_config, 'show_header_border', True))
     tab.gmail_show_separators.setChecked(tab._config_bool('gmail', gmail_config, 'show_separators', True))
     tab.gmail_show_timestamp.setChecked(tab._config_bool('gmail', gmail_config, 'show_timestamp', True))
     tab.gmail_auto_title_case.setChecked(tab._config_bool('gmail', gmail_config, 'auto_title_case', True))
+    tab.gmail_clean_sender_names.setChecked(tab._config_bool('gmail', gmail_config, 'clean_sender_names', True))
+    tab.gmail_max_sender_words.setValue(tab._config_int('gmail', gmail_config, 'max_sender_words', 3))
+    tab.gmail_sender_column_width.setValue(tab._config_int('gmail', gmail_config, 'sender_column_width', 180))
+    tab.gmail_max_subject_words.setValue(tab._config_int('gmail', gmail_config, 'max_subject_words', 4))
+    tab.gmail_max_subject_chars.setValue(tab._config_int('gmail', gmail_config, 'max_subject_chars', 0))
     tab.gmail_desaturate.setChecked(tab._config_bool('gmail', gmail_config, 'desaturate_when_no_unread', True))
 
     tab.gmail_show_background.setChecked(tab._config_bool('gmail', gmail_config, 'show_background', True))
@@ -942,6 +1026,8 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'limit': tab.gmail_limit.value(),
         'refresh_minutes': tab.gmail_refresh.value(),
         'filter_label': tab.gmail_filter_label.text().strip() or 'INBOX',
+        'account_slot': str(tab.gmail_account_slot.value()),
+        'width': tab.gmail_width.value(),
         'font_family': tab.gmail_font_combo.currentFont().family(),
         'font_size': tab.gmail_font_size.value(),
         'margin': tab.gmail_margin.value(),
@@ -950,9 +1036,15 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'show_envelope_icon': tab.gmail_show_envelope.isChecked(),
         'show_three_dot_menu': tab.gmail_show_three_dot.isChecked(),
         'show_unread_count_in_header': tab.gmail_show_unread_count.isChecked(),
+        'show_header_border': tab.gmail_show_header_border.isChecked(),
         'show_separators': tab.gmail_show_separators.isChecked(),
         'show_timestamp': tab.gmail_show_timestamp.isChecked(),
         'auto_title_case': tab.gmail_auto_title_case.isChecked(),
+        'clean_sender_names': tab.gmail_clean_sender_names.isChecked(),
+        'max_sender_words': tab.gmail_max_sender_words.value(),
+        'sender_column_width': tab.gmail_sender_column_width.value(),
+        'max_subject_words': tab.gmail_max_subject_words.value(),
+        'max_subject_chars': tab.gmail_max_subject_chars.value(),
         'desaturate_when_no_unread': tab.gmail_desaturate.isChecked(),
         'show_background': tab.gmail_show_background.isChecked(),
         'intense_shadow': tab.gmail_intense_shadow.isChecked(),

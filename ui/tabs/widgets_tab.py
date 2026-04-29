@@ -525,7 +525,7 @@ class WidgetsTab(QWidget):
             " color: #ffffff;"
             " border-radius: 8px;"
             " padding: 6px 18px;"
-            " min-width: 90px;"
+            " min-width: 70px;"
             " border: 1px solid #ffffff;"
             " }"
             "QPushButton:hover {"
@@ -549,12 +549,12 @@ class WidgetsTab(QWidget):
             self._btn_media,
             self._btn_visualizers,
             self._btn_reddit,
-            self._btn_defaults,
         ]
         if dev_gmail_enabled:
             buttons.append(self._btn_gmail)
         if dev_features_enabled:
             buttons.append(self._btn_imgur)
+        buttons.append(self._btn_defaults)
         
         for idx, btn in enumerate(buttons):
             btn.setCheckable(True)
@@ -644,12 +644,12 @@ class WidgetsTab(QWidget):
             self._media_container,
             self._visualizers_container,
             self._reddit_container,
-            self._defaults_container,
         ]
         if dev_gmail_enabled:
             self._subtab_containers.append(self._gmail_container)
         if dev_features_enabled:
             self._subtab_containers.append(self._imgur_container)
+        self._subtab_containers.append(self._defaults_container)
 
         self._on_subtab_changed(0)
         self._perf_log("_setup_ui_sections", perf_scope)

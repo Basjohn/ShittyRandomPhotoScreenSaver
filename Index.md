@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-04-27
+Last updated: 2026-04-29
 
 Living map of the current SRPSS codebase.
 
@@ -14,6 +14,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
+| `Docs/Gmail_Widget_Plan.md` | Gmail widget execution plan, current layout cleanup, runtime URL/menu/action failures, settings flicker regression, refresh/defaults/resource audits, thread/date display work, and release checks |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
 
@@ -75,10 +76,11 @@ Living map of the current SRPSS codebase.
 | OAuth manager | `core/gmail/gmail_oauth.py` | OAuth 2.0 PKCE flow, token storage (DPAPI) |
 | REST API client | `core/gmail/gmail_client.py` | Gmail REST API — metadata, labels, actions |
 | IMAP client | `core/gmail/gmail_imap.py` | IMAP + App Password — headers, unread count |
+| Deep-link helpers | `core/gmail/gmail_deeplinks.py` | Gmail inbox/thread/search URL builders; `X-GM-THRID` decimal-to-hex conversion |
 | Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
-| Widget components | `widgets/gmail_components.py` | GmailPosition enum, formatting utilities, email cache |
-| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, widget settings |
-| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list, actions |
+| Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, formatting/text cleanup utilities, email cache |
+| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, widget settings, single Gmail width control, sender/subject cleanup controls, sender column width |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list, actions, row hit targets, Media-style layout margins/header frame, central URL click targets |
 | Dev gate | `core/dev_gates.py` | `is_gmail_enabled()`, `force_gate(gmail=...)` |
 
 ## Source Ingestion

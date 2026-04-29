@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-04-26
+Last updated: 2026-04-29
 
 This file tracks active work and near-term validation.
 
@@ -13,20 +13,22 @@ This file tracks active work and near-term validation.
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
 - **U-05 RESOLVED (2026-04-25)**: MC Keyboard Focus / Ctrl Halo Runtime Input Family fixed via wiring dead code `_restore_mc_input_focus`.
-- **GMAIL WIDGET**: **Phases 3 + 4 + 5 complete** (2026-04-28). Plan v1.4.
-  - Phase 3: settings dataclass, defaults, dev gate (`--devgmail`), UI tab, wiring.
-  - Phase 4: `GmailWidgetFactory`, registered in `WidgetFactoryRegistry`, instantiation block, fade sync, main arg filtering.
-  - Phase 5: `NotificationSoundPlayer` singleton (`core/audio/notification_sound.py`), new-mail detection in `GmailWidget` (first fetch skips sound, subsequent fetches play sound only for new unread IDs), sound UI controls (enable, file path, browse/test, volume slider), full load/save wiring, factory applies settings.
-  - Fixes: `webbrowser.open(url, new=1)` for OAuth new-window behavior; Gmail settings tab + subtab button fully gated by `is_gmail_enabled()` in `widgets_tab.py`.
-  - **Next**: Phase 6 (final testing + sign-off).
-- **GMAIL WIDGET — THREADING AUDIT** (2026-04-27): Comprehensive ThreadManager migration. See `Docs/Gmail_Widget_Plan.md` Appendix E.
-  - [ ] Fix `gmail_widget.py` — replace raw `QTimer` + `threading.Thread` with `ThreadManager`
-  - [ ] Fix `gmail_oauth.py` — replace raw locks/threads with `ThreadManager`, add server cleanup
-  - [ ] Fix `gmail_backend.py` — replace raw locks with `ThreadManager`, fix `_last_error`/`_last_unread_count` races
-  - [ ] Fix `gmail_client.py` — replace raw `threading.Lock` with `ThreadManager`
-  - [ ] Fix `gmail_imap.py` — move `import re` to top, ensure thread safety
-  - [ ] Fix `widgets_tab_gmail.py` — offload DPAPI/network to `ThreadManager`
-  - [ ] Fix `gmail_widget.py` — resource cleanup (`QMenu`, `_sound_player`)
+- **GMAIL WIDGET**: Plan v3.5 active in `Docs/Gmail_Widget_Plan.md` (2026-04-29).
+  - [x] Foundation/dev gate/settings/UI/sound implemented.
+  - [x] Phase A structural polish implemented: nine-position enum, single `gmail.width`, Media-style content margins, measured header frame.
+  - [x] Phase B deep-link foundation implemented: `core/gmail/gmail_deeplinks.py`, IMAP `open_url`, Gmail account slot, decimal `X-GM-THRID` to lowercase hex, focused tests.
+  - [x] Phase C first safety pass implemented: widget async fetch generation/cancel guard, stale results ignored after cleanup/settings changes, `gmail_imap.py` hot-path `re` import removed.
+  - [x] Phase B/D screenshot polish slice implemented: row clicks prefer `email.open_url`, action menu click has priority in widget tests, vertical ellipsis indicator, contraction-safe subject title case, sender cleanup/casing, max sender words, adjustable sender column width, fixed sender/subject columns, max subject words/chars, defaults/UI controls, focused tests.
+  - [x] Gmail MC URL-routing patch implemented: row/header clicks now expose URLs to central input routing so MC can use direct `QDesktopServices` opening instead of the Reddit helper bridge.
+  - [x] Gmail settings Layout cleanup implemented: Display now sits above Position; min/max width and custom padding controls removed; new saves write only `width`.
+  - [ ] Phase B interaction next: normal/main Gmail URLs are queued to the ProgramData helper bridge but do not reliably open after exit; inspect helper/task-scheduler/queue consumption using the Reddit path as the reference.
+  - [x] Phase B IMAP action slice implemented: widget dispatches IMAP menu actions using `imap_uid`; IMAP mark-read/archive/spam/trash now use UID STORE/Gmail label operations with focused tests.
+  - [ ] Phase B actions next: runtime-validate IMAP actions against real Gmail and harden folder/label discovery if Gmail rejects the current label operations.
+  - [ ] Phase C next: fix Gmail settings flicker regression using `Docs/Historical_Bugs.md` R-18 and flicker harnesses; make Gmail IMAP Save & Test non-blocking; add backend helper to test supplied credentials before saving; harden OAuth callback server cleanup.
+  - [ ] Phase D next: finish header parity visual/manual validation against Media/Spotify/Reddit; replace jagged Gmail envelope assets with clean black-and-white PNGs; add refresh button/blank-space double-click refresh; add date display mode; plan/implement thread collapse; run defaults audit; per-element fonts/colours; finish settings bucket organisation without duplicate controls.
+  - [ ] Phase E later: resource-use audit for over-painting/over-updating/per-tick waste; stretch investigation for opening Gmail/Reddit links on the browser window/process on lowest-index monitor with safe fallback.
+  - [ ] Phase B/D interaction next: MC subject links work, but vertical action menus do not open and briefly freeze cursor input; diagnose popup/focus separately using `/logs`.
+  - [ ] Phase E next: secure-desktop/manual URL validation, paint/resource profiling, repo credential hygiene, archive deprecation note.
 - Investigate MuteButtonWidget fade-in race with `invalidate_overlay_effects` (~1/10 failure).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 

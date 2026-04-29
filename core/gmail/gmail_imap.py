@@ -13,12 +13,14 @@ from __future__ import annotations
 
 import email as email_lib
 import imaplib
+import re
 import threading
 from datetime import datetime
 from email.header import decode_header as _decode_header
 from email.utils import parsedate_to_datetime
-from typing import List, Optional
+from typing import Callable, List, Optional
 
+from core.gmail.gmail_deeplinks import build_open_url, gmail_inbox_url
 from core.gmail.gmail_client import EmailMetadata
 from core.logging.logger import get_logger
 from core.windows.secure_url_launcher import open_url
@@ -61,12 +63,32 @@ class GmailImapClient:
         self._email = email_address
         self._password = app_password
         self._lock = threading.Lock()
+        self._supports_gmail_extensions = False
 
     def _connect(self) -> imaplib.IMAP4_SSL:
         """Create and authenticate an IMAP connection."""
         conn = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, timeout=IMAP_TIMEOUT)
         conn.login(self._email, self._password)
+        self._supports_gmail_extensions = self._detect_gmail_extensions(conn)
         return conn
+
+    def _detect_gmail_extensions(self, conn: imaplib.IMAP4_SSL) -> bool:
+        """Return whether the server advertises Gmail IMAP extensions."""
+        try:
+            caps = getattr(conn, "capabilities", ()) or ()
+            cap_text = " ".join(
+                cap.decode("ascii", errors="ignore") if isinstance(cap, bytes) else str(cap)
+                for cap in caps
+            )
+            if "X-GM-EXT-1" in cap_text.upper():
+                return True
+            status, data = conn.capability()
+            if status == "OK":
+                joined = b" ".join(part for part in data if isinstance(part, bytes))
+                return b"X-GM-EXT-1" in joined.upper()
+        except Exception as exc:
+            logger.debug("[GMAIL_IMAP] Capability check failed: %s", exc)
+        return False
 
     def list_messages(
         self,
@@ -99,7 +121,7 @@ class GmailImapClient:
                     return []
 
                 search_criteria = "UNSEEN" if query and "is:unread" in query else "ALL"
-                status, data = conn.search(None, search_criteria)
+                status, data = conn.uid("SEARCH", None, search_criteria)
                 if status != "OK" or not data[0]:
                     return []
 
@@ -134,7 +156,13 @@ class GmailImapClient:
         self, conn: imaplib.IMAP4_SSL, msg_id: bytes
     ) -> Optional[EmailMetadata]:
         """Fetch headers + flags for a single message."""
-        status, data = conn.fetch(msg_id, "(FLAGS BODY[HEADER.FIELDS (FROM SUBJECT DATE)] X-GM-MSGID X-GM-THRID X-GM-LABELS)")
+        fetch_parts = "FLAGS BODY[HEADER.FIELDS (FROM SUBJECT DATE MESSAGE-ID)]"
+        if self._supports_gmail_extensions:
+            fetch_parts += " X-GM-MSGID X-GM-THRID X-GM-LABELS"
+        try:
+            status, data = conn.uid("FETCH", msg_id, f"({fetch_parts})")
+        except (AttributeError, TypeError):
+            status, data = conn.fetch(msg_id, f"({fetch_parts})")
         if status != "OK" or not data or not data[0]:
             return None
 
@@ -150,7 +178,6 @@ class GmailImapClient:
                 raw_headers = part[1] if len(part) > 1 and isinstance(part[1], bytes) else b""
                 header_str = header_info.decode("utf-8", errors="replace")
                 if b"FLAGS" in header_info:
-                    import re
                     flags_match = re.search(r"FLAGS \(([^)]*)\)", header_str)
                     if flags_match:
                         raw_flags = flags_match.group(1).encode()
@@ -173,6 +200,7 @@ class GmailImapClient:
         sender = _decode_header_value(msg.get("From", "Unknown"))
         subject = _decode_header_value(msg.get("Subject", "No Subject"))
         date = _parse_date(msg.get("Date"))
+        rfc822_message_id = msg.get("Message-ID")
 
         is_unread = b"\\Seen" not in raw_flags
 
@@ -181,7 +209,7 @@ class GmailImapClient:
             if "UNREAD" not in label_list:
                 label_list.append("UNREAD")
 
-        return EmailMetadata(
+        meta = EmailMetadata(
             id=gmail_msgid or msg_id.decode("utf-8", errors="replace"),
             thread_id=gmail_thrid or gmail_msgid or msg_id.decode("utf-8", errors="replace"),
             sender=sender,
@@ -189,7 +217,31 @@ class GmailImapClient:
             date=date,
             labels=tuple(label_list),
             is_unread=is_unread,
+            provider="gmail" if self._supports_gmail_extensions else "imap",
+            account_email=self._email,
+            imap_uid=msg_id.decode("utf-8", errors="replace"),
+            rfc822_message_id=rfc822_message_id,
+            gmail_thread_id=gmail_thrid or None,
+            gmail_message_id=gmail_msgid or None,
         )
+        if self._supports_gmail_extensions:
+            return EmailMetadata(
+                id=meta.id,
+                thread_id=meta.thread_id,
+                sender=meta.sender,
+                subject=meta.subject,
+                date=meta.date,
+                labels=meta.labels,
+                is_unread=meta.is_unread,
+                provider=meta.provider,
+                account_email=meta.account_email,
+                imap_uid=meta.imap_uid,
+                rfc822_message_id=meta.rfc822_message_id,
+                gmail_thread_id=meta.gmail_thread_id,
+                gmail_message_id=meta.gmail_message_id,
+                open_url=build_open_url(meta),
+            )
+        return meta
 
     def get_unread_count(self, label_id: str = "INBOX") -> int:
         """Return the number of unseen messages."""
@@ -212,30 +264,86 @@ class GmailImapClient:
                     except Exception:
                         pass
 
+    def _coerce_imap_uid(self, message_id: str) -> str:
+        uid = str(message_id or "").strip()
+        if not uid or not uid.isdigit():
+            raise ValueError("IMAP action requires a numeric UID")
+        return uid
+
+    def _run_uid_action(
+        self,
+        message_id: str,
+        action_name: str,
+        action: Callable[[imaplib.IMAP4_SSL, str], bool],
+    ) -> bool:
+        """Run a UID-based IMAP action against INBOX."""
+        try:
+            uid = self._coerce_imap_uid(message_id)
+        except ValueError as exc:
+            logger.warning("[GMAIL_IMAP] %s skipped: %s", action_name, exc)
+            return False
+
+        with self._lock:
+            conn = None
+            try:
+                conn = self._connect()
+                status, _ = conn.select('"INBOX"', readonly=False)
+                if status != "OK":
+                    logger.warning("[GMAIL_IMAP] %s failed: could not select INBOX", action_name)
+                    return False
+                return action(conn, uid)
+            except Exception as exc:
+                logger.warning("[GMAIL_IMAP] %s failed for UID %s: %s", action_name, uid, exc)
+                return False
+            finally:
+                if conn:
+                    try:
+                        conn.logout()
+                    except Exception:
+                        pass
+
+    @staticmethod
+    def _uid_store(conn: imaplib.IMAP4_SSL, uid: str, operation: str, flags: str) -> bool:
+        status, _ = conn.uid("STORE", uid, operation, flags)
+        return status == "OK"
+
     def mark_as_read(self, message_id: str) -> bool:
-        """Mark a message as read. Requires message UID or sequence number."""
-        logger.warning("[GMAIL_IMAP] mark_as_read not supported via IMAP app password flow for Gmail message ID %s", message_id)
-        return False
+        """Mark a message as read using its IMAP UID."""
+        return self._run_uid_action(
+            message_id,
+            "mark_as_read",
+            lambda conn, uid: self._uid_store(conn, uid, "+FLAGS", r"(\Seen)"),
+        )
 
     def archive_message(self, message_id: str) -> bool:
-        """Archive not directly supported via simple IMAP."""
-        logger.warning("[GMAIL_IMAP] archive_message not supported via IMAP for Gmail message ID %s", message_id)
-        return False
+        """Archive a Gmail IMAP message by removing the Inbox label."""
+        return self._run_uid_action(
+            message_id,
+            "archive_message",
+            lambda conn, uid: self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)"),
+        )
 
     def spam_message(self, message_id: str) -> bool:
-        """Spam not directly supported via simple IMAP."""
-        logger.warning("[GMAIL_IMAP] spam_message not supported via IMAP for Gmail message ID %s", message_id)
-        return False
+        """Move a Gmail IMAP message to Spam via Gmail labels."""
+        def _spam(conn: imaplib.IMAP4_SSL, uid: str) -> bool:
+            added = self._uid_store(conn, uid, "+X-GM-LABELS", r"(\Spam)")
+            removed = self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)")
+            return added and removed
+
+        return self._run_uid_action(message_id, "spam_message", _spam)
 
     def trash_message(self, message_id: str) -> bool:
-        """Trash not directly supported via simple IMAP."""
-        logger.warning("[GMAIL_IMAP] trash_message not supported via IMAP for Gmail message ID %s", message_id)
-        return False
+        """Move a Gmail IMAP message to Trash via Gmail labels."""
+        def _trash(conn: imaplib.IMAP4_SSL, uid: str) -> bool:
+            added = self._uid_store(conn, uid, "+X-GM-LABELS", r"(\Trash)")
+            removed = self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)")
+            return added and removed
+
+        return self._run_uid_action(message_id, "trash_message", _trash)
 
     def open_message_in_browser(self, message_id: str) -> bool:
-        """Open Gmail web UI. Uses numeric Gmail message ID if available."""
-        url = f"https://mail.google.com/mail/u/0/#inbox/{message_id}"
-        return open_url(url)
+        """Open Gmail inbox as a fallback for IMAP messages."""
+        return open_url(gmail_inbox_url())
 
     def test_connection(self) -> bool:
         """Verify credentials by attempting login."""

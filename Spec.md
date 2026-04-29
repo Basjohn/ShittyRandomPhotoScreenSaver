@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-04-27
+Last updated: 2026-04-29
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -103,15 +103,34 @@ Active ids:
 - OAuth mode: `core/gmail/gmail_oauth.py` (PKCE flow, DPAPI token storage)
 - IMAP mode: `core/gmail/gmail_imap.py` (App Password authentication)
 - REST client: `core/gmail/gmail_client.py` (metadata-only API calls)
+- Deep-link helpers: `core/gmail/gmail_deeplinks.py` owns Gmail web URL construction
+- IMAP/Gmail row links use `X-GM-THRID` decimal ids converted to lowercase hex for `#all/<thread_hex>` routes; RFC `Message-ID` search is the fallback when thread id is unavailable
 
 ### 11.3 Widget contracts
 - Overlay widget: `widgets/gmail_widget.py` (email list, actions, paint events)
-- Widget components: `widgets/gmail_components.py` (GmailPosition enum, formatting, email cache)
-- Settings UI: `ui/tabs/widgets_tab_gmail.py` (backend selector, credentials, widget settings)
+- Widget components: `widgets/gmail_components.py` (nine-position GmailPosition enum, relative-time formatting, sender/subject cleanup helpers, email cache)
+- Settings UI: `ui/tabs/widgets_tab_gmail.py` (backend selector, credentials, widget settings, sender/subject cleanup controls)
+- Gmail settings remain a flat dict under `gmail` in `core/settings/default_settings.py`; do not add a Gmail settings dataclass unless the whole widget settings architecture is deliberately migrated
+- Gmail visual settings must keep geometry and hit rects aligned: display, position, single `gmail.width`, Media-style margins, header frame, and row click targets must be derived from measured widget layout. Gmail must not expose custom per-side padding controls unless the whole widget family gains the same concept.
+- Gmail header styling must maintain visual parity with peer overlay headers (Media/Spotify/Reddit): comparable logo scale, frame border weight, radius, and top inset
+- Gmail row interaction must work in normal and MC modes: full row sender/subject hit rect opens the message URL through central input URL routing, while the vertical action-menu hit rect opens the menu and must not be consumed by row click handling
+- Gmail normal/main URL clicks use the same helper/task-scheduler bridge route as Reddit; MC URL clicks use the MC direct Qt/browser route. The two paths must not be mixed.
+- Gmail action-menu operations must have real backend effects for the active backend. IMAP actions must use IMAP-safe identifiers such as UID, not only Gmail web/message ids.
+- Gmail display text cleanup is part of the widget contract: title casing must preserve contractions, sender cleanup must prefer RFC-style display names over raw addresses, and subject/sender shortening must run before final pixel elision
+- Gmail row text columns must remain stable across visible rows: timestamp, sender, and subject slots should use shared widths so shorter senders leave blank space instead of moving the subject start position; the sender/subject boundary is user-adjustable via `gmail.sender_column_width`
+- Gmail sender casing may apply conservative display capitalization for visual consistency, but must preserve established mixed/all-caps brand tokens such as `PayPal`, `ChatGPT`, `FNB`, and `AI`
+- Gmail date display is user-selectable between word-style labels and numeric dates. Numeric dates use `DD/MM` for current-year messages and `DD/MM/YYYY` when the year is needed.
+- Gmail thread/duplicate display may collapse truly identical or Gmail-threaded entries, but read and unread groups must remain separate.
+- Gmail may expose manual refresh through a quiet icon-only refresh control and blank-space double-click, but refresh must respect fetch-in-progress guards and must not animate or repaint continuously while idle.
+- Gmail user-facing defaults must come from the settings/defaults system. Hardcoded Gmail values are acceptable only for private drawing constants or legacy migration fallbacks.
+- Gmail must not do per-tick network work, pixmap scaling, over-painting, or unnecessary `update()` calls when its data and animation state are unchanged.
+- Future shared URL opening work may try to prefer a browser window on the lowest-index monitor, but must fall back to current behavior and must not add brittle or always-running browser automation.
 
 ### 11.4 Security invariants
 - OAuth tokens stored encrypted via DPAPI
 - API calls are metadata-only (no body/snippet content)
+- `EmailMetadata` may contain provider ids needed for links/deduping (`X-GM-THRID`, `X-GM-MSGID`, RFC `Message-ID`, IMAP UID), but must not contain bodies, snippets, or raw headers
+- Secure-desktop/browser opening must use the correct runtime route: SCR/secure-desktop paths use the helper/secure launcher bridge, while MC-mode row/header URL clicks should reach central input routing and open directly via Qt rather than the Reddit helper bridge
 - No credential leakage in tests (all mocked with fake data)
 
 ## 12. Documentation Contract

@@ -55,8 +55,9 @@ def test_gmail_position_enum_values() -> None:
 
     # Check that all GmailPosition values are lowercase snake_case
     valid_positions = [
-        "top_left", "top_right",
-        "bottom_left", "bottom_right"
+        "top_left", "top_center", "top_right",
+        "middle_left", "center", "middle_right",
+        "bottom_left", "bottom_center", "bottom_right",
     ]
 
     for pos in GmailPosition:
@@ -81,3 +82,19 @@ def test_gmail_settings_type_safety() -> None:
 
     if "gmail.position" in DEFAULT_SETTINGS:
         assert isinstance(DEFAULT_SETTINGS["gmail.position"], str)
+
+
+def test_gmail_text_cleanup_defaults_exist() -> None:
+    """Verify Gmail text cleanup defaults are present in the widget settings dict."""
+    from core.settings.default_settings import DEFAULT_SETTINGS
+
+    gmail = DEFAULT_SETTINGS["widgets"]["gmail"]
+    assert gmail["clean_sender_names"] is True
+    assert gmail["max_sender_words"] == 3
+    assert gmail["sender_column_width"] == 180
+    assert gmail["max_subject_words"] == 4
+    assert gmail["max_subject_chars"] == 0
+    assert gmail["width"] == 600
+    assert "min_width" not in gmail
+    assert "max_width" not in gmail
+    assert "content_padding_left" not in gmail

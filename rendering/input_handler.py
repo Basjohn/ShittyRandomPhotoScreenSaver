@@ -802,7 +802,18 @@ class InputHandler(QObject):
                 if gw.isVisible() and gw.geometry().contains(pos):
                     geom = gw.geometry()
                     local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
-                    if hasattr(gw, 'handle_click'):
+                    url = None
+                    if hasattr(gw, "resolve_click_target"):
+                        try:
+                            url = gw.resolve_click_target(local_pos)
+                        except Exception:
+                            logger.debug("[INPUT] Gmail resolve_click_target failed", exc_info=True)
+                    if url:
+                        handled = True
+                        reddit_handled = True
+                        reddit_url = url
+                        logger.debug("[INPUT] Gmail resolved central URL click: %s", url)
+                    elif hasattr(gw, 'handle_click'):
                         result = gw.handle_click(local_pos)
                         logger.debug("[INPUT] Gmail handle_click returned: %s", result)
                         if result:
