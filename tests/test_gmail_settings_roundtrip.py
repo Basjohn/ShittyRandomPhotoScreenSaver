@@ -104,6 +104,38 @@ def test_gmail_text_cleanup_defaults_exist() -> None:
     assert "content_padding_left" not in gmail
 
 
+def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
+    """Both normal and MC builds consume this canonical Gmail default dict."""
+    from core.settings.default_settings import DEFAULT_SETTINGS
+
+    gmail = DEFAULT_SETTINGS["widgets"]["gmail"]
+    expected_keys = {
+        "enabled", "monitor", "position", "width", "limit", "refresh_minutes",
+        "filter_label", "account_slot", "font_family", "font_size", "margin",
+        "header_logo_px_adjust", "show_sender", "show_subject", "show_envelope_icon",
+        "show_three_dot_menu", "show_unread_count_in_header", "show_header_border",
+        "show_separators", "show_timestamp", "date_display_mode", "group_threads",
+        "auto_title_case", "clean_sender_names", "max_sender_words",
+        "sender_column_width", "max_subject_words", "max_subject_chars",
+        "desaturate_when_no_unread", "show_background", "intense_shadow",
+        "bg_opacity", "border_opacity", "separator_thickness",
+        "boundary_separator_thickness", "play_sound_on_new_mail", "sound_file_path",
+        "sound_volume_percent", "color", "bg_color", "border_color",
+        "separator_color", "boundary_separator_color",
+    }
+
+    assert expected_keys <= set(gmail)
+    assert not any("password" in key.lower() for key in gmail)
+    assert not any("email" in key.lower() for key in gmail)
+    assert not any("token" in key.lower() for key in gmail)
+
+
+def test_reddit_refresh_spiral_default_comes_from_defaults() -> None:
+    from core.settings.default_settings import DEFAULT_SETTINGS
+
+    assert DEFAULT_SETTINGS["widgets"]["reddit"]["show_refresh_spiral"] is True
+
+
 def test_gmail_signal_block_attrs_cover_newer_controls() -> None:
     """Guard against settings-load flicker from stale Gmail signal blockers."""
     from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS
@@ -111,6 +143,7 @@ def test_gmail_signal_block_attrs_cover_newer_controls() -> None:
     expected_attrs = {
         "gmail_backend_combo",
         "gmail_width",
+        "gmail_header_logo_px_adjust",
         "gmail_show_header_border",
         "gmail_date_display_mode",
         "gmail_group_threads",
@@ -243,17 +276,36 @@ def test_gmail_text_limits_are_split_across_two_rows() -> None:
     source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
 
     assert 'text_limit_row = _aligned_row(appearance_inner, "Text Limits:")' in source
-    assert 'subject_limit_row = _aligned_row(appearance_inner, "")' in source
-    assert "subject_limit_row.addWidget(tab.gmail_max_subject_words)" in source
-    assert "subject_limit_row.addWidget(tab.gmail_max_subject_chars)" in source
+    assert "text_limit_grid = QGridLayout()" in source
+    assert "text_limit_grid.addWidget(tab.gmail_max_sender_words, 0, 1)" in source
+    assert "text_limit_grid.addWidget(tab.gmail_sender_column_width, 0, 3)" in source
+    assert "text_limit_grid.addWidget(tab.gmail_max_subject_words, 1, 1)" in source
+    assert "text_limit_grid.addWidget(tab.gmail_max_subject_chars, 1, 3)" in source
 
 
 def test_gmail_buckets_defer_initial_collapse_until_children_exist() -> None:
     """Collapsed Gmail buckets should not do first-click child construction/polish work."""
     source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
 
-    assert source.count("defer_initial_visibility=True") == 4
+    assert source.count("defer_initial_visibility=True") == 5
+    assert 'expanded=tab.get_gmail_bucket_state("backend", default=True)' in source
     assert "_finalize_bucket_body(toggle, body)" in source
+
+
+def test_gmail_is_not_dev_gated() -> None:
+    """Gmail should be ordinary feature plumbing, not hidden behind a CLI gate."""
+    sources = [
+        Path("core/dev_gates.py"),
+        Path("ui/tabs/widgets_tab.py"),
+        Path("ui/tabs/widgets_tab_gmail.py"),
+        Path("rendering/widget_factories.py"),
+        Path("rendering/widget_setup.py"),
+        Path("rendering/widget_setup_all.py"),
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in sources)
+
+    assert "is_gmail_enabled" not in combined
+    assert "devgmail" not in combined.lower()
 
 
 def test_gmail_backend_visibility_hidden_before_parent_show(qt_app, monkeypatch) -> None:

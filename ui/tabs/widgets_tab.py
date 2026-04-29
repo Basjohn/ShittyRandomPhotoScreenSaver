@@ -26,7 +26,6 @@ from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPen
 
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger, is_perf_metrics_enabled
-from core.dev_gates import is_gmail_enabled
 from core.settings.defaults import get_default_settings
 from core.settings.visualizer_settings_snapshot import (
     normalize_visualizer_mode_payload,
@@ -528,9 +527,6 @@ class WidgetsTab(QWidget):
         self._btn_reddit = QPushButton("Reddit")
         self._btn_defaults = QPushButton("Defaults")
         
-        # Dev-gated buttons
-        dev_gmail_enabled = is_gmail_enabled()
-
         # Imgur button - gated by SRPSS_ENABLE_DEV
         if dev_features_enabled:
             self._btn_imgur = QPushButton("Imgur")
@@ -555,9 +551,7 @@ class WidgetsTab(QWidget):
             " }"
         )
 
-        # Gmail button - gated by --devgmail flag
-        if dev_gmail_enabled:
-            self._btn_gmail = QPushButton("Gmail")
+        self._btn_gmail = QPushButton("Gmail")
 
         # Build button list conditionally
         buttons = [
@@ -567,8 +561,7 @@ class WidgetsTab(QWidget):
             self._btn_visualizers,
             self._btn_reddit,
         ]
-        if dev_gmail_enabled:
-            buttons.append(self._btn_gmail)
+        buttons.append(self._btn_gmail)
         if dev_features_enabled:
             buttons.append(self._btn_imgur)
         buttons.append(self._btn_defaults)
@@ -616,13 +609,11 @@ class WidgetsTab(QWidget):
         self._perf_log("build_reddit_ui", section_start)
         layout.addWidget(self._reddit_container)
 
-        # Gmail section - gated by --devgmail
-        if dev_gmail_enabled:
-            from ui.tabs.widgets_tab_gmail import build_gmail_ui
-            section_start = time.perf_counter()
-            self._gmail_container = build_gmail_ui(self, layout)
-            self._perf_log("build_gmail_ui", section_start)
-            layout.addWidget(self._gmail_container)
+        from ui.tabs.widgets_tab_gmail import build_gmail_ui
+        section_start = time.perf_counter()
+        self._gmail_container = build_gmail_ui(self, layout)
+        self._perf_log("build_gmail_ui", section_start)
+        layout.addWidget(self._gmail_container)
 
         self._defaults_container = self._build_defaults_section()
         layout.addWidget(self._defaults_container)
@@ -662,8 +653,7 @@ class WidgetsTab(QWidget):
             self._visualizers_container,
             self._reddit_container,
         ]
-        if dev_gmail_enabled:
-            self._subtab_containers.append(self._gmail_container)
+        self._subtab_containers.append(self._gmail_container)
         if dev_features_enabled:
             self._subtab_containers.append(self._imgur_container)
         self._subtab_containers.append(self._defaults_container)
@@ -868,14 +858,15 @@ class WidgetsTab(QWidget):
                 'reddit_enabled', 'reddit_subreddit', 'reddit_items',
                 'reddit_position', 'reddit_monitor_combo',
                 'reddit_font_combo', 'reddit_font_size', 'reddit_margin',
+                'reddit_header_logo_px_adjust',
                 'reddit_show_background', 'reddit_show_separators',
+                'reddit_show_refresh_spiral',
                 'reddit_bg_opacity', 'reddit_border_opacity',
                 'reddit2_enabled', 'reddit2_subreddit', 'reddit2_items',
                 'reddit2_position', 'reddit2_monitor_combo',
                 'reddit_exit_on_click',
             ]
-            if is_gmail_enabled():
-                _widget_attrs.extend(GMAIL_SIGNAL_BLOCK_ATTRS)
+            _widget_attrs.extend(GMAIL_SIGNAL_BLOCK_ATTRS)
             for attr_name in _widget_attrs:
                 w = getattr(self, attr_name, None)
                 if w is not None and hasattr(w, 'blockSignals'):
@@ -906,8 +897,7 @@ class WidgetsTab(QWidget):
             load_weather_settings(self, widgets)
             load_media_settings(self, widgets)
             load_reddit_settings(self, widgets)
-            if is_gmail_enabled():
-                load_gmail_settings(self, widgets)
+            load_gmail_settings(self, widgets)
             load_imgur_settings(self, widgets)
 
         finally:
@@ -1367,7 +1357,7 @@ class WidgetsTab(QWidget):
         weather_config = save_weather_settings(self)
         media_config, spotify_vis_config = save_media_settings(self)
         reddit_config, reddit2_config = save_reddit_settings(self)
-        if is_gmail_enabled() and hasattr(self, 'gmail_enabled'):
+        if hasattr(self, 'gmail_enabled'):
             gmail_config = save_gmail_settings(self)
         else:
             gmail_config = None
@@ -1400,7 +1390,14 @@ class WidgetsTab(QWidget):
         global_config = existing_widgets.get('global', {})
         if not isinstance(global_config, dict):
             global_config = {}
-        global_config['card_border_width_px'] = int(self._global_card_border_width)
+        if hasattr(self, '_global_card_border_width'):
+            border_width = self._global_card_border_width
+        else:
+            try:
+                border_width = self._widget_default('global', 'card_border_width_px', 3)
+            except Exception:
+                border_width = 3
+        global_config['card_border_width_px'] = int(border_width)
         existing_widgets['global'] = global_config
 
         existing_widgets['clock'] = clock_config

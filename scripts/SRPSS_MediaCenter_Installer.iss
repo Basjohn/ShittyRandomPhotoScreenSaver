@@ -50,6 +50,7 @@ Source: "..\release\main_mc.dist\*"; DestDir: "{app}"; Flags: recursesubdirs cre
 Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Active curated preset tree shared with SCR/NORMAL builds.
 Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\release\main_mc.dist\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 ; Include the EXE itself (for convenience when browsing install dir)
 Source: "..\release\main_mc.dist\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Installer icon for shortcuts / ARP entry
@@ -72,4 +73,5 @@ Type: filesandordirs; Name: "{app}"
 ; stale/renamed files never linger across upgrades.
 Type: filesandordirs; Name: "{app}\presets\visualizer_modes"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
+Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 

@@ -14,7 +14,6 @@ Design:
 """
 from __future__ import annotations
 
-import os
 import threading
 from pathlib import Path
 from typing import Optional
@@ -24,6 +23,7 @@ from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import get_logger
+from core.audio.sound_paths import resolve_notification_sound_path
 
 logger = get_logger(__name__)
 
@@ -153,12 +153,7 @@ class NotificationSoundPlayer(QObject):
     def _resolve_path(path: str) -> Optional[Path]:
         """Resolve to an absolute path that exists, or None."""
         try:
-            p = Path(os.path.expandvars(os.path.expanduser(path)))
-            if p.is_absolute():
-                return p if p.exists() else None
-            # Relative paths are resolved against the project root (cwd).
-            cand = Path.cwd() / p
-            return cand if cand.exists() else None
+            return resolve_notification_sound_path(path)
         except Exception:
             return None
 

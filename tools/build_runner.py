@@ -180,6 +180,7 @@ def _run_preflight() -> PreflightResult:
     mc_exe = mc_dist / "SRPSS_Media_Center.exe"
     icon = REPO_ROOT / "SRPSS.ico"
     logo = REPO_ROOT / "images" / "LogoBMP.bmp"
+    default_sound = REPO_ROOT / "resources" / "tutuogg.ogg"
 
     helper_exe = REPO_ROOT / "release" / "helpers" / "SRPSS_RedditHelper.exe"
 
@@ -201,6 +202,8 @@ def _run_preflight() -> PreflightResult:
         r.warnings.append("SRPSS.ico not found (needed by installers).")
     if not logo.exists():
         r.warnings.append("images/LogoBMP.bmp not found (needed by installers).")
+    if not default_sound.exists():
+        r.errors.append("resources/tutuogg.ogg not found (default Gmail notification sound).")
 
     return r
 

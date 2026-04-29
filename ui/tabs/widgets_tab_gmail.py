@@ -1,7 +1,6 @@
 """Gmail widget section for widgets tab.
 
 Extracted UI building, settings loading/saving for the Gmail overlay widget.
-Gated by ``core.dev_gates.is_gmail_enabled()``.
 """
 from __future__ import annotations
 
@@ -11,12 +10,13 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QSpinBox, QGroupBox, QCheckBox, QLineEdit,
-    QSlider, QWidget, QPushButton,
+    QSlider, QWidget, QPushButton, QGridLayout,
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from core.audio.sound_paths import default_notification_sound_path
 from core.threading.manager import ThreadManager
 from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.tabs.shared_styles import (
@@ -47,6 +47,7 @@ GMAIL_SIGNAL_BLOCK_ATTRS = (
     'gmail_width',
     'gmail_limit',
     'gmail_refresh',
+    'gmail_header_logo_px_adjust',
     'gmail_filter_label',
     'gmail_account_slot',
     'gmail_font_combo',
@@ -503,18 +504,14 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     GUARDRAIL: Only these controls may live outside a bucket:
       - Enable checkbox
-      - Backend mode selector (+ IMAP/OAuth panels)
-      - Email + App Password fields (IMAP panel)
-      - Account status row
     ALL other settings MUST be placed inside a collapsed-by-default bucket.
+    The Backend bucket is the only default-open bucket because connection
+    state is the first-run task for this widget.
     When adding new interactable settings, create or extend a bucket.
 
     Returns the Gmail container widget.
     """
-    from core.dev_gates import is_gmail_enabled
     from ui.tabs.widgets_tab import NoWheelSlider
-
-    gmail_gated = not is_gmail_enabled()
 
     gmail_group = QGroupBox("Gmail Widget")
     style_group_box(gmail_group)
@@ -529,30 +526,30 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_enabled.stateChanged.connect(tab._update_stack_status)
     gmail_layout.addWidget(tab.gmail_enabled)
 
-    if gmail_gated:
-        tab.gmail_enabled.setEnabled(False)
-        tab.gmail_enabled.setChecked(False)
-        gate_label = QLabel("Requires --devgmail flag to enable.")
-        gate_label.setStyleSheet(INFO_LABEL_STYLE)
-        gmail_layout.addWidget(gate_label)
-
     # Controls container
     tab._gmail_controls_container = QWidget()
     _gc = QVBoxLayout(tab._gmail_controls_container)
     _gc.setContentsMargins(0, 0, 0, 12)
     _gc.setSpacing(12)
 
+    backend_toggle, backend_body, backend_inner = build_bucket_toggle(
+        _gc, "Backend",
+        expanded=tab.get_gmail_bucket_state("backend", default=True),
+        on_toggle=lambda checked: tab.set_gmail_bucket_state("backend", checked),
+        defer_initial_visibility=True,
+    )
+
     gmail_info = QLabel(
         "Shows recent Gmail messages. Choose a backend below to connect."
     )
     gmail_info.setWordWrap(True)
     gmail_info.setStyleSheet(INFO_LABEL_STYLE)
-    _gc.addWidget(gmail_info)
+    backend_inner.addWidget(gmail_info)
 
     # ------------------------------------------------------------------
     # Backend mode selector
     # ------------------------------------------------------------------
-    mode_row = _aligned_row(_gc, "Backend:")
+    mode_row = _aligned_row(backend_inner, "Backend:")
     tab.gmail_backend_combo = StyledComboBox()
     tab.gmail_backend_combo.addItems(["IMAP (App Password)", "OAuth (Advanced)"])
     tab.gmail_backend_combo.setMinimumWidth(180)
@@ -599,7 +596,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     pw_row.addWidget(tab.gmail_imap_save_btn)
     pw_row.addStretch()
 
-    _gc.addWidget(tab._gmail_imap_panel)
+    backend_inner.addWidget(tab._gmail_imap_panel)
 
     # ------------------------------------------------------------------
     # OAuth panel (shown when OAuth mode selected)
@@ -617,12 +614,12 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     oauth_info.setStyleSheet(INFO_LABEL_STYLE)
     oauth_layout.addWidget(oauth_info)
 
-    _gc.addWidget(tab._gmail_oauth_panel)
+    backend_inner.addWidget(tab._gmail_oauth_panel)
 
     # ------------------------------------------------------------------
     # Account status / Authorize / Sign Out (shared between modes)
     # ------------------------------------------------------------------
-    auth_row = _aligned_row(_gc, "Account:")
+    auth_row = _aligned_row(backend_inner, "Account:")
     tab.gmail_auth_status = QLabel("")
     tab.gmail_auth_status.setStyleSheet(STATUS_LABEL_STYLE)
     tab.gmail_auth_status.setMinimumWidth(180)
@@ -775,6 +772,16 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     margin_row.addWidget(create_inline_label("px"))
     margin_row.addStretch()
 
+    logo_adjust_row = _aligned_row(appearance_inner, "Header Logo:")
+    tab.gmail_header_logo_px_adjust = QSpinBox()
+    tab.gmail_header_logo_px_adjust.setRange(-12, 24)
+    tab.gmail_header_logo_px_adjust.setSuffix(" px")
+    tab.gmail_header_logo_px_adjust.setValue(tab._default_int('gmail', 'header_logo_px_adjust', 0))
+    tab.gmail_header_logo_px_adjust.setAccelerated(True)
+    tab.gmail_header_logo_px_adjust.valueChanged.connect(tab._save_settings)
+    logo_adjust_row.addWidget(tab.gmail_header_logo_px_adjust)
+    logo_adjust_row.addStretch()
+
     # Boolean toggles
     appearance_inner.addSpacing(8)
 
@@ -859,14 +866,20 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     appearance_inner.addWidget(tab.gmail_clean_sender_names)
 
     text_limit_row = _aligned_row(appearance_inner, "Text Limits:")
+    text_limit_grid = QGridLayout()
+    text_limit_grid.setContentsMargins(0, 0, 0, 0)
+    text_limit_grid.setHorizontalSpacing(20)
+    text_limit_grid.setVerticalSpacing(10)
+    text_limit_grid.setColumnMinimumWidth(0, 112)
+    text_limit_grid.setColumnMinimumWidth(2, 136)
     tab.gmail_max_sender_words = QSpinBox()
     tab.gmail_max_sender_words.setRange(0, 20)
     tab.gmail_max_sender_words.setSpecialValueText("Off")
     tab.gmail_max_sender_words.setValue(tab._default_int('gmail', 'max_sender_words', 3))
     tab.gmail_max_sender_words.setAccelerated(True)
     tab.gmail_max_sender_words.valueChanged.connect(tab._save_settings)
-    text_limit_row.addWidget(create_inline_label("Sender words"))
-    text_limit_row.addWidget(tab.gmail_max_sender_words)
+    text_limit_grid.addWidget(create_inline_label("Sender words"), 0, 0)
+    text_limit_grid.addWidget(tab.gmail_max_sender_words, 0, 1)
 
     tab.gmail_sender_column_width = QSpinBox()
     tab.gmail_sender_column_width.setRange(40, 360)
@@ -874,19 +887,17 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_sender_column_width.setAccelerated(True)
     tab.gmail_sender_column_width.setSuffix(" px")
     tab.gmail_sender_column_width.valueChanged.connect(tab._save_settings)
-    text_limit_row.addWidget(create_inline_label("Sender column"))
-    text_limit_row.addWidget(tab.gmail_sender_column_width)
-    text_limit_row.addStretch()
+    text_limit_grid.addWidget(create_inline_label("Sender column"), 0, 2)
+    text_limit_grid.addWidget(tab.gmail_sender_column_width, 0, 3)
 
-    subject_limit_row = _aligned_row(appearance_inner, "")
     tab.gmail_max_subject_words = QSpinBox()
     tab.gmail_max_subject_words.setRange(0, 30)
     tab.gmail_max_subject_words.setSpecialValueText("Off")
     tab.gmail_max_subject_words.setValue(tab._default_int('gmail', 'max_subject_words', 4))
     tab.gmail_max_subject_words.setAccelerated(True)
     tab.gmail_max_subject_words.valueChanged.connect(tab._save_settings)
-    subject_limit_row.addWidget(create_inline_label("Subject words"))
-    subject_limit_row.addWidget(tab.gmail_max_subject_words)
+    text_limit_grid.addWidget(create_inline_label("Subject words"), 1, 0)
+    text_limit_grid.addWidget(tab.gmail_max_subject_words, 1, 1)
 
     tab.gmail_max_subject_chars = QSpinBox()
     tab.gmail_max_subject_chars.setRange(0, 200)
@@ -894,9 +905,11 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_max_subject_chars.setValue(tab._default_int('gmail', 'max_subject_chars', 0))
     tab.gmail_max_subject_chars.setAccelerated(True)
     tab.gmail_max_subject_chars.valueChanged.connect(tab._save_settings)
-    subject_limit_row.addWidget(create_inline_label("Subject chars"))
-    subject_limit_row.addWidget(tab.gmail_max_subject_chars)
-    subject_limit_row.addStretch()
+    text_limit_grid.addWidget(create_inline_label("Subject chars"), 1, 2)
+    text_limit_grid.addWidget(tab.gmail_max_subject_chars, 1, 3)
+    text_limit_grid.setColumnStretch(4, 1)
+    text_limit_row.addLayout(text_limit_grid)
+    text_limit_row.addStretch()
 
     tab.gmail_desaturate = QCheckBox("Desaturate logo when no unread")
     tab.gmail_desaturate.setProperty("circleIndicator", True)
@@ -1057,7 +1070,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Sound file path
     sound_path_row = _aligned_row(sound_inner, "Sound File:")
     tab.gmail_sound_file = QLineEdit()
-    tab.gmail_sound_file.setText(tab._default_str('gmail', 'sound_file_path', 'resources/tutuogg.ogg'))
+    tab.gmail_sound_file.setText(tab._default_str('gmail', 'sound_file_path', default_notification_sound_path()))
     tab.gmail_sound_file.setPlaceholderText("Path to .ogg/.wav/.mp3")
     tab.gmail_sound_file.setMinimumWidth(220)
     tab.gmail_sound_file.textChanged.connect(tab._save_settings)
@@ -1090,16 +1103,13 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     sound_vol_row.addWidget(tab.gmail_sound_volume_label)
 
     for toggle, body in (
+        (backend_toggle, backend_body),
         (layout_toggle, layout_body),
         (appearance_toggle, appearance_body),
         (sep_toggle, sep_body),
         (sound_toggle, sound_body),
     ):
         _finalize_bucket_body(toggle, body)
-
-    # Disable all controls if gated
-    if gmail_gated:
-        tab._gmail_controls_container.setEnabled(False)
 
     gmail_layout.addWidget(tab._gmail_controls_container)
     tab.gmail_enabled.stateChanged.connect(lambda: _update_gmail_enabled_visibility(tab))
@@ -1131,7 +1141,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         for key in (
             'enabled', 'position', 'monitor', 'limit', 'refresh_minutes',
             'filter_label', 'account_slot', 'width', 'font_family',
-            'font_size', 'margin', 'show_sender', 'show_subject',
+            'font_size', 'header_logo_px_adjust', 'margin', 'show_sender', 'show_subject',
             'show_envelope_icon', 'show_three_dot_menu',
             'show_unread_count_in_header', 'show_header_border',
             'show_separators', 'show_timestamp', 'date_display_mode',
@@ -1173,6 +1183,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
             tab.gmail_width.setValue(int(width_default))
         tab.gmail_font_combo.setCurrentFont(QFont(tab._config_str('gmail', gmail_config, 'font_family', str(gmail_defaults['font_family']))))
         tab.gmail_font_size.setValue(tab._config_int('gmail', gmail_config, 'font_size', int(gmail_defaults['font_size'])))
+        tab.gmail_header_logo_px_adjust.setValue(tab._config_int('gmail', gmail_config, 'header_logo_px_adjust', int(gmail_defaults['header_logo_px_adjust'])))
         tab.gmail_margin.setValue(tab._config_int('gmail', gmail_config, 'margin', int(gmail_defaults['margin'])))
 
         tab.gmail_show_sender.setChecked(tab._config_bool('gmail', gmail_config, 'show_sender', bool(gmail_defaults['show_sender'])))
@@ -1264,6 +1275,7 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'width': tab.gmail_width.value(),
         'font_family': tab.gmail_font_combo.currentFont().family(),
         'font_size': tab.gmail_font_size.value(),
+        'header_logo_px_adjust': tab.gmail_header_logo_px_adjust.value(),
         'margin': tab.gmail_margin.value(),
         'show_sender': tab.gmail_show_sender.isChecked(),
         'show_subject': tab.gmail_show_subject.isChecked(),

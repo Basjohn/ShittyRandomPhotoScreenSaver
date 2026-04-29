@@ -32,6 +32,21 @@ def test_gmail_envelope_png_sources_are_high_resolution(qt_app):
         assert image.hasAlphaChannel()
 
 
+def test_gmail_unread_envelope_is_inverse_white_asset():
+    """Unread should be the white filled inverse; read should remain the plain black envelope."""
+    from PIL import Image
+
+    def _average_visible_luma(asset_path: str) -> float:
+        image = Image.open(ROOT / asset_path).convert("RGBA")
+        pixels = [px for px in image.getdata() if px[3] > 16]
+        return sum((px[0] + px[1] + px[2]) / 3 for px in pixels) / len(pixels)
+
+    unread_luma = _average_visible_luma("images/gmail-envelope.png")
+    read_luma = _average_visible_luma("images/gmail-read.png")
+
+    assert unread_luma > read_luma + 40
+
+
 def test_gmail_action_icon_paths_are_covered_by_asset_manifest():
     """The menu icon loader should only reference tracked Gmail asset paths."""
     manifest = set(GMAIL_IMAGE_ASSETS)
@@ -54,3 +69,32 @@ def test_nuitka_builds_include_images_directory():
     for script in scripts:
         text = script.read_text(encoding="utf-8")
         assert "--include-data-dir=images=images" in text
+
+
+def test_builds_package_gmail_notification_sound_and_qt_multimedia():
+    """Frozen builds need the default sound file and Qt multimedia plugins."""
+    scripts = (
+        ROOT / "scripts" / "build_nuitka.ps1",
+        ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+    )
+
+    for script in scripts:
+        text = script.read_text(encoding="utf-8")
+        assert "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg" in text
+        assert "--include-data-dir=resources=resources" not in text
+        assert "client_secrets.json" not in text
+        assert "--include-qt-plugins=multimedia" in text
+        assert "--include-module=PySide6.QtMultimedia" in text
+
+
+def test_installers_ship_default_gmail_notification_sound_to_programdata():
+    """Both installers should place the default OGG in the shared ProgramData sound folder."""
+    scripts = (
+        ROOT / "scripts" / "SRPSS_Installer.iss",
+        ROOT / "scripts" / "SRPSS_MediaCenter_Installer.iss",
+    )
+
+    for script in scripts:
+        text = script.read_text(encoding="utf-8")
+        assert "tutuogg.ogg" in text
+        assert r"{commonappdata}\SRPSS\sounds" in text

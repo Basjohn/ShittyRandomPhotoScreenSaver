@@ -591,6 +591,10 @@ class RedditWidgetFactory(WidgetFactory):
             margin = inherit_style('margin', model.margin)
             if hasattr(widget, 'set_margin'):
                 widget.set_margin(int(margin))
+
+            header_logo_px_adjust = inherit_style('header_logo_px_adjust', model.header_logo_px_adjust)
+            if hasattr(widget, 'set_header_logo_px_adjust'):
+                widget.set_header_logo_px_adjust(int(header_logo_px_adjust))
             
             # Color
             text_color = inherit_style('color', [255, 255, 255, 230])
@@ -607,6 +611,13 @@ class RedditWidgetFactory(WidgetFactory):
             show_separators = SettingsManager.to_bool(inherit_style('show_separators', model.show_separators), True)
             if hasattr(widget, 'set_show_separators'):
                 widget.set_show_separators(show_separators)
+
+            show_refresh_spiral = SettingsManager.to_bool(
+                inherit_style('show_refresh_spiral', model.show_refresh_spiral),
+                True,
+            )
+            if hasattr(widget, 'set_show_refresh_spiral'):
+                widget.set_show_refresh_spiral(show_refresh_spiral)
             
             # Background color
             bg_color = inherit_style('bg_color', inherit_style('background_color', [35, 35, 35, 255]))
@@ -916,20 +927,17 @@ class ImgurWidgetFactory(WidgetFactory):
 
 
 class GmailWidgetFactory(WidgetFactory):
-    """Factory for creating GmailWidget instances. Dev-gated by ``--devgmail`` CLI flag."""
+    """Factory for creating GmailWidget instances."""
 
     def get_widget_name(self) -> str:
         return "gmail"
 
     def create(self, parent: QWidget, config: Dict[str, Any]) -> Optional[QWidget]:
         """Create and configure a GmailWidget."""
-        from core.dev_gates import is_gmail_enabled
         from widgets.gmail_widget import GmailWidget
         from widgets.gmail_components import GmailPosition
         from widgets.shadow_utils import apply_widget_shadow
 
-        if not is_gmail_enabled():
-            return None
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
 
@@ -1009,12 +1017,13 @@ class GmailWidgetFactory(WidgetFactory):
                 widget.set_intense_shadow(intense_shadow)
 
             # Notification sound
+            from core.audio.sound_paths import default_notification_sound_path
             if hasattr(widget, 'set_play_sound_on_new_mail'):
                 widget.set_play_sound_on_new_mail(
                     SettingsManager.to_bool(config.get('play_sound_on_new_mail', False), False)
                 )
             if hasattr(widget, 'set_sound_file_path'):
-                widget.set_sound_file_path(config.get('sound_file_path', 'resources/tutuogg.ogg'))
+                widget.set_sound_file_path(config.get('sound_file_path', default_notification_sound_path()))
             if hasattr(widget, 'set_sound_volume_percent'):
                 widget.set_sound_volume_percent(int(config.get('sound_volume_percent', 50)))
 

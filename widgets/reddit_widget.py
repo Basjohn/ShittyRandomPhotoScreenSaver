@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Optional, List, Dict, Any
 from datetime import timedelta
+import math
 import threading
 import time
 import random
@@ -22,7 +23,16 @@ from pathlib import Path
 import requests
 
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
-from PySide6.QtGui import QFont, QColor, QPainter, QFontMetrics, QDesktopServices, QPixmap
+from PySide6.QtGui import (
+    QFont,
+    QColor,
+    QPainter,
+    QFontMetrics,
+    QDesktopServices,
+    QPixmap,
+    QPainterPath,
+    QPen,
+)
 from PySide6.QtWidgets import QWidget
 from shiboken6 import isValid as shiboken_isValid
 
@@ -127,8 +137,14 @@ class RedditWidget(BaseOverlayWidget):
         self._header_font_pt: int = self._font_size
         self._header_logo_size: int = max(12, int(self._font_size * 1.3))
         self._header_logo_margin: int = self._header_logo_size
+        self._header_logo_px_adjust: int = 0
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
         self._header_hit_rect: Optional[QRect] = None
+        self._show_refresh_spiral: bool = True
+        self._refresh_hit_rect: Optional[QRect] = None
+        self._refreshing: bool = False
+        self._refresh_spin_angle: int = 0
+        self._refresh_spin_timer: Optional[QTimer] = None
 
         # Hover state and tooltip management
         self._hover_row_index: Optional[int] = None
@@ -371,6 +387,13 @@ class RedditWidget(BaseOverlayWidget):
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
         self._hover_timer = None
+        try:
+            if self._refresh_spin_timer is not None:
+                self._refresh_spin_timer.stop()
+                self._refresh_spin_timer.deleteLater()
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
+        self._refresh_spin_timer = None
 
     def is_running(self) -> bool:
         return self._enabled
@@ -397,7 +420,34 @@ class RedditWidget(BaseOverlayWidget):
 
     def set_show_separators(self, show: bool) -> None:
         """Enable or disable row separators."""
-        self._show_separators = bool(show)
+        new_value = bool(show)
+        if self._show_separators == new_value:
+            return
+        self._show_separators = new_value
+        self._invalidate_paint_cache()
+        self.update()
+
+    def set_header_logo_px_adjust(self, value: int) -> None:
+        try:
+            adjust = max(-12, min(24, int(value)))
+        except (TypeError, ValueError):
+            adjust = 0
+        if self._header_logo_px_adjust == adjust:
+            return
+        self._header_logo_px_adjust = adjust
+        self._sync_header_metrics()
+        self._invalidate_paint_cache()
+        self._update_card_height_from_content(len(self._posts) or self._limit)
+        self.update()
+
+    def set_show_refresh_spiral(self, show: bool) -> None:
+        new_value = bool(show)
+        if self._show_refresh_spiral == new_value:
+            return
+        self._show_refresh_spiral = new_value
+        if not new_value:
+            self._stop_refresh_spinner()
+            self._refresh_hit_rect = None
         self.update()
 
     def set_item_limit(self, limit: int) -> None:
@@ -408,6 +458,30 @@ class RedditWidget(BaseOverlayWidget):
             # Trim existing posts to the new visible limit
             self._posts = self._posts[: self._limit]
             self.update()
+
+    def set_font_size(self, size: int) -> None:  # type: ignore[override]
+        before = self._font_size
+        super().set_font_size(size)
+        if self._font_size == before:
+            return
+        self._sync_header_metrics()
+        self._invalidate_paint_cache()
+        self._update_card_height_from_content(len(self._posts) or self._limit)
+
+    def set_font_family(self, family: str) -> None:  # type: ignore[override]
+        before = self._font_family
+        super().set_font_family(family)
+        if self._font_family == before:
+            return
+        self._invalidate_paint_cache()
+        self._update_card_height_from_content(len(self._posts) or self._limit)
+
+    def _sync_header_metrics(self) -> None:
+        base_font = max(6, int(self._font_size))
+        header_font = max(6, int(base_font * 1.2) + int(round(int(self._header_logo_px_adjust) / 1.3)))
+        self._header_font_pt = header_font
+        self._header_logo_size = max(12, int(header_font * 1.3))
+        self._header_logo_margin = self._header_logo_size
 
     # ------------------------------------------------------------------
     # Progressive Loading
@@ -482,11 +556,7 @@ class RedditWidget(BaseOverlayWidget):
         self._invalidate_paint_cache()
         
         # Update typography
-        base_font = max(6, self._font_size)
-        header_font = max(6, int(base_font * 1.2))
-        self._header_font_pt = header_font
-        self._header_logo_size = max(12, int(header_font * 1.3))
-        self._header_logo_margin = self._header_logo_size
+        self._sync_header_metrics()
         
         # Size the card
         self._update_card_height_from_content(len(self._posts))
@@ -741,10 +811,48 @@ class RedditWidget(BaseOverlayWidget):
         except Exception as exc:
             self._on_fetch_error(str(exc))
 
+    def _trigger_manual_refresh(self) -> bool:
+        if not self._enabled:
+            return False
+        try:
+            self._start_refresh_spinner()
+            self._fetch_feed()
+            return True
+        except Exception:
+            self._stop_refresh_spinner()
+            logger.debug("[REDDIT] Manual refresh failed", exc_info=True)
+            return False
+
+    def _start_refresh_spinner(self) -> None:
+        self._refreshing = True
+        if self._refresh_spin_timer is None:
+            timer = QTimer(self)
+            timer.setInterval(45)
+            timer.timeout.connect(self._advance_refresh_spinner)
+            self._refresh_spin_timer = timer
+            self._register_resource(timer, "reddit refresh spinner")
+        if not self._refresh_spin_timer.isActive():
+            self._refresh_spin_timer.start()
+        self.update()
+
+    def _advance_refresh_spinner(self) -> None:
+        if not self._refreshing:
+            self._stop_refresh_spinner()
+            return
+        self._refresh_spin_angle = (self._refresh_spin_angle + 18) % 360
+        self.update()
+
+    def _stop_refresh_spinner(self) -> None:
+        self._refreshing = False
+        if self._refresh_spin_timer is not None and self._refresh_spin_timer.isActive():
+            self._refresh_spin_timer.stop()
+        self.update()
+
     def _on_feed_fetched(self, posts_data: List[Dict[str, Any]]) -> None:
         # Guard against callback arriving after widget destruction
         if not shiboken_isValid(self):
             return
+        self._stop_refresh_spinner()
         
         if not posts_data:
             logger.warning("[REDDIT] Empty listing for subreddit %s", self._subreddit)
@@ -852,11 +960,7 @@ class RedditWidget(BaseOverlayWidget):
 
         # Update typography metrics for the header based on the current
         # base font size; the header itself is painted in paintEvent.
-        base_font = max(6, self._font_size)
-        header_font = max(6, int(base_font * 1.2))
-        self._header_font_pt = header_font
-        self._header_logo_size = max(12, int(header_font * 1.3))
-        self._header_logo_margin = self._header_logo_size
+        self._sync_header_metrics()
 
         # Size the card to the actual number of visible rows so we avoid
         # large empty regions while still leaving enough headroom for the
@@ -910,6 +1014,7 @@ class RedditWidget(BaseOverlayWidget):
         # Guard against callback arriving after widget destruction
         if not shiboken_isValid(self):
             return
+        self._stop_refresh_spinner()
         
         if is_verbose_logging():
             logger.warning("[REDDIT] Fetch error: %s", error)
@@ -942,6 +1047,12 @@ class RedditWidget(BaseOverlayWidget):
         super().paintEvent(event)
         
         if not self._posts:
+            if self._show_refresh_spiral:
+                painter = QPainter(self)
+                try:
+                    self._paint_refresh_button(painter)
+                finally:
+                    painter.end()
             return
         
         widget_size = self.size()
@@ -988,8 +1099,46 @@ class RedditWidget(BaseOverlayWidget):
             painter = QPainter(self)
             try:
                 painter.drawPixmap(0, 0, self._cached_content_pixmap)
+                if self._show_refresh_spiral:
+                    self._paint_refresh_button(painter)
             finally:
                 painter.end()
+
+    def _paint_refresh_button(self, painter: QPainter) -> None:
+        margins = self.contentsMargins()
+        size = 22
+        right_padding = min(max(0, margins.right()), 12)
+        right = self.width() - right_padding
+        top = margins.top() + 2
+        rect = QRect(max(0, right - size), top, size, size)
+        self._refresh_hit_rect = rect
+
+        painter.save()
+        try:
+            color = QColor(170, 170, 170, 190)
+            if self._refreshing:
+                color = QColor(220, 220, 220, 235)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(color, 2)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            center = rect.center()
+            max_radius = max(4.0, (min(rect.width(), rect.height()) / 2.0) - 3.0)
+            path = QPainterPath()
+            steps = 44
+            for index in range(steps):
+                progress = index / float(steps - 1)
+                radius = 1.1 + progress * (max_radius - 1.1)
+                angle = math.radians(self._refresh_spin_angle + 30 + progress * 620)
+                x = center.x() + math.cos(angle) * radius
+                y = center.y() + math.sin(angle) * radius
+                if index == 0:
+                    path.moveTo(x, y)
+                else:
+                    path.lineTo(x, y)
+            painter.drawPath(path)
+        finally:
+            painter.restore()
     
     def _regenerate_cache(self, size) -> None:
         """Regenerate the cached content pixmap."""
@@ -1212,6 +1361,8 @@ class RedditWidget(BaseOverlayWidget):
 
     def resolve_click_target(self, local_pos: QPoint) -> Optional[str]:
         """Return the Reddit URL associated with the given click, if any."""
+        if self._show_refresh_spiral and self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
+            return None
         header_rect = self._header_hit_rect
         if header_rect is not None and header_rect.contains(local_pos):
             slug = self._subreddit
@@ -1232,12 +1383,15 @@ class RedditWidget(BaseOverlayWidget):
         """
         if not self._enabled:
             return False
+        refresh_rect = self._refresh_hit_rect
+        if self._show_refresh_spiral and refresh_rect is not None and refresh_rect.contains(local_pos):
+            return self._trigger_manual_refresh()
         # If the click is on a link/title, don't consume — let normal click flow handle it
         url = self.resolve_click_target(local_pos)
         if url is not None:
             return False
         try:
-            self._fetch_feed()
+            self._trigger_manual_refresh()
             logger.debug("[REDDIT] Double-click triggered subreddit refresh")
             return True
         except Exception:
@@ -1253,6 +1407,10 @@ class RedditWidget(BaseOverlayWidget):
         Returns:
             True if a link was clicked and opened, False otherwise.
         """
+        refresh_rect = self._refresh_hit_rect
+        if self._show_refresh_spiral and refresh_rect is not None and refresh_rect.contains(local_pos):
+            return self._trigger_manual_refresh()
+
         url = self.resolve_click_target(local_pos)
         if not url:
             return False

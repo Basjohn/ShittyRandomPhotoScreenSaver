@@ -252,6 +252,76 @@
         "global": {
             "card_border_width_px": 4
         },
+        "gmail": {
+            "account_slot": "0",
+            "auto_title_case": true,
+            "bg_color": [
+                35,
+                35,
+                35,
+                255
+            ],
+            "bg_opacity": 0.6,
+            "border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "border_opacity": 1.0,
+            "boundary_separator_color": [
+                180,
+                180,
+                180,
+                80
+            ],
+            "boundary_separator_thickness": 2,
+            "clean_sender_names": true,
+            "color": [
+                255,
+                255,
+                255,
+                230
+            ],
+            "date_display_mode": "relative",
+            "desaturate_when_no_unread": true,
+            "enabled": false,
+            "filter_label": "INBOX",
+            "font_family": "Segoe UI",
+            "font_size": 14,
+            "group_threads": false,
+            "header_logo_px_adjust": 0,
+            "intense_shadow": true,
+            "limit": 5,
+            "margin": 30,
+            "max_sender_words": 3,
+            "max_subject_chars": 0,
+            "max_subject_words": 4,
+            "monitor": "ALL",
+            "play_sound_on_new_mail": false,
+            "position": "Top Left",
+            "refresh_minutes": 5,
+            "sender_column_width": 180,
+            "separator_color": [
+                200,
+                200,
+                200,
+                40
+            ],
+            "separator_thickness": 1,
+            "show_background": true,
+            "show_envelope_icon": true,
+            "show_header_border": true,
+            "show_sender": true,
+            "show_separators": true,
+            "show_subject": true,
+            "show_three_dot_menu": true,
+            "show_timestamp": true,
+            "show_unread_count_in_header": true,
+            "sound_file_path": "resources/tutuogg.ogg",
+            "sound_volume_percent": 50,
+            "width": 600
+        },
         "imgur": {
             "bg_color": [
                 35,
@@ -369,12 +439,14 @@
             "exit_on_click": true,
             "font_family": "Segoe UI",
             "font_size": 14,
+            "header_logo_px_adjust": 0,
             "intense_shadow": true,
             "limit": 20,
             "margin": 30,
             "monitor": 2,
             "position": "Bottom Center",
             "show_background": true,
+            "show_refresh_spiral": true,
             "show_separators": true,
             "subreddit": "All"
         },

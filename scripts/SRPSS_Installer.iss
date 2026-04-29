@@ -51,6 +51,7 @@ Source: ".\reddit_helper_task_template.xml"; Flags: dontcopy
 ; Authoritative curated visualizer presets shipped directly from the repository tree.
 ; Delivered to a stable ProgramData path so upgrades always clean-replace them.
 Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 
 [InstallDelete]
 ; Remove any legacy SRPSS screen saver binaries that can cause duplicate
@@ -62,6 +63,7 @@ Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
 ; Wipe old shipped curated presets before the new ones land so stale/renamed
 ; files are never left behind alongside the authoritative replacement set.
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
+Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 
 [Registry]
 ; Set SRPSS.scr as the current user's active screensaver

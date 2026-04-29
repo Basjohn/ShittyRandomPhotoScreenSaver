@@ -103,6 +103,8 @@ def test_gmail_subject_shortening() -> None:
     assert shorten_subject("One two three four five", max_words=4, max_chars=25) == "One two three four five"
     assert shorten_subject("Receipt For Your Payment To COGNOSPHERE", max_words=4, max_chars=20) == "Receipt For Your Pay..."
     assert shorten_subject("One two three four", max_words=0, max_chars=0) == "One two three four"
+    assert shorten_subject("PayPal | Receipt For Your Payment", max_words=4) == "PayPal | Receipt For Your..."
+    assert shorten_subject("Takealot - Payment Confirmation", max_words=2) == "Takealot - Payment..."
 
 
 def test_format_relative_time() -> None:

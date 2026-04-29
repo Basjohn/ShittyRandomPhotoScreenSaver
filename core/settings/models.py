@@ -2157,8 +2157,10 @@ class RedditWidgetSettings:
     background_color: str = "#000000"
     background_opacity: float = 0.6
     show_separators: bool = True
+    show_refresh_spiral: bool = True
     intense_shadow: bool = True
     margin: int = 30
+    header_logo_px_adjust: int = 0
     border_color: list[int] = field(default_factory=lambda: [255, 255, 255, 255])
     border_opacity: float = 1.0
     color: list[int] = field(default_factory=lambda: [255, 255, 255, 230])
@@ -2182,8 +2184,10 @@ class RedditWidgetSettings:
             background_color=settings.get(f"{prefix}.background_color", "#000000"),
             background_opacity=float(settings.get(f"{prefix}.background_opacity", 0.6)),
             show_separators=settings.get(f"{prefix}.show_separators", True),
+            show_refresh_spiral=settings.get(f"{prefix}.show_refresh_spiral", True),
             intense_shadow=settings.get(f"{prefix}.intense_shadow", True),
             margin=int(settings.get(f"{prefix}.margin", 30)),
+            header_logo_px_adjust=int(settings.get(f"{prefix}.header_logo_px_adjust", 0)),
             border_color=settings.get(f"{prefix}.border_color", [255, 255, 255, 255]),
             border_opacity=float(settings.get(f"{prefix}.border_opacity", 1.0)),
             color=settings.get(f"{prefix}.color", [255, 255, 255, 230]),
@@ -2212,8 +2216,10 @@ class RedditWidgetSettings:
             background_color=_get("background_color", "#000000"),
             background_opacity=float(_get("background_opacity", 0.6)),
             show_separators=_get("show_separators", True),
+            show_refresh_spiral=_get("show_refresh_spiral", True),
             intense_shadow=_get("intense_shadow", True),
             margin=int(_get("margin", 30)),
+            header_logo_px_adjust=int(_get("header_logo_px_adjust", 0)),
             border_color=_get("border_color", [255, 255, 255, 255]),
             border_opacity=float(_get("border_opacity", 1.0)),
             color=_get("color", [255, 255, 255, 230]),
@@ -2233,8 +2239,10 @@ class RedditWidgetSettings:
             f"{prefix}.background_color": self.background_color,
             f"{prefix}.background_opacity": float(self.background_opacity),
             f"{prefix}.show_separators": self.show_separators,
+            f"{prefix}.show_refresh_spiral": self.show_refresh_spiral,
             f"{prefix}.intense_shadow": self.intense_shadow,
             f"{prefix}.margin": int(self.margin),
+            f"{prefix}.header_logo_px_adjust": int(self.header_logo_px_adjust),
             f"{prefix}.border_color": self.border_color,
             f"{prefix}.border_opacity": float(self.border_opacity),
             f"{prefix}.color": self.color,

@@ -271,9 +271,11 @@ class _StubRedditWidget(_BaseStubWidget):
         self.font_family = None
         self.font_size = None
         self.margin = None
+        self.header_logo_px_adjust = None
         self.text_color = None
         self.show_background = None
         self.show_separators = None
+        self.show_refresh_spiral = None
         self.background_color = None
         self.background_opacity = None
         self.background_border = None
@@ -295,6 +297,9 @@ class _StubRedditWidget(_BaseStubWidget):
     def set_margin(self, value):
         self.margin = value
 
+    def set_header_logo_px_adjust(self, value):
+        self.header_logo_px_adjust = value
+
     def set_text_color(self, value):
         self.text_color = value
 
@@ -303,6 +308,9 @@ class _StubRedditWidget(_BaseStubWidget):
 
     def set_show_separators(self, value):
         self.show_separators = value
+
+    def set_show_refresh_spiral(self, value):
+        self.show_refresh_spiral = value
 
     def set_background_color(self, value):
         self.background_color = value
@@ -521,12 +529,14 @@ def test_reddit_widgets_support_inheritance_and_limit():
             "font_family": "Inter",
             "font_size": 18,
             "margin": 12,
+            "header_logo_px_adjust": 5,
             "color": [255, 255, 255, 255],
             "bg_color": [0, 0, 0, 255],
             "border_color": [50, 50, 50, 255],
             "border_opacity": 0.5,
             "show_background": True,
             "show_separators": True,
+            "show_refresh_spiral": False,
             "limit": 9,
             "intense_shadow": True,
         },
@@ -549,6 +559,8 @@ def test_reddit_widgets_support_inheritance_and_limit():
     assert widget.subreddit == "all"
     assert widget.font_size == 18
     assert widget.margin == 12
+    assert widget.header_logo_px_adjust == 5
+    assert widget.show_refresh_spiral is False
     assert widget.item_limit == 9
     assert widget.intense_shadow is True
     assert widget.raised is True
@@ -560,6 +572,8 @@ def test_reddit_widgets_support_inheritance_and_limit():
     assert widget2.item_limit == 4
     # inherits styling from reddit1
     assert widget2.font_family == "Inter"
+    assert widget2.header_logo_px_adjust == 5
+    assert widget2.show_refresh_spiral is False
     assert widget2.text_color == (tuple([255, 255, 255, 255]), None)
     assert widget2.raised is True
     assert widget2.started is True

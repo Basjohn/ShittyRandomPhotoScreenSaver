@@ -174,10 +174,17 @@ def _limit_words(text: str, max_words: int) -> tuple[str, bool]:
     max_words = _coerce_limit(max_words)
     if max_words <= 0:
         return text, False
-    words = text.split()
-    if len(words) <= max_words:
+    count = 0
+    for match in re.finditer(r"\S+", text):
+        token = match.group(0)
+        if not any(ch.isalnum() for ch in token):
+            continue
+        count += 1
+        if count > max_words:
+            return _trim_ellipsis_source(text[: match.start()]), True
+    if count <= max_words:
         return text, False
-    return " ".join(words[:max_words]), True
+    return text, False
 
 
 def _limit_chars(text: str, max_chars: int) -> tuple[str, bool]:

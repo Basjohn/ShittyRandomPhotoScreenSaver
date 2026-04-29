@@ -6,7 +6,7 @@ Status: Gmail is functional enough for iterative runtime testing, but not shippa
 
 ## 1. Current Contract
 
-Gmail is a dev-gated widget behind `--devgmail`. IMAP with an app password is the primary supported backend. OAuth/REST remains optional/dev/advanced until Google verification and release policy are settled.
+Gmail is a normal widget feature. IMAP with an app password is the primary supported backend. OAuth/REST remains optional/dev/advanced until Google verification and release policy are settled.
 
 Core rules:
 
@@ -22,7 +22,6 @@ Core rules:
 
 | Area | File | Notes |
 |---|---|---|
-| Dev gate | `core/dev_gates.py` | `is_gmail_enabled()` reads `--devgmail` / forced gate state. |
 | Backend facade | `core/gmail/gmail_backend.py` | Routes IMAP vs OAuth/REST and owns credential state. |
 | IMAP backend | `core/gmail/gmail_imap.py` | Primary backend; fetches metadata and Gmail IMAP ids. |
 | OAuth manager | `core/gmail/gmail_oauth.py` | Optional OAuth path; PKCE + DPAPI token storage. |
@@ -45,7 +44,7 @@ Security invariants:
 
 Do not reimplement these unless a defect is found:
 
-- Dev gate, backend modules, settings UI, defaults, notification sound, and focused tests exist.
+- Gmail dev gating has been removed; backend modules, settings UI, defaults, notification sound, and focused tests exist.
 - Nine-position support, single `gmail.width`, Media-style margins, measured header frame, and layout cleanup are implemented.
 - IMAP deep links, account slot, decimal thread-id conversion, row `open_url`, row/action hit separation, vertical action menu, and MC menu popup ownership are implemented.
 - Normal/main URL queueing wakes the helper bridge; MC row/header URL routing is patched.
@@ -56,15 +55,21 @@ Do not reimplement these unless a defect is found:
 - Thread grouping is guarded by `gmail.group_threads`, default `False`.
 - Mark as Read/Unread, Spam, and Delete action paths work in runtime reports; Archive remains unresolved.
 - Gmail asset guard exists: required images are tested, Archive icon asset exists, and both Nuitka scripts include `images=images`.
-- Settings flicker mitigation exists but is not runtime-validated: Gmail load signal blocking is canonicalized, redundant `setVisible(...)` calls are reduced, styled combo popup-view creation is deferred until popup open, Gmail backend/auth refresh is deferred until after settings construction, and the failed hidden-bucket pre-polish approach has been removed.
+- Settings dialog creation flicker is runtime-confirmed fixed; bucket-open visual oddness remains under watch. Gmail load signal blocking is canonicalized, redundant `setVisible(...)` calls are reduced, styled combo popup-view creation is deferred until popup open, Gmail backend/auth refresh is deferred until after settings construction, and the failed hidden-bucket pre-polish approach has been removed.
 - IMAP Save & Test is non-blocking: supplied credentials are tested on an IO task, then saved only after success.
 - Backend-specific settings visibility now uses explicit hidden state, so OAuth text/Authorize controls stay hidden for IMAP even when settings are opened fresh.
 - Gmail settings UI has a canonical default accessor for user-facing fallback values; missing Gmail defaults fail loudly instead of silently introducing hardcoded drift.
 - Settings-dialog cached widget defaults now merge with fresh canonical defaults and invalidate when `default_settings.py` changes, so stale cache data cannot hide newly added Gmail defaults.
-- Gmail bucket toggles now avoid redundant state writes; shared bucket visibility updates skip no-op body show/hide without suppressing the whole settings dialog; Gmail buckets defer the initial collapse until after their child controls are built. Runtime validation is still required for the reported Gmail-only bucket flicker.
+- Gmail bucket toggles now avoid redundant state writes; shared bucket visibility updates skip no-op body show/hide without suppressing the whole settings dialog; Gmail buckets defer the initial collapse until after their child controls are built; Backend content lives in a default-open Backend bucket. Runtime validation is still required for the reported Gmail-only bucket oddness.
+- Header parity pass started: Gmail header font/logo sizing now follows Media's `font * 1.2` and `header * 1.3` relationship, has a `header_logo_px_adjust` setting, and uses Media-style inner header border thickness.
 - Failed flicker attempt retained as a guardrail: do not pre-polish hidden Gmail bucket contents by temporarily showing them during settings construction. R-18 proved constructor-time visibility calls can create settings ghost/flicker behavior.
-- Gmail Text Limits settings are split into two aligned rows: sender word/column controls on the first row, subject word/character controls on the second row.
+- Gmail Text Limits settings are split into a compact two-row aligned grid: sender word/column controls on the first row, subject word/character controls on the second row.
 - Gmail envelope/read PNG sources were regenerated as clean 64px transparent black-and-white assets, with tests preventing a return to tiny/jagged source icons.
+- Gmail unread rows now use the white/unread envelope asset while read rows use the black/read asset.
+- Gmail sender/subject word limiting ignores punctuation-only separators such as `|`, `-`, `•`, and `/`.
+- Gmail notification sound release support has source guardrails: both Nuitka builds include only `resources/tutuogg.ogg`, Qt multimedia support is declared, installers ship `tutuogg.ogg` to ProgramData, and the default sound resolver prefers ProgramData with script-mode fallback.
+- Gmail stays hidden when there is no authenticated account and no usable cache; it should not join the startup fade wave just to show an auth/empty placeholder.
+- Build scripts include only `resources/tutuogg.ogg`, not the whole `resources` folder, so local ignored OAuth files such as `client_secrets.json` are not bundled.
 - Gmail widget setters now skip no-op `update()` calls for repeated same-value settings, starting the resource-use cleanup before the final profiling pass.
 
 ## 4. Active Priorities
@@ -100,9 +105,9 @@ Tasks:
 - [x] Defer Gmail backend/auth refresh until after settings construction so IMAP/OAuth credential checks do not run on the dialog-construction path.
 - [x] Defer styled combo popup-view styling until the popup is opened, avoiding constructor-time `view()` calls that can create `QComboBoxPrivateContainer` helper frames.
 - [x] Defer Gmail bucket initial collapse until after bucket child controls are built, then apply the final collapsed/expanded state once.
-- [x] Run `tools/flicker_test.py` with winprobe against Widgets-initial and full main-setup settings paths (`v34`, `v17`; latest with `--devgmail`): only the SettingsDialog HWND appeared; no tiny caption/helper window or foreground churn was observed. This does not close the bug because the user still reports it in live use.
-- [ ] Runtime/manual validation: open settings from normal and MC/screensaver paths with Gmail enabled and verify no taskbar/ghost flicker.
-- [ ] Runtime/manual validation: open/close Gmail settings buckets and confirm the Gmail-only flicker is gone.
+- [x] Run `tools/flicker_test.py` with winprobe against Widgets-initial and full main-setup settings paths (`v34`, `v17`; last gated run before gate removal): only the SettingsDialog HWND appeared; no tiny caption/helper window or foreground churn was observed.
+- [x] Runtime/user validation: settings dialog creation flicker is fixed.
+- [x] Runtime/manual validation: extra Backend bucket resolved the Gmail-only bucket oddness.
 - [ ] If a new root cause is proven, add a short entry to `Docs/Historical_Bugs.md` with the exact forbidden pattern.
 
 Failure conditions:
@@ -189,8 +194,9 @@ The Gmail header/logo still needs visual parity with Media/Spotify/Reddit: logo 
 Tasks:
 
 - [ ] Runtime screenshot Gmail beside Media at the same scale.
-- [ ] Measure header frame/logo/text positions using live layout helpers, not screenshot constants.
-- [ ] Adjust Gmail header constants only if the measured comparison is off.
+- [x] Measure implementation against Media formulas rather than screenshot constants.
+- [x] Adjust Gmail header font/logo relationship and header border thickness to match Media.
+- [ ] Runtime-validate the default size visually; use `gmail.header_logo_px_adjust` only for final px nudging.
 - [ ] Keep click hit rect aligned with the painted header frame.
 
 #### C2. Envelope and action assets
@@ -202,8 +208,9 @@ Current envelope PNGs are distorted/jagged. Archive now has an SVG, but read/unr
 Tasks:
 
 - [x] Replace read/unread envelope PNGs with clean black-and-white assets.
-- [ ] Keep unread/read distinction visually clear at 16px.
-- [ ] Verify assets appear in source and packaged builds.
+- [x] Keep unread/read distinction visually clear in widget code by selecting the unread PNG for unread mail and the read PNG for read mail.
+- [ ] Runtime-validate unread/read distinction visually at 16px in normal and MC builds.
+- [ ] Verify assets appear in final packaged builds.
 - [ ] Keep fallback drawing for missing optional icons.
 
 #### C3. Row/date/text runtime validation
@@ -211,6 +218,8 @@ Tasks:
 Tasks:
 
 - [x] Split Text Limits into two aligned settings rows so four spinboxes no longer compete on one line.
+- [x] Re-align Text Limits as a two-row grid matching the desired Sender words/Sender column and Subject words/Subject chars layout.
+- [x] Ensure punctuation-only separator tokens do not count as subject/sender words.
 - [ ] Validate `relative`, `numeric`, and `words` date modes at default and narrow practical widths.
 - [ ] Validate sender/subject columns remain aligned when sender word limits change.
 - [ ] Validate title casing on real sender/subject samples:
@@ -241,13 +250,14 @@ Tasks:
 - [x] Add a canonical Gmail settings UI default accessor and use it for load/save fallback values.
 - [ ] Continue removing hardcoded default drift in widget apply logic where values are still user-facing rather than private drawing constants.
 - [ ] Keep private drawing constants local when they are not user-facing settings.
+- [x] Default notification sound path now resolves to `%ProgramData%\SRPSS\sounds\tutuogg.ogg` when installed, with `resources/tutuogg.ogg` as the script/dev fallback.
 
 #### D2. Paint/update/resource audit
 
 Tasks:
 
-- [ ] Confirm Gmail does no network, file I/O, pixmap scaling, or settings checks from `paintEvent()`.
-- [ ] Confirm refresh spinner/timers run only while refreshing and stop on cleanup.
+- [x] Source-audit Gmail paint path: no network, credential checks, cache writes, or sound setup are performed from `paintEvent()`.
+- [x] Confirm refresh spinner/timers run only while refreshing and stop on cleanup.
 - [ ] Confirm not causing/contributing to UI Thread choking, if so migrate feasible items to another thread.
 - [~] Confirm Gmail does not repaint every frame/tick when data and animation state are unchanged; first-pass setter no-op guards are implemented.
 - [ ] Profile `paintEvent()` with 10 rows; target under 5ms on a normal 1080p desktop.
@@ -256,10 +266,15 @@ Tasks:
 
 Tasks:
 
-- [ ] Remove Devgate from Gmail and make it a normal feature. (Safe to do anytime, Gmail already has user value)
+- [x] Remove Devgate from Gmail and make it a normal feature.
 - [x] Source-level tests verify Gmail assets exist and normal/MC Nuitka scripts include `images=images`.
+- [x] Source-level tests verify normal/MC Nuitka scripts include notification sound resource packaging, Qt multimedia support, and installer ProgramData sound shipping.
+- [x] Corrected source-level build guard: normal/MC Nuitka scripts include only `resources/tutuogg.ogg`, not the entire `resources` directory.
+- [x] Build runner preflight fails clearly if `resources/tutuogg.ogg` is missing.
+- [x] Confirmed tracked files do not contain the user's Gmail address, app password, Gmail credential `.enc`, or OAuth client secret JSON.
 - [ ] Build or inspect final normal/MC artifacts and verify Gmail brand, envelope, Archive, Spam, Trash, Mark Read/Unread, and refresh visuals appear.
-- [ ] Ensure no `client_secrets.json`, token, app password, `.enc`, `.pickle`, cache, or raw credential artifacts are tracked or bundled by accident.
+- [ ] Build or inspect final normal/MC artifacts and verify notification sound playback works from ProgramData.
+- [ ] Continue ensuring no `client_secrets.json`, token, app password, `.enc`, `.pickle`, cache, or raw credential artifacts are tracked or bundled by accident.
 
 ## 6. Research Items
 

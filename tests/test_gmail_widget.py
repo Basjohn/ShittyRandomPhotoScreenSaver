@@ -18,10 +18,6 @@ def qt_app():
 def test_gmail_widget_instantiation_mock_settings(qt_app):
     """Verify GmailWidget can be instantiated with mock settings (no real widget painting)."""
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    # Enable gmail gate for test
-    force_gate(gmail=True)
 
     # Create widget with mock settings (no real Gmail credentials)
     mock_settings = {
@@ -53,9 +49,6 @@ def test_gmail_widget_instantiation_mock_settings(qt_app):
 def test_gmail_widget_paint_event_empty_state(qt_app):
     """Verify GmailWidget paintEvent doesn't crash with empty email list."""
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     try:
         widget = GmailWidget()
@@ -74,9 +67,6 @@ def test_gmail_widget_paint_event_empty_state(qt_app):
 def test_gmail_widget_handle_click_miss(qt_app):
     """Verify GmailWidget.handle_click() returns False for clicks outside email rows."""
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     try:
         widget = GmailWidget()
@@ -93,9 +83,6 @@ def test_gmail_widget_handle_click_miss(qt_app):
 def test_gmail_widget_cleanup_no_leaks(qt_app):
     """Verify GmailWidget.cleanup() stops timers and clears references."""
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     try:
         widget = GmailWidget()
@@ -107,6 +94,26 @@ def test_gmail_widget_cleanup_no_leaks(qt_app):
         assert True  # If we get here, cleanup succeeded
     except Exception as e:
         pytest.skip(f"Cleanup test skipped: {e}")
+
+
+def test_gmail_no_auth_and_no_cache_does_not_request_fade(qt_app, monkeypatch):
+    """Gmail should stay hidden when there is no account information and no cache."""
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    fade_requests = []
+    try:
+        monkeypatch.setattr(widget, "_load_email_cache", lambda: None)
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
+        monkeypatch.setattr(widget, "_fetch_emails", lambda: False)
+        monkeypatch.setattr(widget, "_request_fade_in", lambda: fade_requests.append("fade"))
+
+        widget._activate_impl()
+
+        assert fade_requests == []
+        assert widget._has_displayed_valid_data is False
+    finally:
+        widget.cleanup()
 
 
 def test_gmail_widget_no_real_credentials_in_code():
@@ -125,9 +132,6 @@ def test_gmail_widget_no_real_credentials_in_code():
 def test_gmail_widget_settings_application(qt_app):
     """Verify GmailWidget.apply_settings() parses settings correctly."""
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     try:
         widget = GmailWidget()
@@ -155,9 +159,6 @@ def test_gmail_widget_phase_a_settings(qt_app):
     """Verify Phase A layout settings apply to widget state."""
     from widgets.base_overlay_widget import OverlayPosition
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     try:
@@ -188,9 +189,6 @@ def test_gmail_widget_phase_a_settings(qt_app):
 def test_gmail_widget_text_cleanup_settings(qt_app):
     """Verify Gmail text cleanup settings apply to widget state."""
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     try:
@@ -216,11 +214,7 @@ def test_gmail_widget_text_cleanup_settings(qt_app):
 def test_gmail_widget_date_display_setting(qt_app):
     """Verify Gmail date display mode applies to row date formatting."""
     from datetime import datetime
-
-    from core.dev_gates import force_gate
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     try:
@@ -242,12 +236,8 @@ def test_gmail_widget_row_click_opens_email_url(qt_app, monkeypatch):
     """Verify row clicks open the email open_url."""
     from datetime import datetime
     from PySide6.QtCore import QPoint, QRect
-
-    from core.dev_gates import force_gate
     from core.gmail.gmail_client import EmailMetadata
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
     opened = []
     monkeypatch.setattr("widgets.gmail_widget.open_url", lambda url: opened.append(url))
 
@@ -279,12 +269,8 @@ def test_gmail_widget_action_click_has_priority(qt_app, monkeypatch):
     """Verify action-menu clicks are not consumed by the row click path."""
     from datetime import datetime
     from PySide6.QtCore import QPoint, QRect
-
-    from core.dev_gates import force_gate
     from core.gmail.gmail_client import EmailMetadata
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
     opened = []
     menu_ids = []
     monkeypatch.setattr("widgets.gmail_widget.open_url", lambda url: opened.append(url))
@@ -356,12 +342,8 @@ def test_gmail_action_menu_click_defers_mc_focus_restore(qt_app):
 def test_gmail_widget_uses_imap_uid_for_imap_actions(qt_app):
     """Verify IMAP menu actions dispatch backend-safe IDs instead of Gmail web IDs."""
     from datetime import datetime
-
-    from core.dev_gates import force_gate
     from core.gmail.gmail_client import EmailMetadata
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     try:
@@ -384,11 +366,7 @@ def test_gmail_widget_uses_imap_uid_for_imap_actions(qt_app):
 def test_gmail_widget_refresh_click_forces_fetch(qt_app):
     """Verify the top-right refresh hit rect consumes clicks and fetches."""
     from PySide6.QtCore import QPoint, QRect
-
-    from core.dev_gates import force_gate
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     calls = []
@@ -405,10 +383,7 @@ def test_gmail_widget_refresh_click_forces_fetch(qt_app):
 
 def test_gmail_widget_loads_archive_action_icon(qt_app):
     """Verify the Archive action has a real loaded icon asset, not only fallback drawing."""
-    from core.dev_gates import force_gate
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     try:
@@ -421,10 +396,7 @@ def test_gmail_widget_loads_archive_action_icon(qt_app):
 
 def test_gmail_widget_setters_skip_noop_repaints(qt_app):
     """Repeated same-value settings should not schedule needless repaints."""
-    from core.dev_gates import force_gate
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     calls = []
@@ -449,11 +421,7 @@ def test_gmail_widget_setters_skip_noop_repaints(qt_app):
 def test_gmail_widget_blank_double_click_refreshes_but_rows_do_not(qt_app):
     """Verify Gmail follows Reddit's blank-space double-click refresh contract."""
     from PySide6.QtCore import QPoint, QRect
-
-    from core.dev_gates import force_gate
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     calls = []
@@ -478,9 +446,6 @@ def test_gmail_widget_header_border_smoke(qt_app):
     from PySide6.QtGui import QFont
 
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     try:
@@ -497,15 +462,50 @@ def test_gmail_widget_header_border_smoke(qt_app):
         widget.cleanup()
 
 
+def test_gmail_header_logo_adjust_controls_logo_and_header_text(qt_app):
+    """Gmail header metrics should follow Media-style font/logo sizing with px adjustment."""
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.set_font_size(14)
+        assert widget._header_logo_size == max(12, int(max(6, int(14 * 1.2)) * 1.3))
+        base_header = widget._header_font_pt
+        base_logo = widget._header_logo_size
+
+        widget.apply_settings({"gmail.header_logo_px_adjust": 6})
+
+        assert widget._header_logo_size > base_logo
+        assert widget._header_font_pt > base_header
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_unread_and_read_envelopes_use_distinct_assets(qt_app):
+    """Unread rows should use the white envelope, read rows the black/read envelope."""
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        unread = EmailMetadata("u", "tu", "sender@example.com", "Unread", datetime.now(), ("UNREAD",), True)
+        read = EmailMetadata("r", "tr", "sender@example.com", "Read", datetime.now(), tuple(), False)
+
+        assert widget._envelope_for_email(unread) is widget._envelope_pixmap
+        assert widget._envelope_for_email(read) is widget._envelope_read_pixmap
+        assert widget._envelope_for_email(read) is not widget._envelope_for_email(unread)
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_widget_ignores_stale_fetch_results(qt_app):
     """Verify stale async fetch callbacks do not mutate visible state."""
     from datetime import datetime
 
     from core.gmail.gmail_client import EmailMetadata
     from widgets.gmail_widget import GmailWidget
-    from core.dev_gates import force_gate
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     try:
@@ -532,12 +532,8 @@ def test_gmail_widget_ignores_stale_fetch_results(qt_app):
 def test_gmail_widget_cache_uses_display_order(qt_app):
     """Verify cached mail preserves the backend order the widget displays."""
     from datetime import datetime
-
-    from core.dev_gates import force_gate
     from core.gmail.gmail_client import EmailMetadata
     from widgets.gmail_widget import GmailWidget
-
-    force_gate(gmail=True)
 
     widget = GmailWidget()
     written_ids = []

@@ -25,6 +25,7 @@ from core.gmail.gmail_backend import GmailBackend
 from core.gmail.gmail_client import EmailMetadata, GmailLabel
 from core.gmail.gmail_deeplinks import gmail_inbox_url
 from core.logging.logger import get_logger
+from core.audio.sound_paths import default_notification_sound_path
 from core.settings.storage_paths import get_app_data_dir
 from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
@@ -117,18 +118,21 @@ class GmailWidget(BaseOverlayWidget):
         self._content_padding_right = 0
         self._content_padding_top = 0
         self._show_header_border = True
-        self._header_frame_pad_x = 9
-        self._header_frame_pad_y = 5
+        self._header_frame_pad_x = 10
+        self._header_frame_pad_y = 6
         self._header_logo_gap = 8
+        self._header_logo_y_offset = 2
 
-        self._header_font_pt = max(10, int(self._font_size) + 2)
-        self._header_logo_size = 28
+        self._header_logo_px_adjust = 0
+        self._header_font_pt = max(6, int(self._font_size * 1.2))
+        self._header_logo_size = max(12, int(self._header_font_pt * 1.3))
         self._row_vertical_spacing = 2
 
         self._brand_pixmap: Optional[QPixmap] = None
         self._brand_pixmap_desaturated: Optional[QPixmap] = None
         self._envelope_pixmap: Optional[QPixmap] = None
         self._envelope_pixmap_dim: Optional[QPixmap] = None
+        self._envelope_read_pixmap: Optional[QPixmap] = None
         self._action_icons: Dict[str, Optional[QPixmap]] = {}
 
         self._header_hit_rect: Optional[QRect] = None
@@ -153,7 +157,7 @@ class GmailWidget(BaseOverlayWidget):
         self._seen_message_ids: Set[str] = set()
         self._seen_initialised: bool = False
         self._play_sound_on_new_mail: bool = False
-        self._sound_file_path: str = "resources/tutuogg.ogg"
+        self._sound_file_path: str = default_notification_sound_path()
         self._sound_volume_percent: int = 50
 
         if settings is not None:
@@ -204,27 +208,57 @@ class GmailWidget(BaseOverlayWidget):
         self._brand_pixmap = None
         self._brand_pixmap_desaturated = None
 
+    def _sync_header_metrics(self) -> None:
+        base_font = max(6, int(self._font_size))
+        media_header_font = max(6, int(base_font * 1.2))
+        header_font = max(6, media_header_font + int(round(int(self._header_logo_px_adjust) / 1.3)))
+        logo_size = max(12, int(header_font * 1.3))
+        self._header_logo_size = logo_size
+        self._header_font_pt = header_font
+
     def _load_envelope_pixmap(self) -> None:
-        path = Path("images/gmail-envelope.png")
-        if path.exists():
-            pm = QPixmap(str(path))
+        unread_path = Path("images/gmail-envelope.png")
+        read_path = Path("images/gmail-read.png")
+        target = 16
+
+        if unread_path.exists():
+            pm = QPixmap(str(unread_path))
             if not pm.isNull():
-                target = 16
                 self._envelope_pixmap = pm.scaled(
                     target, target,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
+
+        if read_path.exists():
+            read_pm = QPixmap(str(read_path))
+            if not read_pm.isNull():
+                self._envelope_read_pixmap = read_pm.scaled(
+                    target, target,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+
+        if self._envelope_read_pixmap is None and unread_path.exists():
+            pm = QPixmap(str(unread_path))
+            if not pm.isNull():
                 dim_img = pm.toImage().convertToFormat(QImage.Format.Format_Grayscale8)
                 self._envelope_pixmap_dim = QPixmap.fromImage(dim_img).scaled(
                     target, target,
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-                return
-        logger.warning("[GMAIL] Envelope PNG missing: %s", path)
-        self._envelope_pixmap = None
-        self._envelope_pixmap_dim = None
+                self._envelope_read_pixmap = self._envelope_pixmap_dim
+        else:
+            self._envelope_pixmap_dim = self._envelope_read_pixmap
+
+        if self._envelope_pixmap is None:
+            logger.warning("[GMAIL] Envelope PNG missing: %s", unread_path)
+        if self._envelope_read_pixmap is None:
+            logger.warning("[GMAIL] Read envelope PNG missing: %s", read_path)
+
+    def _envelope_for_email(self, email: EmailMetadata) -> Optional[QPixmap]:
+        return self._envelope_pixmap if email.is_unread else self._envelope_read_pixmap
 
     def _ensure_desaturated_brand(self) -> Optional[QPixmap]:
         if self._brand_pixmap is None:
@@ -305,14 +339,11 @@ class GmailWidget(BaseOverlayWidget):
             self._has_displayed_valid_data = True
             self._update_card_height_from_content(len(self._emails))
             self.update()
+            self._request_fade_in()
         else:
             self._update_card_height_from_content(1)
-            self.update()
         self._schedule_timer()
         self._fetch_emails()
-
-        # Register for coordinated fade-in (must happen before compositor_ready fires)
-        self._request_fade_in()
         logger.debug("[LIFECYCLE] GmailWidget activated")
 
     def _deactivate_impl(self) -> None:
@@ -765,7 +796,7 @@ class GmailWidget(BaseOverlayWidget):
         frame_rect = QRect(left, top, frame_width, frame_height)
         center_y = frame_rect.top() + self._header_frame_pad_y + (content_height / 2)
         logo_x = frame_rect.left() + self._header_frame_pad_x
-        logo_y = int(center_y - (logo_height / 2))
+        logo_y = int(center_y - (logo_height / 2)) + int(self._header_logo_y_offset)
         text_x = logo_x + logo_width + self._header_logo_gap
         text_baseline_y = int(center_y - (text_height / 2) + fm.ascent())
         return {
@@ -785,7 +816,7 @@ class GmailWidget(BaseOverlayWidget):
         if frame_rect.width() <= 0 or frame_rect.height() <= 0:
             return
         radius = min(self._bg_corner_radius + 1, min(frame_rect.width(), frame_rect.height()) / 2)
-        border_width = max(1, self._bg_border_width)
+        border_width = max(2, max(1, self._bg_border_width) - 3)
         draw_rounded_rect_with_shadow(
             painter,
             frame_rect,
@@ -883,7 +914,7 @@ class GmailWidget(BaseOverlayWidget):
             subject_fm = QFontMetrics(subject_font)
             line_height = subject_fm.height() + 6
             if self._show_envelope_icon and self._envelope_pixmap is not None:
-                env_pm = self._envelope_pixmap if email.is_unread else self._envelope_pixmap_dim
+                env_pm = self._envelope_for_email(email)
                 if env_pm is not None:
                     line_centre = row_y + (line_height * 0.5)
                     icon_half = float(env_pm.height()) / 2.0
@@ -1209,6 +1240,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_gmail_position(getattr(settings, "position", self._gmail_position.value))
         self.set_width(self._settings_width_value(settings))
         self.set_show_header_border(getattr(settings, "show_header_border", self._show_header_border))
+        self.set_header_logo_px_adjust(getattr(settings, "header_logo_px_adjust", self._header_logo_px_adjust))
         self.set_account_slot(getattr(settings, "account_slot", self._account_slot))
         self.set_limit(getattr(settings, "limit", self._limit))
         self.set_refresh_interval(getattr(settings, "refresh_minutes", 5))
@@ -1245,6 +1277,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_gmail_position(d.get("position", self._gmail_position.value))
         self.set_width(d.get("width", d.get("min_width", d.get("max_width", self._width))))
         self.set_show_header_border(d.get("show_header_border", self._show_header_border))
+        self.set_header_logo_px_adjust(d.get("header_logo_px_adjust", self._header_logo_px_adjust))
         self.set_account_slot(d.get("account_slot", self._account_slot))
         self.set_limit(d.get("limit", self._limit))
         self.set_refresh_interval(d.get("refresh_minutes", 5))
@@ -1331,6 +1364,27 @@ class GmailWidget(BaseOverlayWidget):
         if self._show_header_border == show:
             return
         self._show_header_border = show
+        self._update_card_height_from_content(len(self._emails) or self._limit)
+        self.update()
+
+    def set_font_size(self, size: int) -> None:
+        super().set_font_size(size)
+        self._sync_header_metrics()
+        self._load_brand_pixmap()
+        self._update_card_height_from_content(len(self._emails) or self._limit)
+        self.update()
+
+    def set_header_logo_px_adjust(self, value: Any) -> None:
+        try:
+            adjust = int(value)
+        except (TypeError, ValueError):
+            adjust = 0
+        adjust = max(-12, min(24, adjust))
+        if self._header_logo_px_adjust == adjust:
+            return
+        self._header_logo_px_adjust = adjust
+        self._sync_header_metrics()
+        self._load_brand_pixmap()
         self._update_card_height_from_content(len(self._emails) or self._limit)
         self.update()
 

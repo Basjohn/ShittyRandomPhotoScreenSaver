@@ -94,10 +94,9 @@ Active ids:
 
 ## 11. Gmail Widget Architecture
 
-### 11.1 Dev gating
-- Gmail widget is gated by `--devgmail` CLI flag
-- Gate state managed by `core/dev_gates.py`: `is_gmail_enabled()`, `force_gate(gmail=...)`
-- Widget factory registration and rendering are gated by the flag
+### 11.1 Availability
+- Gmail widget is a normal feature and must not be hidden behind a dev-gate or CLI flag.
+- Widget factory registration, settings UI, expected-overlay checks, and rendering paths are always available; actual overlay display is controlled only by `widgets.gmail.enabled` and monitor selection.
 
 ### 11.2 Backend routing
 - Unified backend (`core/gmail/gmail_backend.py`) routes to OAuth/REST or IMAP based on config
@@ -121,13 +120,13 @@ Active ids:
 - Gmail user-facing settings UI defaults must be read from canonical widget defaults; missing Gmail defaults should fail loudly in tests instead of quietly introducing new hardcoded fallback drift.
 - Settings-dialog cached widget defaults must be treated as an optimization only. WidgetsTab must merge cached defaults with fresh canonical defaults, and cache invalidation must include both `defaults.py` and `default_settings.py` so new Gmail defaults are not hidden by stale cache data.
 - Gmail visual settings must keep geometry and hit rects aligned: display, position, single `gmail.width`, Media-style margins, header frame, and row click targets must be derived from measured widget layout. Gmail must not expose custom per-side padding controls unless the whole widget family gains the same concept.
-- Gmail header styling must maintain visual parity with peer overlay headers (Media/Spotify/Reddit): comparable logo scale, frame border weight, radius, and top inset
+- Gmail header styling must maintain visual parity with peer overlay headers (Media/Spotify/Reddit): comparable logo scale, frame border weight, radius, and top inset. Default Gmail header font/logo sizing follows Media's derived relationship (`font * 1.2`, then `header * 1.3`), with `gmail.header_logo_px_adjust` reserved for final visual nudging.
 - Gmail row interaction must work in normal and MC modes: full row sender/subject hit rect opens the message URL through central input URL routing, while the vertical action-menu hit rect opens the menu and must not be consumed by row click handling
 - Gmail normal/main URL clicks use the same helper/task-scheduler bridge route as Reddit; MC URL clicks use the MC direct Qt/browser route. The two paths must not be mixed.
 - Gmail MC action-menu popup handling must not immediately reclaim DisplayWidget focus in a way that steals input from the popup; the menu object must remain alive until it hides.
 - Gmail action-menu operations must have real backend effects for the active backend. IMAP actions must use IMAP-safe identifiers such as UID, not only Gmail web/message ids.
 - Gmail action menus must include Mark as Read/Unread, Archive, Spam, and Delete where the active backend can support them. Required Gmail action image assets must be present in the repo and covered by build-script asset tests; missing optional image assets must still fall back to simple generated icons rather than silently leaving important actions visually blank.
-- Gmail display text cleanup is part of the widget contract: title casing must preserve contractions, sender cleanup must prefer RFC-style display names over raw addresses, and subject/sender shortening must run before final pixel elision
+- Gmail display text cleanup is part of the widget contract: title casing must preserve contractions, sender cleanup must prefer RFC-style display names over raw addresses, subject/sender shortening must run before final pixel elision, and punctuation-only separator tokens such as `|` or `-` must not count as words
 - Gmail row text columns must remain stable across visible rows: timestamp, sender, and subject slots should use shared widths so shorter senders leave blank space instead of moving the subject start position; the sender/subject boundary is user-adjustable via `gmail.sender_column_width`
 - Gmail IMAP Inbox listing must preserve the active mailbox order returned from the selected label instead of over-fetching and date-sorting in the widget. Runtime evidence showed the over-fetch/date-sort mitigation mismatched Gmail's visible Inbox.
 - Gmail cached mail must be stored and loaded in the same backend order used for visible display, so startup cache display does not visibly reorder a few seconds later when the live fetch completes.
@@ -138,10 +137,11 @@ Active ids:
 - Gmail may expose manual refresh through a quiet icon-only refresh control and blank-space double-click, but refresh must respect fetch-in-progress guards and must not animate or repaint continuously while idle. If a hand-drawn arrow reads ambiguously in runtime screenshots, prefer a neutral spiral or asset-backed icon over repeated arrow geometry tweaks.
 - Gmail user-facing defaults must come from the settings/defaults system. Hardcoded Gmail values are acceptable only for private drawing constants or legacy migration fallbacks.
 - Gmail settings buckets must not disable/re-enable whole-dialog updates or pre-polish hidden bucket bodies by temporarily showing them during settings construction. R-18 established constructor-time visibility calls as a settings flicker hazard, so bucket toggles should use ordinary guarded body visibility changes and keep runtime flicker validation open until proven.
-- Gmail Text Limits settings should stay readable at normal settings widths: sender word and sender-column controls on one row, subject word and subject-character controls on a second aligned row.
+- Gmail Text Limits settings should stay readable at normal settings widths: sender word and sender-column controls on one row, subject word and subject-character controls on a second aligned row/grid.
 - Gmail must not do per-tick network work, pixmap scaling, over-painting, or unnecessary `update()` calls when its data and animation state are unchanged.
 - Future shared URL opening work may try to prefer a browser window on the lowest-index monitor, but must fall back to current behavior and must not add brittle or always-running browser automation.
-- Gmail build/release work must verify all Gmail image assets and generated/fallback asset dependencies are included in build scripts, frozen build config, resource copy steps, and installer/package outputs. Source-level guardrails currently verify required Gmail image assets and `images=images` inclusion for normal and MC Nuitka scripts; final packaged artifacts still require runtime validation.
+- Gmail build/release work must verify all Gmail image assets, notification sound assets, Qt multimedia dependencies, and generated/fallback asset dependencies are included in build scripts, frozen build config, resource copy steps, and installer/package outputs. Frozen builds should prefer `%ProgramData%\SRPSS\sounds\tutuogg.ogg` for the default notification sound, with `resources/tutuogg.ogg` as the script/dev fallback. Build scripts must include only the default OGG, not the entire `resources` directory, so ignored local OAuth files are never bundled. Final packaged artifacts still require runtime validation.
+- Gmail must not fade into view when there is no authenticated account information and no usable cache.
 
 ### 11.4 Security invariants
 - OAuth tokens stored encrypted via DPAPI

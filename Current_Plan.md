@@ -15,7 +15,7 @@ This file tracks active work and near-term validation.
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
 - **U-05 RESOLVED (2026-04-25)**: MC Keyboard Focus / Ctrl Halo Runtime Input Family fixed via wiring dead code `_restore_mc_input_focus`.
 - **GMAIL WIDGET**: Plan v5.0 active in `Docs/Gmail_Widget_Plan.md` (2026-04-29).
-  - [x] Foundation/dev gate/settings/UI/sound implemented.
+  - [x] Foundation/settings/UI/sound implemented; Gmail dev gate removed and Gmail is now ordinary feature plumbing.
   - [x] Phase A structural polish implemented: nine-position enum, single `gmail.width`, Media-style content margins, measured header frame.
   - [x] Phase B deep-link foundation implemented: `core/gmail/gmail_deeplinks.py`, IMAP `open_url`, Gmail account slot, decimal `X-GM-THRID` to lowercase hex, focused tests.
   - [x] Phase B Inbox-order regression corrected: removed the over-fetch/date-sort mitigation and restored newest-UID mailbox order because runtime evidence showed the mitigation caused a worse Gmail Inbox mismatch.
@@ -38,14 +38,18 @@ This file tracks active work and near-term validation.
   - [x] Phase C bucket flicker mitigation: shared bucket toggles skip no-op visibility work; Gmail bucket-state writes are skipped when unchanged.
   - [x] Phase C bucket flicker audit: removed the failed Gmail hidden-bucket pre-polish/deferred-persistence attempt because it temporarily showed hidden bodies during settings construction, matching the R-18 flicker hazard pattern.
   - [x] Phase C Gmail construction hardening: Gmail backend/auth refresh is queued until after settings construction, styled combo popup-view creation is deferred until popup open, Gmail bucket final visibility is applied after controls are built, and Text Limits controls are split across two aligned rows.
-  - [ ] Phase C next: manual normal+MC settings-open validation for flicker remains; harness validation (`tools/flicker_test.py` v34/v17 with winprobe, latest run including `--devgmail`) saw only the SettingsDialog HWND and no tiny caption/helper window, but the live bug remains user-reported. Harden OAuth callback server cleanup after manual validation.
+  - [x] Phase C settings dialog creation flicker fixed in live use; extra Backend bucket resolved the Gmail-only bucket-open oddness.
+  - [x] Phase C bucket organisation follow-up: Backend content moved into a default-open Backend bucket.
   - [x] Phase D refresh affordance slice implemented: top-right flat refresh icon now uses a more curved arrowless spiral glyph, bounded spinner timer during fetch, click-to-refresh, blank-space double-click refresh parity with Reddit, and hit-rect tests.
   - [x] Phase B/C cache-order follow-up corrected: fetched and cached email lists now preserve backend order instead of unread-first/date-desc sorting.
   - [x] Phase B grouping guard added: `gmail.group_threads` defaults to `False` and grouping remains off until the PayPal/thread behavior can be fixed safely.
   - [x] Phase B/D date display modes implemented: Relative, Numerical, and Words date styles, shown beside the date visibility control and applied to row width measurement.
-  - [ ] Phase D next: runtime-validate spiral glyph/spinner idleness, date display modes, and restored IMAP Inbox ordering after manual refresh; finish header parity visual/manual validation against Media/Spotify/Reddit; replace jagged Gmail envelope assets with clean black-and-white PNGs; run defaults audit; per-element fonts/colours; finish settings bucket organisation without duplicate controls.
+  - [x] Phase D header parity implementation: Gmail header font/logo now follow Media's sizing relationship, header border uses Media-style inner thickness, and `gmail.header_logo_px_adjust` exists for final px nudging.
+  - [ ] Phase D next: runtime-validate spiral glyph/spinner idleness, date display modes, restored IMAP Inbox ordering after manual refresh, Gmail header parity against Media/Spotify/Reddit, Reddit logo adjustment feasibility, and whether the Gmail refresh spiral needs its own px adjustment; run defaults audit; per-element fonts/colours.
   - [x] Phase E first build-script asset audit implemented: required Gmail image assets are manifest-tested, the missing Archive icon asset exists, and normal/MC Nuitka scripts are guarded for `images=images` inclusion.
-  - [x] Phase C/D asset and repaint pass implemented: Gmail envelope/read PNG sources are clean 64px transparent black-and-white assets, and Gmail widget same-value setters now skip no-op repaints.
+  - [x] Phase C/D asset and repaint pass implemented: Gmail envelope/read PNG sources are clean 64px transparent black-and-white assets, unread rows select the unread envelope, text-limit word counting ignores punctuation-only separators, Text Limits uses a two-row grid, and Gmail widget same-value setters now skip no-op repaints.
+  - [x] Phase E notification sound packaging guardrails implemented: default sound resolver prefers ProgramData with script fallback, normal/MC builds include only `resources/tutuogg.ogg` plus Qt multimedia support, installers ship `tutuogg.ogg` to ProgramData, and build runner preflight fails if the source OGG is missing.
+  - [x] Phase E defaults/security audit: Reddit refresh spiral is default-on through canonical defaults/SST exports, Gmail defaults are present for normal and MC, tracked files were checked for Gmail credentials, and Gmail no-auth/no-cache activation no longer requests fade-in.
   - [ ] Phase E later: online research for Archive semantics and Gmail grouping/sender-swapping; final packaged-build runtime validation for Gmail assets.
   - [ ] Phase E later: resource-use audit for over-painting/over-updating/per-tick waste; stretch investigation for opening Gmail/Reddit links on the browser window/process on lowest-index monitor with safe fallback.
   - [x] Phase B/D interaction patch implemented: Gmail action-menu clicks keep a live QMenu reference, use a topmost popup, and defer immediate MC focus restoration so the popup can receive clicks.

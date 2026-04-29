@@ -1059,9 +1059,14 @@ class WidgetManager:
                 font_family = inherit_style('font_family', model.font_family)
                 font_size = inherit_style('font_size', model.font_size)
                 margin = inherit_style('margin', model.margin)
+                header_logo_px_adjust = inherit_style('header_logo_px_adjust', model.header_logo_px_adjust)
                 text_color = inherit_style('color', [255, 255, 255, 230])
                 show_background = SettingsManager.to_bool(inherit_style('show_background', model.show_background), True)
                 show_separators = SettingsManager.to_bool(inherit_style('show_separators', model.show_separators), True)
+                show_refresh_spiral = SettingsManager.to_bool(
+                    inherit_style('show_refresh_spiral', model.show_refresh_spiral),
+                    True,
+                )
                 bg_color_value = inherit_style('bg_color', inherit_style('background_color', [35, 35, 35, 255]))
                 bg_opacity_value = inherit_style('bg_opacity', model.background_opacity)
                 border_color_value = inherit_style('border_color', [255, 255, 255, 255])
@@ -1077,6 +1082,8 @@ class WidgetManager:
                     widget.set_show_background(show_background)
                 if hasattr(widget, 'set_show_separators'):
                     widget.set_show_separators(show_separators)
+                if hasattr(widget, 'set_show_refresh_spiral'):
+                    widget.set_show_refresh_spiral(show_refresh_spiral)
                 if hasattr(widget, 'set_background_color'):
                     widget.set_background_color(parse_color_to_qcolor(bg_color_value))
                 if hasattr(widget, 'set_background_opacity'):
@@ -1088,6 +1095,8 @@ class WidgetManager:
                         widget.set_background_border(current_width if current_width is not None else widget.get_global_border_width(), border_qcolor)
                 if hasattr(widget, 'set_margin'):
                     widget.set_margin(int(margin))
+                if hasattr(widget, 'set_header_logo_px_adjust'):
+                    widget.set_header_logo_px_adjust(int(header_logo_px_adjust))
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply reddit config for %s", key, exc_info=True)
     
