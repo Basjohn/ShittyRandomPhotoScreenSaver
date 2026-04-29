@@ -155,7 +155,8 @@ class WidgetsTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
-        self._widget_defaults = widget_defaults or self._load_widget_defaults()
+        self._provided_widget_defaults = widget_defaults
+        self._widget_defaults = self._load_widget_defaults()
         self._current_subtab = 0
         self._subtab_scroll_cache: Dict[int, int] = {}
         self._scroll_area: Optional[QScrollArea] = None
@@ -225,10 +226,24 @@ class WidgetsTab(QWidget):
         try:
             defaults = get_default_settings()
             widgets_defaults = defaults.get('widgets', {})
-            return widgets_defaults if isinstance(widgets_defaults, dict) else {}
+            loaded_defaults = widgets_defaults if isinstance(widgets_defaults, dict) else {}
+            if isinstance(self._provided_widget_defaults, dict):
+                merged = dict(loaded_defaults)
+                for section, section_defaults in self._provided_widget_defaults.items():
+                    if (
+                        isinstance(section_defaults, dict)
+                        and isinstance(merged.get(section), dict)
+                    ):
+                        merged_section = dict(merged[section])
+                        merged_section.update(section_defaults)
+                        merged[section] = merged_section
+                    else:
+                        merged[section] = section_defaults
+                return merged
+            return loaded_defaults
         except Exception:
             logger.debug("[WIDGETS_TAB] Failed to load widget defaults", exc_info=True)
-            return {}
+            return self._provided_widget_defaults if isinstance(self._provided_widget_defaults, dict) else {}
     
     def _widget_default(self, section: str, key: str, fallback: Any) -> Any:
         """Fetch a default value for a widget section/key combo."""
@@ -418,6 +433,8 @@ class WidgetsTab(QWidget):
         if not isinstance(states, dict):
             states = {}
             self._gmail_bucket_state = states
+        if states.get(bucket) == bool(expanded):
+            return
         states[bucket] = bool(expanded)
         try:
             self._settings.set(self._GMAIL_BUCKET_STATE_KEY, dict(states))

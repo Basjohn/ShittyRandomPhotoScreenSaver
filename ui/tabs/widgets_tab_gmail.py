@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QGroupBox, QCheckBox, QLineEdit,
     QSlider, QWidget, QPushButton,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
@@ -173,6 +173,51 @@ def _get_gmail_thread_manager(tab: WidgetsTab) -> ThreadManager:
     return manager
 
 
+def _is_imap_selected_in_combo(tab: WidgetsTab) -> bool:
+    combo = getattr(tab, "gmail_backend_combo", None)
+    if combo is not None and hasattr(combo, "currentText"):
+        try:
+            return combo.currentText() == "IMAP (App Password)"
+        except Exception:
+            return True
+    return True
+
+
+def _sync_backend_combo_from_backend(tab: WidgetsTab, backend) -> None:
+    combo = getattr(tab, 'gmail_backend_combo', None)
+    if backend is None or combo is None:
+        return
+    try:
+        from core.gmail.gmail_backend import GmailBackendMode
+        target_index = 0 if backend.mode == GmailBackendMode.IMAP else 1
+        if combo.currentIndex() != target_index:
+            blocked = combo.blockSignals(True)
+            try:
+                combo.setCurrentIndex(target_index)
+            finally:
+                combo.blockSignals(blocked)
+    except Exception:
+        logger.debug("[GMAIL_TAB] Failed to sync backend combo", exc_info=True)
+
+
+def _queue_gmail_auth_refresh(tab: WidgetsTab) -> None:
+    if getattr(tab, "_gmail_auth_refresh_queued", False):
+        return
+    tab._gmail_auth_refresh_queued = True
+
+    def _run() -> None:
+        tab._gmail_auth_refresh_queued = False
+        _refresh_gmail_auth_state(tab)
+
+    QTimer.singleShot(250, _run)
+
+
+def _finalize_bucket_body(toggle, body: QWidget) -> None:
+    expanded = bool(toggle.isChecked())
+    if body.isHidden() == expanded:
+        body.setVisible(expanded)
+
+
 def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
     """Update the auth status label and button visibility based on credential state."""
     status_label = getattr(tab, 'gmail_auth_status', None)
@@ -183,11 +228,16 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
 
     backend = _get_gmail_backend()
     if backend is None:
+        _update_backend_panels(tab, use_backend=False)
         status_label.setText("Gmail unavailable")
         auth_btn.setEnabled(False)
         out_btn.setEnabled(False)
         _set_visible_if_changed(out_btn, False)
         return
+    _sync_backend_combo_from_backend(tab, backend)
+    imap_email = getattr(tab, "gmail_imap_email", None)
+    if imap_email is not None and not imap_email.text() and getattr(backend, "_imap_email", None):
+        imap_email.setText(backend._imap_email)
 
     # Reload OAuth config in case client_secrets was added after start
     mgr = _get_gmail_oauth_manager()
@@ -198,7 +248,7 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
             pass
 
     # Update mode-specific panel visibility
-    _update_backend_panels(tab)
+    _update_backend_panels(tab, use_backend=True)
 
     status_label.setText(backend.status_text)
 
@@ -216,13 +266,13 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
         _set_visible_if_changed(out_btn, False)
 
 
-def _update_backend_panels(tab: WidgetsTab) -> None:
+def _update_backend_panels(tab: WidgetsTab, *, use_backend: bool = True) -> None:
     """Show/hide OAuth vs IMAP panels based on current backend mode."""
-    backend = _get_gmail_backend()
-    if backend is None:
-        return
-    from core.gmail.gmail_backend import GmailBackendMode
-    is_imap = backend.mode == GmailBackendMode.IMAP
+    backend = _get_gmail_backend() if use_backend else None
+    is_imap = _is_imap_selected_in_combo(tab)
+    if backend is not None:
+        from core.gmail.gmail_backend import GmailBackendMode
+        is_imap = backend.mode == GmailBackendMode.IMAP
     oauth_panel = getattr(tab, '_gmail_oauth_panel', None)
     imap_panel = getattr(tab, '_gmail_imap_panel', None)
     _set_visible_if_changed(oauth_panel, not is_imap)
@@ -506,13 +556,6 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_backend_combo = StyledComboBox()
     tab.gmail_backend_combo.addItems(["IMAP (App Password)", "OAuth (Advanced)"])
     tab.gmail_backend_combo.setMinimumWidth(180)
-    backend = _get_gmail_backend()
-    if backend is not None:
-        from core.gmail.gmail_backend import GmailBackendMode
-        if backend.mode == GmailBackendMode.IMAP:
-            tab.gmail_backend_combo.setCurrentIndex(0)
-        else:
-            tab.gmail_backend_combo.setCurrentIndex(1)
     tab.gmail_backend_combo.currentTextChanged.connect(
         lambda text: _on_gmail_backend_changed(tab, text)
     )
@@ -541,8 +584,6 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_imap_email = QLineEdit()
     tab.gmail_imap_email.setPlaceholderText("you@gmail.com")
     tab.gmail_imap_email.setMinimumWidth(260)
-    if backend is not None and getattr(backend, '_imap_email', None):
-        tab.gmail_imap_email.setText(backend._imap_email)
     email_row.addWidget(tab.gmail_imap_email)
     email_row.addStretch()
 
@@ -596,13 +637,18 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_authorize_btn.clicked.connect(lambda: _on_gmail_authorize_clicked(tab))
     tab.gmail_sign_out_btn.clicked.connect(lambda: _on_gmail_sign_out_clicked(tab))
 
-    _refresh_gmail_auth_state(tab)
+    tab.gmail_auth_status.setText("Gmail status loading...")
+    _update_backend_panels(tab, use_backend=False)
+    _set_visible_if_changed(tab.gmail_authorize_btn, False)
+    _set_visible_if_changed(tab.gmail_sign_out_btn, False)
+    _queue_gmail_auth_refresh(tab)
 
     # Layout bucket
-    _, _, layout_inner = build_bucket_toggle(
+    layout_toggle, layout_body, layout_inner = build_bucket_toggle(
         _gc, "Layout",
         expanded=tab.get_gmail_bucket_state("layout", default=False),
         on_toggle=lambda checked: tab.set_gmail_bucket_state("layout", checked),
+        defer_initial_visibility=True,
     )
 
     # Monitor
@@ -689,10 +735,11 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     account_slot_row.addStretch()
 
     # Appearance bucket
-    _, _, appearance_inner = build_bucket_toggle(
+    appearance_toggle, appearance_body, appearance_inner = build_bucket_toggle(
         _gc, "Appearance",
         expanded=tab.get_gmail_bucket_state("appearance", default=False),
         on_toggle=lambda checked: tab.set_gmail_bucket_state("appearance", checked),
+        defer_initial_visibility=True,
     )
 
     # Font family
@@ -829,15 +876,17 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_sender_column_width.valueChanged.connect(tab._save_settings)
     text_limit_row.addWidget(create_inline_label("Sender column"))
     text_limit_row.addWidget(tab.gmail_sender_column_width)
+    text_limit_row.addStretch()
 
+    subject_limit_row = _aligned_row(appearance_inner, "")
     tab.gmail_max_subject_words = QSpinBox()
     tab.gmail_max_subject_words.setRange(0, 30)
     tab.gmail_max_subject_words.setSpecialValueText("Off")
     tab.gmail_max_subject_words.setValue(tab._default_int('gmail', 'max_subject_words', 4))
     tab.gmail_max_subject_words.setAccelerated(True)
     tab.gmail_max_subject_words.valueChanged.connect(tab._save_settings)
-    text_limit_row.addWidget(create_inline_label("Subject words"))
-    text_limit_row.addWidget(tab.gmail_max_subject_words)
+    subject_limit_row.addWidget(create_inline_label("Subject words"))
+    subject_limit_row.addWidget(tab.gmail_max_subject_words)
 
     tab.gmail_max_subject_chars = QSpinBox()
     tab.gmail_max_subject_chars.setRange(0, 200)
@@ -845,9 +894,9 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_max_subject_chars.setValue(tab._default_int('gmail', 'max_subject_chars', 0))
     tab.gmail_max_subject_chars.setAccelerated(True)
     tab.gmail_max_subject_chars.valueChanged.connect(tab._save_settings)
-    text_limit_row.addWidget(create_inline_label("Subject chars"))
-    text_limit_row.addWidget(tab.gmail_max_subject_chars)
-    text_limit_row.addStretch()
+    subject_limit_row.addWidget(create_inline_label("Subject chars"))
+    subject_limit_row.addWidget(tab.gmail_max_subject_chars)
+    subject_limit_row.addStretch()
 
     tab.gmail_desaturate = QCheckBox("Desaturate logo when no unread")
     tab.gmail_desaturate.setProperty("circleIndicator", True)
@@ -940,10 +989,11 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     border_opacity_row.addWidget(tab.gmail_border_opacity_label)
 
     # Separators bucket
-    _, _, sep_inner = build_bucket_toggle(
+    sep_toggle, sep_body, sep_inner = build_bucket_toggle(
         _gc, "Separators",
         expanded=tab.get_gmail_bucket_state("separators", default=False),
         on_toggle=lambda checked: tab.set_gmail_bucket_state("separators", checked),
+        defer_initial_visibility=True,
     )
 
     tab.gmail_show_separators = QCheckBox("Show separator lines")
@@ -991,10 +1041,11 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     bsep_thick_row.addStretch()
 
     # Sound bucket
-    _, _, sound_inner = build_bucket_toggle(
+    sound_toggle, sound_body, sound_inner = build_bucket_toggle(
         _gc, "Notification Sound",
         expanded=tab.get_gmail_bucket_state("sound", default=False),
         on_toggle=lambda checked: tab.set_gmail_bucket_state("sound", checked),
+        defer_initial_visibility=True,
     )
 
     tab.gmail_play_sound = QCheckBox("Play Sound on New Mail")
@@ -1037,6 +1088,14 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     tab.gmail_sound_volume_label.setMinimumWidth(50)
     sound_vol_row.addWidget(tab.gmail_sound_volume_label)
+
+    for toggle, body in (
+        (layout_toggle, layout_body),
+        (appearance_toggle, appearance_body),
+        (sep_toggle, sep_body),
+        (sound_toggle, sound_body),
+    ):
+        _finalize_bucket_body(toggle, body)
 
     # Disable all controls if gated
     if gmail_gated:
@@ -1186,15 +1245,9 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         _apply_color('gmail_bg_color_btn', '_gmail_bg_color')
         _apply_color('gmail_border_color_btn', '_gmail_border_color')
 
-        # Sync backend combo from persisted GmailBackend config
-        backend = _get_gmail_backend()
-        combo = getattr(tab, 'gmail_backend_combo', None)
-        if backend is not None and combo is not None:
-            from core.gmail.gmail_backend import GmailBackendMode
-            combo.setCurrentIndex(0 if backend.mode == GmailBackendMode.IMAP else 1)
-
     _update_gmail_enabled_visibility(tab)
-    _refresh_gmail_auth_state(tab)
+    _update_backend_panels(tab, use_backend=False)
+    _queue_gmail_auth_refresh(tab)
 
 
 def save_gmail_settings(tab: WidgetsTab) -> dict:

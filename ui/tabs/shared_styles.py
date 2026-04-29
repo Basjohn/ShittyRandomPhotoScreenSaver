@@ -899,6 +899,7 @@ def build_bucket_toggle(
     title: str,
     expanded: bool = False,
     on_toggle: Callable[[bool], None] | None = None,
+    defer_initial_visibility: bool = False,
 ) -> tuple[QToolButton, QWidget, QVBoxLayout]:
     """Create a collapsible bucket toggle with arrow indicator.
 
@@ -923,12 +924,14 @@ def build_bucket_toggle(
     body_layout = QVBoxLayout(body)
     body_layout.setContentsMargins(12, 0, 0, 8)
     body_layout.setSpacing(4)
-    body.setVisible(expanded)
+    if not defer_initial_visibility:
+        body.setVisible(expanded)
     host_layout.addWidget(body)
 
     def _apply_state(checked: bool) -> None:
         toggle.setArrowType(Qt.DownArrow if checked else Qt.RightArrow)
-        body.setVisible(checked)
+        if body.isHidden() == bool(checked):
+            body.setVisible(checked)
         if on_toggle is not None:
             on_toggle(checked)
 

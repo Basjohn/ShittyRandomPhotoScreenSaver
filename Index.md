@@ -79,8 +79,9 @@ Living map of the current SRPSS codebase.
 | Deep-link helpers | `core/gmail/gmail_deeplinks.py` | Gmail inbox/thread/search URL builders; `X-GM-THRID` decimal-to-hex conversion |
 | Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
 | Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, date formatting modes, formatting/text cleanup utilities, email cache |
-| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, non-blocking IMAP Save & Test, widget settings, single Gmail width control, date display mode, sender/subject cleanup controls, sender column width, default-off grouping toggle, Gmail load signal-block/visibility flicker guardrails |
-| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions, row hit targets, Media-style layout margins/header frame, central URL click targets, refresh control, action menu popup ownership, Gmail image/action icon manifest |
+| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, non-blocking IMAP Save & Test, widget settings, single Gmail width control, date display mode, sender/subject cleanup controls, two-row Text Limits layout, sender column width, default-off grouping toggle, deferred auth refresh, Gmail load signal-block/visibility flicker guardrails |
+| Settings cache | `ui/settings_dialog_cache.py` | Settings dialog cached defaults/font data; cache generation includes canonical defaults modules so Gmail defaults do not go stale |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions, row hit targets, Media-style layout margins/header frame, central URL click targets, refresh control, action menu popup ownership, Gmail image/action icon manifest, no-op repaint guards |
 | Asset guard tests | `tests/test_gmail_assets.py` | Verifies required Gmail image assets exist and normal/MC Nuitka scripts include the `images` directory |
 | Dev gate | `core/dev_gates.py` | `is_gmail_enabled()`, `force_gate(gmail=...)` |
 

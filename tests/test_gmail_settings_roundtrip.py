@@ -1,6 +1,8 @@
 """Tests for Gmail settings roundtrip (no Qt app required)."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 
@@ -143,6 +145,20 @@ def test_gmail_default_accessor_requires_canonical_default() -> None:
         _gmail_default(tab, "missing_key")
 
 
+def test_widget_defaults_merge_stale_cache_with_canonical_defaults() -> None:
+    """A stale settings-dialog cache must not hide newly added Gmail defaults."""
+    from ui.tabs.widgets_tab import WidgetsTab
+
+    tab = WidgetsTab.__new__(WidgetsTab)
+    tab._provided_widget_defaults = {"gmail": {"enabled": True}}
+
+    defaults = WidgetsTab._load_widget_defaults(tab)
+
+    assert defaults["gmail"]["enabled"] is True
+    assert defaults["gmail"]["width"] == 600
+    assert defaults["gmail"]["filter_label"] == "INBOX"
+
+
 def test_gmail_signal_blocker_blocks_and_unblocks_all_present_controls() -> None:
     """Gmail load should silence its controls even if the parent block list drifts."""
     from types import SimpleNamespace
@@ -193,6 +209,53 @@ def test_gmail_visibility_helper_uses_explicit_hidden_state() -> None:
     assert already_hidden.calls == []
 
 
+def test_gmail_buckets_do_not_prime_hidden_bodies_by_showing_them() -> None:
+    """R-18 proved constructor-time setVisible(True) can create settings flicker."""
+    source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
+
+    assert "_prime_hidden_bucket_body" not in source
+    assert "setVisible(True)" not in source
+
+
+def test_gmail_settings_construction_defers_backend_auth_refresh() -> None:
+    """Gmail must not load backend/OAuth during settings dialog construction."""
+    source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
+    build_source = source.split("def build_gmail_ui", 1)[1].split("def load_gmail_settings", 1)[0]
+
+    assert "_queue_gmail_auth_refresh(tab)" in build_source
+    assert "_refresh_gmail_auth_state(tab)" not in build_source
+
+
+def test_styled_combos_do_not_precreate_popup_views() -> None:
+    """Calling view() in combo constructors creates top-level helper frames before show."""
+    for path in (
+        Path("ui/widgets/styled_combo_box.py"),
+        Path("ui/widgets/styled_font_combo_box.py"),
+    ):
+        source = path.read_text(encoding="utf-8")
+        init_source = source.split("def __init__", 1)[1].split("def showPopup", 1)[0]
+        assert "self._style_popup_view()" not in init_source
+        assert "self.view()" not in init_source
+
+
+def test_gmail_text_limits_are_split_across_two_rows() -> None:
+    """Keep sender and subject text-limit spinboxes from crowding one row."""
+    source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
+
+    assert 'text_limit_row = _aligned_row(appearance_inner, "Text Limits:")' in source
+    assert 'subject_limit_row = _aligned_row(appearance_inner, "")' in source
+    assert "subject_limit_row.addWidget(tab.gmail_max_subject_words)" in source
+    assert "subject_limit_row.addWidget(tab.gmail_max_subject_chars)" in source
+
+
+def test_gmail_buckets_defer_initial_collapse_until_children_exist() -> None:
+    """Collapsed Gmail buckets should not do first-click child construction/polish work."""
+    source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
+
+    assert source.count("defer_initial_visibility=True") == 4
+    assert "_finalize_bucket_body(toggle, body)" in source
+
+
 def test_gmail_backend_visibility_hidden_before_parent_show(qt_app, monkeypatch) -> None:
     """Backend panels/buttons must be explicitly hidden even while the parent is hidden."""
     from PySide6.QtWidgets import QLabel, QPushButton, QWidget
@@ -225,3 +288,33 @@ def test_gmail_backend_visibility_hidden_before_parent_show(qt_app, monkeypatch)
     assert tab._gmail_imap_panel.isHidden() is False
     assert tab.gmail_authorize_btn.isHidden() is True
     assert tab.gmail_sign_out_btn.isHidden() is True
+
+
+def test_gmail_backend_visibility_falls_back_to_combo_when_backend_unavailable(qt_app, monkeypatch) -> None:
+    """When backend is unavailable at dialog open, only the selected-mode panel should show."""
+    from PySide6.QtWidgets import QWidget
+
+    from ui.tabs import widgets_tab_gmail
+
+    class FakeCombo:
+        def __init__(self, text):
+            self._text = text
+
+        def currentText(self):
+            return self._text
+
+    tab = QWidget()
+    tab._gmail_oauth_panel = QWidget(tab)
+    tab._gmail_imap_panel = QWidget(tab)
+    tab.gmail_backend_combo = FakeCombo("IMAP (App Password)")
+
+    monkeypatch.setattr(widgets_tab_gmail, "_get_gmail_backend", lambda: None)
+
+    widgets_tab_gmail._update_backend_panels(tab)  # type: ignore[arg-type]
+    assert tab._gmail_oauth_panel.isHidden() is True
+    assert tab._gmail_imap_panel.isHidden() is False
+
+    tab.gmail_backend_combo = FakeCombo("OAuth (Advanced)")
+    widgets_tab_gmail._update_backend_panels(tab)  # type: ignore[arg-type]
+    assert tab._gmail_oauth_panel.isHidden() is False
+    assert tab._gmail_imap_panel.isHidden() is True

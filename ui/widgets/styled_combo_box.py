@@ -36,7 +36,6 @@ class StyledComboBox(QComboBox):
         self._size_variant: SizeVariant = size_variant
         self._popup_stylesheet = popup_stylesheet or shared_styles.COMBOBOX_POPUP_VIEW_STYLE
         self._apply_base_properties()
-        self._style_popup_view()
         # Dedicated overlay renders the right-hand knob at runtime so it never blurs when scaled.
         self._knob_overlay = ComboKnobController(self)
         attach_control_shadow(self)

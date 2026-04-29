@@ -33,17 +33,24 @@ def _cache_file() -> Path:
 
 
 def _compute_defaults_generation() -> float:
-    """Use the defaults.py mtime as a cheap invalidation hook."""
-    defaults_path = (
+    """Use defaults module mtimes as a cheap invalidation hook."""
+    defaults_paths = [
         Path(__file__).resolve().parents[1]
         / "core"
         / "settings"
-        / "defaults.py"
-    )
-    try:
-        return defaults_path.stat().st_mtime
-    except FileNotFoundError:
-        return time.time()
+        / "defaults.py",
+        Path(__file__).resolve().parents[1]
+        / "core"
+        / "settings"
+        / "default_settings.py",
+    ]
+    mtimes = []
+    for defaults_path in defaults_paths:
+        try:
+            mtimes.append(defaults_path.stat().st_mtime)
+        except FileNotFoundError:
+            mtimes.append(time.time())
+    return max(mtimes)
 
 
 def _load_persisted_cache() -> SettingsDialogCacheData | None:

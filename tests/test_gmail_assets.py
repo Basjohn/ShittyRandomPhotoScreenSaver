@@ -20,6 +20,18 @@ def test_gmail_required_image_assets_exist():
     assert missing == []
 
 
+def test_gmail_envelope_png_sources_are_high_resolution(qt_app):
+    """Envelope PNGs should be clean source assets, not tiny jagged 16px icons."""
+    from PySide6.QtGui import QImage
+
+    for asset_path in ("images/gmail-envelope.png", "images/gmail-read.png"):
+        image = QImage(str(ROOT / asset_path))
+        assert not image.isNull()
+        assert image.width() >= 64
+        assert image.height() >= 64
+        assert image.hasAlphaChannel()
+
+
 def test_gmail_action_icon_paths_are_covered_by_asset_manifest():
     """The menu icon loader should only reference tracked Gmail asset paths."""
     manifest = set(GMAIL_IMAGE_ASSETS)

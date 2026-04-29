@@ -56,10 +56,16 @@ Do not reimplement these unless a defect is found:
 - Thread grouping is guarded by `gmail.group_threads`, default `False`.
 - Mark as Read/Unread, Spam, and Delete action paths work in runtime reports; Archive remains unresolved.
 - Gmail asset guard exists: required images are tested, Archive icon asset exists, and both Nuitka scripts include `images=images`.
-- Settings flicker mitigation exists but is not runtime-validated: Gmail load signal blocking is canonicalized and redundant `setVisible(...)` calls are reduced.
+- Settings flicker mitigation exists but is not runtime-validated: Gmail load signal blocking is canonicalized, redundant `setVisible(...)` calls are reduced, styled combo popup-view creation is deferred until popup open, Gmail backend/auth refresh is deferred until after settings construction, and the failed hidden-bucket pre-polish approach has been removed.
 - IMAP Save & Test is non-blocking: supplied credentials are tested on an IO task, then saved only after success.
 - Backend-specific settings visibility now uses explicit hidden state, so OAuth text/Authorize controls stay hidden for IMAP even when settings are opened fresh.
 - Gmail settings UI has a canonical default accessor for user-facing fallback values; missing Gmail defaults fail loudly instead of silently introducing hardcoded drift.
+- Settings-dialog cached widget defaults now merge with fresh canonical defaults and invalidate when `default_settings.py` changes, so stale cache data cannot hide newly added Gmail defaults.
+- Gmail bucket toggles now avoid redundant state writes; shared bucket visibility updates skip no-op body show/hide without suppressing the whole settings dialog; Gmail buckets defer the initial collapse until after their child controls are built. Runtime validation is still required for the reported Gmail-only bucket flicker.
+- Failed flicker attempt retained as a guardrail: do not pre-polish hidden Gmail bucket contents by temporarily showing them during settings construction. R-18 proved constructor-time visibility calls can create settings ghost/flicker behavior.
+- Gmail Text Limits settings are split into two aligned rows: sender word/column controls on the first row, subject word/character controls on the second row.
+- Gmail envelope/read PNG sources were regenerated as clean 64px transparent black-and-white assets, with tests preventing a return to tiny/jagged source icons.
+- Gmail widget setters now skip no-op `update()` calls for repeated same-value settings, starting the resource-use cleanup before the final profiling pass.
 
 ## 4. Active Priorities
 
@@ -87,8 +93,16 @@ Tasks:
 - [x] Ensure `WidgetsTab._load_settings()` imports that list instead of duplicating stale Gmail control names.
 - [x] Avoid redundant Gmail panel/button `setVisible(...)` calls.
 - [x] Fix hidden-parent backend visibility by comparing against explicit hidden state instead of `isVisible()`.
-- [ ] Run `tools/flicker_test.py` and/or `tools/winprobe_observer.py` against the real settings open path.
+- [x] Fix stale settings-dialog cache/default merging that caused Gmail defaults to look missing at dialog construction.
+- [x] Reduce Gmail bucket toggle churn by avoiding redundant visibility/state updates.
+- [x] Audit Gmail buckets against R-18 and remove the failed hidden-bucket pre-polish path that temporarily called `setVisible(True)` during settings construction.
+- [x] Add source guard coverage preventing Gmail bucket priming from reintroducing constructor-time `setVisible(True)`.
+- [x] Defer Gmail backend/auth refresh until after settings construction so IMAP/OAuth credential checks do not run on the dialog-construction path.
+- [x] Defer styled combo popup-view styling until the popup is opened, avoiding constructor-time `view()` calls that can create `QComboBoxPrivateContainer` helper frames.
+- [x] Defer Gmail bucket initial collapse until after bucket child controls are built, then apply the final collapsed/expanded state once.
+- [x] Run `tools/flicker_test.py` with winprobe against Widgets-initial and full main-setup settings paths (`v34`, `v17`; latest with `--devgmail`): only the SettingsDialog HWND appeared; no tiny caption/helper window or foreground churn was observed. This does not close the bug because the user still reports it in live use.
 - [ ] Runtime/manual validation: open settings from normal and MC/screensaver paths with Gmail enabled and verify no taskbar/ghost flicker.
+- [ ] Runtime/manual validation: open/close Gmail settings buckets and confirm the Gmail-only flicker is gone.
 - [ ] If a new root cause is proven, add a short entry to `Docs/Historical_Bugs.md` with the exact forbidden pattern.
 
 Failure conditions:
@@ -108,6 +122,7 @@ Tasks:
 - [x] Apply backend panel/button visibility during fresh settings construction and load.
 - [x] Use explicit hidden state so hidden children stay hidden after their parent becomes visible.
 - [x] Test the hidden-parent case.
+- [x] When backend is temporarily unavailable during settings open, route panel visibility from backend-combo selection so only one backend panel is shown.
 - [ ] Runtime-validate: close settings on IMAP, reopen settings, and confirm OAuth testing text and Authorize button are absent until OAuth is selected.
 
 #### A3. IMAP Save & Test
@@ -186,7 +201,7 @@ Current envelope PNGs are distorted/jagged. Archive now has an SVG, but read/unr
 
 Tasks:
 
-- [ ] Replace read/unread envelope PNGs with clean black-and-white assets.
+- [x] Replace read/unread envelope PNGs with clean black-and-white assets.
 - [ ] Keep unread/read distinction visually clear at 16px.
 - [ ] Verify assets appear in source and packaged builds.
 - [ ] Keep fallback drawing for missing optional icons.
@@ -195,6 +210,7 @@ Tasks:
 
 Tasks:
 
+- [x] Split Text Limits into two aligned settings rows so four spinboxes no longer compete on one line.
 - [ ] Validate `relative`, `numeric`, and `words` date modes at default and narrow practical widths.
 - [ ] Validate sender/subject columns remain aligned when sender word limits change.
 - [ ] Validate title casing on real sender/subject samples:
@@ -232,7 +248,8 @@ Tasks:
 
 - [ ] Confirm Gmail does no network, file I/O, pixmap scaling, or settings checks from `paintEvent()`.
 - [ ] Confirm refresh spinner/timers run only while refreshing and stop on cleanup.
-- [ ] Confirm Gmail does not repaint every frame/tick when data and animation state are unchanged.
+- [ ] Confirm not causing/contributing to UI Thread choking, if so migrate feasible items to another thread.
+- [~] Confirm Gmail does not repaint every frame/tick when data and animation state are unchanged; first-pass setter no-op guards are implemented.
 - [ ] Profile `paintEvent()` with 10 rows; target under 5ms on a normal 1080p desktop.
 
 #### D3. Build/package validation
@@ -244,9 +261,9 @@ Tasks:
 - [ ] Build or inspect final normal/MC artifacts and verify Gmail brand, envelope, Archive, Spam, Trash, Mark Read/Unread, and refresh visuals appear.
 - [ ] Ensure no `client_secrets.json`, token, app password, `.enc`, `.pickle`, cache, or raw credential artifacts are tracked or bundled by accident.
 
-## 6. Deferred / Research Items
+## 6. Research Items
 
 - Archive semantics in Gmail IMAP: online research required.
 - Thread grouping/conversation semantics in Gmail IMAP: online research required.
-- OAuth production readiness: Google restricted-scope verification, release policy, and public-build credential policy.
+- [DEFERRED] OAuth production readiness: Google restricted-scope verification, release policy, and public-build credential policy.
 - Browser monitor placement for Gmail/Reddit links: shared low-priority stretch.

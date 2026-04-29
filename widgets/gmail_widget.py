@@ -1291,9 +1291,12 @@ class GmailWidget(BaseOverlayWidget):
 
     def set_width(self, width: Any) -> None:
         try:
-            self._width = int(width)
+            next_width = int(width)
         except (TypeError, ValueError):
-            self._width = 600
+            next_width = 600
+        if self._width == max(200, min(1200, next_width)):
+            return
+        self._width = next_width
         self._apply_width()
 
     def set_min_width(self, width: int) -> None:
@@ -1302,7 +1305,20 @@ class GmailWidget(BaseOverlayWidget):
     def set_max_width(self, width: int) -> None:
         self.set_width(width)
 
+    def _set_attr_and_update(self, attr: str, value: Any) -> bool:
+        if getattr(self, attr) == value:
+            return False
+        setattr(self, attr, value)
+        self.update()
+        return True
+
     def set_content_padding(self, left: int, right: int, top: int) -> None:
+        if (
+            self._content_padding_left == 0
+            and self._content_padding_right == 0
+            and self._content_padding_top == 0
+        ):
+            return
         self._content_padding_left = 0
         self._content_padding_right = 0
         self._content_padding_top = 0
@@ -1311,107 +1327,106 @@ class GmailWidget(BaseOverlayWidget):
         self._update_position()
 
     def set_show_header_border(self, show: bool) -> None:
-        self._show_header_border = bool(show)
+        show = bool(show)
+        if self._show_header_border == show:
+            return
+        self._show_header_border = show
         self._update_card_height_from_content(len(self._emails) or self._limit)
         self.update()
 
     def set_account_slot(self, slot: Any) -> None:
         text = str(slot or "0").strip()
-        self._account_slot = text if text.isdigit() else "0"
+        next_slot = text if text.isdigit() else "0"
+        if self._account_slot == next_slot:
+            return
+        self._account_slot = next_slot
 
     def set_limit(self, limit: int) -> None:
-        self._limit = max(5, min(10, limit))
+        next_limit = max(5, min(10, limit))
+        if self._limit == next_limit:
+            return
+        self._limit = next_limit
         self._update_card_height_from_content(self._limit)
 
     def set_refresh_interval(self, minutes: int) -> None:
-        self._refresh_interval = timedelta(minutes=max(1, minutes))
+        next_interval = timedelta(minutes=max(1, minutes))
+        if self._refresh_interval == next_interval:
+            return
+        self._refresh_interval = next_interval
 
     def set_group_threads(self, enabled: bool) -> None:
-        self._group_threads = bool(enabled)
-        self.update()
+        self._set_attr_and_update("_group_threads", bool(enabled))
 
     def set_show_sender(self, show: bool) -> None:
-        self._show_sender = bool(show)
-        self.update()
+        self._set_attr_and_update("_show_sender", bool(show))
 
     def set_show_subject(self, show: bool) -> None:
-        self._show_subject = bool(show)
-        self.update()
+        self._set_attr_and_update("_show_subject", bool(show))
 
     def set_show_envelope_icon(self, show: bool) -> None:
-        self._show_envelope_icon = bool(show)
-        self.update()
+        self._set_attr_and_update("_show_envelope_icon", bool(show))
 
     def set_show_three_dot_menu(self, show: bool) -> None:
-        self._show_three_dot_menu = bool(show)
-        self.update()
+        self._set_attr_and_update("_show_three_dot_menu", bool(show))
 
     def set_show_timestamp(self, show: bool) -> None:
-        self._show_timestamp = bool(show)
-        self.update()
+        self._set_attr_and_update("_show_timestamp", bool(show))
 
     def set_date_display_mode(self, mode: Any) -> None:
         normalized = str(mode or "relative").strip().lower()
         if normalized not in {"relative", "numeric", "words"}:
             normalized = "relative"
-        self._date_display_mode = normalized
-        self.update()
+        self._set_attr_and_update("_date_display_mode", normalized)
 
     def _format_email_date(self, dt: datetime) -> str:
         return format_email_date(dt, self._date_display_mode)
 
     def set_show_separators(self, show: bool) -> None:
-        self._show_separators = bool(show)
-        self.update()
+        self._set_attr_and_update("_show_separators", bool(show))
 
     def set_separator_color(self, color: Any) -> None:
+        next_color = self._separator_color
         if isinstance(color, (list, tuple)) and len(color) >= 3:
-            self._separator_color = QColor(*color)
+            next_color = QColor(*color)
         elif isinstance(color, QColor):
-            self._separator_color = color
-        self.update()
+            next_color = color
+        self._set_attr_and_update("_separator_color", next_color)
 
     def set_separator_thickness(self, thickness: int) -> None:
-        self._separator_thickness = max(1, min(4, thickness))
-        self.update()
+        self._set_attr_and_update("_separator_thickness", max(1, min(4, thickness)))
 
     def set_boundary_separator_color(self, color: Any) -> None:
+        next_color = self._boundary_separator_color
         if isinstance(color, (list, tuple)) and len(color) >= 3:
-            self._boundary_separator_color = QColor(*color)
+            next_color = QColor(*color)
         elif isinstance(color, QColor):
-            self._boundary_separator_color = color
-        self.update()
+            next_color = color
+        self._set_attr_and_update("_boundary_separator_color", next_color)
 
     def set_boundary_separator_thickness(self, thickness: int) -> None:
-        self._boundary_separator_thickness = max(1, min(6, thickness))
-        self.update()
+        self._set_attr_and_update("_boundary_separator_thickness", max(1, min(6, thickness)))
 
     def set_auto_title_case(self, enable: bool) -> None:
-        self._auto_title_case = bool(enable)
-        self.update()
+        self._set_attr_and_update("_auto_title_case", bool(enable))
 
     def set_clean_sender_names(self, enable: bool) -> None:
-        self._clean_sender_names = bool(enable)
-        self.update()
+        self._set_attr_and_update("_clean_sender_names", bool(enable))
 
     def set_max_sender_words(self, value: Any) -> None:
-        self._max_sender_words = self._coerce_non_negative_int(value, 3)
-        self.update()
+        self._set_attr_and_update("_max_sender_words", self._coerce_non_negative_int(value, 3))
 
     def set_sender_column_width(self, value: Any) -> None:
         try:
-            self._sender_column_width = max(40, min(360, int(value)))
+            next_width = max(40, min(360, int(value)))
         except (TypeError, ValueError):
-            self._sender_column_width = 180
-        self.update()
+            next_width = 180
+        self._set_attr_and_update("_sender_column_width", next_width)
 
     def set_max_subject_words(self, value: Any) -> None:
-        self._max_subject_words = self._coerce_non_negative_int(value, 4)
-        self.update()
+        self._set_attr_and_update("_max_subject_words", self._coerce_non_negative_int(value, 4))
 
     def set_max_subject_chars(self, value: Any) -> None:
-        self._max_subject_chars = self._coerce_non_negative_int(value, 0)
-        self.update()
+        self._set_attr_and_update("_max_subject_chars", self._coerce_non_negative_int(value, 0))
 
     @staticmethod
     def _coerce_non_negative_int(value: Any, default: int) -> int:
@@ -1421,12 +1436,10 @@ class GmailWidget(BaseOverlayWidget):
             return default
 
     def set_show_unread_count_in_header(self, show: bool) -> None:
-        self._show_unread_count_in_header = bool(show)
-        self.update()
+        self._set_attr_and_update("_show_unread_count_in_header", bool(show))
 
     def set_desaturate_when_no_unread(self, desaturate: bool) -> None:
-        self._desaturate_when_no_unread = bool(desaturate)
-        self.update()
+        self._set_attr_and_update("_desaturate_when_no_unread", bool(desaturate))
 
     # ------------------------------------------------------------------
     # Notification sound

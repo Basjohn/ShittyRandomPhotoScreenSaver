@@ -419,6 +419,33 @@ def test_gmail_widget_loads_archive_action_icon(qt_app):
         widget.cleanup()
 
 
+def test_gmail_widget_setters_skip_noop_repaints(qt_app):
+    """Repeated same-value settings should not schedule needless repaints."""
+    from core.dev_gates import force_gate
+    from widgets.gmail_widget import GmailWidget
+
+    force_gate(gmail=True)
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        widget.update = lambda *args, **kwargs: calls.append("update")  # type: ignore[method-assign]
+
+        widget.set_show_sender(widget._show_sender)
+        widget.set_show_subject(widget._show_subject)
+        widget.set_show_envelope_icon(widget._show_envelope_icon)
+        widget.set_date_display_mode(widget._date_display_mode)
+        widget.set_sender_column_width(widget._sender_column_width)
+        widget.set_max_subject_words(widget._max_subject_words)
+
+        assert calls == []
+
+        widget.set_show_sender(not widget._show_sender)
+        assert calls == ["update"]
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_widget_blank_double_click_refreshes_but_rows_do_not(qt_app):
     """Verify Gmail follows Reddit's blank-space double-click refresh contract."""
     from PySide6.QtCore import QPoint, QRect
