@@ -704,6 +704,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 5
                        'desaturate_when_no_unread': True,
                        'enabled': False,
                        'filter_label': 'INBOX',
+                       'group_threads': False,
                        'account_slot': '0',
                        'font_family': 'Segoe UI',
                        'font_size': 14,

@@ -412,6 +412,17 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                                     widget._pending_reddit_url_prequeued = bool(queued)
                                     if queued:
                                         logger.info("[REDDIT] URL queued to ProgramData bridge: %s", reddit_url)
+                                        try:
+                                            from core.windows import reddit_helper_runtime
+                                            reddit_helper_runtime.refresh_session_ticket(source="scr_click_url")
+                                            reddit_helper_runtime.ensure_helper_runtime(
+                                                source="run_session_click",
+                                                owner_pid=None,
+                                                idle_exit_seconds=60,
+                                                allow_system=True,
+                                            )
+                                        except Exception:
+                                            logger.warning("[REDDIT] Failed to wake helper runtime after URL queue", exc_info=True)
                                     else:
                                         logger.warning("[REDDIT] Bridge enqueue rejected; cleanup safety-net remains active: %s", reddit_url)
                                 else:
@@ -448,7 +459,17 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                         QTimer.singleShot(800, _bring_browser_foreground_mc)
                 
-            _restore_mc_input_focus(widget, "widget_click_handled")
+            defer_focus_restore = False
+            try:
+                defer_focus_restore = bool(
+                    getattr(widget._input_handler, "_defer_focus_restore_after_widget_click", False)
+                )
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            if defer_focus_restore:
+                logger.debug("[DISPLAY_WIDGET] Deferring MC focus restore for widget popup")
+            else:
+                _restore_mc_input_focus(widget, "widget_click_handled")
             event.accept()
             return
 

@@ -1,7 +1,7 @@
 {
   "mode": "devcurve",
-  "name": "Preset 1 (Deep Blue)",
-  "preset_index": 0,
+  "name": "Preset 2 (Rainbow Rapids)",
+  "preset_index": 1,
   "visualizer_preset_override": true,
   "visualizer_preset_mode": "devcurve",
   "snapshot": {
@@ -22,7 +22,7 @@
         ],
         "bar_border_opacity": 1.0,
         "devcurve_growth": 5.0,
-        "devcurve_active_layer": "bass",
+        "devcurve_active_layer": "mids",
         "devcurve_layer_bass_shape_nodes": [
           [
             0.0,
@@ -62,7 +62,7 @@
         "devcurve_layer_mids_shape_nodes": [
           [
             0.0,
-            0.321428571428572
+            0.5074404761904764
           ],
           [
             0.251736111111111,
@@ -74,38 +74,38 @@
           ],
           [
             1.0,
-            0.34183673469387815
+            0.5074404761904764
           ]
         ],
         "devcurve_layer_transients_shape_nodes": [
           [
             0.0,
-            0.030612244897959183
+            0.09353741496598658
           ],
           [
-            0.24913194444444434,
-            0.030612244897959183
+            0.24796245421245414,
+            0.0901360544217691
           ],
           [
-            0.7508680555555554,
-            0.02040816326530612
+            0.7509500915750915,
+            0.09693877551020408
           ],
           [
             1.0,
-            0.02721088435374169
+            0.09353741496598658
           ]
         ],
         "devcurve_base_level": 0.3,
-        "devcurve_motion_power": 1.61,
+        "devcurve_motion_power": 1.65,
         "devcurve_idle_motion": 0.06,
-        "devcurve_idle_speed": 0.13,
-        "devcurve_smoothness": 0.55,
+        "devcurve_idle_speed": 0.1,
+        "devcurve_smoothness": 0.5,
         "devcurve_layer_bass_enabled": true,
         "devcurve_layer_bass_color": [
           28,
           28,
           134,
-          230
+          220
         ],
         "devcurve_layer_bass_alpha": 0.4,
         "devcurve_layer_bass_power": 3.0,
@@ -161,8 +161,8 @@
           255,
           240
         ],
-        "devcurve_layer_transients_alpha": 0.39,
-        "devcurve_layer_transients_power": 2.3461538461538503,
+        "devcurve_layer_transients_alpha": 0.4,
+        "devcurve_layer_transients_power": 3.0,
         "devcurve_layer_transients_offset": 0.0,
         "devcurve_layer_transients_outline_color": [
           255,
@@ -170,33 +170,33 @@
           255,
           255
         ],
-        "devcurve_layer_transients_outline_width": 0.006,
+        "devcurve_layer_transients_outline_width": 0.008,
         "devcurve_layer_transients_order": 2,
         "devcurve_ghosting_enabled": true,
-        "devcurve_ghost_alpha": 0.38,
+        "devcurve_ghost_alpha": 0.65,
         "devcurve_ghost_decay": 0.4,
         "devcurve_foreground_shadow_enabled": true,
-        "devcurve_foreground_shadow_alpha": 0.4,
+        "devcurve_foreground_shadow_alpha": 0.45,
         "devcurve_foreground_shadow_darken": 0.9,
         "devcurve_foreground_shadow_offset": 0.2,
         "devcurve_foreground_specular_enabled": true,
         "devcurve_foreground_specular_alpha": 0.99,
-        "devcurve_foreground_specular_width": 0.061,
+        "devcurve_foreground_specular_width": 0.055,
         "devcurve_foreground_specular_offset": 0.07,
         "devcurve_foreground_specular_crest_bias": 1.76,
         "devcurve_dynamic_floor": true,
-        "devcurve_manual_floor": 0.12,
+        "devcurve_manual_floor": 0.14,
         "devcurve_dynamic_range_enabled": false,
         "devcurve_agc_strength": 0.1,
         "devcurve_input_gain": 1.1,
         "devcurve_kick_lane_gain": 1.0,
         "devcurve_transient_pulse_gain": 1.0,
         "devcurve_transient_clamp": 1.5,
-        "devcurve_audio_block_size": 0,
+        "devcurve_audio_block_size": 256,
         "devcurve_adaptive_sensitivity": false,
-        "devcurve_sensitivity": 1.25,
+        "devcurve_sensitivity": 1.35,
         "devcurve_bar_count": 35,
-        "devcurve_rainbow_enabled": false,
+        "devcurve_rainbow_enabled": true,
         "devcurve_rainbow_speed": 0.5,
         "mode": "devcurve"
       }

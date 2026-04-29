@@ -1,14 +1,14 @@
 # Gmail Widget Plan
 
-Version: 3.5
+Version: 3.9
 Date: 2026-04-29
-Status: Gmail is functional enough for iterative runtime testing, but not shippable. Completed work is now kept brief; remaining work is focused on runtime link/menu actions, settings flicker regression, thread collapse, date display modes, header parity validation, refresh controls, settings/defaults audit, resource-use audit, settings UI cleanup, and release hygiene.
+Status: Gmail is functional enough for iterative runtime testing, but not shippable. Completed work is now kept brief; remaining work is focused on validating the latest runtime link/menu/action fixes, restored Inbox ordering, optional/default-off thread grouping, settings flicker regression, date display modes, header parity validation, refresh controls, settings/defaults audit, resource-use audit, settings UI cleanup, and release hygiene.
 
 ## 1. Current Intent
 
 The Gmail widget is a dev-gated overlay (`--devgmail`) that displays Gmail/IMAP metadata in the screensaver without storing or rendering message bodies. IMAP is the primary production backend. OAuth/REST remains optional and dev/advanced unless Google verification is completed.
 
-The next work should focus on making the existing widget shippable, not rewriting it. The visible widget layout foundation, IMAP/Gmail deep-link foundation, sender/subject cleanup controls, fixed sender/subject columns, and adjustable sender-column width are implemented. The latest layout cleanup removes the exposed min/max width and padding controls: Gmail now has one `gmail.width` value, defaulting to the same 600px width used by the Media widget, and uses Media-style content margins instead of user-facing padding. Runtime failures remain active: normal/main mode queues Gmail URLs to the ProgramData helper bridge but does not reliably open the browser after exit; MC mode subject links work, but the vertical action menu does not open and briefly freezes the cursor; IMAP action methods still log unsupported/no-op results.
+The next work should focus on making the existing widget shippable, not rewriting it. The visible widget layout foundation, IMAP/Gmail deep-link foundation, sender/subject cleanup controls, fixed sender/subject columns, and adjustable sender-column width are implemented. The latest layout cleanup removes the exposed min/max width and padding controls: Gmail now has one `gmail.width` value, defaulting to the same 600px width used by the Media widget, and uses Media-style content margins instead of user-facing padding. Runtime interaction patches are in place but still need validation: normal/main mode queues Gmail URLs to the ProgramData helper bridge and now explicitly wakes the helper runtime after queueing; MC mode subject links work, and the action-menu path now keeps a live menu reference and suppresses immediate MC focus reclaim so the popup can receive clicks. The latest ordering/action patch restores backend/Inbox order instead of over-fetching and date-sorting, keeps cached rows in that same backend order, adds optional/default-off thread grouping, switches Archive to Gmail IMAP `MOVE` to All Mail with label-removal fallback, and preserves the working Mark as Unread, Spam, and Delete paths.
 
 ## 2. Current Architecture
 
@@ -54,6 +54,9 @@ These are already done and should not be reimplemented unless code review finds 
 - Phase C has a first safety pass: stale async widget fetch results are ignored after cleanup/settings generation changes; `gmail_imap.py` no longer imports `re` per fetched message.
 - Screenshot-driven text cleanup is implemented: contraction-safe subject title casing, sender cleanup, max sender words, max subject words/chars, UI controls, defaults, and focused tests.
 - Row/action dispatch foundation is implemented: row clicks prefer `EmailMetadata.open_url`, action menu clicks have priority over row clicks, and the action indicator is vertical.
+- Runtime interaction hardening is partially implemented: normal/main URL queueing now wakes the helper runtime, and Gmail action-menu clicks now keep the QMenu alive and defer MC focus restoration instead of immediately stealing focus back from the popup.
+- IMAP Inbox list ordering has been restored to the previous safer behavior after runtime mismatch: fetch the latest mailbox UIDs requested by the active label, reverse them for newest-first display, and do not over-fetch/date-sort them in the widget.
+- Email cache display stability is partially implemented: fetched and cached mail now preserve the same backend order before writing or loading cache, reducing startup row jumps without inventing unread-first ordering.
 - Fixed row-column layout is implemented: visible rows share timestamp, sender, and subject start/stop columns so short senders leave blank space instead of shifting subjects.
 - Sender alignment is now an explicit setting: `gmail.sender_column_width` controls where the subject column starts. `gmail.max_sender_words` only changes sender text content and should not be expected to move the subject column.
 
@@ -267,6 +270,8 @@ Tasks:
 - [x] **B1.13** Header click should open `https://mail.google.com/mail/u/<slot>/#inbox` for Gmail accounts when possible.
 - [x] **B1.14** Row click should open `email.open_url` when present, otherwise fall back to the header/inbox URL or no-op with a quiet sanitized log.
 - [x] **B1.15** Route browser opens through the appropriate runtime path: widget-local fallback uses `core/windows/secure_url_launcher.py`, while central MC input routing receives URLs from `resolve_click_target(...)` and opens through Qt.
+- [x] **B1.22** Restore IMAP Inbox listing to the pre-regression newest-UID mailbox order. The over-fetch/date-sort mitigation created a worse mismatch with Gmail's visible Inbox and must not be reintroduced without a default-off setting and runtime proof.
+- [ ] **B1.23** Runtime-validate that `gmail.label_filter = INBOX` shows the same top visible messages as Gmail Primary/Inbox after manual refresh. If mismatch remains, inspect Gmail category labels, thread grouping, and cache freshness before changing display cleanup code.
 
 Tests:
 
@@ -319,9 +324,11 @@ Tasks:
 - [x] **B2.7** Add `GmailWidget.resolve_click_target(local_pos)` so row/header URL clicks can be handed to central URL routing without opening inside the widget.
 - [x] **B2.8** Update `rendering/input_handler.py` so Gmail row/header URLs set the existing central URL return values. This intentionally reuses the current Reddit/Imgur tuple until that path is renamed/generalized.
 - [ ] **B2.9** Run an MC-mode manual or harness check after implementation. Expected result: header/row clicks open through MC direct browser opening, not through `reddit_helper_bridge`.
-- [ ] **B2.10** Diagnose action-menu freeze separately from URL clicks. Check `/logs` first, then add temporary instrumentation around `_show_action_menu`, `QMenu.popup(...)`, focus restoration, and topmost/window flags if logs are inconclusive.
-- [ ] **B2.11** Verify normal/main helper handoff using the same task-scheduler/helper pattern that Reddit uses. If Gmail URLs are queued successfully but not opened, inspect helper task state, queue consumption, and script-vs-frozen launch differences.
+- [x] **B2.10** Diagnose and patch the action-menu freeze separately from URL clicks. Current fix: `GmailWidget` keeps a live `_active_action_menu` reference, closes any previous menu before opening a new one, makes the popup topmost, and `InputHandler` marks Gmail action-menu clicks so `display_input` does not immediately run MC focus restoration against the popup.
+- [x] **B2.11** Patch normal/main helper handoff using the same task-scheduler/helper runtime path that Reddit uses. Current fix: after a ProgramData bridge queue succeeds, refresh the helper session ticket and call `ensure_helper_runtime(source="run_session_click", allow_system=True)` so secure-desktop/SYSTEM runs can ask Task Scheduler to wake the user-session helper.
 - [ ] **B2.12** Verify the menu contains Archive in both normal/main and MC mode. Code intends to add it; user observation says it is missing in at least one runtime, so do not close this without runtime evidence.
+- [ ] **B2.13** Runtime-validate the B2.10 action-menu patch in MC mode. Expected result: vertical action menu opens without cursor freeze, stays clickable, and menu actions can be selected.
+- [ ] **B2.14** Runtime-validate the B2.11 helper wake patch in normal/main mode. Expected result: Gmail row/header links exit the screensaver and open the queued Gmail URL in the browser. If still failing, inspect ProgramData queue leftovers, helper heartbeat, scheduled-task acceptance, and helper logs before changing URL construction.
 
 Failure conditions:
 
@@ -352,10 +359,14 @@ Tasks:
 - [ ] **B3.2** Add a backend-level action helper that maps a widget email id to the backend-specific identifier when possible, or stores a small id map from the latest fetched metadata.
 - [x] **B3.3** Implement Mark Read for IMAP with `STORE +FLAGS (\\Seen)` against the correct selected mailbox/UID, then refresh the widget row state.
 - [x] **B3.4** Implement Trash/Spam with Gmail IMAP label operations and no broad expunge. Folder discovery remains a future hardening item if label operations fail in real Gmail runtime.
-- [x] **B3.5** Implement Archive for Gmail IMAP by removing the Inbox label using Gmail IMAP `-X-GM-LABELS (\\Inbox)`. Avoid expunging unrelated messages.
-- [ ] **B3.6** After successful action, update cached in-widget state or trigger an immediate refresh so the user sees the result.
-- [ ] **B3.7** On action failure, log a sanitized reason and keep the menu/UI responsive. Do not log subjects, credentials, raw headers, or server banners.
+- [x] **B3.5** Implement Archive for Gmail IMAP by moving the UID to `[Gmail]/All Mail` with `UID MOVE`, falling back to `-X-GM-LABELS (\\Inbox)` only if MOVE is unavailable. Avoid expunging unrelated messages.
+- [x] **B3.6** After successful action, trigger an immediate refresh so the user sees the result. Runtime validation remains open because logs show Archive success while the user still observed no visible Gmail change.
+- [x] **B3.7** On action failure, log a sanitized reason and keep the menu/UI responsive. Do not log subjects, credentials, raw headers, or server banners.
 - [ ] **B3.8** Runtime-validate these IMAP actions against a real Gmail account. If Gmail rejects `\\Spam` / `\\Trash` / `\\Inbox` label names in this context, add label discovery or provider-specific fallback before closing B3.
+- [x] **B3.9** Add Mark as Unread for REST and IMAP as a safer runtime tester action and useful menu command.
+- [x] **B3.10** Runtime finding: Mark as Unread works in both normal/main and MC builds; Spam and Delete also work. Archive failure is isolated to archive semantics, not menu dispatch or UID dispatch.
+- [ ] **B3.10a** Runtime-validate the new Archive implementation. Expected result: Archive removes the row from Inbox in both builds. If it still fails, add Gmail folder discovery for the All Mail special-use mailbox before changing menu code.
+- [ ] **B3.11** If action effects are still inconsistent, add post-action verification for IMAP in debug/runtime builds: after UID STORE success, refetch flags/labels for the UID or refresh the list and log only sanitized action/id/state summaries.
 
 Failure conditions:
 
@@ -388,6 +399,7 @@ Preferred behavior:
 
 - Collapse truly identical/thread-related entries and show a count suffix such as `(3)`.
 - Split read and unread groups, even if they share the same Gmail thread id, so unread mail remains visually actionable.
+- Grouping must be optional and defaulted off (`gmail.group_threads = False`) until the Inbox mismatch and action semantics are proven in runtime.
 
 Tasks:
 
@@ -397,6 +409,8 @@ Tasks:
 - [ ] **B5.4** Render a count suffix such as `(3)` on sender or subject without breaking subject shortening rules.
 - [ ] **B5.5** Decide and document action semantics for a collapsed row before implementation: open should go to the thread URL; mark read/archive/trash should apply to all grouped entries only if every entry has an actionable backend id, otherwise apply to the newest entry and log the limitation.
 - [ ] **B5.6** Add tests for read/unread split groups, Gmail thread-id grouping, fallback exact grouping, and count rendering.
+- [ ] **B5.7** Validate against the PayPal duplicate case: two same-sender/same-subject rows in the same read/unread bucket should collapse with a visible count, while a read PayPal and unread PayPal should remain separate.
+- [x] **B5.8** Add `gmail.group_threads` defaulted to `False` and a settings checkbox. Current runtime should leave grouping off.
 
 ## 8. Phase C - Threading, Lifecycle, and Resource Safety
 
@@ -792,12 +806,14 @@ Gmail needs the same quick manual refresh ergonomics users already expect from R
 
 Tasks:
 
-- [ ] **D7.1** Add a flat icon-only grey refresh button in the Gmail widget top-right. It should be visually quiet and not introduce a large text/control surface.
-- [ ] **D7.2** The refresh icon should spin or animate while a forced refresh is in progress, then stop on success, failure, or cancellation.
-- [ ] **D7.3** Clicking the refresh icon forces an email refresh immediately, respecting the existing fetch-in-progress guard so repeated clicks do not spawn overlapping network work.
-- [ ] **D7.4** Double-clicking blank space inside the Gmail widget should force a refresh, matching the existing Reddit widget behavior. Do not let row double-clicks both open a link and refresh.
-- [ ] **D7.5** Add hit rect tests for refresh button vs row/menu/header areas.
+- [x] **D7.1** Add a flat icon-only grey refresh button in the Gmail widget top-right. It should be visually quiet and not introduce a large text/control surface.
+- [x] **D7.1a** Replace the failed circular-arrow attempts with an arrowless spiral glyph after runtime screenshot review showed the arrow direction remained ambiguous/backwards.
+- [x] **D7.2** The refresh icon should spin or animate while a forced refresh is in progress, then stop on success, failure, or cancellation.
+- [x] **D7.3** Clicking the refresh icon forces an email refresh immediately, respecting the existing fetch-in-progress guard so repeated clicks do not spawn overlapping network work.
+- [x] **D7.4** Double-clicking blank space inside the Gmail widget should force a refresh, matching the existing Reddit widget behavior. Do not let row double-clicks both open a link and refresh.
+- [x] **D7.5** Add hit rect tests for refresh button vs row/menu/header areas.
 - [ ] **D7.6** Runtime-validate that refresh animation does not tick continuously when idle.
+- [ ] **D7.7** Runtime-validate the spiral glyph visually. If the spiral still reads poorly, replace it with a small PNG/icon asset rather than another hand-drawn arrow attempt.
 
 Failure conditions:
 

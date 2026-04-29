@@ -119,6 +119,24 @@ def test_mark_as_read_mocked() -> None:
         assert mock_post.called is False
 
 
+def test_mark_as_unread_sends_unread_label() -> None:
+    """Verify mark_as_unread() adds the UNREAD label."""
+    from core.gmail.gmail_client import GmailClient
+    from unittest.mock import MagicMock
+
+    mock_oauth = MagicMock()
+    mock_oauth.credentials = MagicMock()
+    mock_oauth.credentials.access_token = "fake_access_token"
+    client = GmailClient(oauth_manager=mock_oauth)
+    calls = []
+    client._make_request = lambda method, endpoint, data=None: calls.append((method, endpoint, data)) or {}
+
+    assert client.mark_as_unread("fake_msg") is True
+    assert calls == [
+        ("POST", "users/me/messages/fake_msg/modify", {"addLabelIds": ["UNREAD"]})
+    ]
+
+
 def test_archive_message_mocked() -> None:
     """Verify archive_message() with mocked requests (no real API calls)."""
     from core.gmail.gmail_client import GmailClient

@@ -14,7 +14,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
-| `Docs/Gmail_Widget_Plan.md` | Gmail widget execution plan, current layout cleanup, runtime URL/menu/action failures, settings flicker regression, refresh/defaults/resource audits, thread/date display work, and release checks |
+| `Docs/Gmail_Widget_Plan.md` | Gmail widget execution plan, current layout cleanup, runtime URL/menu/action and restored Inbox/cache-order fixes awaiting validation, settings flicker regression, optional thread/date display work, refresh/defaults/resource audits, and release checks |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
 
@@ -74,13 +74,13 @@ Living map of the current SRPSS codebase.
 | Module | File | Role |
 |---|---|---|
 | OAuth manager | `core/gmail/gmail_oauth.py` | OAuth 2.0 PKCE flow, token storage (DPAPI) |
-| REST API client | `core/gmail/gmail_client.py` | Gmail REST API — metadata, labels, actions |
-| IMAP client | `core/gmail/gmail_imap.py` | IMAP + App Password — headers, unread count |
+| REST API client | `core/gmail/gmail_client.py` | Gmail REST API — metadata, labels, read/unread/archive/spam/trash actions |
+| IMAP client | `core/gmail/gmail_imap.py` | IMAP + App Password — headers, unread count, selected-mailbox order, UID actions |
 | Deep-link helpers | `core/gmail/gmail_deeplinks.py` | Gmail inbox/thread/search URL builders; `X-GM-THRID` decimal-to-hex conversion |
 | Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
 | Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, formatting/text cleanup utilities, email cache |
-| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, widget settings, single Gmail width control, sender/subject cleanup controls, sender column width |
-| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list, actions, row hit targets, Media-style layout margins/header frame, central URL click targets |
+| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, widget settings, single Gmail width control, sender/subject cleanup controls, sender column width, default-off grouping toggle |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions, row hit targets, Media-style layout margins/header frame, central URL click targets, refresh control, action menu popup ownership |
 | Dev gate | `core/dev_gates.py` | `is_gmail_enabled()`, `force_gate(gmail=...)` |
 
 ## Source Ingestion

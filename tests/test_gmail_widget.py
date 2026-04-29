@@ -283,11 +283,49 @@ def test_gmail_widget_action_click_has_priority(qt_app, monkeypatch):
         widget._show_action_menu = lambda message_id, _pos: menu_ids.append(message_id)  # type: ignore[method-assign]
 
         assert widget.resolve_click_target(QPoint(238, 32)) is None
+        assert widget.is_action_menu_point(QPoint(238, 32)) is True
         assert widget.handle_click(QPoint(238, 32)) is True
         assert menu_ids == ["fake_msg"]
         assert opened == []
     finally:
         widget.cleanup()
+
+
+def test_gmail_action_menu_click_defers_mc_focus_restore(qt_app):
+    """Verify central routing marks Gmail menu clicks as popup-safe."""
+    from unittest.mock import MagicMock
+
+    from PySide6.QtCore import QPoint, QRect, Qt
+
+    from rendering.input_handler import InputHandler
+
+    handler = InputHandler(None)
+    event = MagicMock()
+    event.pos.return_value = QPoint(238, 32)
+    event.button.return_value = Qt.MouseButton.LeftButton
+
+    gmail = MagicMock()
+    gmail.isVisible.return_value = True
+    gmail.geometry.return_value = QRect(0, 0, 300, 120)
+    gmail.resolve_click_target.return_value = None
+    gmail.is_action_menu_point.return_value = True
+    gmail.handle_click.return_value = True
+
+    handled, reddit_handled, reddit_url = handler.route_widget_click(
+        event,
+        None,
+        None,
+        None,
+        None,
+        gmail,
+        None,
+        None,
+    )
+
+    assert handled is True
+    assert reddit_handled is False
+    assert reddit_url is None
+    assert handler._defer_focus_restore_after_widget_click is True
 
 
 def test_gmail_widget_uses_imap_uid_for_imap_actions(qt_app):
@@ -314,6 +352,55 @@ def test_gmail_widget_uses_imap_uid_for_imap_actions(qt_app):
             imap_uid="42",
         )
         assert widget._action_message_id(email) == "42"
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_widget_refresh_click_forces_fetch(qt_app):
+    """Verify the top-right refresh hit rect consumes clicks and fetches."""
+    from PySide6.QtCore import QPoint, QRect
+
+    from core.dev_gates import force_gate
+    from widgets.gmail_widget import GmailWidget
+
+    force_gate(gmail=True)
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        widget._refresh_hit_rect = QRect(100, 10, 22, 22)
+        widget._fetch_emails = lambda: calls.append("fetch") or True  # type: ignore[method-assign]
+
+        assert widget.resolve_click_target(QPoint(110, 20)) is None
+        assert widget.handle_click(QPoint(110, 20)) is True
+        assert calls == ["fetch"]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_widget_blank_double_click_refreshes_but_rows_do_not(qt_app):
+    """Verify Gmail follows Reddit's blank-space double-click refresh contract."""
+    from PySide6.QtCore import QPoint, QRect
+
+    from core.dev_gates import force_gate
+    from widgets.gmail_widget import GmailWidget
+
+    force_gate(gmail=True)
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        widget._enabled = True
+        widget._row_hit_rects = [(QRect(10, 20, 200, 24), "msg", "Subject")]
+        widget._action_hit_rects = [(QRect(210, 20, 24, 24), "msg")]
+        widget._refresh_hit_rect = QRect(240, 10, 22, 22)
+        widget._fetch_emails = lambda: calls.append("fetch") or True  # type: ignore[method-assign]
+
+        assert widget.handle_double_click(QPoint(20, 25)) is False
+        assert widget.handle_double_click(QPoint(220, 25)) is False
+        assert widget.handle_double_click(QPoint(250, 20)) is False
+        assert widget.handle_double_click(QPoint(40, 90)) is True
+        assert calls == ["fetch"]
     finally:
         widget.cleanup()
 
@@ -370,5 +457,56 @@ def test_gmail_widget_ignores_stale_fetch_results(qt_app):
 
         assert widget._emails == []
         assert widget._unread_count == 0
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_widget_cache_uses_display_order(qt_app):
+    """Verify cached mail preserves the backend order the widget displays."""
+    from datetime import datetime
+
+    from core.dev_gates import force_gate
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    force_gate(gmail=True)
+
+    widget = GmailWidget()
+    written_ids = []
+    try:
+        read_newer = EmailMetadata(
+            id="read_newer",
+            thread_id="read_thread",
+            sender="Sender",
+            subject="Read newer",
+            date=datetime(2026, 4, 29, 12, 0, 0),
+            labels=("INBOX",),
+            is_unread=False,
+        )
+        unread_older = EmailMetadata(
+            id="unread_older",
+            thread_id="unread_thread",
+            sender="Sender",
+            subject="Unread older",
+            date=datetime(2026, 4, 28, 12, 0, 0),
+            labels=("INBOX", "UNREAD"),
+            is_unread=True,
+        )
+        older_read = EmailMetadata(
+            id="older_read",
+            thread_id="older_thread",
+            sender="Sender",
+            subject="Older read",
+            date=datetime(2026, 4, 27, 12, 0, 0),
+            labels=("INBOX",),
+            is_unread=False,
+        )
+        widget._write_email_cache = lambda emails: written_ids.extend(e.id for e in emails)  # type: ignore[method-assign]
+
+        backend_order = [read_newer, unread_older, older_read]
+        widget._on_emails_fetched(backend_order, 1)
+
+        assert [email.id for email in widget._emails] == ["read_newer", "unread_older", "older_read"]
+        assert written_ids == ["read_newer", "unread_older", "older_read"]
     finally:
         widget.cleanup()

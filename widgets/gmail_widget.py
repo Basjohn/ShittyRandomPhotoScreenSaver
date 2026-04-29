@@ -2,12 +2,23 @@
 from __future__ import annotations
 
 import threading
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QFontMetrics, QIcon, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetrics,
+    QIcon,
+    QImage,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import QMenu, QWidget
 
 from core.gmail.gmail_backend import GmailBackend
@@ -63,6 +74,7 @@ class GmailWidget(BaseOverlayWidget):
         self._limit = 5
         self._refresh_interval = timedelta(minutes=5)
         self._filter_label = GmailLabel.INBOX.value
+        self._group_threads = False
         self._show_sender = True
         self._show_subject = True
         self._show_envelope_icon = True
@@ -104,8 +116,10 @@ class GmailWidget(BaseOverlayWidget):
         self._action_icons: Dict[str, Optional[QPixmap]] = {}
 
         self._header_hit_rect: Optional[QRect] = None
+        self._refresh_hit_rect: Optional[QRect] = None
         self._row_hit_rects: List[Tuple[QRect, str, str]] = []
         self._action_hit_rects: List[Tuple[QRect, str]] = []
+        self._active_action_menu: Optional[QMenu] = None
 
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
         self._update_timer: Optional[QTimer] = None
@@ -113,6 +127,9 @@ class GmailWidget(BaseOverlayWidget):
         self._fetch_lock = threading.Lock()
         self._fetch_generation = 0
         self._cancelled = False
+        self._refreshing = False
+        self._refresh_spin_angle = 0
+        self._refresh_spin_timer: Optional[QTimer] = None
 
         # New-mail detection: only fire sound for messages that arrive after
         # the first fetch of this session. Pre-existing unread on first fetch
@@ -205,7 +222,13 @@ class GmailWidget(BaseOverlayWidget):
         return pm
 
     def _load_action_icons(self) -> None:
-        names = {"read": "images/gmail-read.png", "spam": "images/gmail-spam.png", "trash": "images/gmail-trash.png"}
+        names = {
+            "read": "images/gmail-read.png",
+            "unread": "images/gmail-envelope.png",
+            "archive": "images/gmail-archive.png",
+            "spam": "images/gmail-spam.png",
+            "trash": "images/gmail-trash.png",
+        }
         for key, path_str in names.items():
             path = Path(path_str)
             if path.exists():
@@ -214,6 +237,41 @@ class GmailWidget(BaseOverlayWidget):
                     self._action_icons[key] = pm.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
                     continue
             self._action_icons[key] = None
+
+    def _action_icon(self, key: str) -> QIcon:
+        pm = self._action_icons.get(key)
+        if pm is None or pm.isNull():
+            pm = self._fallback_action_pixmap(key)
+            self._action_icons[key] = pm
+        return QIcon(pm)
+
+    @staticmethod
+    def _fallback_action_pixmap(key: str) -> QPixmap:
+        pm = QPixmap(16, 16)
+        pm.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pm)
+        try:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(QColor(235, 235, 235, 220), 1.5)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            if key == "archive":
+                painter.drawLine(3, 5, 13, 5)
+                painter.drawLine(4, 5, 5, 3)
+                painter.drawLine(5, 3, 11, 3)
+                painter.drawLine(11, 3, 12, 5)
+                painter.drawRect(3, 5, 10, 8)
+                painter.drawLine(6, 8, 10, 8)
+            elif key == "unread":
+                painter.drawRect(2, 4, 12, 8)
+                painter.drawLine(2, 4, 8, 9)
+                painter.drawLine(14, 4, 8, 9)
+            else:
+                painter.drawEllipse(3, 3, 10, 10)
+        finally:
+            painter.end()
+        return pm
 
     def _initialize_impl(self) -> None:
         logger.debug("[LIFECYCLE] GmailWidget initialized")
@@ -253,6 +311,7 @@ class GmailWidget(BaseOverlayWidget):
             except Exception:
                 pass
             self._update_timer = None
+        self._set_refreshing(False)
         self._cancelled = True
         self._fetch_generation += 1
         self._emails.clear()
@@ -293,9 +352,11 @@ class GmailWidget(BaseOverlayWidget):
             except Exception:
                 pass
             self._update_timer = None
+        self._set_refreshing(False)
         self._emails.clear()
         self._row_hit_rects.clear()
         self._action_hit_rects.clear()
+        self._refresh_hit_rect = None
         super().cleanup()
 
     # ------------------------------------------------------------------
@@ -314,21 +375,23 @@ class GmailWidget(BaseOverlayWidget):
             self._update_timer.timeout.connect(self._fetch_emails)
             self._update_timer.start(interval_ms)
 
-    def _fetch_emails(self) -> None:
+    def _fetch_emails(self) -> bool:
         with self._fetch_lock:
             if self._fetch_in_progress:
                 logger.debug("[GMAIL] Fetch already in progress, skipping")
-                return
+                return False
             self._fetch_in_progress = True
+        self._set_refreshing(True)
         # Re-acquire client from backend each fetch in case mode/credentials changed
         self._gmail_client = self._backend.client if self._backend.is_authenticated else None
         if self._gmail_client is None:
             with self._fetch_lock:
                 self._fetch_in_progress = False
+            self._set_refreshing(False)
             logger.debug("[GMAIL] Not authenticated, skipping fetch")
             self._last_error = "auth"
             self.update()
-            return
+            return False
         try:
             if self._ensure_thread_manager("GmailWidget._fetch_emails"):
                 generation = self._fetch_generation
@@ -337,6 +400,32 @@ class GmailWidget(BaseOverlayWidget):
                 self._fetch_emails_sync()
         except Exception:
             self._fetch_emails_sync()
+        return True
+
+    def _set_refreshing(self, refreshing: bool) -> None:
+        refreshing = bool(refreshing)
+        if refreshing == self._refreshing:
+            return
+        self._refreshing = refreshing
+        if refreshing:
+            if self._refresh_spin_timer is None:
+                self._refresh_spin_timer = QTimer(self)
+                self._refresh_spin_timer.timeout.connect(self._advance_refresh_spinner)
+            self._refresh_spin_timer.start(80)
+        else:
+            if self._refresh_spin_timer is not None:
+                self._refresh_spin_timer.stop()
+            self._refresh_spin_angle = 0
+        self.update()
+
+    def _advance_refresh_spinner(self) -> None:
+        if not self._refreshing:
+            return
+        self._refresh_spin_angle = (self._refresh_spin_angle + 30) % 360
+        if self._refresh_hit_rect is not None:
+            self.update(self._refresh_hit_rect.adjusted(-2, -2, 2, 2))
+        else:
+            self.update()
 
     def _fetch_emails_async(self, generation: int) -> None:
         try:
@@ -387,16 +476,18 @@ class GmailWidget(BaseOverlayWidget):
             return
         if generation is not None and generation != self._fetch_generation:
             return
-        self._emails = sorted(emails, key=lambda e: (not e.is_unread, -e.date.timestamp()))
+        self._set_refreshing(False)
+        display_emails = list(emails)
+        self._emails = display_emails
         self._last_error = None
         self._detect_new_mail(emails)
         if unread_count != self._unread_count:
             self._unread_count = unread_count
             self.unread_count_changed.emit(unread_count)
-        if emails:
+        if display_emails:
             self._has_displayed_valid_data = True
-            self._write_email_cache(emails)
-            self._update_card_height_from_content(len(emails))
+            self._write_email_cache(display_emails)
+            self._update_card_height_from_content(len(display_emails))
             self.update()
             if not self.isVisible():
                 self._request_fade_in()
@@ -452,6 +543,7 @@ class GmailWidget(BaseOverlayWidget):
             return
         if generation is not None and generation != self._fetch_generation:
             return
+        self._set_refreshing(False)
         self._last_error = error_msg
         logger.warning("[GMAIL] Displaying error state: %s", error_msg)
         self._update_card_height_from_content(1)
@@ -466,7 +558,7 @@ class GmailWidget(BaseOverlayWidget):
             return None
         mtime = datetime.fromtimestamp(CACHE_PATH.stat().st_mtime)
         if datetime.now() - mtime > timedelta(hours=CACHE_MAX_AGE_HOURS):
-            logger.debug("[GMAIL] Cache stale (>24h), ignoring")
+            logger.debug("[GMAIL] Cache stale (>%dh), ignoring", CACHE_MAX_AGE_HOURS)
             return None
         try:
             data = CACHE_PATH.read_text(encoding="utf-8")
@@ -564,6 +656,7 @@ class GmailWidget(BaseOverlayWidget):
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         try:
             self._paint_header(painter)
+            self._paint_refresh_button(painter)
             if self._last_error:
                 self._paint_error_state(painter)
             elif not self._emails:
@@ -590,6 +683,41 @@ class GmailWidget(BaseOverlayWidget):
         painter.setPen(self._text_color)
         painter.drawText(layout["text_x"], layout["text_baseline_y"], header_text)
         self._header_hit_rect = QRect(layout["frame_rect"])
+
+    def _paint_refresh_button(self, painter: QPainter) -> None:
+        margins = self.contentsMargins()
+        size = 22
+        right = self.width() - margins.right() - self._content_padding_right
+        top = margins.top() + self._content_padding_top
+        rect = QRect(max(0, right - size), top, size, size)
+        self._refresh_hit_rect = rect
+
+        painter.save()
+        try:
+            color = QColor(170, 170, 170, 190)
+            if self._refreshing:
+                color = QColor(210, 210, 210, 230)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            pen = QPen(color, 2)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            center = rect.center()
+            max_radius = max(4.0, (min(rect.width(), rect.height()) / 2.0) - 3.5)
+            path = QPainterPath()
+            steps = 34
+            for index in range(steps):
+                progress = index / float(steps - 1)
+                radius = 2.4 + progress * (max_radius - 2.4)
+                angle = math.radians(self._refresh_spin_angle + 45 + progress * 430)
+                x = center.x() + math.cos(angle) * radius
+                y = center.y() + math.sin(angle) * radius
+                if index == 0:
+                    path.moveTo(x, y)
+                else:
+                    path.lineTo(x, y)
+            painter.drawPath(path)
+        finally:
+            painter.restore()
 
     def _header_text(self) -> str:
         if self._show_unread_count_in_header and self._unread_count > 0:
@@ -820,7 +948,29 @@ class GmailWidget(BaseOverlayWidget):
     # Click Handling
     # ------------------------------------------------------------------
 
+    def _is_interactive_point(self, local_pos: QPoint) -> bool:
+        if self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
+            return True
+        if self._header_hit_rect is not None and self._header_hit_rect.contains(local_pos):
+            return True
+        if self.is_action_menu_point(local_pos):
+            return True
+        if any(rect.contains(local_pos) for rect, _message_id, _subject in self._row_hit_rects):
+            return True
+        return False
+
+    def is_action_menu_point(self, local_pos: QPoint) -> bool:
+        return any(rect.contains(local_pos) for rect, _message_id in self._action_hit_rects)
+
+    def is_action_menu_visible(self) -> bool:
+        menu = self._active_action_menu
+        return bool(menu is not None and menu.isVisible())
+
     def handle_click(self, local_pos: QPoint) -> bool:
+        if self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
+            self._fetch_emails()
+            return True
+
         if self._last_error:
             is_auth = "auth" in self._last_error.lower()
             if is_auth:
@@ -851,9 +1001,26 @@ class GmailWidget(BaseOverlayWidget):
 
         return False
 
+    def handle_double_click(self, local_pos: QPoint) -> bool:
+        if not self._enabled:
+            return False
+        if self._is_interactive_point(local_pos):
+            return False
+        try:
+            started = self._fetch_emails()
+            if started:
+                logger.debug("[GMAIL] Blank-space double-click triggered email refresh")
+            return True
+        except Exception:
+            logger.debug("[GMAIL] Double-click refresh failed", exc_info=True)
+            return False
+
     def resolve_click_target(self, local_pos: QPoint) -> Optional[str]:
         """Return a Gmail URL for central MC/SCR click routing, without opening it."""
         if self._last_error:
+            return None
+
+        if self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
             return None
 
         if self._header_hit_rect is not None and self._header_hit_rect.contains(local_pos):
@@ -881,8 +1048,16 @@ class GmailWidget(BaseOverlayWidget):
             logger.error("[GMAIL] Auth flow failed: %s", e)
 
     def _show_action_menu(self, message_id: str, local_pos: QPoint) -> None:
+        if self._active_action_menu is not None:
+            try:
+                self._active_action_menu.close()
+            except Exception:
+                pass
+            self._active_action_menu = None
+
         menu = QMenu(self)
         menu.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        menu.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
         menu.setStyleSheet(
             "QMenu { background-color: rgba(43,43,43,255); border: 2px solid rgba(154,154,154,200); border-radius: 6px; padding: 4px 2px; }"
             "QMenu::item { background-color: transparent; color: #ffffff; padding: 6px 20px 6px 12px; margin: 1px 3px; border-radius: 3px; font-size: 12px; }"
@@ -897,35 +1072,38 @@ class GmailWidget(BaseOverlayWidget):
 
         if email.is_unread:
             action_read = menu.addAction("Mark as Read")
-            icon_read = self._action_icons.get("read")
-            if icon_read:
-                action_read.setIcon(QIcon(icon_read))
+            action_read.setIcon(self._action_icon("read"))
             action_read.triggered.connect(
                 lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_mark_as_read, mid)
             )
+        else:
+            action_unread = menu.addAction("Mark as Unread")
+            action_unread.setIcon(self._action_icon("unread"))
+            action_unread.triggered.connect(
+                lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_mark_as_unread, mid)
+            )
 
         action_archive = menu.addAction("Archive")
+        action_archive.setIcon(self._action_icon("archive"))
         action_archive.triggered.connect(
             lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_archive, mid)
         )
 
         action_spam = menu.addAction("Mark as Spam")
-        icon_spam = self._action_icons.get("spam")
-        if icon_spam:
-            action_spam.setIcon(QIcon(icon_spam))
+        action_spam.setIcon(self._action_icon("spam"))
         action_spam.triggered.connect(
             lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_spam, mid)
         )
 
         action_trash = menu.addAction("Delete")
-        icon_trash = self._action_icons.get("trash")
-        if icon_trash:
-            action_trash.setIcon(QIcon(icon_trash))
+        action_trash.setIcon(self._action_icon("trash"))
         action_trash.triggered.connect(
             lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_trash, mid)
         )
 
         global_pos = self.mapToGlobal(local_pos)
+        self._active_action_menu = menu
+        menu.aboutToHide.connect(lambda: setattr(self, "_active_action_menu", None))
         menu.popup(global_pos)
 
     @staticmethod
@@ -958,6 +1136,18 @@ class GmailWidget(BaseOverlayWidget):
                 ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
+        else:
+            logger.warning("[GMAIL] Mark as read failed for %s", message_id)
+
+    def _do_mark_as_unread(self, message_id: str) -> None:
+        if self._gmail_client and self._gmail_client.mark_as_unread(message_id):
+            logger.info("[GMAIL] Marked %s as unread", message_id)
+            try:
+                ThreadManager.run_on_ui_thread(self._fetch_emails)
+            except Exception:
+                pass
+        else:
+            logger.warning("[GMAIL] Mark as unread failed for %s", message_id)
 
     def _do_archive(self, message_id: str) -> None:
         if self._gmail_client and self._gmail_client.archive_message(message_id):
@@ -966,6 +1156,8 @@ class GmailWidget(BaseOverlayWidget):
                 ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
+        else:
+            logger.warning("[GMAIL] Archive failed for %s", message_id)
 
     def _do_spam(self, message_id: str) -> None:
         if self._gmail_client and self._gmail_client.spam_message(message_id):
@@ -974,6 +1166,8 @@ class GmailWidget(BaseOverlayWidget):
                 ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
+        else:
+            logger.warning("[GMAIL] Spam failed for %s", message_id)
 
     def _do_trash(self, message_id: str) -> None:
         if self._gmail_client and self._gmail_client.trash_message(message_id):
@@ -982,6 +1176,8 @@ class GmailWidget(BaseOverlayWidget):
                 ThreadManager.run_on_ui_thread(self._fetch_emails)
             except Exception:
                 pass
+        else:
+            logger.warning("[GMAIL] Trash failed for %s", message_id)
 
     # ------------------------------------------------------------------
     # Settings
@@ -998,6 +1194,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_account_slot(getattr(settings, "account_slot", self._account_slot))
         self.set_limit(getattr(settings, "limit", self._limit))
         self.set_refresh_interval(getattr(settings, "refresh_minutes", 5))
+        self.set_group_threads(getattr(settings, "group_threads", self._group_threads))
         self.set_show_sender(getattr(settings, "show_sender", self._show_sender))
         self.set_show_subject(getattr(settings, "show_subject", self._show_subject))
         self.set_show_envelope_icon(getattr(settings, "show_envelope_icon", self._show_envelope_icon))
@@ -1032,6 +1229,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_account_slot(d.get("account_slot", self._account_slot))
         self.set_limit(d.get("limit", self._limit))
         self.set_refresh_interval(d.get("refresh_minutes", 5))
+        self.set_group_threads(d.get("group_threads", self._group_threads))
         self.set_show_sender(d.get("show_sender", self._show_sender))
         self.set_show_subject(d.get("show_subject", self._show_subject))
         self.set_show_envelope_icon(d.get("show_envelope_icon", self._show_envelope_icon))
@@ -1107,6 +1305,10 @@ class GmailWidget(BaseOverlayWidget):
 
     def set_refresh_interval(self, minutes: int) -> None:
         self._refresh_interval = timedelta(minutes=max(1, minutes))
+
+    def set_group_threads(self, enabled: bool) -> None:
+        self._group_threads = bool(enabled)
+        self.update()
 
     def set_show_sender(self, show: bool) -> None:
         self._show_sender = bool(show)

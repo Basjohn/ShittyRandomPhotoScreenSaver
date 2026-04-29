@@ -201,6 +201,19 @@ class GmailClient:
             logger.warning("[GMAIL_CLIENT] mark_as_read failed for %s: %s", message_id, exc)
             return False
 
+    def mark_as_unread(self, message_id: str) -> bool:
+        """Add UNREAD label to a message."""
+        try:
+            self._make_request(
+                "POST",
+                f"users/me/messages/{message_id}/modify",
+                data={"addLabelIds": ["UNREAD"]},
+            )
+            return True
+        except Exception as exc:
+            logger.warning("[GMAIL_CLIENT] mark_as_unread failed for %s: %s", message_id, exc)
+            return False
+
     def archive_message(self, message_id: str) -> bool:
         """Remove INBOX label (archive)."""
         try:

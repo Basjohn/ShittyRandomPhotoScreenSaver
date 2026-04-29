@@ -307,6 +307,11 @@ class GmailImapClient:
         status, _ = conn.uid("STORE", uid, operation, flags)
         return status == "OK"
 
+    @staticmethod
+    def _uid_move(conn: imaplib.IMAP4_SSL, uid: str, mailbox: str) -> bool:
+        status, _ = conn.uid("MOVE", uid, mailbox)
+        return status == "OK"
+
     def mark_as_read(self, message_id: str) -> bool:
         """Mark a message as read using its IMAP UID."""
         return self._run_uid_action(
@@ -315,12 +320,26 @@ class GmailImapClient:
             lambda conn, uid: self._uid_store(conn, uid, "+FLAGS", r"(\Seen)"),
         )
 
+    def mark_as_unread(self, message_id: str) -> bool:
+        """Mark a message as unread using its IMAP UID."""
+        return self._run_uid_action(
+            message_id,
+            "mark_as_unread",
+            lambda conn, uid: self._uid_store(conn, uid, "-FLAGS", r"(\Seen)"),
+        )
+
     def archive_message(self, message_id: str) -> bool:
-        """Archive a Gmail IMAP message by removing the Inbox label."""
+        """Archive a Gmail IMAP message by moving it to All Mail."""
+        def _archive(conn: imaplib.IMAP4_SSL, uid: str) -> bool:
+            moved = self._uid_move(conn, uid, '"[Gmail]/All Mail"')
+            if moved:
+                return True
+            return self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)")
+
         return self._run_uid_action(
             message_id,
             "archive_message",
-            lambda conn, uid: self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)"),
+            _archive,
         )
 
     def spam_message(self, message_id: str) -> bool:

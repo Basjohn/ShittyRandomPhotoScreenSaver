@@ -11,8 +11,11 @@ class FakeImapActionConn:
         self.selected.append((mailbox, readonly))
         return "OK", [b""]
 
-    def uid(self, command, uid, operation, flags):
-        self.uid_calls.append((command, uid, operation, flags))
+    def uid(self, command, uid, operation, flags=None):
+        if flags is None:
+            self.uid_calls.append((command, uid, operation))
+        else:
+            self.uid_calls.append((command, uid, operation, flags))
         return "OK", [b""]
 
     def logout(self):
@@ -32,7 +35,20 @@ def test_imap_mark_as_read_uses_uid_store(monkeypatch) -> None:
     assert conn.logged_out is True
 
 
-def test_imap_archive_removes_inbox_label(monkeypatch) -> None:
+def test_imap_mark_as_unread_uses_uid_store(monkeypatch) -> None:
+    from core.gmail.gmail_imap import GmailImapClient
+
+    conn = FakeImapActionConn()
+    client = GmailImapClient("fake@example.com", "fake_app_password")
+    monkeypatch.setattr(client, "_connect", lambda: conn)
+
+    assert client.mark_as_unread("42") is True
+    assert conn.selected == [('"INBOX"', False)]
+    assert conn.uid_calls == [("STORE", "42", "-FLAGS", r"(\Seen)")]
+    assert conn.logged_out is True
+
+
+def test_imap_archive_moves_to_all_mail(monkeypatch) -> None:
     from core.gmail.gmail_imap import GmailImapClient
 
     conn = FakeImapActionConn()
@@ -40,7 +56,7 @@ def test_imap_archive_removes_inbox_label(monkeypatch) -> None:
     monkeypatch.setattr(client, "_connect", lambda: conn)
 
     assert client.archive_message("42") is True
-    assert conn.uid_calls == [("STORE", "42", "-X-GM-LABELS", r"(\Inbox)")]
+    assert conn.uid_calls == [("MOVE", "42", '"[Gmail]/All Mail"')]
 
 
 def test_imap_spam_and_trash_use_gmail_labels(monkeypatch) -> None:
@@ -99,3 +115,50 @@ def test_imap_metadata_fetch_prefers_uid_fetch() -> None:
     assert meta is not None
     assert meta.imap_uid == "42"
     assert conn.uid_calls[0][0] == "FETCH"
+
+
+def test_imap_list_messages_preserves_recent_uid_order(monkeypatch) -> None:
+    from core.gmail.gmail_imap import GmailImapClient
+
+    class FakeListConn:
+        def __init__(self):
+            self.fetch_uids = []
+            self.logged_out = False
+
+        def capability(self):
+            return "OK", [b""]
+
+        def select(self, mailbox, readonly=True):
+            assert mailbox == '"INBOX"'
+            assert readonly is True
+            return "OK", [b""]
+
+        def uid(self, command, *args):
+            if command == "SEARCH":
+                return "OK", [b"1 2 3 4 5 6 7 8 9 10"]
+            if command == "FETCH":
+                uid = args[0].decode("ascii") if isinstance(args[0], bytes) else str(args[0])
+                self.fetch_uids.append(uid)
+                dates = {"9": "Mon, 13 Jan 2025 12:00:00 +0000", "10": "Tue, 14 Jan 2025 12:00:00 +0000"}
+                date = dates.get(uid, "Wed, 01 Jan 2025 12:00:00 +0000")
+                headers = (
+                    b"From: fake_sender@example.com\r\n"
+                    + f"Subject: Message {uid}\r\n".encode("ascii")
+                    + f"Date: {date}\r\n".encode("ascii")
+                    + f"Message-ID: <fake-{uid}@example.com>\r\n\r\n".encode("ascii")
+                )
+                return "OK", [(f"{uid} (FLAGS (\\Seen))".encode("ascii"), headers)]
+            raise AssertionError(f"unexpected command {command}")
+
+        def logout(self):
+            self.logged_out = True
+
+    conn = FakeListConn()
+    client = GmailImapClient("fake@example.com", "fake_app_password")
+    monkeypatch.setattr(client, "_connect", lambda: conn)
+
+    messages = client.list_messages(label_ids=["INBOX"], max_results=2)
+
+    assert [message.subject for message in messages] == ["Message 10", "Message 9"]
+    assert conn.fetch_uids == ["10", "9"]
+    assert conn.logged_out is True

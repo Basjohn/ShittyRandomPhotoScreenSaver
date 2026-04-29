@@ -652,6 +652,12 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_show_timestamp.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_timestamp)
 
+    tab.gmail_group_threads = QCheckBox("Group similar email threads")
+    tab.gmail_group_threads.setProperty("circleIndicator", True)
+    tab.gmail_group_threads.setChecked(tab._default_bool('gmail', 'group_threads', False))
+    tab.gmail_group_threads.stateChanged.connect(tab._save_settings)
+    appearance_inner.addWidget(tab.gmail_group_threads)
+
     tab.gmail_auto_title_case = QCheckBox("Auto title-case subjects")
     tab.gmail_auto_title_case.setProperty("circleIndicator", True)
     tab.gmail_auto_title_case.setChecked(tab._default_bool('gmail', 'auto_title_case', True))
@@ -956,6 +962,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.gmail_show_header_border.setChecked(tab._config_bool('gmail', gmail_config, 'show_header_border', True))
     tab.gmail_show_separators.setChecked(tab._config_bool('gmail', gmail_config, 'show_separators', True))
     tab.gmail_show_timestamp.setChecked(tab._config_bool('gmail', gmail_config, 'show_timestamp', True))
+    tab.gmail_group_threads.setChecked(tab._config_bool('gmail', gmail_config, 'group_threads', False))
     tab.gmail_auto_title_case.setChecked(tab._config_bool('gmail', gmail_config, 'auto_title_case', True))
     tab.gmail_clean_sender_names.setChecked(tab._config_bool('gmail', gmail_config, 'clean_sender_names', True))
     tab.gmail_max_sender_words.setValue(tab._config_int('gmail', gmail_config, 'max_sender_words', 3))
@@ -1039,6 +1046,7 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'show_header_border': tab.gmail_show_header_border.isChecked(),
         'show_separators': tab.gmail_show_separators.isChecked(),
         'show_timestamp': tab.gmail_show_timestamp.isChecked(),
+        'group_threads': tab.gmail_group_threads.isChecked(),
         'auto_title_case': tab.gmail_auto_title_case.isChecked(),
         'clean_sender_names': tab.gmail_clean_sender_names.isChecked(),
         'max_sender_words': tab.gmail_max_sender_words.value(),

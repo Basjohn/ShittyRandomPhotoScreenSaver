@@ -94,6 +94,7 @@ def test_gmail_text_cleanup_defaults_exist() -> None:
     assert gmail["sender_column_width"] == 180
     assert gmail["max_subject_words"] == 4
     assert gmail["max_subject_chars"] == 0
+    assert gmail["group_threads"] is False
     assert gmail["width"] == 600
     assert "min_width" not in gmail
     assert "max_width" not in gmail

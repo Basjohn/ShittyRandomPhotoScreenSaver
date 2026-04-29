@@ -91,6 +91,7 @@ class InputHandler(QObject):
         
         # Context menu state
         self._context_menu_active: bool = False
+        self._defer_focus_restore_after_widget_click: bool = False
         
         logger.debug("[INPUT_HANDLER] Initialized")
     
@@ -699,6 +700,7 @@ class InputHandler(QObject):
         handled = False
         reddit_handled = False
         reddit_url = None
+        self._defer_focus_restore_after_widget_click = False
         pos = event.pos()
         button = event.button()
         
@@ -814,10 +816,18 @@ class InputHandler(QObject):
                         reddit_url = url
                         logger.debug("[INPUT] Gmail resolved central URL click: %s", url)
                     elif hasattr(gw, 'handle_click'):
+                        action_menu_point = False
+                        if hasattr(gw, "is_action_menu_point"):
+                            try:
+                                action_menu_point = bool(gw.is_action_menu_point(local_pos))
+                            except Exception:
+                                logger.debug("[INPUT] Gmail action-menu hit test failed", exc_info=True)
                         result = gw.handle_click(local_pos)
                         logger.debug("[INPUT] Gmail handle_click returned: %s", result)
                         if result:
                             handled = True
+                            if action_menu_point:
+                                self._defer_focus_restore_after_widget_click = True
             except Exception:
                 logger.debug("[INPUT] Gmail click routing failed", exc_info=True)
         
