@@ -213,6 +213,31 @@ def test_gmail_widget_text_cleanup_settings(qt_app):
         widget.cleanup()
 
 
+def test_gmail_widget_date_display_setting(qt_app):
+    """Verify Gmail date display mode applies to row date formatting."""
+    from datetime import datetime
+
+    from core.dev_gates import force_gate
+    from widgets.gmail_widget import GmailWidget
+
+    force_gate(gmail=True)
+
+    widget = GmailWidget()
+    try:
+        widget.apply_settings({"gmail.date_display_mode": "numeric"})
+        assert widget._date_display_mode == "numeric"
+        assert widget._format_email_date(datetime(2025, 6, 23)) == "23/06/2025"
+
+        widget.apply_settings({"gmail.date_display_mode": "words"})
+        assert widget._date_display_mode == "words"
+        assert widget._format_email_date(datetime(2026, 4, 16)).startswith("April 16th")
+
+        widget.apply_settings({"gmail.date_display_mode": "bad-value"})
+        assert widget._date_display_mode == "relative"
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_widget_row_click_opens_email_url(qt_app, monkeypatch):
     """Verify row clicks open the email open_url."""
     from datetime import datetime
@@ -374,6 +399,22 @@ def test_gmail_widget_refresh_click_forces_fetch(qt_app):
         assert widget.resolve_click_target(QPoint(110, 20)) is None
         assert widget.handle_click(QPoint(110, 20)) is True
         assert calls == ["fetch"]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_widget_loads_archive_action_icon(qt_app):
+    """Verify the Archive action has a real loaded icon asset, not only fallback drawing."""
+    from core.dev_gates import force_gate
+    from widgets.gmail_widget import GmailWidget
+
+    force_gate(gmail=True)
+
+    widget = GmailWidget()
+    try:
+        icon = widget._action_icons.get("archive")
+        assert icon is not None
+        assert not icon.isNull()
     finally:
         widget.cleanup()
 

@@ -5,6 +5,7 @@ Gated by ``core.dev_gates.is_gmail_enabled()``.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
@@ -16,6 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
@@ -34,14 +36,91 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 LABEL_WIDTH = 140
+_MISSING_DEFAULT = object()
+GMAIL_SIGNAL_BLOCK_ATTRS = (
+    'gmail_enabled',
+    'gmail_backend_combo',
+    'gmail_imap_email',
+    'gmail_imap_password',
+    'gmail_monitor_combo',
+    'gmail_position',
+    'gmail_width',
+    'gmail_limit',
+    'gmail_refresh',
+    'gmail_filter_label',
+    'gmail_account_slot',
+    'gmail_font_combo',
+    'gmail_font_size',
+    'gmail_margin',
+    'gmail_show_sender',
+    'gmail_show_subject',
+    'gmail_show_envelope',
+    'gmail_show_three_dot',
+    'gmail_show_unread_count',
+    'gmail_show_header_border',
+    'gmail_show_timestamp',
+    'gmail_date_display_mode',
+    'gmail_group_threads',
+    'gmail_auto_title_case',
+    'gmail_clean_sender_names',
+    'gmail_max_sender_words',
+    'gmail_sender_column_width',
+    'gmail_max_subject_words',
+    'gmail_max_subject_chars',
+    'gmail_desaturate',
+    'gmail_show_background',
+    'gmail_intense_shadow',
+    'gmail_bg_opacity',
+    'gmail_color_btn',
+    'gmail_bg_color_btn',
+    'gmail_border_color_btn',
+    'gmail_border_opacity',
+    'gmail_show_separators',
+    'gmail_separator_color_btn',
+    'gmail_separator_thickness',
+    'gmail_boundary_separator_color_btn',
+    'gmail_boundary_separator_thickness',
+    'gmail_play_sound',
+    'gmail_sound_file',
+    'gmail_sound_volume',
+)
+
+
+def _set_visible_if_changed(widget: QWidget | None, visible: bool) -> None:
+    if widget is not None and (not widget.isHidden()) != bool(visible):
+        widget.setVisible(bool(visible))
+
+
+def _gmail_default(tab: WidgetsTab, key: str):
+    value = tab._widget_default('gmail', key, _MISSING_DEFAULT)
+    if value is _MISSING_DEFAULT:
+        raise KeyError(f"Missing Gmail default: {key}")
+    return value
+
+
+@contextmanager
+def _block_gmail_setting_signals(tab: WidgetsTab):
+    blockers = []
+    for attr_name in GMAIL_SIGNAL_BLOCK_ATTRS:
+        widget = getattr(tab, attr_name, None)
+        if widget is not None and hasattr(widget, "blockSignals"):
+            widget.blockSignals(True)
+            blockers.append(widget)
+    try:
+        yield
+    finally:
+        for widget in blockers:
+            try:
+                widget.blockSignals(False)
+            except Exception as exc:
+                logger.debug("[GMAIL_TAB] Failed to unblock signal: %s", exc)
 
 
 def _update_gmail_enabled_visibility(tab: WidgetsTab) -> None:
     """Show/hide all Gmail controls based on gmail_enabled checkbox."""
     enabled = getattr(tab, 'gmail_enabled', None) and tab.gmail_enabled.isChecked()
     container = getattr(tab, '_gmail_controls_container', None)
-    if container is not None:
-        container.setVisible(bool(enabled))
+    _set_visible_if_changed(container, bool(enabled))
 
 
 def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
@@ -82,6 +161,18 @@ def _get_gmail_backend():
         return None
 
 
+def _get_gmail_thread_manager(tab: WidgetsTab) -> ThreadManager:
+    manager = getattr(tab, "_gmail_thread_manager", None)
+    if manager is None:
+        manager = ThreadManager()
+        tab._gmail_thread_manager = manager
+        try:
+            tab.destroyed.connect(lambda _obj=None, m=manager: m.shutdown(wait=False))
+        except Exception as exc:
+            logger.debug("[GMAIL_TAB] Failed to attach Gmail ThreadManager cleanup: %s", exc)
+    return manager
+
+
 def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
     """Update the auth status label and button visibility based on credential state."""
     status_label = getattr(tab, 'gmail_auth_status', None)
@@ -95,7 +186,7 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
         status_label.setText("Gmail unavailable")
         auth_btn.setEnabled(False)
         out_btn.setEnabled(False)
-        out_btn.setVisible(False)
+        _set_visible_if_changed(out_btn, False)
         return
 
     # Reload OAuth config in case client_secrets was added after start
@@ -112,17 +203,17 @@ def _refresh_gmail_auth_state(tab: WidgetsTab) -> None:
     status_label.setText(backend.status_text)
 
     if backend.is_authenticated:
-        auth_btn.setVisible(False)
-        out_btn.setVisible(True)
+        _set_visible_if_changed(auth_btn, False)
+        _set_visible_if_changed(out_btn, True)
         out_btn.setEnabled(True)
     else:
         from core.gmail.gmail_backend import GmailBackendMode
         if backend.mode == GmailBackendMode.IMAP:
-            auth_btn.setVisible(False)
+            _set_visible_if_changed(auth_btn, False)
         else:
-            auth_btn.setVisible(True)
+            _set_visible_if_changed(auth_btn, True)
             auth_btn.setEnabled(True)
-        out_btn.setVisible(False)
+        _set_visible_if_changed(out_btn, False)
 
 
 def _update_backend_panels(tab: WidgetsTab) -> None:
@@ -134,10 +225,8 @@ def _update_backend_panels(tab: WidgetsTab) -> None:
     is_imap = backend.mode == GmailBackendMode.IMAP
     oauth_panel = getattr(tab, '_gmail_oauth_panel', None)
     imap_panel = getattr(tab, '_gmail_imap_panel', None)
-    if oauth_panel is not None:
-        oauth_panel.setVisible(not is_imap)
-    if imap_panel is not None:
-        imap_panel.setVisible(is_imap)
+    _set_visible_if_changed(oauth_panel, not is_imap)
+    _set_visible_if_changed(imap_panel, is_imap)
 
 
 def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
@@ -289,7 +378,7 @@ def _on_gmail_backend_changed(tab: WidgetsTab, mode_text: str) -> None:
 
 
 def _on_gmail_imap_save(tab: WidgetsTab) -> None:
-    """Save IMAP credentials and test connection."""
+    """Test IMAP credentials off the UI thread, then save them on success."""
     backend = _get_gmail_backend()
     if backend is None:
         return
@@ -306,25 +395,57 @@ def _on_gmail_imap_save(tab: WidgetsTab) -> None:
     status_label = getattr(tab, 'gmail_auth_status', None)
     if status_label:
         status_label.setText("Testing connection...")
+    save_btn = getattr(tab, 'gmail_imap_save_btn', None)
+    if save_btn is not None:
+        save_btn.setEnabled(False)
 
-    backend.save_imap_credentials(email_addr, app_pw)
-    success = backend.test_imap_connection()
-    if success:
-        if status_label:
-            status_label.setText(f"Connected (IMAP: {email_addr})")
-        StyledPopup.show_success(tab, "Gmail IMAP", "Connection successful!")
-    else:
-        if status_label:
-            status_label.setText("IMAP login failed")
-        StyledPopup.show_warning(
-            tab, "Gmail IMAP",
-            "Login failed. Check your email and app password.\n\n"
-            "Make sure:\n"
-            "  - 2-Step Verification is enabled on your Google account\n"
-            "  - You generated an App Password at myaccount.google.com/apppasswords\n"
-            "  - You entered the 16-character app password (not your regular password)"
+    generation = int(getattr(tab, "_gmail_imap_save_generation", 0)) + 1
+    tab._gmail_imap_save_generation = generation
+
+    def _test_credentials() -> bool:
+        return backend.test_imap_credentials(email_addr, app_pw)
+
+    def _finish(result) -> None:
+        def _apply_result() -> None:
+            if getattr(tab, "_gmail_imap_save_generation", None) != generation:
+                return
+            if save_btn is not None:
+                save_btn.setEnabled(True)
+            success = bool(getattr(result, "success", False) and getattr(result, "result", False))
+            if success:
+                backend.save_imap_credentials(email_addr, app_pw)
+                if status_label:
+                    status_label.setText(f"Connected (IMAP: {email_addr})")
+                StyledPopup.show_success(tab, "Gmail IMAP", "Connection successful!")
+            else:
+                if status_label:
+                    status_label.setText("IMAP login failed")
+                StyledPopup.show_warning(
+                    tab, "Gmail IMAP",
+                    "Login failed. Check your email and app password.\n\n"
+                    "Make sure:\n"
+                    "  - 2-Step Verification is enabled on your Google account\n"
+                    "  - You generated an App Password at myaccount.google.com/apppasswords\n"
+                    "  - You entered the 16-character app password (not your regular password)"
+                )
+            _refresh_gmail_auth_state(tab)
+
+        ThreadManager.run_on_ui_thread(_apply_result)
+
+    try:
+        manager = _get_gmail_thread_manager(tab)
+        manager.submit_io_task(
+            _test_credentials,
+            task_id=f"gmail_imap_save_test_{generation}",
+            callback=_finish,
         )
-    _refresh_gmail_auth_state(tab)
+    except Exception as exc:
+        logger.warning("[GMAIL_TAB] Failed to submit IMAP test task: %s", exc)
+        if save_btn is not None:
+            save_btn.setEnabled(True)
+        if status_label:
+            status_label.setText("IMAP test could not start")
+        StyledPopup.show_warning(tab, "Gmail IMAP", "Could not start IMAP connection test.")
 
 
 def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
@@ -353,7 +474,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Enable checkbox
     tab.gmail_enabled = QCheckBox("Enable Gmail Widget")
     tab.gmail_enabled.setProperty("circleIndicator", True)
-    tab.gmail_enabled.setChecked(tab._default_bool('gmail', 'enabled', False))
+    tab.gmail_enabled.setChecked(tab._default_bool('gmail', 'enabled', bool(_gmail_default(tab, 'enabled'))))
     tab.gmail_enabled.stateChanged.connect(tab._save_settings)
     tab.gmail_enabled.stateChanged.connect(tab._update_stack_status)
     gmail_layout.addWidget(tab.gmail_enabled)
@@ -492,7 +613,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_monitor_combo.currentTextChanged.connect(tab._update_stack_status)
     tab.gmail_monitor_combo.setMinimumWidth(120)
     disp_row.addWidget(tab.gmail_monitor_combo)
-    gmail_monitor_default = tab._widget_default('gmail', 'monitor', 'ALL')
+    gmail_monitor_default = _gmail_default(tab, 'monitor')
     tab._set_combo_text(tab.gmail_monitor_combo, str(gmail_monitor_default))
     disp_row.addStretch()
 
@@ -508,7 +629,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_position.currentTextChanged.connect(tab._update_stack_status)
     tab.gmail_position.setMinimumWidth(150)
     pos_row.addWidget(tab.gmail_position)
-    tab._set_combo_text(tab.gmail_position, tab._default_str('gmail', 'position', 'Top Left'))
+    tab._set_combo_text(tab.gmail_position, tab._default_str('gmail', 'position', str(_gmail_default(tab, 'position'))))
     tab.gmail_stack_status = QLabel("")
     tab.gmail_stack_status.setMinimumWidth(100)
     tab.gmail_stack_status.setStyleSheet(STATUS_LABEL_STYLE)
@@ -520,7 +641,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_width = QSpinBox()
     tab.gmail_width.setRange(200, 1200)
     tab.gmail_width.setSingleStep(10)
-    tab.gmail_width.setValue(tab._default_int('gmail', 'width', 600))
+    tab.gmail_width.setValue(tab._default_int('gmail', 'width', int(_gmail_default(tab, 'width'))))
     tab.gmail_width.setAccelerated(True)
     tab.gmail_width.setSuffix(" px")
     tab.gmail_width.valueChanged.connect(tab._save_settings)
@@ -531,7 +652,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     limit_row = _aligned_row(layout_inner, "Max Emails:")
     tab.gmail_limit = QSpinBox()
     tab.gmail_limit.setRange(1, 10)
-    tab.gmail_limit.setValue(tab._default_int('gmail', 'limit', 5))
+    tab.gmail_limit.setValue(tab._default_int('gmail', 'limit', int(_gmail_default(tab, 'limit'))))
     tab.gmail_limit.setAccelerated(True)
     tab.gmail_limit.valueChanged.connect(tab._save_settings)
     limit_row.addWidget(tab.gmail_limit)
@@ -541,7 +662,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     refresh_row = _aligned_row(layout_inner, "Refresh:")
     tab.gmail_refresh = QSpinBox()
     tab.gmail_refresh.setRange(1, 60)
-    tab.gmail_refresh.setValue(tab._default_int('gmail', 'refresh_minutes', 5))
+    tab.gmail_refresh.setValue(tab._default_int('gmail', 'refresh_minutes', int(_gmail_default(tab, 'refresh_minutes'))))
     tab.gmail_refresh.setAccelerated(True)
     tab.gmail_refresh.setSuffix(" min")
     tab.gmail_refresh.valueChanged.connect(tab._save_settings)
@@ -551,7 +672,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Filter label
     filter_row = _aligned_row(layout_inner, "Label Filter:")
     tab.gmail_filter_label = QLineEdit()
-    tab.gmail_filter_label.setText(tab._default_str('gmail', 'filter_label', 'INBOX'))
+    tab.gmail_filter_label.setText(tab._default_str('gmail', 'filter_label', str(_gmail_default(tab, 'filter_label'))))
     tab.gmail_filter_label.setPlaceholderText("e.g. INBOX, CATEGORY_PRIMARY")
     tab.gmail_filter_label.setMinimumWidth(180)
     tab.gmail_filter_label.textChanged.connect(tab._save_settings)
@@ -561,7 +682,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     account_slot_row = _aligned_row(layout_inner, "Account Slot:")
     tab.gmail_account_slot = QSpinBox()
     tab.gmail_account_slot.setRange(0, 9)
-    tab.gmail_account_slot.setValue(tab._default_int('gmail', 'account_slot', 0))
+    tab.gmail_account_slot.setValue(tab._default_int('gmail', 'account_slot', int(_gmail_default(tab, 'account_slot'))))
     tab.gmail_account_slot.setAccelerated(True)
     tab.gmail_account_slot.valueChanged.connect(tab._save_settings)
     account_slot_row.addWidget(tab.gmail_account_slot)
@@ -651,6 +772,26 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_show_timestamp.setChecked(tab._default_bool('gmail', 'show_timestamp', True))
     tab.gmail_show_timestamp.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_timestamp)
+
+    date_mode_row = _aligned_row(appearance_inner, "Date Style:")
+    tab.gmail_date_display_mode = StyledComboBox(size_variant="compact")
+    tab.gmail_date_display_mode.addItems(["Relative", "Numerical", "Words"])
+    tab.gmail_date_display_mode.currentTextChanged.connect(tab._save_settings)
+    tab.gmail_date_display_mode.setMinimumWidth(130)
+    tab.gmail_date_display_mode.setEnabled(tab.gmail_show_timestamp.isChecked())
+    tab.gmail_show_timestamp.stateChanged.connect(
+        lambda state: tab.gmail_date_display_mode.setEnabled(bool(state))
+    )
+    tab._set_combo_text(
+        tab.gmail_date_display_mode,
+        {
+            "relative": "Relative",
+            "numeric": "Numerical",
+            "words": "Words",
+        }.get(tab._default_str('gmail', 'date_display_mode', str(_gmail_default(tab, 'date_display_mode'))).lower(), "Relative"),
+    )
+    date_mode_row.addWidget(tab.gmail_date_display_mode)
+    date_mode_row.addStretch()
 
     tab.gmail_group_threads = QCheckBox("Group similar email threads")
     tab.gmail_group_threads.setProperty("circleIndicator", True)
@@ -926,100 +1067,131 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
     gmail_config = widgets.get('gmail', {})
     if not isinstance(gmail_config, dict):
         gmail_config = {}
+    gmail_defaults = {
+        key: _gmail_default(tab, key)
+        for key in (
+            'enabled', 'position', 'monitor', 'limit', 'refresh_minutes',
+            'filter_label', 'account_slot', 'width', 'font_family',
+            'font_size', 'margin', 'show_sender', 'show_subject',
+            'show_envelope_icon', 'show_three_dot_menu',
+            'show_unread_count_in_header', 'show_header_border',
+            'show_separators', 'show_timestamp', 'date_display_mode',
+            'group_threads', 'auto_title_case', 'clean_sender_names',
+            'max_sender_words', 'sender_column_width', 'max_subject_words',
+            'max_subject_chars', 'desaturate_when_no_unread',
+            'show_background', 'intense_shadow', 'bg_opacity',
+            'border_opacity', 'separator_thickness',
+            'boundary_separator_thickness', 'play_sound_on_new_mail',
+            'sound_file_path', 'sound_volume_percent', 'color',
+            'bg_color', 'border_color', 'separator_color',
+            'boundary_separator_color',
+        )
+    }
 
-    tab.gmail_enabled.setChecked(tab._config_bool('gmail', gmail_config, 'enabled', False))
+    with _block_gmail_setting_signals(tab):
+        tab.gmail_enabled.setChecked(tab._config_bool('gmail', gmail_config, 'enabled', bool(gmail_defaults['enabled'])))
 
-    gmail_pos = tab._config_str('gmail', gmail_config, 'position', 'Top Left')
-    idx = tab.gmail_position.findText(gmail_pos)
-    if idx >= 0:
-        tab.gmail_position.setCurrentIndex(idx)
+        gmail_pos = tab._config_str('gmail', gmail_config, 'position', str(gmail_defaults['position']))
+        idx = tab.gmail_position.findText(gmail_pos)
+        if idx >= 0:
+            tab.gmail_position.setCurrentIndex(idx)
 
-    mon_sel = gmail_config.get('monitor', tab._widget_default('gmail', 'monitor', 'ALL'))
-    mon_text = str(mon_sel) if isinstance(mon_sel, (int, str)) else 'ALL'
-    mon_idx = tab.gmail_monitor_combo.findText(mon_text)
-    if mon_idx >= 0:
-        tab.gmail_monitor_combo.setCurrentIndex(mon_idx)
+        mon_sel = gmail_config.get('monitor', gmail_defaults['monitor'])
+        mon_text = str(mon_sel) if isinstance(mon_sel, (int, str)) else str(gmail_defaults['monitor'])
+        mon_idx = tab.gmail_monitor_combo.findText(mon_text)
+        if mon_idx >= 0:
+            tab.gmail_monitor_combo.setCurrentIndex(mon_idx)
 
-    tab.gmail_limit.setValue(tab._config_int('gmail', gmail_config, 'limit', 5))
-    tab.gmail_refresh.setValue(tab._config_int('gmail', gmail_config, 'refresh_minutes', 5))
-    tab.gmail_filter_label.setText(tab._config_str('gmail', gmail_config, 'filter_label', 'INBOX'))
-    tab.gmail_account_slot.setValue(tab._config_int('gmail', gmail_config, 'account_slot', 0))
-    width_default = tab._widget_default('gmail', 'width', 600)
-    width_value = gmail_config.get('width', gmail_config.get('min_width', width_default))
-    try:
-        tab.gmail_width.setValue(int(width_value))
-    except (TypeError, ValueError):
-        tab.gmail_width.setValue(int(width_default))
-    tab.gmail_font_combo.setCurrentFont(QFont(tab._config_str('gmail', gmail_config, 'font_family', 'Segoe UI')))
-    tab.gmail_font_size.setValue(tab._config_int('gmail', gmail_config, 'font_size', 14))
-    tab.gmail_margin.setValue(tab._config_int('gmail', gmail_config, 'margin', 30))
+        tab.gmail_limit.setValue(tab._config_int('gmail', gmail_config, 'limit', int(gmail_defaults['limit'])))
+        tab.gmail_refresh.setValue(tab._config_int('gmail', gmail_config, 'refresh_minutes', int(gmail_defaults['refresh_minutes'])))
+        tab.gmail_filter_label.setText(tab._config_str('gmail', gmail_config, 'filter_label', str(gmail_defaults['filter_label'])))
+        tab.gmail_account_slot.setValue(tab._config_int('gmail', gmail_config, 'account_slot', int(gmail_defaults['account_slot'])))
+        width_default = gmail_defaults['width']
+        width_value = gmail_config.get('width', gmail_config.get('min_width', width_default))
+        try:
+            tab.gmail_width.setValue(int(width_value))
+        except (TypeError, ValueError):
+            tab.gmail_width.setValue(int(width_default))
+        tab.gmail_font_combo.setCurrentFont(QFont(tab._config_str('gmail', gmail_config, 'font_family', str(gmail_defaults['font_family']))))
+        tab.gmail_font_size.setValue(tab._config_int('gmail', gmail_config, 'font_size', int(gmail_defaults['font_size'])))
+        tab.gmail_margin.setValue(tab._config_int('gmail', gmail_config, 'margin', int(gmail_defaults['margin'])))
 
-    tab.gmail_show_sender.setChecked(tab._config_bool('gmail', gmail_config, 'show_sender', True))
-    tab.gmail_show_subject.setChecked(tab._config_bool('gmail', gmail_config, 'show_subject', True))
-    tab.gmail_show_envelope.setChecked(tab._config_bool('gmail', gmail_config, 'show_envelope_icon', True))
-    tab.gmail_show_three_dot.setChecked(tab._config_bool('gmail', gmail_config, 'show_three_dot_menu', True))
-    tab.gmail_show_unread_count.setChecked(tab._config_bool('gmail', gmail_config, 'show_unread_count_in_header', True))
-    tab.gmail_show_header_border.setChecked(tab._config_bool('gmail', gmail_config, 'show_header_border', True))
-    tab.gmail_show_separators.setChecked(tab._config_bool('gmail', gmail_config, 'show_separators', True))
-    tab.gmail_show_timestamp.setChecked(tab._config_bool('gmail', gmail_config, 'show_timestamp', True))
-    tab.gmail_group_threads.setChecked(tab._config_bool('gmail', gmail_config, 'group_threads', False))
-    tab.gmail_auto_title_case.setChecked(tab._config_bool('gmail', gmail_config, 'auto_title_case', True))
-    tab.gmail_clean_sender_names.setChecked(tab._config_bool('gmail', gmail_config, 'clean_sender_names', True))
-    tab.gmail_max_sender_words.setValue(tab._config_int('gmail', gmail_config, 'max_sender_words', 3))
-    tab.gmail_sender_column_width.setValue(tab._config_int('gmail', gmail_config, 'sender_column_width', 180))
-    tab.gmail_max_subject_words.setValue(tab._config_int('gmail', gmail_config, 'max_subject_words', 4))
-    tab.gmail_max_subject_chars.setValue(tab._config_int('gmail', gmail_config, 'max_subject_chars', 0))
-    tab.gmail_desaturate.setChecked(tab._config_bool('gmail', gmail_config, 'desaturate_when_no_unread', True))
+        tab.gmail_show_sender.setChecked(tab._config_bool('gmail', gmail_config, 'show_sender', bool(gmail_defaults['show_sender'])))
+        tab.gmail_show_subject.setChecked(tab._config_bool('gmail', gmail_config, 'show_subject', bool(gmail_defaults['show_subject'])))
+        tab.gmail_show_envelope.setChecked(tab._config_bool('gmail', gmail_config, 'show_envelope_icon', bool(gmail_defaults['show_envelope_icon'])))
+        tab.gmail_show_three_dot.setChecked(tab._config_bool('gmail', gmail_config, 'show_three_dot_menu', bool(gmail_defaults['show_three_dot_menu'])))
+        tab.gmail_show_unread_count.setChecked(tab._config_bool('gmail', gmail_config, 'show_unread_count_in_header', bool(gmail_defaults['show_unread_count_in_header'])))
+        tab.gmail_show_header_border.setChecked(tab._config_bool('gmail', gmail_config, 'show_header_border', bool(gmail_defaults['show_header_border'])))
+        tab.gmail_show_separators.setChecked(tab._config_bool('gmail', gmail_config, 'show_separators', bool(gmail_defaults['show_separators'])))
+        tab.gmail_show_timestamp.setChecked(tab._config_bool('gmail', gmail_config, 'show_timestamp', bool(gmail_defaults['show_timestamp'])))
+        tab._set_combo_text(
+            tab.gmail_date_display_mode,
+            {
+                "relative": "Relative",
+                "numeric": "Numerical",
+                "numerical": "Numerical",
+                "words": "Words",
+            }.get(str(gmail_config.get('date_display_mode', gmail_defaults['date_display_mode'])).lower(), "Relative"),
+        )
+        tab.gmail_date_display_mode.setEnabled(tab.gmail_show_timestamp.isChecked())
+        tab.gmail_group_threads.setChecked(tab._config_bool('gmail', gmail_config, 'group_threads', bool(gmail_defaults['group_threads'])))
+        tab.gmail_auto_title_case.setChecked(tab._config_bool('gmail', gmail_config, 'auto_title_case', bool(gmail_defaults['auto_title_case'])))
+        tab.gmail_clean_sender_names.setChecked(tab._config_bool('gmail', gmail_config, 'clean_sender_names', bool(gmail_defaults['clean_sender_names'])))
+        tab.gmail_max_sender_words.setValue(tab._config_int('gmail', gmail_config, 'max_sender_words', int(gmail_defaults['max_sender_words'])))
+        tab.gmail_sender_column_width.setValue(tab._config_int('gmail', gmail_config, 'sender_column_width', int(gmail_defaults['sender_column_width'])))
+        tab.gmail_max_subject_words.setValue(tab._config_int('gmail', gmail_config, 'max_subject_words', int(gmail_defaults['max_subject_words'])))
+        tab.gmail_max_subject_chars.setValue(tab._config_int('gmail', gmail_config, 'max_subject_chars', int(gmail_defaults['max_subject_chars'])))
+        tab.gmail_desaturate.setChecked(tab._config_bool('gmail', gmail_config, 'desaturate_when_no_unread', bool(gmail_defaults['desaturate_when_no_unread'])))
 
-    tab.gmail_show_background.setChecked(tab._config_bool('gmail', gmail_config, 'show_background', True))
-    tab.gmail_intense_shadow.setChecked(tab._config_bool('gmail', gmail_config, 'intense_shadow', True))
+        tab.gmail_show_background.setChecked(tab._config_bool('gmail', gmail_config, 'show_background', bool(gmail_defaults['show_background'])))
+        tab.gmail_intense_shadow.setChecked(tab._config_bool('gmail', gmail_config, 'intense_shadow', bool(gmail_defaults['intense_shadow'])))
 
-    opacity_pct = int(tab._config_float('gmail', gmail_config, 'bg_opacity', 0.6) * 100)
-    tab.gmail_bg_opacity.setValue(opacity_pct)
-    tab.gmail_bg_opacity_label.setText(f"{opacity_pct}%")
+        opacity_pct = int(tab._config_float('gmail', gmail_config, 'bg_opacity', float(gmail_defaults['bg_opacity'])) * 100)
+        tab.gmail_bg_opacity.setValue(opacity_pct)
+        tab.gmail_bg_opacity_label.setText(f"{opacity_pct}%")
 
-    border_opacity_pct = int(tab._config_float('gmail', gmail_config, 'border_opacity', 1.0) * 100)
-    tab.gmail_border_opacity.setValue(border_opacity_pct)
-    tab.gmail_border_opacity_label.setText(f"{border_opacity_pct}%")
+        border_opacity_pct = int(tab._config_float('gmail', gmail_config, 'border_opacity', float(gmail_defaults['border_opacity'])) * 100)
+        tab.gmail_border_opacity.setValue(border_opacity_pct)
+        tab.gmail_border_opacity_label.setText(f"{border_opacity_pct}%")
 
-    tab.gmail_separator_thickness.setValue(tab._config_int('gmail', gmail_config, 'separator_thickness', 1))
-    tab.gmail_boundary_separator_thickness.setValue(tab._config_int('gmail', gmail_config, 'boundary_separator_thickness', 2))
+        tab.gmail_separator_thickness.setValue(tab._config_int('gmail', gmail_config, 'separator_thickness', int(gmail_defaults['separator_thickness'])))
+        tab.gmail_boundary_separator_thickness.setValue(tab._config_int('gmail', gmail_config, 'boundary_separator_thickness', int(gmail_defaults['boundary_separator_thickness'])))
 
-    # Sound settings
-    tab.gmail_play_sound.setChecked(tab._config_bool('gmail', gmail_config, 'play_sound_on_new_mail', False))
-    tab.gmail_sound_file.setText(tab._config_str('gmail', gmail_config, 'sound_file_path', 'resources/tutuogg.ogg'))
-    tab.gmail_sound_volume.setValue(tab._config_int('gmail', gmail_config, 'sound_volume_percent', 50))
-    tab.gmail_sound_volume_label.setText(f"{tab.gmail_sound_volume.value()}%")
+        # Sound settings
+        tab.gmail_play_sound.setChecked(tab._config_bool('gmail', gmail_config, 'play_sound_on_new_mail', bool(gmail_defaults['play_sound_on_new_mail'])))
+        tab.gmail_sound_file.setText(tab._config_str('gmail', gmail_config, 'sound_file_path', str(gmail_defaults['sound_file_path'])))
+        tab.gmail_sound_volume.setValue(tab._config_int('gmail', gmail_config, 'sound_volume_percent', int(gmail_defaults['sound_volume_percent'])))
+        tab.gmail_sound_volume_label.setText(f"{tab.gmail_sound_volume.value()}%")
 
-    # Colors
-    color_data = gmail_config.get('color', tab._widget_default('gmail', 'color', [255, 255, 255, 230]))
-    tab._gmail_color = QColor(*color_data)
-    bg_color_data = gmail_config.get('bg_color', tab._widget_default('gmail', 'bg_color', [35, 35, 35, 255]))
-    try:
-        tab._gmail_bg_color = QColor(*bg_color_data)
-    except Exception:
-        tab._gmail_bg_color = QColor(35, 35, 35, 255)
-    border_color_data = gmail_config.get('border_color', tab._widget_default('gmail', 'border_color', [255, 255, 255, 255]))
-    try:
-        tab._gmail_border_color = QColor(*border_color_data)
-    except Exception:
-        tab._gmail_border_color = QColor(255, 255, 255, 255)
-    sep_color_data = gmail_config.get('separator_color', tab._widget_default('gmail', 'separator_color', [200, 200, 200, 40]))
-    tab._gmail_separator_color = QColor(*sep_color_data)
-    bsep_color_data = gmail_config.get('boundary_separator_color', tab._widget_default('gmail', 'boundary_separator_color', [180, 180, 180, 80]))
-    tab._gmail_boundary_separator_color = QColor(*bsep_color_data)
-    _apply_color('gmail_color_btn', '_gmail_color')
-    _apply_color('gmail_separator_color_btn', '_gmail_separator_color')
-    _apply_color('gmail_boundary_separator_color_btn', '_gmail_boundary_separator_color')
-    _apply_color('gmail_bg_color_btn', '_gmail_bg_color')
-    _apply_color('gmail_border_color_btn', '_gmail_border_color')
+        # Colors
+        color_data = gmail_config.get('color', gmail_defaults['color'])
+        tab._gmail_color = QColor(*color_data)
+        bg_color_data = gmail_config.get('bg_color', gmail_defaults['bg_color'])
+        try:
+            tab._gmail_bg_color = QColor(*bg_color_data)
+        except Exception:
+            tab._gmail_bg_color = QColor(35, 35, 35, 255)
+        border_color_data = gmail_config.get('border_color', gmail_defaults['border_color'])
+        try:
+            tab._gmail_border_color = QColor(*border_color_data)
+        except Exception:
+            tab._gmail_border_color = QColor(255, 255, 255, 255)
+        sep_color_data = gmail_config.get('separator_color', gmail_defaults['separator_color'])
+        tab._gmail_separator_color = QColor(*sep_color_data)
+        bsep_color_data = gmail_config.get('boundary_separator_color', gmail_defaults['boundary_separator_color'])
+        tab._gmail_boundary_separator_color = QColor(*bsep_color_data)
+        _apply_color('gmail_color_btn', '_gmail_color')
+        _apply_color('gmail_separator_color_btn', '_gmail_separator_color')
+        _apply_color('gmail_boundary_separator_color_btn', '_gmail_boundary_separator_color')
+        _apply_color('gmail_bg_color_btn', '_gmail_bg_color')
+        _apply_color('gmail_border_color_btn', '_gmail_border_color')
 
-    # Sync backend combo from persisted GmailBackend config
-    backend = _get_gmail_backend()
-    combo = getattr(tab, 'gmail_backend_combo', None)
-    if backend is not None and combo is not None:
-        from core.gmail.gmail_backend import GmailBackendMode
-        combo.setCurrentIndex(0 if backend.mode == GmailBackendMode.IMAP else 1)
+        # Sync backend combo from persisted GmailBackend config
+        backend = _get_gmail_backend()
+        combo = getattr(tab, 'gmail_backend_combo', None)
+        if backend is not None and combo is not None:
+            from core.gmail.gmail_backend import GmailBackendMode
+            combo.setCurrentIndex(0 if backend.mode == GmailBackendMode.IMAP else 1)
 
     _update_gmail_enabled_visibility(tab)
     _refresh_gmail_auth_state(tab)
@@ -1027,12 +1199,14 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
 
 def save_gmail_settings(tab: WidgetsTab) -> dict:
     """Return gmail_config dict from current UI state."""
+    filter_default = str(_gmail_default(tab, 'filter_label'))
+    sound_default = str(_gmail_default(tab, 'sound_file_path'))
     gmail_config = {
         'enabled': tab.gmail_enabled.isChecked(),
         'position': tab.gmail_position.currentText(),
         'limit': tab.gmail_limit.value(),
         'refresh_minutes': tab.gmail_refresh.value(),
-        'filter_label': tab.gmail_filter_label.text().strip() or 'INBOX',
+        'filter_label': tab.gmail_filter_label.text().strip() or filter_default,
         'account_slot': str(tab.gmail_account_slot.value()),
         'width': tab.gmail_width.value(),
         'font_family': tab.gmail_font_combo.currentFont().family(),
@@ -1046,6 +1220,11 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'show_header_border': tab.gmail_show_header_border.isChecked(),
         'show_separators': tab.gmail_show_separators.isChecked(),
         'show_timestamp': tab.gmail_show_timestamp.isChecked(),
+        'date_display_mode': {
+            "Relative": "relative",
+            "Numerical": "numeric",
+            "Words": "words",
+        }.get(tab.gmail_date_display_mode.currentText(), "relative"),
         'group_threads': tab.gmail_group_threads.isChecked(),
         'auto_title_case': tab.gmail_auto_title_case.isChecked(),
         'clean_sender_names': tab.gmail_clean_sender_names.isChecked(),
@@ -1071,7 +1250,7 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'boundary_separator_color': [tab._gmail_boundary_separator_color.red(), tab._gmail_boundary_separator_color.green(),
                                      tab._gmail_boundary_separator_color.blue(), tab._gmail_boundary_separator_color.alpha()],
         'play_sound_on_new_mail': tab.gmail_play_sound.isChecked(),
-        'sound_file_path': tab.gmail_sound_file.text().strip() or 'resources/tutuogg.ogg',
+        'sound_file_path': tab.gmail_sound_file.text().strip() or sound_default,
         'sound_volume_percent': tab.gmail_sound_volume.value(),
     }
     mon_text = tab.gmail_monitor_combo.currentText()

@@ -14,7 +14,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
-| `Docs/Gmail_Widget_Plan.md` | Gmail widget execution plan, current layout cleanup, runtime URL/menu/action and restored Inbox/cache-order fixes awaiting validation, settings flicker regression, optional thread/date display work, refresh/defaults/resource audits, and release checks |
+| `Docs/Gmail_Widget_Plan.md` | Pruned Gmail widget working plan: active settings/runtime/visual/release tasks, compact completed ledger, and unresolved flicker/runtime validation items |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
 
@@ -78,9 +78,10 @@ Living map of the current SRPSS codebase.
 | IMAP client | `core/gmail/gmail_imap.py` | IMAP + App Password — headers, unread count, selected-mailbox order, UID actions |
 | Deep-link helpers | `core/gmail/gmail_deeplinks.py` | Gmail inbox/thread/search URL builders; `X-GM-THRID` decimal-to-hex conversion |
 | Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
-| Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, formatting/text cleanup utilities, email cache |
-| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, widget settings, single Gmail width control, sender/subject cleanup controls, sender column width, default-off grouping toggle |
-| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions, row hit targets, Media-style layout margins/header frame, central URL click targets, refresh control, action menu popup ownership |
+| Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, date formatting modes, formatting/text cleanup utilities, email cache |
+| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, non-blocking IMAP Save & Test, widget settings, single Gmail width control, date display mode, sender/subject cleanup controls, sender column width, default-off grouping toggle, Gmail load signal-block/visibility flicker guardrails |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions, row hit targets, Media-style layout margins/header frame, central URL click targets, refresh control, action menu popup ownership, Gmail image/action icon manifest |
+| Asset guard tests | `tests/test_gmail_assets.py` | Verifies required Gmail image assets exist and normal/MC Nuitka scripts include the `images` directory |
 | Dev gate | `core/dev_gates.py` | `is_gmail_enabled()`, `force_gate(gmail=...)` |
 
 ## Source Ingestion

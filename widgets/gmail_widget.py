@@ -31,9 +31,9 @@ from core.windows.secure_url_launcher import open_url
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition, WidgetLifecycleState
 from widgets.gmail_components import (
     GmailPosition,
-    _format_relative_time,
     clean_sender_name,
     deserialize_email_cache,
+    format_email_date,
     shorten_subject,
     smart_title_case_subject,
     serialize_email_cache,
@@ -46,6 +46,21 @@ logger = get_logger(__name__)
 CACHE_MAX_AGE_HOURS = 72
 CACHE_DIR = get_app_data_dir() / "cache"
 CACHE_PATH = CACHE_DIR / "gmail_cache.json"
+GMAIL_IMAGE_ASSETS = (
+    "images/google-gmail.png",
+    "images/gmail-envelope.png",
+    "images/gmail-read.png",
+    "images/gmail-archive.svg",
+    "images/gmail-spam.png",
+    "images/gmail-trash.png",
+)
+GMAIL_ACTION_ICON_PATHS = {
+    "read": ("images/gmail-read.png",),
+    "unread": ("images/gmail-envelope.png",),
+    "archive": ("images/gmail-archive.svg",),
+    "spam": ("images/gmail-spam.png",),
+    "trash": ("images/gmail-trash.png",),
+}
 
 
 class GmailWidget(BaseOverlayWidget):
@@ -80,6 +95,7 @@ class GmailWidget(BaseOverlayWidget):
         self._show_envelope_icon = True
         self._show_three_dot_menu = True
         self._show_timestamp = True
+        self._date_display_mode = "relative"
         self._show_separators = True
         self._auto_title_case = True
         self._clean_sender_names = True
@@ -222,21 +238,23 @@ class GmailWidget(BaseOverlayWidget):
         return pm
 
     def _load_action_icons(self) -> None:
-        names = {
-            "read": "images/gmail-read.png",
-            "unread": "images/gmail-envelope.png",
-            "archive": "images/gmail-archive.png",
-            "spam": "images/gmail-spam.png",
-            "trash": "images/gmail-trash.png",
-        }
-        for key, path_str in names.items():
-            path = Path(path_str)
-            if path.exists():
-                pm = QPixmap(str(path))
-                if not pm.isNull():
-                    self._action_icons[key] = pm.scaled(16, 16, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-                    continue
-            self._action_icons[key] = None
+        for key, path_options in GMAIL_ACTION_ICON_PATHS.items():
+            loaded: Optional[QPixmap] = None
+            for path_str in path_options:
+                path = Path(path_str)
+                if path.exists():
+                    pm = QPixmap(str(path))
+                    if not pm.isNull():
+                        loaded = pm.scaled(
+                            16,
+                            16,
+                            Qt.AspectRatioMode.KeepAspectRatio,
+                            Qt.TransformationMode.SmoothTransformation,
+                        )
+                        break
+            if loaded is None:
+                logger.warning("[GMAIL] Action icon missing or unreadable: %s", path_options)
+            self._action_icons[key] = loaded
 
     def _action_icon(self, key: str) -> QIcon:
         pm = self._action_icons.get(key)
@@ -702,13 +720,13 @@ class GmailWidget(BaseOverlayWidget):
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             painter.setPen(pen)
             center = rect.center()
-            max_radius = max(4.0, (min(rect.width(), rect.height()) / 2.0) - 3.5)
+            max_radius = max(4.0, (min(rect.width(), rect.height()) / 2.0) - 3.0)
             path = QPainterPath()
-            steps = 34
+            steps = 44
             for index in range(steps):
                 progress = index / float(steps - 1)
-                radius = 2.4 + progress * (max_radius - 2.4)
-                angle = math.radians(self._refresh_spin_angle + 45 + progress * 430)
+                radius = 1.1 + progress * (max_radius - 1.1)
+                angle = math.radians(self._refresh_spin_angle + 30 + progress * 620)
                 x = center.x() + math.cos(angle) * radius
                 y = center.y() + math.sin(angle) * radius
                 if index == 0:
@@ -835,7 +853,7 @@ class GmailWidget(BaseOverlayWidget):
             time_font = QFont(self._font_family, base_font_pt - 2, QFont.Weight.Normal)
             time_fm = QFontMetrics(time_font)
             time_slot_width = max(
-                (time_fm.horizontalAdvance(_format_relative_time(email.date)) + 8 for email in visible_emails),
+                (time_fm.horizontalAdvance(self._format_email_date(email.date)) + 8 for email in visible_emails),
                 default=0,
             )
         text_area_width = max(1, available_width - env_slot_width - time_slot_width - action_width - 18)
@@ -857,7 +875,7 @@ class GmailWidget(BaseOverlayWidget):
             if self._show_timestamp:
                 time_font = QFont(self._font_family, base_font_pt - 2, QFont.Weight.Normal)
                 painter.setFont(time_font)
-                time_text = _format_relative_time(email.date)
+                time_text = self._format_email_date(email.date)
             env_x = left
             env_width = env_slot_width
             # Pre-compute line height so we can vertically centre the envelope
@@ -1200,6 +1218,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_envelope_icon(getattr(settings, "show_envelope_icon", self._show_envelope_icon))
         self.set_show_three_dot_menu(getattr(settings, "show_three_dot_menu", self._show_three_dot_menu))
         self.set_show_timestamp(getattr(settings, "show_timestamp", self._show_timestamp))
+        self.set_date_display_mode(getattr(settings, "date_display_mode", self._date_display_mode))
         self.set_show_separators(getattr(settings, "show_separators", self._show_separators))
         self.set_separator_color(getattr(settings, "separator_color", self._separator_color))
         self.set_separator_thickness(getattr(settings, "separator_thickness", self._separator_thickness))
@@ -1235,6 +1254,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_envelope_icon(d.get("show_envelope_icon", self._show_envelope_icon))
         self.set_show_three_dot_menu(d.get("show_three_dot_menu", self._show_three_dot_menu))
         self.set_show_timestamp(d.get("show_timestamp", self._show_timestamp))
+        self.set_date_display_mode(d.get("date_display_mode", self._date_display_mode))
         self.set_show_separators(d.get("show_separators", self._show_separators))
         self.set_separator_color(d.get("separator_color", self._separator_color))
         self.set_separator_thickness(d.get("separator_thickness", self._separator_thickness))
@@ -1329,6 +1349,16 @@ class GmailWidget(BaseOverlayWidget):
     def set_show_timestamp(self, show: bool) -> None:
         self._show_timestamp = bool(show)
         self.update()
+
+    def set_date_display_mode(self, mode: Any) -> None:
+        normalized = str(mode or "relative").strip().lower()
+        if normalized not in {"relative", "numeric", "words"}:
+            normalized = "relative"
+        self._date_display_mode = normalized
+        self.update()
+
+    def _format_email_date(self, dt: datetime) -> str:
+        return format_email_date(dt, self._date_display_mode)
 
     def set_show_separators(self, show: bool) -> None:
         self._show_separators = bool(show)

@@ -141,7 +141,13 @@ class GmailBackend(QObject):
         """Test IMAP login with current credentials."""
         if not self._imap_email or not self._imap_password:
             return False
-        client = GmailImapClient(self._imap_email, self._imap_password)
+        return self.test_imap_credentials(self._imap_email, self._imap_password)
+
+    def test_imap_credentials(self, email_address: str, app_password: str) -> bool:
+        """Test supplied IMAP credentials without storing them."""
+        if not email_address or not app_password:
+            return False
+        client = GmailImapClient(email_address, app_password)
         return client.test_connection()
 
     def start_oauth_flow(self) -> bool:

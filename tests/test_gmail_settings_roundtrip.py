@@ -95,7 +95,133 @@ def test_gmail_text_cleanup_defaults_exist() -> None:
     assert gmail["max_subject_words"] == 4
     assert gmail["max_subject_chars"] == 0
     assert gmail["group_threads"] is False
+    assert gmail["date_display_mode"] == "relative"
     assert gmail["width"] == 600
     assert "min_width" not in gmail
     assert "max_width" not in gmail
     assert "content_padding_left" not in gmail
+
+
+def test_gmail_signal_block_attrs_cover_newer_controls() -> None:
+    """Guard against settings-load flicker from stale Gmail signal blockers."""
+    from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS
+
+    expected_attrs = {
+        "gmail_backend_combo",
+        "gmail_width",
+        "gmail_show_header_border",
+        "gmail_date_display_mode",
+        "gmail_group_threads",
+        "gmail_clean_sender_names",
+        "gmail_max_sender_words",
+        "gmail_sender_column_width",
+        "gmail_max_subject_words",
+        "gmail_max_subject_chars",
+        "gmail_sound_file",
+        "gmail_sound_volume",
+    }
+
+    assert expected_attrs <= set(GMAIL_SIGNAL_BLOCK_ATTRS)
+
+
+def test_gmail_default_accessor_requires_canonical_default() -> None:
+    """User-facing Gmail fallbacks should come from canonical widget defaults."""
+    from types import SimpleNamespace
+
+    import pytest
+
+    from ui.tabs.widgets_tab_gmail import _gmail_default
+
+    tab = SimpleNamespace(
+        _widget_default=lambda section, key, fallback: "INBOX"
+        if (section, key) == ("gmail", "filter_label")
+        else fallback
+    )
+
+    assert _gmail_default(tab, "filter_label") == "INBOX"
+    with pytest.raises(KeyError):
+        _gmail_default(tab, "missing_key")
+
+
+def test_gmail_signal_blocker_blocks_and_unblocks_all_present_controls() -> None:
+    """Gmail load should silence its controls even if the parent block list drifts."""
+    from types import SimpleNamespace
+
+    from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS, _block_gmail_setting_signals
+
+    class FakeControl:
+        def __init__(self):
+            self.calls = []
+
+        def blockSignals(self, blocked):
+            self.calls.append(bool(blocked))
+
+    controls = {name: FakeControl() for name in GMAIL_SIGNAL_BLOCK_ATTRS}
+    tab = SimpleNamespace(**controls)
+
+    with _block_gmail_setting_signals(tab):
+        assert all(control.calls == [True] for control in controls.values())
+
+    assert all(control.calls == [True, False] for control in controls.values())
+
+
+def test_gmail_visibility_helper_uses_explicit_hidden_state() -> None:
+    """Repeated setVisible(True) calls were a historical settings flicker trigger."""
+    from ui.tabs.widgets_tab_gmail import _set_visible_if_changed
+
+    class FakeWidget:
+        def __init__(self, hidden):
+            self._hidden = hidden
+            self.calls = []
+
+        def isHidden(self):
+            return self._hidden
+
+        def setVisible(self, visible):
+            self.calls.append(bool(visible))
+            self._hidden = not bool(visible)
+
+    widget = FakeWidget(False)
+    _set_visible_if_changed(widget, True)
+    assert widget.calls == []
+
+    _set_visible_if_changed(widget, False)
+    assert widget.calls == [False]
+
+    already_hidden = FakeWidget(True)
+    _set_visible_if_changed(already_hidden, False)
+    assert already_hidden.calls == []
+
+
+def test_gmail_backend_visibility_hidden_before_parent_show(qt_app, monkeypatch) -> None:
+    """Backend panels/buttons must be explicitly hidden even while the parent is hidden."""
+    from PySide6.QtWidgets import QLabel, QPushButton, QWidget
+
+    from core.gmail.gmail_backend import GmailBackendMode
+    from ui.tabs import widgets_tab_gmail
+
+    class FakeBackend:
+        mode = GmailBackendMode.IMAP
+        is_authenticated = False
+        status_text = "Enter email & app password"
+
+    class FakeManager:
+        def _load_client_config(self):
+            return None
+
+    tab = QWidget()
+    tab.gmail_auth_status = QLabel(tab)
+    tab.gmail_authorize_btn = QPushButton("Authorize", tab)
+    tab.gmail_sign_out_btn = QPushButton("Sign Out", tab)
+    tab._gmail_oauth_panel = QWidget(tab)
+    tab._gmail_imap_panel = QWidget(tab)
+
+    monkeypatch.setattr(widgets_tab_gmail, "_get_gmail_backend", lambda: FakeBackend())
+    monkeypatch.setattr(widgets_tab_gmail, "_get_gmail_oauth_manager", lambda: FakeManager())
+
+    widgets_tab_gmail._refresh_gmail_auth_state(tab)  # type: ignore[arg-type]
+
+    assert tab._gmail_oauth_panel.isHidden() is True
+    assert tab._gmail_imap_panel.isHidden() is False
+    assert tab.gmail_authorize_btn.isHidden() is True
+    assert tab.gmail_sign_out_btn.isHidden() is True

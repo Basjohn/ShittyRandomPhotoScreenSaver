@@ -57,13 +57,50 @@ _WHITESPACE_RE = re.compile(r"\s+")
 _NOISY_LOCAL_PARTS = {"no-reply", "noreply", "notification", "notifications", "alert", "alerts"}
 
 
-def _format_relative_time(dt: datetime) -> str:
+def _number_word(value: int) -> str:
+    words = {
+        1: "One",
+        2: "Two",
+        3: "Three",
+        4: "Four",
+        5: "Five",
+        6: "Six",
+        7: "Seven",
+        8: "Eight",
+        9: "Nine",
+        10: "Ten",
+    }
+    return words.get(value, str(value))
+
+
+def _ordinal_suffix(day: int) -> str:
+    if 10 <= day % 100 <= 20:
+        return "th"
+    return {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+
+
+def _format_words_date(dt: datetime, now: Optional[datetime] = None) -> str:
+    current = now or (datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now())
+    text = f"{dt.strftime('%B')} {dt.day}{_ordinal_suffix(dt.day)}"
+    if dt.year != current.year:
+        text = f"{text} {dt.year}"
+    return text
+
+
+def _format_numeric_date(dt: datetime, now: Optional[datetime] = None) -> str:
+    current = now or (datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now())
+    if dt.year == current.year:
+        return dt.strftime("%d/%m")
+    return dt.strftime("%d/%m/%Y")
+
+
+def _format_relative_time(dt: datetime, now: Optional[datetime] = None) -> str:
     """Format a datetime as a human-readable relative string.
 
     Examples: "2 min ago", "1 hr ago", "Yesterday", "Mon 14:32".
     No external dependencies — uses datetime arithmetic only.
     """
-    now = datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now()
+    now = now or (datetime.now(dt.tzinfo) if dt.tzinfo else datetime.now())
     delta = now - dt
 
     if delta < timedelta(seconds=0):
@@ -78,9 +115,27 @@ def _format_relative_time(dt: datetime) -> str:
         return f"{hrs} hr ago"
     if delta < timedelta(days=2):
         return "Yesterday"
-    if delta < timedelta(days=7):
-        return dt.strftime("%a")
-    return dt.strftime("%b %d")
+    if delta < timedelta(days=14):
+        return "Last Week"
+    if delta < timedelta(days=60):
+        return "Last Month"
+    if delta < timedelta(days=365):
+        months = max(2, int(delta.days // 30))
+        return f"{_number_word(months)} Months Ago"
+    if delta < timedelta(days=730):
+        return "Last Year"
+    years = max(2, int(delta.days // 365))
+    return f"{_number_word(years)} Years Ago"
+
+
+def format_email_date(dt: datetime, mode: str = "relative", now: Optional[datetime] = None) -> str:
+    """Format an email date for Gmail row display."""
+    normalized = str(mode or "relative").strip().lower()
+    if normalized == "numeric":
+        return _format_numeric_date(dt, now)
+    if normalized == "words":
+        return _format_words_date(dt, now)
+    return _format_relative_time(dt, now)
 
 
 def _decode_mime_header(raw: str) -> str:

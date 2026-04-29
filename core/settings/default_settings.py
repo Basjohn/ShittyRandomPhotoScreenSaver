@@ -732,6 +732,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 5
                        'show_subject': True,
                        'show_three_dot_menu': True,
                        'show_timestamp': True,
+                       'date_display_mode': 'relative',
                        'show_unread_count_in_header': True,
                        'sound_file_path': 'resources/tutuogg.ogg',
                        'sound_volume_percent': 50},

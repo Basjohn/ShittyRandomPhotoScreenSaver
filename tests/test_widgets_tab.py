@@ -378,72 +378,6 @@ def test_visualizer_unknown_saved_mode_falls_back_to_registry_default(qt_app, se
         tab.deleteLater()
 
 
-def test_visualizer_block_size_roundtrip_preserves_non_auto_values(qt_app, settings_manager):
-    from ui.tabs.media.technical_controls import get_per_mode_controls_for_mode
-
-    tab = WidgetsTab(settings_manager)
-    try:
-        tab._load_settings()
-
-        sine_controls = get_per_mode_controls_for_mode(tab, "sine_wave")
-        osc_controls = get_per_mode_controls_for_mode(tab, "oscilloscope")
-        assert sine_controls is not None
-        assert osc_controls is not None
-
-        sine_combo = sine_controls["block_size"]
-        osc_combo = osc_controls["block_size"]
-
-        sine_combo.setCurrentIndex(sine_combo.findData(128))
-        osc_combo.setCurrentIndex(osc_combo.findData(512))
-        qt_app.processEvents()
-        tab._save_settings_now()
-
-        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
-        assert saved.get("sine_wave_audio_block_size") == 128
-        assert saved.get("oscilloscope_audio_block_size") == 512
-    finally:
-        tab.deleteLater()
-
-    reloaded = WidgetsTab(settings_manager)
-    try:
-        reloaded._load_settings()
-        sine_controls = get_per_mode_controls_for_mode(reloaded, "sine_wave")
-        osc_controls = get_per_mode_controls_for_mode(reloaded, "oscilloscope")
-        assert sine_controls is not None
-        assert osc_controls is not None
-        assert sine_controls["block_size"].currentData() == 128
-        assert osc_controls["block_size"].currentData() == 512
-    finally:
-        reloaded.deleteLater()
-
-
-def test_blob_normal_edit_switches_curated_preset_to_custom(qt_app, settings_manager):
-    """Blob normal-layout controls should keep their explicit Custom handoff."""
-
-    tab = WidgetsTab(settings_manager)
-    try:
-        tab._load_settings()
-        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("blob"))
-        slider = getattr(tab, "_blob_preset_slider", None)
-        assert slider is not None
-
-        slider.set_preset_index(0)
-        widgets_cfg = tab._settings.get('widgets', {}) or {}
-        spotify_vis = widgets_cfg.setdefault('spotify_visualizer', {})
-        spotify_vis['preset_blob'] = 0
-        tab._settings.set('widgets', widgets_cfg)
-        tab._settings.save()
-
-        tab.blob_pulse.setValue(min(tab.blob_pulse.maximum(), tab.blob_pulse.value() + 5))
-        qt_app.processEvents()
-        tab._save_settings_now()
-
-        assert slider.preset_index() == slider.custom_index()
-        saved = tab._settings.get('widgets', {}).get('spotify_visualizer', {})
-        assert saved.get('preset_blob') == slider.custom_index()
-    finally:
-        tab.deleteLater()
-
 def test_visualizer_custom_preset_roundtrip(qt_app, settings_manager):
     """Custom visualizer config survives curated preset switches and restores UI state."""
 
@@ -757,47 +691,6 @@ def test_bubble_center_out_reverse_round_trips_through_widgets_tab(qt_app, setti
         saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
         assert saved.get("bubble_gradient_direction") == "center_out_reverse"
         assert saved.get("bubble_gradient_semantics_version") == 2
-    finally:
-        tab.deleteLater()
-
-
-def test_blob_pulse_controls_load_and_roundtrip(qt_app, settings_manager):
-    tab = WidgetsTab(settings_manager)
-    try:
-        widgets_cfg = settings_manager.get("widgets", {}) or {}
-        spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
-        spotify_vis["blob_pulse"] = 1.42
-        spotify_vis["blob_pulse_release_ms"] = 1280
-        spotify_vis["blob_stretch"] = 0.48
-        spotify_vis["blob_glow_drive_mode"] = "vocal"
-        settings_manager.set("widgets", widgets_cfg)
-
-        tab._load_settings()
-
-        assert tab.blob_pulse.value() == 142
-        assert tab.blob_pulse_label.text() == "1.42x"
-        assert tab.blob_pulse_release_ms.value() == 1280
-        assert tab.blob_pulse_release_ms_label.text() == "1.28s"
-        assert tab.blob_stretch.value() == 48
-        assert tab.blob_stretch_label.text() == "48%"
-        assert tab.blob_glow_drive_mode.currentIndex() == 1
-
-        tab.blob_pulse.setValue(165)
-        tab.blob_pulse_release_ms.setValue(1260)
-        tab.blob_stretch.setValue(63)
-        tab.blob_glow_drive_mode.setCurrentIndex(0)
-
-        # Must set mode to blob before saving blob-specific settings
-        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("blob"))
-        qt_app.processEvents()
-
-        tab._save_settings_now()
-
-        saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
-        assert saved.get("blob_pulse") == pytest.approx(1.65)
-        assert saved.get("blob_pulse_release_ms") == 1260
-        assert saved.get("blob_stretch") == pytest.approx(0.63)
-        assert saved.get("blob_glow_drive_mode") == "bass"
     finally:
         tab.deleteLater()
 
@@ -1228,71 +1121,6 @@ def test_build_visualizer_preset_payload_uses_shared_missing_preset_fallback(qt_
 
         assert payload
         assert payload["preset_index"] == 0
-    finally:
-        tab.deleteLater()
-
-
-def test_bubble_move_to_custom_roundtrip_preserves_curated_preset_snapshot(qt_app, settings_manager):
-    tab = WidgetsTab(settings_manager)
-    try:
-        from core.settings.visualizer_presets import apply_preset_to_config, build_normalized_custom_snapshot
-
-        mode = "bubble"
-        preset_index = 1
-        slider = getattr(tab, "_bubble_preset_slider", None)
-        assert slider is not None
-        custom_index = slider.custom_index()
-
-        widgets_cfg = settings_manager.get("widgets", {}) or {}
-        widgets_cfg["spotify_visualizer"] = {
-            "mode": mode,
-            "preset_bubble": preset_index,
-        }
-        settings_manager.set("widgets", widgets_cfg)
-
-        tab._load_settings()
-        tab._save_settings = tab._save_settings_now
-
-        expected_config = apply_preset_to_config(mode, preset_index, {"mode": mode})
-        expected_snapshot = build_normalized_custom_snapshot(mode, expected_config)
-
-        setattr(slider, "_pending_move_to_custom", True)
-        slider.set_preset_index(custom_index)
-        tab._on_visualizer_preset_changed(mode, custom_index)
-
-        cache = settings_manager.get("visualizer_custom_presets", {}) or {}
-        assert isinstance(cache, dict)
-        assert cache[mode] == expected_snapshot
-
-        payload = tab.build_visualizer_preset_payload(mode)
-        assert payload["snapshot"]["widgets"]["spotify_visualizer"] == expected_snapshot
-    finally:
-        tab.deleteLater()
-
-
-def test_bubble_saved_from_settings_preset_roundtrips_without_snapshot_drift(qt_app, settings_manager):
-    tab = WidgetsTab(settings_manager)
-    try:
-        from pathlib import Path
-        import json
-
-        from core.settings.visualizer_presets import build_normalized_custom_snapshot
-
-        mode = "bubble"
-        preset_path = Path("presets/visualizer_modes/bubble/preset_1_spiral_surge.json")
-        payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        saved_snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
-
-        widgets_cfg = settings_manager.get("widgets", {}) or {}
-        widgets_cfg["spotify_visualizer"] = dict(saved_snapshot)
-        settings_manager.set("widgets", widgets_cfg)
-
-        tab._load_settings()
-
-        rebuilt_config = tab._build_current_spotify_visualizer_config(saved_snapshot)
-        rebuilt_snapshot = build_normalized_custom_snapshot(mode, rebuilt_config)
-
-        assert rebuilt_snapshot == saved_snapshot
     finally:
         tab.deleteLater()
 

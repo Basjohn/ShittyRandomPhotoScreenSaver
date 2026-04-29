@@ -162,3 +162,30 @@ def test_imap_list_messages_preserves_recent_uid_order(monkeypatch) -> None:
     assert [message.subject for message in messages] == ["Message 10", "Message 9"]
     assert conn.fetch_uids == ["10", "9"]
     assert conn.logged_out is True
+
+
+def test_backend_tests_supplied_imap_credentials_without_saving(monkeypatch, tmp_path) -> None:
+    from core.gmail.gmail_backend import GmailBackend
+
+    calls = []
+
+    class FakeImapClient:
+        def __init__(self, email, password):
+            calls.append((email, password))
+
+        def test_connection(self):
+            return True
+
+    monkeypatch.setattr("core.gmail.gmail_backend.GmailImapClient", FakeImapClient)
+
+    backend = GmailBackend()
+    backend._app_data = tmp_path
+    backend._imap_creds_path = tmp_path / "gmail_imap_creds.enc"
+    backend._imap_email = None
+    backend._imap_password = None
+
+    assert backend.test_imap_credentials("fake@example.com", "fake_app_password") is True
+    assert calls == [("fake@example.com", "fake_app_password")]
+    assert backend._imap_email is None
+    assert backend._imap_password is None
+    assert not backend._imap_creds_path.exists()

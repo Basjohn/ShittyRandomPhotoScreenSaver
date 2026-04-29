@@ -8,12 +8,13 @@ This file tracks active work and near-term validation.
 - Keep this aligned with `Spec.md`, `Index.md`, `Docs/Guardrails.md`, and `Docs/Historical_Bugs.md`.
 - Keep harnesses/probes intact unless explicitly asked to retire them.
 - Treat `presets/visualizer_modes/` as the authored preset source tree.
+- Do not add tests that require authored visualizer presets to keep specific names, slots, or numeric creative values beyond schema/index/repair contracts.
 - Do not close visual/runtime bugs from tests alone when symptoms are user-visible.
 
 ## Active Priorities
 - Keep settings/dialog stability and startup behavior regression-free while preserving custom styling.
 - **U-05 RESOLVED (2026-04-25)**: MC Keyboard Focus / Ctrl Halo Runtime Input Family fixed via wiring dead code `_restore_mc_input_focus`.
-- **GMAIL WIDGET**: Plan v3.9 active in `Docs/Gmail_Widget_Plan.md` (2026-04-29).
+- **GMAIL WIDGET**: Plan v5.0 active in `Docs/Gmail_Widget_Plan.md` (2026-04-29).
   - [x] Foundation/dev gate/settings/UI/sound implemented.
   - [x] Phase A structural polish implemented: nine-position enum, single `gmail.width`, Media-style content margins, measured header frame.
   - [x] Phase B deep-link foundation implemented: `core/gmail/gmail_deeplinks.py`, IMAP `open_url`, Gmail account slot, decimal `X-GM-THRID` to lowercase hex, focused tests.
@@ -26,12 +27,20 @@ This file tracks active work and near-term validation.
   - [x] Phase B IMAP action slice implemented: widget dispatches IMAP menu actions using `imap_uid`; IMAP mark-read/archive/spam/trash now use UID STORE/Gmail label operations with focused tests.
   - [x] Phase B action-menu follow-up implemented: Mark as Unread added for REST/IMAP, Archive now has fallback icon coverage, and failed menu actions log sanitized warnings.
   - [x] Phase B action isolation confirmed by runtime: Mark as Unread works in both builds; Spam and Delete work; Archive alone fails.
-  - [ ] Phase B actions next: runtime-validate the new Archive implementation, which uses Gmail IMAP `MOVE` to `[Gmail]/All Mail` with old Inbox-label removal only as fallback.
-  - [ ] Phase C next: fix Gmail settings flicker regression using `Docs/Historical_Bugs.md` R-18 and flicker harnesses; make Gmail IMAP Save & Test non-blocking; add backend helper to test supplied credentials before saving; harden OAuth callback server cleanup.
-  - [x] Phase D refresh affordance slice implemented: top-right flat refresh icon now uses an arrowless spiral glyph, bounded spinner timer during fetch, click-to-refresh, blank-space double-click refresh parity with Reddit, and hit-rect tests.
+  - [ ] Phase B actions later: Archive still fails while Mark as Unread, Spam, and Delete work. Move Archive to an online research task before further changes.
+  - [x] Phase C settings flicker mitigation implemented: Gmail load uses a canonical comprehensive signal-block list, parent Widgets-tab load imports the same list, and Gmail panel/button visibility updates now skip redundant `setVisible(...)` calls.
+  - [x] Phase C IMAP Save & Test non-blocking slice implemented: supplied credentials are tested on an IO task, saved only after success, and UI labels/buttons/popups are updated via the UI-thread helper.
+  - [x] Phase C backend-specific auth UI fixed: OAuth testing text/Authorize controls are explicitly hidden for IMAP even when settings opens fresh with a hidden parent page.
+  - [x] Gmail plan cleanup completed: `Docs/Gmail_Widget_Plan.md` v5.0 now keeps completed history compact and active tasks detailed.
+  - [x] Phase D defaults audit first pass implemented: Gmail settings UI now uses a canonical default accessor for user-facing fallback values and save fallbacks.
+  - [ ] Phase C next: runtime-validate settings flicker mitigation with flicker harness/manual normal+MC settings opens; harden OAuth callback server cleanup.
+  - [x] Phase D refresh affordance slice implemented: top-right flat refresh icon now uses a more curved arrowless spiral glyph, bounded spinner timer during fetch, click-to-refresh, blank-space double-click refresh parity with Reddit, and hit-rect tests.
   - [x] Phase B/C cache-order follow-up corrected: fetched and cached email lists now preserve backend order instead of unread-first/date-desc sorting.
   - [x] Phase B grouping guard added: `gmail.group_threads` defaults to `False` and grouping remains off until the PayPal/thread behavior can be fixed safely.
-  - [ ] Phase D next: runtime-validate spiral glyph/spinner idleness and restored IMAP Inbox ordering after manual refresh; finish header parity visual/manual validation against Media/Spotify/Reddit; replace jagged Gmail envelope assets with clean black-and-white PNGs; add date display mode; plan/implement optional thread collapse including the duplicate PayPal case; run defaults audit; per-element fonts/colours; finish settings bucket organisation without duplicate controls.
+  - [x] Phase B/D date display modes implemented: Relative, Numerical, and Words date styles, shown beside the date visibility control and applied to row width measurement.
+  - [ ] Phase D next: runtime-validate spiral glyph/spinner idleness, date display modes, and restored IMAP Inbox ordering after manual refresh; finish header parity visual/manual validation against Media/Spotify/Reddit; replace jagged Gmail envelope assets with clean black-and-white PNGs; run defaults audit; per-element fonts/colours; finish settings bucket organisation without duplicate controls.
+  - [x] Phase E first build-script asset audit implemented: required Gmail image assets are manifest-tested, the missing Archive icon asset exists, and normal/MC Nuitka scripts are guarded for `images=images` inclusion.
+  - [ ] Phase E later: online research for Archive semantics and Gmail grouping/sender-swapping; final packaged-build runtime validation for Gmail assets.
   - [ ] Phase E later: resource-use audit for over-painting/over-updating/per-tick waste; stretch investigation for opening Gmail/Reddit links on the browser window/process on lowest-index monitor with safe fallback.
   - [x] Phase B/D interaction patch implemented: Gmail action-menu clicks keep a live QMenu reference, use a topmost popup, and defer immediate MC focus restoration so the popup can receive clicks.
   - [ ] Phase B/D interaction validation next: runtime-validate normal/main helper wake after exit and MC vertical action-menu opening/clickability. Keep these open until tested in the real builds.

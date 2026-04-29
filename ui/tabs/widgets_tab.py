@@ -801,7 +801,7 @@ class WidgetsTab(QWidget):
         from ui.tabs.widgets_tab_weather import load_weather_settings
         from ui.tabs.widgets_tab_media import load_media_settings
         from ui.tabs.widgets_tab_reddit import load_reddit_settings
-        from ui.tabs.widgets_tab_gmail import load_gmail_settings
+        from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS, load_gmail_settings
         from ui.tabs.widgets_tab_imgur import load_imgur_settings
 
         # Block all signals during load to prevent unintended saves
@@ -858,18 +858,7 @@ class WidgetsTab(QWidget):
                 'reddit_exit_on_click',
             ]
             if is_gmail_enabled():
-                _widget_attrs.extend([
-                    'gmail_enabled', 'gmail_position', 'gmail_monitor_combo',
-                    'gmail_limit', 'gmail_refresh', 'gmail_filter_label',
-                    'gmail_font_combo', 'gmail_font_size', 'gmail_margin',
-                    'gmail_show_sender', 'gmail_show_subject',
-                    'gmail_show_envelope', 'gmail_show_three_dot',
-                    'gmail_show_unread_count', 'gmail_show_separators',
-                    'gmail_show_timestamp', 'gmail_auto_title_case',
-                    'gmail_desaturate', 'gmail_show_background',
-                    'gmail_intense_shadow', 'gmail_bg_opacity',
-                    'gmail_border_opacity',
-                ])
+                _widget_attrs.extend(GMAIL_SIGNAL_BLOCK_ATTRS)
             for attr_name in _widget_attrs:
                 w = getattr(self, attr_name, None)
                 if w is not None and hasattr(w, 'blockSignals'):
@@ -1361,7 +1350,7 @@ class WidgetsTab(QWidget):
         weather_config = save_weather_settings(self)
         media_config, spotify_vis_config = save_media_settings(self)
         reddit_config, reddit2_config = save_reddit_settings(self)
-        if is_gmail_enabled():
+        if is_gmail_enabled() and hasattr(self, 'gmail_enabled'):
             gmail_config = save_gmail_settings(self)
         else:
             gmail_config = None

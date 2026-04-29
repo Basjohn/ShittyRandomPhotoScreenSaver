@@ -110,17 +110,33 @@ def test_format_relative_time() -> None:
     from datetime import datetime, timedelta
     from widgets.gmail_components import _format_relative_time
 
-    now = datetime.now()
+    now = datetime(2026, 4, 29, 12, 0, 0)
 
     # Test various time differences
-    assert _format_relative_time(now - timedelta(minutes=1)) in ["1 min ago"]
-    assert _format_relative_time(now - timedelta(hours=1)) in ["1 hr ago"]
-    assert _format_relative_time(now - timedelta(days=1)) in ["Yesterday"]
-    # For 7+ days, it returns "Mon" (weekday) for < 7 days, "Apr 20" (month day) for >= 7 days
-    result_7days = _format_relative_time(now - timedelta(days=7))
-    assert result_7days in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] or len(result_7days) >= 3
+    assert _format_relative_time(now - timedelta(minutes=1), now=now) == "1 min ago"
+    assert _format_relative_time(now - timedelta(hours=1), now=now) == "1 hr ago"
+    assert _format_relative_time(now - timedelta(days=1), now=now) == "Yesterday"
+    assert _format_relative_time(now - timedelta(days=7), now=now) == "Last Week"
+    assert _format_relative_time(now - timedelta(days=40), now=now) == "Last Month"
+    assert _format_relative_time(now - timedelta(days=800), now=now) == "Two Years Ago"
 
     # Test future time (edge case)
     future = now + timedelta(minutes=5)
-    result = _format_relative_time(future)
+    result = _format_relative_time(future, now=now)
     assert result == ""  # Future times return empty string
+
+
+def test_format_email_date_modes() -> None:
+    """Verify Gmail date display modes."""
+    from datetime import datetime, timedelta
+    from widgets.gmail_components import format_email_date
+
+    now = datetime(2026, 4, 29, 12, 0, 0)
+    date = datetime(2026, 4, 16, 9, 30, 0)
+    old_date = datetime(2025, 6, 23, 9, 30, 0)
+
+    assert format_email_date(now - timedelta(days=1), "relative", now=now) == "Yesterday"
+    assert format_email_date(date, "numeric", now=now) == "16/04"
+    assert format_email_date(old_date, "numeric", now=now) == "23/06/2025"
+    assert format_email_date(date, "words", now=now) == "April 16th"
+    assert format_email_date(old_date, "words", now=now) == "June 23rd 2025"
