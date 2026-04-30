@@ -33,12 +33,13 @@ ENV/
 .hypothesis/
 .pytype/
 .agent
-.codex-appdata/
-.codex_appdata/
-.tmp_dbg_settings/
-.tmp_dbg_appdata/
-.tests_tmp_appdata/
+/codex-appdata/
+/codex_appdata/
+/tmp_dbg_settings/
+/tmp_dbg_appdata/
+/tests_tmp_appdata/
 .current_plan.md
+/tmp_dbg_settings/
 
 # Coverage and test artifacts
 htmlcov/
