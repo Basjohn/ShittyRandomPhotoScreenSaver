@@ -32,6 +32,8 @@ ENV/
 .mypy_cache/
 .hypothesis/
 .pytype/
+.agent
+.codex-appdata/
 
 # Coverage and test artifacts
 htmlcov/
