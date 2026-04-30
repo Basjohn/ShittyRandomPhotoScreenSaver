@@ -18,6 +18,7 @@ Rules:
 - Archive is hidden for IMAP. The retained Archive code path is for OAuth/future diagnostics, not a currently advertised IMAP action.
 - Settings flicker guardrail: do not pre-polish hidden Gmail bucket bodies by temporarily showing them during settings construction. R-18 established constructor-time visibility calls as a ghost-window/flicker hazard.
 - Qt shadow/effect guardrail: Gmail content caching must not mutate graphics effects, hide/show widgets, reparent, resize, or call overlay-effect invalidation.
+- Shadow-cache parity guardrail: Gmail must participate in the shared overlay-effect invalidation cadence used by peer widgets. This does not solve the broader multi-monitor MC shadow corruption/focus-loss issue, but Gmail must not be the lone widget missing the mitigation.
 
 ## 2. Canonical Files
 
@@ -101,7 +102,7 @@ Runtime state:
 - Mark Read/Unread, Spam, Delete, and link opening work in normal and MC builds.
 - Archive repeatedly fails and is isolated from the rest of the action menu.
 - Current implementation already tries Gmail IMAP label removal (`-X-GM-LABELS (\Inbox)`) before any hard-named All Mail MOVE fallback.
-- Archive is now hidden for IMAP menus so users are not offered an action that repeatedly failed under runtime testing.
+- Archive is now hidden whenever the active Gmail backend is IMAP, even if row metadata reports Gmail extension support as `provider="gmail"`, so users are not offered an action that repeatedly failed under runtime testing.
 
 Position:
 - Treat Archive as unavailable through Gmail IMAP unless proven otherwise. Do not keep guessing locally.
@@ -145,6 +146,7 @@ Do not reimplement these unless a defect is found:
 - Notification sound packaging guardrails exist for normal and MC builds.
 - Gmail refresh spiral is optional and default-on through canonical defaults/settings UI/widget apply logic.
 - IMAP Archive is hidden from the action menu while the backend code remains documented for OAuth/future diagnostics.
+- Gmail participates in shared overlay-effect invalidation so it is not excluded from the existing anti-shadow-cache-corruption cadence.
 - Gmail no-auth/no-cache startup stays hidden instead of fading in an empty/auth placeholder.
 - Paint/resource first pass exists: stable-content cache, no-op setter guards, transition-aware refresh deferral, in-flight spinner suspension, async cache writes, and perf buckets.
 

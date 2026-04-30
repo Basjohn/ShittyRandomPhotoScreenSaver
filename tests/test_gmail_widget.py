@@ -366,6 +366,8 @@ def test_gmail_widget_uses_imap_uid_for_imap_actions(qt_app):
 def test_gmail_widget_hides_archive_for_imap_but_keeps_oauth_path(qt_app):
     """IMAP Archive is hidden because it is unreliable; Gmail/OAuth path remains available."""
     from datetime import datetime
+    from types import SimpleNamespace
+    from core.gmail.gmail_backend import GmailBackendMode
     from core.gmail.gmail_client import EmailMetadata
     from widgets.gmail_widget import GmailWidget
 
@@ -395,6 +397,9 @@ def test_gmail_widget_hides_archive_for_imap_but_keeps_oauth_path(qt_app):
         )
 
         assert widget._should_show_archive_action(imap_email) is False
+        widget._backend = SimpleNamespace(mode=GmailBackendMode.IMAP)  # type: ignore[assignment]
+        assert widget._should_show_archive_action(gmail_email) is False
+        widget._backend = SimpleNamespace(mode=GmailBackendMode.OAUTH)  # type: ignore[assignment]
         assert widget._should_show_archive_action(gmail_email) is True
     finally:
         widget.cleanup()

@@ -100,6 +100,7 @@ def invalidate_overlay_effects(mgr: "WidgetManager", reason: str) -> None:
         "media_widget",
         "spotify_visualizer_widget",
         "spotify_volume_widget",
+        "gmail_widget",
         "reddit_widget",
         "reddit2_widget",
     ):

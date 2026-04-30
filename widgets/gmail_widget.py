@@ -23,7 +23,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QMenu, QWidget
 
-from core.gmail.gmail_backend import GmailBackend
+from core.gmail.gmail_backend import GmailBackend, GmailBackendMode
 from core.gmail.gmail_client import EmailMetadata, GmailLabel
 from core.gmail.gmail_deeplinks import gmail_inbox_url
 from core.logging.logger import get_logger
@@ -1507,9 +1507,19 @@ class GmailWidget(BaseOverlayWidget):
             return email.imap_uid
         return email.id
 
-    @staticmethod
-    def _should_show_archive_action(email: EmailMetadata) -> bool:
+    def _should_show_archive_action(self, email: EmailMetadata) -> bool:
         """Hide Archive for IMAP; keep the action code for future OAuth/diagnostic work."""
+        try:
+            if self._backend.mode == GmailBackendMode.IMAP:
+                return False
+        except Exception:
+            pass
+        try:
+            client_name = type(self._gmail_client).__name__.lower()
+            if "imap" in client_name:
+                return False
+        except Exception:
+            pass
         return email.provider != "imap"
 
     @staticmethod

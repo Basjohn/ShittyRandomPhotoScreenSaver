@@ -58,6 +58,7 @@ Near-term targets:
 
 ### General Runtime
 Open watchlist:
+- HIGH PRIORITY: multi-monitor MC shadow/shadow-cache corruption now appears frequently after focus loss/cross-display clicks. Investigate why Display 1 click into app followed by Display 0 interaction corrupts shadows until focus is clicked back in. Preserve the MC focus restore/key fix while researching permanent mitigation; Gmail now participates in the overlay-effect invalidation cadence, but the broader cause is unresolved.
 - Mute button fade-in reliability under startup event pressure.
 - Transition random mode actual distribution vs expected uniform over 50+ rotations.
 - Settings destructive-flow checks: reset/import when touching settings architecture.
