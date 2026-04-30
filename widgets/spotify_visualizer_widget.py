@@ -5,8 +5,8 @@ from dataclasses import asdict, is_dataclass
 import time
 import copy
 
-from PySide6.QtCore import QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPaintEvent
+from PySide6.QtCore import QRect, QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 from core.logging.logger import (
     get_logger,
@@ -18,7 +18,11 @@ from core.process import ProcessSupervisor
 from core.settings.models import SpotifyVisualizerSettings, PER_MODE_TECHNICAL_MODES
 from core.settings.visualizer_presets import apply_preset_to_config, resolve_preset_index_from_mapping
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
-from widgets.base_overlay_widget import BaseOverlayWidget
+from widgets.base_overlay_widget import (
+    BaseOverlayWidget,
+    PAINTED_FRAME_SHADOW_TUNING,
+    painted_frame_shadows_enabled,
+)
 
 
 from utils.profiler import profile
@@ -72,6 +76,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._bars_timer = None
         self._shadow_config = None
         self._show_background: bool = True
+        self._painted_frame_shadow_enabled: bool = painted_frame_shadows_enabled()
+        self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
+        self._painted_frame_shadow_cache_key: Optional[tuple] = None
         self._animation_manager = None
         self._anim_listener_id: Optional[int] = None
 
@@ -1280,9 +1287,25 @@ class SpotifyVisualizerWidget(QWidget):
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
+        self._invalidate_painted_frame_shadow_cache()
+        if self.uses_painted_frame_shadow():
+            try:
+                self.setGraphicsEffect(None)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to clear graphics effect for painted shadow", exc_info=True)
 
     def _update_card_style(self) -> None:
-        if self._show_background:
+        if self.uses_painted_frame_shadow():
+            self.setStyleSheet(
+                """
+                QWidget {
+                    background-color: transparent;
+                    border: 0px solid transparent;
+                    border-radius: 8px;
+                }
+                """
+            )
+        elif self._show_background:
             bg = QColor(self._bg_color)
             alpha = int(255 * max(0.0, min(1.0, self._bg_opacity)))
             bg.setAlpha(alpha)
@@ -1314,8 +1337,114 @@ class SpotifyVisualizerWidget(QWidget):
         resolved_width = BaseOverlayWidget.get_global_border_width() if border_width is None else int(border_width)
         self._border_width = max(0, resolved_width)
         self._show_background = bool(show_background)
+        self._invalidate_painted_frame_shadow_cache()
         self._update_card_style()
         self.update()
+
+    def uses_painted_frame_shadow(self) -> bool:
+        return bool(self._painted_frame_shadow_enabled and self._show_background)
+
+    def _invalidate_painted_frame_shadow_cache(self) -> None:
+        self._painted_frame_shadow_pixmap = None
+        self._painted_frame_shadow_cache_key = None
+
+    def _painted_frame_shadow_card_rect(self) -> QRectF:
+        tuning = PAINTED_FRAME_SHADOW_TUNING
+        return QRectF(
+            0.0,
+            0.0,
+            max(1.0, float(self.width() - int(tuning["card_shrink_right"]))),
+            max(1.0, float(self.height() - int(tuning["card_shrink_bottom"]))),
+        )
+
+    def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
+        if not self.uses_painted_frame_shadow() or self.width() <= 0 or self.height() <= 0:
+            return None
+        try:
+            dpr = max(1.0, float(self.devicePixelRatioF()))
+        except Exception:
+            dpr = 1.0
+        bg = QColor(self._bg_color)
+        bg.setAlpha(int(255 * max(0.0, min(1.0, self._bg_opacity))))
+        tuning = PAINTED_FRAME_SHADOW_TUNING
+        key = (
+            self.width(),
+            self.height(),
+            round(dpr, 3),
+            bg.getRgb(),
+            self._card_border_color.getRgb(),
+            int(self._border_width),
+            tuple(sorted(tuning.items())),
+        )
+        if (
+            self._painted_frame_shadow_pixmap is not None
+            and not self._painted_frame_shadow_pixmap.isNull()
+            and self._painted_frame_shadow_cache_key == key
+        ):
+            return self._painted_frame_shadow_pixmap
+
+        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
+        pixmap.setDevicePixelRatio(dpr)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        try:
+            card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
+            radius = max(0.0, float(8 + int(tuning["radius_extra"])))
+            offset_x = float(tuning["offset_x"])
+            offset_y = float(tuning["offset_y"])
+            steps = max(1, int(tuning["blur_steps"]))
+            spread = max(0.0, float(tuning["spread"]))
+            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
+
+            for layer in range(steps, 0, -1):
+                frac = layer / float(steps)
+                grow = spread * frac
+                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
+                if alpha <= 0:
+                    continue
+                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
+                shadow_path = QPainterPath()
+                shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
+                painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
+
+            frame_path = QPainterPath()
+            frame_path.addRoundedRect(card_rect, radius, radius)
+            painter.fillPath(frame_path, bg)
+            if self._border_width > 0 and self._card_border_color.alpha() > 0:
+                pen = QPen(self._card_border_color, max(1, int(self._border_width)))
+                pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(frame_path)
+        finally:
+            painter.end()
+
+        self._painted_frame_shadow_pixmap = pixmap
+        self._painted_frame_shadow_cache_key = key
+        return pixmap
+
+    def _paint_painted_frame_shadow(self) -> None:
+        if not self.uses_painted_frame_shadow():
+            return
+        painter = QPainter(self)
+        try:
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+        finally:
+            painter.end()
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        self._invalidate_painted_frame_shadow_cache()
+        super().resizeEvent(event)
+        pixmap = self._ensure_painted_frame_shadow_pixmap()
+        if pixmap is None or pixmap.isNull():
+            return
+        painter = QPainter(self)
+        try:
+            painter.drawPixmap(0, 0, pixmap)
+        finally:
+            painter.end()
 
     def set_bar_colors(self, fill_color: QColor, border_color: QColor) -> None:
         # Fill colour is applied per-bar; border colour controls the bar
@@ -2375,7 +2504,10 @@ class SpotifyVisualizerWidget(QWidget):
         on_tick(self)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
-        super().paintEvent(event)
+        if self.uses_painted_frame_shadow():
+            self._paint_painted_frame_shadow()
+        else:
+            super().paintEvent(event)
 
         painter = QPainter(self)
         try:

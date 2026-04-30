@@ -52,6 +52,18 @@ def configure_overlay_widget_attributes(widget: QWidget) -> None:
     except Exception as e:
         logger.debug("[SHADOW] Exception suppressed: %s", e)
 
+
+def uses_painted_frame_shadow(widget: QWidget) -> bool:
+    """Return True when a widget owns its framed-card shadow in paintEvent."""
+    try:
+        fn = getattr(widget, "uses_painted_frame_shadow", None)
+        if callable(fn):
+            return bool(fn())
+    except Exception:
+        return False
+    return False
+
+
 # Global multiplier to make widget shadows slightly larger/softer by
 # increasing their blur radius. This applies both to immediate shadows
 # and to the animated shadow fade so visuals stay consistent.
@@ -110,6 +122,14 @@ def apply_widget_shadow(
 
     if config is None:
         config = {}
+
+    if uses_painted_frame_shadow(widget):
+        try:
+            if isinstance(widget.graphicsEffect(), QGraphicsDropShadowEffect):
+                widget.setGraphicsEffect(None)
+        except Exception:
+            logger.debug("[SHADOWS] Failed to clear skipped drop shadow for %r", widget, exc_info=True)
+        return
 
     enabled = _to_bool(config.get("enabled", True), True)
 
@@ -244,6 +264,9 @@ class ShadowFadeProfile:
         """Attach a drop shadow immediately using the shared helper."""
 
         try:
+            if uses_painted_frame_shadow(widget):
+                apply_widget_shadow(widget, config or {}, has_background_frame=has_background_frame)
+                return
             apply_widget_shadow(widget, config or {}, has_background_frame=has_background_frame)
         except Exception:
             logger.debug("[SHADOW_FADE] attach_shadow failed for %r", widget, exc_info=True)
@@ -510,7 +533,7 @@ class ShadowFadeProfile:
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
 
-                if apply_shadow_on_finish:
+                if apply_shadow_on_finish and not uses_painted_frame_shadow(widget):
                     try:
                         cls._start_shadow_fade(widget, cfg, has_background_frame=has_background_frame)
                     except Exception as e:

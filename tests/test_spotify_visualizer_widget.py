@@ -18,6 +18,7 @@ from widgets.spotify_visualizer_widget import (
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
 from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _SpotifyBeatEngine
 import widgets.spotify_visualizer_widget as vis_mod
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect
 
 
@@ -1403,6 +1404,30 @@ def test_shadow_cache_invalidated_once_per_cycle(qt_app, qtbot, monkeypatch):
     assert called["count"] == 1
     assert widget.graphicsEffect() is None
     assert widget._pending_shadow_cache_invalidation is False  # type: ignore[attr-defined]
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_shadowfix_uses_painted_frame_shadow(qt_app, qtbot, monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["main.py", "--shadowfix"])
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
+    qtbot.addWidget(widget)
+    widget.resize(320, 160)
+    widget.set_bar_style(
+        bg_color=QColor(16, 16, 16, 255),
+        bg_opacity=0.7,
+        border_color=QColor(255, 255, 255, 230),
+        border_width=3,
+        show_background=True,
+    )
+    widget.set_shadow_config({"enabled": True})
+
+    assert widget.uses_painted_frame_shadow() is True
+    assert widget.graphicsEffect() is None
+    pixmap = widget._ensure_painted_frame_shadow_pixmap()
+    assert pixmap is not None
+    assert not pixmap.isNull()
 
 
 @pytest.mark.qt

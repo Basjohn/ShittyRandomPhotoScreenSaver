@@ -21,19 +21,24 @@ Current status:
 - IMAP/app-password is the primary supported backend; OAuth/REST remains optional/advanced.
 - Normal and MC Gmail link opening works.
 - Mark Read/Unread, Spam, and Delete work in runtime reports.
-- Archive remains the only action that repeatedly fails. Treat it as a Gmail IMAP capability/research question, not a local guessing target.
+- Archive is hidden for IMAP after repeated runtime failures; code remains for OAuth/future diagnostics.
 - Gmail refresh/paint has first-pass caching and transition contention mitigation. Recent fix also covers refreshes already in flight when a transition is requested.
+- `--shadowfix` now gates the shared painted-frame-shadow experiment for framed overlay cards, including the Spotify visualizer card. It avoids persistent `QGraphicsDropShadowEffect` for framed widgets, explicitly clears the transparent backing store before painting, and uses cached DPR-aware painter output instead.
+- Shared tuning lives in `PAINTED_FRAME_SHADOW_TUNING` in `widgets/base_overlay_widget.py`, promoted from the user-validated Gmail values. Gmail's older `GMAIL_SHADOWFIX_TUNING` remains only as diagnostic/local comparison while the shared path takes over.
 - Settings dialog creation flicker is fixed in live use; keep R-18 guardrails active for future settings work.
 
 Near-term targets:
 - Runtime-validate the latest Gmail/Reddit refresh contention fix from fresh `/logs`: in-flight refresh + manual transition should suspend spinner repaint and defer apply until transition idle.
-- Rebuild/inspect final normal and MC artifacts for Gmail logo, envelope, action icons, refresh visual, and notification sound from ProgramData.
+- Runtime A/B `--shadowfix` on all framed widgets in MC multi-monitor: Display 1 click into app, then Display 0 click. Compare whether Gmail/Weather/Reddit/Media/Visualizer stop doubling outside-card shadows.
+- Watch logs for `[GMAIL_SHADOWFIX] Unexpected persistent graphics effect`; if it appears, there is still an effect in the stack despite the gated painted-shadow path.
+- Tune `PAINTED_FRAME_SHADOW_TUNING` for family-wide fidelity: card shrink, offset, blur steps, spread, max alpha, and radius extra. Keep this gated until the visual match and corruption behavior are both validated.
+- Rebuild/inspect final normal and MC artifacts for envelope/action icons, optional refresh visual, and regression-check Gmail logo/sound packaging.
 - Run a concise Gmail defaults/security/build audit after packaging changes: no credentials or OAuth local secrets tracked or bundled.
 - Runtime-check display polish only where screenshots still show issues: header/logo alignment, unread/read envelope distinction at 16px, date modes at practical widths, sender/subject column alignment.
 
 Deferred Gmail targets:
 - Thread grouping/conversation display remains default-off until researched. Prefer `X-GM-THRID`, split read/unread groups, and decide collapsed-row action semantics before implementing.
-- Archive may not be viable through Gmail IMAP in modern Gmail for this account/build path. Do not keep changing it without a source-backed finding or a small diagnostic harness that proves the exact accepted command.
+- Archive should stay hidden for IMAP unless a source-backed finding or small diagnostic harness proves a reliable accepted command.
 - Low-priority shared stretch: open Gmail/Reddit links on monitor index `0` when cleanly possible, with fallback to current behavior.
 
 ### Reddit Widget
@@ -58,7 +63,8 @@ Near-term targets:
 
 ### General Runtime
 Open watchlist:
-- HIGH PRIORITY: multi-monitor MC shadow/shadow-cache corruption now appears frequently after focus loss/cross-display clicks. Investigate why Display 1 click into app followed by Display 0 interaction corrupts shadows until focus is clicked back in. Preserve the MC focus restore/key fix while researching permanent mitigation; Gmail now participates in the overlay-effect invalidation cadence, but the broader cause is unresolved.
+- HIGH PRIORITY: multi-monitor MC shadow/shadow-cache corruption now appears frequently after focus loss/cross-display clicks. Preserve the MC focus restore/key fix while validating the permanent mitigation. Current theory: stale transparent backing-store pixels and/or widget-level `QGraphicsDropShadowEffect` on translucent background frames are the corruptible primitives; `--shadowfix` now tests cached painted outer-frame shadows across framed overlay cards, including the Spotify visualizer.
+- Reassess/remove `Intense Shadows` as a user-facing setting after painted shadows validate. The old setting was mostly an aggressive multiplier (`3x` blur, `2.5x` opacity, `2x` offset); the new path should make the normal result strong enough without a second shadow mode.
 - Mute button fade-in reliability under startup event pressure.
 - Transition random mode actual distribution vs expected uniform over 50+ rotations.
 - Settings destructive-flow checks: reset/import when touching settings architecture.

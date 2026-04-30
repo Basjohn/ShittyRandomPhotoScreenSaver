@@ -176,7 +176,7 @@ def test_gmail_widget_phase_a_settings(qt_app):
         assert widget.maximumWidth() == 640
         assert widget._width == 640
         margins = widget.contentsMargins()
-        assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (29, 12, 12, 12)
+        assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (29, 12, 29, 12)
         assert widget._content_padding_left == 0
         assert widget._content_padding_right == 0
         assert widget._content_padding_top == 0
@@ -438,6 +438,36 @@ def test_gmail_widget_refresh_spiral_can_be_hidden(qt_app):
         assert widget.resolve_click_target(QPoint(110, 20)) is None
         assert widget.handle_click(QPoint(110, 20)) is False
         assert calls == []
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_shadowfix_flag_uses_painted_shadow_without_drop_effect(qt_app, monkeypatch):
+    """--shadowfix should keep Gmail off persistent QGraphicsDropShadowEffect."""
+    import sys
+
+    from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
+    from widgets.gmail_widget import GMAIL_SHADOWFIX_TUNING, GmailWidget
+
+    monkeypatch.setattr(sys, "argv", ["main.py", "--shadowfix"])
+    widget = GmailWidget()
+    try:
+        assert widget._shadowfix_enabled is True
+        assert {"card_shrink_right", "offset_x", "blur_steps", "max_alpha"} <= set(GMAIL_SHADOWFIX_TUNING)
+
+        widget.set_show_background(True)
+        widget.set_shadow_config({"enabled": True, "frame_opacity": 0.7, "blur_radius": 18})
+        widget.resize(320, 160)
+
+        shared_pixmap = widget._ensure_painted_frame_shadow_pixmap()
+        assert shared_pixmap is not None
+        assert not shared_pixmap.isNull()
+        assert PAINTED_FRAME_SHADOW_TUNING["blur_steps"] == 44
+
+        pixmap = widget._ensure_shadowfix_frame_pixmap()
+        assert pixmap is not None
+        assert not pixmap.isNull()
+        assert widget.graphicsEffect() is None
     finally:
         widget.cleanup()
 

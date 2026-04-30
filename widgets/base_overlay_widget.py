@@ -19,8 +19,10 @@ from abc import abstractmethod
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QPoint, QRect, QSize, Signal
-from PySide6.QtGui import QColor, QFont
+import sys
+
+from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Signal, Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QLabel, QWidget
 try:
     from shiboken6 import Shiboken  # type: ignore
@@ -36,6 +38,26 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+# Shared painted frame-shadow profile. Values are promoted from the validated
+# Gmail --shadowfix tuning pass. They are intentionally grouped here so visual
+# matching can be adjusted centrally without reviving per-widget "intense"
+# shadow multipliers.
+PAINTED_FRAME_SHADOW_TUNING = {
+    "card_shrink_right": 11,
+    "card_shrink_bottom": 11,
+    "offset_x": 5,
+    "offset_y": 5,
+    "blur_steps": 44,
+    "spread": 8,
+    "max_alpha": 14,
+    "radius_extra": 0,
+}
+
+
+def painted_frame_shadows_enabled() -> bool:
+    return "--shadowfix" in sys.argv
 
 
 class WidgetLifecycleState(Enum):
@@ -198,6 +220,9 @@ class BaseOverlayWidget(QLabel):
         self._shadow_config: Optional[Dict[str, Any]] = None
         self._has_faded_in = False
         self._intense_shadow = False  # Intensified shadow styling
+        self._painted_frame_shadow_enabled = painted_frame_shadows_enabled()
+        self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
+        self._painted_frame_shadow_cache_key: Optional[Tuple[Any, ...]] = None
         
         # Thread manager
         self._thread_manager: Optional["ThreadManager"] = None
@@ -274,6 +299,7 @@ class BaseOverlayWidget(QLabel):
     def set_show_background(self, show: bool) -> None:
         """Enable or disable background frame."""
         self._show_background = bool(show)
+        self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
         self.update()
     
@@ -281,6 +307,7 @@ class BaseOverlayWidget(QLabel):
         """Set background color."""
         if isinstance(color, QColor):
             self._bg_color = color
+            self._invalidate_painted_frame_shadow_cache()
             self._update_stylesheet()
     
     def set_background_opacity(self, opacity: float) -> None:
@@ -288,6 +315,7 @@ class BaseOverlayWidget(QLabel):
         self._bg_opacity = max(0.0, min(1.0, float(opacity)))
         # Update bg_color alpha
         self._bg_color.setAlpha(int(255 * self._bg_opacity))
+        self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
     
     @classmethod
@@ -307,6 +335,7 @@ class BaseOverlayWidget(QLabel):
         if new_width == self._bg_border_width:
             return False
         self._bg_border_width = new_width
+        self._invalidate_painted_frame_shadow_cache()
         return True
 
     def set_card_border_width(self, width: int) -> None:
@@ -327,11 +356,20 @@ class BaseOverlayWidget(QLabel):
     def set_background_corner_radius(self, radius: int) -> None:
         """Set background corner radius."""
         self._bg_corner_radius = max(0, int(radius))
+        self._invalidate_painted_frame_shadow_cache()
         self._update_stylesheet()
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet. Override for custom styling."""
-        if self._show_background:
+        if self.uses_painted_frame_shadow():
+            self.setStyleSheet(f"""
+                QWidget {{
+                    background-color: transparent;
+                    border: none;
+                    color: rgba({self._text_color.red()}, {self._text_color.green()}, {self._text_color.blue()}, {self._text_color.alpha()});
+                }}
+            """)
+        elif self._show_background:
             bg = self._bg_color
             border = self._bg_border_color
             self.setStyleSheet(f"""
@@ -531,6 +569,13 @@ class BaseOverlayWidget(QLabel):
     def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
         """Set shadow configuration."""
         self._shadow_config = config
+        self._invalidate_painted_frame_shadow_cache()
+        if self.uses_painted_frame_shadow():
+            try:
+                self.setGraphicsEffect(None)
+            except Exception as e:
+                logger.debug("[OVERLAY] Exception suppressed: %s", e)
+            return
         if is_perf_metrics_enabled():
             overlay = getattr(self, "_overlay_name", self.__class__.__name__)
             logger.info(
@@ -556,6 +601,9 @@ class BaseOverlayWidget(QLabel):
             intense: True to enable intense shadows
         """
         self._intense_shadow = bool(intense)
+        if self.uses_painted_frame_shadow():
+            self._invalidate_painted_frame_shadow_cache()
+            return
         if self._shadow_config and self._has_faded_in:
             apply_widget_shadow(self, self._shadow_config, has_background_frame=self._show_background, intense=self._intense_shadow)
     
@@ -566,8 +614,115 @@ class BaseOverlayWidget(QLabel):
     def on_fade_complete(self) -> None:
         """Called when fade-in animation completes. Apply shadow."""
         self._has_faded_in = True
+        if self.uses_painted_frame_shadow():
+            self._invalidate_painted_frame_shadow_cache()
+            return
         if self._shadow_config:
             apply_widget_shadow(self, self._shadow_config, has_background_frame=self._show_background, intense=self._intense_shadow)
+
+    def uses_painted_frame_shadow(self) -> bool:
+        """True when this framed widget should paint/cache its own outer shadow."""
+        return bool(self._painted_frame_shadow_enabled and self._show_background)
+
+    def _invalidate_painted_frame_shadow_cache(self) -> None:
+        self._painted_frame_shadow_pixmap = None
+        self._painted_frame_shadow_cache_key = None
+
+    def _painted_frame_shadow_card_rect(self) -> QRectF:
+        tuning = PAINTED_FRAME_SHADOW_TUNING
+        return QRectF(
+            0.0,
+            0.0,
+            max(1.0, float(self.width() - int(tuning["card_shrink_right"]))),
+            max(1.0, float(self.height() - int(tuning["card_shrink_bottom"]))),
+        )
+
+    def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
+        if not self.uses_painted_frame_shadow() or self.width() <= 0 or self.height() <= 0:
+            return None
+        try:
+            dpr = max(1.0, float(self.devicePixelRatioF()))
+        except Exception:
+            dpr = 1.0
+        tuning = PAINTED_FRAME_SHADOW_TUNING
+        key = (
+            self.width(),
+            self.height(),
+            round(dpr, 3),
+            self._bg_color.getRgb(),
+            self._bg_border_color.getRgb(),
+            int(self._bg_border_width),
+            int(self._bg_corner_radius),
+            tuple(sorted(tuning.items())),
+        )
+        if (
+            self._painted_frame_shadow_pixmap is not None
+            and not self._painted_frame_shadow_pixmap.isNull()
+            and self._painted_frame_shadow_cache_key == key
+        ):
+            return self._painted_frame_shadow_pixmap
+
+        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
+        pixmap.setDevicePixelRatio(dpr)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        try:
+            card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
+            radius = max(0.0, float(self._bg_corner_radius + int(tuning["radius_extra"])))
+            offset_x = float(tuning["offset_x"])
+            offset_y = float(tuning["offset_y"])
+            steps = max(1, int(tuning["blur_steps"]))
+            spread = max(0.0, float(tuning["spread"]))
+            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
+
+            for layer in range(steps, 0, -1):
+                frac = layer / float(steps)
+                grow = spread * frac
+                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
+                if alpha <= 0:
+                    continue
+                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
+                shadow_path = QPainterPath()
+                shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
+                painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
+
+            frame_path = QPainterPath()
+            frame_path.addRoundedRect(card_rect, radius, radius)
+            painter.fillPath(frame_path, self._bg_color)
+            if self._bg_border_width > 0 and self._bg_border_color.alpha() > 0:
+                pen = QPen(self._bg_border_color, max(1, int(self._bg_border_width)))
+                pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+                painter.setPen(pen)
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPath(frame_path)
+        finally:
+            painter.end()
+
+        self._painted_frame_shadow_pixmap = pixmap
+        self._painted_frame_shadow_cache_key = key
+        return pixmap
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        if self.uses_painted_frame_shadow():
+            painter = QPainter(self)
+            try:
+                painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+                painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+            finally:
+                painter.end()
+            pixmap = self._ensure_painted_frame_shadow_pixmap()
+            if pixmap is not None and not pixmap.isNull():
+                painter = QPainter(self)
+                try:
+                    painter.drawPixmap(0, 0, pixmap)
+                finally:
+                    painter.end()
+        super().paintEvent(event)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        self._invalidate_painted_frame_shadow_cache()
+        super().resizeEvent(event)
     
     # -------------------------------------------------------------------------
     # Thread Manager Integration

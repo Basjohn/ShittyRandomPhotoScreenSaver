@@ -19,6 +19,7 @@ Rules:
 - Settings flicker guardrail: do not pre-polish hidden Gmail bucket bodies by temporarily showing them during settings construction. R-18 established constructor-time visibility calls as a ghost-window/flicker hazard.
 - Qt shadow/effect guardrail: Gmail content caching must not mutate graphics effects, hide/show widgets, reparent, resize, or call overlay-effect invalidation.
 - Shadow-cache parity guardrail: Gmail must participate in the shared overlay-effect invalidation cadence used by peer widgets. This does not solve the broader multi-monitor MC shadow corruption/focus-loss issue, but Gmail must not be the lone widget missing the mitigation.
+- `--shadowfix` now uses the shared painted-frame-shadow path for framed overlay cards, including Gmail and the Spotify visualizer card. Gmail is covered by that shared path; its older local tuning remains diagnostic while `PAINTED_FRAME_SHADOW_TUNING` in `widgets/base_overlay_widget.py` is the active shared tuning group.
 
 ## 2. Canonical Files
 
@@ -58,6 +59,9 @@ Tasks:
 - [ ] Runtime-validate fresh logs for manual transition during an already-running Gmail refresh: spinner repaint should stop and fetched result/cache/sound/UI apply should wait until transition idle.
 - [ ] Runtime-profile Gmail with 8-10 rows and confirm idle `gmail.paint` stays comfortably below 5ms on a normal 1080p desktop.
 - [ ] Watch for Qt shadow/effect corruption around Gmail after repeated refreshes, fades, transitions, settings reloads, and monitor changes.
+- [ ] Runtime A/B framed widgets with and without `--shadowfix` in MC multi-monitor focus-loss sequence. If Gmail/Weather/Reddit/Media/Visualizer stop corrupting, promote painted frame shadows as the likely permanent path for framed widgets.
+- [ ] If `--shadowfix` still doubles the outside-card shadow, check for `[GMAIL_SHADOWFIX] Unexpected persistent graphics effect` first; if absent, treat the issue as stale transparent backing-store accumulation or parent/window composition rather than a remaining Gmail drop-shadow effect.
+- [ ] Tune `PAINTED_FRAME_SHADOW_TUNING` in `widgets/base_overlay_widget.py` for softness/darkness/offset parity before making the path default.
 
 ### B. Build And Release Validation
 
@@ -149,6 +153,7 @@ Do not reimplement these unless a defect is found:
 - Gmail participates in shared overlay-effect invalidation so it is not excluded from the existing anti-shadow-cache-corruption cadence.
 - Gmail no-auth/no-cache startup stays hidden instead of fading in an empty/auth placeholder.
 - Paint/resource first pass exists: stable-content cache, no-op setter guards, transition-aware refresh deferral, in-flight spinner suspension, async cache writes, and perf buckets.
+- `--shadowfix` gated painted-shadow experiment now lives in `BaseOverlayWidget` for framed cards, with cached DPR-aware frame output and shared tuning constants.
 
 ## 6. Failure Guardrails
 
