@@ -138,6 +138,7 @@ class RedditWidget(BaseOverlayWidget):
         self._header_logo_size: int = max(12, int(self._font_size * 1.3))
         self._header_logo_margin: int = self._header_logo_size
         self._header_logo_px_adjust: int = 0
+        self._header_content_y_offset: int = -1
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
         self._header_hit_rect: Optional[QRect] = None
         self._show_refresh_spiral: bool = True
@@ -145,6 +146,7 @@ class RedditWidget(BaseOverlayWidget):
         self._refreshing: bool = False
         self._refresh_spin_angle: int = 0
         self._refresh_spin_timer: Optional[QTimer] = None
+        self._refresh_spinner_suspended_for_transition: bool = False
         self._fetch_in_progress: bool = False
         self._deferred_refresh_timer: Optional[QTimer] = None
         self._pending_refresh_after_transition: bool = False
@@ -870,18 +872,35 @@ class RedditWidget(BaseOverlayWidget):
 
     def _parent_transition_running(self) -> bool:
         parent = self.parent()
-        if parent is None:
-            return False
-        try:
-            has_pending = getattr(parent, "has_transition_work_pending", None)
-            if callable(has_pending):
-                return bool(has_pending())
-            has_running = getattr(parent, "has_running_transition", None)
-            if callable(has_running):
-                return bool(has_running())
-        except Exception:
-            return False
+        while parent is not None:
+            try:
+                has_pending = getattr(parent, "has_transition_work_pending", None)
+                if callable(has_pending) and bool(has_pending()):
+                    return True
+                has_running = getattr(parent, "has_running_transition", None)
+                if callable(has_running) and bool(has_running()):
+                    return True
+            except Exception:
+                return False
+            parent = parent.parent() if hasattr(parent, "parent") else None
         return False
+
+    def on_parent_transition_work_pending(self, pending: bool) -> None:
+        """Pause live refresh animation as soon as a transition is requested."""
+        if not self._refreshing:
+            return
+        transition_busy = bool(pending) or self._parent_transition_running()
+        if transition_busy:
+            self._refresh_spinner_suspended_for_transition = True
+            if self._refresh_spin_timer is not None and self._refresh_spin_timer.isActive():
+                self._refresh_spin_timer.stop()
+            self._update_refresh_button_region()
+            return
+        if self._refresh_spinner_suspended_for_transition:
+            self._refresh_spinner_suspended_for_transition = False
+            if self._refresh_spin_timer is not None and not self._refresh_spin_timer.isActive():
+                self._refresh_spin_timer.start()
+            self._update_refresh_button_region()
 
     def _defer_refresh_if_transition(self) -> bool:
         if not self._parent_transition_running():
@@ -938,13 +957,14 @@ class RedditWidget(BaseOverlayWidget):
     def _start_refresh_spinner(self) -> None:
         was_refreshing = self._refreshing
         self._refreshing = True
+        self._refresh_spinner_suspended_for_transition = self._parent_transition_running()
         if self._refresh_spin_timer is None:
             timer = QTimer(self)
             timer.setInterval(45)
             timer.timeout.connect(self._advance_refresh_spinner)
             self._refresh_spin_timer = timer
             self._register_resource(timer, "reddit refresh spinner")
-        if not self._refresh_spin_timer.isActive():
+        if not self._refresh_spinner_suspended_for_transition and not self._refresh_spin_timer.isActive():
             self._refresh_spin_timer.start()
         if not was_refreshing:
             self._update_refresh_button_region()
@@ -953,12 +973,18 @@ class RedditWidget(BaseOverlayWidget):
         if not self._refreshing:
             self._stop_refresh_spinner()
             return
+        if self._refresh_spinner_suspended_for_transition or self._parent_transition_running():
+            self._refresh_spinner_suspended_for_transition = True
+            if self._refresh_spin_timer is not None:
+                self._refresh_spin_timer.stop()
+            return
         self._refresh_spin_angle = (self._refresh_spin_angle + 18) % 360
         self._update_refresh_button_region()
 
     def _stop_refresh_spinner(self) -> None:
         was_refreshing = self._refreshing
         self._refreshing = False
+        self._refresh_spinner_suspended_for_transition = False
         if self._refresh_spin_timer is not None and self._refresh_spin_timer.isActive():
             self._refresh_spin_timer.stop()
         if was_refreshing:
@@ -1320,7 +1346,7 @@ class RedditWidget(BaseOverlayWidget):
         painter.setFont(header_font)
         header_metrics = QFontMetrics(header_font)
         header_top = rect.top() + 4
-        baseline_y = header_top + header_metrics.ascent()
+        baseline_y = header_top + header_metrics.ascent() + self._header_content_y_offset
 
         self._paint_header_frame(painter)
 
@@ -1349,7 +1375,7 @@ class RedditWidget(BaseOverlayWidget):
                 line_height = header_metrics.height()
                 line_centre = header_top + (line_height * 0.6)
                 icon_half = float(logo_size) / 2.0
-                y_logo = int(line_centre - icon_half)
+                y_logo = int(line_centre - icon_half + self._header_content_y_offset)
                 if y_logo < header_top:
                     y_logo = header_top
                 painter.drawPixmap(int(x), int(y_logo), pm)

@@ -244,8 +244,6 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     success = transition.start(widget.previous_pixmap, new_pixmap, widget)
                 
                 if success:
-                    if hasattr(widget, "set_transition_work_pending"):
-                        widget.set_transition_work_pending(False)
                     widget._current_transition = transition
                     widget._current_transition_overlay_key = overlay_key
                     widget._current_transition_started_at = time.monotonic()
@@ -253,6 +251,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget._current_transition_first_run = (
                         widget._current_transition_name not in widget._warmed_transition_types
                     )
+                    if hasattr(widget, "set_transition_work_pending"):
+                        widget.set_transition_work_pending(False)
                     if is_perf_metrics_enabled():
                         logger.info(
                             "[PERF] [TRANSITION] Start name=%s first_run=%s overlay=%s",

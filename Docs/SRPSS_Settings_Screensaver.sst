@@ -306,6 +306,7 @@
         "show_background": true,
         "show_envelope_icon": true,
         "show_header_border": true,
+        "show_refresh_spiral": true,
         "show_sender": true,
         "show_separators": true,
         "show_subject": true,

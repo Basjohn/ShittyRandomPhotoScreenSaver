@@ -57,6 +57,7 @@ GMAIL_SIGNAL_BLOCK_ATTRS = (
     'gmail_show_subject',
     'gmail_show_envelope',
     'gmail_show_three_dot',
+    'gmail_show_refresh_spiral',
     'gmail_show_unread_count',
     'gmail_show_header_border',
     'gmail_show_timestamp',
@@ -809,6 +810,12 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_show_three_dot.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_three_dot)
 
+    tab.gmail_show_refresh_spiral = QCheckBox("Show refresh spiral")
+    tab.gmail_show_refresh_spiral.setProperty("circleIndicator", True)
+    tab.gmail_show_refresh_spiral.setChecked(tab._default_bool('gmail', 'show_refresh_spiral', True))
+    tab.gmail_show_refresh_spiral.stateChanged.connect(tab._save_settings)
+    appearance_inner.addWidget(tab.gmail_show_refresh_spiral)
+
     tab.gmail_show_unread_count = QCheckBox("Show unread count in header")
     tab.gmail_show_unread_count.setProperty("circleIndicator", True)
     tab.gmail_show_unread_count.setChecked(tab._default_bool('gmail', 'show_unread_count_in_header', True))
@@ -1142,7 +1149,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
             'enabled', 'position', 'monitor', 'limit', 'refresh_minutes',
             'filter_label', 'account_slot', 'width', 'font_family',
             'font_size', 'header_logo_px_adjust', 'margin', 'show_sender', 'show_subject',
-            'show_envelope_icon', 'show_three_dot_menu',
+            'show_envelope_icon', 'show_three_dot_menu', 'show_refresh_spiral',
             'show_unread_count_in_header', 'show_header_border',
             'show_separators', 'show_timestamp', 'date_display_mode',
             'group_threads', 'auto_title_case', 'clean_sender_names',
@@ -1190,6 +1197,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.gmail_show_subject.setChecked(tab._config_bool('gmail', gmail_config, 'show_subject', bool(gmail_defaults['show_subject'])))
         tab.gmail_show_envelope.setChecked(tab._config_bool('gmail', gmail_config, 'show_envelope_icon', bool(gmail_defaults['show_envelope_icon'])))
         tab.gmail_show_three_dot.setChecked(tab._config_bool('gmail', gmail_config, 'show_three_dot_menu', bool(gmail_defaults['show_three_dot_menu'])))
+        tab.gmail_show_refresh_spiral.setChecked(tab._config_bool('gmail', gmail_config, 'show_refresh_spiral', bool(gmail_defaults['show_refresh_spiral'])))
         tab.gmail_show_unread_count.setChecked(tab._config_bool('gmail', gmail_config, 'show_unread_count_in_header', bool(gmail_defaults['show_unread_count_in_header'])))
         tab.gmail_show_header_border.setChecked(tab._config_bool('gmail', gmail_config, 'show_header_border', bool(gmail_defaults['show_header_border'])))
         tab.gmail_show_separators.setChecked(tab._config_bool('gmail', gmail_config, 'show_separators', bool(gmail_defaults['show_separators'])))
@@ -1281,6 +1289,7 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'show_subject': tab.gmail_show_subject.isChecked(),
         'show_envelope_icon': tab.gmail_show_envelope.isChecked(),
         'show_three_dot_menu': tab.gmail_show_three_dot.isChecked(),
+        'show_refresh_spiral': tab.gmail_show_refresh_spiral.isChecked(),
         'show_unread_count_in_header': tab.gmail_show_unread_count.isChecked(),
         'show_header_border': tab.gmail_show_header_border.isChecked(),
         'show_separators': tab.gmail_show_separators.isChecked(),

@@ -113,7 +113,7 @@ def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
         "enabled", "monitor", "position", "width", "limit", "refresh_minutes",
         "filter_label", "account_slot", "font_family", "font_size", "margin",
         "header_logo_px_adjust", "show_sender", "show_subject", "show_envelope_icon",
-        "show_three_dot_menu", "show_unread_count_in_header", "show_header_border",
+        "show_three_dot_menu", "show_refresh_spiral", "show_unread_count_in_header", "show_header_border",
         "show_separators", "show_timestamp", "date_display_mode", "group_threads",
         "auto_title_case", "clean_sender_names", "max_sender_words",
         "sender_column_width", "max_subject_words", "max_subject_chars",
@@ -136,6 +136,12 @@ def test_reddit_refresh_spiral_default_comes_from_defaults() -> None:
     assert DEFAULT_SETTINGS["widgets"]["reddit"]["show_refresh_spiral"] is True
 
 
+def test_gmail_refresh_spiral_default_comes_from_defaults() -> None:
+    from core.settings.default_settings import DEFAULT_SETTINGS
+
+    assert DEFAULT_SETTINGS["widgets"]["gmail"]["show_refresh_spiral"] is True
+
+
 def test_gmail_signal_block_attrs_cover_newer_controls() -> None:
     """Guard against settings-load flicker from stale Gmail signal blockers."""
     from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS
@@ -145,6 +151,7 @@ def test_gmail_signal_block_attrs_cover_newer_controls() -> None:
         "gmail_width",
         "gmail_header_logo_px_adjust",
         "gmail_show_header_border",
+        "gmail_show_refresh_spiral",
         "gmail_date_display_mode",
         "gmail_group_threads",
         "gmail_clean_sender_names",

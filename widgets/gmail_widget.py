@@ -115,6 +115,7 @@ class GmailWidget(BaseOverlayWidget):
         self._show_subject = True
         self._show_envelope_icon = True
         self._show_three_dot_menu = True
+        self._show_refresh_spiral = True
         self._show_timestamp = True
         self._date_display_mode = "relative"
         self._show_separators = True
@@ -142,6 +143,7 @@ class GmailWidget(BaseOverlayWidget):
         self._header_frame_pad_y = 6
         self._header_logo_gap = 8
         self._header_logo_y_offset = 2
+        self._header_content_y_offset = -1
 
         self._header_logo_px_adjust = 0
         self._header_font_pt = max(6, int(self._font_size * 1.2))
@@ -172,6 +174,7 @@ class GmailWidget(BaseOverlayWidget):
         self._refreshing = False
         self._refresh_spin_angle = 0
         self._refresh_spin_timer: Optional[QTimer] = None
+        self._refresh_spinner_suspended_for_transition = False
         self._deferred_fetch_timer: Optional[QTimer] = None
         self._deferred_refresh_timer: Optional[QTimer] = None
         self._pending_refresh_after_transition = False
@@ -543,18 +546,24 @@ class GmailWidget(BaseOverlayWidget):
             return
         self._refreshing = refreshing
         if refreshing:
+            self._refresh_spinner_suspended_for_transition = self._parent_transition_running()
             if self._refresh_spin_timer is None:
                 self._refresh_spin_timer = QTimer(self)
                 self._refresh_spin_timer.timeout.connect(self._advance_refresh_spinner)
-            self._refresh_spin_timer.start(80)
+            if not self._refresh_spinner_suspended_for_transition:
+                self._refresh_spin_timer.start(80)
         else:
+            self._refresh_spinner_suspended_for_transition = False
             if self._refresh_spin_timer is not None:
                 self._refresh_spin_timer.stop()
             self._refresh_spin_angle = 0
         self._update_refresh_button_region()
 
     def _advance_refresh_spinner(self) -> None:
-        if not self._refreshing:
+        if not self._refreshing or self._refresh_spinner_suspended_for_transition or self._parent_transition_running():
+            if self._refresh_spin_timer is not None:
+                self._refresh_spin_timer.stop()
+            self._refresh_spinner_suspended_for_transition = bool(self._refreshing)
             return
         self._refresh_spin_angle = (self._refresh_spin_angle + 30) % 360
         self._update_refresh_button_region()
@@ -567,18 +576,35 @@ class GmailWidget(BaseOverlayWidget):
 
     def _parent_transition_running(self) -> bool:
         parent = self.parent()
-        if parent is None:
-            return False
-        try:
-            has_pending = getattr(parent, "has_transition_work_pending", None)
-            if callable(has_pending):
-                return bool(has_pending())
-            has_running = getattr(parent, "has_running_transition", None)
-            if callable(has_running):
-                return bool(has_running())
-        except Exception:
-            return False
+        while parent is not None:
+            try:
+                has_pending = getattr(parent, "has_transition_work_pending", None)
+                if callable(has_pending) and bool(has_pending()):
+                    return True
+                has_running = getattr(parent, "has_running_transition", None)
+                if callable(has_running) and bool(has_running()):
+                    return True
+            except Exception:
+                return False
+            parent = parent.parent() if hasattr(parent, "parent") else None
         return False
+
+    def on_parent_transition_work_pending(self, pending: bool) -> None:
+        """Pause live refresh animation as soon as a transition is requested."""
+        if not self._refreshing:
+            return
+        transition_busy = bool(pending) or self._parent_transition_running()
+        if transition_busy:
+            self._refresh_spinner_suspended_for_transition = True
+            if self._refresh_spin_timer is not None and self._refresh_spin_timer.isActive():
+                self._refresh_spin_timer.stop()
+            self._update_refresh_button_region()
+            return
+        if self._refresh_spinner_suspended_for_transition:
+            self._refresh_spinner_suspended_for_transition = False
+            if self._refresh_spin_timer is not None and not self._refresh_spin_timer.isActive():
+                self._refresh_spin_timer.start(80)
+            self._update_refresh_button_region()
 
     def _defer_refresh_if_transition(self) -> bool:
         if not self._parent_transition_running():
@@ -976,7 +1002,10 @@ class GmailWidget(BaseOverlayWidget):
         try:
             if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
                 painter.drawPixmap(0, 0, self._cached_content_pixmap)
-            self._paint_refresh_button(painter)
+            if self._show_refresh_spiral:
+                self._paint_refresh_button(painter)
+            else:
+                self._refresh_hit_rect = None
         finally:
             painter.end()
 
@@ -1111,9 +1140,10 @@ class GmailWidget(BaseOverlayWidget):
         frame_rect = QRect(left, top, frame_width, frame_height)
         center_y = frame_rect.top() + self._header_frame_pad_y + (content_height / 2)
         logo_x = frame_rect.left() + self._header_frame_pad_x
-        logo_y = int(center_y - (logo_height / 2)) + int(self._header_logo_y_offset)
+        content_y_offset = int(self._header_content_y_offset)
+        logo_y = int(center_y - (logo_height / 2)) + int(self._header_logo_y_offset) + content_y_offset
         text_x = logo_x + logo_width + self._header_logo_gap
-        text_baseline_y = int(center_y - (text_height / 2) + fm.ascent())
+        text_baseline_y = int(center_y - (text_height / 2) + fm.ascent()) + content_y_offset
         return {
             "frame_rect": frame_rect,
             "logo_rect": QRect(logo_x, logo_y, logo_width, logo_height),
@@ -1313,7 +1343,7 @@ class GmailWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
 
     def _is_interactive_point(self, local_pos: QPoint) -> bool:
-        if self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
+        if self._show_refresh_spiral and self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
             return True
         if self._header_hit_rect is not None and self._header_hit_rect.contains(local_pos):
             return True
@@ -1331,7 +1361,7 @@ class GmailWidget(BaseOverlayWidget):
         return bool(menu is not None and menu.isVisible())
 
     def handle_click(self, local_pos: QPoint) -> bool:
-        if self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
+        if self._show_refresh_spiral and self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
             self._fetch_emails()
             return True
 
@@ -1384,7 +1414,7 @@ class GmailWidget(BaseOverlayWidget):
         if self._last_error:
             return None
 
-        if self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
+        if self._show_refresh_spiral and self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
             return None
 
         if self._header_hit_rect is not None and self._header_hit_rect.contains(local_pos):
@@ -1447,11 +1477,12 @@ class GmailWidget(BaseOverlayWidget):
                 lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_mark_as_unread, mid)
             )
 
-        action_archive = menu.addAction("Archive")
-        action_archive.setIcon(self._action_icon("archive"))
-        action_archive.triggered.connect(
-            lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_archive, mid)
-        )
+        if self._should_show_archive_action(email):
+            action_archive = menu.addAction("Archive")
+            action_archive.setIcon(self._action_icon("archive"))
+            action_archive.triggered.connect(
+                lambda _checked=False, mid=action_message_id: self._dispatch_action(widget_ref, self._do_archive, mid)
+            )
 
         action_spam = menu.addAction("Mark as Spam")
         action_spam.setIcon(self._action_icon("spam"))
@@ -1475,6 +1506,11 @@ class GmailWidget(BaseOverlayWidget):
         if email.provider in {"gmail", "imap"} and email.imap_uid:
             return email.imap_uid
         return email.id
+
+    @staticmethod
+    def _should_show_archive_action(email: EmailMetadata) -> bool:
+        """Hide Archive for IMAP; keep the action code for future OAuth/diagnostic work."""
+        return email.provider != "imap"
 
     @staticmethod
     def _dispatch_action(widget_ref, action_fn, message_id: str) -> None:
@@ -1514,6 +1550,7 @@ class GmailWidget(BaseOverlayWidget):
             logger.warning("[GMAIL] Mark as unread failed for %s", message_id)
 
     def _do_archive(self, message_id: str) -> None:
+        """Archive action code is retained for OAuth/future diagnostics, but hidden for IMAP."""
         if self._gmail_client and self._gmail_client.archive_message(message_id):
             logger.info("[GMAIL] Archived %s", message_id)
             try:
@@ -1564,6 +1601,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_subject(getattr(settings, "show_subject", self._show_subject))
         self.set_show_envelope_icon(getattr(settings, "show_envelope_icon", self._show_envelope_icon))
         self.set_show_three_dot_menu(getattr(settings, "show_three_dot_menu", self._show_three_dot_menu))
+        self.set_show_refresh_spiral(getattr(settings, "show_refresh_spiral", self._show_refresh_spiral))
         self.set_show_timestamp(getattr(settings, "show_timestamp", self._show_timestamp))
         self.set_date_display_mode(getattr(settings, "date_display_mode", self._date_display_mode))
         self.set_show_separators(getattr(settings, "show_separators", self._show_separators))
@@ -1601,6 +1639,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_subject(d.get("show_subject", self._show_subject))
         self.set_show_envelope_icon(d.get("show_envelope_icon", self._show_envelope_icon))
         self.set_show_three_dot_menu(d.get("show_three_dot_menu", self._show_three_dot_menu))
+        self.set_show_refresh_spiral(d.get("show_refresh_spiral", self._show_refresh_spiral))
         self.set_show_timestamp(d.get("show_timestamp", self._show_timestamp))
         self.set_date_display_mode(d.get("date_display_mode", self._date_display_mode))
         self.set_show_separators(d.get("show_separators", self._show_separators))
@@ -1739,6 +1778,13 @@ class GmailWidget(BaseOverlayWidget):
 
     def set_show_three_dot_menu(self, show: bool) -> None:
         self._set_attr_and_update("_show_three_dot_menu", bool(show))
+
+    def set_show_refresh_spiral(self, show: bool) -> None:
+        show = bool(show)
+        if self._show_refresh_spiral == show:
+            return
+        self._show_refresh_spiral = show
+        self._update_refresh_button_region()
 
     def set_show_timestamp(self, show: bool) -> None:
         self._set_attr_and_update("_show_timestamp", bool(show))

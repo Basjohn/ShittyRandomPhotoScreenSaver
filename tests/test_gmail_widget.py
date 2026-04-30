@@ -363,6 +363,43 @@ def test_gmail_widget_uses_imap_uid_for_imap_actions(qt_app):
         widget.cleanup()
 
 
+def test_gmail_widget_hides_archive_for_imap_but_keeps_oauth_path(qt_app):
+    """IMAP Archive is hidden because it is unreliable; Gmail/OAuth path remains available."""
+    from datetime import datetime
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        imap_email = EmailMetadata(
+            id="gmail_msg_id",
+            thread_id="gmail_thread_id",
+            sender="PayPal",
+            subject="Receipt",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=False,
+            provider="imap",
+            imap_uid="42",
+        )
+        gmail_email = EmailMetadata(
+            id="gmail_msg_id",
+            thread_id="gmail_thread_id",
+            sender="PayPal",
+            subject="Receipt",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=False,
+            provider="gmail",
+            imap_uid="42",
+        )
+
+        assert widget._should_show_archive_action(imap_email) is False
+        assert widget._should_show_archive_action(gmail_email) is True
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_widget_refresh_click_forces_fetch(qt_app):
     """Verify the top-right refresh hit rect consumes clicks and fetches."""
     from PySide6.QtCore import QPoint, QRect
@@ -377,6 +414,25 @@ def test_gmail_widget_refresh_click_forces_fetch(qt_app):
         assert widget.resolve_click_target(QPoint(110, 20)) is None
         assert widget.handle_click(QPoint(110, 20)) is True
         assert calls == ["fetch"]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_widget_refresh_spiral_can_be_hidden(qt_app):
+    """The optional Gmail refresh spiral should not consume clicks when hidden."""
+    from PySide6.QtCore import QPoint, QRect
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        widget._refresh_hit_rect = QRect(100, 10, 22, 22)
+        widget._fetch_emails = lambda: calls.append("fetch") or True  # type: ignore[method-assign]
+        widget.set_show_refresh_spiral(False)
+
+        assert widget.resolve_click_target(QPoint(110, 20)) is None
+        assert widget.handle_click(QPoint(110, 20)) is False
+        assert calls == []
     finally:
         widget.cleanup()
 
@@ -752,6 +808,46 @@ def test_gmail_fetch_result_defers_during_parent_transition_pending(qt_app):
         assert [item.id for item in widget._emails] == ["pending"]
     finally:
         widget.cleanup()
+        parent.deleteLater()
+
+
+def test_gmail_transition_pending_parent_chain_and_spinner_suspend(qt_app):
+    """A refresh already in flight should stop live spinner repaint when transition work starts."""
+    from PySide6.QtWidgets import QWidget
+
+    from widgets.gmail_widget import GmailWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.pending = False
+
+        def has_transition_work_pending(self):
+            return self.pending
+
+    parent = TransitionParent()
+    container = QWidget(parent)
+    widget = GmailWidget(container)
+    updates = []
+    try:
+        widget.update = lambda *args, **kwargs: updates.append(args)  # type: ignore[method-assign]
+        widget._set_refreshing(True)
+        assert widget._refreshing is True
+        assert widget._refresh_spinner_suspended_for_transition is False
+        assert widget._refresh_spin_timer is not None
+        assert widget._refresh_spin_timer.isActive()
+
+        parent.pending = True
+        assert widget._parent_transition_running() is True
+        widget.on_parent_transition_work_pending(True)
+
+        assert widget._refreshing is True
+        assert widget._refresh_spinner_suspended_for_transition is True
+        assert not widget._refresh_spin_timer.isActive()
+        assert updates
+    finally:
+        widget.cleanup()
+        container.deleteLater()
         parent.deleteLater()
 
 

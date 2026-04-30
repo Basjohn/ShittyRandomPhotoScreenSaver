@@ -1587,7 +1587,18 @@ class DisplayWidget(QWidget):
 
     def set_transition_work_pending(self, pending: bool) -> None:
         """Mark that an accepted image change is preparing to start a transition."""
-        self._transition_work_pending = bool(pending)
+        pending = bool(pending)
+        if self._transition_work_pending == pending:
+            return
+        self._transition_work_pending = pending
+        for attr_name in ("gmail_widget", "reddit_widget", "reddit2_widget"):
+            widget = getattr(self, attr_name, None)
+            callback = getattr(widget, "on_parent_transition_work_pending", None)
+            if callable(callback):
+                try:
+                    callback(pending)
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Transition pending callback failed for %s: %s", attr_name, e)
 
     def has_transition_work_pending(self) -> bool:
         """Return True from image-change request acceptance through transition start."""

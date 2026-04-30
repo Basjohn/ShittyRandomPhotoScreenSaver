@@ -726,6 +726,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 5
                        'show_header_border': True,
                        'show_background': True,
                        'show_envelope_icon': True,
+                       'show_refresh_spiral': True,
                        'show_sender': True,
                        'show_separators': True,
                        'separator_color': [200, 200, 200, 40],

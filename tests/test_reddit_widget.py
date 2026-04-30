@@ -276,6 +276,48 @@ def test_reddit_fetch_result_defers_apply_during_parent_transition_pending(qt_ap
 
 
 @pytest.mark.qt
+def test_reddit_transition_pending_parent_chain_and_spinner_suspend(qt_app, qtbot):  # noqa: ARG001
+    """A Reddit refresh already in flight should stop spinner repaint when transition work starts."""
+    from PySide6.QtWidgets import QWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.pending = False
+
+        def has_transition_work_pending(self):
+            return self.pending
+
+    parent = TransitionParent()
+    container = QWidget(parent)
+    widget = RedditWidget(container)
+    qtbot.addWidget(parent)
+    qtbot.addWidget(container)
+    qtbot.addWidget(widget)
+    updates = []
+    try:
+        widget.update = lambda *args, **kwargs: updates.append(args)  # type: ignore[method-assign]
+        widget._start_refresh_spinner()  # type: ignore[attr-defined]
+        assert widget._refreshing is True  # type: ignore[attr-defined]
+        assert widget._refresh_spinner_suspended_for_transition is False  # type: ignore[attr-defined]
+        assert widget._refresh_spin_timer is not None  # type: ignore[attr-defined]
+        assert widget._refresh_spin_timer.isActive()  # type: ignore[attr-defined]
+
+        parent.pending = True
+        assert widget._parent_transition_running() is True  # type: ignore[attr-defined]
+        widget.on_parent_transition_work_pending(True)  # type: ignore[attr-defined]
+
+        assert widget._refreshing is True  # type: ignore[attr-defined]
+        assert widget._refresh_spinner_suspended_for_transition is True  # type: ignore[attr-defined]
+        assert not widget._refresh_spin_timer.isActive()  # type: ignore[attr-defined]
+        assert updates
+    finally:
+        widget.cleanup()
+        container.deleteLater()
+        parent.deleteLater()
+
+
+@pytest.mark.qt
 def test_reddit_cache_regeneration_defers_during_transition(qt_app, qtbot):  # noqa: ARG001
     """Reddit should keep blitting an old cache instead of regenerating during transitions."""
     from PySide6.QtGui import QPixmap
