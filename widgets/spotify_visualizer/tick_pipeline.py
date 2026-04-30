@@ -296,6 +296,16 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
     widget._devcurve_foreground_travel_rate = float(frame.get("foreground_travel_rate", 0.0))
     widget._devcurve_foreground_travel_pos = float(frame.get("foreground_travel_pos", 0.0))
     widget._devcurve_specular_travel_rate = float(frame.get("specular_travel_rate", 0.0))
+    current_specular_activity = float(
+        getattr(widget, "_devcurve_specular_activity_alpha", 1.0 if playing else 0.0)
+    )
+    target_specular_activity = 1.0 if playing else 0.0
+    fade_seconds = 0.85
+    blend = max(0.0, min(1.0, dt / fade_seconds))
+    widget._devcurve_specular_activity_alpha = (
+        current_specular_activity
+        + (target_specular_activity - current_specular_activity) * blend
+    )
 
     if is_viz_diagnostics_enabled():
         last_diag = float(getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0)

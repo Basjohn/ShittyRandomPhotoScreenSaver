@@ -481,6 +481,19 @@ def test_gmail_header_logo_adjust_controls_logo_and_header_text(qt_app):
         widget.cleanup()
 
 
+def test_gmail_brand_desaturation_is_prepared_before_paint(qt_app):
+    """No-unread header desaturation should not do image conversion during paint."""
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        assert widget._brand_pixmap is not None
+        assert widget._brand_pixmap_desaturated is not None
+        assert widget._ensure_desaturated_brand() is widget._brand_pixmap_desaturated
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_unread_and_read_envelopes_use_distinct_assets(qt_app):
     """Unread rows should use the white envelope, read rows the black/read envelope."""
     from datetime import datetime
@@ -574,3 +587,250 @@ def test_gmail_widget_cache_uses_display_order(qt_app):
         assert written_ids == ["read_newer", "unread_older", "older_read"]
     finally:
         widget.cleanup()
+
+
+def test_gmail_unchanged_fetch_skips_cache_write_and_repaint(qt_app):
+    """Polls that return identical visible data should not churn cache or repaint."""
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    writes = []
+    updates = []
+    try:
+        email = EmailMetadata(
+            id="same",
+            thread_id="thread",
+            sender="Sender",
+            subject="Same",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=False,
+        )
+        widget._emails = [email]
+        widget._unread_count = 0
+        widget._has_displayed_valid_data = True
+        widget._last_error = None
+        widget._write_email_cache_deferred = lambda emails: writes.append(list(emails))  # type: ignore[method-assign]
+        widget.update = lambda *args, **kwargs: updates.append("update")  # type: ignore[method-assign]
+
+        widget._on_emails_fetched([email], 0)
+
+        assert writes == []
+        assert updates == []
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_fetch_result_defers_visible_apply_during_parent_transition(qt_app):
+    """Fetch completion should not rewrite/cache/repaint the widget mid-transition."""
+    from datetime import datetime
+    from PySide6.QtWidgets import QWidget
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.running = True
+
+        def has_running_transition(self):
+            return self.running
+
+    parent = TransitionParent()
+    widget = GmailWidget(parent)
+    written_ids = []
+    update_calls = []
+    try:
+        email = EmailMetadata(
+            id="deferred",
+            thread_id="thread",
+            sender="Sender",
+            subject="Deferred",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=False,
+        )
+        widget._write_email_cache = lambda emails: written_ids.extend(e.id for e in emails)  # type: ignore[method-assign]
+        widget.update = lambda *args, **kwargs: update_calls.append("update")  # type: ignore[method-assign]
+
+        widget._on_emails_fetched([email], 0, 0)
+
+        assert widget._emails == []
+        assert written_ids == []
+        assert widget._deferred_fetch_result is not None
+
+        parent.running = False
+        widget._flush_deferred_fetch_result()
+
+        assert [item.id for item in widget._emails] == ["deferred"]
+        assert written_ids == ["deferred"]
+        assert update_calls
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
+def test_gmail_refresh_start_defers_during_parent_transition(qt_app):
+    """Refresh should not start spinner/network work while a display transition is active."""
+    from PySide6.QtWidgets import QWidget
+
+    from widgets.gmail_widget import GmailWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.running = True
+
+        def has_running_transition(self):
+            return self.running
+
+    parent = TransitionParent()
+    widget = GmailWidget(parent)
+    calls = []
+    try:
+        widget._set_refreshing = lambda refreshing: calls.append(("refreshing", refreshing))  # type: ignore[method-assign]
+
+        assert widget._fetch_emails() is True
+        assert widget._pending_refresh_after_transition is True
+        assert calls == []
+
+        parent.running = False
+        widget._fetch_emails = lambda **kwargs: calls.append(("fetch", kwargs)) or True  # type: ignore[method-assign]
+        widget._flush_deferred_refresh()
+
+        assert widget._pending_refresh_after_transition is False
+        assert calls == [("fetch", {"defer_for_transition": False})]
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
+def test_gmail_fetch_result_defers_during_parent_transition_pending(qt_app):
+    """The pre-transition image-load window should block visible Gmail apply work too."""
+    from datetime import datetime
+    from PySide6.QtWidgets import QWidget
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.pending = True
+
+        def has_transition_work_pending(self):
+            return self.pending
+
+        def has_running_transition(self):
+            return False
+
+    parent = TransitionParent()
+    widget = GmailWidget(parent)
+    try:
+        email = EmailMetadata(
+            id="pending",
+            thread_id="thread",
+            sender="Sender",
+            subject="Pending",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=False,
+        )
+
+        widget._on_emails_fetched([email], 0, 0)
+
+        assert widget._emails == []
+        assert widget._deferred_fetch_result is not None
+
+        parent.pending = False
+        widget._flush_deferred_fetch_result()
+
+        assert [item.id for item in widget._emails] == ["pending"]
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
+def test_gmail_widget_has_perf_instrumentation():
+    """Gmail should emit comparable widget perf metrics when perf logging is enabled."""
+    from pathlib import Path
+
+    source = Path("widgets/gmail_widget.py").read_text(encoding="utf-8")
+
+    assert 'widget_paint_sample(self, "gmail.paint")' in source
+    assert 'widget_timer_sample(self, "gmail.fetch.apply")' in source
+    assert 'widget_timer_sample(self, "gmail.cache.write")' in source
+    assert '"gmail.refresh.dispatch"' in source
+
+
+def test_gmail_cached_paint_reuses_stable_content(qt_app):
+    """Stable Gmail content should render once until invalidated."""
+    from PySide6.QtGui import QPixmap
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        widget.resize(420, 160)
+        widget._paint_stable_content = lambda painter: calls.append("stable")  # type: ignore[method-assign]
+        widget._paint_refresh_button = lambda painter: None  # type: ignore[method-assign]
+
+        target = QPixmap(widget.size())
+        target.fill()
+        widget.render(target)
+        widget.render(target)
+
+        assert calls == ["stable"]
+        assert widget._cache_invalidated is False
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_cache_invalidates_for_visual_settings_but_not_spinner(qt_app):
+    """Visual changes invalidate stable content; spinner ticks only repaint the icon."""
+    from PySide6.QtCore import QRect
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    updates = []
+    try:
+        widget._cache_invalidated = False
+        widget.update = lambda *args, **kwargs: updates.append(args)  # type: ignore[method-assign]
+
+        widget.set_sender_column_width(widget._sender_column_width + 1)
+        assert widget._cache_invalidated is True
+        assert updates
+
+        updates.clear()
+        widget._cache_invalidated = False
+        widget._refreshing = True
+        widget._refresh_hit_rect = QRect(100, 10, 22, 22)
+        widget._advance_refresh_spinner()
+
+        assert widget._cache_invalidated is False
+        assert updates and isinstance(updates[-1][0], QRect)
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_content_cache_regeneration_avoids_shadow_effect_mutation():
+    """The Gmail content cache must not touch fragile Qt shadow/effect paths."""
+    import inspect
+    from widgets.gmail_widget import GmailWidget
+
+    source = inspect.getsource(GmailWidget._regenerate_content_cache)
+
+    forbidden = (
+        "setGraphicsEffect",
+        "invalidate_overlay_effects",
+        ".hide(",
+        ".show(",
+        "setParent",
+        ".resize(",
+    )
+    for token in forbidden:
+        assert token not in source

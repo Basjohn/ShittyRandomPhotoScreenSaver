@@ -77,6 +77,7 @@ class DisplayManager(QObject):
         # Phase 3: Multi-display synchronization (lock-free)
         self._transition_ready_queue: Optional[SPSCQueue] = None
         self._sync_enabled = False
+        self._transition_work_pending = False
         
         # Monitor hotplug detection
         self.screen_count = 0
@@ -459,6 +460,37 @@ class DisplayManager(QObject):
         except Exception as e:
             logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
             return False
+        return False
+
+    def set_transition_work_pending(self, pending: bool) -> None:
+        """Mark all displays as having accepted image-change work before transition start."""
+        self._transition_work_pending = bool(pending)
+        try:
+            for display in self.displays:
+                setter = getattr(display, "set_transition_work_pending", None)
+                if callable(setter):
+                    setter(pending)
+        except Exception as e:
+            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
+
+    def has_transition_work_pending(self) -> bool:
+        """Return True if image-change work is pending or any transition is running."""
+        any_display_pending = False
+        try:
+            for display in self.displays:
+                try:
+                    has_pending = getattr(display, "has_transition_work_pending", None)
+                    if callable(has_pending) and has_pending():
+                        any_display_pending = True
+                        return True
+                except Exception as e:
+                    logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
+                    continue
+        except Exception as e:
+            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
+            return False
+        if not any_display_pending:
+            self._transition_work_pending = False
         return False
     
     # --- Phase 3: Multi-Display Synchronization (Lock-Free) ---

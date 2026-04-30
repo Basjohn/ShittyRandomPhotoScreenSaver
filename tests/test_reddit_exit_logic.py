@@ -143,6 +143,38 @@ class TestRedditClickRouting:
         assert reddit_handled is True
         assert reddit_url == url
 
+    @pytest.mark.qt
+    def test_reddit_refresh_control_does_not_request_link_exit(self, qt_app, qtbot):
+        """A handled Reddit non-link control click must not look like a URL click."""
+        from rendering.input_handler import InputHandler
+        from widgets.reddit_widget import RedditWidget
+
+        handler = InputHandler(self._DummyParent())
+
+        widget = RedditWidget()
+        qtbot.addWidget(widget)
+        widget.show()
+        widget.setGeometry(0, 0, 300, 200)
+        widget._show_refresh_spiral = True
+        widget._refresh_hit_rect = QRect(250, 10, 22, 22)
+        widget._trigger_manual_refresh = lambda: True  # type: ignore[method-assign]
+
+        event = MagicMock()
+        event.pos.return_value = QPoint(260, 20)
+        event.button.return_value = Qt.MouseButton.LeftButton
+
+        handled, reddit_handled, reddit_url = handler.route_widget_click(
+            event,
+            None,
+            None,
+            widget,
+            None,
+        )
+
+        assert handled is True
+        assert reddit_handled is False
+        assert reddit_url is None
+
 
 class TestCacheInvalidationMitigation:
     """Test that the Phase E cache corruption is mitigated by immediate exit."""

@@ -46,15 +46,15 @@ Do not reimplement these unless a defect is found:
 
 - Gmail dev gating has been removed; backend modules, settings UI, defaults, notification sound, and focused tests exist.
 - Nine-position support, single `gmail.width`, Media-style margins, measured header frame, and layout cleanup are implemented.
-- IMAP deep links, account slot, decimal thread-id conversion, row `open_url`, row/action hit separation, vertical action menu, and MC menu popup ownership are implemented.
+- IMAP deep links, account slot, decimal thread-id conversion, row `open_url`, row/action hit separation, vertical action menu, and MC menu popup ownership are implemented and runtime-confirmed in normal and MC builds except Archive.
 - Normal/main URL queueing wakes the helper bridge; MC row/header URL routing is patched.
 - Sender/subject cleanup exists: contraction-safe title case, sender cleanup/casing, sender word limit, subject word/char limits, fixed row columns, and adjustable sender-column width.
 - Refresh control exists: top-right spiral, click-to-refresh, blank-space double-click refresh, fetch-in-progress guard, and spinner idleness logic.
 - Date display modes exist: `relative`, `numeric`, `words`.
 - Cache/backend order was restored to selected-mailbox order; over-fetch/date-sort and unread-first cache ordering were removed after runtime mismatch.
 - Thread grouping is guarded by `gmail.group_threads`, default `False`.
-- Mark as Read/Unread, Spam, and Delete action paths work in runtime reports; Archive remains unresolved.
-- Gmail asset guard exists: required images are tested, Archive icon asset exists, and both Nuitka scripts include `images=images`.
+- Mark as Read/Unread, Spam, Delete, and link opening work in runtime reports; Archive remains the only unresolved action.
+- Gmail asset guard exists: required images are tested, Archive icon asset exists, both Nuitka scripts include `images=images`, and the widget resolves Gmail assets relative to the executable/module rather than only the process cwd for standard SCR launches.
 - Settings dialog creation flicker is runtime-confirmed fixed; bucket-open visual oddness remains under watch. Gmail load signal blocking is canonicalized, redundant `setVisible(...)` calls are reduced, styled combo popup-view creation is deferred until popup open, Gmail backend/auth refresh is deferred until after settings construction, and the failed hidden-bucket pre-polish approach has been removed.
 - IMAP Save & Test is non-blocking: supplied credentials are tested on an IO task, then saved only after success.
 - Backend-specific settings visibility now uses explicit hidden state, so OAuth text/Authorize controls stay hidden for IMAP even when settings are opened fresh.
@@ -70,7 +70,7 @@ Do not reimplement these unless a defect is found:
 - Gmail notification sound release support has source guardrails: both Nuitka builds include only `resources/tutuogg.ogg`, Qt multimedia support is declared, installers ship `tutuogg.ogg` to ProgramData, and the default sound resolver prefers ProgramData with script-mode fallback.
 - Gmail stays hidden when there is no authenticated account and no usable cache; it should not join the startup fade wave just to show an auth/empty placeholder.
 - Build scripts include only `resources/tutuogg.ogg`, not the whole `resources` folder, so local ignored OAuth files such as `client_secrets.json` are not bundled.
-- Gmail widget setters now skip no-op `update()` calls for repeated same-value settings, starting the resource-use cleanup before the final profiling pass.
+- Gmail widget setters now skip no-op `update()` calls for repeated same-value settings, header desaturation is precomputed with the loaded brand pixmap instead of being generated lazily from `paintEvent()`, refresh start/result apply defer while the parent display is actively transitioning, unchanged refresh results skip cache writes/repaints, cache writes are dispatched to IO when ThreadManager is available, and Gmail emits widget perf metrics for paint, refresh dispatch, result apply/error apply, and cache writes.
 
 ## 4. Active Priorities
 
@@ -150,16 +150,16 @@ Tasks:
 
 Known runtime state:
 
-- Main/normal build: Gmail links can exit screensaver but have historically failed to navigate to the target address.
-- MC build: subject links currently work.
-- Gmail normal/main must use the same helper/task-scheduler path as Reddit.
-- Gmail MC must use the same direct MC URL path as Reddit MC, not the helper bridge.
+- Main/normal build: Gmail links now navigate correctly in runtime testing.
+- MC build: Gmail links now navigate correctly in runtime testing.
+- Gmail normal/main must keep using the same helper/task-scheduler path as Reddit.
+- Gmail MC must keep using the same direct MC URL path as Reddit MC, not the helper bridge.
 
 Tasks:
 
-- [ ] Runtime-validate normal/main Gmail row and header clicks after the helper wake patch.
-- [ ] Runtime-validate MC Gmail row and header clicks after central routing.
-- [ ] Use `/logs` when failures are reported; keep logs sanitized.
+- [x] Runtime-validate normal/main Gmail row and header clicks after the helper wake patch.
+- [x] Runtime-validate MC Gmail row and header clicks after central routing.
+- [x] Use `/logs` when failures are reported; keep logs sanitized.
 - [ ] Low-priority shared stretch: investigate opening Gmail/Reddit links on the browser window/process on monitor index `0`, with safe fallback and no continuous polling.
 
 #### B2. Action menu effects
@@ -170,17 +170,19 @@ Known runtime state:
 - Main dot menu opens and clicks register.
 - Mark as Unread works in both builds.
 - Spam and Delete work.
-- Archive still fails despite local Inbox-label removal and Gmail IMAP MOVE attempts.
+- Archive still fails in runtime, isolated from the rest of the menu actions.
+- Online source check: Gmail's current IMAP extension docs show labels are exposed through `X-GM-LABELS` and include `\Inbox`; implementation now removes `\Inbox` first and keeps hard-named All Mail MOVE only as fallback.
 
 Tasks:
 
-- [ ] Keep Archive marked as a later online research task. Do not keep guessing locally.
-- [ ] Research Gmail IMAP Archive semantics with primary/current sources before changing more code:
+- [x] Keep Archive isolated instead of reopening working link/menu behavior.
+- [x] Research Gmail IMAP Archive semantics with primary/current sources before changing more code:
   - Gmail special-use mailbox discovery
   - `[Gmail]/All Mail` localization/namespace behavior
   - UID validity after selected label views
   - difference between removing `\Inbox`, category labels, and moving to All Mail
-- [ ] Add a diagnostic harness only if sources do not settle the behavior.
+- [ ] Runtime-validate Archive after the `-X-GM-LABELS (\Inbox)` first-pass change.
+- [ ] Add a diagnostic harness only if Archive still fails after runtime validation.
 - [ ] Preserve working Mark Read/Unread, Spam, and Delete semantics.
 
 ### C. Display Quality
@@ -258,9 +260,21 @@ Tasks:
 
 - [x] Source-audit Gmail paint path: no network, credential checks, cache writes, or sound setup are performed from `paintEvent()`.
 - [x] Confirm refresh spinner/timers run only while refreshing and stop on cleanup.
-- [ ] Confirm not causing/contributing to UI Thread choking, if so migrate feasible items to another thread.
-- [~] Confirm Gmail does not repaint every frame/tick when data and animation state are unchanged; first-pass setter no-op guards are implemented.
-- [ ] Profile `paintEvent()` with 10 rows; target under 5ms on a normal 1080p desktop.
+- [x] Precompute header desaturation during asset loading so no pixmap conversion is triggered by paint.
+- [x] Prevent refresh-start and fetch-completion UI churn during active/pending transitions: spinner start, network submission, visible result apply, cache write, layout height recompute, repaint, unread signal, and sound detection now wait until the parent transition is idle. This includes the image-load/pre-start window after a transition request is accepted but before GL animation reports as running.
+- [x] Skip cache writes and repaint when a refresh returns the same visible email list and unread count.
+- [x] Dispatch Gmail cache writes through the IO thread pool when ThreadManager is available; fall back to synchronous write only when the thread manager is unavailable.
+- [x] Add Gmail to `perf_widgets.log` instrumentation:
+  - `gmail.paint`
+  - `gmail.refresh.dispatch`
+  - `gmail.fetch.apply`
+  - `gmail.fetch.error_apply`
+  - `gmail.cache.write`
+- [x] Add a DPR-aware stable-content paint cache for Gmail so idle paints blit cached header/rows/state while the refresh spiral remains live and uncached.
+- [x] Keep Gmail cache regeneration shadow-safe: no graphics-effect mutation, hide/show, reparenting, resize, or overlay-effect invalidation occurs in the cache path; source guard coverage exists for this.
+- [~] Confirm not causing/contributing to UI Thread choking; remaining risk is normal idle-time sound setup/play and live perf metrics from the newly added Gmail buckets.
+- [~] Confirm Gmail does not repaint every frame/tick when data and animation state are unchanged; first-pass setter no-op guards and stable-content caching are implemented.
+- [ ] Runtime-profile `gmail.paint` with 10 rows from `perf_widgets.log`; target under 5ms on a normal 1080p desktop.
 
 #### D3. Build/package validation
 
@@ -268,17 +282,19 @@ Tasks:
 
 - [x] Remove Devgate from Gmail and make it a normal feature.
 - [x] Source-level tests verify Gmail assets exist and normal/MC Nuitka scripts include `images=images`.
+- [x] Fix standard build Gmail logo lookup: widget asset loading no longer depends only on cwd, which can be System32 for `.scr` launches.
 - [x] Source-level tests verify normal/MC Nuitka scripts include notification sound resource packaging, Qt multimedia support, and installer ProgramData sound shipping.
 - [x] Corrected source-level build guard: normal/MC Nuitka scripts include only `resources/tutuogg.ogg`, not the entire `resources` directory.
 - [x] Build runner preflight fails clearly if `resources/tutuogg.ogg` is missing.
 - [x] Confirmed tracked files do not contain the user's Gmail address, app password, Gmail credential `.enc`, or OAuth client secret JSON.
-- [ ] Build or inspect final normal/MC artifacts and verify Gmail brand, envelope, Archive, Spam, Trash, Mark Read/Unread, and refresh visuals appear.
+- [ ] Rebuild/inspect final normal artifact and verify the Gmail brand logo now appears; MC/script already validated.
+- [ ] Build or inspect final normal/MC artifacts and verify envelope, Archive, Spam, Trash, Mark Read/Unread, and refresh visuals appear.
 - [ ] Build or inspect final normal/MC artifacts and verify notification sound playback works from ProgramData.
 - [ ] Continue ensuring no `client_secrets.json`, token, app password, `.enc`, `.pickle`, cache, or raw credential artifacts are tracked or bundled by accident.
 
 ## 6. Research Items
 
-- Archive semantics in Gmail IMAP: online research required.
+- Archive semantics in Gmail IMAP: source research completed; runtime validation still required for the label-removal first pass.
 - Thread grouping/conversation semantics in Gmail IMAP: online research required.
 - [DEFERRED] OAuth production readiness: Google restricted-scope verification, release policy, and public-build credential policy.
 - Browser monitor placement for Gmail/Reddit links: shared low-priority stretch.

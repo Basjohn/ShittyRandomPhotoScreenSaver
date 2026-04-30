@@ -484,6 +484,12 @@ def load_and_display_image_async(
             if data is None:
                 logger.warning(f"[ASYNC] Image processing failed, retrying (attempt {retry_count + 1}/10)")
                 engine._loading_in_progress = False
+                try:
+                    pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+                    if callable(pending):
+                        pending(False)
+                except Exception:
+                    logger.debug("[ASYNC] Failed to clear transition pending state", exc_info=True)
                 if retry_count < 10 and engine.image_queue:
                     next_meta = engine.image_queue.next()
                     if next_meta:
@@ -494,6 +500,11 @@ def load_and_display_image_async(
             is_same_image = data.get('same_image', True)
 
             displays = engine.display_manager.displays if engine.display_manager else []
+            for i, display in enumerate(displays):
+                if i not in processed:
+                    setter = getattr(display, "set_transition_work_pending", None)
+                    if callable(setter):
+                        setter(False)
             displayed_paths = []
 
             # PERF: Stagger transition starts by 100ms per display to avoid
@@ -542,10 +553,23 @@ def load_and_display_image_async(
 
             schedule_prefetch(engine)
             engine._loading_in_progress = False
+            try:
+                if engine.display_manager and not engine.display_manager.has_transition_work_pending():
+                    pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+                    if callable(pending):
+                        pending(False)
+            except Exception:
+                logger.debug("[ASYNC] Failed to reconcile transition pending state", exc_info=True)
 
         except Exception as e:
             logger.exception(f"[ASYNC] UI callback failed: {e}")
             engine._loading_in_progress = False
+            try:
+                pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+                if callable(pending):
+                    pending(False)
+            except Exception:
+                logger.debug("[ASYNC] Failed to clear transition pending state", exc_info=True)
 
     # Submit to COMPUTE pool for processing
     try:
@@ -685,9 +709,20 @@ def load_and_display_image_async_with_metas(
             data = result.result if result and result.success else None
             if data is None:
                 engine._loading_in_progress = False
+                try:
+                    pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+                    if callable(pending):
+                        pending(False)
+                except Exception:
+                    logger.debug("[ASYNC-PREV] Failed to clear transition pending state", exc_info=True)
                 return
             processed = data['processed']
             displays_list = engine.display_manager.displays if engine.display_manager else []
+            for i, display in enumerate(displays_list):
+                if i not in processed:
+                    setter = getattr(display, "set_transition_work_pending", None)
+                    if callable(setter):
+                        setter(False)
             stagger_ms = TRANSITION_STAGGER_MS
             displayed = []
             for i, display in enumerate(displays_list):
@@ -712,9 +747,22 @@ def load_and_display_image_async_with_metas(
                 engine.image_changed.emit(displayed[0])
                 logger.info("[ASYNC-PREV] Previous images displayed on %d displays", len(displayed))
             engine._loading_in_progress = False
+            try:
+                if engine.display_manager and not engine.display_manager.has_transition_work_pending():
+                    pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+                    if callable(pending):
+                        pending(False)
+            except Exception:
+                logger.debug("[ASYNC-PREV] Failed to reconcile transition pending state", exc_info=True)
         except Exception as e:
             logger.exception("[ASYNC-PREV] UI callback failed: %s", e)
             engine._loading_in_progress = False
+            try:
+                pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+                if callable(pending):
+                    pending(False)
+            except Exception:
+                logger.debug("[ASYNC-PREV] Failed to clear transition pending state", exc_info=True)
 
     try:
         engine.thread_manager.submit_compute_task(
@@ -756,6 +804,12 @@ def load_and_display_image(
         if not pixmap:
             logger.warning(f"[FALLBACK] Image load failed, attempting next image (retry {retry_count + 1}/10)")
             engine._loading_in_progress = False
+            try:
+                pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+                if callable(pending):
+                    pending(False)
+            except Exception:
+                logger.debug("[FALLBACK] Failed to clear transition pending state", exc_info=True)
 
             if retry_count < 10 and engine.image_queue:
                 next_image = engine.image_queue.next()
@@ -803,11 +857,23 @@ def load_and_display_image(
         schedule_prefetch(engine)
 
         engine._loading_in_progress = False
+        try:
+            pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+            if callable(pending):
+                pending(False)
+        except Exception:
+            logger.debug("[FALLBACK] Failed to reconcile transition pending state", exc_info=True)
         return True
 
     except Exception as e:
         logger.exception(f"Load and display failed: {e}")
         engine._loading_in_progress = False
+        try:
+            pending = getattr(engine.display_manager, "set_transition_work_pending", None)
+            if callable(pending):
+                pending(False)
+        except Exception:
+            logger.debug("[FALLBACK] Failed to clear transition pending state", exc_info=True)
         return False
 
 

@@ -147,3 +147,172 @@ def test_reddit_handle_click_header_opens_subreddit(qt_app, qtbot, monkeypatch):
 
     assert handled is True
     assert opened == ["https://www.reddit.com/r/wallpapers"]
+
+
+@pytest.mark.qt
+def test_reddit_manual_refresh_defers_during_parent_transition(qt_app, qtbot):  # noqa: ARG001
+    """Refresh spiral work should wait until the parent transition is idle."""
+    from PySide6.QtWidgets import QWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.running = True
+
+        def has_running_transition(self):
+            return self.running
+
+    parent = TransitionParent()
+    widget = RedditWidget(parent)
+    qtbot.addWidget(parent)
+    qtbot.addWidget(widget)
+    calls = []
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        assert widget._trigger_manual_refresh() is True  # type: ignore[attr-defined]
+        assert widget._pending_refresh_after_transition is True  # type: ignore[attr-defined]
+        assert calls == []
+
+        parent.running = False
+        widget._flush_deferred_refresh()  # type: ignore[attr-defined]
+
+        assert widget._pending_refresh_after_transition is False  # type: ignore[attr-defined]
+        assert calls == [{}]
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
+@pytest.mark.qt
+def test_reddit_fetch_result_defers_apply_during_parent_transition(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    """Fetched Reddit data should not invalidate/repaint content mid-transition."""
+    from PySide6.QtWidgets import QWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.running = True
+
+        def has_running_transition(self):
+            return self.running
+
+    parent = TransitionParent()
+    widget = RedditWidget(parent)
+    qtbot.addWidget(parent)
+    qtbot.addWidget(widget)
+    try:
+        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: None)
+        widget._fetch_in_progress = True  # type: ignore[attr-defined]
+        posts_data = [
+            {
+                "title": "A normal post",
+                "url": "https://example.com/post",
+                "score": 1,
+                "created_utc": time.time(),
+            }
+        ]
+
+        widget._on_feed_fetched(posts_data)  # type: ignore[attr-defined]
+
+        assert widget._fetch_in_progress is False  # type: ignore[attr-defined]
+        assert widget._posts == []  # type: ignore[attr-defined]
+        assert widget._deferred_posts_data == posts_data  # type: ignore[attr-defined]
+
+        parent.running = False
+        widget._flush_deferred_refresh()  # type: ignore[attr-defined]
+
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert widget._deferred_posts_data is None  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
+@pytest.mark.qt
+def test_reddit_fetch_result_defers_apply_during_parent_transition_pending(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    """Fetched Reddit data should wait during the accepted-before-running transition window."""
+    from PySide6.QtWidgets import QWidget
+
+    class TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.pending = True
+
+        def has_transition_work_pending(self):
+            return self.pending
+
+        def has_running_transition(self):
+            return False
+
+    parent = TransitionParent()
+    widget = RedditWidget(parent)
+    qtbot.addWidget(parent)
+    qtbot.addWidget(widget)
+    try:
+        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: None)
+        posts_data = [
+            {
+                "title": "A pending post",
+                "url": "https://example.com/post",
+                "score": 1,
+                "created_utc": time.time(),
+            }
+        ]
+
+        widget._on_feed_fetched(posts_data)  # type: ignore[attr-defined]
+
+        assert widget._posts == []  # type: ignore[attr-defined]
+        assert widget._deferred_posts_data == posts_data  # type: ignore[attr-defined]
+
+        parent.pending = False
+        widget._flush_deferred_refresh()  # type: ignore[attr-defined]
+
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
+@pytest.mark.qt
+def test_reddit_cache_regeneration_defers_during_transition(qt_app, qtbot):  # noqa: ARG001
+    """Reddit should keep blitting an old cache instead of regenerating during transitions."""
+    from PySide6.QtGui import QPixmap
+    from PySide6.QtWidgets import QWidget
+    from widgets.reddit_components import RedditPost
+
+    class TransitionParent(QWidget):
+        def has_running_transition(self):
+            return True
+
+    parent = TransitionParent()
+    widget = RedditWidget(parent)
+    qtbot.addWidget(parent)
+    qtbot.addWidget(widget)
+    calls = []
+    try:
+        widget.resize(300, 180)
+        widget._posts = [  # type: ignore[attr-defined]
+            RedditPost(
+                title="Cached",
+                url="https://example.com/cached",
+                score=1,
+                created_utc=time.time(),
+            )
+        ]
+        widget._cached_content_pixmap = QPixmap(widget.size())  # type: ignore[attr-defined]
+        widget._cached_content_pixmap.fill()  # type: ignore[attr-defined]
+        widget._cache_invalidated = True  # type: ignore[attr-defined]
+        widget._regenerate_cache = lambda size: calls.append(size)  # type: ignore[method-assign]
+        widget._paint_refresh_button = lambda painter: None  # type: ignore[method-assign]
+
+        target = QPixmap(widget.size())
+        target.fill()
+        widget.render(target)
+
+        assert calls == []
+        assert widget._cache_invalidated is True  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+        parent.deleteLater()

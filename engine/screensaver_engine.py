@@ -848,6 +848,12 @@ class ScreensaverEngine(QObject):
                 return False
             # Set flag inside lock to make check-and-set atomic
             self._loading_in_progress = True
+            try:
+                mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
+                if callable(mark_pending):
+                    mark_pending(True)
+            except Exception as e:
+                logger.debug("[TRANSITION] Failed to mark transition work pending: %s", e)
         
         try:
             # Get next image from queue
@@ -858,6 +864,12 @@ class ScreensaverEngine(QObject):
                 self.display_manager.show_error("No images available")
                 with self._loading_lock:
                     self._loading_in_progress = False
+                try:
+                    mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
+                    if callable(mark_pending):
+                        mark_pending(False)
+                except Exception as e:
+                    logger.debug("[TRANSITION] Failed to clear transition work pending: %s", e)
                 return False
             
             self._current_image = image_meta
@@ -874,6 +886,12 @@ class ScreensaverEngine(QObject):
         except Exception as e:
             logger.exception(f"Show next image failed: {e}")
             self._loading_in_progress = False
+            try:
+                mark_pending = getattr(self.display_manager, "set_transition_work_pending", None)
+                if callable(mark_pending):
+                    mark_pending(False)
+            except Exception as pending_exc:
+                logger.debug("[TRANSITION] Failed to clear transition work pending: %s", pending_exc)
             return False
     
     def _load_image_via_worker(

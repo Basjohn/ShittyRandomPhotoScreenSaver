@@ -228,6 +228,7 @@ class DisplayWidget(QWidget):
         self._current_transition_started_at: float = 0.0
         self._current_transition_name: Optional[str] = None
         self._current_transition_first_run: bool = False
+        self._transition_work_pending: bool = False
         self._warmed_transition_types: Set[str] = set()
         self._prewarmed_transition_types: Set[str] = set()
         self._last_transition_name: Optional[str] = None
@@ -778,6 +779,7 @@ class DisplayWidget(QWidget):
     def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
         """Display a new image with transition (backward-compatible sync version)."""
         if pixmap.isNull():
+            self.set_transition_work_pending(False)
             logger.warning("[FALLBACK] Received null pixmap in set_image")
             self.error_message = "Failed to load image"
             self.current_pixmap = None
@@ -1583,6 +1585,14 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return False
 
+    def set_transition_work_pending(self, pending: bool) -> None:
+        """Mark that an accepted image change is preparing to start a transition."""
+        self._transition_work_pending = bool(pending)
+
+    def has_transition_work_pending(self) -> bool:
+        """Return True from image-change request acceptance through transition start."""
+        return bool(getattr(self, "_transition_work_pending", False)) or self.has_running_transition()
+
     def get_transition_snapshot(self) -> Dict[str, Any]:
         """Return lightweight metrics about the active transition, if any."""
         now_wall = time.time()
@@ -1591,6 +1601,7 @@ class DisplayWidget(QWidget):
             "name": None,
             "elapsed": None,
             "first_run": False,
+            "pending": bool(getattr(self, "_transition_work_pending", False)),
             "idle_age": None,
             "last_transition": self._last_transition_name,
         }

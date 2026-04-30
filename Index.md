@@ -57,6 +57,7 @@ Living map of the current SRPSS codebase.
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport and render-state storage |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping |
+| Spline Curve runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | DevCurve/Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |
 
 ## Rendering System
@@ -66,8 +67,9 @@ Living map of the current SRPSS codebase.
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync |
 | Startup policy | `rendering/overlay_startup_policy.py` | Primary and secondary startup timing |
-| Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing |
+| Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link Reddit controls separate from URL clicks so refresh controls do not trigger normal-build browser exits |
 | GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface |
+| Transition busy state | `rendering/display_widget.py` / `engine/display_manager.py` | Pending/active transition reporting used by overlay widgets to defer refresh/cache churn during image-load and GL transition windows |
 
 ## Gmail Integration
 
@@ -81,7 +83,7 @@ Living map of the current SRPSS codebase.
 | Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, date formatting modes, formatting/text cleanup utilities, punctuation-aware shortening, email cache |
 | Settings UI | `ui/tabs/widgets_tab_gmail.py` | Default-open Backend bucket, credentials, non-blocking IMAP Save & Test, widget settings, single Gmail width control, date display mode, sender/subject cleanup controls, two-row Text Limits grid, header logo px adjustment after Margin, sender column width, default-off grouping toggle, deferred auth refresh, Gmail load signal-block/visibility flicker guardrails |
 | Settings cache | `ui/settings_dialog_cache.py` | Settings dialog cached defaults/font data; cache generation includes canonical defaults modules so Gmail defaults do not go stale |
-| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions, row hit targets, Media-style layout margins/header frame, read/unread envelope selection, central URL click targets, refresh control, action menu popup ownership, Gmail image/action icon manifest, no-op repaint guards |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions, row hit targets, Media-style layout margins/header frame, read/unread envelope selection, central URL click targets, refresh control, action menu popup ownership, build-safe Gmail image/action icon resolution, precomputed header desaturation, pending/active transition-aware refresh/result deferral, async cache writes, DPR-aware stable-content paint cache with shadow/effect guardrails, unchanged-result/no-op repaint guards, `perf_widgets.log` instrumentation |
 | Asset guard tests | `tests/test_gmail_assets.py` | Verifies required Gmail image assets exist and normal/MC Nuitka scripts include only the notification OGG plus Qt multimedia requirements |
 
 ## Source Ingestion

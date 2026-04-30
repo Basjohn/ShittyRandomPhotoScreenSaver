@@ -1165,7 +1165,11 @@ def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['devcurve_foreground_shadow_darken'] = float(getattr(widget, '_devcurve_foreground_shadow_darken', 0.42))
     extra['devcurve_foreground_shadow_offset'] = float(getattr(widget, '_devcurve_foreground_shadow_offset', 0.10))
     extra['devcurve_foreground_specular_enabled'] = bool(getattr(widget, '_devcurve_foreground_specular_enabled', False))
-    extra['devcurve_foreground_specular_alpha'] = float(getattr(widget, '_devcurve_foreground_specular_alpha', 0.78))
+    specular_activity = max(0.0, min(1.0, float(getattr(widget, '_devcurve_specular_activity_alpha', 1.0))))
+    extra['devcurve_foreground_specular_alpha'] = (
+        float(getattr(widget, '_devcurve_foreground_specular_alpha', 0.78))
+        * specular_activity
+    )
     extra['devcurve_foreground_specular_width'] = float(getattr(widget, '_devcurve_foreground_specular_width', 0.022))
     extra['devcurve_foreground_specular_offset'] = float(getattr(widget, '_devcurve_foreground_specular_offset', 0.028))
     extra['devcurve_foreground_specular_crest_bias'] = float(getattr(widget, '_devcurve_foreground_specular_crest_bias', 1.05))

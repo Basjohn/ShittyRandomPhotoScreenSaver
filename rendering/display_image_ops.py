@@ -57,6 +57,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
     """
     # If a transition is already running, skip this call (single-skip policy)
     if widget.has_running_transition():
+        if hasattr(widget, "set_transition_work_pending"):
+            widget.set_transition_work_pending(False)
         widget._transition_skip_count += 1
         logger.debug(
             "Transition in progress - skipping image request (skip_count=%s)",
@@ -65,6 +67,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         return
 
     if processed_pixmap.isNull():
+        if hasattr(widget, "set_transition_work_pending"):
+            widget.set_transition_work_pending(False)
         logger.warning("[FALLBACK] Received null processed pixmap")
         widget.error_message = "Failed to load image"
         widget.current_pixmap = None
@@ -240,6 +244,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     success = transition.start(widget.previous_pixmap, new_pixmap, widget)
                 
                 if success:
+                    if hasattr(widget, "set_transition_work_pending"):
+                        widget.set_transition_work_pending(False)
                     widget._current_transition = transition
                     widget._current_transition_overlay_key = overlay_key
                     widget._current_transition_started_at = time.monotonic()
@@ -303,6 +309,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
             widget.current_image_path = image_path
             widget.image_displayed.emit(image_path)
             widget._has_rendered_first_frame = True
+            if hasattr(widget, "set_transition_work_pending"):
+                widget.set_transition_work_pending(False)
 
 def _on_transition_finished(
     widget,

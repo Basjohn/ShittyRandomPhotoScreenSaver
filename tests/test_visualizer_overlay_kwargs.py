@@ -11,6 +11,7 @@ from widgets.spotify_visualizer.audio_worker import VisualizerMode
 from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
 from widgets.spotify_visualizer.energy_bands import EnergyBands
 from widgets.spotify_visualizer.renderers.blob import get_uniform_names as blob_uniform_names
+from widgets.spotify_visualizer.tick_pipeline import dispatch_devcurve_field
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
@@ -120,6 +121,60 @@ def test_devcurve_gpu_kwargs_include_curve_payload(qt_app):
     assert "devcurve_specular_slot1" in extras
     assert "devcurve_specular_slot2" in extras
     assert "devcurve_outline_alpha" not in extras
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_devcurve_gpu_kwargs_apply_runtime_specular_activity_alpha(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+
+    stub_engine = _StubEngine()
+    widget._devcurve_foreground_specular_alpha = 0.8
+    widget._devcurve_specular_activity_alpha = 0.25
+
+    extras = build_gpu_push_extra_kwargs(widget, "devcurve", stub_engine)
+
+    assert extras["devcurve_foreground_specular_alpha"] == pytest.approx(0.2)
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_devcurve_specular_activity_fades_down_while_paused(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+
+    widget._engine = _StubEngine()
+    widget.set_visualization_mode(VisualizerMode.DEVCURVE)
+    widget._spotify_playing = False
+    widget._devcurve_specular_activity_alpha = 1.0
+
+    dispatch_devcurve_field(widget, 10.0)
+    first = widget._devcurve_specular_activity_alpha
+    dispatch_devcurve_field(widget, 10.1)
+
+    assert 0.0 <= widget._devcurve_specular_activity_alpha < first < 1.0
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_devcurve_specular_activity_fades_up_when_playing(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+
+    widget._engine = _StubEngine()
+    widget.set_visualization_mode(VisualizerMode.DEVCURVE)
+    widget._spotify_playing = True
+    widget._devcurve_specular_activity_alpha = 0.0
+
+    dispatch_devcurve_field(widget, 20.0)
+    first = widget._devcurve_specular_activity_alpha
+    dispatch_devcurve_field(widget, 20.1)
+
+    assert 0.0 < first < widget._devcurve_specular_activity_alpha <= 1.0
 
     widget.deleteLater()
 

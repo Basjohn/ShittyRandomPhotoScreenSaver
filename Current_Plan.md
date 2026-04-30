@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-04-29
+Last updated: 2026-04-30
 
 This file tracks active work and near-term validation.
 
@@ -26,8 +26,8 @@ This file tracks active work and near-term validation.
   - [x] Phase B interaction patch implemented: normal/main Gmail URL queueing now refreshes the helper session ticket and explicitly wakes the Reddit helper runtime/task-scheduler path after a successful ProgramData enqueue.
   - [x] Phase B IMAP action slice implemented: widget dispatches IMAP menu actions using `imap_uid`; IMAP mark-read/archive/spam/trash now use UID STORE/Gmail label operations with focused tests.
   - [x] Phase B action-menu follow-up implemented: Mark as Unread added for REST/IMAP, Archive now has fallback icon coverage, and failed menu actions log sanitized warnings.
-  - [x] Phase B action isolation confirmed by runtime: Mark as Unread works in both builds; Spam and Delete work; Archive alone fails.
-  - [ ] Phase B actions later: Archive still fails while Mark as Unread, Spam, and Delete work. Move Archive to an online research task before further changes.
+  - [x] Phase B action isolation confirmed by runtime: normal/MC link opening works; Mark as Unread, Spam, and Delete work in both builds; Archive alone fails.
+  - [~] Phase B Archive follow-up: current Gmail IMAP source research supports removing `\Inbox` via `-X-GM-LABELS` before any hard-named All Mail MOVE fallback; code now follows that order and needs runtime validation.
   - [x] Phase C settings flicker mitigation implemented: Gmail load uses a canonical comprehensive signal-block list, parent Widgets-tab load imports the same list, and Gmail panel/button visibility updates now skip redundant `setVisible(...)` calls.
   - [x] Phase C IMAP Save & Test non-blocking slice implemented: supplied credentials are tested on an IO task, saved only after success, and UI labels/buttons/popups are updated via the UI-thread helper.
   - [x] Phase C backend-specific auth UI fixed: OAuth testing text/Authorize controls are explicitly hidden for IMAP even when settings opens fresh with a hidden parent page.
@@ -50,11 +50,16 @@ This file tracks active work and near-term validation.
   - [x] Phase C/D asset and repaint pass implemented: Gmail envelope/read PNG sources are clean 64px transparent black-and-white assets, unread rows select the unread envelope, text-limit word counting ignores punctuation-only separators, Text Limits uses a two-row grid, and Gmail widget same-value setters now skip no-op repaints.
   - [x] Phase E notification sound packaging guardrails implemented: default sound resolver prefers ProgramData with script fallback, normal/MC builds include only `resources/tutuogg.ogg` plus Qt multimedia support, installers ship `tutuogg.ogg` to ProgramData, and build runner preflight fails if the source OGG is missing.
   - [x] Phase E defaults/security audit: Reddit refresh spiral is default-on through canonical defaults/SST exports, Gmail defaults are present for normal and MC, tracked files were checked for Gmail credentials, and Gmail no-auth/no-cache activation no longer requests fade-in.
-  - [ ] Phase E later: online research for Archive semantics and Gmail grouping/sender-swapping; final packaged-build runtime validation for Gmail assets.
-  - [ ] Phase E later: resource-use audit for over-painting/over-updating/per-tick waste; stretch investigation for opening Gmail/Reddit links on the browser window/process on lowest-index monitor with safe fallback.
+  - [~] Phase E packaged asset follow-up: standard build Gmail logo was missing at runtime because asset lookup could depend on cwd; Gmail image/action assets now resolve via cwd, executable parent, then module/repo root. Rebuild/runtime validation still required for the normal artifact.
+  - [ ] Phase E later: online research for Gmail grouping/sender-swapping; final packaged-build runtime validation for Gmail assets.
+  - [~] Phase E resource-use audit: source/log pass confirms transition frames are already spike-prone, so Gmail now defers refresh start and result apply while the parent display is pending/starting/running a transition, skips unchanged-result cache writes/repaints, sends cache writes to IO when ThreadManager is available, keeps refresh timers idle unless refreshing, avoids no-op setter repaints, precomputes header desaturation outside paint, renders stable Gmail content through a DPR-aware content pixmap cache without touching Qt shadow/effect paths, and emits `perf_widgets.log` metrics for Gmail paint/refresh/apply/cache buckets. Remaining target is runtime review of those Gmail buckets with 10 rows and idle-time sound cost.
   - [x] Phase B/D interaction patch implemented: Gmail action-menu clicks keep a live QMenu reference, use a topmost popup, and defer immediate MC focus restoration so the popup can receive clicks.
-  - [ ] Phase B/D interaction validation next: runtime-validate normal/main helper wake after exit and MC vertical action-menu opening/clickability. Keep these open until tested in the real builds.
-  - [ ] Phase E next: secure-desktop/manual URL validation, paint/resource profiling, repo credential hygiene, archive deprecation note.
+  - [x] Phase B/D interaction validation: runtime testing confirms Gmail link clicking works in normal and MC, and dot-menu opening/clicking works except Archive effect.
+  - [ ] Phase E next: Archive runtime diagnosis, paint/resource profiling, and archive diagnostic harness only if label-removal still fails.
+- **REDDIT WIDGET**
+  - [x] Refresh spiral click classification fixed: non-link Reddit controls can consume clicks without setting `reddit_handled`, so the main build no longer exits as though a URL was clicked.
+  - [x] Refresh spiral now queues a guarded Reddit refresh through the existing fetch path, respects fetch-in-progress, defers refresh start/result apply while parent transitions are pending/starting/running, and defers paint-cache regeneration during transitions when an old cache can be blitted.
+  - [ ] Runtime-validate Reddit spiral refresh in normal and MC builds: no link-exit unless a real URL is clicked, one queued refresh after transition idle, spinner stops cleanly.
 - Investigate MuteButtonWidget fade-in race with `invalidate_overlay_effects` (~1/10 failure).
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
 
@@ -131,4 +136,4 @@ These are ticking bombs even if not the U-05 root cause. Fix after U-05 is resol
 3. Deferred Winlogon-targeted automation pass: compare `S` path vs media path evidence only after MC focused behavior is understood.
 4. Add a transition-distribution logger that counts transition types over a session and reports skew at shutdown.
 5. Asses what use "card_height.py" is and why we do not simply have a logical centralized sizing system for all visualizer modes while preventing bleed or complex interactions? Basing it on multipliers is bizarre.
-6. For Spline Wave Visualizer, add option that specular fades out on idle and fades in on play.
+6. [x] For Spline Curve/DevCurve, specular now fades out while idle/paused and fades back in when playback resumes using the runtime specular alpha multiplier rather than shader reshaping or preset value enforcement.

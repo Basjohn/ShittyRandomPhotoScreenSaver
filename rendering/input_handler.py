@@ -786,9 +786,12 @@ class InputHandler(QObject):
                         if isinstance(result, str) and result:
                             url = result
                         elif result:
-                            # Legacy behaviour: handle_click already opened the URL
+                            # Non-link Reddit controls, such as the refresh
+                            # spiral, can consume the click without producing
+                            # a URL. Do not mark these as reddit_handled or
+                            # the main build will exit as though a link was
+                            # clicked.
                             handled = True
-                            reddit_handled = True
                             break
                     if url:
                         handled = True

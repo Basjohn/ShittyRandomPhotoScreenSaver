@@ -329,12 +329,15 @@ class GmailImapClient:
         )
 
     def archive_message(self, message_id: str) -> bool:
-        """Archive a Gmail IMAP message by moving it to All Mail."""
+        """Archive a Gmail IMAP message by removing the Inbox label."""
         def _archive(conn: imaplib.IMAP4_SSL, uid: str) -> bool:
-            moved = self._uid_move(conn, uid, '"[Gmail]/All Mail"')
-            if moved:
+            # Gmail treats labels as IMAP folders. Archiving is the removal of
+            # the Inbox label; moving to All Mail is mailbox-name dependent and
+            # can report success without matching Gmail's Archive button.
+            removed = self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)")
+            if removed:
                 return True
-            return self._uid_store(conn, uid, "-X-GM-LABELS", r"(\Inbox)")
+            return self._uid_move(conn, uid, '"[Gmail]/All Mail"')
 
         return self._run_uid_action(
             message_id,

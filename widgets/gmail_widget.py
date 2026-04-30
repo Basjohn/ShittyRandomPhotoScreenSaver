@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import threading
 import math
+import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -25,6 +27,7 @@ from core.gmail.gmail_backend import GmailBackend
 from core.gmail.gmail_client import EmailMetadata, GmailLabel
 from core.gmail.gmail_deeplinks import gmail_inbox_url
 from core.logging.logger import get_logger
+from core.performance import record_widget_timer_result, widget_paint_sample, widget_timer_sample
 from core.audio.sound_paths import default_notification_sound_path
 from core.settings.storage_paths import get_app_data_dir
 from core.threading.manager import ThreadManager
@@ -62,6 +65,23 @@ GMAIL_ACTION_ICON_PATHS = {
     "spam": ("images/gmail-spam.png",),
     "trash": ("images/gmail-trash.png",),
 }
+
+
+def _gmail_asset_path(relative_path: str) -> Path:
+    """Resolve Gmail widget assets in script, onedir, and onefile builds."""
+    rel = Path(relative_path)
+    candidates = [
+        Path.cwd() / rel,
+        Path(getattr(sys, "argv", [""])[0]).resolve().parent / rel,
+        Path(__file__).resolve().parents[1] / rel,
+    ]
+    for candidate in candidates:
+        try:
+            if candidate.exists():
+                return candidate
+        except Exception:
+            continue
+    return candidates[-1]
 
 
 class GmailWidget(BaseOverlayWidget):
@@ -134,6 +154,8 @@ class GmailWidget(BaseOverlayWidget):
         self._envelope_pixmap_dim: Optional[QPixmap] = None
         self._envelope_read_pixmap: Optional[QPixmap] = None
         self._action_icons: Dict[str, Optional[QPixmap]] = {}
+        self._cached_content_pixmap: Optional[QPixmap] = None
+        self._cache_invalidated = True
 
         self._header_hit_rect: Optional[QRect] = None
         self._refresh_hit_rect: Optional[QRect] = None
@@ -150,6 +172,11 @@ class GmailWidget(BaseOverlayWidget):
         self._refreshing = False
         self._refresh_spin_angle = 0
         self._refresh_spin_timer: Optional[QTimer] = None
+        self._deferred_fetch_timer: Optional[QTimer] = None
+        self._deferred_refresh_timer: Optional[QTimer] = None
+        self._pending_refresh_after_transition = False
+        self._deferred_fetch_result: Optional[Tuple[List[EmailMetadata], int, Optional[int]]] = None
+        self._deferred_fetch_error: Optional[Tuple[str, Optional[int]]] = None
 
         # New-mail detection: only fire sound for messages that arrive after
         # the first fetch of this session. Pre-existing unread on first fetch
@@ -193,7 +220,7 @@ class GmailWidget(BaseOverlayWidget):
         return QSize(width, height)
 
     def _load_brand_pixmap(self) -> None:
-        path = Path("images/google-gmail.png")
+        path = _gmail_asset_path("images/google-gmail.png")
         if path.exists():
             pm = QPixmap(str(path))
             if not pm.isNull():
@@ -202,11 +229,18 @@ class GmailWidget(BaseOverlayWidget):
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
-                self._brand_pixmap_desaturated = None
+                self._brand_pixmap_desaturated = self._desaturate_pixmap(self._brand_pixmap)
                 return
         logger.warning("[GMAIL] Brand PNG missing: %s", path)
         self._brand_pixmap = None
         self._brand_pixmap_desaturated = None
+
+    @staticmethod
+    def _desaturate_pixmap(pixmap: QPixmap) -> Optional[QPixmap]:
+        if pixmap.isNull():
+            return None
+        grayscale = pixmap.toImage().convertToFormat(QImage.Format.Format_Grayscale8)
+        return QPixmap.fromImage(grayscale)
 
     def _sync_header_metrics(self) -> None:
         base_font = max(6, int(self._font_size))
@@ -217,8 +251,8 @@ class GmailWidget(BaseOverlayWidget):
         self._header_font_pt = header_font
 
     def _load_envelope_pixmap(self) -> None:
-        unread_path = Path("images/gmail-envelope.png")
-        read_path = Path("images/gmail-read.png")
+        unread_path = _gmail_asset_path("images/gmail-envelope.png")
+        read_path = _gmail_asset_path("images/gmail-read.png")
         target = 16
 
         if unread_path.exists():
@@ -263,19 +297,13 @@ class GmailWidget(BaseOverlayWidget):
     def _ensure_desaturated_brand(self) -> Optional[QPixmap]:
         if self._brand_pixmap is None:
             return None
-        if self._brand_pixmap_desaturated is not None:
-            return self._brand_pixmap_desaturated
-        img = self._brand_pixmap.toImage()
-        grayscale = img.convertToFormat(QImage.Format.Format_Grayscale8)
-        pm = QPixmap.fromImage(grayscale)
-        self._brand_pixmap_desaturated = pm
-        return pm
+        return self._brand_pixmap_desaturated
 
     def _load_action_icons(self) -> None:
         for key, path_options in GMAIL_ACTION_ICON_PATHS.items():
             loaded: Optional[QPixmap] = None
             for path_str in path_options:
-                path = Path(path_str)
+                path = _gmail_asset_path(path_str)
                 if path.exists():
                     pm = QPixmap(str(path))
                     if not pm.isNull():
@@ -338,7 +366,7 @@ class GmailWidget(BaseOverlayWidget):
             self._unread_count = sum(1 for e in self._emails if e.is_unread)
             self._has_displayed_valid_data = True
             self._update_card_height_from_content(len(self._emails))
-            self.update()
+            self._invalidate_content_cache_and_update()
             self._request_fade_in()
         else:
             self._update_card_height_from_content(1)
@@ -360,12 +388,26 @@ class GmailWidget(BaseOverlayWidget):
             except Exception:
                 pass
             self._update_timer = None
+        if self._deferred_fetch_timer is not None:
+            try:
+                self._deferred_fetch_timer.stop()
+            except Exception:
+                pass
+        if self._deferred_refresh_timer is not None:
+            try:
+                self._deferred_refresh_timer.stop()
+            except Exception:
+                pass
+        self._pending_refresh_after_transition = False
+        self._deferred_fetch_result = None
+        self._deferred_fetch_error = None
         self._set_refreshing(False)
         self._cancelled = True
         self._fetch_generation += 1
         self._emails.clear()
         self._row_hit_rects.clear()
         self._action_hit_rects.clear()
+        self._clear_content_cache()
         logger.debug("[LIFECYCLE] GmailWidget deactivated")
 
     def _cleanup_impl(self) -> None:
@@ -401,11 +443,29 @@ class GmailWidget(BaseOverlayWidget):
             except Exception:
                 pass
             self._update_timer = None
+        if self._deferred_fetch_timer is not None:
+            try:
+                self._deferred_fetch_timer.stop()
+                self._deferred_fetch_timer.deleteLater()
+            except Exception:
+                pass
+            self._deferred_fetch_timer = None
+        if self._deferred_refresh_timer is not None:
+            try:
+                self._deferred_refresh_timer.stop()
+                self._deferred_refresh_timer.deleteLater()
+            except Exception:
+                pass
+            self._deferred_refresh_timer = None
+        self._pending_refresh_after_transition = False
+        self._deferred_fetch_result = None
+        self._deferred_fetch_error = None
         self._set_refreshing(False)
         self._emails.clear()
         self._row_hit_rects.clear()
         self._action_hit_rects.clear()
         self._refresh_hit_rect = None
+        self._clear_content_cache()
         super().cleanup()
 
     # ------------------------------------------------------------------
@@ -424,32 +484,58 @@ class GmailWidget(BaseOverlayWidget):
             self._update_timer.timeout.connect(self._fetch_emails)
             self._update_timer.start(interval_ms)
 
-    def _fetch_emails(self) -> bool:
-        with self._fetch_lock:
-            if self._fetch_in_progress:
-                logger.debug("[GMAIL] Fetch already in progress, skipping")
-                return False
-            self._fetch_in_progress = True
-        self._set_refreshing(True)
-        # Re-acquire client from backend each fetch in case mode/credentials changed
-        self._gmail_client = self._backend.client if self._backend.is_authenticated else None
-        if self._gmail_client is None:
-            with self._fetch_lock:
-                self._fetch_in_progress = False
-            self._set_refreshing(False)
-            logger.debug("[GMAIL] Not authenticated, skipping fetch")
-            self._last_error = "auth"
-            self.update()
-            return False
+    def _fetch_emails(self, *, defer_for_transition: bool = True) -> bool:
+        start_time = time.perf_counter()
+        if defer_for_transition and self._defer_refresh_if_transition():
+            record_widget_timer_result(
+                self._perf_widget_name(),
+                "gmail.refresh.dispatch",
+                (time.perf_counter() - start_time) * 1000.0,
+                None,
+            )
+            return True
         try:
-            if self._ensure_thread_manager("GmailWidget._fetch_emails"):
-                generation = self._fetch_generation
-                self._thread_manager.submit_io_task(self._fetch_emails_async, generation)
-            else:
+            with self._fetch_lock:
+                if self._fetch_in_progress:
+                    logger.debug("[GMAIL] Fetch already in progress, skipping")
+                    return False
+                self._fetch_in_progress = True
+            self._set_refreshing(True)
+            # Re-acquire client from backend each fetch in case mode/credentials changed
+            self._gmail_client = self._backend.client if self._backend.is_authenticated else None
+            if self._gmail_client is None:
+                with self._fetch_lock:
+                    self._fetch_in_progress = False
+                self._set_refreshing(False)
+                logger.debug("[GMAIL] Not authenticated, skipping fetch")
+                self._last_error = "auth"
+                self._invalidate_content_cache_and_update()
+                return False
+            try:
+                if self._ensure_thread_manager("GmailWidget._fetch_emails"):
+                    generation = self._fetch_generation
+                    self._thread_manager.submit_io_task(self._fetch_emails_async, generation)
+                else:
+                    self._fetch_emails_sync()
+            except Exception:
                 self._fetch_emails_sync()
+            return True
+        finally:
+            record_widget_timer_result(
+                self._perf_widget_name(),
+                "gmail.refresh.dispatch",
+                (time.perf_counter() - start_time) * 1000.0,
+                None,
+            )
+
+    def _perf_widget_name(self) -> str:
+        try:
+            overlay_name = getattr(self, "_overlay_name", None)
+            if overlay_name:
+                return str(overlay_name)
         except Exception:
-            self._fetch_emails_sync()
-        return True
+            pass
+        return "GmailWidget"
 
     def _set_refreshing(self, refreshing: bool) -> None:
         refreshing = bool(refreshing)
@@ -465,16 +551,115 @@ class GmailWidget(BaseOverlayWidget):
             if self._refresh_spin_timer is not None:
                 self._refresh_spin_timer.stop()
             self._refresh_spin_angle = 0
-        self.update()
+        self._update_refresh_button_region()
 
     def _advance_refresh_spinner(self) -> None:
         if not self._refreshing:
             return
         self._refresh_spin_angle = (self._refresh_spin_angle + 30) % 360
+        self._update_refresh_button_region()
+
+    def _update_refresh_button_region(self) -> None:
         if self._refresh_hit_rect is not None:
             self.update(self._refresh_hit_rect.adjusted(-2, -2, 2, 2))
         else:
             self.update()
+
+    def _parent_transition_running(self) -> bool:
+        parent = self.parent()
+        if parent is None:
+            return False
+        try:
+            has_pending = getattr(parent, "has_transition_work_pending", None)
+            if callable(has_pending):
+                return bool(has_pending())
+            has_running = getattr(parent, "has_running_transition", None)
+            if callable(has_running):
+                return bool(has_running())
+        except Exception:
+            return False
+        return False
+
+    def _defer_refresh_if_transition(self) -> bool:
+        if not self._parent_transition_running():
+            return False
+        self._pending_refresh_after_transition = True
+        self._schedule_deferred_refresh()
+        logger.debug("[GMAIL] Deferred email refresh until active transition finishes")
+        return True
+
+    def _schedule_deferred_refresh(self) -> None:
+        if self._deferred_refresh_timer is None:
+            self._deferred_refresh_timer = QTimer(self)
+            self._deferred_refresh_timer.setSingleShot(True)
+            self._deferred_refresh_timer.timeout.connect(self._flush_deferred_refresh)
+        if not self._deferred_refresh_timer.isActive():
+            self._deferred_refresh_timer.start(250)
+
+    def _flush_deferred_refresh(self) -> None:
+        if self._cancelled:
+            self._pending_refresh_after_transition = False
+            return
+        if not self._pending_refresh_after_transition:
+            return
+        if self._parent_transition_running():
+            self._schedule_deferred_refresh()
+            return
+        self._pending_refresh_after_transition = False
+        self._fetch_emails(defer_for_transition=False)
+
+    def _defer_fetch_result_if_transition(
+        self,
+        emails: List[EmailMetadata],
+        unread_count: int,
+        generation: Optional[int],
+    ) -> bool:
+        if not self._parent_transition_running():
+            return False
+        self._deferred_fetch_result = (list(emails), int(unread_count), generation)
+        self._deferred_fetch_error = None
+        self._schedule_deferred_fetch_flush()
+        logger.debug("[GMAIL] Deferred fetched mail apply until active transition finishes")
+        return True
+
+    def _defer_fetch_error_if_transition(
+        self,
+        error_msg: str,
+        generation: Optional[int],
+    ) -> bool:
+        if not self._parent_transition_running():
+            return False
+        self._deferred_fetch_error = (str(error_msg), generation)
+        self._deferred_fetch_result = None
+        self._schedule_deferred_fetch_flush()
+        logger.debug("[GMAIL] Deferred fetch error display until active transition finishes")
+        return True
+
+    def _schedule_deferred_fetch_flush(self) -> None:
+        if self._deferred_fetch_timer is None:
+            self._deferred_fetch_timer = QTimer(self)
+            self._deferred_fetch_timer.setSingleShot(True)
+            self._deferred_fetch_timer.timeout.connect(self._flush_deferred_fetch_result)
+        if not self._deferred_fetch_timer.isActive():
+            self._deferred_fetch_timer.start(250)
+
+    def _flush_deferred_fetch_result(self) -> None:
+        if self._cancelled:
+            self._deferred_fetch_result = None
+            self._deferred_fetch_error = None
+            return
+        if self._parent_transition_running():
+            self._schedule_deferred_fetch_flush()
+            return
+        if self._deferred_fetch_error is not None:
+            error_msg, generation = self._deferred_fetch_error
+            self._deferred_fetch_error = None
+            self._on_fetch_error(error_msg, generation, defer_for_transition=False)
+            return
+        if self._deferred_fetch_result is not None:
+            emails, unread_count, generation = self._deferred_fetch_result
+            self._deferred_fetch_result = None
+            self._on_emails_fetched(emails, unread_count, generation, defer_for_transition=False)
 
     def _fetch_emails_async(self, generation: int) -> None:
         try:
@@ -519,14 +704,45 @@ class GmailWidget(BaseOverlayWidget):
                 self._fetch_in_progress = False
 
     def _on_emails_fetched(
-        self, emails: List[EmailMetadata], unread_count: int, generation: Optional[int] = None
+        self,
+        emails: List[EmailMetadata],
+        unread_count: int,
+        generation: Optional[int] = None,
+        *,
+        defer_for_transition: bool = True,
+    ) -> None:
+        with widget_timer_sample(self, "gmail.fetch.apply"):
+            self._on_emails_fetched_impl(
+                emails,
+                unread_count,
+                generation,
+                defer_for_transition=defer_for_transition,
+            )
+
+    def _on_emails_fetched_impl(
+        self,
+        emails: List[EmailMetadata],
+        unread_count: int,
+        generation: Optional[int] = None,
+        *,
+        defer_for_transition: bool = True,
     ) -> None:
         if self._cancelled:
             return
         if generation is not None and generation != self._fetch_generation:
             return
         self._set_refreshing(False)
+        if defer_for_transition and self._defer_fetch_result_if_transition(emails, unread_count, generation):
+            return
         display_emails = list(emails)
+        if (
+            self._has_displayed_valid_data
+            and self._last_error is None
+            and display_emails == self._emails
+            and unread_count == self._unread_count
+        ):
+            logger.debug("[GMAIL] Fetched mail unchanged; skipping cache write and repaint")
+            return
         self._emails = display_emails
         self._last_error = None
         self._detect_new_mail(emails)
@@ -535,14 +751,14 @@ class GmailWidget(BaseOverlayWidget):
             self.unread_count_changed.emit(unread_count)
         if display_emails:
             self._has_displayed_valid_data = True
-            self._write_email_cache(display_emails)
+            self._write_email_cache_deferred(display_emails)
             self._update_card_height_from_content(len(display_emails))
-            self.update()
+            self._invalidate_content_cache_and_update()
             if not self.isVisible():
                 self._request_fade_in()
         else:
             self._update_card_height_from_content(1)
-            self.update()
+            self._invalidate_content_cache_and_update()
             if not self.isVisible():
                 self._request_fade_in()
 
@@ -587,16 +803,38 @@ class GmailWidget(BaseOverlayWidget):
         except Exception as exc:
             logger.warning("[GMAIL] Notification sound failed: %s", exc)
 
-    def _on_fetch_error(self, error_msg: str, generation: Optional[int] = None) -> None:
+    def _on_fetch_error(
+        self,
+        error_msg: str,
+        generation: Optional[int] = None,
+        *,
+        defer_for_transition: bool = True,
+    ) -> None:
+        with widget_timer_sample(self, "gmail.fetch.error_apply"):
+            self._on_fetch_error_impl(
+                error_msg,
+                generation,
+                defer_for_transition=defer_for_transition,
+            )
+
+    def _on_fetch_error_impl(
+        self,
+        error_msg: str,
+        generation: Optional[int] = None,
+        *,
+        defer_for_transition: bool = True,
+    ) -> None:
         if self._cancelled:
             return
         if generation is not None and generation != self._fetch_generation:
             return
         self._set_refreshing(False)
+        if defer_for_transition and self._defer_fetch_error_if_transition(error_msg, generation):
+            return
         self._last_error = error_msg
         logger.warning("[GMAIL] Displaying error state: %s", error_msg)
         self._update_card_height_from_content(1)
-        self.update()
+        self._invalidate_content_cache_and_update()
 
     # ------------------------------------------------------------------
     # Email Cache
@@ -619,13 +857,24 @@ class GmailWidget(BaseOverlayWidget):
             return None
 
     def _write_email_cache(self, emails: List[EmailMetadata]) -> None:
+        with widget_timer_sample(self, "gmail.cache.write"):
+            try:
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                tmp = CACHE_PATH.with_suffix(".tmp")
+                tmp.write_text(serialize_email_cache(emails), encoding="utf-8")
+                tmp.replace(CACHE_PATH)
+            except Exception as e:
+                logger.warning("[GMAIL] Failed to write cache: %s", e)
+
+    def _write_email_cache_deferred(self, emails: List[EmailMetadata]) -> None:
+        cache_emails = list(emails)
         try:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            tmp = CACHE_PATH.with_suffix(".tmp")
-            tmp.write_text(serialize_email_cache(emails), encoding="utf-8")
-            tmp.replace(CACHE_PATH)
-        except Exception as e:
-            logger.warning("[GMAIL] Failed to write cache: %s", e)
+            if self._ensure_thread_manager("GmailWidget._write_email_cache"):
+                self._thread_manager.submit_io_task(self._write_email_cache, cache_emails)
+                return
+        except Exception as exc:
+            logger.debug("[GMAIL] Cache write IO dispatch failed: %s", exc)
+        self._write_email_cache(cache_emails)
 
     # ------------------------------------------------------------------
     # Card Height
@@ -699,21 +948,87 @@ class GmailWidget(BaseOverlayWidget):
     # ------------------------------------------------------------------
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
-        super().paintEvent(event)
+        with widget_paint_sample(self, "gmail.paint"):
+            super().paintEvent(event)
+            self._paint_cached_content()
+
+    def _paint_cached_content(self) -> None:
+        widget_size = self.size()
+        cache_valid = False
+        if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
+            try:
+                cached_dpr = self._cached_content_pixmap.devicePixelRatio()
+                cached_w = int(self._cached_content_pixmap.width() / cached_dpr)
+                cached_h = int(self._cached_content_pixmap.height() / cached_dpr)
+                cache_valid = (
+                    abs(cached_w - widget_size.width()) <= 2
+                    and abs(cached_h - widget_size.height()) <= 2
+                )
+            except Exception:
+                cache_valid = False
+
+        if self._cache_invalidated or not cache_valid:
+            self._regenerate_content_cache(widget_size)
+
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         try:
-            self._paint_header(painter)
+            if self._cached_content_pixmap is not None and not self._cached_content_pixmap.isNull():
+                painter.drawPixmap(0, 0, self._cached_content_pixmap)
             self._paint_refresh_button(painter)
-            if self._last_error:
-                self._paint_error_state(painter)
-            elif not self._emails:
-                self._paint_empty_state(painter)
-            else:
-                self._paint_emails(painter)
         finally:
             painter.end()
+
+    def _regenerate_content_cache(self, size: QSize) -> None:
+        """Regenerate stable Gmail content without touching widget effects."""
+        if size.width() <= 0 or size.height() <= 0:
+            self._clear_content_cache()
+            return
+        with widget_timer_sample(self, "gmail.cache.regen"):
+            try:
+                dpr = self.devicePixelRatioF()
+            except Exception:
+                dpr = 1.0
+            pixmap = QPixmap(max(1, int(size.width() * dpr)), max(1, int(size.height() * dpr)))
+            pixmap.setDevicePixelRatio(dpr)
+            pixmap.fill(Qt.GlobalColor.transparent)
+
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+            try:
+                self._paint_stable_content(painter)
+            finally:
+                painter.end()
+            self._cached_content_pixmap = pixmap
+            self._cache_invalidated = False
+
+    def _paint_stable_content(self, painter: QPainter) -> None:
+        self._row_hit_rects.clear()
+        self._action_hit_rects.clear()
+        self._paint_header(painter)
+        if self._last_error:
+            self._paint_error_state(painter)
+        elif not self._emails:
+            self._paint_empty_state(painter)
+        else:
+            self._paint_emails(painter)
+
+    def _invalidate_content_cache(self) -> None:
+        self._cache_invalidated = True
+
+    def _invalidate_content_cache_and_update(self) -> None:
+        self._invalidate_content_cache()
+        self.update()
+
+    def _clear_content_cache(self) -> None:
+        self._cached_content_pixmap = None
+        self._cache_invalidated = True
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._invalidate_content_cache()
 
     def _paint_header(self, painter: QPainter) -> None:
         header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
@@ -1331,6 +1646,7 @@ class GmailWidget(BaseOverlayWidget):
             return
         self._width = next_width
         self._apply_width()
+        self._invalidate_content_cache_and_update()
 
     def set_min_width(self, width: int) -> None:
         self.set_width(width)
@@ -1342,7 +1658,7 @@ class GmailWidget(BaseOverlayWidget):
         if getattr(self, attr) == value:
             return False
         setattr(self, attr, value)
-        self.update()
+        self._invalidate_content_cache_and_update()
         return True
 
     def set_content_padding(self, left: int, right: int, top: int) -> None:
@@ -1356,7 +1672,7 @@ class GmailWidget(BaseOverlayWidget):
         self._content_padding_right = 0
         self._content_padding_top = 0
         self._update_card_height_from_content(len(self._emails) or self._limit)
-        self.update()
+        self._invalidate_content_cache_and_update()
         self._update_position()
 
     def set_show_header_border(self, show: bool) -> None:
@@ -1365,14 +1681,14 @@ class GmailWidget(BaseOverlayWidget):
             return
         self._show_header_border = show
         self._update_card_height_from_content(len(self._emails) or self._limit)
-        self.update()
+        self._invalidate_content_cache_and_update()
 
     def set_font_size(self, size: int) -> None:
         super().set_font_size(size)
         self._sync_header_metrics()
         self._load_brand_pixmap()
         self._update_card_height_from_content(len(self._emails) or self._limit)
-        self.update()
+        self._invalidate_content_cache_and_update()
 
     def set_header_logo_px_adjust(self, value: Any) -> None:
         try:
@@ -1386,7 +1702,7 @@ class GmailWidget(BaseOverlayWidget):
         self._sync_header_metrics()
         self._load_brand_pixmap()
         self._update_card_height_from_content(len(self._emails) or self._limit)
-        self.update()
+        self._invalidate_content_cache_and_update()
 
     def set_account_slot(self, slot: Any) -> None:
         text = str(slot or "0").strip()
@@ -1401,6 +1717,7 @@ class GmailWidget(BaseOverlayWidget):
             return
         self._limit = next_limit
         self._update_card_height_from_content(self._limit)
+        self._invalidate_content_cache_and_update()
 
     def set_refresh_interval(self, minutes: int) -> None:
         next_interval = timedelta(minutes=max(1, minutes))

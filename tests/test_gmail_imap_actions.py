@@ -48,7 +48,7 @@ def test_imap_mark_as_unread_uses_uid_store(monkeypatch) -> None:
     assert conn.logged_out is True
 
 
-def test_imap_archive_moves_to_all_mail(monkeypatch) -> None:
+def test_imap_archive_removes_inbox_label(monkeypatch) -> None:
     from core.gmail.gmail_imap import GmailImapClient
 
     conn = FakeImapActionConn()
@@ -56,7 +56,7 @@ def test_imap_archive_moves_to_all_mail(monkeypatch) -> None:
     monkeypatch.setattr(client, "_connect", lambda: conn)
 
     assert client.archive_message("42") is True
-    assert conn.uid_calls == [("MOVE", "42", '"[Gmail]/All Mail"')]
+    assert conn.uid_calls == [("STORE", "42", "-X-GM-LABELS", r"(\Inbox)")]
 
 
 def test_imap_spam_and_trash_use_gmail_labels(monkeypatch) -> None:
