@@ -35,6 +35,10 @@ ENV/
 .agent
 .codex-appdata/
 .codex_appdata/
+.tmp_dbg_settings/
+.tmp_dbg_appdata/
+.tests_tmp_appdata/
+.current_plan.md
 
 # Coverage and test artifacts
 htmlcov/
