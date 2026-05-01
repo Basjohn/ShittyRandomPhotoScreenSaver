@@ -229,7 +229,7 @@ class GmailWidget(BaseOverlayWidget):
         self.setMouseTracking(False)
         font = QFont(self._font_family, self._font_size, QFont.Weight.Normal)
         self.setFont(font)
-        self.setContentsMargins(29, 12, 29, 12)
+        self.setContentsMargins(20, 12, 20, 12)
         self._apply_width()
         self.setMinimumHeight(120)
 

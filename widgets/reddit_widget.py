@@ -189,6 +189,7 @@ class RedditWidget(BaseOverlayWidget):
         # We paint text manually; QLabel's text property is unused, but
         # we can still take advantage of stylesheet-based background.
         self.setWordWrap(False)
+        self.setContentsMargins(20, 12, 20, 12)
 
         # Reasonable default footprint
         self.setMinimumWidth(600)
@@ -1266,9 +1267,8 @@ class RedditWidget(BaseOverlayWidget):
     def _paint_refresh_button(self, painter: QPainter) -> None:
         margins = self.contentsMargins()
         size = 22
-        right_padding = min(max(0, margins.right()), 12)
-        right = self.width() - right_padding
-        top = margins.top() + 2
+        right = self.width() - margins.right()
+        top = margins.top()
         rect = QRect(max(0, right - size), top, size, size)
         self._refresh_hit_rect = rect
 
@@ -1445,18 +1445,42 @@ class RedditWidget(BaseOverlayWidget):
                 break
 
             age_text = age_labels[idx] if idx < len(age_labels) else ""
+            age_value = ""
+            age_suffix = ""
+            if age_text:
+                parts = age_text.rsplit(" ", 1)
+                age_value = parts[0] if len(parts) > 0 else ""
+                age_suffix = parts[1] if len(parts) > 1 else ""
 
             painter.setFont(age_font)
             painter.setPen(QColor(200, 200, 200, 220))
             age_rect = QRect(rect.left(), y, age_col_width, line_height)
-            # Draw age text with shadow (cached, only regenerated when data changes)
-            draw_text_rect_with_shadow(
-                painter,
-                age_rect,
-                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
-                age_text,
-                font_size=age_font_size,
-            )
+            # Draw value left-aligned, AGO suffix right-aligned
+            if age_value:
+                value_w = int(age_rect.width() * 0.55)
+                value_rect = QRect(age_rect.left(), age_rect.top(), value_w, age_rect.height())
+                draw_text_rect_with_shadow(
+                    painter,
+                    value_rect,
+                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                    age_value,
+                    font_size=age_font_size,
+                )
+            if age_suffix:
+                suffix_w = age_rect.width() - int(age_rect.width() * 0.55)
+                suffix_rect = QRect(
+                    age_rect.left() + int(age_rect.width() * 0.55),
+                    age_rect.top(),
+                    suffix_w,
+                    age_rect.height(),
+                )
+                draw_text_rect_with_shadow(
+                    painter,
+                    suffix_rect,
+                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
+                    age_suffix,
+                    font_size=age_font_size,
+                )
 
             painter.setFont(title_font)
             painter.setPen(self._text_color)
@@ -1666,16 +1690,16 @@ class RedditWidget(BaseOverlayWidget):
         if minutes < 1:
             minutes = 1
         if hours < 1:
-            return f"{minutes}M AGO"
+            return f"{minutes:02d} M AGO"
         if days < 1:
-            return f"{hours}HR AGO"
+            return f"{hours:02d} HR AGO"
         if days < 7:
-            return f"{days}D AGO"
+            return f"{days:02d} D AGO"
         weeks = days // 7
         if weeks < 52:
-            return f"{weeks}W AGO"
+            return f"{weeks:02d} W AGO"
         years = days // 365
-        return f"{years}Y AGO"
+        return f"{years:02d} Y AGO"
 
     def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         logger.debug("[REDDIT] _start_widget_fade_in: duration_ms=%s", duration_ms)
@@ -1773,8 +1797,8 @@ class RedditWidget(BaseOverlayWidget):
             return
 
         margins = self.contentsMargins()
-        left = margins.left() - 4
-        top = margins.top() + 2
+        left = margins.left()
+        top = margins.top()
 
         try:
             header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
@@ -1800,7 +1824,7 @@ class RedditWidget(BaseOverlayWidget):
         total_w = int(inner_w + pad_x * 2)
         total_h = int(row_h + pad_y * 2)
 
-        max_width = max(0, self.width() - margins.right() - left - 10)
+        max_width = max(0, self.width() - margins.right() - left)
         if max_width and total_w > max_width:
             total_w = max_width
 
@@ -1831,7 +1855,6 @@ class RedditWidget(BaseOverlayWidget):
                     background-color: rgba(%d, %d, %d, %d);
                     border: %dpx solid rgba(%d, %d, %d, %d);
                     border-radius: 8px;
-                    padding: 6px 28px 6px 21px;
                 }
                 """
                 % (
@@ -1856,7 +1879,6 @@ class RedditWidget(BaseOverlayWidget):
                 QLabel {
                     color: rgba(%d, %d, %d, %d);
                     background-color: transparent;
-                    padding: 6px 28px 6px 21px;
                 }
                 """
                 % (
