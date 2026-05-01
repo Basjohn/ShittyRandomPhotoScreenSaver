@@ -67,7 +67,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
   (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)  
 ---
 
-Transitions Showcase:
+Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
 <img width="600" height="337" alt="SSRPSTrOnly" src="https://github.com/user-attachments/assets/38e2984a-f37b-41c5-a3aa-1bd2b7ffd288" />
 
 
