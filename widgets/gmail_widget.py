@@ -1274,7 +1274,7 @@ class GmailWidget(BaseOverlayWidget):
 
     def _header_text(self) -> str:
         if self._show_unread_count_in_header and self._unread_count > 0:
-            return f"Gmail ({self._unread_count})"
+            return f"Gmail ( {self._unread_count} )"
         return "Gmail"
 
     def _calculate_header_layout(
@@ -1303,7 +1303,7 @@ class GmailWidget(BaseOverlayWidget):
         content_y_offset = int(self._header_content_y_offset)
         logo_y = int(center_y - (logo_height / 2)) + int(self._header_logo_y_offset) + content_y_offset
         text_x = logo_x + logo_width + self._header_logo_gap
-        text_baseline_y = int(center_y - (text_height / 2) + fm.ascent()) + content_y_offset
+        text_baseline_y = int(center_y - (text_height / 2) + fm.ascent()) + content_y_offset - 1
         return {
             "frame_rect": frame_rect,
             "logo_rect": QRect(logo_x, logo_y, logo_width, logo_height),
@@ -1406,7 +1406,7 @@ class GmailWidget(BaseOverlayWidget):
                 painter.drawLine(left, sep_y, left + available_width, sep_y)
                 row_y += 2
             subject_weight = QFont.Weight(600) if email.is_unread else QFont.Weight(400)
-            sender_weight = QFont.Weight(700) if email.is_unread else QFont.Weight(600)
+            sender_weight = QFont.Weight(680) if email.is_unread else QFont.Weight(550)
             time_width = time_slot_width
             time_text = ""
             if self._show_timestamp:

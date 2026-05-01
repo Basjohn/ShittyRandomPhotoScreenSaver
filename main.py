@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from enum import Enum
 from PySide6.QtWidgets import QApplication, QMessageBox
-from PySide6.QtCore import Qt, QCoreApplication, QTimer
+from PySide6.QtCore import Qt, QCoreApplication
 from PySide6.QtGui import QSurfaceFormat, QImageReader, QIcon
 from core.logging.logger import (
     clear_logs_for_fresh_start,
@@ -603,7 +603,12 @@ def main():
     
     logger.info("Qt Application created: %s", app.applicationName())
     logger.debug("High DPI scaling enabled")
-    
+
+    # Register bundled custom fonts before any widgets are created
+    from ui.tabs.shared_styles import ensure_custom_fonts
+    ensure_custom_fonts()
+    logger.debug("Custom fonts registered")
+
     # Route to appropriate mode
     exit_code = 0
     

@@ -103,7 +103,12 @@ def smart_title_case(text: str) -> str:
         # Title case the core word (capitalize first character of every word)
         result.append(leading + core[:1].upper() + core[1:] + trailing)
     
-    return " ".join(result)
+    result = " ".join(result)
+
+    # Normalize r/subreddit capitalization: r/yummy → R/Yummy
+    result = re.sub(r"(?i)\br/([a-z])", lambda m: f"R/{m.group(1).upper()}", result)
+
+    return result
 
 
 def try_bring_reddit_window_to_front() -> None:

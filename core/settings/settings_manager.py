@@ -791,7 +791,32 @@ class SettingsManager(QObject):
                 # Missing key: populate to avoid ambiguous startup paths.
                 self._settings.setValue('display.hw_accel', expected_hw)
                 repairs['display.hw_accel'] = "Missing key"
-            
+
+            # Migrate legacy widget font families from Segoe UI to Inter
+            widgets = self._settings.value('widgets')
+            if isinstance(widgets, Mapping):
+                widgets_copy: Dict[str, Any] = dict(widgets)
+                changed = False
+                for widget_name, widget_section in widgets_copy.items():
+                    if not isinstance(widget_section, Mapping):
+                        continue
+                    font_key = 'font_family'
+                    if font_key in widget_section:
+                        current_font = widget_section[font_key]
+                        if isinstance(current_font, str) and current_font.strip().lower() == 'segoe ui':
+                            widget_section_copy = dict(widget_section)
+                            widget_section_copy[font_key] = 'Inter'
+                            widgets_copy[widget_name] = widget_section_copy
+                            changed = True
+                            repairs[f'widgets.{widget_name}.font_family'] = "Migrated: Segoe UI -> Inter"
+                            logger.info(
+                                "Migrated widget '%s' font_family from 'Segoe UI' to 'Inter'",
+                                widget_name,
+                            )
+                if changed:
+                    self._settings.setValue('widgets', widgets_copy)
+                    self._settings.sync()
+
             # Validate widgets - must be dict
             widgets = self._settings.value('widgets')
             if widgets is not None and not isinstance(widgets, Mapping):
