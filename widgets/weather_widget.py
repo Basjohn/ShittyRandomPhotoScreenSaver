@@ -244,6 +244,7 @@ class WeatherWidget(BaseOverlayWidget):
 
         text_layout.addWidget(self._city_label)
         text_layout.addWidget(self._conditions_label)
+        self._apply_text_alignment()
 
         # Build primary layout based on icon alignment
         if self._icon_alignment == "LEFT":
@@ -1282,6 +1283,27 @@ class WeatherWidget(BaseOverlayWidget):
         if self._cached_data:
             self._update_display(self._cached_data)
 
+    def _apply_text_alignment(self) -> None:
+        """Right-align city/condition labels when icon is on the left so
+        text edges align cleanly; revert to left-align otherwise.
+        """
+        if not self._city_label or not self._conditions_label:
+            return
+        if self._icon_alignment == "LEFT":
+            self._city_label.setAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
+            self._conditions_label.setAlignment(
+                Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+            )
+        else:
+            self._city_label.setAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+            self._conditions_label.setAlignment(
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            )
+
     def _rebuild_primary_layout(self) -> None:
         """Rebuild the primary row layout based on current icon alignment.
         
@@ -1290,7 +1312,9 @@ class WeatherWidget(BaseOverlayWidget):
         """
         if not hasattr(self, '_primary_row') or not self._primary_row:
             return
-        
+
+        self._apply_text_alignment()
+
         # Get the layout
         primary_layout = self._primary_row.layout()
         if not primary_layout:

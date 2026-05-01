@@ -1303,7 +1303,7 @@ class GmailWidget(BaseOverlayWidget):
         content_y_offset = int(self._header_content_y_offset)
         logo_y = int(center_y - (logo_height / 2)) + int(self._header_logo_y_offset) + content_y_offset
         text_x = logo_x + logo_width + self._header_logo_gap
-        text_baseline_y = int(center_y - (text_height / 2) + fm.ascent()) + content_y_offset - 1
+        text_baseline_y = int(center_y - (text_height / 2) + fm.ascent()) + content_y_offset + 1
         return {
             "frame_rect": frame_rect,
             "logo_rect": QRect(logo_x, logo_y, logo_width, logo_height),

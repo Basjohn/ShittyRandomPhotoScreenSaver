@@ -1346,7 +1346,7 @@ class RedditWidget(BaseOverlayWidget):
         painter.setFont(header_font)
         header_metrics = QFontMetrics(header_font)
         header_top = rect.top() + 4
-        baseline_y = header_top + header_metrics.ascent() + self._header_content_y_offset
+        baseline_y = header_top + header_metrics.ascent() + self._header_content_y_offset + 2
 
         self._paint_header_frame(painter)
 
