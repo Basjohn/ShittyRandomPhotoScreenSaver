@@ -196,7 +196,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Font family
     imgur_font_family_row = _aligned_row(_imgur_ctl, "Font:")
     tab.imgur_font_combo = StyledFontComboBox(size_variant="hero")
-    default_imgur_font = tab._default_str('imgur', 'font_family', 'Segoe UI')
+    default_imgur_font = tab._default_str('imgur', 'font_family', 'Inter')
     tab.imgur_font_combo.setCurrentFont(QFont(default_imgur_font))
     tab.imgur_font_combo.setMinimumWidth(220)
     tab.imgur_font_combo.setToolTip("Font family for Imgur widget text")
@@ -369,7 +369,7 @@ def load_imgur_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.imgur_interval.setValue(max(5, min(60, imgur_interval)))
     tab.imgur_show_header.setChecked(tab._config_bool('imgur', imgur_config, 'show_header', True))
 
-    tab.imgur_font_combo.setCurrentFont(QFont(tab._config_str('imgur', imgur_config, 'font_family', 'Segoe UI')))
+    tab.imgur_font_combo.setCurrentFont(QFont(tab._config_str('imgur', imgur_config, 'font_family', 'Inter')))
     tab.imgur_font_size.setValue(tab._config_int('imgur', imgur_config, 'font_size', 11))
     tab.imgur_margin.setValue(tab._config_int('imgur', imgur_config, 'margin', 30))
     tab.imgur_show_background.setChecked(tab._config_bool('imgur', imgur_config, 'show_background', True))

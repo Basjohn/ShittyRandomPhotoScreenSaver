@@ -183,7 +183,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Font family
     reddit_font_family_row = _aligned_row(_rc_layout, "Font:")
     tab.reddit_font_combo = StyledFontComboBox(size_variant="hero")
-    default_reddit_font = tab._default_str('reddit', 'font_family', 'Segoe UI')
+    default_reddit_font = tab._default_str('reddit', 'font_family', 'Inter')
     tab.reddit_font_combo.setCurrentFont(QFont(default_reddit_font))
     tab.reddit_font_combo.setMinimumWidth(220)
     tab.reddit_font_combo.setToolTip("Font family for Reddit post titles")
@@ -445,7 +445,7 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
     if r_idx >= 0:
         tab.reddit_monitor_combo.setCurrentIndex(r_idx)
 
-    tab.reddit_font_combo.setCurrentFont(QFont(tab._config_str('reddit', reddit_config, 'font_family', 'Segoe UI')))
+    tab.reddit_font_combo.setCurrentFont(QFont(tab._config_str('reddit', reddit_config, 'font_family', 'Inter')))
     tab.reddit_font_size.setValue(tab._config_int('reddit', reddit_config, 'font_size', 18))
     tab.reddit_margin.setValue(tab._config_int('reddit', reddit_config, 'margin', 30))
     tab.reddit_header_logo_px_adjust.setValue(tab._config_int('reddit', reddit_config, 'header_logo_px_adjust', 0))

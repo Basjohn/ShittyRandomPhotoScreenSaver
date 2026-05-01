@@ -1405,7 +1405,8 @@ class GmailWidget(BaseOverlayWidget):
                 painter.setPen(QPen(self._boundary_separator_color, self._boundary_separator_thickness))
                 painter.drawLine(left, sep_y, left + available_width, sep_y)
                 row_y += 2
-            weight = QFont.Weight.Bold if email.is_unread else QFont.Weight.Normal
+            subject_weight = QFont.Weight(600) if email.is_unread else QFont.Weight(400)
+            sender_weight = QFont.Weight(700) if email.is_unread else QFont.Weight(600)
             time_width = time_slot_width
             time_text = ""
             if self._show_timestamp:
@@ -1415,7 +1416,7 @@ class GmailWidget(BaseOverlayWidget):
             env_x = left
             env_width = env_slot_width
             # Pre-compute line height so we can vertically centre the envelope
-            subject_font = QFont(self._font_family, base_font_pt, weight)
+            subject_font = QFont(self._font_family, base_font_pt, subject_weight)
             subject_fm = QFontMetrics(subject_font)
             line_height = subject_fm.height() + 6
             if self._show_envelope_icon and self._envelope_pixmap is not None:
@@ -1429,7 +1430,7 @@ class GmailWidget(BaseOverlayWidget):
                     painter.drawPixmap(env_x, env_y, env_pm)
             sender_width = 0
             if self._show_sender:
-                sender_font = QFont(self._font_family, base_font_pt, weight)
+                sender_font = QFont(self._font_family, base_font_pt, sender_weight)
                 painter.setFont(sender_font)
                 sender_fm = QFontMetrics(sender_font)
                 sender_text = clean_sender_name(
@@ -1441,7 +1442,7 @@ class GmailWidget(BaseOverlayWidget):
                     sender_text, Qt.TextElideMode.ElideRight, sender_slot_width
                 )
                 sender_width = sender_slot_width + 12
-            subject_font = QFont(self._font_family, base_font_pt, weight)
+            subject_font = QFont(self._font_family, base_font_pt, subject_weight)
             painter.setFont(subject_font)
             subject_fm = QFontMetrics(subject_font)
             subject_text = email.subject
@@ -1461,9 +1462,9 @@ class GmailWidget(BaseOverlayWidget):
                 painter.setFont(QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal))
                 painter.setPen(QColor(180, 180, 180, 200))
                 time_x = env_x + env_width
-                painter.drawText(time_x, text_y, time_text)
+                painter.drawText(time_x, text_y - 2, time_text)
             if self._show_sender:
-                painter.setFont(QFont(self._font_family, base_font_pt, weight))
+                painter.setFont(QFont(self._font_family, base_font_pt, sender_weight))
                 painter.setPen(
                     QColor(200, 200, 200, 255)
                     if email.is_unread

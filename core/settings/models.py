@@ -389,7 +389,7 @@ class ClockWidgetSettings:
     show_seconds: bool = True
     timezone: str = "local"
     show_timezone: bool = False
-    font_family: str = "Segoe UI"
+    font_family: str = "Inter"
     font_size: int = 48
     text_color: str = "#FFFFFF"
     show_background: bool = False
@@ -418,7 +418,7 @@ class ClockWidgetSettings:
             show_seconds=settings.get(f"{prefix}.show_seconds", True),
             timezone=settings.get(f"{prefix}.timezone", "local"),
             show_timezone=settings.get(f"{prefix}.show_timezone", False),
-            font_family=settings.get(f"{prefix}.font_family", "Segoe UI"),
+            font_family=settings.get(f"{prefix}.font_family", "Inter"),
             font_size=settings.get(f"{prefix}.font_size", 48),
             text_color=settings.get(f"{prefix}.text_color", "#FFFFFF"),
             show_background=settings.get(f"{prefix}.show_background", False),
@@ -2046,7 +2046,7 @@ class WeatherWidgetSettings:
     monitor: str = "ALL"
     position: WidgetPosition = WidgetPosition.BOTTOM_LEFT
     location: str = ""
-    font_family: str = "Segoe UI"
+    font_family: str = "Inter"
     font_size: int = 24
     text_color: str = "#FFFFFF"
     show_background: bool = True
@@ -2073,7 +2073,7 @@ class WeatherWidgetSettings:
             monitor=settings.get("widgets.weather.monitor", "ALL"),
             position=position,
             location=settings.get("widgets.weather.location", ""),
-            font_family=settings.get("widgets.weather.font_family", "Segoe UI"),
+            font_family=settings.get("widgets.weather.font_family", "Inter"),
             font_size=settings.get("widgets.weather.font_size", 24),
             text_color=settings.get("widgets.weather.text_color", "#FFFFFF"),
             show_background=settings.get("widgets.weather.show_background", True),
@@ -2104,7 +2104,7 @@ class WeatherWidgetSettings:
             monitor=_get("monitor", "ALL"),
             position=position,
             location=_get("location", ""),
-            font_family=_get("font_family", "Segoe UI"),
+            font_family=_get("font_family", "Inter"),
             font_size=int(_get("font_size", 24)),
             text_color=_get("text_color", "#FFFFFF"),
             show_background=_get("show_background", True),
@@ -2150,7 +2150,7 @@ class RedditWidgetSettings:
     position: WidgetPosition = WidgetPosition.TOP_RIGHT
     subreddit: str = "technology"
     limit: int = 10
-    font_family: str = "Segoe UI"
+    font_family: str = "Inter"
     font_size: int = 18
     text_color: str = "#FFFFFF"
     show_background: bool = True
@@ -2177,7 +2177,7 @@ class RedditWidgetSettings:
             position=position,
             subreddit=settings.get(f"{prefix}.subreddit", "technology"),
             limit=int(settings.get(f"{prefix}.limit", 10)),
-            font_family=settings.get(f"{prefix}.font_family", "Segoe UI"),
+            font_family=settings.get(f"{prefix}.font_family", "Inter"),
             font_size=int(settings.get(f"{prefix}.font_size", 18)),
             text_color=settings.get(f"{prefix}.text_color", "#FFFFFF"),
             show_background=settings.get(f"{prefix}.show_background", True),
@@ -2209,7 +2209,7 @@ class RedditWidgetSettings:
             position=position,
             subreddit=_get("subreddit", "technology"),
             limit=int(_get("limit", 10)),
-            font_family=_get("font_family", "Segoe UI"),
+            font_family=_get("font_family", "Inter"),
             font_size=int(_get("font_size", 18)),
             text_color=_get("text_color", "#FFFFFF"),
             show_background=_get("show_background", True),
@@ -2255,7 +2255,7 @@ class MediaWidgetSettings:
     enabled: bool = False
     monitor: str = "ALL"
     position: WidgetPosition = WidgetPosition.BOTTOM_LEFT
-    font_family: str = "Segoe UI"
+    font_family: str = "Inter"
     font_size: int = 20
     text_color: str = "#FFFFFF"
     show_background: bool = True
@@ -2287,7 +2287,7 @@ class MediaWidgetSettings:
             enabled=settings.get("widgets.media.enabled", False),
             monitor=settings.get("widgets.media.monitor", "ALL"),
             position=position,
-            font_family=settings.get("widgets.media.font_family", "Segoe UI"),
+            font_family=settings.get("widgets.media.font_family", "Inter"),
             font_size=settings.get("widgets.media.font_size", 20),
             text_color=settings.get("widgets.media.text_color", "#FFFFFF"),
             show_background=settings.get("widgets.media.show_background", True),
@@ -2323,7 +2323,7 @@ class MediaWidgetSettings:
             enabled=_get("enabled", False),
             monitor=_get("monitor", "ALL"),
             position=position,
-            font_family=_get("font_family", "Segoe UI"),
+            font_family=_get("font_family", "Inter"),
             font_size=int(_get("font_size", 20)),
             text_color=_get("text_color", "#FFFFFF"),
             show_background=_get("show_background", True),

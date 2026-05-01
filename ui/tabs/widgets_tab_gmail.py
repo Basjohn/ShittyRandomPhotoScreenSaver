@@ -744,7 +744,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     from ui.widgets import StyledFontComboBox
     font_row = _aligned_row(appearance_inner, "Font:")
     tab.gmail_font_combo = StyledFontComboBox(size_variant="hero")
-    default_font = tab._default_str('gmail', 'font_family', 'Segoe UI')
+    default_font = tab._default_str('gmail', 'font_family', 'Inter')
     tab.gmail_font_combo.setCurrentFont(QFont(default_font))
     tab.gmail_font_combo.setMinimumWidth(220)
     tab.gmail_font_combo.currentFontChanged.connect(tab._save_settings)

@@ -302,7 +302,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     media_font_family_row = _aligned_row(_media_ctrl_layout, "Font:")
     tab.media_font_combo = StyledFontComboBox(size_variant="hero")
-    default_media_font = tab._default_str('media', 'font_family', 'Segoe UI')
+    default_media_font = tab._default_str('media', 'font_family', 'Inter')
     tab.media_font_combo.setCurrentFont(QFont(default_media_font))
     tab.media_font_combo.setMinimumWidth(220)
     tab.media_font_combo.currentFontChanged.connect(tab._save_settings)
@@ -716,7 +716,7 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     if index >= 0:
         tab.media_position.setCurrentIndex(index)
 
-    tab.media_font_combo.setCurrentFont(QFont(tab._config_str('media', media_config, 'font_family', 'Segoe UI')))
+    tab.media_font_combo.setCurrentFont(QFont(tab._config_str('media', media_config, 'font_family', 'Inter')))
     tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size', 22))
     tab.media_margin.setValue(tab._config_int('media', media_config, 'margin', 30))
     tab.media_show_background.setChecked(tab._config_bool('media', media_config, 'show_background', True))

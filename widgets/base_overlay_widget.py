@@ -172,7 +172,7 @@ class BaseOverlayWidget(QLabel):
     position_changed = Signal(str)
     
     # Default styling
-    DEFAULT_FONT_FAMILY = "Segoe UI"
+    DEFAULT_FONT_FAMILY = "Inter"
     DEFAULT_FONT_SIZE = 18
     DEFAULT_MARGIN = 30
     DEFAULT_BG_OPACITY = 0.9

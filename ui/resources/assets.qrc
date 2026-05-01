@@ -7,6 +7,8 @@
         <file alias="fonts/Jost-Regular.ttf">../assets/fonts/Jost-Regular.ttf</file>
         <file alias="fonts/Jost-SemiBold.ttf">../assets/fonts/Jost-SemiBold.ttf</file>
         <file alias="fonts/Jost-Bold.ttf">../assets/fonts/Jost-Bold.ttf</file>
+        <file alias="fonts/Inter-VariableFont_opsz,wght.ttf">../assets/fonts/Inter-VariableFont_opsz,wght.ttf</file>
+        <file alias="fonts/Inter-Italic-VariableFont_opsz,wght.ttf">../assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf</file>
         <file alias="combobox_closed.svg">../assets/combobox_closed.svg</file>
         <file alias="combobox_closed_hover.svg">../assets/combobox_closed_hover.svg</file>
     </qresource>

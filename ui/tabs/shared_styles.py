@@ -4,7 +4,7 @@ Centralises repeated styling blocks and common widgets so individual tabs
 don't duplicate them.
 """
 import weakref
-from typing import Dict, Any, Optional, Callable
+from typing import Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
@@ -34,22 +34,28 @@ _JOST_FONT_PATHS = (
     ":/ui/assets/fonts/Jost-SemiBold.ttf",
     ":/ui/assets/fonts/Jost-Bold.ttf",
 )
-_JOST_REGISTERED = False
+_INTER_FONT_PATHS = (
+    ":/ui/assets/fonts/Inter-VariableFont_opsz,wght.ttf",
+    ":/ui/assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
+)
+_FONTS_REGISTERED = False
 
 
-def _ensure_jost_registered() -> None:
-    global _JOST_REGISTERED
-    if _JOST_REGISTERED:
+def _ensure_fonts_registered() -> None:
+    global _FONTS_REGISTERED
+    if _FONTS_REGISTERED:
         return
     if QApplication.instance() is None:
         return
     for path in _JOST_FONT_PATHS:
         QFontDatabase.addApplicationFont(path)
-    _JOST_REGISTERED = True
+    for path in _INTER_FONT_PATHS:
+        QFontDatabase.addApplicationFont(path)
+    _FONTS_REGISTERED = True
 
 
 def ensure_custom_fonts() -> None:
-    _ensure_jost_registered()
+    _ensure_fonts_registered()
 
 
 FORM_LABEL_HEIGHT = 34

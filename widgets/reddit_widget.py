@@ -1350,7 +1350,7 @@ class RedditWidget(BaseOverlayWidget):
 
         self._paint_header_frame(painter)
 
-        x = rect.left() + 3
+        x = rect.left() + 10
         logo_size = max(0, int(self._header_logo_size))
         if self._brand_pixmap is not None and not self._brand_pixmap.isNull() and logo_size > 0:
             try:
@@ -1412,7 +1412,7 @@ class RedditWidget(BaseOverlayWidget):
             )
 
         # Posts list
-        title_font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
+        title_font = QFont(self._font_family, self._font_size, QFont.Weight(700))
         title_metrics = QFontMetrics(title_font)
         age_font_size = max(8, self._font_size - 5)
         age_font = QFont(self._font_family, age_font_size, QFont.Weight.DemiBold)
@@ -1632,7 +1632,7 @@ class RedditWidget(BaseOverlayWidget):
         age_font = QFont(self._font_family, age_font_pt, QFont.Weight.DemiBold)
         age_metrics = QFontMetrics(age_font)
 
-        title_font = QFont(self._font_family, base_font_pt, QFont.Weight.Bold)
+        title_font = QFont(self._font_family, base_font_pt, QFont.Weight(700))
         title_metrics = QFontMetrics(title_font)
 
         line_height = max(age_metrics.height(), title_metrics.height()) + 4
@@ -1815,8 +1815,8 @@ class RedditWidget(BaseOverlayWidget):
         logo_size = max(1, int(self._header_logo_size))
         gap = max(6, self._header_logo_margin - logo_size)
 
-        pad_x = 8
-        pad_y = 4
+        pad_x = 10
+        pad_y = 6
 
         inner_w = logo_size + gap + text_w
         row_h = max(text_h, logo_size)

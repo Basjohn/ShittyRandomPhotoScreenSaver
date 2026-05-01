@@ -264,7 +264,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Font family
     font_family_row = _aligned_row(_clock_ctrl_layout, "Font:")
     tab.clock_font_combo = StyledFontComboBox(size_variant="hero")
-    default_clock_font = tab._default_str('clock', 'font_family', 'Segoe UI')
+    default_clock_font = tab._default_str('clock', 'font_family', 'Inter')
     tab.clock_font_combo.setCurrentFont(QFont(default_clock_font))
     tab.clock_font_combo.setMinimumWidth(220)
     tab.clock_font_combo.currentFontChanged.connect(tab._save_settings)
@@ -458,7 +458,7 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     if index >= 0:
         tab.clock_position.setCurrentIndex(index)
 
-    tab.clock_font_combo.setCurrentFont(QFont(tab._config_str('clock', clock_config, 'font_family', 'Segoe UI')))
+    tab.clock_font_combo.setCurrentFont(QFont(tab._config_str('clock', clock_config, 'font_family', 'Inter')))
     tab.clock_font_size.setValue(tab._config_int('clock', clock_config, 'font_size', 78))
     tab.clock_margin.setValue(tab._config_int('clock', clock_config, 'margin', 30))
     tab.clock_show_background.setChecked(tab._config_bool('clock', clock_config, 'show_background', False))

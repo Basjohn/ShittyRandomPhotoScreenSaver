@@ -182,7 +182,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Font family
     weather_font_family_row = _aligned_row(_weather_ctrl_layout, "Font:")
     tab.weather_font_combo = StyledFontComboBox(size_variant="hero")
-    default_weather_font = tab._default_str('weather', 'font_family', 'Segoe UI')
+    default_weather_font = tab._default_str('weather', 'font_family', 'Inter')
     tab.weather_font_combo.setCurrentFont(QFont(default_weather_font))
     tab.weather_font_combo.setMinimumWidth(220)
     tab.weather_font_combo.currentFontChanged.connect(tab._save_settings)
@@ -397,7 +397,7 @@ def load_weather_settings(tab: WidgetsTab, widgets: dict) -> None:
     if index >= 0:
         tab.weather_position.setCurrentIndex(index)
 
-    tab.weather_font_combo.setCurrentFont(QFont(tab._config_str('weather', weather_config, 'font_family', 'Segoe UI')))
+    tab.weather_font_combo.setCurrentFont(QFont(tab._config_str('weather', weather_config, 'font_family', 'Inter')))
     tab.weather_font_size.setValue(tab._config_int('weather', weather_config, 'font_size', 28))
     tab.weather_show_forecast.setChecked(tab._config_bool('weather', weather_config, 'show_forecast', True))
     tab.weather_show_details.setChecked(tab._config_bool('weather', weather_config, 'show_details_row', True))
