@@ -1386,7 +1386,7 @@ class GmailWidget(BaseOverlayWidget):
         )
         time_slot_width = 0
         if self._show_timestamp:
-            time_font = QFont(self._font_family, base_font_pt - 2, QFont.Weight.Normal)
+            time_font = QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal)
             time_fm = QFontMetrics(time_font)
             time_slot_width = max(
                 (time_fm.horizontalAdvance(self._format_email_date(email.date)) + 8 for email in visible_emails),
@@ -1409,7 +1409,7 @@ class GmailWidget(BaseOverlayWidget):
             time_width = time_slot_width
             time_text = ""
             if self._show_timestamp:
-                time_font = QFont(self._font_family, base_font_pt - 2, QFont.Weight.Normal)
+                time_font = QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal)
                 painter.setFont(time_font)
                 time_text = self._format_email_date(email.date)
             env_x = left
@@ -1458,7 +1458,7 @@ class GmailWidget(BaseOverlayWidget):
             )
             text_y = row_y + subject_fm.ascent() + 2
             if self._show_timestamp:
-                painter.setFont(QFont(self._font_family, base_font_pt - 2, QFont.Weight.Normal))
+                painter.setFont(QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal))
                 painter.setPen(QColor(180, 180, 180, 200))
                 time_x = env_x + env_width
                 painter.drawText(time_x, text_y, time_text)
