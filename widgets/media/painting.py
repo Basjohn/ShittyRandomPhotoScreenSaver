@@ -104,14 +104,13 @@ def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
     logo_size = max(1, int(widget._header_logo_size))
     gap = max(6, widget._header_logo_margin - logo_size)
 
-    pad_x = 10
+    pad_x = 17
     pad_y = 6
 
     inner_w = logo_size + gap + text_w
     row_h = max(text_h, logo_size)
 
-    extra_right_pad = 24
-    width = int(inner_w + pad_x * 2 + extra_right_pad)
+    width = int(inner_w + pad_x * 2)
     height = int(row_h + pad_y * 2)
 
     max_width = max(0, widget.width() - margins.right() - left - 10)
@@ -219,7 +218,7 @@ def draw_control_icon(
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, next_sym)
     elif key == "play":
         pause_font_size = widget._font_size - 4 if centre_sym == "||" else widget._font_size - 2
-        font_centre = QFont(widget._font_family, pause_font_size, QFont.Weight.Bold)
+        font_centre = QFont("Segoe UI", pause_font_size, QFont.Weight.Bold)
         painter.setFont(font_centre)
         painter.setPen(active_color)
         painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, centre_sym)

@@ -42,7 +42,7 @@ def compute_controls_layout(widget):
         return None
 
     controls_font_pt = max(8, int((widget._font_size - 2) * 0.9))
-    font = QFont(widget._font_family, controls_font_pt, QFont.Weight.Medium)
+    font = QFont("Segoe UI", controls_font_pt, QFont.Weight.Medium)
     fm = QFontMetrics(font)
     row_height = max(widget._controls_row_min_height(), int((fm.height() + 10) * 0.85))
 
