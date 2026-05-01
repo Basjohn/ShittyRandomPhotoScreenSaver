@@ -1414,7 +1414,7 @@ class RedditWidget(BaseOverlayWidget):
         # Posts list
         title_font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         title_metrics = QFontMetrics(title_font)
-        age_font_size = max(8, self._font_size - 3)
+        age_font_size = max(8, self._font_size - 5)
         age_font = QFont(self._font_family, age_font_size, QFont.Weight.DemiBold)
         painter.setFont(age_font)
         age_metrics = QFontMetrics(age_font)
@@ -1628,7 +1628,7 @@ class RedditWidget(BaseOverlayWidget):
         header_metrics = QFontMetrics(header_font)
         header_height = header_metrics.height() + 8
 
-        age_font_pt = max(8, base_font_pt - 3)
+        age_font_pt = max(8, base_font_pt - 5)
         age_font = QFont(self._font_family, age_font_pt, QFont.Weight.DemiBold)
         age_metrics = QFontMetrics(age_font)
 
