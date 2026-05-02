@@ -114,7 +114,7 @@ class GmailWidget(BaseOverlayWidget):
     def __init__(
         self,
         parent: Optional[QWidget] = None,
-        position: GmailPosition = GmailPosition.TOP_LEFT,
+        position: GmailPosition = GmailPosition.TOP_CENTER,
         settings: Optional[Any] = None,
     ) -> None:
         overlay_pos = OverlayPosition.from_string(position.value)

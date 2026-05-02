@@ -278,6 +278,11 @@ class SettingsManager(QObject):
         if app_name == "Screensaver_MC":
             defaults['display.show_on_monitors'] = [1]
             defaults['input.hard_exit'] = True
+            widgets = defaults.setdefault('widgets', {})
+            gmail = widgets.setdefault('gmail', {})
+            gmail['monitor'] = '2'
+            media = widgets.setdefault('media', {})
+            media['monitor'] = '2'
 
     def _ensure_transitions_defaults(self, default_transitions: Dict[str, Any]) -> None:
         with self._lock:
