@@ -1,1 +1,0 @@
-101:     text_w = fm.horizontalAdvance(widget.provider_display_name)

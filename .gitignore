@@ -39,7 +39,6 @@ ENV/
 /tmp_dbg_appdata/
 /tests_tmp_appdata/
 Current_Plan.md
-/tmp_dbg_settings/
 
 # Coverage and test artifacts
 htmlcov/
@@ -53,7 +52,9 @@ yarn-debug.log*
 yarn-error.log*
 *.log
 *.bak
-/logs/
+/logs/*
+!/logs/tests/
+!/logs/tests/**
 /temp/
 /cache/reddit/*.json
 /cache/*/*.json
@@ -62,7 +63,6 @@ yarn-error.log*
 /archive/
 /bak/
 /settings/
-/tests_tmp_appdata/
 agent.md
 
 # Build/release binary artifacts
@@ -100,3 +100,62 @@ id_ed25519
 
 # Local utility sandbox
 MyReuseableUtilityModules/
+
+# Codex / agent local noise
+# Track .agents/skills/; do NOT ignore .agents/.
+/.agent/
+/.agent
+/.codex-appdata/
+/.codex_appdata/
+/.codex_tmp/
+/.codex-traces/
+/.codex_traces/
+/.codex-worktrees/
+/codex-worktrees/
+/worktrees/
+/.worktrees/
+/tmp_codex*/
+/codex_tmp*/
+
+# Codex project config can be useful to track, but local runtime junk should not be.
+/.codex/tmp/
+/.codex/cache/
+/.codex/logs/
+/.codex/sessions/
+/.codex/state/
+/.codex/traces/
+/.codex/history/
+/.codex/backups/
+
+# Agent scratch notes / temporary plans
+/agent.md
+/AGENT.md
+/agent-*.md
+/codex-*.md
+/tmp_*.md
+/temp_*.md
+/temp_search.txt
+
+# Extra Python/tooling caches
+.tox/
+.nox/
+.pyre/
+.pyright/
+.pyrightcache/
+.dmypy.json
+dmypy.json
+
+# Nuitka / PyInstaller / frozen-build scratch output
+*.build/
+*.dist/
+*.onefile-build/
+*.onefile-build
+*.manifest
+*.spec.bak
+
+# Misc temporary/editor conflict leftovers
+*.tmp
+*.temp
+*.old
+*.rej
+*~
