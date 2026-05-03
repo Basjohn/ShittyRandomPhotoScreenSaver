@@ -57,11 +57,11 @@ GMAIL_SHADOWFIX_TUNING = {
     "card_shrink_right": 11,
     "card_shrink_bottom": 11,
     "offset_x": 5,
-    "offset_y": 5,
-    "blur_steps": 44,
-    "spread": 8,
-    "max_alpha": 14,
-    "radius_extra": 0,
+    "offset_y": 8,
+    "blur_steps": 40,
+    "spread": 10,
+    "max_alpha": 8,
+    "radius_extra": 2,
 }
 
 

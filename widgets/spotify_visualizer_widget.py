@@ -1433,18 +1433,17 @@ class SpotifyVisualizerWidget(QWidget):
             painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
         finally:
             painter.end()
+        pixmap = self._ensure_painted_frame_shadow_pixmap()
+        if pixmap is not None and not pixmap.isNull():
+            painter = QPainter(self)
+            try:
+                painter.drawPixmap(0, 0, pixmap)
+            finally:
+                painter.end()
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         self._invalidate_painted_frame_shadow_cache()
         super().resizeEvent(event)
-        pixmap = self._ensure_painted_frame_shadow_pixmap()
-        if pixmap is None or pixmap.isNull():
-            return
-        painter = QPainter(self)
-        try:
-            painter.drawPixmap(0, 0, pixmap)
-        finally:
-            painter.end()
 
     def set_bar_colors(self, fill_color: QColor, border_color: QColor) -> None:
         # Fill colour is applied per-bar; border colour controls the bar
@@ -2514,6 +2513,13 @@ class SpotifyVisualizerWidget(QWidget):
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+
+        if self.uses_painted_frame_shadow():
+            clip_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
+            clip_radius = max(0.0, float(8 + int(PAINTED_FRAME_SHADOW_TUNING["radius_extra"])))
+            clip_path = QPainterPath()
+            clip_path.addRoundedRect(clip_rect, clip_radius, clip_radius)
+            painter.setClipPath(clip_path)
 
         rect = self.rect()
         if is_verbose_logging() and not getattr(self, "_paint_debug_logged", False):

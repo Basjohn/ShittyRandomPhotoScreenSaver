@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-04-30
+Last updated: 2026-05-03
 
 This file tracks active work and near-term validation. Completed implementation detail belongs in a compact ledger, not as the main working surface.
 
@@ -23,15 +23,15 @@ Current status:
 - Mark Read/Unread, Spam, and Delete work in runtime reports.
 - Archive is hidden for IMAP after repeated runtime failures; code remains for OAuth/future diagnostics.
 - Gmail refresh/paint has first-pass caching and transition contention mitigation. Recent fix also covers refreshes already in flight when a transition is requested.
-- `--shadowfix` now gates the shared painted-frame-shadow experiment for framed overlay cards, including the Spotify visualizer card. It avoids persistent `QGraphicsDropShadowEffect` for framed widgets, explicitly clears the transparent backing store before painting, and uses cached DPR-aware painter output instead.
+- `--shadowfix` now gates the shared painted-frame-shadow experiment for framed overlay cards. It avoids persistent `QGraphicsDropShadowEffect` for framed widgets, explicitly clears the transparent backing store before painting, and uses cached DPR-aware painter output instead.
 - Shared tuning lives in `PAINTED_FRAME_SHADOW_TUNING` in `widgets/base_overlay_widget.py`, promoted from the user-validated Gmail values. Gmail's older `GMAIL_SHADOWFIX_TUNING` remains only as diagnostic/local comparison while the shared path takes over.
 - Settings dialog creation flicker is fixed in live use; keep R-18 guardrails active for future settings work.
 
 Near-term targets:
 - Runtime-validate the latest Gmail/Reddit refresh contention fix from fresh `/logs`: in-flight refresh + manual transition should suspend spinner repaint and defer apply until transition idle.
-- Runtime A/B `--shadowfix` on all framed widgets in MC multi-monitor: Display 1 click into app, then Display 0 click. Compare whether Gmail/Weather/Reddit/Media/Visualizer stop doubling outside-card shadows.
+- Runtime A/B `--shadowfix` on all framed widgets in MC multi-monitor: Display 1 click into app, then Display 0 click. Compare whether Gmail/Weather/Reddit/Media stop doubling outside-card shadows.
 - Watch logs for `[GMAIL_SHADOWFIX] Unexpected persistent graphics effect`; if it appears, there is still an effect in the stack despite the gated painted-shadow path.
-- Tune `PAINTED_FRAME_SHADOW_TUNING` for family-wide fidelity: card shrink, offset, blur steps, spread, max alpha, and radius extra. Keep this gated until the visual match and corruption behavior are both validated.
+- Tune `PAINTED_FRAME_SHADOW_TUNING` for family-wide fidelity only if visual validation shows mismatch. Do not make the widget-card backdrop shadows generally more intense by default; current `--shadowfix` card shadows are already tuned heavy.
 - Rebuild/inspect final normal and MC artifacts for envelope/action icons, optional refresh visual, and regression-check Gmail logo/sound packaging.
 - Run a concise Gmail defaults/security/build audit after packaging changes: no credentials or OAuth local secrets tracked or bundled.
 - Runtime-check display polish only where screenshots still show issues: header/logo alignment, unread/read envelope distinction at 16px, date modes at practical widths, sender/subject column alignment.
@@ -41,30 +41,48 @@ Deferred Gmail targets:
 - Archive should stay hidden for IMAP unless a source-backed finding or small diagnostic harness proves a reliable accepted command.
 - Low-priority shared stretch: open Gmail/Reddit links on monitor index `0` when cleanly possible, with fallback to current behavior.
 
-### Reddit Widget
-Current status:
-- Refresh spiral no longer triggers normal-build URL exit.
-- Refresh spiral queues guarded refreshes, respects fetch-in-progress, defers start/result/cache regeneration during pending/running transitions, and suspends live spinner repaint if a transition starts mid-refresh.
-
-Near-term targets:
-- Runtime-validate Reddit spiral refresh in normal and MC builds: no link-exit unless a real URL is clicked, one queued refresh after transition idle, spinner stops cleanly.
-
 ### Visualizer
 Current status:
-- Spline Curve/DevCurve specular now fades out while idle/paused and fades back in on playback using the runtime specular alpha multiplier.
+- Spotify visualizer card `--shadowfix` remains open: the card/background/shadow can now draw, but GL-rendered visualizer content still visibly escapes the painted card boundary in at least DevCurve/Spline-style modes. CPU painter clipping is not enough because the GPU overlay renders through `SpotifyBarsGLOverlay`, outside the widget `QPainter` path.
 
 Guardrails:
 - Do not touch visualizer timing/mitigation paths as a side effect of widget performance work.
 - Keep preset tooling/schema and runtime behavior aligned as visualizer modes evolve.
+- For visualizer `--shadowfix`, do not solve escape by changing visualizer mode size/content, preset geometry, curve amplitude, waveform math, or authored mode behavior. The required fix is visibility/clipping/masking to the card boundary only, matching non-`--shadowfix` behavior.
 
 Near-term targets:
+- Fix visualizer `--shadowfix` escape at the correct rendering layer. The likely target is the GL overlay geometry/clipping path: `rendering/display_image_ops.py` passes `vis.geometry()` to `SpotifyBarsGLOverlay`, while the painted card is inset by `PAINTED_FRAME_SHADOW_TUNING` (`card_shrink_right`, `card_shrink_bottom`). The overlay must be clipped/masked or given a render rect that matches the visible card, without reducing authored content scale.
+- Re-test visualizer `--shadowfix` across Spectrum, Sine/Spline/DevCurve, Blob, Bubble, and Oscilloscope-like modes. The failure may present differently per mode because CPU-painted spectrum and GPU-rendered modes use different pipelines.
+- Remove invalid widget painting outside `paintEvent` if it reappears. Recent logs showed `QWidget::paintEngine: Should no longer be called` / `QPainter::begin: Paint device returned engine == 0`, caused by painting a widget from `resizeEvent`; this class of fix should stay paint-event-only.
 - Preset repair/reindex round-trip checks after visualizer schema changes.
 - Assess `card_height.py` and whether a centralized sizing contract can replace scattered multipliers without bleed or visual regressions.
+- Assess & Document need for extensive shadow cache invalidation systems post-shadowfix gate removal. Other sources of corruption? Performance cost?
+
+
+### Shadow System / `--shadowfix`
+Current status:
+- HIGH PRIORITY: multi-monitor MC shadow/shadow-cache corruption now appears frequently after focus loss/cross-display clicks. Preserve the MC focus restore/key fix while validating the permanent mitigation.
+- Current theory: stale transparent backing-store pixels and/or widget-level `QGraphicsDropShadowEffect` on translucent background frames are the corruptible primitives. `--shadowfix` tests cached painted outer-frame shadows across framed overlay cards.
+- `Intense Shadows` currently remains a user-facing setting, but under painted-frame shadows it is at best ignored and at worst a path back toward mixed shadow methodologies.
+- The existing `--shadowfix` framed-card backdrop shadow should not be made generally heavier as part of intense-shadow cleanup. It is already tuned heavy; the goal is simplification, safety, and consistency, not stronger card backdrop shadows.
+
+Recommended intense-shadow migration path:
+- Remove `intense_shadow` as a user-facing setting after the painted shadow baseline validates. The painted shadow path currently does not meaningfully branch on it, so keeping the toggle risks a setting that appears active but does nothing under `--shadowfix`.
+- Remove `_intense_shadow` as an internal framed-widget control once the migration is live. The goal is one centralized shadow system, not a normal/intense fork.
+- Remove `INTENSE_SHADOW_BLUR_MULTIPLIER`, `INTENSE_SHADOW_OPACITY_MULTIPLIER`, and `INTENSE_SHADOW_OFFSET_MULTIPLIER` from `widgets/shadow_utils.py` once the legacy `QGraphicsDropShadowEffect` path is retired or limited to non-framed/text-only cases.
+- Keep `apply_widget_shadow` only for the non-`--shadowfix` legacy path until migration is complete, then strip the `intense` parameter when no framed widget depends on it.
+- Avoid double painting. A framed widget should never have both a persistent `QGraphicsDropShadowEffect` and a painted-frame shadow. `uses_painted_frame_shadow()` should continue to clear/skip `QGraphicsDropShadowEffect` before returning.
+- Avoid shadow cache corruption by making the painted frame shadow the sole framed-card implementation. The old intense path triples blur radius, boosts opacity, and doubles offset inside Qt's graphics-effect pipeline, increasing exactly the kind of large translucent cached effect surface suspected in U-06.
+- Preserve visual strength by keeping the validated painted-shadow baseline strong enough without a second user-facing intense mode. Do not increase the current `--shadowfix` widget-card backdrop shadow unless a specific visual mismatch is identified.
+- If any non-card/text-only shadow still needs more presence after migration, handle it through a safe painted/text-shadow strategy or another centralized non-`QGraphicsDropShadowEffect` mechanism, not by reviving per-widget intense `QGraphicsDropShadowEffect` multipliers.
+
+Near-term targets:
+- Runtime A/B `--shadowfix` on all framed widgets in MC multi-monitor after the visualizer escape is fixed: Display 1 click into app, then Display 0 click. Compare whether Gmail/Weather/Reddit/Media/Visualizer stop doubling outside-card shadows.
+- Audit settings UI and defaults for `intense_shadow` references before removal. This includes widget tabs, settings models, defaults, tests, and migration behavior.
+- Update `Docs/Historical_Bugs.md` after validation with the final status of U-06 and the adopted shadow architecture.
 
 ### General Runtime
 Open watchlist:
-- HIGH PRIORITY: multi-monitor MC shadow/shadow-cache corruption now appears frequently after focus loss/cross-display clicks. Preserve the MC focus restore/key fix while validating the permanent mitigation. Current theory: stale transparent backing-store pixels and/or widget-level `QGraphicsDropShadowEffect` on translucent background frames are the corruptible primitives; `--shadowfix` now tests cached painted outer-frame shadows across framed overlay cards, including the Spotify visualizer.
-- Reassess/remove `Intense Shadows` as a user-facing setting after painted shadows validate. The old setting was mostly an aggressive multiplier (`3x` blur, `2.5x` opacity, `2x` offset); the new path should make the normal result strong enough without a second shadow mode.
 - Mute button fade-in reliability under startup event pressure.
 - Transition random mode actual distribution vs expected uniform over 50+ rotations.
 - Settings destructive-flow checks: reset/import when touching settings architecture.
@@ -95,8 +113,6 @@ These remain risky and should be handled only when a focused task justifies them
 - Gmail implementation plan: `Docs/Gmail_Widget_Plan.md`
 
 ## Idea Box/Problem Box
-0. CRITICAL, ADD AS HIGH PRIORITY TASK. Two sided issue. First all widgets except for Gmail have a natural anti shadow corruption cadence at some point, gmail lacking it means that it sticks out when this triggers. Other side, shadow/shadow cache corruption is now happening extremely often when clicking into the app in MC mode on Display 1 and then clicking into anything on Display 0. Clicking back in fixes it because of our mitigations (which are great) but we should see if there are ways to permanently solve this issue without ruining/altering fidelity with research compared against our historicals (careful not to regress MC focus which finally fixed our keys!) and even if not investigate why it now suddenly happens on every focus loss. (Is this only detectable by my eyesight? Why do we not log shadow corruption if not?)
-
 1. Add a lightweight doc-drift check for stale references between `Spec.md`, `Index.md`, `Current_Plan.md`, and `Docs/Gmail_Widget_Plan.md`.
 
 2. Add a small harness smoke command list for recurring investigations.

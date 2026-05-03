@@ -454,6 +454,15 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
     if geom.width() <= 0 or geom.height() <= 0:
         return False
 
+    # When painted frame shadows are active the visible card is inset from
+    # the widget edge.  Shrink the rect passed to the GL overlay so
+    # rendered content stays within the card boundary.
+    if hasattr(vis, "uses_painted_frame_shadow") and vis.uses_painted_frame_shadow():
+        from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
+        shrink_r = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_right"])
+        shrink_b = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_bottom"])
+        geom = geom.adjusted(0, 0, -shrink_r, -shrink_b)
+
     overlay = _ensure_spotify_bars_overlay(widget)
     if overlay is None:
         return False
