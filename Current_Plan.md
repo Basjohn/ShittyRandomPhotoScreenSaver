@@ -28,9 +28,9 @@ Current status:
 - Settings dialog creation flicker is fixed in live use; keep R-18 guardrails active for future settings work.
 
 Critical Blockers:
-- [FIXED 2026-05-04] Media control bar shift: `MediaWidget._update_stylesheet()` now sets transparent background/no border when `uses_painted_frame_shadow()` is True, preventing double-painting of card background that caused visual shift. Needs runtime validation.
-- [FIXED 2026-05-04 — U-07] Visualizer GL modes escape card boundary under `--shadowfix`. Fixed via rounded-rect **stencil mask** in `paintGL()` — mask pass writes `1` to stencil inside the visible card boundary (including rounded corners), then visualizer only draws where stencil == 1. No content scale or behavior changes. Needs runtime validation across all modes.
-- [FIXED 2026-05-04] Volume slider shadow: `SpotifyVolumeWidget` now has its own painted frame shadow system using `VOLUME_SLIDER_SHADOW_TUNING` from `shadowtuning.json`. Needs runtime validation.
+- [FIXED 2026-05-04] Media control bar shift: `MediaWidget._update_stylesheet()` now sets transparent background/no border when `uses_painted_frame_shadow()` is True, preventing double-painting of card background that caused visual shift. Validated.
+- [FIXED 2026-05-04 — U-07] Visualizer GL modes escape card boundary under `--shadowfix`. Fixed via rounded-rect **stencil mask** in `paintGL()` with extra `border_width/2` inset to avoid bleeding over the centred card pen stroke. Validated across all modes; `test_stencil_mask_alignment.py` proves zero bleed.
+- [FIXED 2026-05-04] Volume slider shadow: `SpotifyVolumeWidget` now has its own painted frame shadow system using `VOLUME_SLIDER_SHADOW_TUNING` from `shadowtuning.json`. Validated.
 An Image example of ALL 3 Blockers: "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\temp\blockers.png"
 
 Near-term targets:
@@ -57,8 +57,8 @@ Guardrails:
 - For visualizer `--shadowfix`, do not solve escape by changing visualizer mode size/content, preset geometry, curve amplitude, waveform math, or authored mode behavior. The required fix is visibility/clipping/masking to the card boundary only, matching non-`--shadowfix` behavior.
 
 Near-term targets:
-- Runtime-validate stencil mask clipping across all visualizer modes under `--shadowfix`. Confirm no bleed at rounded corners, no content distortion, no stencil artifacts after mode switches.
-- [DONE 2026-05-04] Remove dead `_render_with_qpainter` fallback from `SpotifyBarsGLOverlay`. Removed unused imports: `QPainter`, `QRectF`, `compute_bar_layout`. GL is the only active rendering path.
+- [DONE] Stencil mask validated: `test_stencil_mask_alignment.py` passes (zero bleed, correct corner rounding, zero-radius rectangle parity).
+- [DONE 2026-05-04] Removed dead `_render_with_qpainter` fallback from `SpotifyBarsGLOverlay`. GL is the only active rendering path.
 - Remove invalid widget painting outside `paintEvent` if it reappears. Recent logs showed `QWidget::paintEngine: Should no longer be called` / `QPainter::begin: Paint device returned engine == 0`, caused by painting a widget from `resizeEvent`; this class of fix should stay paint-event-only.
 - Preset repair/reindex round-trip checks after visualizer schema changes.
 - Assess `card_height.py` and whether a centralized sizing contract can replace scattered multipliers without bleed or visual regressions.

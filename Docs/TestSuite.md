@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-04-27
+Last updated: 2026-05-04
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -39,6 +39,7 @@ When changing visualizer settings/contracts, include tests for:
 - runtime bridge kwargs transport,
 - preset repair/reindex behavior,
 - mode-prefix compatibility for future/unknown-style payload prefixes.
+- **Stencil mask alignment** (`tests/test_stencil_mask_alignment.py`): validates that the GL stencil mask exactly matches the visible card boundary (rounded corners included) and does not bleed outside the card fill or over the centred pen stroke. Must pass after any change to `paintGL()` mask uniforms, card inset math, or border-width handling in `SpotifyBarsGLOverlay`.
 
 ## 4.1 Gmail Test Expectations
 When changing Gmail widget OAuth/backend, include tests for:

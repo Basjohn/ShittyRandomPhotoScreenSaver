@@ -1925,17 +1925,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     # We apply the same inset here so the mask matches the
                     # visible painted frame exactly and does not bleed into the
                     # 1-px gap between card edge and shadow spread.
+                    #
+                    # Additionally, the card border is drawn with a pen centred
+                    # on the card path.  The visualizer must stay inside the
+                    # inner edge of that stroke, so we inset by border_width/2.
                     inset = 1.0 * dpr
-                    mask_w = max(1.0, (card_w - 2.0) * dpr)
-                    mask_h = max(1.0, (card_h - 2.0) * dpr)
+                    extra = max(0.0, float(self._border_width_px) * 0.5 * dpr)
+                    mask_x = float(inset + extra)
+                    mask_y = float((rect.height() - card_h) * dpr + inset + extra)
+                    mask_w = max(1.0, (card_w - 2.0) * dpr - 2.0 * extra)
+                    mask_h = max(1.0, (card_h - 2.0) * dpr - 2.0 * extra)
                     gl.glUniform4f(
                         loc_rect,
-                        float(inset),
-                        float((rect.height() - card_h) * dpr + inset),
+                        mask_x,
+                        mask_y,
                         float(mask_w),
                         float(mask_h),
                     )
-                    gl.glUniform1f(loc_radius, float(max(0.0, (radius - 1.0) * dpr)))
+                    gl.glUniform1f(loc_radius, float(max(0.0, (radius - 1.0 - self._border_width_px * 0.5) * dpr)))
                     gl.glBindVertexArray(self._gl_vao)
                     gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
                     gl.glBindVertexArray(0)

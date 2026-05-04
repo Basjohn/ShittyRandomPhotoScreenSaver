@@ -6,18 +6,18 @@ Keep this document as the long-term anti-regression memory for the project.
 ### Active / Unresolved
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
-3. [U-07 — 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Unresolved)](#U-07)
 
 ### Recently Resolved
-1. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-2. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-3. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-4. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-5. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-6. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-7. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-8. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-9. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-21 — 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Resolved)](#U-07)
+2. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+3. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+4. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+5. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+6. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+7. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+8. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+9. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+10. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
 ### Archived / Legacy Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
@@ -1268,16 +1268,18 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - **Loop-avoidance reminder:** if Goo resembles isolated circles, do not tune "hotness" first; inspect field kernel tail, threshold range, and center-void suppression as the first triage path.
 
 <a id="U-07"></a>
-### [U-07] 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Awaiting Validation)
+### [R-20] 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] ACTIVE
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
-- **Symptom:** When `--shadowfix` is enabled, GL-rendered visualizer content (all real modes: Spline, DevCurve, Sine, etc.) visibly escapes the painted card boundary at the right and bottom edges. CPU-painted spectrum bars also escape rounded corners.
+- **Symptom:** When `--shadowfix` is enabled, GL-rendered visualizer content (all real modes: Spectrum, DevCurve, Sine, Blob, Bubble, Oscilloscope) visibly escapes the painted card boundary at the right, bottom, and rounded-corner edges. The bleed was ~1px on sides/corners and ~1.5px on right/bottom, with the top-right corner being the worst.
 
-- **Root cause:** The `SpotifyBarsGLOverlay` receives the full `vis.geometry()` rect and calls `self.setGeometry(rect)` every tick. The painted card is inset by `card_shrink_right/bottom` (currently 11px each), but the GL overlay is unaware of this boundary. GL content renders into the full widget rect, extending past the visible card edge.
+- **Surface-level root cause (2026-05-03):** The `SpotifyBarsGLOverlay` receives the full `vis.geometry()` rect. The painted card is inset by `card_shrink_right/bottom` (11px each), but the GL overlay renders into the full widget rect, extending past the visible card edge.
+
+- **True root cause (2026-05-04):** The initial stencil mask matched the card *fill* rect (inset by 1 logical px via `.adjusted(1.0, 1.0, -1.0, -1.0)`). However, the card border is drawn with a centred pen stroke (`border_width = 3px` from `BaseOverlayWidget.get_global_border_width()`). The mask was therefore bleeding over the inner ~1.5px of the border stroke. The apparent "all sides" bleed was the stencil mask being exactly flush with the card path instead of inside it.
 
 - **Failed approaches (DO NOT REATTEMPT):**
   1. **Rect shrink in `display_image_ops.py`** (2026-05-03/04): Adjusted `geom` with `geom.adjusted(0, 0, -shrink_r, -shrink_b)` before passing to the GL overlay. **Why it failed:** This shrinks the visualizer *content* instead of *clipping* it. The content is rendered at a smaller size, which changes authored mode behavior (amplitude, curve scale, bar widths). It also only covered the prewarm path, not the per-tick `push_spotify_visualizer_frame` path. **Reverted 2026-05-04.**
@@ -1285,19 +1287,23 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
   3. **QPainter in `resizeEvent`** (2026-05-03): Attempted to draw the shadow pixmap from `resizeEvent`. **Why it failed:** Painting outside `paintEvent` is invalid in Qt and produces `QPainter::paintEngine: Should no longer be called` errors. **Reverted 2026-05-03.**
 
 - **Side effects of failed fixes:**
-  - The combined shrink + clip changes caused the media control bar to shift lower when in bottom-right position (Blocker 2 in Current_Plan.md). Traced to `MediaWidget._update_stylesheet()` not being shadowfix-aware, causing double-painting of card background. This was a separate bug exposed during investigation but NOT caused by the shrink/clip code itself. Fixed separately.
+  - The combined shrink + clip changes caused the media control bar to shift lower when in bottom-right position. Traced to `MediaWidget._update_stylesheet()` not being shadowfix-aware, causing double-painting of card background. This was a separate bug exposed during investigation but NOT caused by the shrink/clip code itself. Fixed separately.
 
 - **Fix implemented (2026-05-04):**
   - Rounded-rect **stencil mask** in `SpotifyBarsGLOverlay.paintGL()` clips GL fragments to the visible card boundary (including rounded corners).
   - Two-pass approach per frame:
-    1. Mask pass: color writes disabled, stencil writes 1 inside the card rounded rect via a dedicated SDF shader.
+    1. Mask pass: color writes disabled, stencil writes 1 inside the card rounded rect via a dedicated SDF shader (`roundedRectSDF`).
     2. Visualizer pass: stencil test `GL_EQUAL 1` so only fragments inside the card shape are drawn.
   - Card bounds derived from `PAINTED_FRAME_SHADOW_TUNING` (`card_shrink_right`, `card_shrink_bottom`) plus corner radius `8 + radius_extra`.
+  - **Critical correction:** The mask receives an additional inset of `border_width_px * 0.5 * dpr` so the visualizer stays inside the inner edge of the centred pen stroke, not flush with the card path. The radius uniform is reduced by the same amount.
+  - `rendering/display_image_ops.py` now passes `border_width_px=vis._border_width` to `set_state` so the mask can compute the correct inset.
   - No content size, amplitude, curve scale, or authored mode behavior changes. Visualizer shaders untouched.
   - The QPainter fallback path (`_render_with_qpainter`) was removed as dead code.
-  - Awaiting runtime validation across all modes.
 
-- **Failed approaches (DO NOT REATTEMPT — kept for historical reference):**
-  - Rect shrink, QPainter clip path, and painting in `resizeEvent` all failed (see above).
+- **Verification:**
+  - `tests/test_stencil_mask_alignment.py` passes: zero bleed, correct corner rounding, zero-radius rectangle parity, and documented bleed when inset is omitted.
+  - Runtime validation confirmed no visible bleed at card edges or corners across all modes.
 
-- **Guardrail:** Do not attempt rect-shrink or QPainter-clip approaches for this bug again.
+- **Guardrails:**
+  - Do not attempt rect-shrink or QPainter-clip approaches for this bug family again.
+  - The mask inset must account for both the 1-px painted-frame shadow inset (`inset=1.0`) AND the centred card border width (`border_width/2`).

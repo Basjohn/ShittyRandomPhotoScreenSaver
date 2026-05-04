@@ -419,6 +419,14 @@ def push_spotify_visualizer_frame(
     if overlay is None:
         return False
 
+    # Border width is needed so the GL stencil mask can inset by border_width/2
+    # and avoid bleeding over the pen stroke drawn centred on the card path.
+    try:
+        border_width = int(vis._border_width)
+    except Exception:
+        border_width = 0
+    extra_kwargs.pop("border_width_px", None)
+
     return _push_spotify_bars_overlay_state(
         widget,
         overlay=overlay,
@@ -434,6 +442,7 @@ def push_spotify_visualizer_frame(
         ghost_alpha=ghost_alpha,
         ghost_decay=ghost_decay,
         vis_mode=vis_mode,
+        border_width_px=border_width,
         **extra_kwargs,
     )
 
