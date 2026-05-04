@@ -1847,6 +1847,25 @@ class RedditWidget(BaseOverlayWidget):
         )
 
     def _update_stylesheet(self) -> None:
+        if self.uses_painted_frame_shadow():
+            self.setStyleSheet(
+                """
+                QLabel {
+                    color: rgba(%d, %d, %d, %d);
+                    background-color: transparent;
+                    border: %dpx solid transparent;
+                    border-radius: 8px;
+                }
+                """
+                % (
+                    self._text_color.red(),
+                    self._text_color.green(),
+                    self._text_color.blue(),
+                    self._text_color.alpha(),
+                    self._bg_border_width,
+                )
+            )
+            return
         if self._show_background:
             self.setStyleSheet(
                 """

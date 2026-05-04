@@ -32,6 +32,7 @@ except ImportError:  # pragma: no cover - optional dependency for validity check
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
+from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
 from widgets.shadow_utils import apply_widget_shadow, configure_overlay_widget_attributes
 
 if TYPE_CHECKING:
@@ -40,20 +41,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-# Shared painted frame-shadow profile. Values are promoted from the validated
-# Gmail --shadowfix tuning pass. They are intentionally grouped here so visual
-# matching can be adjusted centrally without reviving per-widget "intense"
-# shadow multipliers.
-PAINTED_FRAME_SHADOW_TUNING = {
-    "card_shrink_right": 11,
-    "card_shrink_bottom": 11,
-    "offset_x": 5,
-    "offset_y": 5,
-    "blur_steps": 44,
-    "spread": 8,
-    "max_alpha": 14,
-    "radius_extra": 0,
-}
+# PAINTED_FRAME_SHADOW_TUNING is imported at module level above from
+# core.settings.shadow_tuning (aliased from CARD_SHADOW_TUNING).
 
 
 def painted_frame_shadows_enabled() -> bool:
@@ -365,7 +354,8 @@ class BaseOverlayWidget(QLabel):
             self.setStyleSheet(f"""
                 QWidget {{
                     background-color: transparent;
-                    border: none;
+                    border: {self._bg_border_width}px solid transparent;
+                    border-radius: {self._bg_corner_radius}px;
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, {self._text_color.blue()}, {self._text_color.alpha()});
                 }}
             """)
@@ -627,6 +617,18 @@ class BaseOverlayWidget(QLabel):
     def _invalidate_painted_frame_shadow_cache(self) -> None:
         self._painted_frame_shadow_pixmap = None
         self._painted_frame_shadow_cache_key = None
+
+    def painted_frame_shadow_card_shrink(self) -> tuple[int, int]:
+        """Return (shrink_right, shrink_bottom) when painted shadows are active.
+
+        Returns ``(0, 0)`` when painted shadows are not in use, so callers
+        can unconditionally subtract these from ``widget.width()`` /
+        ``widget.height()`` to get the content-safe area.
+        """
+        if not self.uses_painted_frame_shadow():
+            return (0, 0)
+        tuning = PAINTED_FRAME_SHADOW_TUNING
+        return (int(tuning["card_shrink_right"]), int(tuning["card_shrink_bottom"]))
 
     def _painted_frame_shadow_card_rect(self) -> QRectF:
         tuning = PAINTED_FRAME_SHADOW_TUNING

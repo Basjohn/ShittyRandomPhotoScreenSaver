@@ -113,7 +113,8 @@ def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
     width = int(inner_w + pad_x * 2)
     height = int(row_h + pad_y * 2)
 
-    max_width = max(0, widget.width() - margins.right() - left - 10)
+    shrink_r, _ = widget.painted_frame_shadow_card_shrink()
+    max_width = max(0, widget.width() - shrink_r - margins.right() - left - 10)
     if max_width and width > max_width:
         width = max_width
 
@@ -326,7 +327,10 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
     if pm is None or pm.isNull():
         return
 
-    max_by_height = max(24, widget.height() - 60)
+    shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
+    effective_w = widget.width() - shrink_r
+    effective_h = widget.height() - shrink_b
+    max_by_height = max(24, effective_h - 60)
     size = max(48, min(widget._artwork_size, max_by_height))
     if size <= 0:
         return
@@ -366,7 +370,7 @@ def paint_artwork(widget: "MediaWidget", painter: QPainter) -> None:
     scaled_logical_h = max(1, int(round(scaled.height() / scale_dpr)))
 
     pad = 20
-    x = max(pad, widget.width() - pad - frame_w)
+    x = max(pad, effective_w - pad - frame_w)
     bias = max(0.0, min(1.0, float(getattr(widget, "_artwork_vertical_bias", 0.4))))
     y = pad + int(round((size - frame_h) * bias))
     widget._last_artwork_rect = QRect(x, y, frame_w, frame_h)

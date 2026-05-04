@@ -389,8 +389,9 @@ def _build_and_apply_metadata(
             )
 
     # CRITICAL: Set content margins BEFORE the first-track early return
-    right_margin = max(widget._artwork_size + 40, 60)
-    widget.setContentsMargins(29, 12, right_margin, widget._controls_row_margin())
+    shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
+    right_margin = max(widget._artwork_size + 40, 60) + shrink_r
+    widget.setContentsMargins(29, 12, right_margin, widget._controls_row_margin() + shrink_b)
 
     # On the very first non-empty track update we use this call to
     # establish a stable layout (card stays hidden until fade sync)

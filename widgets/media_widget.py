@@ -620,7 +620,19 @@ class MediaWidget(BaseOverlayWidget):
     # Styling
     # ------------------------------------------------------------------
     def _update_stylesheet(self) -> None:
-        if self._show_background:
+        if self.uses_painted_frame_shadow():
+            self.setStyleSheet(
+                f"""
+                QLabel {{
+                    color: rgba({self._text_color.red()}, {self._text_color.green()},
+                               {self._text_color.blue()}, {self._text_color.alpha()});
+                    background-color: transparent;
+                    border: {self._bg_border_width}px solid transparent;
+                    border-radius: 8px;
+                }}
+                """
+            )
+        elif self._show_background:
             self.setStyleSheet(
                 f"""
                 QLabel {{

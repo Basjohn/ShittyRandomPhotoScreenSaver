@@ -46,6 +46,8 @@ Living map of the current SRPSS codebase.
 | Snapshot normalization | `core/settings/visualizer_settings_snapshot.py` | Canonical visualizer mapping normalization |
 | Baseline/fallback contract | `core/settings/visualizer_settings_contract.py` | Shared fallback resolution for visualizer settings |
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |
+| Shadow tuning loader | `core/settings/shadow_tuning.py` | Loads `shadowtuning.json`; provides `CARD_SHADOW_TUNING` + `VOLUME_SLIDER_SHADOW_TUNING` |
+| Storage paths | `core/settings/storage_paths.py` | Canonical `%APPDATA%` path resolver for all persistent files |
 
 ## Visualizer System
 

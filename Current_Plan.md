@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-05-03
+Last updated: 2026-05-04
 
 This file tracks active work and near-term validation. Completed implementation detail belongs in a compact ledger, not as the main working surface.
 
@@ -24,8 +24,14 @@ Current status:
 - Archive is hidden for IMAP after repeated runtime failures; code remains for OAuth/future diagnostics.
 - Gmail refresh/paint has first-pass caching and transition contention mitigation. Recent fix also covers refreshes already in flight when a transition is requested.
 - `--shadowfix` now gates the shared painted-frame-shadow experiment for framed overlay cards. It avoids persistent `QGraphicsDropShadowEffect` for framed widgets, explicitly clears the transparent backing store before painting, and uses cached DPR-aware painter output instead.
-- Shared tuning lives in `PAINTED_FRAME_SHADOW_TUNING` in `widgets/base_overlay_widget.py`, promoted from the user-validated Gmail values. Gmail's older `GMAIL_SHADOWFIX_TUNING` remains only as diagnostic/local comparison while the shared path takes over.
+- Shadow tuning now loaded from `shadowtuning.json` (in `%APPDATA%/SRPSS/`) via `core/settings/shadow_tuning.py`. Card tuning is re-exported as `PAINTED_FRAME_SHADOW_TUNING` from `widgets/base_overlay_widget.py` for compatibility. Volume slider has its own `VOLUME_SLIDER_SHADOW_TUNING` section. Hardcoded fallbacks used when file is missing or corrupt. Gmail's older `GMAIL_SHADOWFIX_TUNING` remains only as diagnostic/local comparison.
 - Settings dialog creation flicker is fixed in live use; keep R-18 guardrails active for future settings work.
+
+Critical Blockers:
+- [FIXED 2026-05-04] Media control bar shift: `MediaWidget._update_stylesheet()` now sets transparent background/no border when `uses_painted_frame_shadow()` is True, preventing double-painting of card background that caused visual shift. Needs runtime validation.
+- [OPEN — U-07] Visualizer GL modes escape card boundary under `--shadowfix`. Previous rect-shrink and QPainter-clip approaches failed and were reverted. See `Docs/Historical_Bugs.md` U-07 for dead-end documentation. Next attempt must use GL scissor/stencil/FBO compositing.
+- [FIXED 2026-05-04] Volume slider shadow: `SpotifyVolumeWidget` now has its own painted frame shadow system using `VOLUME_SLIDER_SHADOW_TUNING` from `shadowtuning.json`. Needs runtime validation.
+An Image example of ALL 3 Blockers: "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\temp\blockers.png"
 
 Near-term targets:
 - Runtime-validate the latest Gmail/Reddit refresh contention fix from fresh `/logs`: in-flight refresh + manual transition should suspend spinner repaint and defer apply until transition idle.

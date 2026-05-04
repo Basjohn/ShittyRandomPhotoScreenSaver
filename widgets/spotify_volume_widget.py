@@ -16,14 +16,16 @@ from typing import Optional
 
 import weakref
 
-from PySide6.QtCore import Qt, QTimer, QPoint, QRect
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen
+from PySide6.QtCore import Qt, QTimer, QPoint, QRect, QRectF
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
 from core.media.spotify_volume import SpotifyVolumeController
+from core.settings.shadow_tuning import VOLUME_SLIDER_SHADOW_TUNING
 from core.threading.manager import ThreadManager
+from widgets.base_overlay_widget import painted_frame_shadows_enabled
 from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
 from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
 
@@ -58,6 +60,9 @@ class SpotifyVolumeWidget(QWidget):
         self._flush_timer: Optional[QTimer] = None
         self._has_faded_in: bool = False
         self._anchor_media: Optional[QWidget] = None
+        self._painted_frame_shadow_enabled: bool = painted_frame_shadows_enabled()
+        self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
+        self._painted_frame_shadow_cache_key: Optional[tuple] = None
 
         try:
             SpotifyVolumeWidget._instances.add(self)
@@ -101,6 +106,8 @@ class SpotifyVolumeWidget(QWidget):
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
+        if self.uses_painted_frame_shadow():
+            return
         try:
             apply_widget_shadow(self, config, has_background_frame=False)
         except Exception:
@@ -393,11 +400,107 @@ class SpotifyVolumeWidget(QWidget):
         return True
 
     # ------------------------------------------------------------------
+    # Painted frame shadow (--shadowfix)
+    # ------------------------------------------------------------------
+
+    def uses_painted_frame_shadow(self) -> bool:
+        return bool(self._painted_frame_shadow_enabled)
+
+    def _invalidate_painted_frame_shadow_cache(self) -> None:
+        self._painted_frame_shadow_pixmap = None
+        self._painted_frame_shadow_cache_key = None
+
+    def _painted_frame_shadow_card_rect(self) -> QRectF:
+        tuning = VOLUME_SLIDER_SHADOW_TUNING
+        return QRectF(
+            0.0,
+            0.0,
+            max(1.0, float(self.width() - int(tuning["card_shrink_right"]))),
+            max(1.0, float(self.height() - int(tuning["card_shrink_bottom"]))),
+        )
+
+    def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
+        if not self.uses_painted_frame_shadow() or self.width() <= 0 or self.height() <= 0:
+            return None
+        try:
+            dpr = max(1.0, float(self.devicePixelRatioF()))
+        except Exception:
+            dpr = 1.0
+        tuning = VOLUME_SLIDER_SHADOW_TUNING
+        key = (
+            self.width(),
+            self.height(),
+            round(dpr, 3),
+            tuple(sorted(tuning.items())),
+        )
+        if (
+            self._painted_frame_shadow_pixmap is not None
+            and not self._painted_frame_shadow_pixmap.isNull()
+            and self._painted_frame_shadow_cache_key == key
+        ):
+            return self._painted_frame_shadow_pixmap
+
+        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
+        pixmap.setDevicePixelRatio(dpr)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        try:
+            card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
+            radius = max(0.0, float(10 + int(tuning["radius_extra"])))
+            offset_x = float(tuning["offset_x"])
+            offset_y = float(tuning["offset_y"])
+            steps = max(1, int(tuning["blur_steps"]))
+            spread = max(0.0, float(tuning["spread"]))
+            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
+
+            for layer in range(steps, 0, -1):
+                frac = layer / float(steps)
+                grow = spread * frac
+                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
+                if alpha <= 0:
+                    continue
+                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
+                shadow_path = QPainterPath()
+                shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
+                painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
+        finally:
+            painter.end()
+
+        self._painted_frame_shadow_pixmap = pixmap
+        self._painted_frame_shadow_cache_key = key
+        return pixmap
+
+    def _paint_painted_frame_shadow(self) -> None:
+        if not self.uses_painted_frame_shadow():
+            return
+        painter = QPainter(self)
+        try:
+            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+            painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+        finally:
+            painter.end()
+        pixmap = self._ensure_painted_frame_shadow_pixmap()
+        if pixmap is not None and not pixmap.isNull():
+            painter = QPainter(self)
+            try:
+                painter.drawPixmap(0, 0, pixmap)
+            finally:
+                painter.end()
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        self._invalidate_painted_frame_shadow_cache()
+        super().resizeEvent(event)
+
+    # ------------------------------------------------------------------
     # Painting
     # ------------------------------------------------------------------
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
-        super().paintEvent(event)
+        if self.uses_painted_frame_shadow():
+            self._paint_painted_frame_shadow()
+        else:
+            super().paintEvent(event)
 
         painter = QPainter(self)
         try:

@@ -247,7 +247,8 @@ class GmailWidget(BaseOverlayWidget):
             self.setStyleSheet(f"""
                 QWidget {{
                     background-color: transparent;
-                    border: none;
+                    border: {self._bg_border_width}px solid transparent;
+                    border-radius: {self._bg_corner_radius}px;
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, {self._text_color.blue()}, {self._text_color.alpha()});
                 }}
             """)

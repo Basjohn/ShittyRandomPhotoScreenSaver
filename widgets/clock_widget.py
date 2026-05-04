@@ -924,6 +924,29 @@ class ClockWidget(BaseOverlayWidget):
         if self._show_timezone and self._display_mode != "analog":
             tz_extra_space = self.DIGITAL_TZ_GAP + self._get_tz_label_height_estimate()
 
+        if self.uses_painted_frame_shadow():
+            if self._display_mode == "analog":
+                padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
+                padding_right = padding_left
+            else:
+                padding_top = 6
+                padding_right = 28
+                padding_bottom = 6 + tz_extra_space
+                padding_left = 21
+
+            self.setStyleSheet(f"""
+                QLabel {{
+                    color: rgba({self._text_color.red()}, {self._text_color.green()}, 
+                               {self._text_color.blue()}, {self._text_color.alpha()});
+                    background-color: transparent;
+                    border: {self._bg_border_width}px solid transparent;
+                    border-radius: 8px;
+                    padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
+                }}
+            """)
+            self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
+            return
+
         if self._show_background:
             if self._display_mode == "analog":
                 padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()

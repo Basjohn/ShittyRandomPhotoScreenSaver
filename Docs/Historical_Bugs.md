@@ -6,6 +6,7 @@ Keep this document as the long-term anti-regression memory for the project.
 ### Active / Unresolved
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
+3. [U-07 — 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Unresolved)](#U-07)
 
 ### Recently Resolved
 1. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
@@ -1265,3 +1266,34 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
   - reduced center-void trim to contour shaping (not center suppression)
   - randomized core angular homes and increased core depth/radius envelope to avoid stable ring lock
 - **Loop-avoidance reminder:** if Goo resembles isolated circles, do not tune "hotness" first; inspect field kernel tail, threshold range, and center-void suppression as the first triage path.
+
+<a id="U-07"></a>
+### [U-07] 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Unresolved)
+
+- [ ] COMPLETELY FUCKED
+- [x] ACTIVE
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Symptom:** When `--shadowfix` is enabled, GL-rendered visualizer content (all real modes: Spline, DevCurve, Sine, etc.) visibly escapes the painted card boundary at the right and bottom edges. CPU-painted spectrum bars also escape rounded corners.
+
+- **Root cause:** The `SpotifyBarsGLOverlay` receives the full `vis.geometry()` rect and calls `self.setGeometry(rect)` every tick. The painted card is inset by `card_shrink_right/bottom` (currently 11px each), but the GL overlay is unaware of this boundary. GL content renders into the full widget rect, extending past the visible card edge.
+
+- **Failed approaches (DO NOT REATTEMPT):**
+  1. **Rect shrink in `display_image_ops.py`** (2026-05-03/04): Adjusted `geom` with `geom.adjusted(0, 0, -shrink_r, -shrink_b)` before passing to the GL overlay. **Why it failed:** This shrinks the visualizer *content* instead of *clipping* it. The content is rendered at a smaller size, which changes authored mode behavior (amplitude, curve scale, bar widths). It also only covered the prewarm path, not the per-tick `push_spotify_visualizer_frame` path. **Reverted 2026-05-04.**
+  2. **QPainter clip path in `SpotifyVisualizerWidget.paintEvent`** (2026-05-03): Added a `QPainterPath` rounded-rect clip before CPU bar painting. **Why it failed:** Only affects `QPainter`-drawn content. GL overlay renders via `QOpenGLWidget.paintGL()` in a separate pipeline — the `QPainter` clip path has zero effect on GL output. The majority of real modes are GL-rendered. **Reverted 2026-05-04.**
+  3. **QPainter in `resizeEvent`** (2026-05-03): Attempted to draw the shadow pixmap from `resizeEvent`. **Why it failed:** Painting outside `paintEvent` is invalid in Qt and produces `QPainter::paintEngine: Should no longer be called` errors. **Reverted 2026-05-03.**
+
+- **Side effects of failed fixes:**
+  - The combined shrink + clip changes caused the media control bar to shift lower when in bottom-right position (Blocker 2 in Current_Plan.md). Traced to `MediaWidget._update_stylesheet()` not being shadowfix-aware, causing double-painting of card background. This was a separate bug exposed during investigation but NOT caused by the shrink/clip code itself. Fixed separately.
+
+- **Correct approach (not yet implemented):**
+  - The fix must operate at the GL rendering level, not at the widget geometry or QPainter level.
+  - Possible strategies:
+    - GL scissor test (`glScissor`) inside `paintGL()` to clip to the card rect
+    - GL stencil buffer with rounded-rect mask for pixel-perfect corner clipping
+    - Render GL content to an FBO, then composite the FBO onto the widget through a rounded-rect mask
+  - The non-`--shadowfix` path has no bleed because the card widget geometry equals the visible area. Under `--shadowfix`, the widget is intentionally larger to accommodate the shadow, so the GL overlay must be explicitly told about the visible sub-rect.
+  - The solution must NOT change visualizer content size, amplitude, curve scale, or authored mode behavior.
+
+- **Guardrail:** Do not attempt rect-shrink or QPainter-clip approaches for this bug again. The next attempt must operate inside the GL pipeline or at the FBO/compositing level.

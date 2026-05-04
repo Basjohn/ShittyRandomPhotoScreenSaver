@@ -1396,6 +1396,18 @@ class WeatherWidget(BaseOverlayWidget):
         """Update widget stylesheet based on current settings."""
         # Padding: top right bottom left
         padding = f"{self._padding_top}px {self._padding_right}px {self._padding_bottom}px {self._padding_left}px"
+        if self.uses_painted_frame_shadow():
+            self.setStyleSheet(f"""
+                QLabel {{
+                    color: rgba({self._text_color.red()}, {self._text_color.green()}, 
+                               {self._text_color.blue()}, {self._text_color.alpha()});
+                    background-color: transparent;
+                    border: {self._bg_border_width}px solid transparent;
+                    border-radius: 8px;
+                    padding: {padding};
+                }}
+            """)
+            return
         if self._show_background:
             # With background frame
             self.setStyleSheet(f"""

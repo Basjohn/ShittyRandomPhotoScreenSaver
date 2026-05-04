@@ -2514,13 +2514,6 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
-        if self.uses_painted_frame_shadow():
-            clip_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
-            clip_radius = max(0.0, float(8 + int(PAINTED_FRAME_SHADOW_TUNING["radius_extra"])))
-            clip_path = QPainterPath()
-            clip_path.addRoundedRect(clip_rect, clip_radius, clip_radius)
-            painter.setClipPath(clip_path)
-
         rect = self.rect()
         if is_verbose_logging() and not getattr(self, "_paint_debug_logged", False):
             try:

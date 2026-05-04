@@ -9,6 +9,7 @@ Directory layout under the application data root::
 
     %APPDATA%/SRPSS/            (or SRPSS_MC for Media Center profile)
     ├── settings_v2.json
+    ├── shadowtuning.json
     ├── cache/
     │   ├── rss/
     │   ├── imgur/
