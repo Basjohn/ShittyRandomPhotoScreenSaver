@@ -28,7 +28,10 @@ from widgets.spotify_visualizer.blob_math import (
 )
 from widgets.spotify_visualizer.renderers.spectrum import compute_bar_layout
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
-
+from widgets.base_overlay_widget import (
+    PAINTED_FRAME_SHADOW_TUNING,
+    painted_frame_shadows_enabled,
+)
 
 logger = get_logger(__name__)
 
@@ -1882,11 +1885,34 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if fade <= 0.0:
             return
 
-        # Prefer the shader path when available; fall back to QPainter when
-        # the GL program or buffers are not ready or fail at runtime.
-        used_shader = self._render_with_shader(rect, fade)
-        if not used_shader:
-            self._render_with_qpainter(rect, fade)
+        # --- Shadowfix GL scissor clipping ---
+        # Under --shadowfix the widget is larger than the visible card by
+        # card_shrink_right/bottom pixels.  Enable glScissor to discard
+        # fragments outside the card boundary without changing content scale.
+        scissor_active = False
+        if painted_frame_shadows_enabled():
+            try:
+                dpr = self._get_dpr()
+                shrink_r = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_right"])
+                shrink_b = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_bottom"])
+                card_w = max(1, rect.width() - shrink_r)
+                card_h = max(1, rect.height() - shrink_b)
+                # GL scissor uses bottom-left origin in physical pixels
+                sx = 0
+                sy = int(shrink_b * dpr)
+                sw = int(card_w * dpr)
+                sh = int(card_h * dpr)
+                gl.glEnable(gl.GL_SCISSOR_TEST)
+                gl.glScissor(sx, sy, sw, sh)
+                scissor_active = True
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Scissor setup failed: %s", e)
+
+        try:
+            self._render_with_shader(rect, fade)
+        finally:
+            if scissor_active:
+                gl.glDisable(gl.GL_SCISSOR_TEST)
 
         self.update()
 
@@ -2844,93 +2870,5 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             return False
 
         return True
-
-    def _render_with_qpainter(self, rect: QRect, fade: float) -> None:
-        count = self._bar_count
-        segments = self._segments
-        if count <= 0 or segments <= 0:
-            return
-
-        margin_x = 8
-        margin_y = 6
-        inner = rect.adjusted(margin_x, margin_y, -margin_x, -margin_y)
-        if inner.width() <= 0 or inner.height() <= 0:
-            return
-
-        layout = compute_bar_layout(float(inner.width()), int(count), gap=2.0, bars_inset=2.0)
-        if not layout:
-            return
-        bar_width = float(layout["bar_width"])
-        gap = float(layout["gap"])
-        x0 = float(inner.left()) + float(layout["left"])
-        bar_x = [x0 + i * (bar_width + gap) for i in range(count)]
-
-        seg_gap = 1
-        total_seg_gap = seg_gap * max(0, segments - 1)
-        seg_height = int((inner.height() - total_seg_gap) / max(1, segments))
-        if seg_height <= 0:
-            return
-        base_bottom = inner.bottom()
-        seg_y = [base_bottom - s * (seg_height + seg_gap) - seg_height + 1 for s in range(segments)]
-
-        fill = QColor(self._fill_color)
-        border = QColor(self._border_color)
-
-        try:
-            fade_clamped = max(0.0, min(1.0, fade))
-            fill.setAlpha(int(fill.alpha() * fade_clamped))
-            border.setAlpha(int(border.alpha() * fade_clamped))
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-
-        painter = QPainter(self)
-        try:
-            try:
-                painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-
-            painter.setBrush(fill)
-            painter.setPen(border)
-
-            max_segments = min(segments, len(seg_y))
-            draw_count = min(count, len(bar_x), len(self._bars))
-
-            _BASE_H = 80.0
-            h_scale = max(1.0, float(rect.height()) / _BASE_H)
-
-            for i in range(draw_count):
-                x = bar_x[i]
-                try:
-                    value = float(self._bars[i])
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                    value = 0.0
-                if value <= 0.0:
-                    continue
-                if value > 1.0:
-                    value = 1.0
-                # Height-aware visual boost (mirrors shader u_bar_height_scale)
-                value = min(0.95, value * h_scale)
-
-                if self._single_piece:
-                    # Solid bar: one rectangle from bottom to active height
-                    bar_h = max(1, int(round(value * inner.height())))
-                    bar_y = base_bottom - bar_h + 1
-                    painter.drawRect(QRectF(x, bar_y, bar_width, bar_h))
-                else:
-                    active = int(round(value * segments))
-                    if active <= 0:
-                        if self._playing and value > 0.0:
-                            active = 1
-                        else:
-                            continue
-                    if active > max_segments:
-                        active = max_segments
-                    for s in range(active):
-                        y = seg_y[s]
-                        painter.drawRect(QRectF(x, y, bar_width, seg_height))
-        finally:
-            painter.end()
 
 

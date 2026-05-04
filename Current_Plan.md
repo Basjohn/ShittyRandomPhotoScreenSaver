@@ -29,7 +29,7 @@ Current status:
 
 Critical Blockers:
 - [FIXED 2026-05-04] Media control bar shift: `MediaWidget._update_stylesheet()` now sets transparent background/no border when `uses_painted_frame_shadow()` is True, preventing double-painting of card background that caused visual shift. Needs runtime validation.
-- [OPEN — U-07] Visualizer GL modes escape card boundary under `--shadowfix`. Previous rect-shrink and QPainter-clip approaches failed and were reverted. See `Docs/Historical_Bugs.md` U-07 for dead-end documentation. Next attempt must use GL scissor/stencil/FBO compositing.
+- [FIXED 2026-05-04 — U-07] Visualizer GL modes escape card boundary under `--shadowfix`. Fixed via `glScissor` in `paintGL()` — clips fragments to card boundary without changing content scale. Needs runtime validation across all modes.
 - [FIXED 2026-05-04] Volume slider shadow: `SpotifyVolumeWidget` now has its own painted frame shadow system using `VOLUME_SLIDER_SHADOW_TUNING` from `shadowtuning.json`. Needs runtime validation.
 An Image example of ALL 3 Blockers: "F:\Programming\Apps\ShittyRandomPhotoScreenSaver\temp\blockers.png"
 
@@ -49,7 +49,7 @@ Deferred Gmail targets:
 
 ### Visualizer
 Current status:
-- Spotify visualizer card `--shadowfix` remains open: the card/background/shadow can now draw, but GL-rendered visualizer content still visibly escapes the painted card boundary in at least DevCurve/Spline-style modes. CPU painter clipping is not enough because the GPU overlay renders through `SpotifyBarsGLOverlay`, outside the widget `QPainter` path.
+- Spotify visualizer card `--shadowfix` GL escape fixed via `glScissor` in `SpotifyBarsGLOverlay.paintGL()`. Clips to visible card boundary (minus `card_shrink_right/bottom`) in physical pixels. No content scale/behavior changes. Needs runtime validation across Spectrum, Sine, Blob, Bubble, DevCurve, Oscilloscope.
 
 Guardrails:
 - Do not touch visualizer timing/mitigation paths as a side effect of widget performance work.
@@ -57,8 +57,8 @@ Guardrails:
 - For visualizer `--shadowfix`, do not solve escape by changing visualizer mode size/content, preset geometry, curve amplitude, waveform math, or authored mode behavior. The required fix is visibility/clipping/masking to the card boundary only, matching non-`--shadowfix` behavior.
 
 Near-term targets:
-- Fix visualizer `--shadowfix` escape at the correct rendering layer. The likely target is the GL overlay geometry/clipping path: `rendering/display_image_ops.py` passes `vis.geometry()` to `SpotifyBarsGLOverlay`, while the painted card is inset by `PAINTED_FRAME_SHADOW_TUNING` (`card_shrink_right`, `card_shrink_bottom`). The overlay must be clipped/masked or given a render rect that matches the visible card, without reducing authored content scale.
-- Re-test visualizer `--shadowfix` across Spectrum, Sine/Spline/DevCurve, Blob, Bubble, and Oscilloscope-like modes. The failure may present differently per mode because CPU-painted spectrum and GPU-rendered modes use different pipelines.
+- Runtime-validate `glScissor` clipping across all visualizer modes under `--shadowfix`. Confirm no content distortion, no visible straight-edge artifacts at card corners.
+- Remove dead `_render_with_qpainter` fallback from `SpotifyBarsGLOverlay`. This is legacy/unused code — GL is the only active path. Also remove the `compute_bar_layout` import and `QPainter` import if they become unused after removal.
 - Remove invalid widget painting outside `paintEvent` if it reappears. Recent logs showed `QWidget::paintEngine: Should no longer be called` / `QPainter::begin: Paint device returned engine == 0`, caused by painting a widget from `resizeEvent`; this class of fix should stay paint-event-only.
 - Preset repair/reindex round-trip checks after visualizer schema changes.
 - Assess `card_height.py` and whether a centralized sizing contract can replace scattered multipliers without bleed or visual regressions.

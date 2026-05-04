@@ -1268,11 +1268,11 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - **Loop-avoidance reminder:** if Goo resembles isolated circles, do not tune "hotness" first; inspect field kernel tail, threshold range, and center-void suppression as the first triage path.
 
 <a id="U-07"></a>
-### [U-07] 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Unresolved)
+### [U-07] 2026-05-04 — Visualizer `--shadowfix` GL Content Escaping Card Boundary (Awaiting Validation)
 
 - [ ] COMPLETELY FUCKED
-- [x] ACTIVE
-- [ ] AWAITING VALIDATION
+- [ ] ACTIVE
+- [x] AWAITING VALIDATION
 - [ ] SOLVED
 
 - **Symptom:** When `--shadowfix` is enabled, GL-rendered visualizer content (all real modes: Spline, DevCurve, Sine, etc.) visibly escapes the painted card boundary at the right and bottom edges. CPU-painted spectrum bars also escape rounded corners.
@@ -1287,13 +1287,14 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - **Side effects of failed fixes:**
   - The combined shrink + clip changes caused the media control bar to shift lower when in bottom-right position (Blocker 2 in Current_Plan.md). Traced to `MediaWidget._update_stylesheet()` not being shadowfix-aware, causing double-painting of card background. This was a separate bug exposed during investigation but NOT caused by the shrink/clip code itself. Fixed separately.
 
-- **Correct approach (not yet implemented):**
-  - The fix must operate at the GL rendering level, not at the widget geometry or QPainter level.
-  - Possible strategies:
-    - GL scissor test (`glScissor`) inside `paintGL()` to clip to the card rect
-    - GL stencil buffer with rounded-rect mask for pixel-perfect corner clipping
-    - Render GL content to an FBO, then composite the FBO onto the widget through a rounded-rect mask
-  - The non-`--shadowfix` path has no bleed because the card widget geometry equals the visible area. Under `--shadowfix`, the widget is intentionally larger to accommodate the shadow, so the GL overlay must be explicitly told about the visible sub-rect.
-  - The solution must NOT change visualizer content size, amplitude, curve scale, or authored mode behavior.
+- **Fix implemented (2026-05-04):**
+  - `glScissor` in `SpotifyBarsGLOverlay.paintGL()` clips GL fragments to the visible card boundary.
+  - Scissor rect = `(0, shrink_b*dpr, card_w*dpr, card_h*dpr)` in physical pixels with GL bottom-left origin.
+  - No content size, amplitude, curve scale, or authored mode behavior changes.
+  - The QPainter fallback path (`_render_with_qpainter`) is dead code and scheduled for removal.
+  - Awaiting runtime validation across all modes.
 
-- **Guardrail:** Do not attempt rect-shrink or QPainter-clip approaches for this bug again. The next attempt must operate inside the GL pipeline or at the FBO/compositing level.
+- **Failed approaches (DO NOT REATTEMPT — kept for historical reference):**
+  - Rect shrink, QPainter clip path, and painting in `resizeEvent` all failed (see above).
+
+- **Guardrail:** Do not attempt rect-shrink or QPainter-clip approaches for this bug again.
