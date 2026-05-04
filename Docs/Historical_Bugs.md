@@ -1288,10 +1288,13 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
   - The combined shrink + clip changes caused the media control bar to shift lower when in bottom-right position (Blocker 2 in Current_Plan.md). Traced to `MediaWidget._update_stylesheet()` not being shadowfix-aware, causing double-painting of card background. This was a separate bug exposed during investigation but NOT caused by the shrink/clip code itself. Fixed separately.
 
 - **Fix implemented (2026-05-04):**
-  - `glScissor` in `SpotifyBarsGLOverlay.paintGL()` clips GL fragments to the visible card boundary.
-  - Scissor rect = `(0, shrink_b*dpr, card_w*dpr, card_h*dpr)` in physical pixels with GL bottom-left origin.
-  - No content size, amplitude, curve scale, or authored mode behavior changes.
-  - The QPainter fallback path (`_render_with_qpainter`) is dead code and scheduled for removal.
+  - Rounded-rect **stencil mask** in `SpotifyBarsGLOverlay.paintGL()` clips GL fragments to the visible card boundary (including rounded corners).
+  - Two-pass approach per frame:
+    1. Mask pass: color writes disabled, stencil writes 1 inside the card rounded rect via a dedicated SDF shader.
+    2. Visualizer pass: stencil test `GL_EQUAL 1` so only fragments inside the card shape are drawn.
+  - Card bounds derived from `PAINTED_FRAME_SHADOW_TUNING` (`card_shrink_right`, `card_shrink_bottom`) plus corner radius `8 + radius_extra`.
+  - No content size, amplitude, curve scale, or authored mode behavior changes. Visualizer shaders untouched.
+  - The QPainter fallback path (`_render_with_qpainter`) was removed as dead code.
   - Awaiting runtime validation across all modes.
 
 - **Failed approaches (DO NOT REATTEMPT — kept for historical reference):**

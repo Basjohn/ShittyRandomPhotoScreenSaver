@@ -4,8 +4,8 @@ from typing import List, Sequence, Optional, Set
 
 import numpy as np
 import time
-from PySide6.QtCore import Qt, QRect, QRectF, Signal
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtCore import Qt, QRect, Signal
+from PySide6.QtGui import QColor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import (
@@ -26,7 +26,6 @@ from widgets.spotify_visualizer.blob_pockets import (
 from widgets.spotify_visualizer.blob_math import (
     compute_stage_progress,
 )
-from widgets.spotify_visualizer.renderers.spectrum import compute_bar_layout
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
     PAINTED_FRAME_SHADOW_TUNING,
@@ -412,6 +411,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._gl_program_rids: _Dict[str, _Any] = {}
         self._gl_vao_rid = None
         self._gl_vbo: Optional[int] = None
+        # Rounded-rect stencil mask program for shadowfix corner clipping
+        self._gl_mask_program: Optional[int] = None
         # Legacy single-program aliases for backward compat with ResourceManager
         self._gl_program = None
         self._gl_program_rid = None
@@ -1836,8 +1837,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     def initializeGL(self) -> None:  # type: ignore[override]
         """Create the small shader pipeline used for bar rendering.
 
-        Any failure here is treated as non-fatal – the widget will fall back
-        to the QPainter implementation in paintGL.
+        Any failure here is treated as non-fatal – the widget will skip
+        rendering until the GL pipeline recovers.
         """
         # Transition to INITIALIZING state
         if not self._gl_state.transition(GLContextState.INITIALIZING):
@@ -1885,11 +1886,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if fade <= 0.0:
             return
 
-        # --- Shadowfix GL scissor clipping ---
+        # --- Shadowfix GL stencil mask clipping ---
         # Under --shadowfix the widget is larger than the visible card by
-        # card_shrink_right/bottom pixels.  Enable glScissor to discard
-        # fragments outside the card boundary without changing content scale.
-        scissor_active = False
+        # card_shrink_right/bottom pixels.  A rounded-rect stencil mask
+        # clips GL fragments to the card boundary (including corners)
+        # without changing content scale or authored mode behavior.
+        stencil_active = False
         if painted_frame_shadows_enabled():
             try:
                 dpr = self._get_dpr()
@@ -1897,22 +1899,62 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 shrink_b = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_bottom"])
                 card_w = max(1, rect.width() - shrink_r)
                 card_h = max(1, rect.height() - shrink_b)
-                # GL scissor uses bottom-left origin in physical pixels
-                sx = 0
-                sy = int(shrink_b * dpr)
-                sw = int(card_w * dpr)
-                sh = int(card_h * dpr)
-                gl.glEnable(gl.GL_SCISSOR_TEST)
-                gl.glScissor(sx, sy, sw, sh)
-                scissor_active = True
+                radius = float(8 + int(PAINTED_FRAME_SHADOW_TUNING.get("radius_extra", 0)))
+
+                # 1) Clear stencil, disable color writes
+                gl.glEnable(gl.GL_STENCIL_TEST)
+                gl.glStencilMask(0xFF)
+                gl.glClear(gl.GL_STENCIL_BUFFER_BIT)
+                gl.glColorMask(False, False, False, False)
+                gl.glStencilFunc(gl.GL_ALWAYS, 1, 0xFF)
+                gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_REPLACE)
+
+                # 2) Draw mask: write stencil=1 inside rounded rect
+                if self._gl_mask_program and self._gl_vao:
+                    gl.glUseProgram(self._gl_mask_program)
+                    loc_rect = gl.glGetUniformLocation(self._gl_mask_program, "u_card_rect")
+                    loc_radius = gl.glGetUniformLocation(self._gl_mask_program, "u_radius")
+                    # card_rect in framebuffer pixels (GL bottom-left origin).
+                    # _painted_frame_shadow_card_rect is QRectF(0,0,card_w,card_h)
+                    # in Qt widget coords (top-left origin). In GL the card sits
+                    # at the top of the framebuffer, so its bottom-left corner
+                    # is at y = (widget_h - card_h)*dpr + inset.
+                    #
+                    # _ensure_painted_frame_shadow_pixmap() insets the card by
+                    # 1 logical px on all sides via .adjusted(1.0, 1.0, -1.0, -1.0).
+                    # We apply the same inset here so the mask matches the
+                    # visible painted frame exactly and does not bleed into the
+                    # 1-px gap between card edge and shadow spread.
+                    inset = 1.0 * dpr
+                    mask_w = max(1.0, (card_w - 2.0) * dpr)
+                    mask_h = max(1.0, (card_h - 2.0) * dpr)
+                    gl.glUniform4f(
+                        loc_rect,
+                        float(inset),
+                        float((rect.height() - card_h) * dpr + inset),
+                        float(mask_w),
+                        float(mask_h),
+                    )
+                    gl.glUniform1f(loc_radius, float(max(0.0, (radius - 1.0) * dpr)))
+                    gl.glBindVertexArray(self._gl_vao)
+                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+                    gl.glBindVertexArray(0)
+                    gl.glUseProgram(0)
+
+                # 3) Enable color writes, only draw where stencil==1
+                gl.glColorMask(True, True, True, True)
+                gl.glStencilFunc(gl.GL_EQUAL, 1, 0xFF)
+                gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_KEEP)
+                stencil_active = True
             except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Scissor setup failed: %s", e)
+                logger.debug("[SPOTIFY_VIS] Stencil mask setup failed: %s", e)
 
         try:
             self._render_with_shader(rect, fade)
         finally:
-            if scissor_active:
-                gl.glDisable(gl.GL_SCISSOR_TEST)
+            if stencil_active:
+                gl.glDisable(gl.GL_STENCIL_TEST)
+                gl.glStencilMask(0x00)
 
         self.update()
 
@@ -2623,6 +2665,50 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._gl_vao = vao
         self._gl_vbo = vbo
 
+        # --- Compile rounded-rect stencil mask shader (reuses shared vertex shader) ---
+        _MASK_FRAGMENT_SHADER = """#version 330 core
+in vec2 v_uv;
+out vec4 fragColor;
+uniform vec4 u_card_rect;
+uniform float u_radius;
+float roundedRectSDF(vec2 p, vec2 halfSize, float radius) {
+    vec2 d = abs(p) - halfSize + radius;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - radius;
+}
+void main() {
+    vec2 center = u_card_rect.xy + u_card_rect.zw * 0.5;
+    vec2 halfSize = u_card_rect.zw * 0.5;
+    float dist = roundedRectSDF(gl_FragCoord.xy - center, halfSize, u_radius);
+    if (dist > 0.0) {
+        discard;
+    }
+    fragColor = vec4(1.0);
+}
+"""
+        try:
+            fs_mask = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
+            _gl.glShaderSource(fs_mask, _MASK_FRAGMENT_SHADER)
+            _gl.glCompileShader(fs_mask)
+            if not _gl.glGetShaderiv(fs_mask, _gl.GL_COMPILE_STATUS):
+                info = _gl.glGetShaderInfoLog(fs_mask)
+                logger.warning("[SPOTIFY_VIS] Mask fragment shader compile failed: %s", info)
+                _gl.glDeleteShader(fs_mask)
+            else:
+                prog_mask = _gl.glCreateProgram()
+                _gl.glAttachShader(prog_mask, vs)
+                _gl.glAttachShader(prog_mask, fs_mask)
+                _gl.glLinkProgram(prog_mask)
+                _gl.glDeleteShader(fs_mask)
+                if _gl.glGetProgramiv(prog_mask, _gl.GL_LINK_STATUS):
+                    self._gl_mask_program = prog_mask
+                    logger.debug("[SPOTIFY_VIS] Mask shader compiled")
+                else:
+                    info = _gl.glGetProgramInfoLog(prog_mask)
+                    logger.warning("[SPOTIFY_VIS] Mask program link failed: %s", info)
+                    _gl.glDeleteProgram(prog_mask)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Mask shader setup failed", exc_info=True)
+
         # Register GL handles with ResourceManager for VRAM leak prevention
         try:
             from core.resources.manager import ResourceManager
@@ -2686,6 +2772,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._gl_uniforms.clear()
             self._gl_program = None
 
+            if self._gl_mask_program is not None:
+                try:
+                    if ctx_acquired:
+                        _gl.glDeleteProgram(self._gl_mask_program)
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Failed to delete mask program: %s", e)
+                self._gl_mask_program = None
+
             if self._gl_vbo is not None:
                 try:
                     if ctx_acquired:
@@ -2746,7 +2840,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._gl_disabled = True
-            logger.debug("[SPOTIFY_VIS] GL pipeline unavailable, falling back to QPainter", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] GL pipeline unavailable, skipping render", exc_info=True)
             return False
 
         if not self._gl_programs or self._gl_vao is None:
