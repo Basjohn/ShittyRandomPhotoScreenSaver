@@ -216,22 +216,11 @@ class ClockWidgetFactory(WidgetFactory):
             if hasattr(widget, 'set_analog_face_shadow'):
                 widget.set_analog_face_shadow(analog_shadow)
             
-            intense_shadow = SettingsManager.to_bool(_resolve_style('analog_shadow_intense', False), False)
-            if hasattr(widget, 'set_analog_shadow_intense'):
-                widget.set_analog_shadow_intense(intense_shadow)
-            
-            digital_intense = SettingsManager.to_bool(_resolve_style('digital_shadow_intense', False), False)
-            if hasattr(widget, 'set_digital_shadow_intense'):
-                widget.set_digital_shadow_intense(digital_intense)
-            
             # Shadow config
             if shadows_config:
-                from widgets.shadow_utils import apply_widget_shadow
                 try:
                     if hasattr(widget, "set_shadow_config"):
                         widget.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
                 except Exception as e:
                     logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
@@ -271,7 +260,6 @@ class WeatherWidgetFactory(WidgetFactory):
         from widgets.weather_widget import WeatherWidget, WeatherPosition
         from core.settings.models import WidgetPosition, coerce_widget_position
         from core.settings.defaults import get_default_settings
-        from widgets.shadow_utils import apply_widget_shadow
         canonical = get_default_settings().get('widgets', {}).get('weather', {})
         
         if not SettingsManager.to_bool(config.get("enabled", False), False):
@@ -358,13 +346,6 @@ class WeatherWidgetFactory(WidgetFactory):
             except Exception as e:
                 logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
-            # Intense shadow
-            intense_shadow = SettingsManager.to_bool(
-                config.get('intense_shadow', canonical.get('intense_shadow', True)), True
-            )
-            if hasattr(widget, 'set_intense_shadow'):
-                widget.set_intense_shadow(intense_shadow)
-            
             # Icon alignment (LEFT, RIGHT, NONE) - Issue #3 Fix
             icon_alignment = config.get('icon_alignment', canonical.get('icon_alignment', 'RIGHT'))
             if hasattr(widget, 'set_icon_alignment'):
@@ -397,8 +378,6 @@ class WeatherWidgetFactory(WidgetFactory):
                 try:
                     if hasattr(widget, "set_shadow_config"):
                         widget.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
                 except Exception as e:
                     logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
@@ -426,7 +405,6 @@ class MediaWidgetFactory(WidgetFactory):
         """Create and configure a MediaWidget with full settings."""
         from widgets.media_widget import MediaWidget, MediaPosition
         from core.settings.models import MediaWidgetSettings, WidgetPosition, coerce_widget_position
-        from widgets.shadow_utils import apply_widget_shadow
         
         model = MediaWidgetSettings.from_mapping(config if isinstance(config, dict) else {})
         if not SettingsManager.to_bool(model.enabled, False):
@@ -503,8 +481,6 @@ class MediaWidgetFactory(WidgetFactory):
                 try:
                     if hasattr(widget, "set_shadow_config"):
                         widget.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
                 except Exception as e:
                     logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
@@ -534,7 +510,6 @@ class RedditWidgetFactory(WidgetFactory):
         """Create and configure a RedditWidget with full settings inheritance."""
         from widgets.reddit_widget import RedditWidget, RedditPosition
         from core.settings.models import RedditWidgetSettings, WidgetPosition, coerce_widget_position
-        from widgets.shadow_utils import apply_widget_shadow
         
         model = RedditWidgetSettings.from_mapping(config if isinstance(config, dict) else {}, prefix=f"widgets.{settings_key}")
         if not SettingsManager.to_bool(model.enabled, False):
@@ -650,11 +625,6 @@ class RedditWidgetFactory(WidgetFactory):
             if hasattr(model, 'limit') and hasattr(widget, 'set_item_limit'):
                 widget.set_item_limit(int(model.limit))
             
-            # Intense shadow
-            intense_shadow = SettingsManager.to_bool(model.intense_shadow, False)
-            if hasattr(widget, 'set_intense_shadow'):
-                widget.set_intense_shadow(intense_shadow)
-            
             # Overlay name for fade coordination
             if hasattr(widget, 'set_overlay_name'):
                 widget.set_overlay_name(settings_key)
@@ -664,8 +634,6 @@ class RedditWidgetFactory(WidgetFactory):
                 try:
                     if hasattr(widget, "set_shadow_config"):
                         widget.set_shadow_config(shadows_config)
-                    else:
-                        apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
                 except Exception as e:
                     logger.debug("[WIDGET_FACTORY] Exception suppressed: %s", e)
             
@@ -913,11 +881,6 @@ class ImgurWidgetFactory(WidgetFactory):
             if hasattr(widget, 'set_click_opens_browser'):
                 widget.set_click_opens_browser(click_opens_browser)
             
-            # Intense shadow
-            intense_shadow = SettingsManager.to_bool(config.get('intense_shadow', True), True)
-            if hasattr(widget, 'set_intense_shadow'):
-                widget.set_intense_shadow(intense_shadow)
-            
             logger.debug("[IMGUR_FACTORY] Created ImgurWidget")
             return widget
             
@@ -936,7 +899,6 @@ class GmailWidgetFactory(WidgetFactory):
         """Create and configure a GmailWidget."""
         from widgets.gmail_widget import GmailWidget
         from widgets.gmail_components import GmailPosition
-        from widgets.shadow_utils import apply_widget_shadow
 
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
@@ -1011,11 +973,6 @@ class GmailWidgetFactory(WidgetFactory):
             if border_qcolor and hasattr(widget, 'set_background_border'):
                 widget.set_background_border(border_width, border_qcolor)
 
-            # Intense shadow
-            intense_shadow = SettingsManager.to_bool(config.get('intense_shadow', True), True)
-            if hasattr(widget, 'set_intense_shadow'):
-                widget.set_intense_shadow(intense_shadow)
-
             # Notification sound
             from core.audio.sound_paths import default_notification_sound_path
             if hasattr(widget, 'set_play_sound_on_new_mail'):
@@ -1032,8 +989,6 @@ class GmailWidgetFactory(WidgetFactory):
                 shadows_config = config.get('_shadows_config') or {}
                 if hasattr(widget, "set_shadow_config"):
                     widget.set_shadow_config(shadows_config)
-                else:
-                    apply_widget_shadow(widget, shadows_config, has_background_frame=show_background)
             except Exception as exc:
                 logger.debug("[GMAIL_FACTORY] Shadow apply suppressed: %s", exc)
 

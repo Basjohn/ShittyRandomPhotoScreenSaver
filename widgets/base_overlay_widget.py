@@ -19,8 +19,6 @@ from abc import abstractmethod
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-import sys
-
 from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Signal, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QLabel, QWidget
@@ -33,7 +31,12 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
 from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
-from widgets.shadow_utils import apply_widget_shadow, configure_overlay_widget_attributes
+from widgets.shadow_utils import (
+    configure_overlay_widget_attributes,
+    draw_text_rect_shadow_only,
+    shadow_config_enabled,
+    text_shadows_enabled,
+)
 
 if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
@@ -43,10 +46,6 @@ logger = get_logger(__name__)
 
 # PAINTED_FRAME_SHADOW_TUNING is imported at module level above from
 # core.settings.shadow_tuning (aliased from CARD_SHADOW_TUNING).
-
-
-def painted_frame_shadows_enabled() -> bool:
-    return "--shadowfix" in sys.argv
 
 
 class WidgetLifecycleState(Enum):
@@ -208,8 +207,8 @@ class BaseOverlayWidget(QLabel):
         # Shadow
         self._shadow_config: Optional[Dict[str, Any]] = None
         self._has_faded_in = False
-        self._intense_shadow = False  # Intensified shadow styling
-        self._painted_frame_shadow_enabled = painted_frame_shadows_enabled()
+        self._painted_frame_shadow_enabled = True
+        self._text_shadow_enabled = True
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[Tuple[Any, ...]] = None
         
@@ -559,13 +558,11 @@ class BaseOverlayWidget(QLabel):
     def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
         """Set shadow configuration."""
         self._shadow_config = config
+        self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
+        self._text_shadow_enabled = text_shadows_enabled(config)
         self._invalidate_painted_frame_shadow_cache()
-        if self.uses_painted_frame_shadow():
-            try:
-                self.setGraphicsEffect(None)
-            except Exception as e:
-                logger.debug("[OVERLAY] Exception suppressed: %s", e)
-            return
+        self._update_stylesheet()
+        self.update()
         if is_perf_metrics_enabled():
             overlay = getattr(self, "_overlay_name", self.__class__.__name__)
             logger.info(
@@ -574,41 +571,17 @@ class BaseOverlayWidget(QLabel):
                 "yes" if config else "no",
                 self._has_faded_in,
             )
-        if config and self._has_faded_in:
-            apply_widget_shadow(self, config, has_background_frame=self._show_background, intense=self._intense_shadow)
     
     def get_shadow_config(self) -> Optional[Dict[str, Any]]:
         """Get current shadow configuration."""
         return self._shadow_config
     
-    def set_intense_shadow(self, intense: bool) -> None:
-        """Enable or disable intensified shadow styling.
-        
-        When enabled, shadows have doubled blur radius, increased opacity,
-        and larger offset for dramatic visual effect on large displays.
-        
-        Args:
-            intense: True to enable intense shadows
-        """
-        self._intense_shadow = bool(intense)
-        if self.uses_painted_frame_shadow():
-            self._invalidate_painted_frame_shadow_cache()
-            return
-        if self._shadow_config and self._has_faded_in:
-            apply_widget_shadow(self, self._shadow_config, has_background_frame=self._show_background, intense=self._intense_shadow)
-    
-    def get_intense_shadow(self) -> bool:
-        """Get whether intense shadow styling is enabled."""
-        return self._intense_shadow
-    
     def on_fade_complete(self) -> None:
-        """Called when fade-in animation completes. Apply shadow."""
+        """Called when fade-in animation completes."""
         self._has_faded_in = True
         if self.uses_painted_frame_shadow():
             self._invalidate_painted_frame_shadow_cache()
-            return
-        if self._shadow_config:
-            apply_widget_shadow(self, self._shadow_config, has_background_frame=self._show_background, intense=self._intense_shadow)
+        self.update()
 
     def uses_painted_frame_shadow(self) -> bool:
         """True when this framed widget should paint/cache its own outer shadow."""
@@ -705,6 +678,35 @@ class BaseOverlayWidget(QLabel):
         self._painted_frame_shadow_cache_key = key
         return pixmap
 
+    def _should_paint_label_text_shadow(self) -> bool:
+        if not self._text_shadow_enabled:
+            return False
+        text = self.text()
+        if not text:
+            return False
+        text_format = self.textFormat()
+        if text_format == Qt.TextFormat.RichText:
+            return False
+        if text_format == Qt.TextFormat.AutoText and ("<" in text and ">" in text):
+            return False
+        return True
+
+    def _paint_label_text_shadow(self) -> None:
+        if not self._should_paint_label_text_shadow():
+            return
+        painter = QPainter(self)
+        try:
+            painter.setFont(self.font())
+            draw_text_rect_shadow_only(
+                painter,
+                self.contentsRect(),
+                self.alignment(),
+                self.text(),
+                font_size=int(self.font().pointSize() or self._font_size),
+            )
+        finally:
+            painter.end()
+
     def paintEvent(self, event) -> None:  # type: ignore[override]
         if self.uses_painted_frame_shadow():
             painter = QPainter(self)
@@ -720,6 +722,7 @@ class BaseOverlayWidget(QLabel):
                     painter.drawPixmap(0, 0, pixmap)
                 finally:
                     painter.end()
+        self._paint_label_text_shadow()
         super().paintEvent(event)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]

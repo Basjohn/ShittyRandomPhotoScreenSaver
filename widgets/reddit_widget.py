@@ -41,11 +41,12 @@ from core.performance import widget_paint_sample
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import (
-    apply_widget_shadow,
     ShadowFadeProfile,
     draw_text_with_shadow,
     draw_text_rect_with_shadow,
     draw_rounded_rect_with_shadow,
+    header_shadows_enabled,
+    text_shadows_enabled,
 )
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from widgets.reddit_components import (  # noqa: F401 (re-exports for tests/external)
@@ -1394,7 +1395,14 @@ class RedditWidget(BaseOverlayWidget):
                 available_header_width,
             )
             # Draw header text with shadow (cached, only regenerated when data changes)
-            draw_text_with_shadow(painter, x, baseline_y, drawn_label, font_size=self._header_font_pt)
+            draw_text_with_shadow(
+                painter,
+                x,
+                baseline_y,
+                drawn_label,
+                font_size=self._header_font_pt,
+                enabled=text_shadows_enabled(self._shadow_config),
+            )
             header_text_width = header_metrics.horizontalAdvance(drawn_label)
         else:
             header_text_width = 0
@@ -1465,6 +1473,7 @@ class RedditWidget(BaseOverlayWidget):
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                     age_value,
                     font_size=age_font_size,
+                    enabled=text_shadows_enabled(self._shadow_config),
                 )
             if age_suffix:
                 suffix_w = age_rect.width() - int(age_rect.width() * 0.55)
@@ -1480,6 +1489,7 @@ class RedditWidget(BaseOverlayWidget):
                     Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignRight,
                     age_suffix,
                     font_size=age_font_size,
+                    enabled=text_shadows_enabled(self._shadow_config),
                 )
 
             painter.setFont(title_font)
@@ -1512,7 +1522,14 @@ class RedditWidget(BaseOverlayWidget):
                 )
             title_y = y + title_metrics.ascent()
             # Draw title with shadow (cached, only regenerated when data changes)
-            draw_text_with_shadow(painter, title_x, title_y, display_title, font_size=self._font_size)
+            draw_text_with_shadow(
+                painter,
+                title_x,
+                title_y,
+                display_title,
+                font_size=self._font_size,
+                enabled=text_shadows_enabled(self._shadow_config),
+            )
 
             row_rect = QRect(rect.left(), y, rect.width(), line_height)
             self._row_hit_rects.append((row_rect, post.url, full_title))
@@ -1753,18 +1770,6 @@ class RedditWidget(BaseOverlayWidget):
                 self.show()
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    logger.debug(
-                        "[REDDIT] Failed to apply widget shadow in fallback path",
-                        exc_info=True,
-                    )
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
@@ -1844,6 +1849,7 @@ class RedditWidget(BaseOverlayWidget):
             radius,
             self._bg_border_color,
             inner_width,
+            shadow_enabled=header_shadows_enabled(self._shadow_config),
         )
 
     def _update_stylesheet(self) -> None:

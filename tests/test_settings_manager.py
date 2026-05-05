@@ -270,6 +270,41 @@ class TestSettingsManagerDefaults:
         repairs = manager.validate_and_repair()
         assert "widgets.spotify_visualizer" not in repairs
 
+    def test_cleanup_obsolete_settings_removes_retired_widget_shadow_keys(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set(
+            "widgets",
+            {
+                "clock": {
+                    "enabled": True,
+                    "analog_shadow_intense": True,
+                    "digital_shadow_intense": True,
+                },
+                "gmail": {
+                    "enabled": True,
+                    "intense_shadow": True,
+                },
+                "shadows": {
+                    "enabled": True,
+                    "text_enabled": True,
+                    "header_enabled": True,
+                },
+            },
+        )
+        manager._settings.setValue("widgets.clock.analog_shadow_intense", True)
+        manager._settings.setValue("widgets.weather.intense_shadow", True)
+
+        removed = manager.cleanup_obsolete_settings()
+        widgets = manager.get("widgets")
+
+        assert "widgets.clock.analog_shadow_intense" in removed
+        assert "widgets.clock.digital_shadow_intense" in removed
+        assert "widgets.weather.intense_shadow" in removed
+        assert "widgets.gmail.intense_shadow" in removed
+        assert "analog_shadow_intense" not in widgets["clock"]
+        assert "digital_shadow_intense" not in widgets["clock"]
+        assert "intense_shadow" not in widgets["gmail"]
+
     def test_existing_visualizer_section_does_not_gain_bubble_semantics_marker_during_default_merge(
         self,
         tmp_path: Path,

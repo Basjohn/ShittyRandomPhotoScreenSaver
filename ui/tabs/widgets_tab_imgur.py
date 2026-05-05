@@ -249,14 +249,6 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.imgur_show_background.stateChanged.connect(tab._save_settings)
     _imgur_ctl.addWidget(tab.imgur_show_background)
 
-    # Intense shadow
-    tab.imgur_intense_shadow = QCheckBox("Intense Shadow")
-    tab.imgur_intense_shadow.setProperty("circleIndicator", True)
-    tab.imgur_intense_shadow.setToolTip("Use a more pronounced drop shadow effect")
-    tab.imgur_intense_shadow.setChecked(tab._default_bool('imgur', 'intense_shadow', True))
-    tab.imgur_intense_shadow.stateChanged.connect(tab._save_settings)
-    _imgur_ctl.addWidget(tab.imgur_intense_shadow)
-
     # Background opacity
     imgur_opacity_row = _aligned_row(_imgur_ctl, "Background Opacity:")
     tab.imgur_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -373,7 +365,6 @@ def load_imgur_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.imgur_font_size.setValue(tab._config_int('imgur', imgur_config, 'font_size', 11))
     tab.imgur_margin.setValue(tab._config_int('imgur', imgur_config, 'margin', 30))
     tab.imgur_show_background.setChecked(tab._config_bool('imgur', imgur_config, 'show_background', True))
-    tab.imgur_intense_shadow.setChecked(tab._config_bool('imgur', imgur_config, 'intense_shadow', True))
 
     imgur_opacity_pct = int(tab._config_float('imgur', imgur_config, 'bg_opacity', 0.6) * 100)
     tab.imgur_bg_opacity.setValue(imgur_opacity_pct)
@@ -425,7 +416,6 @@ def save_imgur_settings(tab: WidgetsTab) -> dict | None:
         'color': [tab._imgur_color.red(), tab._imgur_color.green(),
                   tab._imgur_color.blue(), tab._imgur_color.alpha()],
         'show_background': tab.imgur_show_background.isChecked(),
-        'intense_shadow': tab.imgur_intense_shadow.isChecked(),
         'bg_opacity': tab.imgur_bg_opacity.value() / 100.0,
         'bg_color': [tab._imgur_bg_color.red(), tab._imgur_bg_color.green(),
                      tab._imgur_bg_color.blue(), tab._imgur_bg_color.alpha()],

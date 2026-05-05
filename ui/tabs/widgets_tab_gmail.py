@@ -71,7 +71,6 @@ GMAIL_SIGNAL_BLOCK_ATTRS = (
     'gmail_max_subject_chars',
     'gmail_desaturate',
     'gmail_show_background',
-    'gmail_intense_shadow',
     'gmail_bg_opacity',
     'gmail_color_btn',
     'gmail_bg_color_btn',
@@ -933,13 +932,6 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.gmail_show_background.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_background)
 
-    # Intense shadow
-    tab.gmail_intense_shadow = QCheckBox("Intense Shadows")
-    tab.gmail_intense_shadow.setProperty("circleIndicator", True)
-    tab.gmail_intense_shadow.setChecked(tab._default_bool('gmail', 'intense_shadow', True))
-    tab.gmail_intense_shadow.stateChanged.connect(tab._save_settings)
-    appearance_inner.addWidget(tab.gmail_intense_shadow)
-
     appearance_inner.addSpacing(8)
 
     # Background opacity
@@ -1155,7 +1147,7 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
             'group_threads', 'auto_title_case', 'clean_sender_names',
             'max_sender_words', 'sender_column_width', 'max_subject_words',
             'max_subject_chars', 'desaturate_when_no_unread',
-            'show_background', 'intense_shadow', 'bg_opacity',
+            'show_background', 'bg_opacity',
             'border_opacity', 'separator_thickness',
             'boundary_separator_thickness', 'play_sound_on_new_mail',
             'sound_file_path', 'sound_volume_percent', 'color',
@@ -1222,8 +1214,6 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.gmail_desaturate.setChecked(tab._config_bool('gmail', gmail_config, 'desaturate_when_no_unread', bool(gmail_defaults['desaturate_when_no_unread'])))
 
         tab.gmail_show_background.setChecked(tab._config_bool('gmail', gmail_config, 'show_background', bool(gmail_defaults['show_background'])))
-        tab.gmail_intense_shadow.setChecked(tab._config_bool('gmail', gmail_config, 'intense_shadow', bool(gmail_defaults['intense_shadow'])))
-
         opacity_pct = int(tab._config_float('gmail', gmail_config, 'bg_opacity', float(gmail_defaults['bg_opacity'])) * 100)
         tab.gmail_bg_opacity.setValue(opacity_pct)
         tab.gmail_bg_opacity_label.setText(f"{opacity_pct}%")
@@ -1308,7 +1298,6 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'max_subject_chars': tab.gmail_max_subject_chars.value(),
         'desaturate_when_no_unread': tab.gmail_desaturate.isChecked(),
         'show_background': tab.gmail_show_background.isChecked(),
-        'intense_shadow': tab.gmail_intense_shadow.isChecked(),
         'bg_opacity': tab.gmail_bg_opacity.value() / 100.0,
         'color': [tab._gmail_color.red(), tab._gmail_color.green(),
                   tab._gmail_color.blue(), tab._gmail_color.alpha()],

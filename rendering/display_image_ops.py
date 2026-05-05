@@ -579,6 +579,13 @@ def _push_spotify_bars_overlay_state(
         overlay_kwargs.update(extra_kwargs)
 
         try:
+            vis = getattr(widget, "spotify_visualizer_widget", None)
+            if vis is not None and hasattr(overlay, "set_painted_frame_shadow_enabled"):
+                overlay.set_painted_frame_shadow_enabled(bool(vis.uses_painted_frame_shadow()))
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to sync GL stencil shadow state", exc_info=True)
+
+        try:
             overlay.set_state(**overlay_kwargs)
         except TypeError as exc:
             # Fallback: strip keys the current overlay implementation does not accept.

@@ -17,11 +17,10 @@ from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from core.settings.models import SpotifyVisualizerSettings, PER_MODE_TECHNICAL_MODES
 from core.settings.visualizer_presets import apply_preset_to_config, resolve_preset_index_from_mapping
-from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 from widgets.base_overlay_widget import (
     BaseOverlayWidget,
     PAINTED_FRAME_SHADOW_TUNING,
-    painted_frame_shadows_enabled,
 )
 
 
@@ -76,7 +75,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bars_timer = None
         self._shadow_config = None
         self._show_background: bool = True
-        self._painted_frame_shadow_enabled: bool = painted_frame_shadows_enabled()
+        self._painted_frame_shadow_enabled: bool = True
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[tuple] = None
         self._animation_manager = None
@@ -1287,12 +1286,10 @@ class SpotifyVisualizerWidget(QWidget):
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
+        self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
         self._invalidate_painted_frame_shadow_cache()
-        if self.uses_painted_frame_shadow():
-            try:
-                self.setGraphicsEffect(None)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to clear graphics effect for painted shadow", exc_info=True)
+        self._update_card_style()
+        self.update()
 
     def _update_card_style(self) -> None:
         if self.uses_painted_frame_shadow():
@@ -1712,7 +1709,7 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to clear parent overlay reference", exc_info=True)
 
-        # Fully detach drop shadows and cached pixmaps so other widgets don't inherit corruption.
+        # Clear transient opacity state before waiting for the fresh GL frame.
         self._pending_shadow_cache_invalidation = True
         self._invalidate_shadow_cache_if_needed()
         self._shadow_config_missing = True

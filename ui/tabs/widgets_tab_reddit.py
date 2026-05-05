@@ -248,16 +248,6 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.addWidget(tab.reddit_show_background)
     _rc_layout.addSpacing(12)
 
-    # Intense shadow
-    tab.reddit_intense_shadow = QCheckBox("Intense Shadows")
-    tab.reddit_intense_shadow.setProperty("circleIndicator", True)
-    tab.reddit_intense_shadow.setChecked(tab._default_bool('reddit', 'intense_shadow', True))
-    tab.reddit_intense_shadow.setToolTip(
-        "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
-    )
-    tab.reddit_intense_shadow.stateChanged.connect(tab._save_settings)
-    _rc_layout.addWidget(tab.reddit_intense_shadow)
-
     tab.reddit_show_separators = QCheckBox("Show separator lines between posts")
     tab.reddit_show_separators.setProperty("circleIndicator", True)
     tab.reddit_show_separators.setChecked(tab._default_bool('reddit', 'show_separators', True))
@@ -451,7 +441,6 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.reddit_header_logo_px_adjust.setValue(tab._config_int('reddit', reddit_config, 'header_logo_px_adjust', 0))
 
     tab.reddit_show_background.setChecked(tab._config_bool('reddit', reddit_config, 'show_background', True))
-    tab.reddit_intense_shadow.setChecked(tab._config_bool('reddit', reddit_config, 'intense_shadow', True))
     tab.reddit_show_separators.setChecked(tab._config_bool('reddit', reddit_config, 'show_separators', True))
     tab.reddit_show_refresh_spiral.setChecked(tab._config_bool('reddit', reddit_config, 'show_refresh_spiral', True))
     reddit_opacity_pct = int(tab._config_float('reddit', reddit_config, 'bg_opacity', 0.6) * 100)
@@ -524,7 +513,6 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'margin': tab.reddit_margin.value(),
         'header_logo_px_adjust': tab.reddit_header_logo_px_adjust.value(),
         'show_background': tab.reddit_show_background.isChecked(),
-        'intense_shadow': tab.reddit_intense_shadow.isChecked(),
         'show_separators': tab.reddit_show_separators.isChecked(),
         'show_refresh_spiral': tab.reddit_show_refresh_spiral.isChecked(),
         'bg_opacity': tab.reddit_bg_opacity.value() / 100.0,

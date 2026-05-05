@@ -193,15 +193,6 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.clock_analog_shadow.stateChanged.connect(tab._save_settings)
     _analog_layout.addWidget(tab.clock_analog_shadow)
 
-    tab.clock_analog_shadow_intense = QCheckBox("Intense Analogue Shadows")
-    tab.clock_analog_shadow_intense.setProperty("circleIndicator", True)
-    tab.clock_analog_shadow_intense.setChecked(tab._default_bool('clock', 'analog_shadow_intense', False))
-    tab.clock_analog_shadow_intense.setToolTip(
-        "Doubles analogue shadow opacity and enlarges the drop shadow by ~50% for dramatic lighting."
-    )
-    tab.clock_analog_shadow_intense.stateChanged.connect(tab._save_settings)
-    _analog_layout.addWidget(tab.clock_analog_shadow_intense)
-
     tab.clock_show_numerals = QCheckBox("Show Hour Numerals")
     tab.clock_show_numerals.setProperty("circleIndicator", True)
     tab.clock_show_numerals.setChecked(tab._default_bool('clock', 'show_numerals', True))
@@ -215,15 +206,6 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _digital_layout = QVBoxLayout(tab._clock_digital_container)
     _digital_layout.setContentsMargins(0, 0, 0, 12)
     _digital_layout.setSpacing(12)
-
-    tab.clock_digital_shadow_intense = QCheckBox("Intense Digital Shadows")
-    tab.clock_digital_shadow_intense.setProperty("circleIndicator", True)
-    tab.clock_digital_shadow_intense.setChecked(tab._default_bool('clock', 'digital_shadow_intense', False))
-    tab.clock_digital_shadow_intense.setToolTip(
-        "Doubles digital clock shadow blur, opacity, and offset for dramatic effect on large displays."
-    )
-    tab.clock_digital_shadow_intense.stateChanged.connect(tab._save_settings)
-    _digital_layout.addWidget(tab.clock_digital_shadow_intense)
 
     _clock_ctrl_layout.addWidget(tab._clock_digital_container)
 
@@ -446,12 +428,6 @@ def load_clock_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.clock_analog_mode.setChecked(display_mode == 'analog')
     tab.clock_show_numerals.setChecked(tab._config_bool('clock', clock_config, 'show_numerals', True))
     tab.clock_analog_shadow.setChecked(tab._config_bool('clock', clock_config, 'analog_face_shadow', True))
-    tab.clock_analog_shadow_intense.setChecked(
-        tab._config_bool('clock', clock_config, 'analog_shadow_intense', True)
-    )
-    tab.clock_digital_shadow_intense.setChecked(
-        tab._config_bool('clock', clock_config, 'digital_shadow_intense', False)
-    )
 
     position = tab._config_str('clock', clock_config, 'position', 'Top Right')
     index = tab.clock_position.findText(position)
@@ -555,8 +531,6 @@ def save_clock_settings(tab: WidgetsTab) -> tuple[dict, dict, dict]:
         'display_mode': 'analog' if tab.clock_analog_mode.isChecked() else 'digital',
         'show_numerals': tab.clock_show_numerals.isChecked(),
         'analog_face_shadow': tab.clock_analog_shadow.isChecked(),
-        'analog_shadow_intense': tab.clock_analog_shadow_intense.isChecked(),
-        'digital_shadow_intense': tab.clock_digital_shadow_intense.isChecked(),
     }
     cmon_text = tab.clock_monitor_combo.currentText()
     clock_config['monitor'] = cmon_text if cmon_text == 'ALL' else int(cmon_text)

@@ -19,7 +19,7 @@ from core.threading.manager import ThreadManager
 from core.performance import widget_paint_sample
 from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from widgets.weather_components import (  # noqa: F401 (re-exports for tests/external)
     WeatherConditionIcon,
@@ -226,7 +226,7 @@ class WeatherWidget(BaseOverlayWidget):
         text_layout.setContentsMargins(6, 2, 6, 2)
         text_layout.setSpacing(2)
 
-        self._city_label = QLabel(self._text_column)
+        self._city_label = PaintedShadowLabel(self._text_column)
         self._city_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._city_label.setWordWrap(False)
         self._city_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -234,7 +234,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._city_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
         self._city_label.setMinimumWidth(self._min_content_width)
 
-        self._conditions_label = QLabel(self._text_column)
+        self._conditions_label = PaintedShadowLabel(self._text_column)
         self._conditions_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._conditions_label.setWordWrap(False)
         self._conditions_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -299,7 +299,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._root_layout.addWidget(self._forecast_separator)
 
         # Forecast container (reused existing structure)
-        self._forecast_label = QLabel(self)
+        self._forecast_label = PaintedShadowLabel(self)
         self._forecast_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._forecast_label.setWordWrap(True)
         self._forecast_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -1304,6 +1304,20 @@ class WeatherWidget(BaseOverlayWidget):
                 Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
             )
 
+    def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
+        super().set_shadow_config(config)
+        for label in (self._city_label, self._conditions_label, self._forecast_label):
+            if hasattr(label, "set_shadow_config"):
+                try:
+                    label.set_shadow_config(config)  # type: ignore[attr-defined]
+                except Exception as e:
+                    logger.debug("[WEATHER] Exception suppressed: %s", e)
+        if self._detail_row_widget is not None and hasattr(self._detail_row_widget, "set_shadow_config"):
+            try:
+                self._detail_row_widget.set_shadow_config(config)
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
+
     def _rebuild_primary_layout(self) -> None:
         """Rebuild the primary row layout based on current icon alignment.
         
@@ -1441,11 +1455,10 @@ class WeatherWidget(BaseOverlayWidget):
         self.stop()
 
     def _fade_in(self) -> None:
-        """Fade the widget in via ShadowFadeProfile, then attach the shared drop shadow.
+        """Fade the widget in via ShadowFadeProfile.
 
-        The ShadowFadeProfile helper drives the opacity/shadow staging for the
-        card. On failure we fall back to an immediate show and, if configured,
-        a direct call to apply_widget_shadow.
+        The ShadowFadeProfile helper drives opacity staging; card shadows are
+        painter-owned by the widget.
         """
 
         try:
@@ -1461,15 +1474,3 @@ class WeatherWidget(BaseOverlayWidget):
                 self.show()
             except Exception as e:
                 logger.debug("[WEATHER] Exception suppressed: %s", e)
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception:
-                    logger.debug(
-                        "[WEATHER] Failed to apply widget shadow in fallback path",
-                        exc_info=True,
-                    )

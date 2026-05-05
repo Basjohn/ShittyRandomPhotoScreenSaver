@@ -24,7 +24,12 @@ from PySide6.QtGui import (
 from core.logging.logger import get_logger
 from widgets.media.artwork_layout import compute_artwork_frame_size
 from core.media.media_controller import MediaPlaybackState
-from widgets.shadow_utils import draw_rounded_rect_with_shadow
+from widgets.shadow_utils import (
+    draw_rounded_rect_with_shadow,
+    draw_text_rect_with_shadow,
+    header_shadows_enabled,
+    text_shadows_enabled,
+)
 
 if TYPE_CHECKING:
     from widgets.media_widget import MediaWidget
@@ -132,6 +137,7 @@ def paint_header_frame(widget: "MediaWidget", painter: QPainter) -> None:
         radius,
         widget._bg_border_color,
         inner_width,
+        shadow_enabled=header_shadows_enabled(widget._shadow_config),
     )
 
 
@@ -213,16 +219,37 @@ def draw_control_icon(
 
     if key == "prev":
         painter.setPen(inactive_color)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, prev_sym)
+        draw_text_rect_with_shadow(
+            painter,
+            rect,
+            Qt.AlignmentFlag.AlignCenter,
+            prev_sym,
+            font_size=widget._font_size,
+            enabled=text_shadows_enabled(widget._shadow_config),
+        )
     elif key == "next":
         painter.setPen(inactive_color)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, next_sym)
+        draw_text_rect_with_shadow(
+            painter,
+            rect,
+            Qt.AlignmentFlag.AlignCenter,
+            next_sym,
+            font_size=widget._font_size,
+            enabled=text_shadows_enabled(widget._shadow_config),
+        )
     elif key == "play":
         pause_font_size = widget._font_size - 4 if centre_sym == "||" else widget._font_size - 2
         font_centre = QFont("Segoe UI", pause_font_size, QFont.Weight.Bold)
         painter.setFont(font_centre)
         painter.setPen(active_color)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, centre_sym)
+        draw_text_rect_with_shadow(
+            painter,
+            rect,
+            Qt.AlignmentFlag.AlignCenter,
+            centre_sym,
+            font_size=pause_font_size,
+            enabled=text_shadows_enabled(widget._shadow_config),
+        )
 
 
 def paint_controls_row(widget: "MediaWidget", painter: QPainter) -> None:

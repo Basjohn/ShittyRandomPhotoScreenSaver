@@ -78,6 +78,10 @@ class TestSaveDebounce:
             # Mock the widget attribute accessed during save and all delegates
             tab.widget_shadows_enabled = MagicMock()
             tab.widget_shadows_enabled.isChecked.return_value = True
+            tab.widget_text_shadows_enabled = MagicMock()
+            tab.widget_text_shadows_enabled.isChecked.return_value = True
+            tab.widget_header_shadows_enabled = MagicMock()
+            tab.widget_header_shadows_enabled.isChecked.return_value = True
 
             with patch("ui.tabs.widgets_tab_clock.save_clock_settings", return_value=({}, {}, {})), \
                  patch("ui.tabs.widgets_tab_weather.save_weather_settings", return_value={}), \

@@ -25,9 +25,8 @@ from core.logging.logger import get_logger, is_verbose_logging
 from core.media.spotify_volume import SpotifyVolumeController
 from core.settings.shadow_tuning import VOLUME_SLIDER_SHADOW_TUNING
 from core.threading.manager import ThreadManager
-from widgets.base_overlay_widget import painted_frame_shadows_enabled
 from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
-from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile, configure_overlay_widget_attributes
+from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 
 logger = get_logger(__name__)
 
@@ -60,7 +59,7 @@ class SpotifyVolumeWidget(QWidget):
         self._flush_timer: Optional[QTimer] = None
         self._has_faded_in: bool = False
         self._anchor_media: Optional[QWidget] = None
-        self._painted_frame_shadow_enabled: bool = painted_frame_shadows_enabled()
+        self._painted_frame_shadow_enabled: bool = True
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[tuple] = None
 
@@ -106,12 +105,9 @@ class SpotifyVolumeWidget(QWidget):
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
-        if self.uses_painted_frame_shadow():
-            return
-        try:
-            apply_widget_shadow(self, config, has_background_frame=False)
-        except Exception:
-            logger.debug("[SPOTIFY_VOL] Failed to apply widget shadow", exc_info=True)
+        self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
+        self._invalidate_painted_frame_shadow_cache()
+        self.update()
 
     def set_colors(self, *, track_bg: QColor, track_border: QColor, fill: QColor) -> None:
         """Configure track background, border, and fill colours.
@@ -400,7 +396,7 @@ class SpotifyVolumeWidget(QWidget):
         return True
 
     # ------------------------------------------------------------------
-    # Painted frame shadow (--shadowfix)
+    # Painted frame shadow
     # ------------------------------------------------------------------
 
     def uses_painted_frame_shadow(self) -> bool:
@@ -727,11 +723,6 @@ class SpotifyVolumeWidget(QWidget):
                 self.show()
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
-                except Exception:
-                    logger.debug("[SPOTIFY_VOL] Failed to attach shadow in no-fade path", exc_info=True)
             self._has_faded_in = True
             return
 
@@ -749,8 +740,3 @@ class SpotifyVolumeWidget(QWidget):
                 self.show()
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-            if self._shadow_config is not None:
-                try:
-                    apply_widget_shadow(self, self._shadow_config, has_background_frame=False)
-                except Exception:
-                    logger.debug("[SPOTIFY_VOL] Failed to apply widget shadow in fallback path", exc_info=True)

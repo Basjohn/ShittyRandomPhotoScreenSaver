@@ -1384,33 +1384,21 @@ def test_clear_gl_overlay_destroys_overlay(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_shadow_cache_invalidated_once_per_cycle(qt_app, qtbot, monkeypatch):
+def test_shadow_cache_invalidation_clears_transient_effect_once_per_cycle(qt_app, qtbot):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
     qtbot.addWidget(widget)
 
     widget._pending_shadow_cache_invalidation = True  # type: ignore[attr-defined]
     widget.setGraphicsEffect(QGraphicsDropShadowEffect(widget))
 
-    called = {"count": 0}
-
-    def _fake_clear_cache(target_widget: QWidget) -> None:
-        called["count"] += 1
-        assert target_widget is widget
-
-    monkeypatch.setattr("widgets.shadow_utils.clear_cached_shadow_for_widget", _fake_clear_cache)
-
     widget._invalidate_shadow_cache_if_needed()
 
-    assert called["count"] == 1
     assert widget.graphicsEffect() is None
     assert widget._pending_shadow_cache_invalidation is False  # type: ignore[attr-defined]
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_shadowfix_uses_painted_frame_shadow(qt_app, qtbot, monkeypatch):
-    import sys
-
-    monkeypatch.setattr(sys, "argv", ["main.py", "--shadowfix"])
+def test_spotify_visualizer_setting_uses_painted_frame_shadow(qt_app, qtbot):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=8)
     qtbot.addWidget(widget)
     widget.resize(320, 160)
@@ -1428,6 +1416,9 @@ def test_spotify_visualizer_shadowfix_uses_painted_frame_shadow(qt_app, qtbot, m
     pixmap = widget._ensure_painted_frame_shadow_pixmap()
     assert pixmap is not None
     assert not pixmap.isNull()
+
+    widget.set_shadow_config({"enabled": False})
+    assert widget.uses_painted_frame_shadow() is False
 
 
 @pytest.mark.qt

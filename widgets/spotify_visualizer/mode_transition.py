@@ -262,7 +262,7 @@ def reset_visualizer_state(
 
 def start_widget_fade_in(widget: Any, duration_ms: Optional[int] = None) -> None:
     """Fade the visualizer card in via ShadowFadeProfile."""
-    from widgets.shadow_utils import apply_widget_shadow, ShadowFadeProfile
+    from widgets.shadow_utils import ShadowFadeProfile
 
     if duration_ms is None:
         duration_ms = resolve_shared_widget_fade_in_duration_ms()
@@ -301,18 +301,6 @@ def start_widget_fade_in(widget: Any, duration_ms: Optional[int] = None) -> None
             widget.show()
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        if widget._shadow_config is not None:
-            try:
-                apply_widget_shadow(
-                    widget,
-                    widget._shadow_config,
-                    has_background_frame=widget._show_background,
-                )
-            except Exception:
-                logger.debug(
-                    "[SPOTIFY_VIS] Failed to apply widget shadow in fallback path",
-                    exc_info=True,
-                )
 
 
 def start_widget_fade_out(
@@ -500,8 +488,7 @@ def apply_pending_mode_transition_layout(widget: Any) -> None:
 
 
 def invalidate_shadow_cache_if_needed(widget: Any) -> None:
-    """Clear the cached shadow effect so it can be recreated after mode switch."""
-    from widgets.shadow_utils import clear_cached_shadow_for_widget
+    """Clear transient opacity state after mode switch."""
 
     if not widget._pending_shadow_cache_invalidation:
         return
@@ -516,11 +503,6 @@ def invalidate_shadow_cache_if_needed(widget: Any) -> None:
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to clear graphics effect during shadow reset", exc_info=True)
     try:
-        clear_cached_shadow_for_widget(widget)
-        logger.debug("[SPOTIFY_VIS] Shadow cache cleared for widget=%s", hex(id(widget)))
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to clear cached shadow entry", exc_info=True)
-    try:
         setattr(widget, "_shadowfade_effect", None)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to reset shadowfade effect handle", exc_info=True)
@@ -531,7 +513,7 @@ def invalidate_shadow_cache_if_needed(widget: Any) -> None:
 
 
 def on_first_frame_after_cold_start(widget: Any) -> None:
-    """Reattach shadow after the first GPU frame arrives."""
+    """Refresh painted shadow state after the first GPU frame arrives."""
     from widgets.shadow_utils import ShadowFadeProfile
 
     if not getattr(widget, "_waiting_for_fresh_frame", False):
@@ -545,9 +527,9 @@ def on_first_frame_after_cold_start(widget: Any) -> None:
                     widget._shadow_config,
                     has_background_frame=widget._show_background,
                 )
-                logger.debug("[SPOTIFY_VIS] Shadow reattached after fresh frame")
+                logger.debug("[SPOTIFY_VIS] Painted shadow refreshed after fresh frame")
             except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to reattach shadow after fresh frame", exc_info=True)
+                logger.debug("[SPOTIFY_VIS] Failed to refresh shadow after fresh frame", exc_info=True)
         widget._shadow_config_missing = False
     try:
         finish_reveal = getattr(widget, "_finish_staged_startup_reveal", None)

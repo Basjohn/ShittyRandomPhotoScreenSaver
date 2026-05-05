@@ -79,7 +79,6 @@ class _StubMediaWidget(_BaseStubWidget):
         self.show_background = None
         self.background_color = None
         self.background_border = None
-        self.intense_shadow = None
         self.background_opacity = None
         self.provider_runtime = []
 
@@ -122,9 +121,6 @@ class _StubMediaWidget(_BaseStubWidget):
     def set_background_border(self, width, color):
         self.background_border = (width, color)
 
-    def set_intense_shadow(self, value):
-        self.intense_shadow = value
-
     def set_provider_runtime(self, value):
         self.provider_runtime.append(value)
         self.provider = value
@@ -159,8 +155,6 @@ class _StubClockWidget(_BaseStubWidget):
         self.display_mode = None
         self.show_numerals = None
         self.analog_face_shadow = None
-        self.analog_shadow_intense = None
-        self.digital_shadow_intense = None
         self.overlay_name = None
         self.thread_manager = None
 
@@ -197,12 +191,6 @@ class _StubClockWidget(_BaseStubWidget):
     def set_analog_face_shadow(self, value):
         self.analog_face_shadow = value
 
-    def set_analog_shadow_intense(self, value):
-        self.analog_shadow_intense = value
-
-    def set_digital_shadow_intense(self, value):
-        self.digital_shadow_intense = value
-
     def set_overlay_name(self, value):
         self.overlay_name = value
 
@@ -226,7 +214,6 @@ class _StubWeatherWidget(_BaseStubWidget):
         self.border = None
         self.show_forecast = None
         self.margin = None
-        self.intense_shadow = None
 
     def set_thread_manager(self, manager):
         self.thread_manager = manager
@@ -258,9 +245,6 @@ class _StubWeatherWidget(_BaseStubWidget):
     def set_margin(self, value):
         self.margin = value
 
-    def set_intense_shadow(self, value):
-        self.intense_shadow = value
-
 
 class _StubRedditWidget(_BaseStubWidget):
     def __init__(self, parent, position):
@@ -281,7 +265,6 @@ class _StubRedditWidget(_BaseStubWidget):
         self.background_border = None
         self.item_limit = None
         self.limit = None
-        self.intense_shadow = None
         self.overlay_name = None
         self.subreddit = None
 
@@ -325,9 +308,6 @@ class _StubRedditWidget(_BaseStubWidget):
         self.item_limit = value
         self.limit = value
 
-    def set_intense_shadow(self, value):
-        self.intense_shadow = value
-
     def set_overlay_name(self, value):
         self.overlay_name = value
 
@@ -341,7 +321,6 @@ def _patch_widget_classes(monkeypatch):
 
     monkeypatch.setattr("rendering.widget_manager.parse_color_to_qcolor", _fake_qcolor)
     monkeypatch.setattr("rendering.widget_factories.parse_color_to_qcolor", _fake_qcolor)
-    monkeypatch.setattr("widgets.shadow_utils.apply_widget_shadow", lambda *args, **kwargs: None)
     monkeypatch.setattr("widgets.media_widget.MediaWidget", _StubMediaWidget)
     monkeypatch.setattr("widgets.clock_widget.ClockWidget", _StubClockWidget)
     monkeypatch.setattr("widgets.weather_widget.WeatherWidget", _StubWeatherWidget)
@@ -389,7 +368,6 @@ def test_media_widget_creation_handles_prefixed_positions():
             "show_background": True,
             "border_color": [5, 6, 7, 128],
             "border_opacity": 0.5,
-            "intense_shadow": True,
         },
         "shadows": {
             "enabled": True,
@@ -462,8 +440,6 @@ def test_clock_widget_creation_handles_prefixed_positions():
             "display_mode": "analog",
             "show_numerals": False,
             "analog_face_shadow": True,
-            "analog_shadow_intense": True,
-            "digital_shadow_intense": True,
             "timezone": "UTC",
         },
         "shadows": {"enabled": True},
@@ -479,8 +455,6 @@ def test_clock_widget_creation_handles_prefixed_positions():
     assert widget.margin == 25
     assert widget.display_mode == "analog"
     assert widget.show_numerals is False
-    assert widget.analog_shadow_intense is True
-    assert widget.digital_shadow_intense is True
 
 
 def test_weather_widget_creation_handles_prefixed_positions():
@@ -500,7 +474,6 @@ def test_weather_widget_creation_handles_prefixed_positions():
             "border_opacity": 0.9,
             "margin": 10,
             "show_forecast": True,
-            "intense_shadow": True,
         },
         "shadows": {"enabled": True},
     }
@@ -513,7 +486,6 @@ def test_weather_widget_creation_handles_prefixed_positions():
     assert widget.location == "Berlin"
     assert widget.font_size == 30
     assert widget.margin == 10
-    assert widget.intense_shadow is True
     assert widget.background_opacity == 0.75
     assert widget.raised is True
     assert widget.started is True
@@ -538,7 +510,6 @@ def test_reddit_widgets_support_inheritance_and_limit():
             "show_separators": True,
             "show_refresh_spiral": False,
             "limit": 9,
-            "intense_shadow": True,
         },
         "reddit2": {
             "enabled": True,
@@ -562,7 +533,6 @@ def test_reddit_widgets_support_inheritance_and_limit():
     assert widget.header_logo_px_adjust == 5
     assert widget.show_refresh_spiral is False
     assert widget.item_limit == 9
-    assert widget.intense_shadow is True
     assert widget.raised is True
     assert widget.started is True
 

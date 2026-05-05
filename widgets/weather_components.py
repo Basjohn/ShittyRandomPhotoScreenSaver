@@ -20,6 +20,7 @@ from PySide6.QtGui import QFont, QPainter, QColor, QFontMetrics, QPixmap
 
 from core.logging.logger import get_logger
 from weather.open_meteo_provider import OpenMeteoProvider
+from widgets.shadow_utils import PaintedShadowLabel
 
 logger = get_logger(__name__)
 
@@ -239,6 +240,7 @@ class WeatherDetailRow(QWidget):
         self._segment_pool: Dict[str, QWidget] = {}
         self._segment_icon_labels: Dict[str, WeatherDetailIcon] = {}
         self._segment_text_labels: Dict[str, QLabel] = {}
+        self._shadow_config = None
 
         # Outer layout
         outer = QHBoxLayout(self)
@@ -275,6 +277,12 @@ class WeatherDetailRow(QWidget):
 
         self._rebuild_segments()
         self.setVisible(bool(metrics))
+
+    def set_shadow_config(self, config) -> None:
+        self._shadow_config = config
+        for label in self._segment_text_labels.values():
+            if hasattr(label, "set_shadow_config"):
+                label.set_shadow_config(config)
 
     def _rebuild_segments(self) -> None:
         """Rebuild segments with pooling like old code."""
@@ -315,7 +323,8 @@ class WeatherDetailRow(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
         icon_label = WeatherDetailIcon(self._icon_size, segment)
-        text_label = QLabel(segment)
+        text_label = PaintedShadowLabel(segment)
+        text_label.set_shadow_config(self._shadow_config)
         text_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         text_label.setWordWrap(False)
         text_label.setAlignment(

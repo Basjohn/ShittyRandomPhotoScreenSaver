@@ -74,6 +74,21 @@ class TestDefaultsStructure:
         defaults = get_default_settings()
         assert "widgets" in defaults
 
+    def test_widget_shadow_defaults_use_runtime_painted_toggles_only(self):
+        defaults = get_default_settings()
+        widgets = defaults["widgets"]
+        shadows = widgets["shadows"]
+
+        assert shadows["enabled"] is True
+        assert shadows["text_enabled"] is True
+        assert shadows["header_enabled"] is True
+
+        retired_keys = {"intense_shadow", "analog_shadow_intense", "digital_shadow_intense"}
+        assert not retired_keys.intersection(defaults.keys())
+        for section in widgets.values():
+            if isinstance(section, dict):
+                assert not retired_keys.intersection(section.keys())
+
 
 class TestPreserveOnReset:
     """Tests for PRESERVE_ON_RESET configuration."""

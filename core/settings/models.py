@@ -345,9 +345,10 @@ class SourceSettings:
 class ShadowSettings:
     """Widget shadow settings."""
     enabled: bool = True
+    text_enabled: bool = True
+    header_enabled: bool = True
     color: str = "#000000"
-    offset_x: int = 3
-    offset_y: int = 3
+    offset: list[int] = field(default_factory=lambda: [4, 4])
     blur_radius: int = 10
     text_opacity: float = 0.6
     frame_opacity: float = 0.4
@@ -357,9 +358,10 @@ class ShadowSettings:
         """Load shadow settings from SettingsManager."""
         return cls(
             enabled=settings.get("widgets.shadows.enabled", True),
+            text_enabled=settings.get("widgets.shadows.text_enabled", True),
+            header_enabled=settings.get("widgets.shadows.header_enabled", True),
             color=settings.get("widgets.shadows.color", "#000000"),
-            offset_x=settings.get("widgets.shadows.offset_x", 3),
-            offset_y=settings.get("widgets.shadows.offset_y", 3),
+            offset=settings.get("widgets.shadows.offset", [4, 4]),
             blur_radius=settings.get("widgets.shadows.blur_radius", 10),
             text_opacity=settings.get("widgets.shadows.text_opacity", 0.6),
             frame_opacity=settings.get("widgets.shadows.frame_opacity", 0.4),
@@ -369,9 +371,10 @@ class ShadowSettings:
         """Convert to dictionary for saving."""
         return {
             "widgets.shadows.enabled": self.enabled,
+            "widgets.shadows.text_enabled": self.text_enabled,
+            "widgets.shadows.header_enabled": self.header_enabled,
             "widgets.shadows.color": self.color,
-            "widgets.shadows.offset_x": self.offset_x,
-            "widgets.shadows.offset_y": self.offset_y,
+            "widgets.shadows.offset": self.offset,
             "widgets.shadows.blur_radius": self.blur_radius,
             "widgets.shadows.text_opacity": self.text_opacity,
             "widgets.shadows.frame_opacity": self.frame_opacity,
@@ -398,8 +401,6 @@ class ClockWidgetSettings:
     display_mode: str = "digital"
     show_numerals: bool = True
     analog_face_shadow: bool = True
-    analog_shadow_intense: bool = True
-    digital_shadow_intense: bool = False  # Intense shadow for digital mode
     
     @classmethod
     def from_settings(cls, settings: "SettingsManager", prefix: str = "widgets.clock") -> "ClockWidgetSettings":
@@ -427,8 +428,6 @@ class ClockWidgetSettings:
             display_mode=settings.get(f"{prefix}.display_mode", "digital"),
             show_numerals=settings.get(f"{prefix}.show_numerals", True),
             analog_face_shadow=settings.get(f"{prefix}.analog_face_shadow", True),
-            analog_shadow_intense=settings.get(f"{prefix}.analog_shadow_intense", True),
-            digital_shadow_intense=settings.get(f"{prefix}.digital_shadow_intense", False),
         )
 
 
@@ -2053,7 +2052,6 @@ class WeatherWidgetSettings:
     background_color: str = "#000000"
     background_opacity: float = 0.5
     show_forecast: bool = False
-    intense_shadow: bool = True  # Intense shadow styling
     show_details_row: bool = False
     animated_icon_alignment: str = "NONE"
     animated_icon_enabled: bool = True
@@ -2080,7 +2078,6 @@ class WeatherWidgetSettings:
             background_color=settings.get("widgets.weather.background_color", "#000000"),
             background_opacity=settings.get("widgets.weather.background_opacity", 0.5),
             show_forecast=settings.get("widgets.weather.show_forecast", False),
-            intense_shadow=settings.get("widgets.weather.intense_shadow", True),
             show_details_row=settings.get("widgets.weather.show_details_row", False),
             animated_icon_alignment=settings.get("widgets.weather.animated_icon_alignment", "NONE"),
             animated_icon_enabled=settings.get("widgets.weather.animated_icon_enabled", True),
@@ -2111,7 +2108,6 @@ class WeatherWidgetSettings:
             background_color=_get("background_color", "#000000"),
             background_opacity=float(_get("background_opacity", 0.5)),
             show_forecast=_get("show_forecast", False),
-            intense_shadow=_get("intense_shadow", True),
             show_details_row=_get("show_details_row", False),
             animated_icon_alignment=_get("animated_icon_alignment", "NONE"),
             animated_icon_enabled=_get("animated_icon_enabled", True),
@@ -2133,7 +2129,6 @@ class WeatherWidgetSettings:
             f"{prefix}.background_color": self.background_color,
             f"{prefix}.background_opacity": float(self.background_opacity),
             f"{prefix}.show_forecast": self.show_forecast,
-            f"{prefix}.intense_shadow": self.intense_shadow,
             f"{prefix}.show_details_row": self.show_details_row,
             f"{prefix}.animated_icon_alignment": self.animated_icon_alignment,
             f"{prefix}.animated_icon_enabled": self.animated_icon_enabled,
@@ -2158,7 +2153,6 @@ class RedditWidgetSettings:
     background_opacity: float = 0.6
     show_separators: bool = True
     show_refresh_spiral: bool = True
-    intense_shadow: bool = True
     margin: int = 30
     header_logo_px_adjust: int = 0
     border_color: list[int] = field(default_factory=lambda: [255, 255, 255, 255])
@@ -2185,7 +2179,6 @@ class RedditWidgetSettings:
             background_opacity=float(settings.get(f"{prefix}.background_opacity", 0.6)),
             show_separators=settings.get(f"{prefix}.show_separators", True),
             show_refresh_spiral=settings.get(f"{prefix}.show_refresh_spiral", True),
-            intense_shadow=settings.get(f"{prefix}.intense_shadow", True),
             margin=int(settings.get(f"{prefix}.margin", 30)),
             header_logo_px_adjust=int(settings.get(f"{prefix}.header_logo_px_adjust", 0)),
             border_color=settings.get(f"{prefix}.border_color", [255, 255, 255, 255]),
@@ -2217,7 +2210,6 @@ class RedditWidgetSettings:
             background_opacity=float(_get("background_opacity", 0.6)),
             show_separators=_get("show_separators", True),
             show_refresh_spiral=_get("show_refresh_spiral", True),
-            intense_shadow=_get("intense_shadow", True),
             margin=int(_get("margin", 30)),
             header_logo_px_adjust=int(_get("header_logo_px_adjust", 0)),
             border_color=_get("border_color", [255, 255, 255, 255]),
@@ -2240,7 +2232,6 @@ class RedditWidgetSettings:
             f"{prefix}.background_opacity": float(self.background_opacity),
             f"{prefix}.show_separators": self.show_separators,
             f"{prefix}.show_refresh_spiral": self.show_refresh_spiral,
-            f"{prefix}.intense_shadow": self.intense_shadow,
             f"{prefix}.margin": int(self.margin),
             f"{prefix}.header_logo_px_adjust": int(self.header_logo_px_adjust),
             f"{prefix}.border_color": self.border_color,
@@ -2264,7 +2255,6 @@ class MediaWidgetSettings:
     show_controls: bool = True
     show_header_frame: bool = True
     artwork_size: int = 200
-    intense_shadow: bool = True  # Intense shadow styling
     margin: int = 30
     border_color: list[int] = field(default_factory=lambda: [128, 128, 128, 255])
     border_opacity: float = 0.8
@@ -2296,7 +2286,6 @@ class MediaWidgetSettings:
             show_controls=settings.get("widgets.media.show_controls", True),
             show_header_frame=settings.get("widgets.media.show_header_frame", True),
             artwork_size=settings.get("widgets.media.artwork_size", 200),
-            intense_shadow=settings.get("widgets.media.intense_shadow", True),
             margin=settings.get("widgets.media.margin", 30),
             border_color=settings.get("widgets.media.border_color", [128, 128, 128, 255]),
             border_opacity=settings.get("widgets.media.border_opacity", 0.8),
@@ -2332,7 +2321,6 @@ class MediaWidgetSettings:
             show_controls=_get("show_controls", True),
             show_header_frame=_get("show_header_frame", True),
             artwork_size=int(_get("artwork_size", 200)),
-            intense_shadow=_get("intense_shadow", True),
             margin=int(_get("margin", 30)),
             border_color=_get("border_color", [128, 128, 128, 255]),
             border_opacity=float(_get("border_opacity", 0.8)),
@@ -2359,7 +2347,6 @@ class MediaWidgetSettings:
             f"{prefix}.show_controls": self.show_controls,
             f"{prefix}.show_header_frame": self.show_header_frame,
             f"{prefix}.artwork_size": int(self.artwork_size),
-            f"{prefix}.intense_shadow": self.intense_shadow,
             f"{prefix}.margin": int(self.margin),
             f"{prefix}.border_color": self.border_color,
             f"{prefix}.border_opacity": float(self.border_opacity),

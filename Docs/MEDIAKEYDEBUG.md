@@ -357,7 +357,7 @@ rendering/display_input.py     — DEFINITION only
 
 ### 8.3 Why H1 Made Shadow Corruption Frequent
 
-The shadow system (`widgets/shadow_utils.py`) uses `QGraphicsDropShadowEffect` plus `QPixmapCache` for rendering. `rendering/widget_effects.py::invalidate_overlay_effects()` is called on `focusInEvent` (see `display_widget.py:1505`).
+At the time of this investigation, the runtime shadow system (`widgets/shadow_utils.py`) used `QGraphicsDropShadowEffect` plus `QPixmapCache` for rendering. `rendering/widget_effects.py::invalidate_overlay_effects()` was called on `focusInEvent` (see `display_widget.py:1505`). Runtime widget shadows now use painter-owned card/text/header paths instead.
 
 **H1 triggered MORE focus transitions**:
 1. Setting `NoFocus` on ~30+ descendant widgets destabilized Qt's focus tree
@@ -379,11 +379,10 @@ The shadow system (`widgets/shadow_utils.py`) uses `QGraphicsDropShadowEffect` p
 
 `QPixmapCache` is used internally by Qt for these intermediate pixmaps. When the effect is rapidly disabled/enabled (as in `invalidate_overlay_effects`), the cache entry may not be fully invalidated. If a stale cached pixmap is reused while a new effect is being computed, visual artifacts appear (doubled shadows, ghost images).
 
-The codebase already has multiple mitigations:
-- `invalidate_overlay_effects` with `refresh_effects=True` (menu triggers) recreates effects entirely
-- `clear_cached_shadow_for_widget()` calls `QPixmapCache.clear()` globally
-- `spotify_visualizer_widget.py` tracks `_pending_shadow_cache_invalidation`
-- Context menu clear forces a full cache flush
+The codebase used to carry multiple mitigations:
+- `invalidate_overlay_effects` with `refresh_effects=True` (menu triggers) recreated effects entirely
+- `spotify_visualizer_widget.py` tracked `_pending_shadow_cache_invalidation`
+- Context menu clear forced a full cache flush
 
 **Prevention rule**: Never manipulate focus policies on large widget trees during runtime. Focus policy changes trigger `styleChange`/`updateGeometry` cascades, which cause repaints, which stress the shadow pixmap cache.
 

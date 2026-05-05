@@ -266,16 +266,6 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.weather_show_icon.stateChanged.connect(lambda: _update_weather_icon_visibility(tab))
     _update_weather_icon_visibility(tab)
 
-    # Intense shadow
-    tab.weather_intense_shadow = QCheckBox("Intense Shadows")
-    tab.weather_intense_shadow.setProperty("circleIndicator", True)
-    tab.weather_intense_shadow.setChecked(tab._default_bool('weather', 'intense_shadow', True))
-    tab.weather_intense_shadow.setToolTip(
-        "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
-    )
-    tab.weather_intense_shadow.stateChanged.connect(tab._save_settings)
-    _weather_ctrl_layout.addWidget(tab.weather_intense_shadow)
-
     # Background frame
     tab.weather_show_background = QCheckBox("Show Background Frame")
     tab.weather_show_background.setProperty("circleIndicator", True)
@@ -404,9 +394,6 @@ def load_weather_settings(tab: WidgetsTab, widgets: dict) -> None:
     tab.weather_show_icon.setChecked(tab._config_bool('weather', weather_config, 'show_condition_icon', True))
     tab._set_combo_text(tab.weather_icon_alignment, tab._config_str('weather', weather_config, 'icon_alignment', 'RIGHT'))
     tab.weather_icon_size.setValue(tab._config_int('weather', weather_config, 'icon_size', 96))
-    tab.weather_intense_shadow.setChecked(
-        tab._config_bool('weather', weather_config, 'intense_shadow', True)
-    )
     tab.weather_show_background.setChecked(tab._config_bool('weather', weather_config, 'show_background', True))
     weather_opacity_pct = int(tab._config_float('weather', weather_config, 'bg_opacity', 0.6) * 100)
     tab.weather_bg_opacity.setValue(weather_opacity_pct)
@@ -456,7 +443,6 @@ def save_weather_settings(tab: WidgetsTab) -> dict:
         'show_condition_icon': tab.weather_show_icon.isChecked(),
         'icon_alignment': tab.weather_icon_alignment.currentText(),
         'icon_size': tab.weather_icon_size.value(),
-        'intense_shadow': tab.weather_intense_shadow.isChecked(),
         'show_background': tab.weather_show_background.isChecked(),
         'bg_opacity': tab.weather_bg_opacity.value() / 100.0,
         'color': [tab._weather_color.red(), tab._weather_color.green(),

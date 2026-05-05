@@ -20,10 +20,7 @@ from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QPen, QPaintEve
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
-from widgets.shadow_utils import (
-    apply_widget_shadow,
-    ShadowFadeProfile,
-)
+from widgets.shadow_utils import ShadowFadeProfile
 from widgets.clock_ticker import get_global_clock_ticker
 from core.logging.logger import get_logger
 from core.performance import widget_paint_sample
@@ -122,9 +119,6 @@ class ClockWidget(BaseOverlayWidget):
         self._show_numerals: bool = True
         # Optional analogue-only drop shadow under the clock face and hands.
         self._analog_face_shadow: bool = True
-        self._analog_shadow_intense: bool = False
-        # Digital clock intense shadow (uses base class QGraphicsDropShadowEffect)
-        self._digital_shadow_intense: bool = False
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
@@ -341,17 +335,6 @@ class ClockWidget(BaseOverlayWidget):
                     self._tz_label.raise_()
                 except Exception as e:
                     logger.debug("[CLOCK] Exception suppressed: %s", e)
-            # Only apply widget-level shadow in digital mode. Analog mode uses
-            # QPainter-drawn shadows to avoid QGraphicsDropShadowEffect cache corruption.
-            if self._display_mode != "analog":
-                try:
-                    ShadowFadeProfile.attach_shadow(
-                        self,
-                        self._shadow_config,
-                        has_background_frame=self._show_background,
-                    )
-                except Exception as e:
-                    logger.debug("[CLOCK] Exception suppressed: %s", e)
             self._has_faded_in = True
             return
 
@@ -373,7 +356,6 @@ class ClockWidget(BaseOverlayWidget):
                 self._shadow_config,
                 duration_ms=resolved_duration_ms,
                 has_background_frame=self._show_background,
-                apply_shadow_on_finish=self._display_mode != "analog",
             )
         except Exception as e:
             logger.debug("[CLOCK] Exception suppressed: %s", e)
@@ -385,17 +367,6 @@ class ClockWidget(BaseOverlayWidget):
                 try:
                     self._tz_label.show()
                     self._tz_label.raise_()
-                except Exception as e:
-                    logger.debug("[CLOCK] Exception suppressed: %s", e)
-            # Only apply widget-level shadow in digital mode. Analog mode uses
-            # QPainter-drawn shadows to avoid QGraphicsDropShadowEffect cache corruption.
-            if self._display_mode != "analog":
-                try:
-                    apply_widget_shadow(
-                        self,
-                        self._shadow_config or {},
-                        has_background_frame=self._show_background,
-                    )
                 except Exception as e:
                     logger.debug("[CLOCK] Exception suppressed: %s", e)
         self._has_faded_in = True
@@ -798,25 +769,6 @@ class ClockWidget(BaseOverlayWidget):
             self._invalidate_clock_face_cache()
             self.update()
 
-    def set_analog_shadow_intense(self, intense: bool) -> None:
-        """Enable or disable the intensified analogue shadow styling."""
-
-        self._analog_shadow_intense = bool(intense)
-        if self._display_mode == "analog":
-            self._invalidate_clock_face_cache()
-            self.update()
-
-    def set_digital_shadow_intense(self, intense: bool) -> None:
-        """Enable or disable the intensified digital clock shadow styling.
-        
-        When enabled, the QGraphicsDropShadowEffect has doubled blur radius,
-        increased opacity, and larger offset for dramatic visual effect.
-        """
-        self._digital_shadow_intense = bool(intense)
-        # Use base class intense shadow for digital mode
-        if self._display_mode == "digital":
-            self.set_intense_shadow(intense)
-
     def set_font_family(self, family: str) -> None:
         """Set font family - override to use bold weight and update tz label."""
         super().set_font_family(family)
@@ -1041,8 +993,8 @@ class ClockWidget(BaseOverlayWidget):
             else:
                 painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-            shadow_scale = 1.8 if self._analog_shadow_intense else 1.43
-            opacity_scale = 3.0 if self._analog_shadow_intense else 1.82
+            shadow_scale = 1.8
+            opacity_scale = 3.0
 
             def _scaled_alpha(base_alpha: int) -> int:
                 return min(255, int(round(base_alpha * opacity_scale)))
@@ -1070,7 +1022,7 @@ class ClockWidget(BaseOverlayWidget):
             if radius <= 0:
                 return
 
-            drop_offset = 3 if self._analog_shadow_intense else 2
+            drop_offset = 3
             marker_len = max(6, radius // 10)
             marker_lines: list[tuple[int, int, int, int]] = []
             marker_path = QPainterPath()
@@ -1087,19 +1039,19 @@ class ClockWidget(BaseOverlayWidget):
                 marker_path.lineTo(outer_x, outer_y)
 
             if self._analog_face_shadow:
-                base_alpha = max(121, int(self._text_color.alpha() * (0.605 if self._analog_shadow_intense else 0.44)))
+                base_alpha = max(121, int(self._text_color.alpha() * 0.605))
                 shadow_color = QColor(0, 0, 0, _scaled_alpha(base_alpha))
 
                 ring_path = QPainterPath()
                 ring_path.addEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
                 ring_stroke = QPainterPathStroker()
-                ring_stroke.setWidth(max(4.4, radius * (0.0462 if self._analog_shadow_intense else 0.0286)))
+                ring_stroke.setWidth(max(4.4, radius * 0.0462))
                 ring_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 ring_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
                 ring_shape = ring_stroke.createStroke(ring_path)
 
                 marker_stroke = QPainterPathStroker()
-                marker_stroke.setWidth(max(2.2, radius * (0.01584 if self._analog_shadow_intense else 0.01144)))
+                marker_stroke.setWidth(max(2.2, radius * 0.01584))
                 marker_stroke.setCapStyle(Qt.PenCapStyle.RoundCap)
                 marker_stroke.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
                 marker_shape = marker_stroke.createStroke(marker_path)
@@ -1116,7 +1068,7 @@ class ClockWidget(BaseOverlayWidget):
                 painter.restore()
 
             face_pen = QPen(self._text_color)
-            face_pen.setWidth(max(2, int(round(radius * (0.025 if not self._analog_shadow_intense else 0.032)))))
+            face_pen.setWidth(max(2, int(round(radius * 0.032))))
             painter.setPen(face_pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(center_x - radius, center_y - radius, radius * 2, radius * 2)
@@ -1210,8 +1162,8 @@ class ClockWidget(BaseOverlayWidget):
                 fb_painter.drawPixmap(0, 0, self._cached_clock_face)
 
             # Now draw only the dynamic elements (hands)
-            shadow_scale = 1.5 if self._analog_shadow_intense else 1.1
-            opacity_scale = 2.0 if self._analog_shadow_intense else 1.4
+            shadow_scale = 1.5
+            opacity_scale = 2.0
 
             def _scaled_alpha(base_alpha: int) -> int:
                 return min(255, int(round(base_alpha * opacity_scale)))
@@ -1300,7 +1252,7 @@ class ClockWidget(BaseOverlayWidget):
                 tz_x = center_x - tz_metrics.horizontalAdvance(text) // 2
                 fb_painter.setPen(QPen(self._text_color))
                 if self._analog_face_shadow:
-                    tz_shadow_offset = 3 if self._analog_shadow_intense else 2
+                    tz_shadow_offset = 3
                     tz_shadow_color = QColor(0, 0, 0, _scaled_alpha(max(60, int(self._text_color.alpha() * 0.45))))
                     fb_painter.setPen(QPen(tz_shadow_color))
                     fb_painter.drawText(tz_x + tz_shadow_offset, tz_y + tz_shadow_offset, text)

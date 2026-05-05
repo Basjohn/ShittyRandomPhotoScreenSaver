@@ -73,6 +73,9 @@ class TestWidgetsTab:
         assert tab.weather_show_forecast.isChecked() is True  # Default is True per defaults.py
         assert tab.weather_show_background.isChecked() is True
         assert tab.weather_bg_opacity.value() == 60
+        assert tab.widget_shadows_enabled.isChecked() is True
+        assert tab.widget_text_shadows_enabled.isChecked() is True
+        assert tab.widget_header_shadows_enabled.isChecked() is True
 
         tab.deleteLater()
 
@@ -96,6 +99,9 @@ class TestWidgetsTab:
         tab.weather_show_forecast.setChecked(True)
         tab.weather_show_background.setChecked(True)
         tab.weather_bg_opacity.setValue(80)  # 80%
+        tab.widget_shadows_enabled.setChecked(False)
+        tab.widget_text_shadows_enabled.setChecked(False)
+        tab.widget_header_shadows_enabled.setChecked(True)
 
         # Persist settings (call _now directly; _save_settings is debounced)
         tab._save_settings_now()
@@ -119,6 +125,11 @@ class TestWidgetsTab:
         assert weather_cfg.get("show_background") is True
         assert pytest.approx(weather_cfg.get("bg_opacity", 0.0)) == 0.80
         assert weather_cfg.get("monitor") == "ALL"
+
+        shadows_cfg = widgets_cfg.get("shadows", {})
+        assert shadows_cfg.get("enabled") is False
+        assert shadows_cfg.get("text_enabled") is False
+        assert shadows_cfg.get("header_enabled") is True
 
     def test_sine_wave_swatch_persistence(self, qt_app, settings_manager):
         """Glow + line swatch selections persist through save/load and update buttons."""

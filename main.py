@@ -118,7 +118,6 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --viz-diagnostics (or --viz-diag) - Enable Spotify visualizer diagnostics
     - -devblob - Enable dev-gated Blob visualizer mode
     - --devcurve - Legacy no-op flag kept for compatibility
-    - --shadowfix - Enable gated painted-shadow experiment for selected widgets
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
@@ -126,7 +125,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     # Filter out debug/viz/dev-gate flags
     _filtered = {
         "--debug", "-d", "--viz", "--viz-diagnostics", "--viz-diag",
-        "--fresh", "-devblob", "--devcurve", "--shadowfix",
+        "--fresh", "-devblob", "--devcurve",
     }
     args = [arg for arg in sys.argv if arg not in _filtered]
     

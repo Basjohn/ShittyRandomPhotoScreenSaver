@@ -29,7 +29,6 @@ from widgets.spotify_visualizer.blob_math import (
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
     PAINTED_FRAME_SHADOW_TUNING,
-    painted_frame_shadows_enabled,
 )
 
 logger = get_logger(__name__)
@@ -87,6 +86,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
     def __init__(self, parent=None) -> None:  # type: ignore[override]
         super().__init__(parent)
+        self._painted_frame_shadow_enabled: bool = True
 
         apply_widget_surface_format(self, reason="spotify_bars_overlay")
 
@@ -411,7 +411,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._gl_program_rids: _Dict[str, _Any] = {}
         self._gl_vao_rid = None
         self._gl_vbo: Optional[int] = None
-        # Rounded-rect stencil mask program for shadowfix corner clipping
+        # Rounded-rect stencil mask program for painted-card corner clipping
         self._gl_mask_program: Optional[int] = None
         # Legacy single-program aliases for backward compat with ResourceManager
         self._gl_program = None
@@ -541,6 +541,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
+        self._painted_frame_shadow_enabled = bool(enabled)
 
     def set_state(
         self,
@@ -1886,13 +1889,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if fade <= 0.0:
             return
 
-        # --- Shadowfix GL stencil mask clipping ---
-        # Under --shadowfix the widget is larger than the visible card by
-        # card_shrink_right/bottom pixels.  A rounded-rect stencil mask
-        # clips GL fragments to the card boundary (including corners)
-        # without changing content scale or authored mode behavior.
+        # --- Painted-card GL stencil mask clipping ---
+        # When painted card shadows are enabled the widget is larger than
+        # the visible card by card_shrink_right/bottom pixels. A rounded-rect
+        # stencil mask clips GL fragments to the card boundary without
+        # changing content scale or authored mode behavior.
         stencil_active = False
-        if painted_frame_shadows_enabled():
+        if self._painted_frame_shadow_enabled:
             try:
                 dpr = self._get_dpr()
                 shrink_r = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_right"])

@@ -166,7 +166,6 @@
     "widgets": {
       "clock": {
         "analog_face_shadow": true,
-        "analog_shadow_intense": true,
         "bg_color": [
           35,
           35,
@@ -187,7 +186,6 @@
           255,
           230
         ],
-        "digital_shadow_intense": false,
         "display_mode": "analog",
         "enabled": true,
         "font_family": "Segoe UI",
@@ -285,7 +283,6 @@
         "font_size": 14,
         "group_threads": false,
         "header_logo_px_adjust": 0,
-        "intense_shadow": true,
         "limit": 5,
         "margin": 30,
         "max_sender_words": 3,
@@ -356,7 +353,6 @@
         "image_border_radius": 4,
         "image_border_width": 2,
         "image_spacing": 4,
-        "intense_shadow": true,
         "layout_mode": "hybrid",
         "margin": 30,
         "monitor": 2,
@@ -391,7 +387,6 @@
         "enabled": true,
         "font_family": "Segoe UI",
         "font_size": 20,
-        "intense_shadow": true,
         "margin": 30,
         "monitor": 2,
         "mute_button_enabled": true,
@@ -435,7 +430,6 @@
         "font_family": "Segoe UI",
         "font_size": 14,
         "header_logo_px_adjust": 0,
-        "intense_shadow": true,
         "limit": 20,
         "margin": 30,
         "monitor": 2,
@@ -467,7 +461,6 @@
           230
         ],
         "enabled": true,
-        "intense_shadow": true,
         "limit": 20,
         "monitor": 2,
         "position": "Bottom Right",
@@ -484,10 +477,12 @@
         ],
         "enabled": true,
         "frame_opacity": 0.77,
+        "header_enabled": true,
         "offset": [
           4,
           4
         ],
+        "text_enabled": true,
         "text_opacity": 0.33
       },
       "spotify_visualizer": {
@@ -1268,7 +1263,6 @@
         "font_size": 28,
         "icon_alignment": "RIGHT",
         "icon_size": 96,
-        "intense_shadow": true,
         "latitude": "",
         "location": "",
         "longitude": "",

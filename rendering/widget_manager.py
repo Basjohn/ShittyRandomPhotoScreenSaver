@@ -17,7 +17,6 @@ from core.settings.settings_manager import SettingsManager
 from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
-from widgets.shadow_utils import apply_widget_shadow as _apply_widget_shadow
 from widgets.media_widget import MediaWidget
 # Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
 # from widgets.gmail_widget import GmailWidget, GmailPosition
@@ -42,9 +41,6 @@ from widgets.base_overlay_widget import BaseOverlayWidget
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
     from core.threading.manager import ThreadManager
-
-# Re-export for tests that monkeypatch rendering.widget_manager.apply_widget_shadow.
-apply_widget_shadow = _apply_widget_shadow
 
 logger = get_logger(__name__)
 

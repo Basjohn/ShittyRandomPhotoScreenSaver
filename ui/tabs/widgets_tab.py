@@ -715,6 +715,38 @@ class WidgetsTab(QWidget):
         row.addStretch()
         content_layout.addLayout(row)
 
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
+        self.widget_text_shadows_enabled = QCheckBox("Enable Widget Text Shadows")
+        self.widget_text_shadows_enabled.setProperty("circleIndicator", True)
+        self.widget_text_shadows_enabled.setToolTip(
+            "Paints widget text shadows without Qt graphics effects."
+        )
+        self.widget_text_shadows_enabled.setChecked(
+            self._default_bool('shadows', 'text_enabled', True)
+        )
+        self.widget_text_shadows_enabled.stateChanged.connect(self._save_settings)
+        row.addWidget(self.widget_text_shadows_enabled)
+        row.addStretch()
+        content_layout.addLayout(row)
+
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 8, 0, 8)
+        row.setSpacing(12)
+        self.widget_header_shadows_enabled = QCheckBox("Enable Widget Header Drop Shadows")
+        self.widget_header_shadows_enabled.setProperty("circleIndicator", True)
+        self.widget_header_shadows_enabled.setToolTip(
+            "Paints header-frame drop shadows without Qt graphics effects."
+        )
+        self.widget_header_shadows_enabled.setChecked(
+            self._default_bool('shadows', 'header_enabled', True)
+        )
+        self.widget_header_shadows_enabled.stateChanged.connect(self._save_settings)
+        row.addWidget(self.widget_header_shadows_enabled)
+        row.addStretch()
+        content_layout.addLayout(row)
+
         # Card border width row (aligned helper to keep wrap + gutter)
         border_row, _ = add_aligned_row(
             content_layout,
@@ -823,6 +855,8 @@ class WidgetsTab(QWidget):
             # Collect all widget controls that need signal blocking
             _widget_attrs = [
                 'widget_shadows_enabled',
+                'widget_text_shadows_enabled',
+                'widget_header_shadows_enabled',
                 'card_border_width_spin',
                 'clock_enabled', 'clock_format', 'clock_seconds', 'clock_timezone',
                 'clock_show_tz', 'clock_position', 'clock_font_combo', 'clock_font_size',
@@ -879,8 +913,14 @@ class WidgetsTab(QWidget):
                 shadows_enabled_raw = shadows_config.get('enabled', True)
                 enabled = SettingsManager.to_bool(shadows_enabled_raw, True)
                 self.widget_shadows_enabled.setChecked(enabled)
+                text_enabled = SettingsManager.to_bool(shadows_config.get('text_enabled', True), True)
+                self.widget_text_shadows_enabled.setChecked(text_enabled)
+                header_enabled = SettingsManager.to_bool(shadows_config.get('header_enabled', True), True)
+                self.widget_header_shadows_enabled.setChecked(header_enabled)
             else:
                 self.widget_shadows_enabled.setChecked(True)
+                self.widget_text_shadows_enabled.setChecked(True)
+                self.widget_header_shadows_enabled.setChecked(True)
 
             global_cfg = widgets.get('global', {}) if isinstance(widgets, dict) else {}
             try:
@@ -1385,6 +1425,8 @@ class WidgetsTab(QWidget):
         if not isinstance(shadows_config, dict):
             shadows_config = {}
         shadows_config['enabled'] = self.widget_shadows_enabled.isChecked()
+        shadows_config['text_enabled'] = self.widget_text_shadows_enabled.isChecked()
+        shadows_config['header_enabled'] = self.widget_header_shadows_enabled.isChecked()
         existing_widgets['shadows'] = shadows_config
 
         global_config = existing_widgets.get('global', {})
@@ -1431,10 +1473,11 @@ class WidgetsTab(QWidget):
         try:
             logger.debug(
                 "[WIDGETS_TAB] Saving widgets config: "
-                "clock.enabled=%s, clock.analog_shadow_intense=%s, "
-                "reddit.limit=%s, reddit.enabled=%s",
+                "clock.enabled=%s, shadows=%s/%s/%s, reddit.limit=%s, reddit.enabled=%s",
                 clock_config.get('enabled'),
-                clock_config.get('analog_shadow_intense'),
+                shadows_config.get('enabled'),
+                shadows_config.get('text_enabled'),
+                shadows_config.get('header_enabled'),
                 reddit_config.get('limit'),
                 reddit_config.get('enabled'),
             )

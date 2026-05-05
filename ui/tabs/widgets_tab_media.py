@@ -355,15 +355,6 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _mbg_layout.setContentsMargins(0, 0, 0, 12)
     _mbg_layout.setSpacing(12)
 
-    tab.media_intense_shadow = QCheckBox("Intense Shadows")
-    tab.media_intense_shadow.setProperty("circleIndicator", True)
-    tab.media_intense_shadow.setChecked(tab._default_bool('media', 'intense_shadow', True))
-    tab.media_intense_shadow.setToolTip(
-        "Doubles shadow blur, opacity, and offset for dramatic effect on large displays."
-    )
-    tab.media_intense_shadow.stateChanged.connect(tab._save_settings)
-    _mbg_layout.addWidget(tab.media_intense_shadow)
-
     media_opacity_row = _aligned_row(_mbg_layout, "Background Opacity:")
     tab.media_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.media_bg_opacity.setMinimum(0)
@@ -720,7 +711,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     tab.media_font_size.setValue(tab._config_int('media', media_config, 'font_size', 22))
     tab.media_margin.setValue(tab._config_int('media', media_config, 'margin', 30))
     tab.media_show_background.setChecked(tab._config_bool('media', media_config, 'show_background', True))
-    tab.media_intense_shadow.setChecked(tab._config_bool('media', media_config, 'intense_shadow', True))
     media_opacity_pct = int(tab._config_float('media', media_config, 'bg_opacity', 0.6) * 100)
     tab.media_bg_opacity.setValue(media_opacity_pct)
     tab.media_bg_opacity_label.setText(f"{media_opacity_pct}%")
@@ -866,7 +856,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         'font_size': tab.media_font_size.value(),
         'margin': tab.media_margin.value(),
         'show_background': tab.media_show_background.isChecked(),
-        'intense_shadow': tab.media_intense_shadow.isChecked(),
         'bg_opacity': tab.media_bg_opacity.value() / 100.0,
         'color': [tab._media_color.red(), tab._media_color.green(),
                   tab._media_color.blue(), tab._media_color.alpha()],

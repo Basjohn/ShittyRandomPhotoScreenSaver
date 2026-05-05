@@ -57,7 +57,7 @@ Living map of the current SRPSS codebase.
 | Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading + apply |
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator |
-| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and `--shadowfix` rounded-rect stencil mask (with border-width inset) to clip GL content to the visible card boundary |
+| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask (with border-width inset) to clip GL content to the visible card boundary |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping |
 | Spline Curve runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | DevCurve/Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |
@@ -93,7 +93,8 @@ Living map of the current SRPSS codebase.
 
 | Module | File | Role |
 |---|---|---|
-| Painted frame shadows | `widgets/base_overlay_widget.py` | `--shadowfix` gated cached painter-drawn card shadows and shared tuning for framed overlay widgets |
+| Painted frame shadows | `widgets/base_overlay_widget.py` | Settings-controlled cached painter-drawn card and label text shadows for framed runtime overlay widgets |
+| Shadow tuning | `core/settings/shadow_tuning.py` | Canonical `shadowtuning.json` defaults for card, text, header, and Spotify volume-slider painted shadows |
 | Visualizer parity | `widgets/spotify_visualizer_widget.py` | Uses the shared painted-shadow contract for the visualizer card without changing GL/audio/bar rendering |
 
 ## Source Ingestion

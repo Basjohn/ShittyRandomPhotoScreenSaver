@@ -45,7 +45,7 @@ No shadow frameworks or parallel ownership paths.
 
 ### 7.1 Focus Policy Manipulation
 - **Never manipulate focus policies on large widget trees at runtime.**
-- Recursive `setFocusPolicy()` on dozens of widgets destabilizes Qt's focus tree, causing `focusInEvent`/`focusOutEvent` cascades that corrupt `QPixmapCache` used by `QGraphicsDropShadowEffect`.
+- Recursive `setFocusPolicy()` on dozens of widgets destabilizes Qt's focus tree, causing `focusInEvent`/`focusOutEvent` cascades. Runtime widget shadows must stay on the painter-owned card/text/header paths; do not reintroduce `QGraphicsDropShadowEffect` for overlay shadows.
 - If focus policy changes are required, apply them at widget construction time only.
 
 ### 7.2 Dead Code Verification

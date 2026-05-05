@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -22,7 +22,6 @@ from PySide6.QtGui import (
     QPixmap,
 )
 from PySide6.QtWidgets import QMenu, QWidget
-from PySide6.QtWidgets import QGraphicsOpacityEffect
 
 from core.gmail.gmail_backend import GmailBackend, GmailBackendMode
 from core.gmail.gmail_client import EmailMetadata, GmailLabel
@@ -44,29 +43,16 @@ from widgets.gmail_components import (
     serialize_email_cache,
 )
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
-from widgets.shadow_utils import ShadowFadeProfile, draw_rounded_rect_with_shadow
+from widgets.shadow_utils import (
+    ShadowFadeProfile,
+    draw_rounded_rect_with_shadow,
+    draw_text_with_shadow,
+    header_shadows_enabled,
+    text_shadows_enabled,
+)
 
 logger = get_logger(__name__)
 
-
-# --shadowfix diagnostic tuning group. Restart after changing these values.
-# This is intentionally local and gated so Gmail can prove/disprove replacing
-# Qt's widget-level QGraphicsDropShadowEffect for framed cards without changing
-# the rest of the widget family.
-GMAIL_SHADOWFIX_TUNING = {
-    "card_shrink_right": 11,
-    "card_shrink_bottom": 11,
-    "offset_x": 5,
-    "offset_y": 8,
-    "blur_steps": 40,
-    "spread": 10,
-    "max_alpha": 8,
-    "radius_extra": 2,
-}
-
-
-def _gmail_shadowfix_enabled() -> bool:
-    return "--shadowfix" in sys.argv
 
 CACHE_MAX_AGE_HOURS = 72
 CACHE_DIR = get_app_data_dir() / "cache"
@@ -155,11 +141,6 @@ class GmailWidget(BaseOverlayWidget):
         self._boundary_separator_color = QColor(180, 180, 180, 80)
         self._boundary_separator_thickness = 2
 
-        self._shadowfix_enabled = _gmail_shadowfix_enabled()
-        self._shadowfix_frame_pixmap: Optional[QPixmap] = None
-        self._shadowfix_frame_cache_key: Optional[Tuple[Any, ...]] = None
-        self._shadowfix_effect_warning_logged = False
-
         self._width = 600
         self._content_padding_left = 0
         self._content_padding_right = 0
@@ -243,16 +224,6 @@ class GmailWidget(BaseOverlayWidget):
         self._update_position()
 
     def _update_stylesheet(self) -> None:
-        if self._shadowfix_enabled:
-            self.setStyleSheet(f"""
-                QWidget {{
-                    background-color: transparent;
-                    border: {self._bg_border_width}px solid transparent;
-                    border-radius: {self._bg_corner_radius}px;
-                    color: rgba({self._text_color.red()}, {self._text_color.green()}, {self._text_color.blue()}, {self._text_color.alpha()});
-                }}
-            """)
-            return
         super()._update_stylesheet()
 
     def sizeHint(self) -> QSize:  # type: ignore[override]
@@ -1000,7 +971,6 @@ class GmailWidget(BaseOverlayWidget):
                         self,
                         self._shadow_config,
                         has_background_frame=self._show_background,
-                        apply_shadow_on_finish=not self._shadowfix_enabled,
                     )
                 parent.request_overlay_fade_sync("gmail", starter)
             else:
@@ -1016,127 +986,7 @@ class GmailWidget(BaseOverlayWidget):
     def paintEvent(self, event) -> None:  # type: ignore[override]
         with widget_paint_sample(self, "gmail.paint"):
             super().paintEvent(event)
-            if self._shadowfix_enabled:
-                self._shadowfix_warn_if_unexpected_effect()
             self._paint_cached_content()
-
-    def _shadowfix_clear_backing_store(self) -> None:
-        painter = QPainter(self)
-        try:
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-            painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        finally:
-            painter.end()
-
-    def _shadowfix_warn_if_unexpected_effect(self) -> None:
-        if self._shadowfix_effect_warning_logged:
-            return
-        try:
-            effect = self.graphicsEffect()
-        except Exception:
-            return
-        if effect is None or isinstance(effect, QGraphicsOpacityEffect):
-            return
-        self._shadowfix_effect_warning_logged = True
-        logger.warning(
-            "[GMAIL_SHADOWFIX] Unexpected persistent graphics effect while shadowfix is active: %s",
-            type(effect).__name__,
-        )
-
-    def _shadowfix_card_rect(self) -> QRectF:
-        tuning = GMAIL_SHADOWFIX_TUNING
-        return QRectF(
-            0.0,
-            0.0,
-            max(1.0, float(self.width() - int(tuning["card_shrink_right"]))),
-            max(1.0, float(self.height() - int(tuning["card_shrink_bottom"]))),
-        )
-
-    def _paint_shadowfix_frame(self) -> None:
-        if not self._show_background:
-            self._shadowfix_frame_pixmap = None
-            self._shadowfix_frame_cache_key = None
-            return
-        pixmap = self._ensure_shadowfix_frame_pixmap()
-        if pixmap is None or pixmap.isNull():
-            return
-        painter = QPainter(self)
-        try:
-            painter.drawPixmap(0, 0, pixmap)
-        finally:
-            painter.end()
-
-    def _ensure_shadowfix_frame_pixmap(self) -> Optional[QPixmap]:
-        try:
-            dpr = max(1.0, float(self.devicePixelRatioF()))
-        except Exception:
-            dpr = 1.0
-        tuning = GMAIL_SHADOWFIX_TUNING
-        key = (
-            self.width(),
-            self.height(),
-            round(dpr, 3),
-            self._show_background,
-            self._bg_color.getRgb(),
-            self._bg_border_color.getRgb(),
-            int(self._bg_border_width),
-            int(self._bg_corner_radius),
-            tuple(sorted(tuning.items())),
-        )
-        if (
-            self._shadowfix_frame_pixmap is not None
-            and not self._shadowfix_frame_pixmap.isNull()
-            and self._shadowfix_frame_cache_key == key
-        ):
-            return self._shadowfix_frame_pixmap
-
-        if self.width() <= 0 or self.height() <= 0:
-            return None
-
-        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
-        pixmap.setDevicePixelRatio(dpr)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        try:
-            card_rect = self._shadowfix_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
-            radius = max(0.0, float(self._bg_corner_radius + int(tuning["radius_extra"])))
-            offset_x = float(tuning["offset_x"])
-            offset_y = float(tuning["offset_y"])
-            steps = max(1, int(tuning["blur_steps"]))
-            spread = max(0.0, float(tuning["spread"]))
-            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
-
-            for layer in range(steps, 0, -1):
-                frac = layer / float(steps)
-                grow = spread * frac
-                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
-                if alpha <= 0:
-                    continue
-                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
-                shadow_path = QPainterPath()
-                shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
-                painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
-
-            frame_path = QPainterPath()
-            frame_path.addRoundedRect(card_rect, radius, radius)
-            painter.fillPath(frame_path, self._bg_color)
-            if self._bg_border_width > 0 and self._bg_border_color.alpha() > 0:
-                pen = QPen(self._bg_border_color, max(1, int(self._bg_border_width)))
-                pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                painter.setPen(pen)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawPath(frame_path)
-        finally:
-            painter.end()
-
-        self._shadowfix_frame_pixmap = pixmap
-        self._shadowfix_frame_cache_key = key
-        return pixmap
-
-    def _invalidate_shadowfix_frame_cache(self) -> None:
-        self._shadowfix_frame_pixmap = None
-        self._shadowfix_frame_cache_key = None
 
     def _paint_cached_content(self) -> None:
         widget_size = self.size()
@@ -1218,7 +1068,6 @@ class GmailWidget(BaseOverlayWidget):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._invalidate_content_cache()
-        self._invalidate_shadowfix_frame_cache()
 
     def _paint_header(self, painter: QPainter) -> None:
         header_font_pt = int(self._header_font_pt) if self._header_font_pt > 0 else self._font_size
@@ -1235,7 +1084,14 @@ class GmailWidget(BaseOverlayWidget):
         if pixmap is not None:
             painter.drawPixmap(layout["logo_rect"], pixmap)
         painter.setPen(self._text_color)
-        painter.drawText(layout["text_x"], layout["text_baseline_y"], header_text)
+        draw_text_with_shadow(
+            painter,
+            layout["text_x"],
+            layout["text_baseline_y"],
+            header_text,
+            font_size=header_font_pt,
+            enabled=text_shadows_enabled(self._shadow_config),
+        )
         self._header_hit_rect = QRect(layout["frame_rect"])
 
     def _paint_refresh_button(self, painter: QPainter) -> None:
@@ -1329,6 +1185,7 @@ class GmailWidget(BaseOverlayWidget):
             radius,
             self._bg_border_color,
             border_width,
+            shadow_enabled=header_shadows_enabled(self._shadow_config),
         )
 
     def _header_bottom_y(self) -> int:
@@ -1463,7 +1320,14 @@ class GmailWidget(BaseOverlayWidget):
                 painter.setFont(QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal))
                 painter.setPen(QColor(180, 180, 180, 200))
                 time_x = env_x + env_width
-                painter.drawText(time_x, text_y - 2, time_text)
+                draw_text_with_shadow(
+                    painter,
+                    time_x,
+                    text_y - 2,
+                    time_text,
+                    font_size=base_font_pt,
+                    enabled=text_shadows_enabled(self._shadow_config),
+                )
             if self._show_sender:
                 painter.setFont(QFont(self._font_family, base_font_pt, sender_weight))
                 painter.setPen(
@@ -1472,7 +1336,14 @@ class GmailWidget(BaseOverlayWidget):
                     else QColor(180, 180, 180, 220)
                 )
                 sender_x = env_x + env_width + time_width
-                painter.drawText(sender_x, text_y, sender_text)
+                draw_text_with_shadow(
+                    painter,
+                    sender_x,
+                    text_y,
+                    sender_text,
+                    font_size=base_font_pt,
+                    enabled=text_shadows_enabled(self._shadow_config),
+                )
             if self._show_subject:
                 painter.setFont(subject_font)
                 painter.setPen(
@@ -1481,7 +1352,14 @@ class GmailWidget(BaseOverlayWidget):
                     else QColor(220, 220, 220, 230)
                 )
                 subject_x = env_x + env_width + time_width + sender_width
-                painter.drawText(subject_x, text_y, subject_text)
+                draw_text_with_shadow(
+                    painter,
+                    subject_x,
+                    text_y,
+                    subject_text,
+                    font_size=base_font_pt,
+                    enabled=text_shadows_enabled(self._shadow_config),
+                )
             if self._show_separators and i < len(visible_emails) - 1:
                 sep_y = row_y + line_height
                 painter.setPen(QPen(self._separator_color, self._separator_thickness))
@@ -1873,60 +1751,25 @@ class GmailWidget(BaseOverlayWidget):
         return True
 
     def set_show_background(self, show: bool) -> None:
-        before = self._show_background
         super().set_show_background(show)
-        if before != self._show_background:
-            self._invalidate_shadowfix_frame_cache()
 
     def set_background_color(self, color: QColor) -> None:
-        before = QColor(self._bg_color)
         super().set_background_color(color)
-        if before != self._bg_color:
-            self._invalidate_shadowfix_frame_cache()
 
     def set_background_opacity(self, opacity: float) -> None:
-        before = self._bg_color.alpha()
         super().set_background_opacity(opacity)
-        if before != self._bg_color.alpha():
-            self._invalidate_shadowfix_frame_cache()
 
     def set_background_border(self, width: int, color: QColor) -> None:
-        before = (self._bg_border_width, self._bg_border_color.getRgb())
         super().set_background_border(width, color)
-        after = (self._bg_border_width, self._bg_border_color.getRgb())
-        if before != after:
-            self._invalidate_shadowfix_frame_cache()
 
     def set_background_corner_radius(self, radius: int) -> None:
-        before = self._bg_corner_radius
         super().set_background_corner_radius(radius)
-        if before != self._bg_corner_radius:
-            self._invalidate_shadowfix_frame_cache()
 
     def set_shadow_config(self, config: Optional[Dict[str, Any]]) -> None:
-        if not self._shadowfix_enabled:
-            super().set_shadow_config(config)
-            return
-        self._shadow_config = config
-        self._invalidate_shadowfix_frame_cache()
-        try:
-            self.setGraphicsEffect(None)
-        except Exception:
-            pass
-
-    def set_intense_shadow(self, intense: bool) -> None:
-        if not self._shadowfix_enabled:
-            super().set_intense_shadow(intense)
-            return
-        self._intense_shadow = bool(intense)
-        self._invalidate_shadowfix_frame_cache()
+        super().set_shadow_config(config)
 
     def on_fade_complete(self) -> None:
-        if not self._shadowfix_enabled:
-            super().on_fade_complete()
-            return
-        self._has_faded_in = True
-        self._invalidate_shadowfix_frame_cache()
+        super().on_fade_complete()
 
     def set_content_padding(self, left: int, right: int, top: int) -> None:
         if (

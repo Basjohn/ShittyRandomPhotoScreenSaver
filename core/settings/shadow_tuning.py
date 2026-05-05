@@ -11,6 +11,10 @@ Sections
     gmail, clock, weather, reddit).
 ``volume_slider``
     Tuning for ``SpotifyVolumeWidget`` painted shadow.
+``text``
+    Tuning for painter-drawn runtime text shadows.
+``header``
+    Tuning for painter-drawn runtime header-frame shadows.
 
 The file is loaded once at import time.  Other modules import the resulting
 dictionaries and treat them as read-only at runtime.
@@ -51,9 +55,25 @@ _VOLUME_SLIDER_DEFAULTS: Dict[str, Any] = {
     "radius_extra": 0,
 }
 
+_TEXT_DEFAULTS: Dict[str, Any] = {
+    "offset_x": 1,
+    "offset_y": 1,
+    "alpha": 100,
+    "min_font_size": 10,
+    "small_font_min_scale": 0.3,
+}
+
+_HEADER_DEFAULTS: Dict[str, Any] = {
+    "offset_x": 2,
+    "offset_y": 2,
+    "alpha": 80,
+}
+
 _FULL_DEFAULTS: Dict[str, Any] = {
     "card": dict(_CARD_DEFAULTS),
     "volume_slider": dict(_VOLUME_SLIDER_DEFAULTS),
+    "text": dict(_TEXT_DEFAULTS),
+    "header": dict(_HEADER_DEFAULTS),
 }
 
 
@@ -105,8 +125,8 @@ def _load_section(data: Dict[str, Any], key: str, defaults: Dict[str, Any]) -> D
     return merged
 
 
-def load_shadow_tuning() -> tuple[Dict[str, Any], Dict[str, Any]]:
-    """Load shadow tuning and return ``(card_tuning, volume_slider_tuning)``.
+def load_shadow_tuning() -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
+    """Load shadow tuning and return all runtime tuning sections.
 
     Creates the file with defaults if it does not exist.
     """
@@ -114,7 +134,7 @@ def load_shadow_tuning() -> tuple[Dict[str, Any], Dict[str, Any]]:
 
     if not path.is_file():
         _write_defaults(path)
-        return dict(_CARD_DEFAULTS), dict(_VOLUME_SLIDER_DEFAULTS)
+        return dict(_CARD_DEFAULTS), dict(_VOLUME_SLIDER_DEFAULTS), dict(_TEXT_DEFAULTS), dict(_HEADER_DEFAULTS)
 
     try:
         raw = path.read_text(encoding="utf-8")
@@ -128,13 +148,15 @@ def load_shadow_tuning() -> tuple[Dict[str, Any], Dict[str, Any]]:
             exc_info=True,
         )
         _write_defaults(path)
-        return dict(_CARD_DEFAULTS), dict(_VOLUME_SLIDER_DEFAULTS)
+        return dict(_CARD_DEFAULTS), dict(_VOLUME_SLIDER_DEFAULTS), dict(_TEXT_DEFAULTS), dict(_HEADER_DEFAULTS)
 
     card = _load_section(data, "card", _CARD_DEFAULTS)
     volume = _load_section(data, "volume_slider", _VOLUME_SLIDER_DEFAULTS)
+    text = _load_section(data, "text", _TEXT_DEFAULTS)
+    header = _load_section(data, "header", _HEADER_DEFAULTS)
 
     logger.info("[SHADOW_TUNING] Loaded from %s", path)
-    return card, volume
+    return card, volume, text, header
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +164,10 @@ def load_shadow_tuning() -> tuple[Dict[str, Any], Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 try:
-    CARD_SHADOW_TUNING, VOLUME_SLIDER_SHADOW_TUNING = load_shadow_tuning()
+    CARD_SHADOW_TUNING, VOLUME_SLIDER_SHADOW_TUNING, TEXT_SHADOW_TUNING, HEADER_SHADOW_TUNING = load_shadow_tuning()
 except Exception:
     logger.debug("[SHADOW_TUNING] Startup load failed, using hardcoded defaults", exc_info=True)
     CARD_SHADOW_TUNING = dict(_CARD_DEFAULTS)
     VOLUME_SLIDER_SHADOW_TUNING = dict(_VOLUME_SLIDER_DEFAULTS)
+    TEXT_SHADOW_TUNING = dict(_TEXT_DEFAULTS)
+    HEADER_SHADOW_TUNING = dict(_HEADER_DEFAULTS)

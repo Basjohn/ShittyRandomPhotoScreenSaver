@@ -117,7 +117,7 @@ def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
         "show_separators", "show_timestamp", "date_display_mode", "group_threads",
         "auto_title_case", "clean_sender_names", "max_sender_words",
         "sender_column_width", "max_subject_words", "max_subject_chars",
-        "desaturate_when_no_unread", "show_background", "intense_shadow",
+        "desaturate_when_no_unread", "show_background",
         "bg_opacity", "border_opacity", "separator_thickness",
         "boundary_separator_thickness", "play_sound_on_new_mail", "sound_file_path",
         "sound_volume_percent", "color", "bg_color", "border_color",

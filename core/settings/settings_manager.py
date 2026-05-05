@@ -32,6 +32,21 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
+    _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
+        "intense_shadow",
+        "analog_shadow_intense",
+        "digital_shadow_intense",
+    })
+    _RETIRED_WIDGET_SHADOW_DOTTED_KEYS = frozenset({
+        "widgets.clock.analog_shadow_intense",
+        "widgets.clock.digital_shadow_intense",
+        "widgets.weather.intense_shadow",
+        "widgets.media.intense_shadow",
+        "widgets.reddit.intense_shadow",
+        "widgets.reddit2.intense_shadow",
+        "widgets.imgur.intense_shadow",
+        "widgets.gmail.intense_shadow",
+    })
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.12
     _MANUAL_FLOOR_MAX = 1.0
@@ -549,11 +564,28 @@ class SettingsManager(QObject):
         """
         removed = []
         with self._lock:
-            for key in self._OBSOLETE_KEYS:
+            for key in self._OBSOLETE_KEYS | self._RETIRED_WIDGET_SHADOW_DOTTED_KEYS:
                 if self._settings.contains(key):
                     self._settings.remove(key)
                     removed.append(key)
                     logger.debug("Removed obsolete setting: %s", key)
+            widgets = self._settings.value("widgets")
+            if isinstance(widgets, Mapping):
+                widgets_copy = deepcopy(dict(widgets))
+                widgets_changed = False
+                for section_name, section in list(widgets_copy.items()):
+                    if not isinstance(section, Mapping):
+                        continue
+                    section_copy = dict(section)
+                    for retired_key in self._RETIRED_WIDGET_SHADOW_KEYS:
+                        if retired_key in section_copy:
+                            section_copy.pop(retired_key, None)
+                            removed.append(f"widgets.{section_name}.{retired_key}")
+                            widgets_changed = True
+                    if section_copy != section:
+                        widgets_copy[section_name] = section_copy
+                if widgets_changed:
+                    self._settings.setValue("widgets", widgets_copy)
             if removed:
                 self._settings.sync()
                 logger.info("Cleaned up %d obsolete settings: %s", len(removed), removed)

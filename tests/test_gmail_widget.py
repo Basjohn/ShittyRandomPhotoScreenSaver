@@ -176,7 +176,7 @@ def test_gmail_widget_phase_a_settings(qt_app):
         assert widget.maximumWidth() == 640
         assert widget._width == 640
         margins = widget.contentsMargins()
-        assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (29, 12, 29, 12)
+        assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (20, 12, 20, 12)
         assert widget._content_padding_left == 0
         assert widget._content_padding_right == 0
         assert widget._content_padding_top == 0
@@ -442,19 +442,13 @@ def test_gmail_widget_refresh_spiral_can_be_hidden(qt_app):
         widget.cleanup()
 
 
-def test_gmail_shadowfix_flag_uses_painted_shadow_without_drop_effect(qt_app, monkeypatch):
-    """--shadowfix should keep Gmail off persistent QGraphicsDropShadowEffect."""
-    import sys
-
+def test_gmail_uses_shared_painted_shadow_without_drop_effect(qt_app):
+    """Gmail should use the shared painted-card shadow path at runtime."""
     from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
-    from widgets.gmail_widget import GMAIL_SHADOWFIX_TUNING, GmailWidget
+    from widgets.gmail_widget import GmailWidget
 
-    monkeypatch.setattr(sys, "argv", ["main.py", "--shadowfix"])
     widget = GmailWidget()
     try:
-        assert widget._shadowfix_enabled is True
-        assert {"card_shrink_right", "offset_x", "blur_steps", "max_alpha"} <= set(GMAIL_SHADOWFIX_TUNING)
-
         widget.set_show_background(True)
         widget.set_shadow_config({"enabled": True, "frame_opacity": 0.7, "blur_radius": 18})
         widget.resize(320, 160)
@@ -462,11 +456,8 @@ def test_gmail_shadowfix_flag_uses_painted_shadow_without_drop_effect(qt_app, mo
         shared_pixmap = widget._ensure_painted_frame_shadow_pixmap()
         assert shared_pixmap is not None
         assert not shared_pixmap.isNull()
-        assert PAINTED_FRAME_SHADOW_TUNING["blur_steps"] == 44
-
-        pixmap = widget._ensure_shadowfix_frame_pixmap()
-        assert pixmap is not None
-        assert not pixmap.isNull()
+        assert PAINTED_FRAME_SHADOW_TUNING["blur_steps"] > 0
+        assert widget.uses_painted_frame_shadow() is True
         assert widget.graphicsEffect() is None
     finally:
         widget.cleanup()

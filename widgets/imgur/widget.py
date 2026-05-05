@@ -31,7 +31,12 @@ from core.performance import widget_paint_sample
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
-from widgets.shadow_utils import draw_text_with_shadow, draw_rounded_rect_with_shadow
+from widgets.shadow_utils import (
+    draw_text_with_shadow,
+    draw_rounded_rect_with_shadow,
+    header_shadows_enabled,
+    text_shadows_enabled,
+)
 from widgets.imgur.scraper import ImgurScraper, ImgurImage
 from widgets.imgur.image_cache import ImgurImageCache
 
@@ -1028,7 +1033,14 @@ class ImgurWidget(BaseOverlayWidget):
             tag_display = tag_display.replace("_", " ").title()
         
         painter.setPen(QColor(255, 255, 255, 255))
-        draw_text_with_shadow(painter, int(x), int(baseline_y), tag_display, font_size=self._header_font_size)
+        draw_text_with_shadow(
+            painter,
+            int(x),
+            int(baseline_y),
+            tag_display,
+            font_size=self._header_font_size,
+            enabled=text_shadows_enabled(self._shadow_config),
+        )
         
         # Store header hit rect for click handling
         header_text_width = header_metrics.horizontalAdvance(tag_display)
@@ -1077,7 +1089,14 @@ class ImgurWidget(BaseOverlayWidget):
         # Use shadow helper for border with drop shadow (match Reddit widget)
         border_color = self._border_color if hasattr(self, '_border_color') else QColor(255, 255, 255, 255)
         border_width = max(1, self._bg_border_width) if hasattr(self, '_bg_border_width') else 3
-        draw_rounded_rect_with_shadow(painter, rect, radius, border_color, border_width)
+        draw_rounded_rect_with_shadow(
+            painter,
+            rect,
+            radius,
+            border_color,
+            border_width,
+            shadow_enabled=header_shadows_enabled(self._shadow_config),
+        )
     
     def _paint_grid(self, painter: QPainter) -> None:
         """Paint the image grid."""

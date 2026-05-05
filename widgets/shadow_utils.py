@@ -1,11 +1,10 @@
-"""Shared helpers for widget drop shadows and overlay widget attributes.
+"""Shared helpers for runtime widget shadows and overlay widget attributes.
 
 Centralizes configuration for overlay widget shadows (clocks, weather,
 media, and future widgets) so behaviour can be tuned in one place.
 
-Shadows are applied via QGraphicsDropShadowEffect where possible, but
-will gracefully skip widgets that already use a different graphics
-effect (e.g. MediaWidget's opacity effect) to avoid conflicts.
+Runtime card, text, and header shadows are painter-drawn to avoid Qt
+QGraphicsDropShadowEffect cache corruption on translucent overlay widgets.
 
 Also provides `configure_overlay_widget_attributes()` to set Qt widget
 attributes that prevent flickering when sibling QOpenGLWidgets repaint.
@@ -17,12 +16,13 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Callable, Optional
 
-from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect, QGraphicsOpacityEffect
+from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
 from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmapCache
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
+from core.settings.shadow_tuning import HEADER_SHADOW_TUNING, TEXT_SHADOW_TUNING
 
 logger = get_logger(__name__)
 
@@ -64,18 +64,6 @@ def uses_painted_frame_shadow(widget: QWidget) -> bool:
     return False
 
 
-# Global multiplier to make widget shadows slightly larger/softer by
-# increasing their blur radius. This applies both to immediate shadows
-# and to the animated shadow fade so visuals stay consistent.
-SHADOW_SIZE_MULTIPLIER: float = 1.2
-
-# Intense shadow multipliers - dramatically enhanced shadow effect
-# These values are tuned to match the analogue clock's intense shadow styling
-INTENSE_SHADOW_BLUR_MULTIPLIER: float = 3.0      # 3x blur for soft, dramatic glow
-INTENSE_SHADOW_OPACITY_MULTIPLIER: float = 2.5   # 2.5x opacity for visibility
-INTENSE_SHADOW_OFFSET_MULTIPLIER: float = 2.0    # 2x offset for depth
-
-
 def _to_bool(value: Any, default: bool = False) -> bool:
     """Lightweight bool normalisation for local config fields.
 
@@ -99,141 +87,28 @@ def _to_bool(value: Any, default: bool = False) -> bool:
     return bool(value)
 
 
-def apply_widget_shadow(
-    widget: QWidget,
-    config: Mapping[str, Any] | None,
-    *,
-    has_background_frame: bool,
-    intense: bool = False,
-) -> None:
-    """Apply or remove a drop shadow on an overlay widget.
-
-    Args:
-        widget: Target Qt widget (clock, weather, media, etc.).
-        config: ``widgets['shadows']`` settings dictionary.
-        has_background_frame: True when the widget is currently drawing
-            a solid background/frame (e.g. clock/WeatherWidget
-            ``show_background=True``), which uses the stronger
-            ``frame_opacity``; otherwise the lighter ``text_opacity``.
-        intense: If True, applies intensified shadow styling with
-            doubled blur radius, increased opacity, and larger offset
-            for dramatic visual effect on large displays.
-    """
+def shadow_config_enabled(config: Mapping[str, Any] | None, key: str = "enabled", default: bool = True) -> bool:
+    """Read a runtime shadow boolean from ``widgets.shadows`` config."""
 
     if config is None:
-        config = {}
+        return default
+    return _to_bool(config.get(key, default), default)
 
-    if uses_painted_frame_shadow(widget):
-        try:
-            if isinstance(widget.graphicsEffect(), QGraphicsDropShadowEffect):
-                widget.setGraphicsEffect(None)
-        except Exception:
-            logger.debug("[SHADOWS] Failed to clear skipped drop shadow for %r", widget, exc_info=True)
-        return
 
-    enabled = _to_bool(config.get("enabled", True), True)
+def text_shadows_enabled(config: Mapping[str, Any] | None) -> bool:
+    return shadow_config_enabled(config, "text_enabled", True)
 
-    existing_effect = widget.graphicsEffect()
 
-    if not enabled:
-        # Only tear down our own drop-shadow effects; leave other
-        # graphics effects (e.g. MediaWidget opacity) untouched.
-        if isinstance(existing_effect, QGraphicsDropShadowEffect):
-            try:
-                widget.setGraphicsEffect(None)
-            except Exception:
-                logger.debug("[SHADOWS] Failed to clear drop shadow for %r", widget, exc_info=True)
-        return
-
-    # If another, non-shadow effect is already attached, we skip shadows
-    # entirely rather than overriding important behaviour.
-    if existing_effect is not None and not isinstance(existing_effect, QGraphicsDropShadowEffect):
-        logger.debug(
-            "[SHADOWS] Skipping drop shadow for %r because a non-shadow graphicsEffect is already attached",
-            widget,
-        )
-        return
-    
-    # Clear any existing shadow effect to prevent doubling artifacts
-    if isinstance(existing_effect, QGraphicsDropShadowEffect):
-        try:
-            widget.setGraphicsEffect(None)
-        except Exception as e:
-            logger.debug("[SHADOWS] Exception suppressed: %s", e)
-        finally:
-            existing_effect = None
-
-    # Base colour (usually black) with optional alpha from config.
-    color_data = config.get("color", [0, 0, 0, 255])
-    try:
-        r, g, b = int(color_data[0]), int(color_data[1]), int(color_data[2])
-        a = int(color_data[3]) if len(color_data) > 3 else 255
-    except Exception as e:
-        logger.debug("[SHADOW] Exception suppressed: %s", e)
-        r, g, b, a = 0, 0, 0, 255
-
-    # Separate opacities for text-only vs framed widgets.
-    text_opacity = float(config.get("text_opacity", 0.3))
-    frame_opacity = float(config.get("frame_opacity", 0.7))
-    base_opacity = frame_opacity if has_background_frame else text_opacity
-    base_opacity = max(0.0, min(1.0, base_opacity))
-
-    color = QColor(r, g, b, int(a * base_opacity))
-
-    # Offset and blur radius (logical pixels).
-    offset = config.get("offset", [4, 4])
-    try:
-        dx, dy = int(offset[0]), int(offset[1])
-    except Exception as e:
-        logger.debug("[SHADOW] Exception suppressed: %s", e)
-        dx, dy = 4, 4
-
-    try:
-        blur_radius = int(config.get("blur_radius", 18))
-    except Exception as e:
-        logger.debug("[SHADOW] Exception suppressed: %s", e)
-        blur_radius = 18
-    try:
-        blur_radius = max(0, int(blur_radius * SHADOW_SIZE_MULTIPLIER))
-    except Exception as e:
-        logger.debug("[SHADOW] Exception suppressed: %s", e)
-
-    # Apply intense shadow multipliers if enabled
-    if intense:
-        try:
-            blur_radius = int(blur_radius * INTENSE_SHADOW_BLUR_MULTIPLIER)
-            dx = int(dx * INTENSE_SHADOW_OFFSET_MULTIPLIER)
-            dy = int(dy * INTENSE_SHADOW_OFFSET_MULTIPLIER)
-            # Increase opacity significantly for intense shadows - ensure minimum visibility
-            # For text-only widgets, boost from ~0.3 to ~0.75; for framed, from ~0.7 to ~1.0
-            base_opacity = min(1.0, max(0.6, base_opacity * INTENSE_SHADOW_OPACITY_MULTIPLIER))
-            # Use full alpha channel for maximum shadow visibility
-            color = QColor(r, g, b, int(255 * base_opacity))
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-
-    if isinstance(existing_effect, QGraphicsDropShadowEffect):
-        effect = existing_effect
-    else:
-        effect = QGraphicsDropShadowEffect(widget)
-        try:
-            widget.setGraphicsEffect(effect)
-        except Exception:
-            logger.debug("[SHADOWS] Failed to attach drop shadow effect for %r", widget, exc_info=True)
-            return
-
-    effect.setColor(color)
-    effect.setOffset(dx, dy)
-    effect.setBlurRadius(blur_radius)
+def header_shadows_enabled(config: Mapping[str, Any] | None) -> bool:
+    return shadow_config_enabled(config, "header_enabled", True)
 
 
 class ShadowFadeProfile:
-    """Global helper for widget fade-in + shadow application.
+    """Global helper for widget opacity fade-in/fade-out.
 
     Widgets call :meth:`start_fade_in` when they first become visible.
     The helper installs a temporary opacity effect, animates from 0.0 to
-    1.0 with a single shared duration/easing, then removes the effect and
-    re-applies the configured drop shadow via :func:`apply_widget_shadow`.
+    1.0 with a single shared duration/easing, then removes the effect.
 
     A pair of attributes, ``_shadowfade_effect`` and ``_shadowfade_anim``,
     are attached to the widget instance to keep the effect and animation
@@ -261,144 +136,12 @@ class ShadowFadeProfile:
         *,
         has_background_frame: bool,
     ) -> None:
-        """Attach a drop shadow immediately using the shared helper."""
+        """Refresh painter-owned shadows after no-fade fallback paths."""
 
         try:
-            if uses_painted_frame_shadow(widget):
-                apply_widget_shadow(widget, config or {}, has_background_frame=has_background_frame)
-                return
-            apply_widget_shadow(widget, config or {}, has_background_frame=has_background_frame)
+            widget.update()
         except Exception:
-            logger.debug("[SHADOW_FADE] attach_shadow failed for %r", widget, exc_info=True)
-
-    @classmethod
-    def _start_shadow_fade(
-        cls,
-        widget: QWidget,
-        config: Mapping[str, Any],
-        *,
-        has_background_frame: bool,
-    ) -> None:
-        """Fade in a drop shadow using the shared shadow configuration.
-
-        This helper mirrors :func:`apply_widget_shadow`'s configuration but
-        animates the shadow colour alpha from 0 to the configured value so
-        shadows appear gradually rather than popping in.
-        """
-
-        try:
-            enabled = _to_bool(config.get("enabled", True), True)
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-            enabled = True
-
-        if not enabled:
-            return
-
-        # CRITICAL: Always create a fresh effect to avoid shadow doubling
-        # Reusing an existing effect can cause the old shadow to persist
-        # while the new one fades in, creating a "double shadow" artifact
-        existing_effect = widget.graphicsEffect()
-        if isinstance(existing_effect, QGraphicsDropShadowEffect):
-            # Clear the old effect first to prevent doubling
-            try:
-                widget.setGraphicsEffect(None)
-            except Exception as e:
-                logger.debug("[SHADOW] Exception suppressed: %s", e)
-        
-        effect = QGraphicsDropShadowEffect(widget)
-        try:
-            widget.setGraphicsEffect(effect)
-        except Exception:
-            logger.debug(
-                "[SHADOW_FADE] Failed to attach drop shadow effect for %r",
-                widget,
-                exc_info=True,
-            )
-            return
-
-        color_data = config.get("color", [0, 0, 0, 255])
-        try:
-            r, g, b = int(color_data[0]), int(color_data[1]), int(color_data[2])
-            a = int(color_data[3]) if len(color_data) > 3 else 255
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-            r, g, b, a = 0, 0, 0, 255
-
-        text_opacity = float(config.get("text_opacity", 0.3))
-        frame_opacity = float(config.get("frame_opacity", 0.7))
-        base_opacity = frame_opacity if has_background_frame else text_opacity
-        base_opacity = max(0.0, min(1.0, base_opacity))
-        target_alpha = int(a * base_opacity)
-
-        offset = config.get("offset", [4, 4])
-        try:
-            dx, dy = int(offset[0]), int(offset[1])
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-            dx, dy = 4, 4
-
-        try:
-            blur_radius = int(config.get("blur_radius", 18))
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-            blur_radius = 18
-        try:
-            blur_radius = max(0, int(blur_radius * SHADOW_SIZE_MULTIPLIER))
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-
-        start_color = QColor(r, g, b, 0)
-        effect.setColor(start_color)
-        effect.setOffset(dx, dy)
-        effect.setBlurRadius(blur_radius)
-
-        anim = QVariantAnimation(widget)
-        anim.setDuration(max(0, int(cls.DURATION_MS)))
-        anim.setStartValue(0.0)
-        anim.setEndValue(1.0)
-        try:
-            anim.setEasingCurve(cls.EASING)
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-
-        def _on_value_changed(value: float) -> None:
-            if not Shiboken.isValid(effect):
-                return
-            try:
-                t = float(value)
-            except Exception as e:
-                logger.debug("[SHADOW] Exception suppressed: %s", e)
-                t = 1.0
-            t = max(0.0, min(1.0, t))
-            alpha = int(target_alpha * t)
-            color = QColor(r, g, b, alpha)
-            try:
-                effect.setColor(color)
-            except Exception as e:
-                logger.debug("[SHADOW] Exception suppressed: %s", e)
-
-        anim.valueChanged.connect(_on_value_changed)
-
-        def _on_finished() -> None:
-            try:
-                setattr(widget, "_shadowfade_shadow_anim", None)
-            except Exception as e:
-                logger.debug("[SHADOW] Exception suppressed: %s", e)
-            if not Shiboken.isValid(effect):
-                return
-            try:
-                final_color = QColor(r, g, b, target_alpha)
-                effect.setColor(final_color)
-            except Exception as e:
-                logger.debug("[SHADOW] Exception suppressed: %s", e)
-
-        anim.finished.connect(_on_finished)
-        try:
-            setattr(widget, "_shadowfade_shadow_anim", anim)
-        except Exception as e:
-            logger.debug("[SHADOW] Exception suppressed: %s", e)
-        anim.start()
+            logger.debug("[SHADOW_FADE] attach_shadow refresh failed for %r", widget, exc_info=True)
 
     @classmethod
     def start_fade_in(
@@ -411,13 +154,11 @@ class ShadowFadeProfile:
         apply_shadow_on_finish: bool = True,
         on_finished: Optional[Callable[[], None]] = None,
     ) -> None:
-        """Fade ``widget`` in, then apply the shared drop shadow.
+        """Fade ``widget`` in using an opacity effect.
 
         This helper intentionally does **not** look at any fade-related
         settings; duration and easing are global and fixed so that all
-        widgets fade in with identical timing. The only configuration that
-        matters here is whether shadows are enabled at all, which is
-        handled inside :func:`apply_widget_shadow`.
+        widgets fade in with identical timing.
         """
 
         cfg = config or {}
@@ -533,17 +274,6 @@ class ShadowFadeProfile:
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
 
-                if apply_shadow_on_finish and not uses_painted_frame_shadow(widget):
-                    try:
-                        cls._start_shadow_fade(widget, cfg, has_background_frame=has_background_frame)
-                    except Exception as e:
-                        logger.debug("[SHADOW] Exception suppressed: %s", e)
-                        if is_verbose_logging():
-                            logger.debug(
-                                "[SHADOW_FADE] Failed to start shadow fade for %r",
-                                widget,
-                                exc_info=True,
-                            )
                 if on_finished is not None:
                     try:
                         on_finished()
@@ -592,13 +322,6 @@ class ShadowFadeProfile:
                 if on_complete is not None:
                     on_complete()
                 return
-
-            existing_effect = widget.graphicsEffect()
-            if isinstance(existing_effect, QGraphicsDropShadowEffect):
-                try:
-                    widget.setGraphicsEffect(None)
-                except Exception as e:
-                    logger.debug("[SHADOW] Exception suppressed: %s", e)
 
             opacity_effect = QGraphicsOpacityEffect(widget)
             opacity_effect.setOpacity(1.0)
@@ -652,33 +375,18 @@ class ShadowFadeProfile:
                     logger.debug("[SHADOW] Exception suppressed in on_complete: %s", inner)
 
 
-def clear_cached_shadow_for_widget(widget: QWidget) -> None:
-    """Best-effort helper to flush cached shadow pixmaps before reapplying.
-
-    Qt caches drop-shadow pixmaps globally via QPixmapCache. When widgets reuse
-    the same size/configuration, Qt may recycle stale textures that now contain
-    GL artifacts. We currently clear the global cache because Qt does not
-    expose per-widget invalidation, but this helper centralises the policy so we
-    can tighten the scope later (e.g. by keying cached entries ourselves).
-    """
-
-    try:
-        QPixmapCache.clear()
-    except Exception:
-        logger.debug("[SHADOW] Failed to clear QPixmapCache during shadow reset", exc_info=True)
-
-
 # ---------------------------------------------------------------------------
 # Text Shadow Helpers for QPainter-based rendering
 # ---------------------------------------------------------------------------
 
-# Default text shadow settings - bottom-right offset matching widget shadows
-TEXT_SHADOW_OFFSET_X: int = 1
-TEXT_SHADOW_OFFSET_Y: int = 1
-TEXT_SHADOW_COLOR: QColor = QColor(0, 0, 0, 100)
-
-# Smaller text gets less shadow to avoid overwhelming the text
-TEXT_SHADOW_MIN_FONT_SIZE: int = 10  # Below this, shadow is reduced
+TEXT_SHADOW_OFFSET_X: int = int(TEXT_SHADOW_TUNING["offset_x"])
+TEXT_SHADOW_OFFSET_Y: int = int(TEXT_SHADOW_TUNING["offset_y"])
+TEXT_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(TEXT_SHADOW_TUNING["alpha"]))
+TEXT_SHADOW_MIN_FONT_SIZE: int = int(TEXT_SHADOW_TUNING["min_font_size"])
+TEXT_SHADOW_SMALL_FONT_MIN_SCALE: float = float(TEXT_SHADOW_TUNING["small_font_min_scale"])
+HEADER_SHADOW_OFFSET_X: int = int(HEADER_SHADOW_TUNING["offset_x"])
+HEADER_SHADOW_OFFSET_Y: int = int(HEADER_SHADOW_TUNING["offset_y"])
+HEADER_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(HEADER_SHADOW_TUNING["alpha"]))
 
 
 def draw_text_with_shadow(
@@ -691,6 +399,7 @@ def draw_text_with_shadow(
     shadow_offset_x: int = None,
     shadow_offset_y: int = None,
     font_size: int = 12,
+    enabled: bool = True,
 ) -> None:
     """Draw text with a subtle drop shadow for better readability.
     
@@ -710,6 +419,9 @@ def draw_text_with_shadow(
     """
     if not text:
         return
+    if not enabled:
+        painter.drawText(x, y, text)
+        return
     
     # Use defaults if not specified
     if shadow_color is None:
@@ -721,7 +433,7 @@ def draw_text_with_shadow(
     
     # Scale shadow opacity based on font size (smaller text = less shadow)
     if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
-        scale = max(0.3, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+        scale = max(TEXT_SHADOW_SMALL_FONT_MIN_SCALE, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
         alpha = int(shadow_color.alpha() * scale)
         shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
     
@@ -747,6 +459,7 @@ def draw_text_rect_with_shadow(
     shadow_offset_x: int = None,
     shadow_offset_y: int = None,
     font_size: int = 12,
+    enabled: bool = True,
 ) -> None:
     """Draw text in a rect with a subtle drop shadow.
     
@@ -764,6 +477,9 @@ def draw_text_rect_with_shadow(
     """
     if not text:
         return
+    if not enabled:
+        painter.drawText(rect, flags, text)
+        return
     
     # Use defaults if not specified
     if shadow_color is None:
@@ -775,7 +491,7 @@ def draw_text_rect_with_shadow(
     
     # Scale shadow opacity based on font size
     if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
-        scale = max(0.3, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+        scale = max(TEXT_SHADOW_SMALL_FONT_MIN_SCALE, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
         alpha = int(shadow_color.alpha() * scale)
         shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
     
@@ -797,6 +513,86 @@ def draw_text_rect_with_shadow(
     painter.drawText(rect, flags, text)
 
 
+def draw_text_rect_shadow_only(
+    painter: QPainter,
+    rect: QRect,
+    flags: int,
+    text: str,
+    *,
+    shadow_color: QColor = None,
+    shadow_offset_x: int = None,
+    shadow_offset_y: int = None,
+    font_size: int = 12,
+) -> None:
+    """Draw only the shadow pass for QLabel/native text paint paths."""
+    if not text:
+        return
+
+    if shadow_color is None:
+        shadow_color = TEXT_SHADOW_COLOR
+    if shadow_offset_x is None:
+        shadow_offset_x = TEXT_SHADOW_OFFSET_X
+    if shadow_offset_y is None:
+        shadow_offset_y = TEXT_SHADOW_OFFSET_Y
+
+    if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
+        scale = max(TEXT_SHADOW_SMALL_FONT_MIN_SCALE, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+        alpha = int(shadow_color.alpha() * scale)
+        shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
+
+    original_pen = painter.pen()
+    shadow_rect = QRect(
+        rect.x() + shadow_offset_x,
+        rect.y() + shadow_offset_y,
+        rect.width(),
+        rect.height(),
+    )
+    painter.setPen(shadow_color)
+    painter.drawText(shadow_rect, flags, text)
+    painter.setPen(original_pen)
+
+
+class PaintedShadowLabel(QLabel):
+    """QLabel variant that paints a safe text-shadow pass before native text."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._shadow_config: Mapping[str, Any] | None = None
+
+    def set_shadow_config(self, config: Mapping[str, Any] | None) -> None:
+        self._shadow_config = config
+        self.update()
+
+    def _should_paint_text_shadow(self) -> bool:
+        if not text_shadows_enabled(self._shadow_config):
+            return False
+        text = self.text()
+        if not text:
+            return False
+        text_format = self.textFormat()
+        if text_format == Qt.TextFormat.RichText:
+            return False
+        if text_format == Qt.TextFormat.AutoText and ("<" in text and ">" in text):
+            return False
+        return True
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        if self._should_paint_text_shadow():
+            painter = QPainter(self)
+            try:
+                painter.setFont(self.font())
+                draw_text_rect_shadow_only(
+                    painter,
+                    self.contentsRect(),
+                    self.alignment(),
+                    self.text(),
+                    font_size=int(self.font().pointSize() or 12),
+                )
+            finally:
+                painter.end()
+        super().paintEvent(event)
+
+
 def draw_rounded_rect_with_shadow(
     painter: QPainter,
     rect: QRect,
@@ -805,8 +601,9 @@ def draw_rounded_rect_with_shadow(
     border_width: int = 1,
     *,
     shadow_color: QColor = None,
-    shadow_offset_x: int = 2,
-    shadow_offset_y: int = 2,
+    shadow_offset_x: int = None,
+    shadow_offset_y: int = None,
+    shadow_enabled: bool = True,
 ) -> None:
     """Draw a rounded rectangle border with a drop shadow.
     
@@ -824,25 +621,29 @@ def draw_rounded_rect_with_shadow(
         shadow_offset_y: Vertical shadow offset
     """
     if shadow_color is None:
-        shadow_color = QColor(0, 0, 0, 80)
+        shadow_color = HEADER_SHADOW_COLOR
+    if shadow_offset_x is None:
+        shadow_offset_x = HEADER_SHADOW_OFFSET_X
+    if shadow_offset_y is None:
+        shadow_offset_y = HEADER_SHADOW_OFFSET_Y
     
     painter.save()
     try:
-        # Draw shadow
-        shadow_rect = QRect(
-            rect.x() + shadow_offset_x,
-            rect.y() + shadow_offset_y,
-            rect.width(),
-            rect.height(),
-        )
-        shadow_path = QPainterPath()
-        shadow_path.addRoundedRect(shadow_rect, radius, radius)
-        
-        pen = QPen(shadow_color)
-        pen.setWidth(border_width)
-        painter.setPen(pen)
-        painter.setBrush(Qt.BrushStyle.NoBrush)
-        painter.drawPath(shadow_path)
+        if shadow_enabled:
+            shadow_rect = QRect(
+                rect.x() + shadow_offset_x,
+                rect.y() + shadow_offset_y,
+                rect.width(),
+                rect.height(),
+            )
+            shadow_path = QPainterPath()
+            shadow_path.addRoundedRect(shadow_rect, radius, radius)
+
+            pen = QPen(shadow_color)
+            pen.setWidth(border_width)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(shadow_path)
         
         # Draw main border
         main_path = QPainterPath()

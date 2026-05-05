@@ -1387,13 +1387,13 @@ class MediaWidget(BaseOverlayWidget):
         return load_brand_pixmap(provider=self._provider)
 
     def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
-        """Fade the entire widget in, then attach the global drop shadow."""
+        """Fade the entire widget in; shadows are painter-owned."""
         resolved_duration_ms = (
             ShadowFadeProfile.default_duration_ms()
             if duration_ms is None
             else max(0, int(duration_ms))
         )
-        # Reset fade completion flag so re-entrancy (wake from idle) reapplies the shadow.
+        # Reset fade completion flag so re-entrancy (wake from idle) refreshes painted shadows.
         self._fade_in_completed = False
         # CRITICAL: Position the widget BEFORE showing to prevent teleport flash
         # The widget starts at (0,0) and must be moved to its correct position
@@ -1416,7 +1416,7 @@ class MediaWidget(BaseOverlayWidget):
                 )
             except Exception:
                 logger.debug(
-                    "[MEDIA] Failed to attach shadow in no-fade path",
+                    "[MEDIA] Failed to refresh shadow in no-fade path",
                     exc_info=True,
                 )
             self._handle_fade_in_complete()
@@ -1442,7 +1442,7 @@ class MediaWidget(BaseOverlayWidget):
             self._handle_fade_in_complete()
 
     def _handle_fade_in_complete(self) -> None:
-        """Mark fade-in complete and apply shared drop shadow."""
+        """Mark fade-in complete and refresh painter-owned shadows."""
         if self._fade_in_completed:
             return
         self._fade_in_completed = True
