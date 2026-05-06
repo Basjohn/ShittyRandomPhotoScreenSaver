@@ -501,7 +501,11 @@ class WidgetManager:
         # colors (fill/border) and other visual properties take effect without
         # waiting for the async settings-changed bridge.
         try:
-            self._refresh_spotify_visualizer_config(full_widgets)
+            self._refresh_spotify_visualizer_config(
+                full_widgets,
+                force_runtime_reset=True,
+                reset_reason="preset_cycle",
+            )
         except Exception:
             logger.debug(
                 "[WIDGET_MANAGER] Failed to refresh Spotify visualizer after preset cycle",
@@ -549,7 +553,11 @@ class WidgetManager:
         self._schedule_visualizer_preset_save()
 
         try:
-            self._refresh_spotify_visualizer_config(full_widgets)
+            self._refresh_spotify_visualizer_config(
+                full_widgets,
+                force_runtime_reset=True,
+                reset_reason=f"force_preset:{reason}",
+            )
         except Exception:
             logger.debug(
                 "[WIDGET_MANAGER] Failed to refresh visualizer after forced switch",
@@ -801,7 +809,13 @@ class WidgetManager:
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to apply media card style to visualizer", exc_info=True)
 
-    def _refresh_spotify_visualizer_config(self, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
+    def _refresh_spotify_visualizer_config(
+        self,
+        widgets_config: Optional[Mapping[str, Any]] = None,
+        *,
+        force_runtime_reset: bool = False,
+        reset_reason: str = "settings_refresh",
+    ) -> None:
         """Apply latest Spotify visualizer configuration to the live widget."""
         vis = self._widgets.get('spotify_visualizer') or self._widgets.get('spotify_visualizer_widget')
         if vis is None or not hasattr(vis, 'set_settings_model'):
@@ -908,6 +922,17 @@ class WidgetManager:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply vis mode config", exc_info=True)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to reapply full vis mode config", exc_info=True)
+
+        if force_runtime_reset:
+            try:
+                reset_runtime = getattr(vis, "reset_runtime_activation_state", None)
+                if callable(reset_runtime):
+                    reset_runtime(reason=reset_reason)
+            except Exception:
+                logger.debug(
+                    "[WIDGET_MANAGER] Failed to reset visualizer runtime state after config refresh",
+                    exc_info=True,
+                )
 
         media_cfg = cfg.get('media', {}) if isinstance(cfg, Mapping) else {}
         self._apply_media_card_style_to_visualizer(vis, media_cfg)

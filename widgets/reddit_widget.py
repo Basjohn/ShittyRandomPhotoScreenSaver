@@ -42,6 +42,7 @@ from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import (
     ShadowFadeProfile,
+    draw_pixmap_drop_shadow,
     draw_text_with_shadow,
     draw_text_rect_with_shadow,
     draw_rounded_rect_with_shadow,
@@ -1379,6 +1380,14 @@ class RedditWidget(BaseOverlayWidget):
                 y_logo = int(line_centre - icon_half + self._header_content_y_offset)
                 if y_logo < header_top:
                     y_logo = header_top
+                draw_pixmap_drop_shadow(
+                    painter,
+                    QRect(int(x), int(y_logo), logo_size, logo_size),
+                    self._brand_pixmap,
+                    owner=self,
+                    cache_attr="_header_logo_shadow_cache",
+                    shadow_config=self._shadow_config,
+                )
                 painter.drawPixmap(int(x), int(y_logo), pm)
 
             x += logo_size + 8

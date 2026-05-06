@@ -26,6 +26,7 @@ from widgets.media.artwork_layout import compute_artwork_frame_size
 from core.settings.shadow_tuning import CONTROL_SHADOW_TUNING
 from core.media.media_controller import MediaPlaybackState
 from widgets.shadow_utils import (
+    draw_pixmap_drop_shadow,
     draw_rounded_rect_with_shadow,
     draw_text_with_shadow,
     draw_text_rect_with_shadow,
@@ -133,7 +134,9 @@ def _header_layout(widget: "MediaWidget") -> dict[str, object]:
 
     font = QFont(widget._font_family, header_font_pt, QFont.Weight.Bold)
     fm = QFontMetrics(font)
-    text_w = fm.horizontalAdvance(widget.provider_display_name)
+    provider_name = widget.provider_display_name
+    text_w = max(fm.horizontalAdvance(provider_name), fm.boundingRect(provider_name).width())
+    text_w += max(12, int(round(header_font_pt * 0.45)))
     text_h = fm.height()
     logo_size = max(1, int(widget._header_logo_size))
     gap = max(6, int(widget._header_logo_margin) - logo_size)
@@ -146,7 +149,19 @@ def _header_layout(widget: "MediaWidget") -> dict[str, object]:
     height = int(row_h + pad_y * 2)
 
     shrink_r, _ = widget.painted_frame_shadow_card_shrink()
-    max_width = max(0, widget.width() - shrink_r - margins.right() - left - 10)
+    effective_w = max(1, int(widget.width() - shrink_r))
+    max_width = max(0, effective_w - left - 10)
+    artwork_pm = getattr(widget, "_artwork_pixmap", None)
+    artwork_size = max(0, int(getattr(widget, "_artwork_size", 0)))
+    if artwork_pm is not None and not artwork_pm.isNull() and artwork_size > 0:
+        _, shrink_b = widget.painted_frame_shadow_card_shrink()
+        effective_h = max(1, int(widget.height() - shrink_b))
+        max_art_h = max(24, effective_h - 60)
+        art_target = max(48, min(artwork_size, max_art_h))
+        frame_size = compute_artwork_frame_size(artwork_pm, art_target)
+        art_width = max(1, int(frame_size.width()))
+        artwork_left = max(20, effective_w - 20 - art_width)
+        max_width = max(0, artwork_left - left - 18)
     if max_width and width > max_width:
         width = max_width
 
@@ -280,6 +295,14 @@ def paint_header_logo(widget: "MediaWidget", painter: QPainter) -> None:
 
     painter.save()
     try:
+        draw_pixmap_drop_shadow(
+            painter,
+            QRect(x, y, int(size), int(size)),
+            pm,
+            owner=widget,
+            cache_attr="_header_logo_shadow_cache",
+            shadow_config=widget._shadow_config,
+        )
         painter.drawPixmap(x, y, scaled)
     finally:
         painter.restore()

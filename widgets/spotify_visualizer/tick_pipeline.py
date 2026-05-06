@@ -683,7 +683,6 @@ def push_gpu_frame(
 
     if used_gpu:
         widget._has_pushed_first_frame = True
-        widget._cpu_bars_enabled = False
         try:
             if current_geom is None:
                 current_geom = widget.geometry()
@@ -840,15 +839,6 @@ def on_tick(widget: Any) -> None:
     # GPU frame push
     first_frame = not widget._has_pushed_first_frame
     used_gpu = push_gpu_frame(widget, parent, now_ts, changed, first_frame)
-
-    if not used_gpu:
-        # Fallback: when there is no DisplayWidget/GPU bridge
-        has_gpu_parent = parent is not None and hasattr(parent, "push_spotify_visualizer_frame")
-        if not has_gpu_parent or widget._software_visualizer_enabled:
-            widget._cpu_bars_enabled = True
-            widget.update()
-            widget._has_pushed_first_frame = True
-            widget._on_first_frame_after_cold_start()
 
     # PERF: Log slow ticks
     _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0

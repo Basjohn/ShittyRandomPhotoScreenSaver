@@ -24,9 +24,6 @@ from widgets.base_overlay_widget import (
 )
 
 
-from utils.profiler import profile
-
-
 # Re-export package symbols for backward compatibility with external importers
 from widgets.spotify_visualizer.audio_worker import (
     SpotifyVisualizerAudioWorker,  # noqa: F401 – re-export
@@ -469,15 +466,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._pending_shadow_cache_invalidation: bool = False
         self._reset_teardown_bookkeeping()
 
-        # When GPU overlay rendering is available, we disable the
-        # widget's own bar drawing and instead push frames up to the
-        # DisplayWidget, which owns a small QOpenGLWidget overlay.
-        self._cpu_bars_enabled: bool = True
-        # User-configurable switch controlling whether the legacy software
-        # visualiser is allowed to draw bars when GPU rendering is
-        # unavailable or disabled. Defaults to False so the GPU overlay
-        # remains the primary path in OpenGL mode.
-        self._software_visualizer_enabled: bool = False
+        # Visualizer content is GL-only; this widget owns the card surface
+        # while DisplayWidget's QOpenGLWidget overlay owns mode rendering.
 
         # Tick source coordination
         self._using_animation_ticks: bool = False
@@ -778,7 +768,8 @@ class SpotifyVisualizerWidget(QWidget):
         }
         vm = mode_map.get(str(mode).lower(), VisualizerMode.SPECTRUM)
         mode_changed = vm != self._vis_mode
-        self.set_visualization_mode(vm)
+        if mode_changed:
+            self._vis_mode = vm
 
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         apply_vis_mode_kwargs(self, kwargs)
@@ -790,15 +781,12 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             self._cached_vis_kwargs = dict(kwargs)
 
-        if mode_changed:
-            self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
-        else:
-            # Settings refreshes for the already-active mode should update
-            # the live uniforms/config in place instead of cold-resetting
-            # the overlay/engine a second time.
-            self._last_gpu_geom = None
-            self._last_gpu_fade_sent = -1.0
-            self._has_pushed_first_frame = False
+        # Settings refreshes and runtime switches both apply the target
+        # mode before resetting engine/overlay state. That keeps the settings
+        # round-trip path and direct switch path from diverging.
+        self._last_gpu_geom = None
+        self._last_gpu_fade_sent = -1.0
+        self._has_pushed_first_frame = False
         self._mode_transition_apply_height_on_resume = True
 
         if self._mode_transition_phase == 0:
@@ -807,13 +795,20 @@ class SpotifyVisualizerWidget(QWidget):
         if merged_runtime_technical:
             self._apply_technical_config_for_mode(vm, reason="vis_mode_config")
 
+        if mode_changed:
+            self._waiting_for_fresh_engine_frame = True
+            self._waiting_for_fresh_frame = True
+            self._request_overlay_mode_reset(mode=vm.name.lower(), reason="vis_mode_config")
+            self._prepare_engine_for_mode_reset()
+            self._clear_runtime_bar_state()
+
         logger.debug("[SPOTIFY_VIS] Applied vis mode config: mode=%s", mode)
 
     @property
     def _vis_mode_str(self) -> str:
         return self._vis_mode.name.lower()
 
-    def set_settings_model(self, model: SpotifyVisualizerSettings) -> None:
+    def set_settings_model(self, model: SpotifyVisualizerSettings, *, apply_now: bool = True) -> None:
         if model is None:
             return
         try:
@@ -835,7 +830,8 @@ class SpotifyVisualizerWidget(QWidget):
             }.get(mode_name, self._vis_mode)
         except Exception:
             target_mode = self._vis_mode
-        self._apply_technical_config_for_mode(target_mode, reason="settings_model_update")
+        if apply_now:
+            self._apply_technical_config_for_mode(target_mode, reason="settings_model_update")
 
     def _extract_technical_config_from_kwargs(
         self,
@@ -1006,6 +1002,46 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to log technical config", exc_info=True)
 
+    def _apply_full_runtime_config_for_mode(self, mode: VisualizerMode, *, reason: str) -> None:
+        """Replay the same target-mode config used by a settings refresh."""
+
+        wm = getattr(self, '_widget_manager', None)
+        sm = getattr(wm, '_settings_manager', None) if wm is not None else None
+        if sm is None:
+            return
+
+        mode_str = mode.name.lower()
+        try:
+            cfg = sm.get('widgets', {}) or {}
+            vis_cfg = dict(cfg.get('spotify_visualizer', {}) or {})
+            vis_cfg['mode'] = mode_str
+            preset_idx = resolve_preset_index_from_mapping(mode_str, vis_cfg)
+            resolved_cfg = apply_preset_to_config(mode_str, preset_idx, vis_cfg)
+            resolved_cfg['mode'] = mode_str
+            model = SpotifyVisualizerSettings.from_mapping(resolved_cfg)
+            self.set_settings_model(model, apply_now=False)
+            from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+
+            apply_spotify_vis_model_config(self, model, apply_mode=False)
+            self._apply_technical_config_for_mode(mode, reason=f"{reason}:target_config")
+            logger.debug("[SPOTIFY_VIS] Applied full runtime config for mode=%s reason=%s", mode_str, reason)
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to apply full runtime config for mode=%s reason=%s",
+                mode_str,
+                reason,
+                exc_info=True,
+            )
+
+    def _clear_runtime_bar_state(self) -> None:
+        count = max(1, int(getattr(self, "_bar_count", 1) or 1))
+        self._display_bars = [0.0] * count
+        self._target_bars = [0.0] * count
+        self._per_bar_energy = [0.0] * count
+        self._visual_bars = [0.0] * count
+        self._last_update_ts = -1.0
+        self._last_smooth_ts = 0.0
+
     def _apply_audio_block_size(self, block_size: int) -> None:
         try:
             value = max(0, int(block_size))
@@ -1150,22 +1186,6 @@ class SpotifyVisualizerWidget(QWidget):
             self.setMaximumHeight(16777215)  # allow positioning system to grow
             self.resize(self.width(), h)
             logger.debug("[SPOTIFY_VIS] Card height set: %d -> %d (mode=%s)", current, h, mode)
-
-    def set_software_visualizer_enabled(self, enabled: bool) -> None:
-        """Enable or disable the QWidget-based software visualiser path.
-
-        When ``enabled`` is True, the widget is allowed to render bars via
-        its own ``paintEvent`` when GPU rendering is unavailable (for
-        example in software renderer mode). When False, the widget only
-        exposes smoothed bar data to the GPU overlay and does not draw
-        bars itself unless explicitly re-enabled.
-        """
-
-        try:
-            self._software_visualizer_enabled = bool(enabled)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            self._software_visualizer_enabled = bool(enabled)
 
     def attach_to_animation_manager(self, animation_manager) -> None:
         # Detach from any previous manager first to avoid stacking listeners.
@@ -1771,6 +1791,14 @@ class SpotifyVisualizerWidget(QWidget):
         self._waiting_for_fresh_frame = True
         if reason:
             logger.debug("[SPOTIFY_VIS] Engine state reset reason=%s", reason)
+
+    def reset_runtime_activation_state(self, *, reason: str = "activation") -> None:
+        """Cold-reset visualizer runtime state after a mode or preset activation."""
+        self._waiting_for_fresh_engine_frame = True
+        self._waiting_for_fresh_frame = True
+        self._request_overlay_mode_reset(mode=self._vis_mode_str, reason=reason)
+        self._prepare_engine_for_mode_reset()
+        self._clear_runtime_bar_state()
 
     def _should_capture_audio_now(self) -> bool:
         """Return True when audio capture/FFT should actively run."""
@@ -2543,146 +2571,19 @@ class SpotifyVisualizerWidget(QWidget):
             painter.end()
             return
 
-        # When GPU overlay rendering is active for this widget instance, the
-        # card/fade/shadow are still drawn via stylesheets and
-        # ShadowFadeProfile, but the bar geometry itself is rendered by the
-        # GL overlay. In that mode we skip the CPU bar drawing entirely.
-        if not getattr(self, "_cpu_bars_enabled", True):
-            painter.end()
-            return
-
-        if is_perf_metrics_enabled():
-            try:
-                now = time.time()
-                if self._perf_paint_last_ts is not None:
-                    dt = now - self._perf_paint_last_ts
-                    # Skip metrics for gaps >1s (widget was likely occluded during GL transition).
-                    # Also reset the measurement window to avoid polluting duration/avg_fps.
-                    if dt > 1.0:
-                        # Large gap detected - reset measurement window
-                        self._perf_paint_start_ts = now
-                        self._perf_paint_min_dt = 0.0
-                        self._perf_paint_max_dt = 0.0
-                        self._perf_paint_frame_count = 0
-                    elif dt > 0.0:
-                        # Normal frame - record metrics
-                        if self._perf_paint_min_dt == 0.0 or dt < self._perf_paint_min_dt:
-                            self._perf_paint_min_dt = dt
-                        if dt > self._perf_paint_max_dt:
-                            self._perf_paint_max_dt = dt
-                        self._perf_paint_frame_count += 1
-                else:
-                    # First paint event
-                    self._perf_paint_start_ts = now
-                self._perf_paint_last_ts = now
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Paint PERF accounting failed", exc_info=True)
-
-        # Note: paintEvent itself does not trigger PERF snapshots; these are
-        # driven from the tick path so that tick/paint metrics share a common
-        # time window and appear as a paired summary in logs.
-
-        with profile("SPOTIFY_VIS_PAINT", threshold_ms=5.0, log_level="DEBUG"):
-            # Card background is handled by the stylesheet; painting focuses on
-            # the bar geometry only. Use a cached layout to avoid recomputing
-            # per-frame integer geometry.
-
-            segments = max(1, self._dynamic_bar_segments())
-            if (
-                self._geom_cache_rect is None
-                or self._geom_cache_rect.width() != rect.width()
-                or self._geom_cache_rect.height() != rect.height()
-                or self._geom_cache_bar_count != self._bar_count
-                or self._geom_cache_segments != segments
-            ):
-                self._rebuild_geometry_cache(rect)
-
-            inner = self._geom_cache_rect
-            bar_x = self._geom_bar_x
-            seg_y = self._geom_seg_y
-            bar_width = self._geom_bar_width
-            seg_height = self._geom_seg_height
-            if (
-                inner is None
-                or inner.width() <= 0
-                or inner.height() <= 0
-                or not bar_x
-                or not seg_y
-                or bar_width <= 0
-                or seg_height <= 0
-            ):
-                painter.end()
-                return
-
-            count = self._bar_count
-            count = min(count, len(bar_x))
-
-            fill = QColor(self._bar_fill_color)
-            border = QColor(self._bar_border_color)
-            max_segments = min(segments, len(seg_y))
-
-            painter.setBrush(fill)
-            painter.setPen(border)
-
-            # SPECTRUM mode - classic bar visualization
-            _single = self._spectrum_single_piece
-            for i in range(count):
-                    x = bar_x[i]
-                    value = max(0.0, min(1.0, self._display_bars[i]))
-                    if value <= 0.0:
-                        continue
-                    boosted = value * 1.2
-                    if boosted > 1.0:
-                        boosted = 1.0
-
-                    if _single:
-                        bar_h = max(1, int(round(boosted * inner.height())))
-                        bar_y = inner.bottom() - bar_h + 1
-                        painter.drawRect(QRect(x, bar_y, bar_width, bar_h))
-                    else:
-                        active = int(round(boosted * segments))
-                        if active <= 0:
-                            if self._spotify_playing and value > 0.0:
-                                active = 1
-                            else:
-                                continue
-                        active = min(active, max_segments)
-                        for s in range(active):
-                            y = seg_y[s]
-                            bar_rect = QRect(x, y, bar_width, seg_height)
-                            painter.drawRect(bar_rect)
-
-            painter.end()
+        # Visualizer content is GL-only. This QWidget paint path owns only the
+        # card/background/shadow surface; bars and mode visuals are pushed to
+        # the SpotifyBarsGLOverlay.
+        painter.end()
 
     def set_visualization_mode(self, mode: VisualizerMode) -> None:
         """Set the visualization display mode."""
         if mode != self._vis_mode:
             self._vis_mode = mode
-            self._apply_technical_config_for_mode(mode, reason="mode_switch")
             try:
-                wm = getattr(self, '_widget_manager', None)
-                sm = getattr(wm, '_settings_manager', None) if wm is not None else None
-                if sm is not None:
-                    cfg = sm.get('widgets', {}) or {}
-                    vis_cfg = dict(cfg.get('spotify_visualizer', {}) or {})
-                    mode_str = self._vis_mode_str
-                    preset_idx = resolve_preset_index_from_mapping(mode_str, vis_cfg)
-                    vis_cfg = apply_preset_to_config(mode_str, preset_idx, vis_cfg)
-
-                    pm_re = f'{mode_str}_rainbow_enabled'
-                    pm_rs = f'{mode_str}_rainbow_speed'
-                    self._rainbow_enabled = bool(vis_cfg.get(pm_re, vis_cfg.get('rainbow_enabled', False)))
-                    self._rainbow_speed = max(
-                        0.01,
-                        min(5.0, float(vis_cfg.get(pm_rs, vis_cfg.get('rainbow_speed', 0.5))))
-                    )
+                self._apply_full_runtime_config_for_mode(mode, reason="mode_switch")
             except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to sync per-mode rainbow on mode switch", exc_info=True)
-            # Reset display bars so returning modes start clean
-            for i in range(len(self._display_bars)):
-                self._display_bars[i] = 0.0
-            self._last_update_ts = -1.0
-            self._last_smooth_ts = 0.0
+                logger.debug("[SPOTIFY_VIS] Failed to apply runtime config on mode switch", exc_info=True)
             # Invalidate cached GPU geometry so the next tick forces a push
             self._last_gpu_geom = None
             self._last_gpu_fade_sent = -1.0
@@ -2693,7 +2594,9 @@ class SpotifyVisualizerWidget(QWidget):
             # new mode waits for a real fresh frame instead of partially reusing
             # stale waveform/bar state from the previous mode.
             try:
+                self._request_overlay_mode_reset(mode=mode.name.lower(), reason="mode_switch")
                 self._prepare_engine_for_mode_reset()
+                self._clear_runtime_bar_state()
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to prepare engine on mode switch", exc_info=True)
             logger.debug("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)

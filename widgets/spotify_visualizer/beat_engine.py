@@ -96,6 +96,12 @@ class _SpotifyBeatEngine(QObject):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set process supervisor", exc_info=True)
 
+    def _replace_runtime_buffers(self) -> None:
+        """Discard queued audio/result frames at a runtime activation boundary."""
+        self._audio_buffer = TripleBuffer()
+        self._bars_result_buffer = TripleBuffer()
+        self._audio_worker._buffer = self._audio_buffer
+
     def reconfigure_bar_count(self, bar_count: int) -> None:
         """Rebuild shared runtime state for a new bar count."""
         new_count = max(1, int(bar_count))
@@ -104,9 +110,7 @@ class _SpotifyBeatEngine(QObject):
 
         self.cancel_pending_compute_tasks()
         self._bar_count = new_count
-        self._audio_buffer = TripleBuffer()
-        self._bars_result_buffer = TripleBuffer()
-        self._audio_worker._buffer = self._audio_buffer
+        self._replace_runtime_buffers()
         self._audio_worker.reconfigure_bar_count(new_count)
         self._latest_bars = [0.0] * new_count
         self._smoothed_bars = [0.0] * new_count
@@ -114,6 +118,7 @@ class _SpotifyBeatEngine(QObject):
         self._last_audio_ts = 0.0
         self._waveform = [0.0] * 256
         self._waveform_count = 0
+        self._idle_wave_phase = 0.0
         self._energy_bands = EnergyBands()
         self._generation_id += 1
         self._latest_generation_with_frame = self._generation_id - 1
@@ -127,32 +132,17 @@ class _SpotifyBeatEngine(QObject):
         with fresh data instead of inheriting stale smoothed bars and
         energy bands from the previous mode.
         """
-        for i in range(len(self._smoothed_bars)):
-            self._smoothed_bars[i] = 0.0
+        self.cancel_pending_compute_tasks()
+        self._replace_runtime_buffers()
+        self._smoothed_bars = [0.0] * self._bar_count
         self._last_smooth_ts = -1.0
         self._energy_bands = EnergyBands()
-        self._waveform = [0.0] * self._waveform_count
+        self._waveform = [0.0] * 256
         self._waveform_count = 0
+        self._idle_wave_phase = 0.0
         self._latest_bars = [0.0] * self._bar_count
         self._last_audio_ts = 0.0
-        # Reset transient bus state for clean mode switch
-        _tb = getattr(self._audio_worker, '_transient_bus', None)
-        if _tb is not None:
-            _tb.reset()
-        # Reset per-frame DSP state on the audio worker so stale bar-gate
-        # history and reactive-smoothing accumulators cannot bleed across
-        # mode switches or cold-start restarts.
-        aw = self._audio_worker
-        aw._bar_gate_prev1 = None
-        aw._bar_gate_prev2 = None
-        aw._bar_gate_output = None
-        aw._bar_history = None
-        aw._bar_hold_timers = None
-        aw._last_fft_ts = 0.0
-        aw._bubble_control_norm = 1.0
-        aw._bubble_pre_agc_bass = 0.0
-        aw._bubble_pre_agc_mid = 0.0
-        aw._bubble_pre_agc_treble = 0.0
+        self._audio_worker.reset_reactivity_state()
         self._generation_id += 1
         # Force consumers to wait for the next FFT result produced after
         # this reset instead of reusing the pre-reset generation id.
@@ -164,11 +154,8 @@ class _SpotifyBeatEngine(QObject):
         """Reset dynamic/manual floor accumulator state."""
         try:
             aw = self._audio_worker
-            aw._raw_bass_avg = aw._manual_floor
+            aw.reset_reactivity_state()
             aw._last_floor_config = (aw._use_dynamic_floor, aw._manual_floor)
-            aw._last_bass_drop_ratio = 0.0
-            aw._bass_drop_accum = 0.0
-            aw._running_peak = 0.5  # reset peak tracker to prevent stale compression
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to reset floor state", exc_info=True)
 

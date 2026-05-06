@@ -304,6 +304,56 @@ class SpotifyVisualizerAudioWorker(QObject):
             val = 1.8
         self._energy_boost = val
 
+    def reset_reactivity_state(self) -> None:
+        """Clear adaptive DSP state that must not bleed across modes."""
+
+        try:
+            floor = float(self._manual_floor)
+        except Exception:
+            floor = 0.12
+        with self._cfg_lock:
+            self._raw_bass_avg = floor
+            self._applied_noise_floor = floor
+            self._last_noise_floor = floor
+            self._running_peak = 0.5
+            self._env_short = 0.5
+            self._env_long = 0.5
+            self._env_bass_short = 0.5
+            self._env_bass_long = 0.5
+            self._env_mix_short = 0.5
+            self._env_mix_long = 0.5
+            self._agc_bass_split = 4
+            self._agc_mid_split = 10
+            self._last_raw_bass = 0.0
+            self._last_raw_mid = 0.0
+            self._last_raw_treble = 0.0
+            self._prev_raw_bass = 0.0
+            self._last_bass_drop_ratio = 0.0
+            self._bass_drop_accum = 0.0
+            self._bar_gate_prev1 = None
+            self._bar_gate_prev2 = None
+            self._bar_gate_output = None
+            self._bar_history = None
+            self._bar_hold_timers = None
+            self._last_fft_ts = 0.0
+            self._transient_bass = 0.0
+            self._transient_mid = 0.0
+            self._transient_high = 0.0
+            self._onset_detected = False
+            self._onset_type = ""
+            self._onset_strength = 0.0
+            self._pre_agc_bass = 0.0
+            self._pre_agc_mid = 0.0
+            self._pre_agc_treble = 0.0
+            self._bubble_control_norm = 1.0
+            self._bubble_pre_agc_bass = 0.0
+            self._bubble_pre_agc_mid = 0.0
+            self._bubble_pre_agc_treble = 0.0
+        try:
+            self._transient_bus.reset()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to reset transient bus", exc_info=True)
+
     def reconfigure_bar_count(self, bar_count: int) -> None:
         """Rebuild bar-count-dependent runtime state using the startup contract."""
         new_count = max(1, int(bar_count))
@@ -321,38 +371,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._zero_bars = None
         self._band_edges = None
         self._freq_values = None
-        self._bar_history = None
-        self._bar_hold_timers = None
-        self._bar_gate_prev1 = None
-        self._bar_gate_prev2 = None
-        self._bar_gate_output = None
-        self._last_fft_ts = 0.0
-        self._running_peak = 1.0
-        self._env_short = 0.5
-        self._env_long = 0.5
-        self._env_bass_short = 0.5
-        self._env_bass_long = 0.5
-        self._env_mix_short = 0.5
-        self._env_mix_long = 0.5
-        self._raw_bass_avg = self._manual_floor
-        self._applied_noise_floor = self._manual_floor
-        self._last_noise_floor = self._manual_floor
-        self._last_bass_drop_ratio = 0.0
-        self._bass_drop_accum = 0.0
-        self._transient_bass = 0.0
-        self._transient_mid = 0.0
-        self._transient_high = 0.0
-        self._onset_detected = False
-        self._onset_type = ""
-        self._onset_strength = 0.0
-        self._bubble_control_norm = 1.0
-        self._bubble_pre_agc_bass = 0.0
-        self._bubble_pre_agc_mid = 0.0
-        self._bubble_pre_agc_treble = 0.0
-        try:
-            self._transient_bus.reset()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to reset transient bus during bar-count reconfigure", exc_info=True)
+        self.reset_reactivity_state()
 
     def is_running(self) -> bool:
         return self._running

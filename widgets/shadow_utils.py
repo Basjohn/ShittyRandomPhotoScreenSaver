@@ -23,7 +23,12 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QTextDo
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
-from core.settings.shadow_tuning import HEADER_SHADOW_TUNING, TEXT_SHADOW_TUNING, TEXT_LARGE_SHADOW_TUNING
+from core.settings.shadow_tuning import (
+    HEADER_SHADOW_TUNING,
+    ICON_SHADOW_TUNING,
+    TEXT_SHADOW_TUNING,
+    TEXT_LARGE_SHADOW_TUNING,
+)
 
 logger = get_logger(__name__)
 
@@ -726,6 +731,74 @@ def make_alpha_shadow_pixmap(
         painter.end()
 
     return pixmap
+
+
+def draw_pixmap_drop_shadow(
+    painter: QPainter,
+    target: QRect,
+    source: QPixmap,
+    *,
+    owner: object,
+    cache_attr: str,
+    shadow_config: Mapping[str, Any] | None,
+    enabled_key: str = "header_enabled",
+) -> None:
+    """Draw a cached alpha-mask drop shadow for a logo/icon pixmap.
+
+    The helper uses the same silhouette-shadow mechanism as weather icons:
+    transparent pixels stay transparent, the shadow is offset down/right, and
+    the tinted mask is cached per source pixmap/target/DPR/tuning tuple.
+    """
+
+    if source is None or source.isNull():
+        return
+    if target.width() <= 0 or target.height() <= 0:
+        return
+    if not shadow_config_enabled(shadow_config, enabled_key, True):
+        return
+
+    try:
+        device = painter.device()
+        dpr = float(device.devicePixelRatioF()) if device is not None else 1.0
+    except Exception:
+        dpr = 1.0
+    dpr = max(1.0, dpr)
+
+    offset_x = int(ICON_SHADOW_TUNING.get("offset_x", 3))
+    offset_y = int(ICON_SHADOW_TUNING.get("offset_y", 4))
+    alpha = max(0, min(255, int(ICON_SHADOW_TUNING.get("alpha", 67))))
+    target_w = int(target.width())
+    target_h = int(target.height())
+    cache_key = (
+        int(source.cacheKey()),
+        target_w,
+        target_h,
+        round(dpr, 3),
+        alpha,
+    )
+
+    cached_key = getattr(owner, f"{cache_attr}_key", None)
+    shadow = getattr(owner, cache_attr, None)
+    if cached_key != cache_key or not isinstance(shadow, QPixmap) or shadow.isNull():
+        scaled = source.scaled(
+            max(1, int(round(target_w * dpr))),
+            max(1, int(round(target_h * dpr))),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        try:
+            scaled.setDevicePixelRatio(dpr)
+        except Exception:
+            pass
+        shadow = make_alpha_shadow_pixmap(
+            scaled,
+            dpr=dpr,
+            shadow_color=QColor(0, 0, 0, alpha),
+        )
+        setattr(owner, cache_attr, shadow)
+        setattr(owner, f"{cache_attr}_key", cache_key)
+
+    painter.drawPixmap(int(target.x() + offset_x), int(target.y() + offset_y), shadow)
 
 
 def draw_rounded_rect_with_shadow(

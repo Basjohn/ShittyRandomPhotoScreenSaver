@@ -112,13 +112,6 @@ def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
                     setattr(widget, "_mode_transition_resume_ts", now_ts)
                 except Exception:
                     setattr(widget, "_mode_transition_resume_ts", 0.0)
-                try:
-                    widget._reset_visualizer_state(
-                        clear_overlay=False,
-                        replay_cached=bool(getattr(widget, "_cached_vis_kwargs", None)),
-                    )
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Mode reset helper failed", exc_info=True)
                 widget.set_visualization_mode(pending)
                 widget._mode_transition_pending = None
             widget._mode_transition_phase = 3  # waiting-for-ready
@@ -391,6 +384,9 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
         engine.reset_floor_state()
         engine.set_smoothing(widget._smoothing)
         widget._replay_engine_config(engine)
+        apply_technical = getattr(widget, "_apply_technical_config_for_mode", None)
+        if callable(apply_technical):
+            apply_technical(widget._vis_mode, reason="mode_prepare_reset")
         should_capture = bool(getattr(widget, "_spotify_playing", False))
         _capture_helper = getattr(widget, "_should_capture_audio_now", None)
         if callable(_capture_helper):

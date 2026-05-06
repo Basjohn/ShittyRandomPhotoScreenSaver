@@ -8,6 +8,8 @@ from types import SimpleNamespace
 
 from utils.lockfree import TripleBuffer
 from core.settings.models import SpotifyVisualizerSettings
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_preset_key
+from core.settings.visualizer_presets import get_custom_preset_index
 from widgets.spotify_visualizer import mode_transition
 from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer_widget import (
@@ -336,8 +338,134 @@ class _BubbleDispatchThreadManager:
         )
 
 
+class _ImmediateComputeThreadManager:
+    def submit_compute_task(self, fn, callback=None) -> None:
+        result = SimpleNamespace(success=True, result=fn())
+        if callback is not None:
+            callback(result)
+
+
+def _synthetic_audio(np_module, *, hz: float, amp: float, n: int = 4096):
+    t = np_module.arange(n, dtype="float32") / 48000.0
+    signal = (
+        np_module.sin(2.0 * np_module.pi * hz * t) * amp
+        + np_module.sin(2.0 * np_module.pi * hz * 2.7 * t) * (amp * 0.28)
+    )
+    return signal.astype("float32")
+
+
+def _poison_audio_worker_state(engine: _SpotifyBeatEngine) -> None:
+    aw = engine._audio_worker
+    aw._env_short = 9.0
+    aw._env_long = 8.0
+    aw._env_bass_short = 7.0
+    aw._env_bass_long = 6.0
+    aw._env_mix_short = 5.0
+    aw._env_mix_long = 4.0
+    aw._agc_bass_split = 31
+    aw._agc_mid_split = 33
+    aw._last_raw_bass = 0.91
+    aw._last_raw_mid = 0.82
+    aw._last_raw_treble = 0.73
+    aw._prev_raw_bass = 0.64
+    aw._running_peak = 3.0
+    aw._raw_bass_avg = 2.5
+    aw._applied_noise_floor = 2.0
+    aw._last_noise_floor = 1.8
+    aw._last_bass_drop_ratio = 0.7
+    aw._bass_drop_accum = 0.6
+    aw._bar_gate_prev1 = [0.9]
+    aw._bar_gate_prev2 = [0.8]
+    aw._bar_gate_output = [0.7]
+    aw._bar_history = [[0.6]]
+    aw._bar_hold_timers = [12]
+    aw._last_fft_ts = 123.0
+    aw._transient_bass = 0.9
+    aw._transient_mid = 0.8
+    aw._transient_high = 0.7
+    aw._onset_detected = True
+    aw._onset_type = "poison"
+    aw._onset_strength = 0.6
+    aw._pre_agc_bass = 0.88
+    aw._pre_agc_mid = 0.77
+    aw._pre_agc_treble = 0.66
+    aw._bubble_control_norm = 9.0
+    aw._bubble_pre_agc_bass = 0.91
+    aw._bubble_pre_agc_mid = 0.82
+    aw._bubble_pre_agc_treble = 0.73
+
+
+def _assert_audio_worker_state_reset(engine: _SpotifyBeatEngine) -> None:
+    aw = engine._audio_worker
+    floor = aw._manual_floor
+    assert aw._env_short == pytest.approx(0.5)
+    assert aw._env_long == pytest.approx(0.5)
+    assert aw._env_bass_short == pytest.approx(0.5)
+    assert aw._env_bass_long == pytest.approx(0.5)
+    assert aw._env_mix_short == pytest.approx(0.5)
+    assert aw._env_mix_long == pytest.approx(0.5)
+    assert aw._agc_bass_split == 4
+    assert aw._agc_mid_split == 10
+    assert aw._last_raw_bass == pytest.approx(0.0)
+    assert aw._last_raw_mid == pytest.approx(0.0)
+    assert aw._last_raw_treble == pytest.approx(0.0)
+    assert aw._prev_raw_bass == pytest.approx(0.0)
+    assert aw._running_peak == pytest.approx(0.5)
+    assert aw._raw_bass_avg == pytest.approx(floor)
+    assert aw._applied_noise_floor == pytest.approx(floor)
+    assert aw._last_noise_floor == pytest.approx(floor)
+    assert aw._last_bass_drop_ratio == pytest.approx(0.0)
+    assert aw._bass_drop_accum == pytest.approx(0.0)
+    assert aw._bar_gate_prev1 is None
+    assert aw._bar_gate_prev2 is None
+    assert aw._bar_gate_output is None
+    assert aw._bar_history is None
+    assert aw._bar_hold_timers is None
+    assert aw._last_fft_ts == pytest.approx(0.0)
+    assert aw._transient_bass == pytest.approx(0.0)
+    assert aw._transient_mid == pytest.approx(0.0)
+    assert aw._transient_high == pytest.approx(0.0)
+    assert aw._onset_detected is False
+    assert aw._onset_type == ""
+    assert aw._onset_strength == pytest.approx(0.0)
+    assert aw._pre_agc_bass == pytest.approx(0.0)
+    assert aw._pre_agc_mid == pytest.approx(0.0)
+    assert aw._pre_agc_treble == pytest.approx(0.0)
+    assert aw._bubble_control_norm == pytest.approx(1.0)
+    assert aw._bubble_pre_agc_bass == pytest.approx(0.0)
+    assert aw._bubble_pre_agc_mid == pytest.approx(0.0)
+    assert aw._bubble_pre_agc_treble == pytest.approx(0.0)
+
+
+def _poison_engine_runtime_state(engine: _SpotifyBeatEngine, np_module) -> tuple[object, object]:
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    old_audio_buffer = engine._audio_buffer
+    old_result_buffer = engine._bars_result_buffer
+    engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+    engine._bars_result_buffer.publish([0.9] * engine._bar_count)
+    engine._waveform = [0.77] * 256
+    engine._waveform_count = 256
+    engine._idle_wave_phase = 123.45
+    engine._latest_generation_with_waveform = engine.get_generation_id()
+    return old_audio_buffer, old_result_buffer
+
+
+def _assert_engine_runtime_state_reset(
+    engine: _SpotifyBeatEngine,
+    old_audio_buffer: object,
+    old_result_buffer: object,
+) -> None:
+    assert engine._audio_buffer is not old_audio_buffer
+    assert engine._bars_result_buffer is not old_result_buffer
+    assert engine._audio_worker._buffer is engine._audio_buffer
+    assert engine._waveform == [0.0] * 256
+    assert engine._waveform_count == 0
+    assert engine._idle_wave_phase == pytest.approx(0.0)
+    assert engine.get_latest_generation_with_waveform() < engine.get_generation_id()
+
+
 @pytest.mark.qt
-def test_mode_switch_does_not_request_overlay_reset_before_transition_reset(qt_app, qtbot, monkeypatch):
+def test_mode_switch_requests_overlay_reset_after_target_mode_lands(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
@@ -354,7 +482,7 @@ def test_mode_switch_does_not_request_overlay_reset_before_transition_reset(qt_a
     parent._spotify_bars_overlay.reset_requests.clear()
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
-    assert parent._spotify_bars_overlay.reset_requests == []
+    assert parent._spotify_bars_overlay.reset_requests == ["oscilloscope"]
 
 
 @pytest.mark.qt
@@ -934,6 +1062,423 @@ def test_mode_switch_replays_distinct_per_mode_shared_technical_state(qt_app, qt
 
 
 @pytest.mark.qt
+def test_runtime_mode_switch_replays_target_mode_full_config(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    spectrum_preset_key = get_preset_key("spectrum")
+    devcurve_preset_key = get_preset_key("devcurve")
+    spotify_cfg = {
+        "mode": "devcurve",
+        spectrum_preset_key: get_custom_preset_index("spectrum"),
+        devcurve_preset_key: get_custom_preset_index("devcurve"),
+        "spectrum_bar_count": 8,
+        "spectrum_dynamic_floor": True,
+        "spectrum_manual_floor": 0.12,
+        "spectrum_growth": 2.5,
+        "devcurve_bar_count": 8,
+        "devcurve_dynamic_floor": True,
+        "devcurve_manual_floor": 0.61,
+        "devcurve_growth": 5.9,
+    }
+
+    class _Settings:
+        def get(self, key, default=None):
+            if key == "widgets":
+                return {"spotify_visualizer": dict(spotify_cfg)}
+            return default
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
+    widget._engine = fake_engine
+    widget.set_settings_model(SpotifyVisualizerSettings.from_mapping(spotify_cfg))
+    widget._vis_mode = VisualizerMode.DEVCURVE
+    widget._spectrum_growth = 5.9
+    widget._last_floor_config = (True, 0.61)
+
+    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
+
+    assert widget._vis_mode is VisualizerMode.SPECTRUM
+    assert widget._last_floor_config == (True, pytest.approx(0.12))
+    assert widget._spectrum_growth == pytest.approx(2.5)
+    assert fake_engine.last_floor_config == (True, pytest.approx(0.12))
+
+
+@pytest.mark.qt
+def test_runtime_mode_switch_all_modes_replaces_poisoned_technical_state(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    spotify_cfg = {"mode": "spectrum"}
+    expected: dict[str, tuple[int, float]] = {}
+    growth_attr = {
+        "spectrum": "_spectrum_growth",
+        "oscilloscope": "_osc_growth",
+        "blob": "_blob_growth",
+        "sine_wave": "_sine_wave_growth",
+        "bubble": "_bubble_growth",
+        "devcurve": "_devcurve_growth",
+    }
+    for idx, mode_id in enumerate(VISUALIZER_MODE_IDS):
+        spotify_cfg[get_preset_key(mode_id)] = get_custom_preset_index(mode_id)
+        bar_count = 9 + idx
+        floor = 0.11 + idx * 0.03
+        growth = 1.2 + idx * 0.25
+        spotify_cfg[f"{mode_id}_bar_count"] = bar_count
+        spotify_cfg[f"{mode_id}_dynamic_floor"] = False
+        spotify_cfg[f"{mode_id}_manual_floor"] = floor
+        spotify_cfg[f"{mode_id}_adaptive_sensitivity"] = False
+        spotify_cfg[f"{mode_id}_sensitivity"] = 0.55 + idx * 0.02
+        if mode_id == "oscilloscope":
+            spotify_cfg["osc_growth"] = growth
+            spotify_cfg["osc_ghosting_enabled"] = bool(idx % 2)
+        else:
+            spotify_cfg[f"{mode_id}_growth"] = growth
+            spotify_cfg[f"{mode_id}_ghosting_enabled"] = bool(idx % 2)
+        if mode_id == "spectrum":
+            spotify_cfg["spectrum_profile_floor"] = 0.18
+        if mode_id == "devcurve":
+            spotify_cfg["devcurve_active_layer"] = "vocals"
+        expected[mode_id] = (bar_count, floor)
+
+    class _Settings:
+        def get(self, key, default=None):
+            if key == "widgets":
+                return {"spotify_visualizer": dict(spotify_cfg)}
+            return default
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
+    widget._engine = fake_engine
+    original_engine = widget._engine
+
+    for mode_id in VISUALIZER_MODE_IDS:
+        target = getattr(VisualizerMode, mode_id.upper())
+        widget._vis_mode = VisualizerMode.SPECTRUM if target is not VisualizerMode.SPECTRUM else VisualizerMode.BLOB
+        widget._last_floor_config = (False, 0.61)
+        widget._last_sensitivity_config = (False, 9.0)
+        for attr in growth_attr.values():
+            setattr(widget, attr, 5.0)
+        widget._spectrum_profile_floor = 0.30
+        widget._devcurve_active_layer = "bass"
+        before_resets = fake_engine.reset_calls
+
+        widget.set_visualization_mode(target)
+
+        bar_count, floor = expected[mode_id]
+        assert widget._engine is original_engine
+        assert widget._bar_count == bar_count
+        assert widget._last_floor_config == (False, pytest.approx(floor))
+        assert fake_engine.last_floor_config == (False, pytest.approx(floor))
+        assert fake_engine.reset_calls == before_resets + 1
+        assert getattr(widget, growth_attr[mode_id]) == pytest.approx(
+            1.2 + VISUALIZER_MODE_IDS.index(mode_id) * 0.25
+        )
+        if mode_id == "spectrum":
+            assert widget._spectrum_profile_floor == pytest.approx(0.18)
+        if mode_id == "devcurve":
+            assert widget._devcurve_active_layer == "vocals"
+
+
+@pytest.mark.qt
+def test_runtime_switch_paths_reset_all_bleed_state_for_all_modes(qt_app, qtbot, np_module):
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    engine = _SpotifyBeatEngine(12)
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=12)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+
+    ordered_modes = [
+        getattr(VisualizerMode, desc.mode_id.upper())
+        for desc in iter_visualizer_mode_descriptors()
+        if getattr(VisualizerMode, desc.mode_id.upper(), None) is not None
+    ]
+
+    for idx, target in enumerate(ordered_modes):
+        previous = ordered_modes[idx - 1]
+        widget._vis_mode = previous
+        widget._mode_transition_phase = 0
+        widget._mode_transition_pending = None
+        _poison_audio_worker_state(engine)
+        old_audio_buffer, old_result_buffer = _poison_engine_runtime_state(engine, np_module)
+
+        assert mode_transition.switch_to_mode(widget, target.name.lower()) is True
+        now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+        mode_transition.mode_transition_fade_factor(widget, now)
+
+        assert widget._engine is engine
+        assert widget._vis_mode is target
+        _assert_audio_worker_state_reset(engine)
+        _assert_engine_runtime_state_reset(engine, old_audio_buffer, old_result_buffer)
+
+    for idx, target in enumerate(ordered_modes):
+        previous = ordered_modes[idx - 1]
+        widget._vis_mode = previous
+        widget._mode_transition_phase = 0
+        widget._mode_transition_pending = None
+        _poison_audio_worker_state(engine)
+        old_audio_buffer, old_result_buffer = _poison_engine_runtime_state(engine, np_module)
+
+        assert mode_transition.cycle_mode(widget) is True
+        now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+        mode_transition.mode_transition_fade_factor(widget, now)
+
+        assert widget._engine is engine
+        assert widget._vis_mode is target
+        _assert_audio_worker_state_reset(engine)
+        _assert_engine_runtime_state_reset(engine, old_audio_buffer, old_result_buffer)
+
+
+@pytest.mark.qt
+def test_mode_switch_synthetic_audio_matches_fresh_worker_after_reset(qt_app, qtbot, np_module):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    live_engine = _SpotifyBeatEngine(35)
+    live_engine._audio_worker._np = np_module
+    live_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    live_engine.set_playback_state(True)
+    live_engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._engine = live_engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.DEVCURVE
+
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    target_samples = _synthetic_audio(np_module, hz=440.0, amp=0.08)
+
+    for _ in range(8):
+        live_engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+        live_engine.tick()
+    assert max(live_engine._latest_bars or [0.0]) > 0.0
+    _poison_audio_worker_state(live_engine)
+
+    assert mode_transition.switch_to_mode(widget, "spectrum") is True
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(widget, now)
+
+    live_engine._audio_buffer.publish(_AudioFrame(samples=target_samples))
+    live_engine.tick()
+    live_bars = live_engine.get_smoothed_bars()
+
+    fresh_engine = _SpotifyBeatEngine(35)
+    fresh_engine._audio_worker._np = np_module
+    fresh_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    fresh_engine.set_playback_state(True)
+    fresh_engine._play_ramp_start_ts = 0.0
+    oracle_widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(oracle_widget)
+    oracle_widget._engine = fresh_engine
+    oracle_widget._vis_mode = VisualizerMode.SPECTRUM
+    oracle_widget._replay_engine_config(fresh_engine)
+    fresh_engine._audio_buffer.publish(_AudioFrame(samples=target_samples))
+    fresh_engine.tick()
+    fresh_bars = fresh_engine.get_smoothed_bars()
+
+    assert live_engine is widget._engine
+    assert live_bars == pytest.approx(fresh_bars, abs=0.025)
+    assert max(live_bars) < 0.98
+    assert max(live_bars) - min(live_bars) > 0.05
+
+
+@pytest.mark.qt
+def test_mode_switch_discards_stale_audio_buffer_before_next_frame(qt_app, qtbot, np_module):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    engine = _SpotifyBeatEngine(24)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=24)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.DEVCURVE
+
+    old_audio_buffer, old_result_buffer = _poison_engine_runtime_state(engine, np_module)
+
+    assert mode_transition.switch_to_mode(widget, "spectrum") is True
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(widget, now)
+
+    engine.tick()
+
+    assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
+    assert engine.get_latest_generation_with_frame() < engine.get_generation_id()
+    _assert_engine_runtime_state_reset(engine, old_audio_buffer, old_result_buffer)
+
+
+@pytest.mark.qt
+def test_preset_activation_discards_audio_buffer_and_idle_state(qt_app, qtbot, np_module):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    engine = _SpotifyBeatEngine(18)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=18)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+
+    _poison_audio_worker_state(engine)
+    old_audio_buffer, old_result_buffer = _poison_engine_runtime_state(engine, np_module)
+
+    widget.reset_runtime_activation_state(reason="preset_cycle")
+    engine.tick()
+
+    _assert_audio_worker_state_reset(engine)
+    _assert_engine_runtime_state_reset(engine, old_audio_buffer, old_result_buffer)
+    assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
+    assert engine.get_latest_generation_with_frame() < engine.get_generation_id()
+
+
+@pytest.mark.qt
+def test_widget_manager_preset_cycle_discards_real_engine_bleed_state(
+    qt_app,
+    qtbot,
+    settings_manager,
+    np_module,
+):
+    from rendering.widget_manager import WidgetManager
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    parent.screen_index = 0
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg["mode"] = "spectrum"
+    spotify_cfg["preset_spectrum"] = 0
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    engine = _SpotifyBeatEngine(20)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=20)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+
+    wm = WidgetManager(parent, resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+    wm._widgets["spotify_visualizer"] = widget
+    widget._widget_manager = wm
+
+    _poison_audio_worker_state(engine)
+    old_audio_buffer, old_result_buffer = _poison_engine_runtime_state(engine, np_module)
+
+    assert wm.cycle_visualizer_preset("spectrum", 1) is True
+    engine.tick()
+
+    _assert_audio_worker_state_reset(engine)
+    _assert_engine_runtime_state_reset(engine, old_audio_buffer, old_result_buffer)
+    assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
+    assert engine.get_latest_generation_with_frame() < engine.get_generation_id()
+
+
+@pytest.mark.qt
+def test_runtime_cycle_all_modes_and_settle_devcurve_matches_settings_refresh(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._audio_worker = SimpleNamespace()
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    spotify_cfg = {"mode": "devcurve"}
+    for idx, mode_id in enumerate(VISUALIZER_MODE_IDS):
+        spotify_cfg[get_preset_key(mode_id)] = get_custom_preset_index(mode_id)
+        spotify_cfg[f"{mode_id}_bar_count"] = 10 + idx
+        spotify_cfg[f"{mode_id}_dynamic_floor"] = False
+        spotify_cfg[f"{mode_id}_manual_floor"] = 0.10 + idx * 0.04
+        spotify_cfg[f"{mode_id}_adaptive_sensitivity"] = False
+        spotify_cfg[f"{mode_id}_sensitivity"] = 0.5 + idx * 0.03
+    spotify_cfg.update(
+        {
+            "spectrum_growth": 4.8,
+            "spectrum_profile_floor": 0.22,
+            "devcurve_growth": 2.25,
+            "devcurve_active_layer": "transients",
+            "devcurve_ghosting_enabled": True,
+        }
+    )
+
+    class _Settings:
+        def get(self, key, default=None):
+            if key == "widgets":
+                return {"spotify_visualizer": dict(spotify_cfg)}
+            return default
+
+    runtime = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    runtime._widget_manager = SimpleNamespace(_settings_manager=_Settings())
+    runtime._engine = fake_engine
+    original_engine = runtime._engine
+
+    for mode_id in VISUALIZER_MODE_IDS:
+        runtime.set_visualization_mode(getattr(VisualizerMode, mode_id.upper()))
+    runtime.set_visualization_mode(VisualizerMode.DEVCURVE)
+
+    refresh = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    refresh._engine = fake_engine
+    refresh.set_settings_model(SpotifyVisualizerSettings.from_mapping(spotify_cfg))
+    from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+
+    apply_spotify_vis_model_config(refresh, SpotifyVisualizerSettings.from_mapping(spotify_cfg))
+
+    assert runtime._engine is original_engine
+    assert runtime._vis_mode is VisualizerMode.DEVCURVE
+    assert runtime._bar_count == refresh._bar_count
+    assert runtime._last_floor_config == refresh._last_floor_config
+    assert runtime._last_sensitivity_config == refresh._last_sensitivity_config
+    assert runtime._devcurve_growth == pytest.approx(refresh._devcurve_growth)
+    assert runtime._devcurve_active_layer == refresh._devcurve_active_layer
+    assert runtime._devcurve_ghosting_enabled is refresh._devcurve_ghosting_enabled
+
+
+@pytest.mark.qt
 def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
@@ -1168,8 +1713,8 @@ def test_tick_pipeline_backfills_missing_fresh_generation_state(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_mode_cycle_replays_cached_config(qt_app, qtbot, monkeypatch):
-    """Double-click mode cycle should replay cached kwargs for parity with settings apply."""
+def test_mode_cycle_switches_without_stale_cached_cold_replay(qt_app, qtbot, monkeypatch):
+    """Double-click mode cycle should not replay previous-mode kwargs during handoff."""
 
     widget = SpotifyVisualizerWidget(parent=None, bar_count=12)
     qtbot.addWidget(widget)
@@ -1191,12 +1736,8 @@ def test_mode_cycle_replays_cached_config(qt_app, qtbot, monkeypatch):
     now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
     mode_transition.mode_transition_fade_factor(widget, now)
 
-    assert (
-        replay_flags["replay"] is True
-    ), "Mode cycle should cold-reset and replay cached kwargs for reactivity parity"
-    assert (
-        replay_flags["clear_overlay"] is False
-    ), "Mode cycle should not destroy the overlay mid-transition and trigger extra resets"
+    assert replay_flags["replay"] is None
+    assert replay_flags["clear_overlay"] is None
 
 
 @pytest.mark.qt
@@ -1245,7 +1786,7 @@ def test_apply_vis_mode_config_same_mode_skips_cold_reset(qt_app, qtbot, monkeyp
 
 
 @pytest.mark.qt
-def test_set_visualization_mode_does_not_request_overlay_reset_directly(qt_app, qtbot, monkeypatch):
+def test_set_visualization_mode_requests_single_overlay_reset(qt_app, qtbot, monkeypatch):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
     qtbot.addWidget(widget)
 
@@ -1259,7 +1800,7 @@ def test_set_visualization_mode_does_not_request_overlay_reset_directly(qt_app, 
 
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
-    assert reset_requests["count"] == 0
+    assert reset_requests["count"] == 1
 
 
 @pytest.mark.qt
@@ -1318,7 +1859,7 @@ def test_mode_cycle_preserves_transition_resume_ts(qt_app, qtbot):
     assert fade == pytest.approx(0.0)
     assert widget._mode_transition_phase == 3
     assert widget._mode_transition_ts == pytest.approx(now)
-    assert widget._mode_transition_resume_ts == 0.0
+    assert widget._mode_transition_resume_ts == pytest.approx(now)
 
 
 @pytest.mark.qt

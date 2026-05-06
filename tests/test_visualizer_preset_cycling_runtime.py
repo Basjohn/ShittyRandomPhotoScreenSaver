@@ -192,6 +192,39 @@ def test_widget_manager_refresh_applies_curated_contract_for_hotswap(settings_ma
     assert fake_vis.model.resolve_audio_block_size("bubble") == baseline.resolve_audio_block_size("bubble")
 
 
+def test_widget_manager_preset_cycle_forces_runtime_activation_reset(settings_manager):
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+
+    class _FakeVis:
+        def __init__(self):
+            self.reset_reasons: list[str] = []
+
+        def set_settings_model(self, model):
+            self.model = model
+
+        def apply_vis_mode_config(self, **kwargs):
+            self.kwargs = dict(kwargs)
+
+        def reset_runtime_activation_state(self, *, reason: str = "activation"):
+            self.reset_reasons.append(reason)
+
+    fake_vis = _FakeVis()
+    wm._widgets["spotify_visualizer"] = fake_vis
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg["mode"] = "spectrum"
+    spotify_cfg["preset_spectrum"] = 0
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    assert wm.cycle_visualizer_preset("spectrum", 1) is True
+
+    assert fake_vis.reset_reasons == ["preset_cycle"]
+
+
 def test_widget_manager_deferred_visualizer_preset_save_skips_stale_tokens(settings_manager, monkeypatch):
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)

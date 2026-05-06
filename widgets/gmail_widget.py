@@ -45,6 +45,7 @@ from widgets.gmail_components import (
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from widgets.shadow_utils import (
     ShadowFadeProfile,
+    draw_pixmap_drop_shadow,
     draw_rounded_rect_with_shadow,
     draw_text_with_shadow,
     header_shadows_enabled,
@@ -1082,6 +1083,14 @@ class GmailWidget(BaseOverlayWidget):
         layout = self._calculate_header_layout(font, header_text, pixmap)
         self._paint_header_frame(painter, layout["frame_rect"])
         if pixmap is not None:
+            draw_pixmap_drop_shadow(
+                painter,
+                layout["logo_rect"],
+                pixmap,
+                owner=self,
+                cache_attr="_header_logo_shadow_cache",
+                shadow_config=self._shadow_config,
+            )
             painter.drawPixmap(layout["logo_rect"], pixmap)
         painter.setPen(self._text_color)
         draw_text_with_shadow(

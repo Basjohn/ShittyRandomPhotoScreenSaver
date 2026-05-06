@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> None:
+def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, apply_mode: bool = True) -> None:
     """Apply full vis mode config from model to a live SpotifyVisualizerWidget.
     
     Reusable helper called from both initial setup and live settings refresh.
@@ -46,7 +46,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         blob_stretch_inner=model.blob_stretch_inner,
         blob_stretch_outer=model.blob_stretch_outer,
     )
-    vis.apply_vis_mode_config(
+    kwargs = dict(
         mode=str(model.mode),
         bar_fill_color=model.bar_fill_color,
         bar_border_color=model.bar_border_color,
@@ -297,6 +297,18 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings) -> Non
         devcurve_ghost_decay=model.devcurve_ghost_decay,
         sine_line_dim=model.sine_line_dim,
     )
+
+    if apply_mode:
+        vis.apply_vis_mode_config(**kwargs)
+        return
+
+    from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+    apply_vis_mode_kwargs(vis, kwargs)
+    try:
+        vis._cached_vis_kwargs = dict(kwargs)
+    except Exception:
+        pass
 
 
 def create_spotify_volume_widget(

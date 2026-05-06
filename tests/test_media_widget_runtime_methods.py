@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFontMetrics, QPixmap
 
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
 from widgets.media_widget import MediaWidget
@@ -92,3 +93,73 @@ def test_media_widget_no_hidden_qlabel_render_shadow_path() -> None:
 
     assert "_ensure_native_text_shadow_pixmap" not in source
     assert "label.render" not in source
+
+
+def test_media_header_expands_into_artwork_gap_before_eliding(qt_app) -> None:
+    from widgets.media.painting import _header_layout
+
+    widget = MediaWidget()
+    try:
+        widget.resize(900, 420)
+        widget._provider = "musicbee"
+        widget._header_logo_size = 34
+        widget._header_logo_margin = 54
+        widget._header_font_pt = 34
+        widget._artwork_size = 300
+        artwork = QPixmap(300, 300)
+        artwork.fill(QColor(200, 80, 40))
+        widget._artwork_pixmap = artwork
+
+        layout = _header_layout(widget)
+        metrics = QFontMetrics(layout["font"])
+
+        assert layout["text_width"] >= metrics.horizontalAdvance("MUSICBEE")
+    finally:
+        widget.deleteLater()
+
+
+def test_media_header_fits_spotify_in_runtime_geometry_before_eliding(qt_app) -> None:
+    from widgets.media.painting import _header_layout
+
+    widget = MediaWidget()
+    try:
+        widget.resize(890, 420)
+        widget._provider = "spotify"
+        widget._header_logo_size = 52
+        widget._header_logo_margin = 52
+        widget._header_font_pt = 40
+        widget._artwork_size = 300
+        widget.setContentsMargins(29, 12, widget._artwork_size + 40, 42)
+        artwork = QPixmap(300, 300)
+        artwork.fill(QColor(200, 80, 40))
+        widget._artwork_pixmap = artwork
+
+        layout = _header_layout(widget)
+        metrics = QFontMetrics(layout["font"])
+
+        assert layout["text_width"] >= metrics.horizontalAdvance("SPOTIFY") + 8
+    finally:
+        widget.deleteLater()
+
+
+def test_media_header_elides_only_when_artwork_collision_is_unavoidable(qt_app) -> None:
+    from widgets.media.painting import _header_layout
+
+    widget = MediaWidget()
+    try:
+        widget.resize(340, 260)
+        widget._provider = "musicbee"
+        widget._header_logo_size = 34
+        widget._header_logo_margin = 54
+        widget._header_font_pt = 60
+        widget._artwork_size = 220
+        artwork = QPixmap(220, 220)
+        artwork.fill(QColor(200, 80, 40))
+        widget._artwork_pixmap = artwork
+
+        layout = _header_layout(widget)
+        metrics = QFontMetrics(layout["font"])
+
+        assert layout["text_width"] < metrics.horizontalAdvance("MUSICBEE")
+    finally:
+        widget.deleteLater()
