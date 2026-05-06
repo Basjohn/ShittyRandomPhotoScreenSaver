@@ -14,15 +14,16 @@ subtle drop shadows that improve readability on varied backgrounds.
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Mapping, Callable, Optional
 
 from PySide6.QtWidgets import QLabel, QWidget, QGraphicsOpacityEffect
-from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QVariantAnimation, QEasingCurve, Qt, QRect, QRectF, QPointF
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap, QTextDocument
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger, is_verbose_logging
-from core.settings.shadow_tuning import HEADER_SHADOW_TUNING, TEXT_SHADOW_TUNING
+from core.settings.shadow_tuning import HEADER_SHADOW_TUNING, TEXT_SHADOW_TUNING, TEXT_LARGE_SHADOW_TUNING
 
 logger = get_logger(__name__)
 
@@ -379,14 +380,54 @@ class ShadowFadeProfile:
 # Text Shadow Helpers for QPainter-based rendering
 # ---------------------------------------------------------------------------
 
-TEXT_SHADOW_OFFSET_X: int = int(TEXT_SHADOW_TUNING["offset_x"])
-TEXT_SHADOW_OFFSET_Y: int = int(TEXT_SHADOW_TUNING["offset_y"])
+TEXT_SHADOW_OFFSET_X: float = float(TEXT_SHADOW_TUNING["offset_x"])
+TEXT_SHADOW_OFFSET_Y: float = float(TEXT_SHADOW_TUNING["offset_y"])
 TEXT_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(TEXT_SHADOW_TUNING["alpha"]))
 TEXT_SHADOW_MIN_FONT_SIZE: int = int(TEXT_SHADOW_TUNING["min_font_size"])
 TEXT_SHADOW_SMALL_FONT_MIN_SCALE: float = float(TEXT_SHADOW_TUNING["small_font_min_scale"])
-HEADER_SHADOW_OFFSET_X: int = int(HEADER_SHADOW_TUNING["offset_x"])
-HEADER_SHADOW_OFFSET_Y: int = int(HEADER_SHADOW_TUNING["offset_y"])
+TEXT_LARGE_SHADOW_OFFSET_X: float = float(TEXT_LARGE_SHADOW_TUNING["offset_x"])
+TEXT_LARGE_SHADOW_OFFSET_Y: float = float(TEXT_LARGE_SHADOW_TUNING["offset_y"])
+TEXT_LARGE_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(TEXT_LARGE_SHADOW_TUNING["alpha"]))
+TEXT_LARGE_SHADOW_MIN_FONT_SIZE: int = int(TEXT_LARGE_SHADOW_TUNING["min_font_size"])
+TEXT_LARGE_SHADOW_SMALL_FONT_MIN_SCALE: float = float(TEXT_LARGE_SHADOW_TUNING["small_font_min_scale"])
+HEADER_SHADOW_OFFSET_X: float = float(HEADER_SHADOW_TUNING["offset_x"])
+HEADER_SHADOW_OFFSET_Y: float = float(HEADER_SHADOW_TUNING["offset_y"])
 HEADER_SHADOW_COLOR: QColor = QColor(0, 0, 0, int(HEADER_SHADOW_TUNING["alpha"]))
+
+
+def _resolve_text_shadow_params(
+    *,
+    font_size: int,
+    shadow_color: QColor | None,
+    shadow_offset_x: float | None,
+    shadow_offset_y: float | None,
+) -> tuple[QColor, float, float, int, float]:
+    """Resolve text or large-text shadow tuning for a font size."""
+
+    use_large_tuning = font_size >= TEXT_LARGE_SHADOW_MIN_FONT_SIZE
+    if use_large_tuning:
+        color = shadow_color or QColor(TEXT_LARGE_SHADOW_COLOR)
+        offset_x = TEXT_LARGE_SHADOW_OFFSET_X if shadow_offset_x is None else float(shadow_offset_x)
+        offset_y = TEXT_LARGE_SHADOW_OFFSET_Y if shadow_offset_y is None else float(shadow_offset_y)
+        min_font_size = TEXT_LARGE_SHADOW_MIN_FONT_SIZE
+        small_font_min_scale = TEXT_LARGE_SHADOW_SMALL_FONT_MIN_SCALE
+    else:
+        color = shadow_color or QColor(TEXT_SHADOW_COLOR)
+        offset_x = TEXT_SHADOW_OFFSET_X if shadow_offset_x is None else float(shadow_offset_x)
+        offset_y = TEXT_SHADOW_OFFSET_Y if shadow_offset_y is None else float(shadow_offset_y)
+        min_font_size = TEXT_SHADOW_MIN_FONT_SIZE
+        small_font_min_scale = TEXT_SHADOW_SMALL_FONT_MIN_SCALE
+    return color, offset_x, offset_y, min_font_size, small_font_min_scale
+
+
+def resolve_text_shadow_params(font_size: int) -> tuple[QColor, float, float, int, float]:
+    """Public resolver for cached native-label shadow paths."""
+    return _resolve_text_shadow_params(
+        font_size=font_size,
+        shadow_color=None,
+        shadow_offset_x=None,
+        shadow_offset_y=None,
+    )
 
 
 def draw_text_with_shadow(
@@ -396,8 +437,8 @@ def draw_text_with_shadow(
     text: str,
     *,
     shadow_color: QColor = None,
-    shadow_offset_x: int = None,
-    shadow_offset_y: int = None,
+    shadow_offset_x: float = None,
+    shadow_offset_y: float = None,
     font_size: int = 12,
     enabled: bool = True,
 ) -> None:
@@ -423,17 +464,18 @@ def draw_text_with_shadow(
         painter.drawText(x, y, text)
         return
     
-    # Use defaults if not specified
-    if shadow_color is None:
-        shadow_color = TEXT_SHADOW_COLOR
-    if shadow_offset_x is None:
-        shadow_offset_x = TEXT_SHADOW_OFFSET_X
-    if shadow_offset_y is None:
-        shadow_offset_y = TEXT_SHADOW_OFFSET_Y
+    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
+        _resolve_text_shadow_params(
+            font_size=font_size,
+            shadow_color=shadow_color,
+            shadow_offset_x=shadow_offset_x,
+            shadow_offset_y=shadow_offset_y,
+        )
+    )
     
     # Scale shadow opacity based on font size (smaller text = less shadow)
-    if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
-        scale = max(TEXT_SHADOW_SMALL_FONT_MIN_SCALE, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+    if font_size < min_font_size:
+        scale = max(small_font_min_scale, font_size / min_font_size)
         alpha = int(shadow_color.alpha() * scale)
         shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
     
@@ -442,7 +484,7 @@ def draw_text_with_shadow(
     
     # Draw shadow
     painter.setPen(shadow_color)
-    painter.drawText(x + shadow_offset_x, y + shadow_offset_y, text)
+    painter.drawText(QPointF(float(x) + shadow_offset_x, float(y) + shadow_offset_y), text)
     
     # Draw main text
     painter.setPen(original_pen)
@@ -456,8 +498,8 @@ def draw_text_rect_with_shadow(
     text: str,
     *,
     shadow_color: QColor = None,
-    shadow_offset_x: int = None,
-    shadow_offset_y: int = None,
+    shadow_offset_x: float = None,
+    shadow_offset_y: float = None,
     font_size: int = 12,
     enabled: bool = True,
 ) -> None:
@@ -481,17 +523,18 @@ def draw_text_rect_with_shadow(
         painter.drawText(rect, flags, text)
         return
     
-    # Use defaults if not specified
-    if shadow_color is None:
-        shadow_color = TEXT_SHADOW_COLOR
-    if shadow_offset_x is None:
-        shadow_offset_x = TEXT_SHADOW_OFFSET_X
-    if shadow_offset_y is None:
-        shadow_offset_y = TEXT_SHADOW_OFFSET_Y
+    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
+        _resolve_text_shadow_params(
+            font_size=font_size,
+            shadow_color=shadow_color,
+            shadow_offset_x=shadow_offset_x,
+            shadow_offset_y=shadow_offset_y,
+        )
+    )
     
     # Scale shadow opacity based on font size
-    if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
-        scale = max(TEXT_SHADOW_SMALL_FONT_MIN_SCALE, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+    if font_size < min_font_size:
+        scale = max(small_font_min_scale, font_size / min_font_size)
         alpha = int(shadow_color.alpha() * scale)
         shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
     
@@ -499,7 +542,7 @@ def draw_text_rect_with_shadow(
     original_pen = painter.pen()
     
     # Draw shadow (offset rect)
-    shadow_rect = QRect(
+    shadow_rect = QRectF(
         rect.x() + shadow_offset_x,
         rect.y() + shadow_offset_y,
         rect.width(),
@@ -520,28 +563,30 @@ def draw_text_rect_shadow_only(
     text: str,
     *,
     shadow_color: QColor = None,
-    shadow_offset_x: int = None,
-    shadow_offset_y: int = None,
+    shadow_offset_x: float = None,
+    shadow_offset_y: float = None,
     font_size: int = 12,
 ) -> None:
     """Draw only the shadow pass for QLabel/native text paint paths."""
     if not text:
         return
 
-    if shadow_color is None:
-        shadow_color = TEXT_SHADOW_COLOR
-    if shadow_offset_x is None:
-        shadow_offset_x = TEXT_SHADOW_OFFSET_X
-    if shadow_offset_y is None:
-        shadow_offset_y = TEXT_SHADOW_OFFSET_Y
+    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
+        _resolve_text_shadow_params(
+            font_size=font_size,
+            shadow_color=shadow_color,
+            shadow_offset_x=shadow_offset_x,
+            shadow_offset_y=shadow_offset_y,
+        )
+    )
 
-    if font_size < TEXT_SHADOW_MIN_FONT_SIZE:
-        scale = max(TEXT_SHADOW_SMALL_FONT_MIN_SCALE, font_size / TEXT_SHADOW_MIN_FONT_SIZE)
+    if font_size < min_font_size:
+        scale = max(small_font_min_scale, font_size / min_font_size)
         alpha = int(shadow_color.alpha() * scale)
         shadow_color = QColor(shadow_color.red(), shadow_color.green(), shadow_color.blue(), alpha)
 
     original_pen = painter.pen()
-    shadow_rect = QRect(
+    shadow_rect = QRectF(
         rect.x() + shadow_offset_x,
         rect.y() + shadow_offset_y,
         rect.width(),
@@ -581,16 +626,106 @@ class PaintedShadowLabel(QLabel):
             painter = QPainter(self)
             try:
                 painter.setFont(self.font())
+                font_size = int(self.font().pointSize() or 12)
                 draw_text_rect_shadow_only(
                     painter,
                     self.contentsRect(),
                     self.alignment(),
                     self.text(),
-                    font_size=int(self.font().pointSize() or 12),
+                    font_size=font_size,
                 )
             finally:
                 painter.end()
         super().paintEvent(event)
+
+
+def draw_rich_text_shadow_only(
+    painter: QPainter,
+    rect: QRect,
+    html: str,
+    *,
+    default_font,
+    font_size: int,
+    enabled: bool = True,
+) -> None:
+    """Draw a shadow-only pass for QLabel rich text."""
+    if not html or not enabled:
+        return
+
+    shadow_color, shadow_offset_x, shadow_offset_y, min_font_size, small_font_min_scale = (
+        _resolve_text_shadow_params(
+            font_size=font_size,
+            shadow_color=None,
+            shadow_offset_x=None,
+            shadow_offset_y=None,
+        )
+    )
+    if font_size < min_font_size:
+        scale = max(small_font_min_scale, font_size / min_font_size)
+        shadow_color = QColor(
+            shadow_color.red(),
+            shadow_color.green(),
+            shadow_color.blue(),
+            int(shadow_color.alpha() * scale),
+        )
+
+    css_color = (
+        f"rgba({shadow_color.red()},{shadow_color.green()},"
+        f"{shadow_color.blue()},{shadow_color.alpha()})"
+    )
+    shadow_html = re.sub(r"color\s*:\s*[^;'\"]+;?", f"color:{css_color};", html)
+    shadow_html = f"<div style='color:{css_color};'>{shadow_html}</div>"
+
+    doc = QTextDocument()
+    doc.setDefaultFont(default_font)
+    doc.setDocumentMargin(0.0)
+    doc.setDefaultStyleSheet(f"* {{ color: {css_color}; }}")
+    doc.setHtml(shadow_html)
+    doc.setTextWidth(float(rect.width()))
+
+    painter.save()
+    try:
+        painter.translate(float(rect.x()) + shadow_offset_x, float(rect.y()) + shadow_offset_y)
+        doc.drawContents(painter, QRectF(0.0, 0.0, float(rect.width()), float(rect.height())))
+    finally:
+        painter.restore()
+
+
+def make_alpha_shadow_pixmap(
+    source: QPixmap,
+    *,
+    dpr: float,
+    shadow_color: QColor,
+) -> QPixmap:
+    """Return a tinted alpha-mask shadow for *source*.
+
+    The transparent pixels remain transparent; only the source alpha silhouette
+    contributes to the shadow.
+    """
+    if source.isNull():
+        return QPixmap()
+
+    scale_dpr = max(1.0, float(dpr))
+    try:
+        source_dpr = max(1.0, float(source.devicePixelRatio()))
+    except Exception:
+        source_dpr = 1.0
+    logical_w = max(1, int(round(source.width() / source_dpr)))
+    logical_h = max(1, int(round(source.height() / source_dpr)))
+    pixmap = QPixmap(max(1, int(logical_w * scale_dpr)), max(1, int(logical_h * scale_dpr)))
+    pixmap.setDevicePixelRatio(scale_dpr)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(pixmap)
+    try:
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.drawPixmap(QRect(0, 0, logical_w, logical_h), source)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(QRect(0, 0, logical_w, logical_h), shadow_color)
+    finally:
+        painter.end()
+
+    return pixmap
 
 
 def draw_rounded_rect_with_shadow(

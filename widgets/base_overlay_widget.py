@@ -154,6 +154,7 @@ class BaseOverlayWidget(QLabel):
     - Override _calculate_content_size() for size hints
     - Call _apply_base_styling() in their _setup_ui()
     """
+    DEFAULT_CARD_MIN_WIDTH: int = 600
     
     # Signals
     visibility_changed = Signal(bool)
@@ -190,6 +191,9 @@ class BaseOverlayWidget(QLabel):
         self._position = position
         self._margin = self.DEFAULT_MARGIN
         self._overlay_name = overlay_name
+        if not self.objectName():
+            safe_name = "".join(ch if ch.isalnum() else "_" for ch in overlay_name)
+            self.setObjectName(f"{safe_name}_overlay")
         
         # Font styling
         self._font_family = self.DEFAULT_FONT_FAMILY
@@ -349,9 +353,10 @@ class BaseOverlayWidget(QLabel):
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet. Override for custom styling."""
+        selector = f"#{self.objectName()}" if self.objectName() else self.__class__.__name__
         if self.uses_painted_frame_shadow():
             self.setStyleSheet(f"""
-                QWidget {{
+                {selector} {{
                     background-color: transparent;
                     border: {self._bg_border_width}px solid transparent;
                     border-radius: {self._bg_corner_radius}px;
@@ -362,7 +367,7 @@ class BaseOverlayWidget(QLabel):
             bg = self._bg_color
             border = self._bg_border_color
             self.setStyleSheet(f"""
-                QWidget {{
+                {selector} {{
                     background-color: rgba({bg.red()}, {bg.green()}, {bg.blue()}, {bg.alpha()});
                     border: {self._bg_border_width}px solid rgba({border.red()}, {border.green()}, {border.blue()}, {border.alpha()});
                     border-radius: {self._bg_corner_radius}px;
@@ -371,7 +376,7 @@ class BaseOverlayWidget(QLabel):
             """)
         else:
             self.setStyleSheet(f"""
-                QWidget {{
+                {selector} {{
                     background-color: transparent;
                     border: none;
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, {self._text_color.blue()}, {self._text_color.alpha()});
@@ -707,6 +712,10 @@ class BaseOverlayWidget(QLabel):
         finally:
             painter.end()
 
+    def _paint_before_native_text(self) -> None:
+        """Subclass hook for painter shadow passes before QLabel text."""
+        return
+
     def paintEvent(self, event) -> None:  # type: ignore[override]
         if self.uses_painted_frame_shadow():
             painter = QPainter(self)
@@ -722,6 +731,10 @@ class BaseOverlayWidget(QLabel):
                     painter.drawPixmap(0, 0, pixmap)
                 finally:
                     painter.end()
+        try:
+            self._paint_before_native_text()
+        except Exception:
+            logger.debug("[OVERLAY] pre-native text paint failed", exc_info=True)
         self._paint_label_text_shadow()
         super().paintEvent(event)
 

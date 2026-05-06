@@ -1292,14 +1292,15 @@ class SpotifyVisualizerWidget(QWidget):
         self.update()
 
     def _update_card_style(self) -> None:
+        selector = f"#{self.objectName()}" if self.objectName() else "QWidget"
         if self.uses_painted_frame_shadow():
             self.setStyleSheet(
-                """
-                QWidget {
+                f"""
+                {selector} {{
                     background-color: transparent;
                     border: 0px solid transparent;
                     border-radius: 8px;
-                }
+                }}
                 """
             )
         elif self._show_background:
@@ -1308,7 +1309,7 @@ class SpotifyVisualizerWidget(QWidget):
             bg.setAlpha(alpha)
             self.setStyleSheet(
                 f"""
-                QWidget {{
+                {selector} {{
                     background-color: rgba({bg.red()}, {bg.green()}, {bg.blue()}, {bg.alpha()});
                     border: {self._border_width}px solid rgba({self._card_border_color.red()}, {self._card_border_color.green()}, {self._card_border_color.blue()}, {self._card_border_color.alpha()});
                     border-radius: 8px;
@@ -1317,12 +1318,12 @@ class SpotifyVisualizerWidget(QWidget):
             )
         else:
             self.setStyleSheet(
-                """
-                QWidget {
+                f"""
+                {selector} {{
                     background-color: transparent;
                     border: 0px solid transparent;
                     border-radius: 8px;
-                }
+                }}
                 """
             )
 

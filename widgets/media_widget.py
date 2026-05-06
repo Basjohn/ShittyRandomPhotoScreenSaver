@@ -169,8 +169,26 @@ class MediaWidget(BaseOverlayWidget):
         # Optional Spotify-style brand logo used when album artwork is absent.
         self._brand_pixmap: Optional[QPixmap] = self._load_brand_pixmap()
 
+        # Painter-owned metadata layout used by widgets.media.painting.  This
+        # keeps existing dynamic font scaling but avoids QLabel rich-text
+        # shadow duplication.
+        self._metadata_paint: dict[str, object] = {
+            "provider": "",
+            "title": "",
+            "artist": "",
+            "base_font": self._font_size,
+            "header_font": 0,
+            "title_font": self._font_size + 3,
+            "artist_font": max(6, self._font_size - 2),
+            "header_weight": 750,
+            "title_weight": 700,
+            "artist_weight": 600,
+            "line_spacing": 4,
+            "body_top_gap": 8,
+        }
+
         # Cached header logo metrics so paintEvent can align the Spotify glyph
-        # with the rich-text SPOTIFY header.
+        # with the painter-owned SPOTIFY header.
         self._context_menu_active: bool = False
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
@@ -235,6 +253,8 @@ class MediaWidget(BaseOverlayWidget):
         self._controls_row_shadow_alpha: int = 60
         self._controls_row_outline_alpha: int = 65
         self._controls_layout_cache: Optional[dict[str, object]] = None
+        self._controls_shadow_cache: Optional[object] = None
+        self._controls_shadow_cache_key: Optional[tuple] = None
         self._last_display_update_ts: float = 0.0
         self._skipped_identity_updates: int = 0
         self._max_identity_skip: int = 4
@@ -386,7 +406,7 @@ class MediaWidget(BaseOverlayWidget):
         self.setContentsMargins(29, 12, 12, 12)
 
         # Ensure a reasonable default footprint before artwork/metadata arrive.
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH)
         # Tie the default minimum height to the configured artwork size so
         # the widget does not "jump" in height once artwork is decoded.
         self.setMinimumHeight(max(220, self._artwork_size + 60))
@@ -620,10 +640,11 @@ class MediaWidget(BaseOverlayWidget):
     # Styling
     # ------------------------------------------------------------------
     def _update_stylesheet(self) -> None:
+        selector = f"#{self.objectName()}" if self.objectName() else "QLabel"
         if self.uses_painted_frame_shadow():
             self.setStyleSheet(
                 f"""
-                QLabel {{
+                {selector} {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()},
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: transparent;
@@ -635,7 +656,7 @@ class MediaWidget(BaseOverlayWidget):
         elif self._show_background:
             self.setStyleSheet(
                 f"""
-                QLabel {{
+                {selector} {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()},
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: rgba({self._bg_color.red()}, {self._bg_color.green()},
@@ -651,7 +672,7 @@ class MediaWidget(BaseOverlayWidget):
         else:
             self.setStyleSheet(
                 f"""
-                QLabel {{
+                {selector} {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()},
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: transparent;
@@ -713,6 +734,8 @@ class MediaWidget(BaseOverlayWidget):
     def _invalidate_controls_layout(self) -> None:
         """Clear cached transport controls geometry."""
         self._controls_layout_cache = None
+        self._controls_shadow_cache = None
+        self._controls_shadow_cache_key = None
 
     # ------------------------------------------------------------------
     # Transport controls (delegated to controller)
@@ -1367,7 +1390,7 @@ class MediaWidget(BaseOverlayWidget):
     # Painting
     # ------------------------------------------------------------------
     def paintEvent(self, event):  # type: ignore[override]
-        """Paint text via QLabel then overlay optional artwork icon.
+        """Paint the media card through the painter-owned runtime path.
 
         Artwork is drawn to the right side inside the widget's margins so
         that the text content remains legible. All failures are ignored so

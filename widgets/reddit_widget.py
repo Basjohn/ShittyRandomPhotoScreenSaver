@@ -193,7 +193,7 @@ class RedditWidget(BaseOverlayWidget):
         self.setContentsMargins(20, 12, 20, 12)
 
         # Reasonable default footprint
-        self.setMinimumWidth(600)
+        self.setMinimumWidth(BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH)
         base_min = int(220 * 1.2)
         self.setMinimumHeight(base_min)
 
@@ -1853,10 +1853,11 @@ class RedditWidget(BaseOverlayWidget):
         )
 
     def _update_stylesheet(self) -> None:
+        selector = f"#{self.objectName()}" if self.objectName() else "QLabel"
         if self.uses_painted_frame_shadow():
             self.setStyleSheet(
                 """
-                QLabel {
+                %s {
                     color: rgba(%d, %d, %d, %d);
                     background-color: transparent;
                     border: %dpx solid transparent;
@@ -1864,6 +1865,7 @@ class RedditWidget(BaseOverlayWidget):
                 }
                 """
                 % (
+                    selector,
                     self._text_color.red(),
                     self._text_color.green(),
                     self._text_color.blue(),
@@ -1875,7 +1877,7 @@ class RedditWidget(BaseOverlayWidget):
         if self._show_background:
             self.setStyleSheet(
                 """
-                QLabel {
+                %s {
                     color: rgba(%d, %d, %d, %d);
                     background-color: rgba(%d, %d, %d, %d);
                     border: %dpx solid rgba(%d, %d, %d, %d);
@@ -1883,6 +1885,7 @@ class RedditWidget(BaseOverlayWidget):
                 }
                 """
                 % (
+                    selector,
                     self._text_color.red(),
                     self._text_color.green(),
                     self._text_color.blue(),
@@ -1901,12 +1904,13 @@ class RedditWidget(BaseOverlayWidget):
         else:
             self.setStyleSheet(
                 """
-                QLabel {
+                %s {
                     color: rgba(%d, %d, %d, %d);
                     background-color: transparent;
                 }
                 """
                 % (
+                    selector,
                     self._text_color.red(),
                     self._text_color.green(),
                     self._text_color.blue(),

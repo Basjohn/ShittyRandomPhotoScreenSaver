@@ -320,38 +320,34 @@ def _build_and_apply_metadata(
     widget._header_logo_size = max(12, int(header_font * 1.3))
     widget._header_logo_margin = widget._header_logo_size
 
-    # Build metadata lines with per-line font sizes/weights
+    display_title = title
+    display_artist = artist
     if not title and not artist:
-        body_html = (
-            f"<div style='font-size:{base_font}pt; font-weight:500;'>(no metadata)</div>"
-        )
+        display_title = "(no metadata)"
+        display_artist = ""
+        title_font = base_font
+        title_weight = 500
         metadata_complexity = 0
     else:
-        body_lines_html = []
-        if title:
-            body_lines_html.append(
-                f"<div style='font-size:{title_font}pt; font-weight:{title_weight};'>{title}</div>"
-            )
-        if artist:
-            body_lines_html.append(
-                f"<div style='margin-top:4px; font-size:{artist_font}pt; font-weight:{artist_weight}; opacity:0.95;'>{artist}</div>"
-            )
-        body_html = "".join(body_lines_html)
         metadata_complexity = len(title.strip()) + len(artist.strip())
 
-    header_html = (
-        f"<div style='font-size:{header_font}pt; font-weight:{header_weight}; "
-        f"letter-spacing:1px; padding-top:1px; margin-left:{widget._header_logo_margin + 12}px; "
-        f"color:rgba(255,255,255,255);'>{widget.provider_display_name}</div>"
-    )
-    body_wrapper = f"<div style='margin-top:8px;'>{body_html}</div>"
+    widget._metadata_paint = {
+        "provider": widget.provider_display_name,
+        "title": display_title,
+        "artist": display_artist,
+        "base_font": base_font,
+        "header_font": header_font,
+        "title_font": title_font,
+        "artist_font": artist_font,
+        "header_weight": header_weight,
+        "title_weight": title_weight,
+        "artist_weight": artist_weight,
+        "line_spacing": 4,
+        "body_top_gap": 8,
+    }
 
-    html_parts = ["<div style='line-height:1.25'>", header_html, body_wrapper]
-    html_parts.append("</div>")
-    html = "".join(html_parts)
-
-    widget.setTextFormat(Qt.TextFormat.RichText)
-    widget.setText(html)
+    widget.setTextFormat(Qt.TextFormat.PlainText)
+    widget.setText("")
 
     # Adjust artwork vertical bias
     if metadata_complexity <= 0:

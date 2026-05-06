@@ -12,11 +12,12 @@ from __future__ import annotations
 from typing import Optional
 
 from PySide6.QtCore import Qt, QRectF, QPointF
-from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPainterPath
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPainterPath, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.media import system_mute
+from core.settings.shadow_tuning import CONTROL_SHADOW_TUNING
 from core.threading.manager import ThreadManager
 from widgets.media.dependent_visibility import sync_anchor_dependent_visibility
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes
@@ -55,10 +56,13 @@ class MuteButtonWidget(QWidget):
 
         self._btn_width: int = 40
         self._btn_height: int = 36
+        self._shadow_margin: int = max(8, int(CONTROL_SHADOW_TUNING.get("spread", 8)))
+        self._shadow_cache: Optional[QPixmap] = None
+        self._shadow_cache_key: Optional[tuple] = None
 
         configure_overlay_widget_attributes(self)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-        self.setFixedSize(self._btn_width, self._btn_height)
+        self.setFixedSize(self._btn_width + self._shadow_margin * 2, self._btn_height + self._shadow_margin * 2)
         self.hide()
 
     # ------------------------------------------------------------------
@@ -186,10 +190,10 @@ class MuteButtonWidget(QWidget):
             row_rect = controls_layout.get("row_rect")
             if row_rect is not None:
                 # Y: same as control bar top, in parent coordinates
-                y = anchor_geo.top() + row_rect.top() + (row_rect.height() - self._btn_height) // 2
+                y = anchor_geo.top() + row_rect.top() + (row_rect.height() - self._btn_height) // 2 - self._shadow_margin
                 # X: centered under artwork panel, in parent coordinates
                 art_center_x = anchor_geo.left() + artwork_rect.left() + artwork_rect.width() // 2
-                x = art_center_x - self._btn_width // 2
+                x = art_center_x - self.width() // 2
             else:
                 x, y = self._fallback_position(anchor_geo)
         else:
@@ -197,16 +201,16 @@ class MuteButtonWidget(QWidget):
 
         parent = self.parent()
         if parent is not None:
-            max_y = parent.height() - self._btn_height - 4
+            max_y = parent.height() - self.height() - 4
             y = min(y, max_y)
-            x = max(0, min(x, parent.width() - self._btn_width))
+            x = max(0, min(x, parent.width() - self.width()))
         self.move(x, y)
 
     def _fallback_position(self, anchor_geo):
         """Fallback: position below the media card, right-aligned."""
         margins = self._anchor_media.contentsMargins() if hasattr(self._anchor_media, 'contentsMargins') else None
         right_margin = margins.right() if margins else 8
-        x = anchor_geo.right() - right_margin - self._btn_width
+        x = anchor_geo.right() - right_margin - self.width()
         y = anchor_geo.bottom() + 6
         return x, y
 
@@ -355,8 +359,17 @@ class MuteButtonWidget(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        rect = QRectF(1, 1, self.width() - 2, self.height() - 2)
+        rect = QRectF(
+            self._shadow_margin + 1,
+            self._shadow_margin + 1,
+            self._btn_width - 2,
+            self._btn_height - 2,
+        )
         radius = self._border_radius
+
+        shadow = self._ensure_button_shadow_pixmap(rect, radius)
+        if shadow is not None and not shadow.isNull():
+            p.drawPixmap(0, 0, shadow)
 
         # Background with gradient matching control bar
         from PySide6.QtGui import QLinearGradient
@@ -393,6 +406,60 @@ class MuteButtonWidget(QWidget):
             p.drawRoundedRect(rect, radius, radius)
 
         p.end()
+
+    def _ensure_button_shadow_pixmap(self, rect: QRectF, radius: float) -> Optional[QPixmap]:
+        try:
+            dpr = max(1.0, float(self.devicePixelRatioF()))
+        except Exception:
+            dpr = 1.0
+        tuning = CONTROL_SHADOW_TUNING
+        offset_x = int(tuning.get("offset_x", 3))
+        offset_y = int(tuning.get("offset_y", 4))
+        spread = max(1, int(tuning.get("spread", 8)))
+        alpha = max(0, min(255, int(tuning.get("alpha", 80))))
+        passes = max(1, int(tuning.get("passes", 5)))
+        key = (
+            self.width(),
+            self.height(),
+            round(dpr, 3),
+            rect.width(),
+            rect.height(),
+            radius,
+            offset_x,
+            offset_y,
+            spread,
+            alpha,
+            passes,
+        )
+        if self._shadow_cache is not None and not self._shadow_cache.isNull() and self._shadow_cache_key == key:
+            return self._shadow_cache
+
+        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
+        pixmap.setDevicePixelRatio(dpr)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        try:
+            base_rect = rect.translated(offset_x, offset_y)
+            for layer in range(passes, 0, -1):
+                frac = layer / float(passes)
+                grow = spread * frac
+                layer_alpha = int(alpha * (1.0 - frac * 0.78))
+                if layer_alpha <= 0:
+                    continue
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(0, 0, 0, layer_alpha))
+                painter.drawRoundedRect(
+                    base_rect.adjusted(-grow, -grow, grow, grow),
+                    radius + grow,
+                    radius + grow,
+                )
+        finally:
+            painter.end()
+
+        self._shadow_cache = pixmap
+        self._shadow_cache_key = key
+        return pixmap
 
     def _paint_speaker_icon(self, p: QPainter, rect: QRectF) -> None:
         """Draw a monochrome speaker icon with sound waves (or crossed out if muted)."""

@@ -144,12 +144,12 @@ class WeatherWidget(BaseOverlayWidget):
         self._font_size = 24
         
         # Layout sizing - minimum width like old code
-        self._min_content_width = 420
+        self._min_content_width = BaseOverlayWidget.DEFAULT_CARD_MIN_WIDTH
         
         # Padding: reasonable defaults
         self._padding_top = 6
         self._padding_bottom = 6
-        self._padding_left = 12
+        self._padding_left = 20
         self._padding_right = 20
         
         # Set visual padding for base class positioning (aligns visible content to margins)
@@ -213,7 +213,7 @@ class WeatherWidget(BaseOverlayWidget):
         # Primary row: icon + text - minimum width to fit content
         self._primary_row = QWidget(self)
         self._primary_row.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-        self._primary_row.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+        self._primary_row.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         primary_layout = QHBoxLayout(self._primary_row)
         primary_layout.setContentsMargins(0, 0, 0, 0)
         primary_layout.setSpacing(16)
@@ -231,16 +231,16 @@ class WeatherWidget(BaseOverlayWidget):
         self._city_label.setWordWrap(False)
         self._city_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._city_label.setTextFormat(Qt.TextFormat.PlainText)
-        self._city_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
-        self._city_label.setMinimumWidth(self._min_content_width)
+        self._city_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._city_label.setMinimumWidth(0)
 
         self._conditions_label = PaintedShadowLabel(self._text_column)
         self._conditions_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._conditions_label.setWordWrap(False)
         self._conditions_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self._conditions_label.setTextFormat(Qt.TextFormat.PlainText)
-        self._conditions_label.setSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
-        self._conditions_label.setMinimumWidth(self._min_content_width)
+        self._conditions_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self._conditions_label.setMinimumWidth(0)
 
         text_layout.addWidget(self._city_label)
         text_layout.addWidget(self._conditions_label)
@@ -253,6 +253,7 @@ class WeatherWidget(BaseOverlayWidget):
                 size_px=self._icon_size,
                 parent=self._primary_row
             )
+            self._condition_icon_widget.set_shadow_config(self._shadow_config)
             self._condition_icon_widget.setVisible(False)
             primary_layout.addWidget(
                 self._condition_icon_widget, 0,
@@ -266,6 +267,7 @@ class WeatherWidget(BaseOverlayWidget):
                 size_px=self._icon_size,
                 parent=self._primary_row
             )
+            self._condition_icon_widget.set_shadow_config(self._shadow_config)
             self._condition_icon_widget.setVisible(False)
             primary_layout.addWidget(
                 self._condition_icon_widget, 0,
@@ -273,6 +275,7 @@ class WeatherWidget(BaseOverlayWidget):
             )
 
         self._root_layout.addWidget(self._primary_row)
+        self.setMinimumWidth(self._min_content_width)
 
         # Details separator line
         self._details_separator = self._create_separator()
@@ -282,7 +285,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_row_container = QWidget(self)
         self._detail_row_container.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._detail_row_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._detail_row_container.setMinimumWidth(self._min_content_width)
+        self._detail_row_container.setMinimumWidth(0)
         detail_container_layout = QHBoxLayout(self._detail_row_container)
         detail_container_layout.setContentsMargins(0, 4, 0, 4)
         detail_container_layout.setSpacing(0)
@@ -302,9 +305,10 @@ class WeatherWidget(BaseOverlayWidget):
         self._forecast_label = PaintedShadowLabel(self)
         self._forecast_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._forecast_label.setWordWrap(True)
-        self._forecast_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
-        self._forecast_label.setTextFormat(Qt.TextFormat.RichText)
+        self._forecast_label.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+        self._forecast_label.setTextFormat(Qt.TextFormat.PlainText)
         self._forecast_label.setVisible(False)
+        self._forecast_label.setContentsMargins(0, 0, 0, 11)
         self._root_layout.addWidget(self._forecast_label)
 
         try:
@@ -326,8 +330,11 @@ class WeatherWidget(BaseOverlayWidget):
                     pen.setWidth(1)
                     painter.setPen(pen)
                     # Draw horizontal line from left padding to right edge minus padding
-                    x1 = self._padding_left
-                    x2 = self.width() - self._padding_right
+                    contents = self._root_layout.contentsMargins() if self._root_layout is not None else None
+                    left_pad = contents.left() if contents is not None else self._padding_left
+                    right_pad = contents.right() if contents is not None else self._padding_right
+                    x1 = left_pad
+                    x2 = self.width() - right_pad
                     painter.drawLine(x1, self._separator_y, x2, self._separator_y)
                 finally:
                     painter.end()
@@ -1002,6 +1009,41 @@ class WeatherWidget(BaseOverlayWidget):
             _CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
         except Exception:
             logger.debug("Failed to persist weather cache", exc_info=True)
+
+    def _available_primary_text_width(self) -> int:
+        """Return a safe text-column width that stays inside the weather card."""
+        visible_width = max(self.width() if self.width() > 0 else 0, self._min_content_width)
+
+        icon_space = 0
+        if self._show_condition_icon and self._icon_alignment != "NONE":
+            icon_space = self._icon_size + 16
+
+        layout_margins = self._padding_left + self._padding_right + 28
+        available = visible_width - layout_margins - icon_space
+        return max(160, int(available))
+
+    def _fit_weather_font(
+        self,
+        text: str,
+        *,
+        point_size: int,
+        weight: QFont.Weight,
+        max_width: int,
+        min_point_size: int,
+    ) -> tuple[QFont, str, QFontMetrics]:
+        """Fit a single-line weather label to the current card text column."""
+        point_size = max(min_point_size, int(point_size))
+        while point_size > min_point_size:
+            font = QFont(self._font_family, point_size, weight)
+            metrics = QFontMetrics(font)
+            if metrics.horizontalAdvance(text) <= max_width:
+                return font, text, metrics
+            point_size -= 1
+
+        font = QFont(self._font_family, min_point_size, weight)
+        metrics = QFontMetrics(font)
+        fitted = metrics.elidedText(text, Qt.TextElideMode.ElideRight, max_width)
+        return font, fitted, metrics
     
     def _update_display(self, data: Optional[Dict[str, Any]]) -> None:
         """Update widget display with weather data using new layout."""
@@ -1058,17 +1100,24 @@ class WeatherWidget(BaseOverlayWidget):
             # Detail row = 50% of user setting (calculated below)
             location_pt = max(8, int(self._font_size))  # 100% - this is the base
             condition_pt = max(6, int(self._font_size * 0.8))  # 80% of location
+            text_width = self._available_primary_text_width()
 
-            # Set font sizes via stylesheet on labels
+            # Set font sizes via QFont (not stylesheet) for consistency with shadow rendering
             color = self._text_color
             color_rgba = f"rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()})"
 
-            self._city_label.setStyleSheet(f"font-size: {location_pt}pt; font-weight: 700; color: {color_rgba};")
+            city_font, location_display, city_fm = self._fit_weather_font(
+                location_display,
+                point_size=location_pt,
+                weight=QFont.Weight.Bold,
+                max_width=text_width,
+                min_point_size=12,
+            )
+            self._city_label.setFont(city_font)
+            self._city_label.setStyleSheet(f"color: {color_rgba};")
             self._city_label.setText(location_display)
-            
-            # Force city label to size properly
-            city_font = QFont(self._font_family, location_pt, QFont.Weight.Bold)
-            city_fm = QFontMetrics(city_font)
+
+            # Calculate text metrics for sizing
             city_width = city_fm.horizontalAdvance(location_display)
 
             # Build condition line: "22°C - Partly Cloudy"
@@ -1085,29 +1134,32 @@ class WeatherWidget(BaseOverlayWidget):
                 self._conditions_label.setWordWrap(False)
             
             condition_text = f"{temp:.0f}°C - {condition_display}"
-            self._conditions_label.setStyleSheet(f"font-size: {condition_pt}pt; font-weight: 700; color: {color_rgba};")
+            condition_font, condition_text, condition_fm = self._fit_weather_font(
+                condition_text,
+                point_size=condition_pt,
+                weight=QFont.Weight.Bold,
+                max_width=text_width,
+                min_point_size=10,
+            )
+            self._conditions_label.setFont(condition_font)
+            self._conditions_label.setStyleSheet(f"color: {color_rgba};")
             self._conditions_label.setText(condition_text)
-            
-            # Force label to size properly to fit text
-            condition_font = QFont(self._font_family, condition_pt, QFont.Weight.Bold)
-            condition_fm = QFontMetrics(condition_font)
+
+            # Calculate text metrics for sizing
             condition_width = condition_fm.horizontalAdvance(condition_text)
             
-            # Issue #2 Fix: Calculate required width from actual text metrics
-            # Use the maximum of location and condition widths, plus generous padding
-            # The issue was the text being clipped despite having visual space
-            required_width = max(city_width, condition_width) + 30
-            self._city_label.setMinimumWidth(required_width)
-            self._conditions_label.setMinimumWidth(required_width)
+            self._city_label.setMinimumWidth(0)
+            self._conditions_label.setMinimumWidth(0)
+            self._city_label.setMaximumWidth(16777215)
+            self._conditions_label.setMaximumWidth(16777215)
             
-            # Update text column to fit content - ensure it's wide enough
             if self._text_column:
-                self._text_column.setMinimumWidth(required_width + 20)
+                self._text_column.setMinimumWidth(0)
+                self._text_column.setMaximumWidth(16777215)
             
-            # Force primary row to accommodate text column width + icon
             if self._primary_row:
-                icon_space = self._icon_size + 20 if self._show_condition_icon and self._icon_alignment != "NONE" else 0
-                self._primary_row.setMinimumWidth(required_width + icon_space + 40)
+                self._primary_row.setMinimumWidth(0)
+                self._primary_row.setMaximumWidth(16777215)
 
             # Update condition icon
             if self._show_condition_icon and self._icon_alignment != "NONE":
@@ -1155,8 +1207,12 @@ class WeatherWidget(BaseOverlayWidget):
             if self._show_forecast and self._forecast_data:
                 # Feature #5: Forecast font = 50% of location size (same as detail row)
                 forecast_pt = max(6, int(self._font_size * 0.5))
-                forecast_html = f"<span style='font-size:{forecast_pt}pt; font-style:italic; font-weight:400; color:{color_rgba};'>{self._forecast_data}</span>"
-                self._forecast_label.setText(forecast_html)
+                forecast_font = QFont(self._font_family, forecast_pt, QFont.Weight.Normal)
+                forecast_font.setItalic(True)
+                self._forecast_label.setFont(forecast_font)
+                self._forecast_label.setStyleSheet(f"color: {color_rgba};")
+                self._forecast_label.setText(str(self._forecast_data))
+                self._forecast_label.setContentsMargins(0, 0, 0, 11)
                 self._forecast_label.setVisible(True)
                 self._forecast_separator.setVisible(True)
             else:
@@ -1317,6 +1373,11 @@ class WeatherWidget(BaseOverlayWidget):
                 self._detail_row_widget.set_shadow_config(config)
             except Exception as e:
                 logger.debug("[WEATHER] Exception suppressed: %s", e)
+        if self._condition_icon_widget is not None and hasattr(self._condition_icon_widget, "set_shadow_config"):
+            try:
+                self._condition_icon_widget.set_shadow_config(config)
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
 
     def _rebuild_primary_layout(self) -> None:
         """Rebuild the primary row layout based on current icon alignment.
@@ -1408,24 +1469,22 @@ class WeatherWidget(BaseOverlayWidget):
 
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""
-        # Padding: top right bottom left
-        padding = f"{self._padding_top}px {self._padding_right}px {self._padding_bottom}px {self._padding_left}px"
+        selector = f"#{self.objectName()}" if self.objectName() else "QLabel"
         if self.uses_painted_frame_shadow():
             self.setStyleSheet(f"""
-                QLabel {{
+                {selector} {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: transparent;
                     border: {self._bg_border_width}px solid transparent;
                     border-radius: 8px;
-                    padding: {padding};
                 }}
             """)
             return
         if self._show_background:
             # With background frame
             self.setStyleSheet(f"""
-                QLabel {{
+                {selector} {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: rgba({self._bg_color.red()}, {self._bg_color.green()}, 
@@ -1435,17 +1494,15 @@ class WeatherWidget(BaseOverlayWidget):
                                                                  {self._bg_border_color.blue()}, 
                                                                  {self._bg_border_color.alpha()});
                     border-radius: 8px;
-                    padding: {padding};
                 }}
             """)
         else:
             # Transparent background (default)
             self.setStyleSheet(f"""
-                QLabel {{
+                {selector} {{
                     color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                {self._text_color.blue()}, {self._text_color.alpha()});
                     background-color: transparent;
-                    padding: {padding};
                 }}
             """)
     
