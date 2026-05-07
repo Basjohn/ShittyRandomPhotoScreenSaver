@@ -6,19 +6,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "bar_border_opacity": 1.0,
-        "bar_fill_color": [
-          0,
-          0,
-          0,
-          130
-        ],
         "mode": "sine_wave",
         "monitor": "ALL",
         "sine_card_adaptation": 0.24,
@@ -147,7 +134,20 @@
         "sine_wave_transient_pulse_gain": 1.0,
         "sine_wave_transient_width_mix": 0.32,
         "sine_wave_travel": 2,
-        "sine_width_reaction": 0.18
+        "sine_width_reaction": 0.18,
+        "sine_wave_bar_fill_color": [
+          0,
+          0,
+          0,
+          130
+        ],
+        "sine_wave_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "sine_wave_bar_border_opacity": 1.0
       }
     }
   },

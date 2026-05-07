@@ -28,6 +28,14 @@ _BASELINE_DEFAULTS: dict[str, Any] = {
 }
 
 LEGACY_GLOBAL_TECHNICAL_KEYS: tuple[str, ...] = tuple(_BASELINE_DEFAULTS.keys())
+LEGACY_GLOBAL_SHARED_VISUAL_KEYS: tuple[str, ...] = (
+    "bar_fill_color",
+    "bar_border_color",
+    "bar_border_opacity",
+    "ghosting_enabled",
+    "ghost_alpha",
+    "ghost_decay",
+)
 
 PER_MODE_BASELINE_KEYS: tuple[tuple[str, Callable[[Any], Any]], ...] = (
     ("dynamic_floor", bool),
@@ -236,6 +244,79 @@ def migrate_legacy_global_technical_keys(
             migrated[plain_mode_key] = shared_values[key]
 
     for key in LEGACY_GLOBAL_TECHNICAL_KEYS:
+        migrated.pop(key, None)
+        migrated.pop(f"{scoped_prefix}{key}", None)
+
+    return migrated
+
+
+def migrate_legacy_global_visual_keys(
+    data: Mapping[str, Any] | None,
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Promote retired shared visual keys into canonical mode-owned keys once.
+
+    Runtime/persistence should no longer depend on shared preset-varying visual
+    state such as bar colors or legacy ghost fields. This helper upgrades old
+    payloads during normalization/repair and then drops the shared authored form.
+    """
+    if not isinstance(data, Mapping):
+        return {}
+
+    migrated = dict(data)
+    scoped_prefix = f"{prefix}."
+
+    shared_values: dict[str, Any] = {}
+    for key in LEGACY_GLOBAL_SHARED_VISUAL_KEYS:
+        if key in migrated:
+            shared_values[key] = migrated[key]
+        dotted_key = f"{scoped_prefix}{key}"
+        if dotted_key in migrated and key not in shared_values:
+            shared_values[key] = migrated[dotted_key]
+
+    if not shared_values:
+        return migrated
+
+    for mode in VISUALIZER_MODE_IDS:
+        if "bar_fill_color" in shared_values:
+            mode_key = f"{mode}_bar_fill_color"
+            dotted_mode_key = f"{scoped_prefix}{mode_key}"
+            if mode_key not in migrated and dotted_mode_key not in migrated:
+                migrated[mode_key] = shared_values["bar_fill_color"]
+        if "bar_border_color" in shared_values:
+            mode_key = f"{mode}_bar_border_color"
+            dotted_mode_key = f"{scoped_prefix}{mode_key}"
+            if mode_key not in migrated and dotted_mode_key not in migrated:
+                migrated[mode_key] = shared_values["bar_border_color"]
+        if "bar_border_opacity" in shared_values:
+            mode_key = f"{mode}_bar_border_opacity"
+            dotted_mode_key = f"{scoped_prefix}{mode_key}"
+            if mode_key not in migrated and dotted_mode_key not in migrated:
+                migrated[mode_key] = shared_values["bar_border_opacity"]
+
+    ghost_mode_key_map = {
+        "spectrum": ("spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay"),
+        "blob": ("blob_ghosting_enabled", "blob_ghost_alpha", "blob_ghost_decay"),
+        "bubble": ("bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay"),
+        "sine_wave": ("sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay"),
+        "devcurve": ("devcurve_ghosting_enabled", "devcurve_ghost_alpha", "devcurve_ghost_decay"),
+    }
+    for _mode, (enabled_key, alpha_key, decay_key) in ghost_mode_key_map.items():
+        if "ghosting_enabled" in shared_values:
+            dotted = f"{scoped_prefix}{enabled_key}"
+            if enabled_key not in migrated and dotted not in migrated:
+                migrated[enabled_key] = shared_values["ghosting_enabled"]
+        if "ghost_alpha" in shared_values:
+            dotted = f"{scoped_prefix}{alpha_key}"
+            if alpha_key not in migrated and dotted not in migrated:
+                migrated[alpha_key] = shared_values["ghost_alpha"]
+        if "ghost_decay" in shared_values:
+            dotted = f"{scoped_prefix}{decay_key}"
+            if decay_key not in migrated and dotted not in migrated:
+                migrated[decay_key] = shared_values["ghost_decay"]
+
+    for key in LEGACY_GLOBAL_SHARED_VISUAL_KEYS:
         migrated.pop(key, None)
         migrated.pop(f"{scoped_prefix}{key}", None)
 

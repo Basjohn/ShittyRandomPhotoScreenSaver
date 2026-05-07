@@ -492,23 +492,23 @@
             "text_opacity": 0.33
         },
         "spotify_visualizer": {
-            "bar_border_color": [
+            "blob_adaptive_sensitivity": true,
+            "blob_agc_strength": 0.5,
+            "blob_audio_block_size": 512,
+            "blob_bar_border_color": [
                 255,
                 255,
                 255,
                 255
             ],
-            "bar_border_opacity": 1.0,
-            "bar_fill_color": [
+            "blob_bar_border_opacity": 1.0,
+            "blob_bar_count": 32,
+            "blob_bar_fill_color": [
                 255,
                 255,
                 255,
                 230
             ],
-            "blob_adaptive_sensitivity": true,
-            "blob_agc_strength": 0.5,
-            "blob_audio_block_size": 512,
-            "blob_bar_count": 32,
             "blob_color": [
                 0,
                 105,
@@ -625,7 +625,20 @@
             "bubble_adaptive_sensitivity": true,
             "bubble_agc_strength": 0.5,
             "bubble_audio_block_size": 512,
+            "bubble_bar_border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "bubble_bar_border_opacity": 1.0,
             "bubble_bar_count": 48,
+            "bubble_bar_fill_color": [
+                255,
+                255,
+                255,
+                230
+            ],
             "bubble_big_bass_pulse": 0.8,
             "bubble_big_contraction_bias": 1.0,
             "bubble_big_count": 11,
@@ -706,7 +719,20 @@
             "devcurve_adaptive_sensitivity": true,
             "devcurve_agc_strength": 0.5,
             "devcurve_audio_block_size": 0,
+            "devcurve_bar_border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "devcurve_bar_border_opacity": 1.0,
             "devcurve_bar_count": 32,
+            "devcurve_bar_fill_color": [
+                255,
+                255,
+                255,
+                230
+            ],
             "devcurve_base_level": 0.58,
             "devcurve_dynamic_floor": true,
             "devcurve_dynamic_range_enabled": false,
@@ -875,14 +901,11 @@
             "devcurve_motion_power": 1.0,
             "devcurve_rainbow_enabled": false,
             "devcurve_rainbow_speed": 0.5,
-            "devcurve_sensitivity": 0.4,
+            "devcurve_sensitivity": 1.0,
             "devcurve_smoothness": 0.55,
             "devcurve_transient_clamp": 1.5,
             "devcurve_transient_pulse_gain": 1.0,
             "enabled": true,
-            "ghost_alpha": 0.4,
-            "ghost_decay": 0.35,
-            "ghosting_enabled": true,
             "mode": "spectrum",
             "monitor": "ALL",
             "osc_ghost_intensity": 0.4,
@@ -979,7 +1002,20 @@
             "oscilloscope_adaptive_sensitivity": true,
             "oscilloscope_agc_strength": 0.5,
             "oscilloscope_audio_block_size": 512,
+            "oscilloscope_bar_border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "oscilloscope_bar_border_opacity": 1.0,
             "oscilloscope_bar_count": 32,
+            "oscilloscope_bar_fill_color": [
+                255,
+                255,
+                255,
+                230
+            ],
             "oscilloscope_dynamic_floor": true,
             "oscilloscope_dynamic_range_enabled": false,
             "oscilloscope_input_gain": 1.0,
@@ -991,6 +1027,7 @@
             "oscilloscope_transient_clamp": 1.5,
             "oscilloscope_transient_pulse_gain": 1.0,
             "oscilloscope_transient_width_mix": 0.35,
+            "preset_blob": 1,
             "preset_bubble": 0,
             "preset_devcurve": 0,
             "preset_oscilloscope": 0,
@@ -1109,7 +1146,20 @@
             "sine_wave_adaptive_sensitivity": true,
             "sine_wave_agc_strength": 0.5,
             "sine_wave_audio_block_size": 512,
+            "sine_wave_bar_border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "sine_wave_bar_border_opacity": 1.0,
             "sine_wave_bar_count": 40,
+            "sine_wave_bar_fill_color": [
+                255,
+                255,
+                255,
+                230
+            ],
             "sine_wave_dynamic_floor": true,
             "sine_wave_dynamic_range_enabled": false,
             "sine_wave_effect": 0.8,
@@ -1128,7 +1178,20 @@
             "spectrum_adaptive_sensitivity": true,
             "spectrum_agc_strength": 0.5,
             "spectrum_audio_block_size": 512,
+            "spectrum_bar_border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "spectrum_bar_border_opacity": 1.0,
             "spectrum_bar_count": 33,
+            "spectrum_bar_fill_color": [
+                255,
+                255,
+                255,
+                230
+            ],
             "spectrum_border_radius": 2.0,
             "spectrum_drop_speed": 1.0,
             "spectrum_dynamic_floor": true,

@@ -451,13 +451,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to reset transient bus", exc_info=True)
 
-    def reconfigure_bar_count(self, bar_count: int) -> None:
-        """Rebuild bar-count-dependent runtime state using the startup contract."""
-        new_count = max(1, int(bar_count))
-        if new_count == self._bar_count:
-            return
+    def reset_processing_caches(self) -> None:
+        """Discard bar-shaping/banding caches at a runtime activation boundary."""
 
-        self._bar_count = new_count
         self._band_cache_key = None
         self._band_log_idx = None
         self._band_bins = None
@@ -468,6 +464,15 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._zero_bars = None
         self._band_edges = None
         self._freq_values = None
+
+    def reconfigure_bar_count(self, bar_count: int) -> None:
+        """Rebuild bar-count-dependent runtime state using the startup contract."""
+        new_count = max(1, int(bar_count))
+        if new_count == self._bar_count:
+            return
+
+        self._bar_count = new_count
+        self.reset_processing_caches()
         self.reset_reactivity_state()
 
     def is_running(self) -> bool:

@@ -1666,6 +1666,36 @@ def test_beat_engine_force_stop_cancels_compute_and_discards_runtime_buffers(qt_
 
 
 @pytest.mark.qt
+def test_reset_smoothing_state_clears_audio_worker_processing_caches_even_without_bar_count_change(qt_app, qtbot):
+    engine = _SpotifyBeatEngine(35)
+    worker = engine._audio_worker
+
+    worker._band_cache_key = (2048, 35)
+    worker._band_log_idx = [1, 2, 3]
+    worker._band_bins = [4, 5, 6]
+    worker._weight_bands = [0.1, 0.2]
+    worker._weight_factors = [0.3, 0.4]
+    worker._smooth_kernel = [0.25, 0.5, 0.25]
+    worker._work_bars = [0.9] * 35
+    worker._zero_bars = [0.0] * 35
+    worker._band_edges = [0, 10, 20]
+    worker._freq_values = [0.7] * 35
+
+    engine.reset_smoothing_state()
+
+    assert worker._band_cache_key is None
+    assert worker._band_log_idx is None
+    assert worker._band_bins is None
+    assert worker._weight_bands is None
+    assert worker._weight_factors is None
+    assert worker._smooth_kernel is None
+    assert worker._work_bars is None
+    assert worker._zero_bars is None
+    assert worker._band_edges is None
+    assert worker._freq_values is None
+
+
+@pytest.mark.qt
 def test_widget_manager_preset_cycle_discards_real_engine_bleed_state(
     qt_app,
     qtbot,

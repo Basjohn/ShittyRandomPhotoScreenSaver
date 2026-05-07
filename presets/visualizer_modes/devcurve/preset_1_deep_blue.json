@@ -6,19 +6,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "bar_border_opacity": 1.0,
-        "bar_fill_color": [
-          255,
-          255,
-          255,
-          230
-        ],
         "devcurve_active_layer": "bass",
         "devcurve_adaptive_sensitivity": false,
         "devcurve_agc_strength": 0.1,
@@ -197,7 +184,20 @@
         "devcurve_transient_clamp": 1.5,
         "devcurve_transient_pulse_gain": 1.0,
         "mode": "devcurve",
-        "monitor": "ALL"
+        "monitor": "ALL",
+        "devcurve_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "devcurve_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_bar_border_opacity": 1.0
       }
     }
   },

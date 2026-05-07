@@ -1292,11 +1292,12 @@ class TestSettingsModelGhostRoundTrip:
 
     def test_spectrum_ghost_round_trip(self):
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import get_custom_preset_index
         P = "widgets.spotify_visualizer"
 
         model = SpotifyVisualizerSettings.from_mapping({
             "mode": "spectrum",
-            f"{P}.preset_spectrum": 3,
+            f"{P}.preset_spectrum": get_custom_preset_index("spectrum"),
             f"{P}.spectrum_ghosting_enabled": False,
             f"{P}.spectrum_ghost_alpha": 0.8,
             f"{P}.spectrum_ghost_decay": 0.6,
@@ -1311,11 +1312,12 @@ class TestSettingsModelGhostRoundTrip:
 
     def test_sine_ghost_round_trip(self):
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import get_custom_preset_index
         P = "widgets.spotify_visualizer"
 
         model = SpotifyVisualizerSettings.from_mapping({
             "mode": "sine_wave",
-            f"{P}.preset_sine_wave": 3,
+            f"{P}.preset_sine_wave": get_custom_preset_index("sine_wave"),
             f"{P}.sine_ghosting_enabled": False,
             f"{P}.sine_ghost_alpha": 0.9,
             f"{P}.sine_ghost_decay": 0.7,
@@ -1325,11 +1327,12 @@ class TestSettingsModelGhostRoundTrip:
 
     def test_bubble_ghost_round_trip(self):
         from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import get_custom_preset_index
         P = "widgets.spotify_visualizer"
 
         model = SpotifyVisualizerSettings.from_mapping({
             "mode": "bubble",
-            f"{P}.preset_bubble": 3,
+            f"{P}.preset_bubble": get_custom_preset_index("bubble"),
             f"{P}.bubble_ghosting_enabled": True,
             f"{P}.bubble_ghost_alpha": 0.5,
             f"{P}.bubble_ghost_decay": 0.3,

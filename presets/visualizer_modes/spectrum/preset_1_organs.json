@@ -6,19 +6,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "bar_border_opacity": 1.0,
-        "bar_fill_color": [
-          12,
-          12,
-          12,
-          230
-        ],
         "mode": "spectrum",
         "monitor": "ALL",
         "spectrum_adaptive_sensitivity": false,
@@ -131,7 +118,20 @@
         "spectrum_transient_clamp": 1.85,
         "spectrum_transient_pulse_gain": 1.0,
         "spectrum_unique_colors": true,
-        "spectrum_wave_amplitude": 0.15
+        "spectrum_wave_amplitude": 0.15,
+        "spectrum_bar_fill_color": [
+          12,
+          12,
+          12,
+          230
+        ],
+        "spectrum_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "spectrum_bar_border_opacity": 1.0
       }
     }
   },

@@ -316,6 +316,52 @@ def test_curated_bubble_presets_keep_direction_keys_when_present():
                 )
 
 
+def test_filter_settings_for_mode_preserves_legacy_shared_bar_visuals_for_canonicalization():
+    sv = {
+        "mode": "spectrum",
+        "bar_fill_color": [12, 12, 12, 230],
+        "bar_border_color": [255, 255, 255, 255],
+        "bar_border_opacity": 1.0,
+        "spectrum_bar_count": 35,
+    }
+
+    filtered = vp._filter_settings_for_mode("spectrum", sv)
+
+    assert filtered["bar_fill_color"] == [12, 12, 12, 230]
+    assert filtered["bar_border_color"] == [255, 255, 255, 255]
+    assert filtered["bar_border_opacity"] == 1.0
+
+
+def test_parse_preset_payload_promotes_legacy_shared_bar_visuals_to_mode_owned_keys():
+    payload = {
+        "mode": "spectrum",
+        "name": "Preset 1 (Organs)",
+        "preset_index": 0,
+        "snapshot": {
+            "widgets": {
+                "spotify_visualizer": {
+                    "mode": "spectrum",
+                    "bar_fill_color": [12, 12, 12, 230],
+                    "bar_border_color": [255, 255, 255, 255],
+                    "bar_border_opacity": 1.0,
+                    "spectrum_bar_count": 35,
+                }
+            }
+        },
+    }
+
+    parsed = vp._parse_preset_payload(Path("preset_1_organs.json"), payload, "spectrum")
+
+    assert parsed is not None
+    _index, preset = parsed
+    assert preset.settings["spectrum_bar_fill_color"] == [12, 12, 12, 230]
+    assert preset.settings["spectrum_bar_border_color"] == [255, 255, 255, 255]
+    assert preset.settings["spectrum_bar_border_opacity"] == pytest.approx(1.0)
+    assert "bar_fill_color" not in preset.settings
+    assert "bar_border_color" not in preset.settings
+    assert "bar_border_opacity" not in preset.settings
+
+
 def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
     curated_root = tmp_path / "curated"
     (curated_root / "spectrum").mkdir(parents=True)
@@ -1802,6 +1848,8 @@ def test_curated_visualizer_tree_audits_clean():
 
 def test_checked_in_appdata_fixture_uses_modern_visualizer_schema():
     fixture_path = Path(__file__).resolve().parents[1] / "tests_tmp_appdata" / "SRPSS" / "settings_v2.json"
+    if not fixture_path.exists():
+        pytest.skip("checked-in tests_tmp_appdata/SRPSS/settings_v2.json fixture is not present in this checkout")
     payload = json.loads(fixture_path.read_text(encoding="utf-8"))
     sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
 

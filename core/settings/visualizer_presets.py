@@ -39,6 +39,7 @@ from core.settings.visualizer_mode_registry import (
     get_setting_prefixes,
 )
 from core.settings.visualizer_settings_contract import (
+    LEGACY_GLOBAL_SHARED_VISUAL_KEYS,
     normalize_spectrum_render_mode,
 )
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
@@ -58,12 +59,6 @@ _PLACEHOLDER_NAME_RE = re.compile(
 )
 
 GLOBAL_ALLOWED_KEYS = {
-    "bar_border_color",
-    "bar_border_opacity",
-    "bar_fill_color",
-    "ghost_alpha",
-    "ghost_decay",
-    "ghosting_enabled",
     "monitor",
     "mode",
 }
@@ -98,9 +93,6 @@ def _is_global_visualizer_key(key: str) -> bool:
         "enabled",
         "visualizers_enabled",
         "monitor",
-        "ghosting_enabled",
-        "ghost_alpha",
-        "ghost_decay",
         "rainbow_enabled",
         "rainbow_speed",
     }
@@ -562,6 +554,12 @@ def _filter_settings_for_mode(mode: str, sv_settings: Mapping[str, Any]) -> Dict
         if any(key.startswith(prefix) for prefix in prefixes):
             filtered[key] = value
         elif key in GLOBAL_ALLOWED_KEYS:
+            filtered[key] = value
+        elif key in LEGACY_GLOBAL_SHARED_VISUAL_KEYS:
+            # Legacy curated payloads may still carry shared-authored bar styling.
+            # Keep those long enough for canonical mode-payload normalization to
+            # promote them into {mode}_bar_* keys instead of silently dropping
+            # the authored colors on load/repair.
             filtered[key] = value
     # Ensure presets never flip the visualizer mode when applied.
     filtered["mode"] = mode

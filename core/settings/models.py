@@ -16,6 +16,7 @@ Usage:
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, TYPE_CHECKING, Mapping, Tuple
 from enum import Enum
@@ -28,8 +29,9 @@ from core.settings.bubble_gradient_semantics import (
 )
 from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
+    get_preset_key,
     get_setting_prefixes,
-    iter_visualizer_mode_descriptors,
+    VISUALIZER_MODE_IDS,
 )
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,
@@ -39,6 +41,7 @@ from core.settings.visualizer_preset_indices import (
 )
 from core.settings.visualizer_settings_contract import (
     migrate_legacy_global_technical_keys,
+    migrate_legacy_global_visual_keys,
     PER_MODE_BASELINE_KEYS,
     SPECIAL_PER_MODE_KEYS,
     resolve_visualizer_active_mode_rainbow_state,
@@ -444,6 +447,11 @@ PER_MODE_TECHNICAL_MODES: Tuple[str, ...] = (
 _ACTIVE_MODE_TECHNICAL_KEYS: Tuple[str, ...] = tuple(
     key for key, _coerce in PER_MODE_BASELINE_KEYS
 )
+_ACTIVE_MODE_SHARED_VISUAL_KEYS: Tuple[str, ...] = (
+    "bar_fill_color",
+    "bar_border_color",
+    "bar_border_opacity",
+)
 
 
 def _coerce_live_visualizer_bool(value: Any, default: bool) -> bool:
@@ -506,6 +514,25 @@ def _build_live_visualizer_mode_kwargs(
     return kwargs
 
 
+def _build_live_visualizer_mode_shared_visual_kwargs(
+    read_per_mode_value,
+    default_model: "SpotifyVisualizerSettings",
+) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {}
+    for mode in PER_MODE_TECHNICAL_MODES:
+        kwargs[f"{mode}_bar_fill_color"] = deepcopy(
+            read_per_mode_value(mode, "bar_fill_color", getattr(default_model, f"{mode}_bar_fill_color"))
+        )
+        kwargs[f"{mode}_bar_border_color"] = deepcopy(
+            read_per_mode_value(mode, "bar_border_color", getattr(default_model, f"{mode}_bar_border_color"))
+        )
+        kwargs[f"{mode}_bar_border_opacity"] = _coerce_live_visualizer_float(
+            read_per_mode_value(mode, "bar_border_opacity", getattr(default_model, f"{mode}_bar_border_opacity")),
+            float(getattr(default_model, f"{mode}_bar_border_opacity")),
+        )
+    return kwargs
+
+
 def _resolve_active_mode_technical_state(
     mode_key: str,
     per_mode_kwargs: Mapping[str, Any],
@@ -520,6 +547,20 @@ def _resolve_active_mode_technical_state(
     return resolved
 
 
+def _resolve_active_mode_shared_visual_state(
+    mode_key: str,
+    per_mode_kwargs: Mapping[str, Any],
+) -> Dict[str, Any]:
+    normalized_mode = str(mode_key).lower()
+    if normalized_mode not in PER_MODE_TECHNICAL_MODES:
+        normalized_mode = PER_MODE_TECHNICAL_MODES[0]
+
+    resolved: Dict[str, Any] = {}
+    for key in _ACTIVE_MODE_SHARED_VISUAL_KEYS:
+        resolved[key] = deepcopy(per_mode_kwargs[f"{normalized_mode}_{key}"])
+    return resolved
+
+
 @dataclass
 class SpotifyVisualizerSettings:
     """Spotify visualizer widget settings."""
@@ -531,6 +572,24 @@ class SpotifyVisualizerSettings:
     bar_fill_color: list | None = None
     bar_border_color: list | None = None
     bar_border_opacity: float = 0.85
+    spectrum_bar_fill_color: list | None = None
+    spectrum_bar_border_color: list | None = None
+    spectrum_bar_border_opacity: float = 0.85
+    bubble_bar_fill_color: list | None = None
+    bubble_bar_border_color: list | None = None
+    bubble_bar_border_opacity: float = 0.85
+    blob_bar_fill_color: list | None = None
+    blob_bar_border_color: list | None = None
+    blob_bar_border_opacity: float = 0.85
+    sine_wave_bar_fill_color: list | None = None
+    sine_wave_bar_border_color: list | None = None
+    sine_wave_bar_border_opacity: float = 0.85
+    oscilloscope_bar_fill_color: list | None = None
+    oscilloscope_bar_border_color: list | None = None
+    oscilloscope_bar_border_opacity: float = 0.85
+    devcurve_bar_fill_color: list | None = None
+    devcurve_bar_border_color: list | None = None
+    devcurve_bar_border_opacity: float = 0.85
     ghosting_enabled: bool = True
     ghost_alpha: float = 0.4
     ghost_decay: float = 0.35
@@ -887,6 +946,19 @@ class SpotifyVisualizerSettings:
             self.bar_fill_color = [0, 255, 128, 230]
         if self.bar_border_color is None:
             self.bar_border_color = [255, 255, 255, 230]
+        for mode in PER_MODE_TECHNICAL_MODES:
+            fill_attr = f"{mode}_bar_fill_color"
+            border_attr = f"{mode}_bar_border_color"
+            opacity_attr = f"{mode}_bar_border_opacity"
+            if getattr(self, fill_attr) is None:
+                setattr(self, fill_attr, list(self.bar_fill_color))
+            if getattr(self, border_attr) is None:
+                setattr(self, border_attr, list(self.bar_border_color))
+            try:
+                mode_opacity = float(getattr(self, opacity_attr))
+            except Exception:
+                mode_opacity = float(self.bar_border_opacity)
+            setattr(self, opacity_attr, mode_opacity)
         if self.blob_color is None:
             self.blob_color = [0, 180, 255, 230]
         if self.blob_glow_color is None:
@@ -1038,11 +1110,16 @@ class SpotifyVisualizerSettings:
             return raw
 
         _mode_kwargs = _build_live_visualizer_mode_kwargs(_mode_value, _defaults_model)
+        _mode_visual_kwargs = _build_live_visualizer_mode_shared_visual_kwargs(_mode_value, _defaults_model)
         _preset_kwargs = resolve_all_preset_indices_from_getter(get, prefix=prefix)
         _active_mode = coerce_visualizer_mode_id(str(get(f"{prefix}.mode", "bubble")))
         _active_technical = _resolve_active_mode_technical_state(
             _active_mode,
             _mode_kwargs,
+        )
+        _active_visuals = _resolve_active_mode_shared_visual_state(
+            _active_mode,
+            _mode_visual_kwargs,
         )
         _rainbow_kwargs = resolve_visualizer_active_mode_rainbow_state(
             lambda key, default: _mode_value(
@@ -1056,9 +1133,9 @@ class SpotifyVisualizerSettings:
             enabled=get(f"{prefix}.enabled", False),
             monitor=get(f"{prefix}.monitor", "ALL"),
             bar_count=int(_active_technical["bar_count"]),
-            ghosting_enabled=get(f"{prefix}.ghosting_enabled", True),
-            ghost_alpha=float(get(f"{prefix}.ghost_alpha", 0.4)),
-            ghost_decay=float(get(f"{prefix}.ghost_decay", 0.35)),
+            ghosting_enabled=bool(get(f"{prefix}.spectrum_ghosting_enabled", True)),
+            ghost_alpha=float(get(f"{prefix}.spectrum_ghost_alpha", 0.4)),
+            ghost_decay=float(get(f"{prefix}.spectrum_ghost_decay", 0.35)),
             adaptive_sensitivity=bool(_active_technical["adaptive_sensitivity"]),
             sensitivity=float(_active_technical["sensitivity"]),
             dynamic_floor=bool(_active_technical["dynamic_floor"]),
@@ -1069,9 +1146,9 @@ class SpotifyVisualizerSettings:
             kick_lane_gain=float(_active_technical["kick_lane_gain"]),
             transient_pulse_gain=float(_active_technical["transient_pulse_gain"]),
             transient_clamp=float(_active_technical["transient_clamp"]),
-            bar_fill_color=get(f"{prefix}.bar_fill_color", [0, 255, 128, 230]),
-            bar_border_color=get(f"{prefix}.bar_border_color", [255, 255, 255, 230]),
-            bar_border_opacity=float(get(f"{prefix}.bar_border_opacity", 0.85)),
+            bar_fill_color=_active_visuals["bar_fill_color"],
+            bar_border_color=_active_visuals["bar_border_color"],
+            bar_border_opacity=float(_active_visuals["bar_border_opacity"]),
             mode=_active_mode,
             osc_glow_enabled=get(f"{prefix}.osc_glow_enabled", True),
             osc_glow_intensity=float(get(f"{prefix}.osc_glow_intensity", 0.5)),
@@ -1135,24 +1212,9 @@ class SpotifyVisualizerSettings:
             spectrum_glow_enabled=bool(get(f"{prefix}.spectrum_glow_enabled", False)),
             spectrum_glow_intensity=float(get(f"{prefix}.spectrum_glow_intensity", 0.55)),
             spectrum_glow_color=list(get(f"{prefix}.spectrum_glow_color", [110, 220, 255, 235])),
-            spectrum_ghosting_enabled=bool(
-                get(
-                    f"{prefix}.spectrum_ghosting_enabled",
-                    get(f"{prefix}.ghosting_enabled", True),
-                )
-            ),
-            spectrum_ghost_alpha=float(
-                get(
-                    f"{prefix}.spectrum_ghost_alpha",
-                    get(f"{prefix}.ghost_alpha", 0.4),
-                )
-            ),
-            spectrum_ghost_decay=float(
-                get(
-                    f"{prefix}.spectrum_ghost_decay",
-                    get(f"{prefix}.ghost_decay", 0.35),
-                )
-            ),
+            spectrum_ghosting_enabled=bool(get(f"{prefix}.spectrum_ghosting_enabled", True)),
+            spectrum_ghost_alpha=float(get(f"{prefix}.spectrum_ghost_alpha", 0.4)),
+            spectrum_ghost_decay=float(get(f"{prefix}.spectrum_ghost_decay", 0.35)),
             spectrum_mirrored=bool(get(f"{prefix}.spectrum_mirrored", True)),
             spectrum_shape_nodes=list(
                 get(
@@ -1376,6 +1438,7 @@ class SpotifyVisualizerSettings:
             sine_line_dim=bool(get(f"{prefix}.sine_line_dim", False)),
             **_preset_kwargs,
             **_mode_kwargs,
+            **_mode_visual_kwargs,
         )
 
     @classmethod
@@ -1392,7 +1455,10 @@ class SpotifyVisualizerSettings:
         # For non-Custom presets with a non-empty settings dict, the preset
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
-        _raw = migrate_legacy_global_technical_keys(dict(data), prefix=prefix)
+        _raw = migrate_legacy_global_visual_keys(
+            migrate_legacy_global_technical_keys(dict(data), prefix=prefix),
+            prefix=prefix,
+        )
         _mode = coerce_visualizer_mode_id(
             _raw.get("mode", _raw.get(f"{prefix}.mode", "bubble"))
         )
@@ -1438,6 +1504,7 @@ class SpotifyVisualizerSettings:
 
         _defaults_model = cls()
         _mode_kwargs = _build_live_visualizer_mode_kwargs(_get_per_mode_value, _defaults_model)
+        _mode_visual_kwargs = _build_live_visualizer_mode_shared_visual_kwargs(_get_per_mode_value, _defaults_model)
         if resolve_preset_indices:
             _preset_kwargs = resolve_all_preset_indices_from_mapping(_raw, prefix=prefix)
         else:
@@ -1448,14 +1515,18 @@ class SpotifyVisualizerSettings:
                     return 0
 
             _preset_kwargs = {
-                descriptor.preset_key: _coerce_preset_idx(
-                    _raw.get(descriptor.preset_key, _raw.get(f"{prefix}.{descriptor.preset_key}", 0))
+                get_preset_key(mode_id): _coerce_preset_idx(
+                    _raw.get(get_preset_key(mode_id), _raw.get(f"{prefix}.{get_preset_key(mode_id)}", 0))
                 )
-                for descriptor in iter_visualizer_mode_descriptors()
+                for mode_id in VISUALIZER_MODE_IDS
             }
         _active_technical = _resolve_active_mode_technical_state(
             _mode,
             _mode_kwargs,
+        )
+        _active_visuals = _resolve_active_mode_shared_visual_state(
+            _mode,
+            _mode_visual_kwargs,
         )
         _rainbow_kwargs = resolve_visualizer_active_mode_rainbow_state(
             lambda key, default: _get_mode_value(key, default)
@@ -1466,9 +1537,9 @@ class SpotifyVisualizerSettings:
             visualizers_enabled=_get("visualizers_enabled", True),
             monitor=_get("monitor", "ALL"),
             bar_count=int(_active_technical["bar_count"]),
-            ghosting_enabled=_get("ghosting_enabled", True),
-            ghost_alpha=float(_get("ghost_alpha", 0.4)),
-            ghost_decay=float(_get("ghost_decay", 0.35)),
+            ghosting_enabled=bool(_get("spectrum_ghosting_enabled", True)),
+            ghost_alpha=float(_get("spectrum_ghost_alpha", 0.4)),
+            ghost_decay=float(_get("spectrum_ghost_decay", 0.35)),
             adaptive_sensitivity=bool(_active_technical["adaptive_sensitivity"]),
             sensitivity=float(_active_technical["sensitivity"]),
             dynamic_floor=bool(_active_technical["dynamic_floor"]),
@@ -1479,9 +1550,9 @@ class SpotifyVisualizerSettings:
             kick_lane_gain=float(_active_technical["kick_lane_gain"]),
             transient_pulse_gain=float(_active_technical["transient_pulse_gain"]),
             transient_clamp=float(_active_technical["transient_clamp"]),
-            bar_fill_color=_get("bar_fill_color", [0, 255, 128, 230]),
-            bar_border_color=_get("bar_border_color", [255, 255, 255, 230]),
-            bar_border_opacity=float(_get("bar_border_opacity", 0.85)),
+            bar_fill_color=_active_visuals["bar_fill_color"],
+            bar_border_color=_active_visuals["bar_border_color"],
+            bar_border_opacity=float(_active_visuals["bar_border_opacity"]),
             mode=coerce_visualizer_mode_id(str(_get("mode", "bubble"))),
             osc_glow_enabled=_get("osc_glow_enabled", True),
             osc_glow_intensity=float(_get("osc_glow_intensity", 0.5)),
@@ -1541,24 +1612,9 @@ class SpotifyVisualizerSettings:
             spectrum_glow_enabled=bool(_get("spectrum_glow_enabled", False)),
             spectrum_glow_intensity=float(_get("spectrum_glow_intensity", 0.55)),
             spectrum_glow_color=list(_get("spectrum_glow_color", [110, 220, 255, 235])),
-            spectrum_ghosting_enabled=bool(
-                _get(
-                    "spectrum_ghosting_enabled",
-                    _get("ghosting_enabled", True),
-                )
-            ),
-            spectrum_ghost_alpha=float(
-                _get(
-                    "spectrum_ghost_alpha",
-                    _get("ghost_alpha", 0.4),
-                )
-            ),
-            spectrum_ghost_decay=float(
-                _get(
-                    "spectrum_ghost_decay",
-                    _get("ghost_decay", 0.35),
-                )
-            ),
+            spectrum_ghosting_enabled=bool(_get("spectrum_ghosting_enabled", True)),
+            spectrum_ghost_alpha=float(_get("spectrum_ghost_alpha", 0.4)),
+            spectrum_ghost_decay=float(_get("spectrum_ghost_decay", 0.35)),
             spectrum_mirrored=bool(_get("spectrum_mirrored", True)),
             spectrum_shape_nodes=list(
                 _get("spectrum_shape_nodes", [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]])
@@ -1767,6 +1823,7 @@ class SpotifyVisualizerSettings:
             sine_line_dim=bool(_get("sine_line_dim", False)),
             **_preset_kwargs,
             **_mode_kwargs,
+            **_mode_visual_kwargs,
         )
 
     def to_dict(self, prefix: str = "widgets.spotify_visualizer") -> Dict[str, Any]:
@@ -1775,12 +1832,6 @@ class SpotifyVisualizerSettings:
             f"{prefix}.enabled": self.enabled,
             f"{prefix}.visualizers_enabled": self.visualizers_enabled,
             f"{prefix}.monitor": self.monitor,
-            f"{prefix}.ghosting_enabled": self.ghosting_enabled,
-            f"{prefix}.ghost_alpha": float(self.ghost_alpha),
-            f"{prefix}.ghost_decay": float(self.ghost_decay),
-            f"{prefix}.bar_fill_color": list(self.bar_fill_color),
-            f"{prefix}.bar_border_color": list(self.bar_border_color),
-            f"{prefix}.bar_border_opacity": float(self.bar_border_opacity),
             f"{prefix}.mode": self.mode,
             f"{prefix}.osc_glow_enabled": self.osc_glow_enabled,
             f"{prefix}.osc_glow_intensity": float(self.osc_glow_intensity),
@@ -2027,12 +2078,15 @@ class SpotifyVisualizerSettings:
             f"{prefix}.devcurve_foreground_specular_crest_bias": float(self.devcurve_foreground_specular_crest_bias),
             f"{prefix}.sine_line_dim": bool(self.sine_line_dim),
             **{
-                f"{prefix}.{descriptor.preset_key}": int(getattr(self, descriptor.preset_key))
-                for descriptor in iter_visualizer_mode_descriptors()
+                f"{prefix}.{get_preset_key(mode_id)}": int(getattr(self, get_preset_key(mode_id)))
+                for mode_id in VISUALIZER_MODE_IDS
             },
         }
 
         for _mode in PER_MODE_TECHNICAL_MODES:
+            data[f"{prefix}.{_mode}_bar_fill_color"] = list(getattr(self, f"{_mode}_bar_fill_color"))
+            data[f"{prefix}.{_mode}_bar_border_color"] = list(getattr(self, f"{_mode}_bar_border_color"))
+            data[f"{prefix}.{_mode}_bar_border_opacity"] = float(getattr(self, f"{_mode}_bar_border_opacity"))
             data[f"{prefix}.{_mode}_dynamic_floor"] = bool(getattr(self, f"{_mode}_dynamic_floor"))
             data[f"{prefix}.{_mode}_manual_floor"] = float(getattr(self, f"{_mode}_manual_floor"))
             data[f"{prefix}.{_mode}_dynamic_range_enabled"] = bool(getattr(self, f"{_mode}_dynamic_range_enabled"))
@@ -2101,6 +2155,15 @@ class SpotifyVisualizerSettings:
 
     def resolve_bar_count(self, mode: str) -> int:
         return int(getattr(self, self._mode_attr_name(mode, "bar_count")))
+
+    def resolve_bar_fill_color(self, mode: str) -> list:
+        return list(getattr(self, self._mode_attr_name(mode, "bar_fill_color")))
+
+    def resolve_bar_border_color(self, mode: str) -> list:
+        return list(getattr(self, self._mode_attr_name(mode, "bar_border_color")))
+
+    def resolve_bar_border_opacity(self, mode: str) -> float:
+        return float(getattr(self, self._mode_attr_name(mode, "bar_border_opacity")))
 
     def resolve_spectrum_lane_transient_mix(self) -> float:
         return float(self.spectrum_lane_transient_mix)

@@ -6,19 +6,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "bar_border_opacity": 1.0,
-        "bar_fill_color": [
-          255,
-          255,
-          255,
-          230
-        ],
         "bubble_adaptive_sensitivity": true,
         "bubble_agc_strength": 0.4,
         "bubble_audio_block_size": 0,
@@ -100,7 +87,20 @@
         "bubble_transient_mix_vocal": 0.3,
         "bubble_transient_pulse_gain": 1.2,
         "mode": "bubble",
-        "monitor": "ALL"
+        "monitor": "ALL",
+        "bubble_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "bubble_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bubble_bar_border_opacity": 1.0
       }
     }
   },

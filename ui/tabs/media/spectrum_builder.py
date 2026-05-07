@@ -243,7 +243,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_border_opacity.setMinimum(0)
     tab.vis_border_opacity.setMaximum(100)
     spotify_vis_border_opacity_pct = int(
-        tab._default_float('spotify_visualizer', 'bar_border_opacity', 0.85) * 100
+        tab._default_float('spotify_visualizer', 'spectrum_bar_border_opacity', 0.85) * 100
     )
     tab.vis_border_opacity.setValue(spotify_vis_border_opacity_pct)
     tab.vis_border_opacity.setTickPosition(QSlider.TickPosition.TicksBelow)
@@ -262,8 +262,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.vis_ghost_enabled.setProperty("circleIndicator", True)
     tab.vis_ghost_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'spectrum_ghosting_enabled',
-                          tab._default_bool('spotify_visualizer', 'ghosting_enabled', True))
+        tab._default_bool('spotify_visualizer', 'spectrum_ghosting_enabled', True)
     )
     tab.vis_ghost_enabled.setToolTip(
         "When enabled, the visualizer draws trailing ghost bars above the current height."
@@ -281,8 +280,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_opacity_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.vis_ghost_opacity_slider.setMinimum(0)
     tab.vis_ghost_opacity_slider.setMaximum(100)
-    ghost_alpha_pct = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_alpha',
-                           tab._default_float('spotify_visualizer', 'ghost_alpha', 0.4)) * 100)
+    ghost_alpha_pct = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_alpha', 0.4) * 100)
     tab.vis_ghost_opacity_slider.setValue(ghost_alpha_pct)
     tab.vis_ghost_opacity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_opacity_slider.setTickInterval(5)
@@ -299,8 +297,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.vis_ghost_decay_slider = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.vis_ghost_decay_slider.setMinimum(10)
     tab.vis_ghost_decay_slider.setMaximum(100)
-    ghost_decay_slider = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_decay',
-                              tab._default_float('spotify_visualizer', 'ghost_decay', 0.4)) * 100)
+    ghost_decay_slider = int(tab._default_float('spotify_visualizer', 'spectrum_ghost_decay', 0.4) * 100)
     tab.vis_ghost_decay_slider.setValue(max(10, min(100, ghost_decay_slider)))
     tab.vis_ghost_decay_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
     tab.vis_ghost_decay_slider.setTickInterval(5)

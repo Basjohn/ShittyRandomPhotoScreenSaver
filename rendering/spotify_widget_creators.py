@@ -504,49 +504,6 @@ def create_spotify_visualizer_widget(
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
-        # Per-bar colours should come from the resolved model, not the raw
-        # config dict, so curated preset overlays and explicit runtime edits
-        # share the exact same first-frame path as settings refresh.
-        try:
-            fill_color_data = model.bar_fill_color or [255, 255, 255, 230]
-            fr, fg, fb = fill_color_data[0], fill_color_data[1], fill_color_data[2]
-            fa = fill_color_data[3] if len(fill_color_data) > 3 else 230
-            bar_fill_qcolor = QColor(fr, fg, fb, fa)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            bar_fill_qcolor = QColor(255, 255, 255, 230)
-
-        try:
-            bar_border_color_data = model.bar_border_color or [255, 255, 255, 230]
-            br_r, br_g, br_b = bar_border_color_data[0], bar_border_color_data[1], bar_border_color_data[2]
-            base_alpha = bar_border_color_data[3] if len(bar_border_color_data) > 3 else 230
-            try:
-                bar_bo = float(model.bar_border_opacity)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                bar_bo = 0.85
-            bar_bo = max(0.0, min(1.0, bar_bo))
-            br_a = int(bar_bo * base_alpha)
-            bar_border_qcolor = QColor(br_r, br_g, br_b, br_a)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            bar_border_qcolor = QColor(255, 255, 255, 230)
-
-        try:
-            vis.set_bar_colors(bar_fill_qcolor, bar_border_qcolor)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        # Ghosting configuration
-        try:
-            ghost_enabled = SettingsManager.to_bool(model.ghosting_enabled, True)
-            ghost_alpha = float(model.ghost_alpha)
-            ghost_decay = max(0.0, float(model.ghost_decay))
-            if hasattr(vis, 'set_ghost_config'):
-                vis.set_ghost_config(ghost_enabled, ghost_alpha, ghost_decay)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
         # Visualization mode + per-mode settings
         if hasattr(vis, "apply_resolved_activation_payload"):
             try:

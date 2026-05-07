@@ -515,8 +515,9 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         cache = settings_manager.get("visualizer_custom_presets", {})
         assert isinstance(cache, dict)
         snapshot = cache[mode]
-        assert snapshot["bar_fill_color"] == [12, 122, 210, 211]
-        assert snapshot["bar_border_color"] == [220, 180, 80, 255]
+        assert snapshot["spectrum_bar_fill_color"] == [12, 122, 210, 211]
+        assert snapshot["spectrum_bar_border_color"] == [220, 180, 80, 255]
+        assert snapshot["spectrum_bar_border_opacity"] == pytest.approx(0.73)
         assert snapshot["spectrum_growth"] == pytest.approx(3.7)
         assert snapshot["spectrum_render_mode"] == "bars"
         assert snapshot["spectrum_border_radius"] == pytest.approx(7.0)
@@ -536,8 +537,9 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         tab._on_visualizer_preset_changed(mode, custom_index)
 
         restored = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
-        assert restored.get("bar_fill_color") == [12, 122, 210, 211]
-        assert restored.get("bar_border_color") == [220, 180, 80, 255]
+        assert restored.get("spectrum_bar_fill_color") == [12, 122, 210, 211]
+        assert restored.get("spectrum_bar_border_color") == [220, 180, 80, 255]
+        assert restored.get("spectrum_bar_border_opacity") == pytest.approx(0.73)
         assert restored.get("spectrum_growth") == pytest.approx(3.7)
         assert restored.get("spectrum_render_mode") == "bars"
         assert restored.get("spectrum_border_radius") == pytest.approx(7.0)

@@ -151,6 +151,7 @@ class _SpotifyBeatEngine(QObject):
         self._idle_wave_phase = 0.0
         self._latest_bars = [0.0] * self._bar_count
         self._last_audio_ts = 0.0
+        self._audio_worker.reset_processing_caches()
         self._audio_worker.reset_reactivity_state()
         self._generation_id += 1
         self._activation_id += 1

@@ -193,13 +193,13 @@ def load_spectrum_mode_settings(
 
     ghost_enabled = config.get(
         "spectrum_ghosting_enabled",
-        tab._config_bool("spotify_visualizer", config, "ghosting_enabled", True),
+        tab._config_bool("spotify_visualizer", config, "spectrum_ghosting_enabled", True),
     )
     tab.vis_ghost_enabled.setChecked(bool(ghost_enabled))
     ghost_alpha = float(
         config.get(
             "spectrum_ghost_alpha",
-            tab._config_float("spotify_visualizer", config, "ghost_alpha", 0.4),
+            tab._config_float("spotify_visualizer", config, "spectrum_ghost_alpha", 0.4),
         )
     )
     ghost_alpha_pct = max(0, min(100, int(ghost_alpha * 100)))
@@ -209,7 +209,7 @@ def load_spectrum_mode_settings(
     ghost_decay = float(
         config.get(
             "spectrum_ghost_decay",
-            tab._config_float("spotify_visualizer", config, "ghost_decay", 0.4),
+            tab._config_float("spotify_visualizer", config, "spectrum_ghost_decay", 0.4),
         )
     )
     ghost_decay_slider = max(10, min(100, int(ghost_decay * 100.0)))

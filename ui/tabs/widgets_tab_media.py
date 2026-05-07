@@ -770,14 +770,25 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     )
     load_per_mode_technical_controls(tab, spotify_vis_config)
 
-    fill_color_data = spotify_vis_config.get('bar_fill_color', tab._widget_default('spotify_visualizer', 'bar_fill_color', [0, 255, 128, 230]))
+    active_vis_mode = str(spotify_vis_config.get('mode', 'spectrum')).strip().lower() or 'spectrum'
+    fill_color_key = f'{active_vis_mode}_bar_fill_color'
+    border_color_key = f'{active_vis_mode}_bar_border_color'
+    border_opacity_key = f'{active_vis_mode}_bar_border_opacity'
+
+    fill_color_data = spotify_vis_config.get(
+        fill_color_key,
+        tab._widget_default('spotify_visualizer', fill_color_key, [0, 255, 128, 230]),
+    )
     try:
         tab._spotify_vis_fill_color = QColor(*fill_color_data)
     except Exception:
         logger.debug("[MEDIA_TAB] Failed to set vis fill_color=%s", fill_color_data, exc_info=True)
         tab._spotify_vis_fill_color = QColor(0, 255, 128, 230)
 
-    border_color_data = spotify_vis_config.get('bar_border_color', tab._widget_default('spotify_visualizer', 'bar_border_color', [255, 255, 255, 230]))
+    border_color_data = spotify_vis_config.get(
+        border_color_key,
+        tab._widget_default('spotify_visualizer', border_color_key, [255, 255, 255, 230]),
+    )
     try:
         tab._spotify_vis_border_color = QColor(*border_color_data)
     except Exception:
@@ -787,7 +798,9 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     _apply_color_to_button('vis_fill_color_btn', '_spotify_vis_fill_color')
     _apply_color_to_button('vis_border_color_btn', '_spotify_vis_border_color')
 
-    border_opacity_pct = int(tab._config_float('spotify_visualizer', spotify_vis_config, 'bar_border_opacity', 0.85) * 100)
+    border_opacity_pct = int(
+        tab._config_float('spotify_visualizer', spotify_vis_config, border_opacity_key, 0.85) * 100
+    )
     tab.vis_border_opacity.setValue(border_opacity_pct)
     tab.vis_border_opacity_label.setText(f"{border_opacity_pct}%")
 
@@ -880,27 +893,25 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     mmon_text = tab.media_monitor_combo.currentText()
     media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
 
+    current_mode = collect_visualizer_mode_selection(tab)
     spotify_vis_config = {
         'visualizers_enabled': tab.visualizers_enabled.isChecked() if hasattr(tab, 'visualizers_enabled') else True,
         'enabled': tab.vis_enabled_checkbox.isChecked(),
-        'mode': collect_visualizer_mode_selection(tab),
+        'mode': current_mode,
         'software_visualizer_enabled': False,
-        'bar_fill_color': [
+        f'{current_mode}_bar_fill_color': [
             tab._spotify_vis_fill_color.red(),
             tab._spotify_vis_fill_color.green(),
             tab._spotify_vis_fill_color.blue(),
             tab._spotify_vis_fill_color.alpha(),
         ],
-        'bar_border_color': [
+        f'{current_mode}_bar_border_color': [
             tab._spotify_vis_border_color.red(),
             tab._spotify_vis_border_color.green(),
             tab._spotify_vis_border_color.blue(),
             tab._spotify_vis_border_color.alpha(),
         ],
-        'bar_border_opacity': tab.vis_border_opacity.value() / 100.0,
-        'ghosting_enabled': tab.vis_ghost_enabled.isChecked(),
-        'ghost_alpha': tab.vis_ghost_opacity_slider.value() / 100.0,
-        'ghost_decay': max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
+        f'{current_mode}_bar_border_opacity': tab.vis_border_opacity.value() / 100.0,
         'spectrum_ghosting_enabled': tab.vis_ghost_enabled.isChecked(),
         'spectrum_ghost_alpha': tab.vis_ghost_opacity_slider.value() / 100.0,
         'spectrum_ghost_decay': max(0.1, tab.vis_ghost_decay_slider.value() / 100.0),
@@ -911,7 +922,7 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     
     # Option A: Only collect settings for the CURRENT visualizer mode
     # to prevent cross-mode pollution when saving presets
-    _cur_mode = collect_visualizer_mode_selection(tab)
+    _cur_mode = current_mode
     if _cur_mode == 'spectrum':
         spotify_vis_config.update(collect_spectrum_mode_settings(tab))
     elif _cur_mode == 'oscilloscope':

@@ -6,19 +6,6 @@
   "snapshot": {
     "widgets": {
       "spotify_visualizer": {
-        "bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "bar_border_opacity": 1.0,
-        "bar_fill_color": [
-          255,
-          255,
-          255,
-          230
-        ],
         "mode": "oscilloscope",
         "monitor": "ALL",
         "osc_ghost_intensity": 0.42,
@@ -126,7 +113,20 @@
         "oscilloscope_sensitivity": 0.4,
         "oscilloscope_transient_clamp": 1.45,
         "oscilloscope_transient_pulse_gain": 1.0,
-        "oscilloscope_transient_width_mix": 0.32
+        "oscilloscope_transient_width_mix": 0.32,
+        "oscilloscope_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "oscilloscope_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "oscilloscope_bar_border_opacity": 1.0
       }
     }
   },

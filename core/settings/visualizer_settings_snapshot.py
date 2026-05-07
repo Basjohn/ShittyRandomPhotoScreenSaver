@@ -10,7 +10,10 @@ from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
     get_setting_prefixes,
 )
-from core.settings.visualizer_settings_contract import migrate_legacy_global_technical_keys
+from core.settings.visualizer_settings_contract import (
+    migrate_legacy_global_technical_keys,
+    migrate_legacy_global_visual_keys,
+)
 
 _PREFIX = "widgets.spotify_visualizer"
 _TECHNICAL_GLOBAL_KEYS = frozenset(
@@ -27,6 +30,13 @@ _TECHNICAL_GLOBAL_KEYS = frozenset(
         "sensitivity",
         "transient_clamp",
         "transient_pulse_gain",
+    }
+)
+_RETIRED_AUTHORED_SHARED_VISUAL_KEYS = frozenset(
+    {
+        "bar_fill_color",
+        "bar_border_color",
+        "bar_border_opacity",
     }
 )
 _RETIRED_AUTHORED_TECH_SUFFIXES = frozenset({"energy_boost", "use_raw_energy"})
@@ -182,6 +192,7 @@ def normalize_visualizer_section_mapping(
 
     migrated = _forward_migrate_alias_keys(data, prefix=prefix)
     migrated = migrate_legacy_global_technical_keys(migrated, prefix=prefix)
+    migrated = migrate_legacy_global_visual_keys(migrated, prefix=prefix)
 
     model = SpotifyVisualizerSettings.from_mapping(
         migrated,
@@ -226,6 +237,8 @@ def normalize_visualizer_mode_payload(
     canonical_mode = coerce_visualizer_mode_id(mode)
     filtered = _filter_settings_for_mode(canonical_mode, normalized)
     for key in _TECHNICAL_GLOBAL_KEYS:
+        filtered.pop(key, None)
+    for key in _RETIRED_AUTHORED_SHARED_VISUAL_KEYS:
         filtered.pop(key, None)
     for key in _RETIRED_AUTHORED_GLOBAL_VISUAL_KEYS:
         filtered.pop(key, None)

@@ -910,6 +910,34 @@ class SpotifyVisualizerWidget(QWidget):
             "devcurve": VisualizerMode.DEVCURVE,
         }.get(str(mode_key).lower(), VisualizerMode.SPECTRUM)
 
+    def _sync_active_mode_legacy_ghost_bridge(self, mode: VisualizerMode) -> None:
+        """Keep the legacy shared ghost bridge aligned with the active mode."""
+        mode_key = mode.name.lower()
+        if mode_key == "spectrum":
+            self._ghosting_enabled = bool(self._spectrum_ghosting_enabled)
+            self._ghost_alpha = float(self._spectrum_ghost_alpha)
+            self._ghost_decay_rate = float(self._spectrum_ghost_decay)
+        elif mode_key == "blob":
+            self._ghosting_enabled = bool(self._blob_ghosting_enabled)
+            self._ghost_alpha = float(self._blob_ghost_alpha)
+            self._ghost_decay_rate = float(self._blob_ghost_decay)
+        elif mode_key == "sine_wave":
+            self._ghosting_enabled = bool(self._sine_ghosting_enabled)
+            self._ghost_alpha = float(self._sine_ghost_alpha)
+            self._ghost_decay_rate = float(self._sine_ghost_decay)
+        elif mode_key == "bubble":
+            self._ghosting_enabled = bool(self._bubble_ghosting_enabled)
+            self._ghost_alpha = float(self._bubble_ghost_alpha)
+            self._ghost_decay_rate = float(self._bubble_ghost_decay)
+        elif mode_key == "devcurve":
+            self._ghosting_enabled = bool(self._devcurve_ghosting_enabled)
+            self._ghost_alpha = float(self._devcurve_ghost_alpha)
+            self._ghost_decay_rate = float(self._devcurve_ghost_decay)
+        elif mode_key == "oscilloscope":
+            self._ghosting_enabled = bool(self._osc_ghosting_enabled)
+            self._ghost_alpha = float(self._osc_ghost_intensity)
+            self._ghost_decay_rate = float(getattr(self, "_peak_decay_per_sec", 0.4))
+
     def _log_live_activation_state(
         self,
         mode: VisualizerMode,
@@ -928,6 +956,9 @@ class SpotifyVisualizerWidget(QWidget):
                     "[SPOTIFY_VIS][LIVE] reason=%s mode=%s preset_index=%d preset_kind=%s preset_name=%s "
                     "preset_path=%s cache_manual=%.3f worker_manual=%.3f worker_dynamic=%s worker_sensitivity=%.3f "
                     "worker_recommended=%s worker_block=%d worker_input_gain=%.3f worker_agc=%.3f "
+                    "widget_fill=%s widget_border=%s widget_border_opacity=%.3f "
+                    "widget_ghost=%s widget_ghost_alpha=%.3f widget_ghost_decay=%.3f "
+                    "overlay_fill=%s overlay_border=%s overlay_peak_decay=%.3f "
                     "engine_generation=%s engine_activation=%s overlay_activation=%s overlay_generation=%s"
                 ),
                 reason,
@@ -944,6 +975,15 @@ class SpotifyVisualizerWidget(QWidget):
                 int(getattr(worker, "_preferred_block_size", 0) if worker is not None else 0),
                 float(getattr(worker, "_input_gain", 1.0) if worker is not None else 1.0),
                 float(getattr(worker, "_agc_strength", 0.5) if worker is not None else 0.5),
+                self._bar_fill_color.getRgb(),
+                self._bar_border_color.getRgb(),
+                float(self._bar_border_color.alphaF()),
+                bool(self._ghosting_enabled),
+                float(self._ghost_alpha),
+                float(self._ghost_decay_rate),
+                getattr(overlay, "_fill_color", None).getRgb() if overlay is not None and getattr(overlay, "_fill_color", None) is not None else None,
+                getattr(overlay, "_border_color", None).getRgb() if overlay is not None and getattr(overlay, "_border_color", None) is not None else None,
+                float(getattr(overlay, "_peak_decay_per_sec", 0.0) if overlay is not None else 0.0),
                 getattr(engine, "get_generation_id", lambda: None)(),
                 getattr(engine, "get_activation_id", lambda: None)(),
                 getattr(overlay, "_activation_id", None),
@@ -975,6 +1015,7 @@ class SpotifyVisualizerWidget(QWidget):
 
         from rendering.spotify_widget_creators import apply_spotify_vis_model_config
         apply_spotify_vis_model_config(self, snapshot, apply_mode=False)
+        self._sync_active_mode_legacy_ghost_bridge(vm)
 
         self._last_gpu_geom = None
         self._last_gpu_fade_sent = -1.0

@@ -46,6 +46,7 @@ from core.settings.visualizer_settings_snapshot import (  # noqa: E402
     _TECHNICAL_GLOBAL_KEYS,
     normalize_visualizer_mode_payload,
 )
+from core.settings.visualizer_settings_contract import LEGACY_GLOBAL_SHARED_VISUAL_KEYS  # noqa: E402
 from core.visualizer_preset_manifest import regenerate_repo_shipped_visualizer_preset_artifacts  # noqa: E402
 
 _DEFAULTS_CACHE: Dict[str, Any] | None = None
@@ -56,6 +57,9 @@ _DEPRECATED_COMPAT_TECH_SUFFIXES: Tuple[str, ...] = (
     "use_raw_energy",
 )
 _DEPRECATED_AUTHORED_GLOBAL_KEYS: Tuple[str, ...] = (
+    "bar_fill_color",
+    "bar_border_color",
+    "bar_border_opacity",
     "ghosting_enabled",
     "ghost_alpha",
     "ghost_decay",
@@ -205,6 +209,33 @@ def _promote_global_technical_settings(mode: str, sanitized: Dict[str, Any]) -> 
             sanitized.pop(global_key, None)
 
 
+def _promote_global_visual_settings(mode: str, sanitized: Dict[str, Any]) -> None:
+    """Copy legacy shared-authored visual keys into canonical per-mode keys."""
+
+    prefix = _canonical_mode_prefix(mode)
+    for suffix in tuple(
+        key for key in LEGACY_GLOBAL_SHARED_VISUAL_KEYS
+        if key.startswith("bar_")
+    ):
+        global_key = suffix
+        mode_key = f"{prefix}{suffix}"
+        if global_key in sanitized:
+            if mode_key not in sanitized:
+                sanitized[mode_key] = deepcopy(sanitized[global_key])
+            sanitized.pop(global_key, None)
+
+    legacy_ghost_map = {
+        "ghosting_enabled": f"{prefix}ghosting_enabled",
+        "ghost_alpha": f"{prefix}ghost_alpha",
+        "ghost_decay": f"{prefix}ghost_decay",
+    }
+    for global_key, mode_key in legacy_ghost_map.items():
+        if global_key in sanitized:
+            if mode_key not in sanitized:
+                sanitized[mode_key] = sanitized[global_key]
+            sanitized.pop(global_key, None)
+
+
 def _strip_deprecated_curated_keys(mode: str, sanitized: Dict[str, Any]) -> None:
     """Curated authored payloads should not keep deprecated compat keys alive."""
     prefix = _mode_tech_prefix(mode)
@@ -337,6 +368,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
         )
     sanitized["mode"] = mode
     _promote_global_technical_settings(mode, sanitized)
+    _promote_global_visual_settings(mode, sanitized)
     _strip_deprecated_curated_keys(mode, sanitized)
     canonical_defaults = _canonical_mode_defaults(mode)
     prefix = _mode_tech_prefix(mode)

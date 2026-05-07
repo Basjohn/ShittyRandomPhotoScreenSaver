@@ -1074,9 +1074,9 @@ class TestCreateTimeRefreshParity:
                 "spectrum_glow_enabled": True,
                 "spectrum_glow_intensity": 1.2,
                 "spectrum_glow_color": [0, 120, 255, 255],
-                "bar_fill_color": [25, 25, 25, 255],
-                "bar_border_color": [20, 140, 255, 255],
-                "bar_border_opacity": 1.0,
+                "spectrum_bar_fill_color": [25, 25, 25, 255],
+                "spectrum_bar_border_color": [20, 140, 255, 255],
+                "spectrum_bar_border_opacity": 1.0,
             },
         }
 
@@ -1094,12 +1094,9 @@ class TestCreateTimeRefreshParity:
         assert vis.model.resolve_bar_count("spectrum") == 35
         assert vis.model.spectrum_glow_enabled is True
         assert vis.model.spectrum_glow_intensity == pytest.approx(1.2)
-        assert vis.bar_colors is not None
-        fill_color, border_color = vis.bar_colors
-        assert (fill_color.red(), fill_color.green(), fill_color.blue(), fill_color.alpha()) == tuple(vis.model.bar_fill_color)
-        expected_border = list(vis.model.bar_border_color)
-        expected_border[3] = int(float(vis.model.bar_border_opacity) * expected_border[3])
-        assert (border_color.red(), border_color.green(), border_color.blue(), border_color.alpha()) == tuple(expected_border)
+        assert vis.model.resolve_bar_fill_color("spectrum") == [25, 25, 25, 255]
+        assert vis.model.resolve_bar_border_color("spectrum") == [20, 140, 255, 255]
+        assert vis.model.resolve_bar_border_opacity("spectrum") == pytest.approx(1.0)
         assert vis.mode_kwargs["spectrum_glow_enabled"] is True
         assert vis.mode_kwargs["spectrum_glow_intensity"] == pytest.approx(1.2)
         assert getattr(mgr, "expected_overlay", None) is None, (
