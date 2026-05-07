@@ -56,7 +56,7 @@ Living map of the current SRPSS codebase.
 | Mode registry | `core/settings/visualizer_mode_registry.py` | Mode ids, labels, key prefixes, slider ownership |
 | Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading, canonical activation payload resolution, and preset apply |
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
-| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application |
+| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; `_replay_engine_config` reads from authoritative config (`_get_mode_technical_config`) instead of widget cache |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask (with border-width inset) to clip GL content to the visible card boundary |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping |
 | Spline Curve runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | DevCurve/Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |

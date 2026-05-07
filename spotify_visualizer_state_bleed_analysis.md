@@ -1,8 +1,71 @@
 # Spotify Visualizer State Bleed Analysis
 
-**Objective**: Verify if cached configuration variables in the widget are properly updated and replayed during mode transitions, or if stale values persist causing state bleed.
+**Objective**: Fix state bleed where mode-specific config values (sensitivity, floor, etc.) from one mode contaminate another mode during transitions.
 
-**Status**: In Progress
+**Status**: Architectural improvement complete, bleed persists (2026-05-07 22:13 UTC+02:00)
+
+---
+
+## Attempt 1: Remove Cached Variables and Replay Mechanism (FAILED)
+
+**Approach:** Remove widget-level cached config variables (`_last_floor_config`, `_last_sensitivity_config`, etc.) and `_replay_engine_config()` to make technical config/presets the single source of truth.
+
+**Result:** **FAILED** - broke mode switching:
+- Long delays during mode switch
+- Blank widget card after switch
+- New mode not displayed correctly
+
+**Root cause:** Removed `_apply_full_runtime_config_for_mode` which applies widget-level runtime settings (density, displacement, heartbeat, vertical_shift) needed for mode display. Without it, overlay reset with OLD mode's settings instead of NEW mode's settings.
+
+**Lesson:** Cannot simply remove config application methods without understanding their full purpose. The three-call pattern exists for a reason - different methods apply different types of config from different sources.
+
+---
+
+## Attempt 2: Repurpose `_replay_engine_config` (IMPLEMENTED - Cleaner Architecture)
+
+**Approach:** Keep all methods, but change `_replay_engine_config` to read from authoritative config (`_get_mode_technical_config`) instead of widget cache.
+
+**Implementation:**
+- `_replay_engine_config` now reads technical config for current mode from settings/presets
+- Applies config using same helper methods as `_apply_technical_config_for_mode`
+- Updates widget instance variables for parity
+- Applies to beat engine, audio worker, and GL overlay
+- No longer relies on stale widget cache
+
+**Result:** Architectural improvement - cleaner, more maintainable. However, **bleed persists**.
+
+**Status:** This is now the canonical architecture regardless of bleed status. The method now correctly reads from authoritative source instead of stale cache, making config application more predictable.
+
+---
+
+## Key Discoveries
+
+1. **Three-call pattern exists for a reason:**
+   - `_apply_full_runtime_config_for_mode`: Widget-level runtime settings (density, displacement, heartbeat, vertical_shift)
+   - `_apply_technical_config_for_mode`: Technical config (sensitivity, floor, audio_block_size, etc.)
+   - `_replay_engine_config`: Engine config synchronization (now reads from authoritative source)
+
+2. **Widget cache variables are not the sole bleed source:**
+   - Even with `_replay_engine_config` reading from authoritative config, bleed still occurs
+   - Bleed source must be elsewhere in the config application chain
+
+3. **Mode switch flow:**
+   - `apply_resolved_activation_payload` → `_apply_technical_config_for_mode` → `_prepare_engine_for_mode_reset` → `_replay_engine_config`
+   - `_replay_engine_config` is called during mode transitions to ensure engine has correct config
+
+---
+
+## Remaining Investigation
+
+Bleed persists despite `_replay_engine_config` reading from authoritative config. Need to investigate:
+- Where else in the config application chain could stale values be introduced?
+- Are there other cached variables or replay mechanisms?
+- Is the bleed in the preset resolution or technical config caching?
+- Timing issues in the mode transition sequence?
+
+---
+
+**Last Updated**: 2026-05-07 22:13 UTC+02:00
 
 ---
 

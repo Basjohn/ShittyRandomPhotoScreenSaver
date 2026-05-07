@@ -4,8 +4,9 @@ Keep this document as the long-term anti-regression memory for the project.
 ## Quick Navigation (Numbered IDs)
 
 ### Active / Unresolved
-1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
-2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
+1. [U-07 — 2026-05-07 — Spotify Visualizer State Bleed: Cached Config Variables vs Technical Config Dual-Source-of-Truth (Awaiting Validation)](#U-07)
+2. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
+3. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recently Resolved
 1. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#U-07)
@@ -290,6 +291,28 @@ Keep this document as the long-term anti-regression memory for the project.
 
 
 ## Section 2 — Unresolved / Active Investigation (Includes Archived Open Threads)
+
+<a id="U-07"></a>
+### [U-07] 2026-05-07 — Spotify Visualizer State Bleed: Cached Config Variables vs Technical Config Dual-Source-of-Truth (Awaiting Validation)
+
+- [ ] COMPLETELY FUCKED
+- [ ] ACTIVE
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed runtime symptom:** Spotify visualizer mode switches may carry over stale technical config values (floor, sensitivity, energy boost, input gain, audio block size) from the previous mode, causing incorrect behavior in the new mode.
+- **Root cause identified:** Widget-level cached config variables (`_last_floor_config`, `_last_sensitivity_config`, `_last_energy_boost`, `_last_input_gain`, `_last_audio_block_size`) created a conflicting dual-source-of-truth architecture with technical config/presets. During mode transitions, `_apply_technical_config_for_mode` was called 3x, while `_replay_engine_config` was called 1x (then overwritten by the final technical config application). This meant the replayed cached values were immediately overwritten, making the cached variables ineffective.
+- **Attempted fix (2026-05-07):** Removed widget-level cached config variables and replay mechanism to make technical config/presets the single source of truth for per-mode settings.
+  - Removed 5 widget-level cached variables from `spotify_visualizer_widget.py`: `_last_floor_config`, `_last_sensitivity_config`, `_last_energy_boost`, `_last_input_gain`, `_last_audio_block_size`
+  - Removed `_replay_engine_config()` method from `spotify_visualizer_widget.py`
+  - Simplified public config methods (`apply_floor_config`, `apply_sensitivity_config`, `_apply_energy_boost`, `_apply_input_gain`, `_apply_audio_block_size`) to remove caching and deduplication checks
+  - Removed redundant `apply_full_runtime_config_for_mode()` call from `mode_transition.py`
+  - Removed `_replay_engine_config()` call from `mode_transition.py`
+  - Updated tests to check engine state instead of widget cached variables
+  - Preserved audio worker's own `_last_floor_config` and `_last_sensitivity_config` (serve different purpose for internal state management)
+- **Why this fix should work:** Technical config values (floor, sensitivity, energy boost, input gain, block size) are per-mode settings that should come from the preset/mode configuration, not from cached global state. Mode choice and preset choice DO persist via settings, but technical config values should be per-mode. The cached variables were vestigial from when technical config was handled globally before normalization with presets/modes.
+- **Validation status:** **AWAITING VALIDATION** - Implementation complete, not yet confirmed successful through runtime testing.
+- **Documentation:** Full investigation retained in `spotify_visualizer_state_bleed_analysis.md`.
 
 <a id="U-06"></a>
 ### [U-06] 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)

@@ -579,50 +579,84 @@ class SpotifyVisualizerWidget(QWidget):
         self._set_startup_phase_attr("reveal_not_before_ts", float(value))
 
     def _replay_engine_config(self, engine: Optional[_SpotifyBeatEngine]) -> None:
-        """Ensure the shared engine reflects the last applied widget config."""
+        """Ensure the shared engine reflects the authoritative config for current mode."""
         if engine is None:
             return
-        try:
-            floor_dyn, floor_value = self._last_floor_config
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            floor_dyn, floor_value = True, 0.12
-        try:
-            sens_rec, sens_value = self._last_sensitivity_config
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            sens_rec, sens_value = True, 1.0
 
-        try:
-            engine.set_floor_config(floor_dyn, floor_value)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay floor config", exc_info=True)
-        try:
-            engine.set_sensitivity_config(sens_rec, sens_value)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay sensitivity config", exc_info=True)
-        try:
-            from widgets.spotify_visualizer.bar_computation import SpectrumShapeConfig
-            engine.set_spectrum_shape_config(SpectrumShapeConfig(
-                lane_strengths_mirrored=dict(self._spectrum_lane_strengths_mirrored),
-                lane_strengths_linear=dict(self._spectrum_lane_strengths_linear),
-                wave_amplitude=self._spectrum_wave_amplitude,
-                profile_floor=self._spectrum_profile_floor,
-            ))
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay spectrum shape config", exc_info=True)
-        try:
-            engine.set_energy_boost(self._last_energy_boost)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay energy boost config", exc_info=True)
-        try:
-            engine.set_input_gain(self._last_input_gain)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay input gain config", exc_info=True)
-        try:
-            engine.set_drop_speed(self._spectrum_drop_speed)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay drop speed config", exc_info=True)
+        # Read authoritative config for current mode from settings/presets
+        config = self._get_mode_technical_config(self._vis_mode)
+        if config is None:
+            logger.debug("[SPOTIFY_VIS] No technical config available for mode=%s, skipping replay", self._vis_mode.name)
+            return
+
+        # Apply ALL authoritative config using same helper methods as _apply_technical_config_for_mode
+        dynamic_floor = bool(config.get("dynamic_floor", True))
+        manual_floor = float(config.get("manual_floor", 0.12))
+        adaptive = bool(config.get("adaptive_sensitivity", True))
+        sensitivity = float(config.get("sensitivity", 1.0))
+        audio_block_size = int(config.get("audio_block_size", 0) or 0)
+        dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
+        energy_boost = self._compute_energy_boost(dynamic_range_enabled)
+        agc_strength = max(0.0, min(1.0, float(config.get("agc_strength", 0.5))))
+        input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
+
+        # Transient bus controls (only those applied to engine/audio worker/overlay)
+        kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
+        transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.5))))
+        transient_clamp = max(0.0, min(3.0, float(config.get("transient_clamp", 1.5))))
+        spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
+        bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
+        bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
+        blob_transient_mix_bass = max(0.0, min(1.0, float(config.get("blob_transient_mix_bass", 0.5))))
+        blob_transient_mix_vocal = max(0.0, min(1.0, float(config.get("blob_transient_mix_vocal", 0.35))))
+        sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
+        osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
+
+        # Update widget instance variables (for parity with _apply_technical_config_for_mode)
+        self._use_raw_energy = False
+        self._kick_lane_gain = kick_lane_gain
+        self._transient_pulse_gain = transient_pulse_gain
+        self._transient_clamp = transient_clamp
+        self._spectrum_lane_transient_mix = spectrum_lane_transient_mix
+        self._bubble_transient_mix_bass = bubble_transient_mix_bass
+        self._bubble_transient_mix_vocal = bubble_transient_mix_vocal
+        self._blob_transient_mix_bass = blob_transient_mix_bass
+        self._blob_transient_mix_vocal = blob_transient_mix_vocal
+        self._sine_wave_transient_width_mix = sine_wave_transient_width_mix
+        self._osc_transient_width_mix = osc_transient_width_mix
+
+        # Apply using same helper methods as _apply_technical_config_for_mode
+        self.apply_floor_config(dynamic_floor, manual_floor)
+        self.apply_sensitivity_config(adaptive, sensitivity)
+        self._apply_audio_block_size(audio_block_size)
+        self._apply_energy_boost(energy_boost)
+        self._apply_agc_strength(agc_strength)
+        self._apply_input_gain(input_gain)
+
+        # Apply to audio worker (for parity with _apply_technical_config_for_mode)
+        if engine is not None:
+            aw = getattr(engine, '_audio_worker', None)
+            if aw is not None:
+                try:
+                    aw._kick_lane_gain = kick_lane_gain
+                    aw._spectrum_lane_transient_mix = spectrum_lane_transient_mix
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to replay transient config to audio worker", exc_info=True)
+
+        # Apply transient controls to GL overlay
+        parent = self.parent()
+        overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
+        if overlay is not None:
+            try:
+                overlay._blob_transient_mix_bass = blob_transient_mix_bass
+                overlay._blob_transient_mix_vocal = blob_transient_mix_vocal
+                overlay._transient_clamp = transient_clamp
+                overlay._sine_wave_transient_width_mix = sine_wave_transient_width_mix
+                overlay._osc_transient_width_mix = osc_transient_width_mix
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to replay transient config to GL overlay", exc_info=True)
+
+        logger.debug("[SPOTIFY_VIS] Replayed authoritative config for mode=%s", self._vis_mode.name)
         try:
             _active_notches = (self._spectrum_notch_positions_mirrored
                                if self._spectrum_mirrored
