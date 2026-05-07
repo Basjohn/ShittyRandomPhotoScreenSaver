@@ -561,6 +561,16 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     # Get pre-smoothed bars from engine (smoothing done on COMPUTE pool)
     smoothed = engine.get_smoothed_bars()
 
+    # Capture engine generation/activation for source tracking
+    try:
+        engine_generation = engine.get_generation_id()
+    except Exception:
+        engine_generation = -1
+    try:
+        engine_activation = engine.get_activation_id()
+    except Exception:
+        engine_activation = -1
+
     # Always drive the bars from audio to avoid Spotify bridge flakiness.
     widget._fallback_logged = False
 
@@ -585,6 +595,11 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
         if new_val > 0.0:
             any_nonzero = True
         display_bars[i] = new_val
+
+    # Update source tracking when bars are written from engine
+    if any_nonzero:
+        widget._display_bars_source_generation = engine_generation
+        widget._display_bars_source_activation = engine_activation
 
     # Force update during decay (when bars are non-zero but Spotify stopped)
     if any_nonzero and not widget._spotify_playing:

@@ -401,6 +401,14 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
         widget._has_pushed_first_frame = False
         widget._last_gpu_geom = None
         widget._last_gpu_fade_sent = -1.0
+        widget._display_bars_source_generation = -1
+        widget._display_bars_source_activation = -1
+        widget._target_bars_source_generation = -1
+        widget._target_bars_source_activation = -1
+        widget._visual_bars_source_generation = -1
+        widget._visual_bars_source_activation = -1
+        widget._per_bar_energy_source_generation = -1
+        widget._per_bar_energy_source_activation = -1
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to clear runtime bar arrays during mode-owned reset", exc_info=True)
 

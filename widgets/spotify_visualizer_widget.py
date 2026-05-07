@@ -60,6 +60,17 @@ class SpotifyVisualizerWidget(QWidget):
         self._target_bars: List[float] = [0.0] * self._bar_count
         self._per_bar_energy: List[float] = [0.0] * self._bar_count
         self._visual_bars: List[float] = [0.0] * self._bar_count
+
+        # Source tracking for bar arrays to prevent stale compute/frame commits
+        self._display_bars_source_generation: int = -1
+        self._display_bars_source_activation: int = -1
+        self._target_bars_source_generation: int = -1
+        self._target_bars_source_activation: int = -1
+        self._visual_bars_source_generation: int = -1
+        self._visual_bars_source_activation: int = -1
+        self._per_bar_energy_source_generation: int = -1
+        self._per_bar_energy_source_activation: int = -1
+
         self._visual_smoothing_tau: float = 0.055
         self._cached_vis_kwargs: Dict[str, Any] = {}
 
@@ -1052,6 +1063,21 @@ class SpotifyVisualizerWidget(QWidget):
             energy_max = max(per_bar_energy) if per_bar_energy else 0.0
             energy_avg = sum(per_bar_energy) / len(per_bar_energy) if per_bar_energy else 0.0
             
+            # Source tracking fields
+            display_source_gen = getattr(self, "_display_bars_source_generation", -1)
+            display_source_act = getattr(self, "_display_bars_source_activation", -1)
+            target_source_gen = getattr(self, "_target_bars_source_generation", -1)
+            target_source_act = getattr(self, "_target_bars_source_activation", -1)
+            visual_source_gen = getattr(self, "_visual_bars_source_generation", -1)
+            visual_source_act = getattr(self, "_visual_bars_source_activation", -1)
+            energy_source_gen = getattr(self, "_per_bar_energy_source_generation", -1)
+            energy_source_act = getattr(self, "_per_bar_energy_source_activation", -1)
+            
+            # Engine generation/activation
+            engine = getattr(self, "_engine", None)
+            engine_generation = getattr(engine, "get_generation_id", lambda: -1)() if engine else -1
+            engine_activation = getattr(engine, "get_activation_id", lambda: -1)() if engine else -1
+            
             # Overlay activation/generation ids
             overlay = getattr(self.parent(), "_spotify_bars_overlay", None) if self.parent() is not None else None
             overlay_activation = getattr(overlay, "_activation_id", None) if overlay else None
@@ -1073,12 +1099,24 @@ class SpotifyVisualizerWidget(QWidget):
                     "display_max=%.3f display_avg=%.3f target_max=%.3f target_avg=%.3f "
                     "visual_max=%.3f visual_avg=%.3f energy_max=%.3f energy_avg=%.3f "
                     "spectrum_glow=%s spectrum_glow_intensity=%.3f spectrum_mirrored=%s "
-                    "spectrum_growth=%.3f shape_hash=%s overlay_activation=%s overlay_generation=%s",
+                    "spectrum_growth=%.3f shape_hash=%s "
+                    "engine_generation=%s engine_activation=%s "
+                    "display_source_generation=%s display_source_activation=%s "
+                    "target_source_generation=%s target_source_activation=%s "
+                    "visual_source_generation=%s visual_source_activation=%s "
+                    "energy_source_generation=%s energy_source_activation=%s "
+                    "overlay_activation=%s overlay_generation=%s",
                     reason, mode_str, preset_kind, preset_index, len(display_bars),
                     display_max, display_avg, target_max, target_avg,
                     visual_max, visual_avg, energy_max, energy_avg,
                     spectrum_glow, spectrum_glow_intensity, spectrum_mirrored,
-                    spectrum_growth, shape_hash, overlay_activation, overlay_generation,
+                    spectrum_growth, shape_hash,
+                    engine_generation, engine_activation,
+                    display_source_gen, display_source_act,
+                    target_source_gen, target_source_act,
+                    visual_source_gen, visual_source_act,
+                    energy_source_gen, energy_source_act,
+                    overlay_activation, overlay_generation,
                 )
             elif mode_str == "devcurve":
                 devcurve_growth = getattr(self, "_devcurve_growth", 1.0)
@@ -1090,11 +1128,21 @@ class SpotifyVisualizerWidget(QWidget):
                     "display_max=%.3f display_avg=%.3f target_max=%.3f target_avg=%.3f "
                     "visual_max=%.3f visual_avg=%.3f energy_max=%.3f energy_avg=%.3f "
                     "devcurve_growth=%.3f devcurve_base_level=%.3f devcurve_smoothness=%.3f "
+                    "engine_generation=%s engine_activation=%s "
+                    "display_source_generation=%s display_source_activation=%s "
+                    "target_source_generation=%s target_source_activation=%s "
+                    "visual_source_generation=%s visual_source_activation=%s "
+                    "energy_source_generation=%s energy_source_activation=%s "
                     "overlay_activation=%s overlay_generation=%s",
                     reason, mode_str, preset_kind, preset_index, len(display_bars),
                     display_max, display_avg, target_max, target_avg,
                     visual_max, visual_avg, energy_max, energy_avg,
                     devcurve_growth, devcurve_base_level, devcurve_smoothness,
+                    engine_generation, engine_activation,
+                    display_source_gen, display_source_act,
+                    target_source_gen, target_source_act,
+                    visual_source_gen, visual_source_act,
+                    energy_source_gen, energy_source_act,
                     overlay_activation, overlay_generation,
                 )
             else:
@@ -1102,10 +1150,20 @@ class SpotifyVisualizerWidget(QWidget):
                     "[SPOTIFY_VIS][RENDER_STATE] reason=%s mode=%s preset=%s:%d bars=%d "
                     "display_max=%.3f display_avg=%.3f target_max=%.3f target_avg=%.3f "
                     "visual_max=%.3f visual_avg=%.3f energy_max=%.3f energy_avg=%.3f "
+                    "engine_generation=%s engine_activation=%s "
+                    "display_source_generation=%s display_source_activation=%s "
+                    "target_source_generation=%s target_source_activation=%s "
+                    "visual_source_generation=%s visual_source_activation=%s "
+                    "energy_source_generation=%s energy_source_activation=%s "
                     "overlay_activation=%s overlay_generation=%s",
                     reason, mode_str, preset_kind, preset_index, len(display_bars),
                     display_max, display_avg, target_max, target_avg,
                     visual_max, visual_avg, energy_max, energy_avg,
+                    engine_generation, engine_activation,
+                    display_source_gen, display_source_act,
+                    target_source_gen, target_source_act,
+                    visual_source_gen, visual_source_act,
+                    energy_source_gen, energy_source_act,
                     overlay_activation, overlay_generation,
                 )
         except Exception:
