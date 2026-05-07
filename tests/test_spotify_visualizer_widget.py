@@ -1868,8 +1868,20 @@ def test_spotify_visualizer_replays_config_on_start(qt_app, qtbot, monkeypatch):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=12)
     qtbot.addWidget(widget)
 
-    widget.set_floor_config(dynamic_enabled=False, manual_floor=0.3)
-    widget.set_sensitivity_config(recommended=False, sensitivity=2.4)
+    # After commit ff691e3, _replay_engine_config reads from authoritative config cache,
+    # not from widget cached state. Update the technical config cache to have expected values.
+    widget._technical_config_cache = {
+        widget._vis_mode.name.lower(): {
+            "dynamic_floor": False,
+            "manual_floor": 0.3,
+            "adaptive_sensitivity": False,
+            "sensitivity": 2.4,
+            "audio_block_size": 0,
+            "dynamic_range_enabled": False,
+            "agc_strength": 0.5,
+            "input_gain": 1.0,
+        }
+    }
 
     # Simulate the engine forgetting the config before start (e.g., after restart).
     fake_engine.last_floor_config = (True, 0.12)
@@ -2897,3 +2909,446 @@ def test_spotify_visualizer_start_requests_media_refresh_when_anchor_cache_missi
     assert fake_engine.playback_states[-1] is False
 
     vis.stop()
+
+
+def test_prepare_engine_for_mode_reset_does_not_call_replay_engine_config():
+    """Verify _replay_engine_config is not called during mode reset."""
+    from widgets.spotify_visualizer.mode_transition import prepare_engine_for_mode_reset
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    class FakeEngine:
+        def cancel_pending_compute_tasks(self):
+            pass
+
+        def reset_smoothing_state(self):
+            pass
+
+        def reset_floor_state(self):
+            pass
+
+        def set_smoothing(self, value):
+            pass
+
+        def set_playback_state(self, value):
+            pass
+
+        def get_generation_id(self):
+            return 1
+
+    class FakeWidget:
+        _engine = FakeEngine()
+        _bar_count = 32
+        _vis_mode = VisualizerMode.SPECTRUM
+        _smoothing = 0.18
+        _spotify_playing = False
+        replay_called = False
+        technical_called = False
+        _mode_teardown_target_generation = -1
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            pass
+
+        def _replay_engine_config(self, engine):
+            self.replay_called = True
+
+        def _apply_technical_config_for_mode(self, mode, reason):
+            self.technical_called = True
+
+        def _track_engine_generation(self, engine):
+            pass
+
+    widget = FakeWidget()
+
+    prepare_engine_for_mode_reset(widget)
+
+    assert widget.technical_called is True
+    assert widget.replay_called is False
+
+
+def test_prepare_engine_for_mode_reset_applies_target_technical_config_only():
+    """Verify mode reset applies only target technical config after reset."""
+    from widgets.spotify_visualizer.mode_transition import prepare_engine_for_mode_reset
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    calls = []
+
+    class FakeEngine:
+        def __init__(self):
+            self.floor = None
+            self.sensitivity = None
+            self.input_gain = None
+            self.block_size = None
+            self.generation = 1
+
+        def cancel_pending_compute_tasks(self):
+            calls.append(("cancel",))
+
+        def reset_smoothing_state(self):
+            calls.append(("reset_smoothing",))
+
+        def reset_floor_state(self):
+            calls.append(("reset_floor",))
+
+        def set_smoothing(self, value):
+            calls.append(("smoothing", value))
+
+        def set_floor_config(self, dynamic, manual):
+            self.floor = (dynamic, manual)
+            calls.append(("floor", dynamic, manual))
+
+        def set_sensitivity_config(self, adaptive, sensitivity):
+            self.sensitivity = (adaptive, sensitivity)
+            calls.append(("sensitivity", adaptive, sensitivity))
+
+        def set_input_gain(self, value):
+            self.input_gain = value
+            calls.append(("input_gain", value))
+
+        def set_audio_block_size(self, value):
+            self.block_size = value
+            calls.append(("block_size", value))
+
+        def set_playback_state(self, value):
+            calls.append(("playback", value))
+
+        def get_generation_id(self):
+            return self.generation
+
+    engine = FakeEngine()
+
+    class FakeWidget:
+        _engine = engine
+        _bar_count = 32
+        _vis_mode = VisualizerMode.BUBBLE
+        _smoothing = 0.18
+        _spotify_playing = False
+        _mode_teardown_target_generation = -1
+
+        def _get_mode_technical_config(self, mode):
+            assert mode == VisualizerMode.BUBBLE
+            return {
+                "dynamic_floor": False,
+                "manual_floor": 0.66,
+                "adaptive_sensitivity": False,
+                "sensitivity": 0.77,
+                "audio_block_size": 1024,
+                "dynamic_range_enabled": False,
+                "agc_strength": 0.25,
+                "input_gain": 1.55,
+            }
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            calls.append(("full_runtime", mode, reason))
+
+        def _apply_technical_config_for_mode(self, mode, reason):
+            cfg = self._get_mode_technical_config(mode)
+            engine.set_floor_config(cfg["dynamic_floor"], cfg["manual_floor"])
+            engine.set_sensitivity_config(cfg["adaptive_sensitivity"], cfg["sensitivity"])
+            engine.set_input_gain(cfg["input_gain"])
+            engine.set_audio_block_size(cfg["audio_block_size"])
+            calls.append(("technical", mode, reason))
+
+        def _track_engine_generation(self, engine):
+            calls.append(("track_generation", engine.get_generation_id()))
+
+    widget = FakeWidget()
+
+    prepare_engine_for_mode_reset(widget)
+
+    assert engine.floor == (False, 0.66)
+    assert engine.sensitivity == (False, 0.77)
+    assert engine.input_gain == 1.55
+    assert engine.block_size == 1024
+    assert ("technical", VisualizerMode.BUBBLE, "mode_prepare_reset") in calls
+
+
+def test_mode_reset_with_distinct_mode_configs_prevents_bleed():
+    """Verify mode switching with distinct configs prevents state bleed."""
+    from widgets.spotify_visualizer.mode_transition import prepare_engine_for_mode_reset
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    class FakeEngine:
+        def __init__(self):
+            self.floor = None
+            self.sensitivity = None
+            self.input_gain = None
+            self.block_size = None
+            self.generation = 1
+
+        def cancel_pending_compute_tasks(self):
+            pass
+
+        def reset_smoothing_state(self):
+            pass
+
+        def reset_floor_state(self):
+            pass
+
+        def set_smoothing(self, value):
+            pass
+
+        def set_floor_config(self, dynamic, manual):
+            self.floor = (dynamic, manual)
+
+        def set_sensitivity_config(self, adaptive, sensitivity):
+            self.sensitivity = (adaptive, sensitivity)
+
+        def set_input_gain(self, value):
+            self.input_gain = value
+
+        def set_audio_block_size(self, value):
+            self.block_size = value
+
+        def set_playback_state(self, value):
+            pass
+
+        def get_generation_id(self):
+            return self.generation
+
+    engine = FakeEngine()
+
+    class FakeWidget:
+        _engine = engine
+        _bar_count = 32
+        _vis_mode = VisualizerMode.SPECTRUM
+        _smoothing = 0.18
+        _spotify_playing = False
+        _mode_teardown_target_generation = -1
+        _settings_model = None
+        _technical_config_cache = {}
+
+        def _get_mode_technical_config(self, mode):
+            mode_key = mode.name.lower()
+            return self._technical_config_cache.get(mode_key)
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            pass
+
+        def _apply_technical_config_for_mode(self, mode, reason):
+            cfg = self._get_mode_technical_config(mode)
+            if cfg is None:
+                return
+            engine.set_floor_config(cfg["dynamic_floor"], cfg["manual_floor"])
+            engine.set_sensitivity_config(cfg["adaptive_sensitivity"], cfg["sensitivity"])
+            engine.set_input_gain(cfg["input_gain"])
+            engine.set_audio_block_size(cfg["audio_block_size"])
+
+        def _track_engine_generation(self, engine):
+            pass
+
+        def _build_technical_cache(self, model):
+            cache = {}
+            for mode_key in ["spectrum", "bubble", "blob", "devcurve"]:
+                cache[mode_key] = {
+                    "dynamic_floor": mode_key == "bubble",
+                    "manual_floor": 0.12 if mode_key == "spectrum" else 0.66 if mode_key == "bubble" else 0.44,
+                    "adaptive_sensitivity": mode_key != "devcurve",
+                    "sensitivity": 1.0 if mode_key == "spectrum" else 0.77 if mode_key == "bubble" else 0.88,
+                    "audio_block_size": 128 if mode_key == "spectrum" else 256 if mode_key == "bubble" else 512,
+                    "input_gain": 1.1,
+                }
+            return cache
+
+    widget = FakeWidget()
+    widget._settings_model = type("Model", (), {})()
+
+    # Test SPECTRUM -> BUBBLE
+    widget._vis_mode = VisualizerMode.BUBBLE
+    prepare_engine_for_mode_reset(widget)
+    assert engine.floor == (True, 0.66)
+    assert engine.sensitivity == (True, 0.77)
+    assert engine.input_gain == 1.1
+    assert engine.block_size == 256
+
+    # Test BUBBLE -> BLOB
+    widget._vis_mode = VisualizerMode.BLOB
+    prepare_engine_for_mode_reset(widget)
+    assert engine.floor == (False, 0.44)
+    assert engine.sensitivity == (True, 0.88)
+    assert engine.input_gain == 1.1
+    assert engine.block_size == 512
+
+
+def test_prepare_engine_for_mode_reset_rebuilds_technical_config_cache():
+    """Verify that mode reset rebuilds the technical config cache from settings model."""
+    from widgets.spotify_visualizer.mode_transition import prepare_engine_for_mode_reset
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    class FakeEngine:
+        def __init__(self):
+            self.floor = None
+            self.sensitivity = None
+            self.input_gain = None
+            self.block_size = None
+            self.generation = 1
+
+        def cancel_pending_compute_tasks(self):
+            pass
+
+        def reset_smoothing_state(self):
+            pass
+
+        def reset_floor_state(self):
+            pass
+
+        def set_smoothing(self, value):
+            pass
+
+        def set_floor_config(self, dynamic, manual):
+            self.floor = (dynamic, manual)
+
+        def set_sensitivity_config(self, adaptive, sensitivity):
+            self.sensitivity = (adaptive, sensitivity)
+
+        def set_input_gain(self, value):
+            self.input_gain = value
+
+        def set_audio_block_size(self, value):
+            self.block_size = value
+
+        def set_playback_state(self, value):
+            pass
+
+        def get_generation_id(self):
+            return self.generation
+
+    engine = FakeEngine()
+
+    class FakeWidget:
+        _engine = engine
+        _bar_count = 32
+        _vis_mode = VisualizerMode.SPECTRUM
+        _smoothing = 0.18
+        _spotify_playing = False
+        _mode_teardown_target_generation = -1
+        _settings_model = None
+        _technical_config_cache = {}
+
+        def _get_mode_technical_config(self, mode):
+            mode_key = mode.name.lower()
+            return self._technical_config_cache.get(mode_key)
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            pass
+
+        def _apply_technical_config_for_mode(self, mode, reason):
+            cfg = self._get_mode_technical_config(mode)
+            if cfg is None:
+                return
+            engine.set_floor_config(cfg["dynamic_floor"], cfg["manual_floor"])
+            engine.set_sensitivity_config(cfg["adaptive_sensitivity"], cfg["sensitivity"])
+            engine.set_input_gain(cfg["input_gain"])
+            engine.set_audio_block_size(cfg["audio_block_size"])
+
+        def _track_engine_generation(self, engine):
+            pass
+
+        def _build_technical_cache(self, model):
+            cache = {}
+            for mode_key in ["spectrum", "bubble", "blob", "devcurve"]:
+                cache[mode_key] = {
+                    "dynamic_floor": False,
+                    "manual_floor": 0.99,
+                    "adaptive_sensitivity": False,
+                    "sensitivity": 0.99,
+                    "audio_block_size": 1024,
+                    "input_gain": 2.0,
+                }
+            return cache
+
+    widget = FakeWidget()
+    widget._settings_model = type("Model", (), {})()
+
+    # Start with empty cache
+    assert widget._technical_config_cache == {}
+
+    # Mode reset should rebuild cache
+    prepare_engine_for_mode_reset(widget)
+
+    # Verify cache was rebuilt
+    assert len(widget._technical_config_cache) == 4
+    assert "spectrum" in widget._technical_config_cache
+    assert "bubble" in widget._technical_config_cache
+    assert "blob" in widget._technical_config_cache
+    assert "devcurve" in widget._technical_config_cache
+
+    # Verify config was applied from rebuilt cache
+    assert engine.floor == (False, 0.99)
+    assert engine.sensitivity == (False, 0.99)
+    assert engine.input_gain == 2.0
+    assert engine.block_size == 1024
+
+
+def test_prepare_engine_for_mode_reset_handles_missing_settings_model():
+    """Verify mode reset handles missing settings model gracefully."""
+    from widgets.spotify_visualizer.mode_transition import prepare_engine_for_mode_reset
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    class FakeEngine:
+        def __init__(self):
+            self.floor = None
+            self.sensitivity = None
+            self.generation = 1
+
+        def cancel_pending_compute_tasks(self):
+            pass
+
+        def reset_smoothing_state(self):
+            pass
+
+        def reset_floor_state(self):
+            pass
+
+        def set_smoothing(self, value):
+            pass
+
+        def set_floor_config(self, dynamic, manual):
+            self.floor = (dynamic, manual)
+
+        def set_sensitivity_config(self, adaptive, sensitivity):
+            self.sensitivity = (adaptive, sensitivity)
+
+        def set_playback_state(self, value):
+            pass
+
+        def get_generation_id(self):
+            return self.generation
+
+    engine = FakeEngine()
+
+    class FakeWidget:
+        _engine = engine
+        _bar_count = 32
+        _vis_mode = VisualizerMode.SPECTRUM
+        _smoothing = 0.18
+        _spotify_playing = False
+        _mode_teardown_target_generation = -1
+        _settings_model = None
+        _technical_config_cache = {}
+
+        def _get_mode_technical_config(self, mode):
+            mode_key = mode.name.lower()
+            return self._technical_config_cache.get(mode_key)
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            pass
+
+        def _apply_technical_config_for_mode(self, mode, reason):
+            cfg = self._get_mode_technical_config(mode)
+            if cfg is None:
+                return
+            engine.set_floor_config(cfg["dynamic_floor"], cfg["manual_floor"])
+            engine.set_sensitivity_config(cfg["adaptive_sensitivity"], cfg["sensitivity"])
+
+        def _track_engine_generation(self, engine):
+            pass
+
+    widget = FakeWidget()
+
+    # No settings model - should not crash
+    prepare_engine_for_mode_reset(widget)
+
+    # Cache remains empty, no config applied
+    assert widget._technical_config_cache == {}
+    assert engine.floor is None
+    assert engine.sensitivity is None

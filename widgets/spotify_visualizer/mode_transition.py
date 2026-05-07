@@ -563,10 +563,44 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
         engine.reset_smoothing_state()
         engine.reset_floor_state()
         engine.set_smoothing(widget._smoothing)
-        widget._replay_engine_config(engine)
+
+        # Ensure technical config cache is populated before applying config
+        settings_model = getattr(widget, "_settings_model", None)
+        if settings_model is not None:
+            build_cache = getattr(widget, "_build_technical_cache", None)
+            if callable(build_cache):
+                try:
+                    widget._technical_config_cache = build_cache(settings_model)
+                    logger.debug("[SPOTIFY_VIS] Rebuilt technical config cache during mode reset, modes=%d", len(widget._technical_config_cache))
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to rebuild technical config cache during mode reset", exc_info=True)
+            else:
+                logger.debug("[SPOTIFY_VIS] Widget has settings_model but no _build_technical_cache method")
+        else:
+            logger.debug("[SPOTIFY_VIS] Widget has no settings_model, cannot rebuild technical config cache")
+
         apply_technical = getattr(widget, "_apply_technical_config_for_mode", None)
         if callable(apply_technical):
             apply_technical(widget._vis_mode, reason="mode_prepare_reset")
+            try:
+                mode_name = getattr(widget._vis_mode, "name", str(widget._vis_mode))
+                tech = getattr(widget, "_get_mode_technical_config", None)
+                if callable(tech):
+                    tech_cfg = tech(widget._vis_mode)
+                    logger.info(
+                        "[SPOTIFY_VIS][MODE_RESET_ASSERT] mode=%s expected_dynamic=%s expected_manual=%.3f "
+                        "expected_sensitivity=%.3f expected_block=%s expected_input_gain=%.3f",
+                        mode_name,
+                        bool(tech_cfg.get("dynamic_floor", True)) if tech_cfg else None,
+                        float(tech_cfg.get("manual_floor", 0.12)) if tech_cfg else -1.0,
+                        float(tech_cfg.get("sensitivity", 1.0)) if tech_cfg else -1.0,
+                        int(tech_cfg.get("audio_block_size", 0) or 0) if tech_cfg else -1,
+                        float(tech_cfg.get("input_gain", 1.0)) if tech_cfg else -1.0,
+                    )
+                else:
+                    logger.warning("[SPOTIFY_VIS][MODE_RESET_ASSERT] mode=%s _get_mode_technical_config not callable", mode_name)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed mode reset config assertion log", exc_info=True)
         should_capture = bool(getattr(widget, "_spotify_playing", False))
         _capture_helper = getattr(widget, "_should_capture_audio_now", None)
         if callable(_capture_helper):
