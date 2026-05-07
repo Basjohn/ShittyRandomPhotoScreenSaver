@@ -38,6 +38,10 @@ def _ensure_fresh_generation_state(widget: Any) -> None:
         widget._pending_engine_generation = -1
     if not hasattr(widget, "_last_engine_generation_seen"):
         widget._last_engine_generation_seen = -1
+    if not hasattr(widget, "_pending_engine_activation_id"):
+        widget._pending_engine_activation_id = -1
+    if not hasattr(widget, "_last_engine_activation_seen"):
+        widget._last_engine_activation_seen = -1
 
 
 def _mode_requires_fresh_waveform(mode_str: str) -> bool:
@@ -517,6 +521,14 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
             latest_gen = engine.get_latest_generation_with_frame()
         except Exception:
             latest_gen = -1
+        try:
+            engine_activation_id = engine.get_activation_id()
+        except Exception:
+            engine_activation_id = -1
+        activation_ready = (
+            widget._pending_engine_activation_id < 0
+            or engine_activation_id == widget._pending_engine_activation_id
+        )
         waveform_ready = True
         if _mode_requires_fresh_waveform(getattr(widget, "_vis_mode_str", "")):
             try:
@@ -524,12 +536,14 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
             except Exception:
                 latest_waveform_gen = -1
             waveform_ready = latest_waveform_gen >= widget._pending_engine_generation
-        if latest_gen >= widget._pending_engine_generation and waveform_ready:
+        if latest_gen >= widget._pending_engine_generation and waveform_ready and activation_ready:
             widget._waiting_for_fresh_engine_frame = False
             widget._last_engine_generation_seen = latest_gen
+            widget._last_engine_activation_seen = engine_activation_id
             logger.debug(
-                "[SPOTIFY_VIS] Engine delivered fresh frame (gen=%d) after reset",
+                "[SPOTIFY_VIS] Engine delivered fresh frame (gen=%d activation=%s) after reset",
                 latest_gen,
+                engine_activation_id,
             )
 
     pending_reasons = list(widget._latency_pending_probe)
@@ -537,21 +551,15 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     probe_reason = ",".join(pending_reasons) if pending_reasons else None
     widget._log_audio_latency_metrics(engine, now_ts, force_reason=probe_reason)
 
+    if widget._waiting_for_fresh_engine_frame:
+        # Do not copy any engine bars into the display array while the reset
+        # generation is unresolved.  Even if a stale compute callback manages
+        # to publish data, it gets no visual authority before the verified
+        # activation/generation handoff.
+        return False, False
+
     # Get pre-smoothed bars from engine (smoothing done on COMPUTE pool)
     smoothed = engine.get_smoothed_bars()
-
-    if widget._waiting_for_fresh_engine_frame:
-        display_bars = widget._display_bars
-        for i in range(widget._bar_count):
-            val = smoothed[i] if i < len(smoothed) else 0.0
-            display_bars[i] = val
-            if val > 0.0:
-                any_nonzero = True
-        if any_nonzero and widget._pending_engine_generation < 0:
-            widget._waiting_for_fresh_engine_frame = False
-        else:
-            # Still waiting — skip downstream
-            return False, False
 
     # Always drive the bars from audio to avoid Spotify bridge flakiness.
     widget._fallback_logged = False

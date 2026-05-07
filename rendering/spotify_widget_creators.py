@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings
+from core.settings.visualizer_presets import resolve_visualizer_activation_payload
 from rendering.widget_setup import parse_color_to_qcolor
 from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 from widgets.media_widget import MediaWidget
@@ -422,7 +423,14 @@ def create_spotify_visualizer_widget(
     media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
     media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
     spotify_vis_settings = widgets_config.get('spotify_visualizer', {}) if isinstance(widgets_config, dict) else {}
-    model = SpotifyVisualizerSettings.from_mapping(spotify_vis_settings if isinstance(spotify_vis_settings, Mapping) else {})
+    activation_payload = resolve_visualizer_activation_payload(
+        spotify_vis_settings if isinstance(spotify_vis_settings, Mapping) else {}
+    )
+    model = SpotifyVisualizerSettings.from_mapping(
+        activation_payload.resolved_config,
+        apply_preset_overlay=False,
+        resolve_preset_indices=False,
+    )
     spotify_vis_enabled = SettingsManager.to_bool(model.enabled, False)
 
     media_monitor_sel = media_model.monitor
@@ -442,7 +450,12 @@ def create_spotify_visualizer_widget(
             bar_count = int(model.bar_count)
         vis = SpotifyVisualizerWidget(mgr._parent, bar_count=bar_count)
 
-        mgr._log_spotify_vis_config("create", spotify_vis_settings)
+        mgr._log_spotify_vis_config(
+            "create",
+            activation_payload.resolved_config,
+            model=model,
+            activation_payload=activation_payload,
+        )
         if is_perf_metrics_enabled():
             logger.info(
                 "[SPOTIFY_VIS] Created visualizer widget (screen=%s, bar_count=%s, monitor=%s)",
@@ -450,13 +463,6 @@ def create_spotify_visualizer_widget(
                 bar_count,
                 media_monitor_sel,
             )
-
-        # Cache full settings model for per-mode technical controls
-        if hasattr(vis, 'set_settings_model'):
-            try:
-                vis.set_settings_model(model)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         # ThreadManager for animation tick scheduling
         if thread_manager is not None and hasattr(vis, 'set_thread_manager'):
@@ -542,10 +548,26 @@ def create_spotify_visualizer_widget(
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         # Visualization mode + per-mode settings
-        try:
-            apply_spotify_vis_model_config(vis, model)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        if hasattr(vis, "apply_resolved_activation_payload"):
+            try:
+                vis.apply_resolved_activation_payload(
+                    model,
+                    activation_payload,
+                    reason="startup_create",
+                    force_runtime_reset=False,
+                )
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        else:
+            if hasattr(vis, 'set_settings_model'):
+                try:
+                    vis.set_settings_model(model)
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            try:
+                apply_spotify_vis_model_config(vis, model)
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         # Shadow config
         try:

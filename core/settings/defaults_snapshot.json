@@ -492,8 +492,6 @@
             "text_opacity": 0.33
         },
         "spotify_visualizer": {
-            "adaptive_sensitivity": true,
-            "agc_strength": 0.5,
             "bar_border_color": [
                 255,
                 255,
@@ -501,7 +499,6 @@
                 255
             ],
             "bar_border_opacity": 1.0,
-            "bar_count": 21,
             "bar_fill_color": [
                 255,
                 255,
@@ -709,7 +706,7 @@
             "devcurve_adaptive_sensitivity": true,
             "devcurve_agc_strength": 0.5,
             "devcurve_audio_block_size": 0,
-            "devcurve_bar_count": 21,
+            "devcurve_bar_count": 32,
             "devcurve_base_level": 0.58,
             "devcurve_dynamic_floor": true,
             "devcurve_dynamic_range_enabled": false,
@@ -882,14 +879,10 @@
             "devcurve_smoothness": 0.55,
             "devcurve_transient_clamp": 1.5,
             "devcurve_transient_pulse_gain": 1.0,
-            "dynamic_floor": true,
-            "dynamic_range_enabled": false,
             "enabled": true,
             "ghost_alpha": 0.4,
             "ghost_decay": 0.35,
             "ghosting_enabled": true,
-            "input_gain": 1.0,
-            "manual_floor": 0.12,
             "mode": "spectrum",
             "monitor": "ALL",
             "osc_ghost_intensity": 0.4,
@@ -1005,7 +998,6 @@
             "preset_spectrum": 0,
             "rainbow_enabled": true,
             "rainbow_speed": 0.3,
-            "sensitivity": 0.4,
             "sine_card_adaptation": 0.3,
             "sine_crawl_amount": 0.4,
             "sine_density": 1.0,
@@ -1127,7 +1119,7 @@
             "sine_wave_manual_floor": 0.12,
             "sine_wave_rainbow_enabled": false,
             "sine_wave_rainbow_speed": 0.5,
-            "sine_wave_sensitivity": 2.75,
+            "sine_wave_sensitivity": 0.4,
             "sine_wave_transient_clamp": 1.5,
             "sine_wave_transient_pulse_gain": 1.0,
             "sine_wave_transient_width_mix": 0.4,

@@ -1,10 +1,9 @@
 """Shared visualizer settings contract helpers.
 
-This module centralizes the baseline/per-mode fallback rules that were being
-duplicated inside ``SpotifyVisualizerSettings.from_settings()`` and
-``SpotifyVisualizerSettings.from_mapping()``. The goal is to keep sparse
-settings reconstruction, SST-shaped mappings, and future per-mode key additions
-on one shared resolution path.
+This module centralizes visualizer technical-key normalization so runtime
+settings, SST-shaped mappings, and future per-mode key additions all converge
+on one resolution path. Shared/global technical keys are legacy migration
+inputs only; canonical runtime and persisted payloads are mode-owned.
 """
 from __future__ import annotations
 
@@ -22,9 +21,15 @@ _BASELINE_DEFAULTS: dict[str, Any] = {
     "dynamic_range_enabled": False,
     "agc_strength": 0.5,
     "input_gain": 1.0,
+    "kick_lane_gain": 1.0,
+    "transient_pulse_gain": 1.0,
+    "transient_clamp": 1.5,
+    "audio_block_size": 0,
 }
 
-_PER_MODE_BASELINE_KEYS: tuple[tuple[str, Callable[[Any], Any]], ...] = (
+LEGACY_GLOBAL_TECHNICAL_KEYS: tuple[str, ...] = tuple(_BASELINE_DEFAULTS.keys())
+
+PER_MODE_BASELINE_KEYS: tuple[tuple[str, Callable[[Any], Any]], ...] = (
     ("dynamic_floor", bool),
     ("manual_floor", float),
     ("dynamic_range_enabled", bool),
@@ -39,7 +44,7 @@ _PER_MODE_BASELINE_KEYS: tuple[tuple[str, Callable[[Any], Any]], ...] = (
     ("bar_count", int),
 )
 
-_SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Any, Callable[[Any], Any]], ...] = (
+SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Any, Callable[[Any], Any]], ...] = (
     ("spectrum", "lane_transient_mix", "spectrum_lane_transient_mix", 0.65, float),
     ("bubble", "transient_mix_bass", "bubble_transient_mix_bass", 0.75, float),
     ("bubble", "transient_mix_vocal", "bubble_transient_mix_vocal", 0.25, float),
@@ -131,7 +136,7 @@ def resolve_spectrum_unique_colors(read_value: Callable[[str, Any], Any]) -> boo
 
 
 def resolve_visualizer_baselines(read_value: Callable[[str, Any], Any]) -> dict[str, Any]:
-    """Resolve the shared legacy baseline values for visualizer settings."""
+    """Resolve legacy shared technical values for visualizer migration only."""
     return {
         "bar_count": _coerce_int(read_value("bar_count", _BASELINE_DEFAULTS["bar_count"]), _BASELINE_DEFAULTS["bar_count"]),
         "adaptive_sensitivity": _coerce_bool(
@@ -145,6 +150,19 @@ def resolve_visualizer_baselines(read_value: Callable[[str, Any], Any]) -> dict[
         ),
         "agc_strength": _coerce_float(read_value("agc_strength", _BASELINE_DEFAULTS["agc_strength"]), _BASELINE_DEFAULTS["agc_strength"]),
         "input_gain": _coerce_float(read_value("input_gain", _BASELINE_DEFAULTS["input_gain"]), _BASELINE_DEFAULTS["input_gain"]),
+        "kick_lane_gain": _coerce_float(read_value("kick_lane_gain", _BASELINE_DEFAULTS["kick_lane_gain"]), _BASELINE_DEFAULTS["kick_lane_gain"]),
+        "transient_pulse_gain": _coerce_float(
+            read_value("transient_pulse_gain", _BASELINE_DEFAULTS["transient_pulse_gain"]),
+            _BASELINE_DEFAULTS["transient_pulse_gain"],
+        ),
+        "transient_clamp": _coerce_float(
+            read_value("transient_clamp", _BASELINE_DEFAULTS["transient_clamp"]),
+            _BASELINE_DEFAULTS["transient_clamp"],
+        ),
+        "audio_block_size": _coerce_int(
+            read_value("audio_block_size", _BASELINE_DEFAULTS["audio_block_size"]),
+            _BASELINE_DEFAULTS["audio_block_size"],
+        ),
     }
 
 
@@ -152,19 +170,11 @@ def build_visualizer_mode_kwargs(
     read_per_mode_value: Callable[[str, str, Any], Any],
     baselines: Mapping[str, Any],
 ) -> Dict[str, Any]:
-    """Build the per-mode technical kwarg mapping from a shared resolver."""
+    """Build per-mode technical kwargs, using legacy shared values only as sparse migration fallback."""
     kwargs: Dict[str, Any] = {}
     for mode in VISUALIZER_MODE_IDS:
-        for key, coerce in _PER_MODE_BASELINE_KEYS:
+        for key, coerce in PER_MODE_BASELINE_KEYS:
             fallback = baselines.get(key, _BASELINE_DEFAULTS.get(key))
-            if key == "kick_lane_gain":
-                fallback = 1.0
-            elif key == "transient_pulse_gain":
-                fallback = 1.0
-            elif key == "transient_clamp":
-                fallback = 1.5
-            elif key == "audio_block_size":
-                fallback = 0
             raw = read_per_mode_value(mode, key, fallback)
             if coerce is bool:
                 kwargs[f"{mode}_{key}"] = _coerce_bool(raw)
@@ -175,7 +185,7 @@ def build_visualizer_mode_kwargs(
             else:
                 kwargs[f"{mode}_{key}"] = coerce(raw)
 
-    for mode, key, output_key, fallback, coerce in _SPECIAL_PER_MODE_KEYS:
+    for mode, key, output_key, fallback, coerce in SPECIAL_PER_MODE_KEYS:
         raw = read_per_mode_value(mode, key, fallback)
         if coerce is bool:
             kwargs[output_key] = _coerce_bool(raw)
@@ -186,6 +196,50 @@ def build_visualizer_mode_kwargs(
         else:
             kwargs[output_key] = coerce(raw)
     return kwargs
+
+
+def migrate_legacy_global_technical_keys(
+    data: Mapping[str, Any] | None,
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Promote retired global technical keys into missing per-mode keys once.
+
+    This helper is for normalization/repair/import flows only. Live runtime
+    resolution must not read the legacy global keys after normalization.
+    """
+    if not isinstance(data, Mapping):
+        return {}
+
+    migrated = dict(data)
+    scoped_prefix = f"{prefix}."
+    shared_values: dict[str, Any] = {}
+
+    for key in LEGACY_GLOBAL_TECHNICAL_KEYS:
+        if key in migrated:
+            shared_values[key] = migrated[key]
+        dotted_key = f"{scoped_prefix}{key}"
+        if dotted_key in migrated and key not in shared_values:
+            shared_values[key] = migrated[dotted_key]
+
+    if not shared_values:
+        return migrated
+
+    for mode in VISUALIZER_MODE_IDS:
+        for key, _coerce in PER_MODE_BASELINE_KEYS:
+            if key not in shared_values:
+                continue
+            plain_mode_key = f"{mode}_{key}"
+            dotted_mode_key = f"{scoped_prefix}{plain_mode_key}"
+            if plain_mode_key in migrated or dotted_mode_key in migrated:
+                continue
+            migrated[plain_mode_key] = shared_values[key]
+
+    for key in LEGACY_GLOBAL_TECHNICAL_KEYS:
+        migrated.pop(key, None)
+        migrated.pop(f"{scoped_prefix}{key}", None)
+
+    return migrated
 
 
 def resolve_visualizer_active_mode_rainbow_state(

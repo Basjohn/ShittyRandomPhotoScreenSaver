@@ -49,6 +49,8 @@ Deferred Gmail targets:
 ### Visualizer
 Current status:
 - Spotify visualizer card GL escape under painted-card shadows is fixed via **rounded-rect stencil mask** in `SpotifyBarsGLOverlay.paintGL()`. Mask shader draws the visible card shape (including rounded corners) into the stencil buffer; visualizer only renders where stencil == 1. No content scale/behavior changes. Needs runtime validation across Spectrum, Sine, Blob, Bubble, DevCurve, Oscilloscope.
+- Active visualizer settings work is redesigning technical ownership so runtime/save/load/preset paths all use per-mode technical keys only. Shared/global technical keys remain legacy migration inputs for normalization/repair, not live runtime state.
+- Canonical visualizer activation now routes through `resolve_visualizer_activation_payload(...)` so startup create, settings refresh, and runtime switches can share one resolved mode/preset payload instead of rebuilding technical state through parallel paths.
 
 Guardrails:
 - Do not touch visualizer timing/mitigation paths as a side effect of widget performance work.
@@ -58,6 +60,8 @@ Guardrails:
 Near-term targets:
 - [DONE] Stencil mask validated: `test_stencil_mask_alignment.py` passes (zero bleed, correct corner rounding, zero-radius rectangle parity).
 - [DONE 2026-05-04] Removed dead `_render_with_qpainter` fallback from `SpotifyBarsGLOverlay`. GL is the only active rendering path.
+- Align all visualizer settings/model/tests/tooling/docs with canonical per-mode technical ownership; remove active-mode save paths that rewrite shared technical keys and keep diagnostics mode-resolved.
+- Keep live activation diagnostics comparing resolved preset identity with actual worker/widget-applied technical state; do not trust raw settings logs alone for bleed closure.
 - Remove invalid widget painting outside `paintEvent` if it reappears. Recent logs showed `QWidget::paintEngine: Should no longer be called` / `QPainter::begin: Paint device returned engine == 0`, caused by painting a widget from `resizeEvent`; this class of fix should stay paint-event-only.
 - Preset repair/reindex round-trip checks after visualizer schema changes.
 - Assess `card_height.py` and whether a centralized sizing contract can replace scattered multipliers without bleed or visual regressions.

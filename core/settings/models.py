@@ -38,9 +38,10 @@ from core.settings.visualizer_preset_indices import (
     resolve_preset_index_from_mapping,
 )
 from core.settings.visualizer_settings_contract import (
-    build_visualizer_mode_kwargs,
+    migrate_legacy_global_technical_keys,
+    PER_MODE_BASELINE_KEYS,
+    SPECIAL_PER_MODE_KEYS,
     resolve_visualizer_active_mode_rainbow_state,
-    resolve_visualizer_baselines,
     resolve_spectrum_render_mode,
     resolve_spectrum_unique_colors,
 )
@@ -439,6 +440,84 @@ PER_MODE_TECHNICAL_MODES: Tuple[str, ...] = (
     "oscilloscope",
     "devcurve",
 )
+
+_ACTIVE_MODE_TECHNICAL_KEYS: Tuple[str, ...] = tuple(
+    key for key, _coerce in PER_MODE_BASELINE_KEYS
+)
+
+
+def _coerce_live_visualizer_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    if value is None:
+        return default
+    return bool(value)
+
+
+def _coerce_live_visualizer_int(value: Any, default: int) -> int:
+    try:
+        if isinstance(value, bool):
+            return int(value)
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _coerce_live_visualizer_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _build_live_visualizer_mode_kwargs(
+    read_per_mode_value,
+    default_model: "SpotifyVisualizerSettings",
+) -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = {}
+
+    for mode in PER_MODE_TECHNICAL_MODES:
+        for key, coerce in PER_MODE_BASELINE_KEYS:
+            fallback = getattr(default_model, f"{mode}_{key}")
+            raw = read_per_mode_value(mode, key, fallback)
+            if coerce is bool:
+                kwargs[f"{mode}_{key}"] = _coerce_live_visualizer_bool(raw, bool(fallback))
+            elif coerce is int:
+                kwargs[f"{mode}_{key}"] = _coerce_live_visualizer_int(raw, int(fallback))
+            else:
+                kwargs[f"{mode}_{key}"] = _coerce_live_visualizer_float(raw, float(fallback))
+
+    for mode, key, output_key, _fallback_unused, coerce in SPECIAL_PER_MODE_KEYS:
+        fallback = getattr(default_model, output_key)
+        raw = read_per_mode_value(mode, key, fallback)
+        if coerce is bool:
+            kwargs[output_key] = _coerce_live_visualizer_bool(raw, bool(fallback))
+        elif coerce is int:
+            kwargs[output_key] = _coerce_live_visualizer_int(raw, int(fallback))
+        else:
+            kwargs[output_key] = _coerce_live_visualizer_float(raw, float(fallback))
+
+    return kwargs
+
+
+def _resolve_active_mode_technical_state(
+    mode_key: str,
+    per_mode_kwargs: Mapping[str, Any],
+) -> Dict[str, Any]:
+    normalized_mode = str(mode_key).lower()
+    if normalized_mode not in PER_MODE_TECHNICAL_MODES:
+        normalized_mode = PER_MODE_TECHNICAL_MODES[0]
+
+    resolved: Dict[str, Any] = {}
+    for key in _ACTIVE_MODE_TECHNICAL_KEYS:
+        resolved[key] = per_mode_kwargs[f"{normalized_mode}_{key}"]
+    return resolved
 
 
 @dataclass
@@ -947,9 +1026,7 @@ class SpotifyVisualizerSettings:
             bubble_gradient_semantics_version = int(get(f"{prefix}.bubble_gradient_semantics_version", 0))
         except (TypeError, ValueError):
             bubble_gradient_semantics_version = 0
-        _baselines = resolve_visualizer_baselines(
-            lambda key, default: get(f"{prefix}.{key}", default)
-        )
+        _defaults_model = cls()
 
         sentinel = object()
 
@@ -960,9 +1037,13 @@ class SpotifyVisualizerSettings:
                 return fallback
             return raw
 
-        _mode_kwargs = build_visualizer_mode_kwargs(_mode_value, _baselines)
+        _mode_kwargs = _build_live_visualizer_mode_kwargs(_mode_value, _defaults_model)
         _preset_kwargs = resolve_all_preset_indices_from_getter(get, prefix=prefix)
-        _active_mode = str(get(f"{prefix}.mode", "bubble"))
+        _active_mode = coerce_visualizer_mode_id(str(get(f"{prefix}.mode", "bubble")))
+        _active_technical = _resolve_active_mode_technical_state(
+            _active_mode,
+            _mode_kwargs,
+        )
         _rainbow_kwargs = resolve_visualizer_active_mode_rainbow_state(
             lambda key, default: _mode_value(
                 _active_mode,
@@ -974,21 +1055,24 @@ class SpotifyVisualizerSettings:
         return cls(
             enabled=get(f"{prefix}.enabled", False),
             monitor=get(f"{prefix}.monitor", "ALL"),
-            bar_count=_baselines["bar_count"],
+            bar_count=int(_active_technical["bar_count"]),
             ghosting_enabled=get(f"{prefix}.ghosting_enabled", True),
             ghost_alpha=float(get(f"{prefix}.ghost_alpha", 0.4)),
             ghost_decay=float(get(f"{prefix}.ghost_decay", 0.35)),
-            adaptive_sensitivity=_baselines["adaptive_sensitivity"],
-            sensitivity=_baselines["sensitivity"],
-            dynamic_floor=_baselines["dynamic_floor"],
-            manual_floor=_baselines["manual_floor"],
-            dynamic_range_enabled=_baselines["dynamic_range_enabled"],
-            agc_strength=_baselines["agc_strength"],
-            input_gain=_baselines["input_gain"],
+            adaptive_sensitivity=bool(_active_technical["adaptive_sensitivity"]),
+            sensitivity=float(_active_technical["sensitivity"]),
+            dynamic_floor=bool(_active_technical["dynamic_floor"]),
+            manual_floor=float(_active_technical["manual_floor"]),
+            dynamic_range_enabled=bool(_active_technical["dynamic_range_enabled"]),
+            agc_strength=float(_active_technical["agc_strength"]),
+            input_gain=float(_active_technical["input_gain"]),
+            kick_lane_gain=float(_active_technical["kick_lane_gain"]),
+            transient_pulse_gain=float(_active_technical["transient_pulse_gain"]),
+            transient_clamp=float(_active_technical["transient_clamp"]),
             bar_fill_color=get(f"{prefix}.bar_fill_color", [0, 255, 128, 230]),
             bar_border_color=get(f"{prefix}.bar_border_color", [255, 255, 255, 230]),
             bar_border_opacity=float(get(f"{prefix}.bar_border_opacity", 0.85)),
-            mode=coerce_visualizer_mode_id(str(get(f"{prefix}.mode", "bubble"))),
+            mode=_active_mode,
             osc_glow_enabled=get(f"{prefix}.osc_glow_enabled", True),
             osc_glow_intensity=float(get(f"{prefix}.osc_glow_intensity", 0.5)),
             osc_glow_reactivity=float(get(f"{prefix}.osc_glow_reactivity", get(f"{prefix}.osc_glow_size", 1.0))),
@@ -1308,7 +1392,7 @@ class SpotifyVisualizerSettings:
         # For non-Custom presets with a non-empty settings dict, the preset
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
-        _raw = dict(data)
+        _raw = migrate_legacy_global_technical_keys(dict(data), prefix=prefix)
         _mode = coerce_visualizer_mode_id(
             _raw.get("mode", _raw.get(f"{prefix}.mode", "bubble"))
         )
@@ -1341,7 +1425,9 @@ class SpotifyVisualizerSettings:
         def _get_per_mode_value(mode: str, base_key: str, default: Any) -> Any:
             sentinel = object()
             seen: set[str] = set()
-            for candidate in [f"{token}{base_key}" for token in get_setting_prefixes(mode)] + [f"{mode}_{base_key}"]:
+            candidates = [f"{mode}_{base_key}"]
+            candidates.extend(f"{token}{base_key}" for token in get_setting_prefixes(mode))
+            for candidate in candidates:
                 if candidate in seen:
                     continue
                 seen.add(candidate)
@@ -1350,8 +1436,8 @@ class SpotifyVisualizerSettings:
                     return value
             return default
 
-        _baselines = resolve_visualizer_baselines(_get)
-        _mode_kwargs = build_visualizer_mode_kwargs(_get_per_mode_value, _baselines)
+        _defaults_model = cls()
+        _mode_kwargs = _build_live_visualizer_mode_kwargs(_get_per_mode_value, _defaults_model)
         if resolve_preset_indices:
             _preset_kwargs = resolve_all_preset_indices_from_mapping(_raw, prefix=prefix)
         else:
@@ -1367,6 +1453,10 @@ class SpotifyVisualizerSettings:
                 )
                 for descriptor in iter_visualizer_mode_descriptors()
             }
+        _active_technical = _resolve_active_mode_technical_state(
+            _mode,
+            _mode_kwargs,
+        )
         _rainbow_kwargs = resolve_visualizer_active_mode_rainbow_state(
             lambda key, default: _get_mode_value(key, default)
         )
@@ -1375,17 +1465,20 @@ class SpotifyVisualizerSettings:
             enabled=_get("enabled", False),
             visualizers_enabled=_get("visualizers_enabled", True),
             monitor=_get("monitor", "ALL"),
-            bar_count=_baselines["bar_count"],
+            bar_count=int(_active_technical["bar_count"]),
             ghosting_enabled=_get("ghosting_enabled", True),
             ghost_alpha=float(_get("ghost_alpha", 0.4)),
             ghost_decay=float(_get("ghost_decay", 0.35)),
-            adaptive_sensitivity=_baselines["adaptive_sensitivity"],
-            sensitivity=_baselines["sensitivity"],
-            dynamic_floor=_baselines["dynamic_floor"],
-            manual_floor=_baselines["manual_floor"],
-            dynamic_range_enabled=_baselines["dynamic_range_enabled"],
-            agc_strength=_baselines["agc_strength"],
-            input_gain=_baselines["input_gain"],
+            adaptive_sensitivity=bool(_active_technical["adaptive_sensitivity"]),
+            sensitivity=float(_active_technical["sensitivity"]),
+            dynamic_floor=bool(_active_technical["dynamic_floor"]),
+            manual_floor=float(_active_technical["manual_floor"]),
+            dynamic_range_enabled=bool(_active_technical["dynamic_range_enabled"]),
+            agc_strength=float(_active_technical["agc_strength"]),
+            input_gain=float(_active_technical["input_gain"]),
+            kick_lane_gain=float(_active_technical["kick_lane_gain"]),
+            transient_pulse_gain=float(_active_technical["transient_pulse_gain"]),
+            transient_clamp=float(_active_technical["transient_clamp"]),
             bar_fill_color=_get("bar_fill_color", [0, 255, 128, 230]),
             bar_border_color=_get("bar_border_color", [255, 255, 255, 230]),
             bar_border_opacity=float(_get("bar_border_opacity", 0.85)),
@@ -1682,17 +1775,9 @@ class SpotifyVisualizerSettings:
             f"{prefix}.enabled": self.enabled,
             f"{prefix}.visualizers_enabled": self.visualizers_enabled,
             f"{prefix}.monitor": self.monitor,
-            f"{prefix}.bar_count": int(self.bar_count),
             f"{prefix}.ghosting_enabled": self.ghosting_enabled,
             f"{prefix}.ghost_alpha": float(self.ghost_alpha),
             f"{prefix}.ghost_decay": float(self.ghost_decay),
-            f"{prefix}.adaptive_sensitivity": self.adaptive_sensitivity,
-            f"{prefix}.sensitivity": float(self.sensitivity),
-            f"{prefix}.dynamic_floor": self.dynamic_floor,
-            f"{prefix}.manual_floor": float(self.manual_floor),
-            f"{prefix}.dynamic_range_enabled": self.dynamic_range_enabled,
-            f"{prefix}.agc_strength": float(self.agc_strength),
-            f"{prefix}.input_gain": float(self.input_gain),
             f"{prefix}.bar_fill_color": list(self.bar_fill_color),
             f"{prefix}.bar_border_color": list(self.bar_border_color),
             f"{prefix}.bar_border_opacity": float(self.bar_border_opacity),

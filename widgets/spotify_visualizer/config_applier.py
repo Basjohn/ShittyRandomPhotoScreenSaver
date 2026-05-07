@@ -906,6 +906,23 @@ def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_st
     if engine is None:
         return
 
+    try:
+        extra['activation_id'] = engine.get_activation_id()
+    except Exception:
+        extra['activation_id'] = None
+    try:
+        extra['engine_generation'] = engine.get_generation_id()
+    except Exception:
+        extra['engine_generation'] = None
+    try:
+        extra['latest_frame_generation'] = engine.get_latest_generation_with_frame()
+    except Exception:
+        extra['latest_frame_generation'] = None
+    try:
+        extra['latest_waveform_generation'] = engine.get_latest_generation_with_waveform()
+    except Exception:
+        extra['latest_waveform_generation'] = None
+
     extra['waveform'] = engine.get_waveform()
     try:
         extra['waveform_count'] = engine.get_waveform_count()

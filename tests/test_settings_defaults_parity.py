@@ -157,7 +157,6 @@ class TestDefaultsArtifactParity:
     @pytest.mark.parametrize(
         "key",
         [
-            "manual_floor",
             "blob_manual_floor",
             "bubble_manual_floor",
             "oscilloscope_manual_floor",
@@ -168,6 +167,7 @@ class TestDefaultsArtifactParity:
     def test_visualizer_snapshot_manual_floors_stay_on_current_contract(self, key: str):
         snapshot_visualizer = _build_snapshot_with_default_gates()["widgets"]["spotify_visualizer"]
         assert snapshot_visualizer[key] == pytest.approx(0.12)
+        assert "manual_floor" not in snapshot_visualizer
 
     def test_visualizer_preset_repair_uses_dynamic_mode_prefixes(self):
         defaults = get_default_settings()["widgets"]["spotify_visualizer"]

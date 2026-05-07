@@ -252,22 +252,22 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         mid_energy = max(0.0, (raw_mid - noise_floor * 0.4) * expansion)
         treble_energy = max(0.0, (raw_treble - noise_floor * 0.2) * expansion)
 
-        # Bubble/Blob control-lane normalization.
+        # Shared control-lane normalization.
         #
         # Hard-clamping hot pre-AGC energy to 1.0 flattens deltas in loud
-        # passages (notably chorus starts) and can make bubble transients look
+        # passages (notably chorus starts) and can make transients look
         # dead despite strong incoming audio. Keep AGC source semantics intact,
         # but provide a dedicated dynamically-normalized control lane for modes
         # that need sustained variance under pressure.
-        prev_control_norm = max(0.25, float(getattr(worker, "_bubble_control_norm", 1.0) or 1.0))
+        prev_control_norm = max(0.25, float(getattr(worker, "_pre_agc_control_norm", 1.0) or 1.0))
         control_target = max(0.25, min(3.5, max(bass_energy, mid_energy, treble_energy)))
         control_alpha = 0.12 if control_target >= prev_control_norm else 0.30
         control_norm = prev_control_norm + (control_target - prev_control_norm) * control_alpha
         control_norm = max(0.25, min(3.5, control_norm))
-        worker._bubble_control_norm = control_norm
-        worker._bubble_pre_agc_bass = min(1.0, max(0.0, bass_energy / control_norm))
-        worker._bubble_pre_agc_mid = min(1.0, max(0.0, mid_energy / control_norm))
-        worker._bubble_pre_agc_treble = min(1.0, max(0.0, treble_energy / control_norm))
+        worker._pre_agc_control_norm = control_norm
+        worker._pre_agc_control_bass = min(1.0, max(0.0, bass_energy / control_norm))
+        worker._pre_agc_control_mid = min(1.0, max(0.0, mid_energy / control_norm))
+        worker._pre_agc_control_treble = min(1.0, max(0.0, treble_energy / control_norm))
 
         # Pre-AGC energy: post-noise-floor but pre-normalization.
         # Modes that need true dynamic range (bubbles, blob) read these

@@ -348,6 +348,7 @@ class TestSettingsManagerManualFloorClamp:
             "widgets",
             {
                 "spotify_visualizer": {
+                    "mode": "spectrum",
                     "manual_floor": 2.1,
                     "spectrum_manual_floor": 0.5,
                 }
@@ -357,7 +358,9 @@ class TestSettingsManagerManualFloorClamp:
         repairs = manager.validate_and_repair()
 
         widgets = manager.get("widgets")
-        assert widgets["spotify_visualizer"]["manual_floor"] == pytest.approx(1.0)
+        assert "manual_floor" not in widgets["spotify_visualizer"]
+        assert widgets["spotify_visualizer"]["bubble_manual_floor"] == pytest.approx(1.0)
+        assert widgets["spotify_visualizer"]["spectrum_manual_floor"] == pytest.approx(0.5)
         assert "widgets.spotify_visualizer.manual_floor" in repairs
 
     def test_validate_and_repair_clamps_per_mode_manual_floors(self, tmp_path: Path) -> None:

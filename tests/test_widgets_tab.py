@@ -559,6 +559,21 @@ def test_spectrum_custom_roundtrip_preserves_broad_state(qt_app, settings_manage
         assert restored.get("spectrum_agc_strength") == pytest.approx(0.61)
         assert restored.get("spectrum_kick_lane_gain") == pytest.approx(1.55)
         assert restored.get("spectrum_lane_transient_mix") == pytest.approx(0.88)
+        for retired_global in (
+            "bar_count",
+            "adaptive_sensitivity",
+            "sensitivity",
+            "dynamic_floor",
+            "manual_floor",
+            "dynamic_range_enabled",
+            "agc_strength",
+            "input_gain",
+            "kick_lane_gain",
+            "transient_pulse_gain",
+            "transient_clamp",
+            "audio_block_size",
+        ):
+            assert retired_global not in restored
     finally:
         tab.deleteLater()
 

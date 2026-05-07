@@ -152,20 +152,22 @@ class TestInputGainModelRoundTrip:
 
     def test_to_dict_contains_input_gain(self):
         from core.settings.models import SpotifyVisualizerSettings
-        model = SpotifyVisualizerSettings(input_gain=0.75, spectrum_input_gain=0.5)
+        model = SpotifyVisualizerSettings(mode="spectrum", input_gain=0.75, spectrum_input_gain=0.5)
         data = model.to_dict()
         prefix = "widgets.spotify_visualizer"
-        assert data[f"{prefix}.input_gain"] == 0.75
+        assert f"{prefix}.input_gain" not in data
         assert data[f"{prefix}.spectrum_input_gain"] == 0.5
 
     def test_from_mapping_round_trip(self):
         from core.settings.models import SpotifyVisualizerSettings
         original = SpotifyVisualizerSettings(
+            mode="spectrum",
             input_gain=0.6,
+            spectrum_input_gain=0.6,
             bubble_input_gain=1.5,
         )
         data = original.to_dict()
-        restored = SpotifyVisualizerSettings.from_mapping(data)
+        restored = SpotifyVisualizerSettings.from_mapping(data, apply_preset_overlay=False)
         assert abs(restored.input_gain - 0.6) < 1e-6
         assert abs(restored.bubble_input_gain - 1.5) < 1e-6
 

@@ -7,8 +7,11 @@ This module contains the SpotifyVisualizerAudioWorker class which handles:
 
 from __future__ import annotations
 
+import copy
+from contextlib import nullcontext
 from dataclasses import dataclass
 from enum import Enum, auto
+from types import SimpleNamespace
 from typing import List, Optional
 import os
 import threading
@@ -23,6 +26,98 @@ from utils.audio_capture import create_audio_capture, AudioCaptureConfig
 
 
 logger = get_logger(__name__)
+
+
+_COMPUTE_SNAPSHOT_ATTRS = (
+    "_activation_id",
+    "_np",
+    "_bar_count",
+    "_band_cache_key",
+    "_band_log_idx",
+    "_band_bins",
+    "_weight_bands",
+    "_weight_factors",
+    "_smooth_kernel",
+    "_work_bars",
+    "_zero_bars",
+    "_band_edges",
+    "_freq_values",
+    "_bar_history",
+    "_bar_hold_timers",
+    "_running_peak",
+    "_env_short",
+    "_env_long",
+    "_env_bass_short",
+    "_env_bass_long",
+    "_env_mix_short",
+    "_env_mix_long",
+    "_agc_bass_split",
+    "_agc_mid_split",
+    "_last_fft_ts",
+    "_base_output_scale",
+    "_energy_boost",
+    "_input_gain",
+    "_use_dynamic_floor",
+    "_manual_floor",
+    "_min_floor",
+    "_max_floor",
+    "_raw_bass_avg",
+    "_dynamic_floor_ratio",
+    "_dynamic_floor_alpha",
+    "_dynamic_floor_decay_alpha",
+    "_applied_noise_floor",
+    "_last_noise_floor",
+    "_floor_response",
+    "_floor_mid_weight",
+    "_floor_headroom",
+    "_silence_floor_threshold",
+    "_floor_min_ratio",
+    "_last_bass_drop_ratio",
+    "_bass_drop_accum",
+    "_drop_hold_frames",
+    "_drop_threshold",
+    "_drop_decay_fast",
+    "_drop_snap_fraction",
+    "_drop_speed",
+    "_agc_strength",
+    "_spectrum_notch_positions",
+    "_transient_bus",
+    "_kick_lane_gain",
+    "_transient_bass",
+    "_transient_mid",
+    "_transient_high",
+    "_onset_detected",
+    "_onset_type",
+    "_onset_strength",
+    "_pre_agc_control_norm",
+    "_pre_agc_control_bass",
+    "_pre_agc_control_mid",
+    "_pre_agc_control_treble",
+    "_pre_agc_bass",
+    "_pre_agc_mid",
+    "_pre_agc_treble",
+    "_use_recommended",
+    "_user_sensitivity",
+    "_bars_log_last_ts",
+    "_bars_log_interval",
+    "_floor_log_last_ts",
+    "_floor_log_last_mode",
+    "_floor_log_last_applied",
+    "_floor_log_last_manual",
+    "_recommended_sensitivity_multiplier",
+    "_last_sensitivity_config",
+    "_last_floor_config",
+    "_spectrum_shape_config",
+    "_spectrum_mirrored",
+    "_spectrum_shape_nodes",
+    "_bar_gate_prev1",
+    "_bar_gate_prev2",
+    "_bar_gate_output",
+    "_last_raw_bass",
+    "_last_raw_mid",
+    "_last_raw_treble",
+    "_prev_raw_bass",
+)
 
 try:
     _DEBUG_CONST_BARS = float(os.environ.get("SRPSS_SPOTIFY_VIS_DEBUG_CONST", "0.0"))
@@ -44,6 +139,7 @@ class VisualizerMode(Enum):
 @dataclass
 class _AudioFrame:
     samples: object
+    activation_id: Optional[int] = None
 
 
 class SpotifyVisualizerAudioWorker(QObject):
@@ -65,6 +161,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._buffer = buffer if buffer is not None else TripleBuffer[_AudioFrame]()
         self._running: bool = False
         self._backend = None  # AudioCaptureBackend instance
+        self._activation_id: int = 0
         self._np = None
         # FFT band caching
         self._band_cache_key = None
@@ -139,14 +236,14 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._onset_detected: bool = False
         self._onset_type: str = ""
         self._onset_strength: float = 0.0
-        # Bubble/Blob control-lane energies (pre-AGC, dynamically normalised).
+        # Shared control-lane energies (pre-AGC, dynamically normalised).
         # These are separate from the AGC source fields so we can keep
         # visualizer control dynamics expressive under hot passages without
         # perturbing spectrum AGC internals.
-        self._bubble_control_norm: float = 1.0
-        self._bubble_pre_agc_bass: float = 0.0
-        self._bubble_pre_agc_mid: float = 0.0
-        self._bubble_pre_agc_treble: float = 0.0
+        self._pre_agc_control_norm: float = 1.0
+        self._pre_agc_control_bass: float = 0.0
+        self._pre_agc_control_mid: float = 0.0
+        self._pre_agc_control_treble: float = 0.0
 
         # Sensitivity configuration (driven from Settings UI).
         self._cfg_lock = threading.Lock()
@@ -345,10 +442,10 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._pre_agc_bass = 0.0
             self._pre_agc_mid = 0.0
             self._pre_agc_treble = 0.0
-            self._bubble_control_norm = 1.0
-            self._bubble_pre_agc_bass = 0.0
-            self._bubble_pre_agc_mid = 0.0
-            self._bubble_pre_agc_treble = 0.0
+            self._pre_agc_control_norm = 1.0
+            self._pre_agc_control_bass = 0.0
+            self._pre_agc_control_mid = 0.0
+            self._pre_agc_control_treble = 0.0
         try:
             self._transient_bus.reset()
         except Exception:
@@ -429,7 +526,10 @@ class SpotifyVisualizerAudioWorker(QObject):
                 if mono.size > 2048:
                     mono = mono[-2048:]
                 
-                self._buffer.publish(_AudioFrame(samples=mono.copy()))
+                self._buffer.publish(_AudioFrame(
+                    samples=mono.copy(),
+                    activation_id=getattr(self, "_activation_id", None),
+                ))
                 
                 if is_verbose_logging():
                     peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
@@ -504,6 +604,96 @@ class SpotifyVisualizerAudioWorker(QObject):
         """Delegates to widgets.spotify_visualizer.bar_computation."""
         from widgets.spotify_visualizer.bar_computation import maybe_log_floor_state
         maybe_log_floor_state(self, **kwargs)
+
+    def make_compute_snapshot(self) -> SimpleNamespace:
+        """Return a detached DSP state object for one FFT compute job.
+
+        Background compute tasks must not mutate the live worker until the
+        owning beat-engine callback verifies the current activation token.
+        The bar computation module intentionally writes its intermediate
+        floor/AGC/transient/bar-history state into the object it receives, so
+        we give it a plain snapshot and commit only after the token check.
+        """
+
+        state = SimpleNamespace()
+        for name in _COMPUTE_SNAPSHOT_ATTRS:
+            if not hasattr(self, name):
+                continue
+            value = getattr(self, name)
+            if name == "_np":
+                setattr(state, name, value)
+                continue
+            try:
+                setattr(state, name, copy.deepcopy(value))
+            except Exception:
+                try:
+                    setattr(state, name, copy.copy(value))
+                except Exception:
+                    setattr(state, name, value)
+        state._cfg_lock = nullcontext()
+        return state
+
+    def commit_compute_snapshot(self, state: object) -> None:
+        """Commit mutable DSP state produced by a verified compute job."""
+
+        runtime_attrs = (
+            "_band_cache_key",
+            "_band_log_idx",
+            "_band_bins",
+            "_weight_bands",
+            "_weight_factors",
+            "_smooth_kernel",
+            "_work_bars",
+            "_zero_bars",
+            "_band_edges",
+            "_freq_values",
+            "_bar_history",
+            "_bar_hold_timers",
+            "_running_peak",
+            "_env_short",
+            "_env_long",
+            "_env_bass_short",
+            "_env_bass_long",
+            "_env_mix_short",
+            "_env_mix_long",
+            "_agc_bass_split",
+            "_agc_mid_split",
+            "_last_fft_ts",
+            "_raw_bass_avg",
+            "_applied_noise_floor",
+            "_last_noise_floor",
+            "_last_bass_drop_ratio",
+            "_bass_drop_accum",
+            "_transient_bus",
+            "_transient_bass",
+            "_transient_mid",
+            "_transient_high",
+            "_onset_detected",
+            "_onset_type",
+            "_onset_strength",
+            "_pre_agc_control_norm",
+            "_pre_agc_control_bass",
+            "_pre_agc_control_mid",
+            "_pre_agc_control_treble",
+            "_pre_agc_bass",
+            "_pre_agc_mid",
+            "_pre_agc_treble",
+            "_bar_gate_prev1",
+            "_bar_gate_prev2",
+            "_bar_gate_output",
+            "_last_raw_bass",
+            "_last_raw_mid",
+            "_last_raw_treble",
+            "_prev_raw_bass",
+            "_floor_log_last_ts",
+            "_floor_log_last_mode",
+            "_floor_log_last_applied",
+            "_floor_log_last_manual",
+            "_bars_log_last_ts",
+        )
+        for name in runtime_attrs:
+            if hasattr(state, name):
+                setattr(self, name, getattr(state, name))
 
     def compute_bars_from_samples(self, samples) -> Optional[List[float]]:
         """Delegates to widgets.spotify_visualizer.bar_computation."""

@@ -10,6 +10,7 @@ from core.settings.visualizer_mode_registry import (
     coerce_visualizer_mode_id,
     get_setting_prefixes,
 )
+from core.settings.visualizer_settings_contract import migrate_legacy_global_technical_keys
 
 _PREFIX = "widgets.spotify_visualizer"
 _TECHNICAL_GLOBAL_KEYS = frozenset(
@@ -21,8 +22,11 @@ _TECHNICAL_GLOBAL_KEYS = frozenset(
         "dynamic_floor",
         "dynamic_range_enabled",
         "input_gain",
+        "kick_lane_gain",
         "manual_floor",
         "sensitivity",
+        "transient_clamp",
+        "transient_pulse_gain",
     }
 )
 _RETIRED_AUTHORED_TECH_SUFFIXES = frozenset({"energy_boost", "use_raw_energy"})
@@ -177,6 +181,7 @@ def normalize_visualizer_section_mapping(
         return {}
 
     migrated = _forward_migrate_alias_keys(data, prefix=prefix)
+    migrated = migrate_legacy_global_technical_keys(migrated, prefix=prefix)
 
     model = SpotifyVisualizerSettings.from_mapping(
         migrated,

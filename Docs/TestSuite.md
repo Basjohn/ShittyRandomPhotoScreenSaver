@@ -36,6 +36,7 @@ pytest tests/test_visualizer_presets.py::TestVisualizerPresetRepair -q
 When changing visualizer settings/contracts, include tests for:
 - model serialization round-trip,
 - normalization contracts,
+- legacy shared-technical migration into per-mode keys without re-emitting shared keys,
 - runtime bridge kwargs transport,
 - preset repair/reindex behavior,
 - mode-prefix compatibility for future/unknown-style payload prefixes.

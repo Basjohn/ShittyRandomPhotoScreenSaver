@@ -27,8 +27,13 @@ Source of truth: `core/settings/visualizer_mode_registry.py`.
 
 ## 3. Shared Settings Contracts
 - mapping normalization: `visualizer_settings_snapshot.py`
-- baseline/fallback contract: `visualizer_settings_contract.py`
+- technical normalization / legacy migration contract: `visualizer_settings_contract.py`
 - preset-index fallback: `visualizer_preset_indices.py`
+
+Technical persistence rule:
+- runtime and canonical saved settings use per-mode technical keys only;
+- curated/custom presets may vary technical payload inside a mode;
+- shared/global technical keys are accepted only as legacy migration inputs and must not survive normalized payloads.
 
 ## 4. Preset Contracts
 - authored source: `presets/visualizer_modes/`.

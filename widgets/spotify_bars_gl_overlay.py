@@ -4,7 +4,7 @@ from typing import List, Sequence, Optional, Set
 
 import numpy as np
 import time
-from PySide6.QtCore import Qt, QRect, Signal
+from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -80,10 +80,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     this class is responsible only for the bar geometry.
     """
 
-    # Emitted (once) when the requested vis mode has no compiled shader and
-    # the overlay falls back to spectrum.  Args: (failed_mode, fallback_mode).
-    mode_fallback_requested = Signal(str, str)
-
     def __init__(self, parent=None) -> None:  # type: ignore[override]
         super().__init__(parent)
         self._painted_frame_shadow_enabled: bool = True
@@ -121,7 +117,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         
         # Active visualization mode
         self._vis_mode: str = 'spectrum'
-        self._fallback_emitted: bool = False
+        self._activation_id: int | None = None
+        self._engine_generation: int | None = None
+        self._latest_frame_generation: int | None = None
+        self._latest_waveform_generation: int | None = None
 
         # Accumulated time for animated visualizers (seconds)
         self._accumulated_time: float = 0.0
@@ -452,47 +451,44 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         mode_key = mode.lower() if mode else 'spectrum'
         self._accumulated_time = 0.0
         self._last_time_ts = 0.0
+        self._peaks = []
+        self._last_peak_ts = 0.0
 
-        if mode_key == 'spectrum':
-            self._peaks = []
-            self._last_peak_ts = 0.0
-
-        if mode_key == 'blob':
-            self.reset_blob_state()
-        else:
-            self._blob_stage_progress_ready = False
-            self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
-            self._blob_stage_progress_filtered = (-1.0, -1.0, -1.0)
-
-        if mode_key in {'oscilloscope', 'sine_wave'}:
-            self._waveform = []
-            self._prev_waveform = []
-            self._ghost_waveform_ring = []
-            self._ghost_ring_idx = 0
-            self._waveform_count = 0
-            self._line_smoothed_bass = 0.0
-            self._line_smoothed_mid = 0.0
-            self._line_smoothed_high = 0.0
-            self._line_kick_event_strength = 0.0
-            self._line_snare_event_strength = 0.0
-            self._line_kick_event_envelope = 0.0
-            self._line_snare_event_envelope = 0.0
-            # Sine ghost peak state: clear to prevent stale peaks on mode re-entry
-            self._sine_peak_bass = 0.0
-            self._sine_peak_mid = 0.0
-            self._sine_peak_high = 0.0
-            self._sine_peak_hold_remaining = 0.0
-
-        if mode_key == 'bubble':
-            self._bubble_pos_data = []
-            self._bubble_extra_data = []
-            self._bubble_trail_data = []
-            self._bubble_count = 0
-        if mode_key == 'devcurve':
-            self._devcurve_curve_bass = []
-            self._devcurve_curve_vocals = []
-            self._devcurve_curve_mids = []
-            self._devcurve_curve_transients = []
+        # Reset every mode bucket, not only the incoming mode. Runtime mode
+        # switches and preset hops share one overlay object, while settings
+        # round-trips recreate it. Clearing all transient buckets preserves
+        # that restart-like isolation without changing authored settings.
+        self.reset_blob_state()
+        self._waveform = []
+        self._prev_waveform = []
+        self._ghost_waveform_ring = []
+        self._ghost_ring_idx = 0
+        self._waveform_count = 0
+        self._line_smoothed_bass = 0.0
+        self._line_smoothed_mid = 0.0
+        self._line_smoothed_high = 0.0
+        self._line_kick_event_strength = 0.0
+        self._line_snare_event_strength = 0.0
+        self._line_kick_event_envelope = 0.0
+        self._line_snare_event_envelope = 0.0
+        self._sine_peak_bass = 0.0
+        self._sine_peak_mid = 0.0
+        self._sine_peak_high = 0.0
+        self._sine_peak_hold_remaining = 0.0
+        self._bubble_pos_data = []
+        self._bubble_extra_data = []
+        self._bubble_trail_data = []
+        self._bubble_count = 0
+        self._devcurve_curve_bass = []
+        self._devcurve_curve_vocals = []
+        self._devcurve_curve_mids = []
+        self._devcurve_curve_transients = []
+        self._devcurve_sample_count = 0
+        self._devcurve_foreground_layer_id = -1
+        self._devcurve_specular_slot0 = [0.0, 0.0, 0.0, 0.0]
+        self._devcurve_specular_slot1 = [0.0, 0.0, 0.0, 0.0]
+        self._devcurve_specular_slot2 = [0.0, 0.0, 0.0, 0.0]
+        self._last_vis_mode = None
 
         logger.info(
             "[SPOTIFY_VIS][OVERLAY][RESET] mode=%s reason=%s",
@@ -757,6 +753,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         line_kick_event_strength: float = 0.0,
         line_snare_event_strength: float = 0.0,
         floor_snapshot: dict | None = None,
+        activation_id: int | None = None,
+        engine_generation: int | None = None,
+        latest_frame_generation: int | None = None,
+        latest_waveform_generation: int | None = None,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -769,6 +769,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self.clear_overlay_buffer()
             return
 
+        self._activation_id = activation_id
+        self._engine_generation = engine_generation
+        self._latest_frame_generation = latest_frame_generation
+        self._latest_waveform_generation = latest_waveform_generation
         self._apply_floor_snapshot(floor_snapshot)
 
         # Set active visualizer mode
@@ -782,7 +786,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._pending_mode_resets.discard(requested_mode)
         if prev_mode != self._vis_mode or manual_reset:
             reason = "mode_change" if prev_mode != self._vis_mode else "manual_reset"
-            self._fallback_emitted = False
             self._reset_mode_state(self._vis_mode, reason=reason)
             self._last_vis_mode = self._vis_mode
         try:
@@ -2859,18 +2862,10 @@ void main() {
         mode = self._vis_mode
         prog = self._gl_programs.get(mode)
         if prog is None:
-            # Fall back to spectrum if the requested mode wasn't compiled
-            failed_mode = mode
-            prog = self._gl_programs.get('spectrum')
-            mode = 'spectrum'
-            if prog is not None and not self._fallback_emitted:
-                self._fallback_emitted = True
-                logger.warning(
-                    "[SPOTIFY_VIS] Mode '%s' shader unavailable — requesting fallback to spectrum",
-                    failed_mode,
-                )
-                self.mode_fallback_requested.emit(failed_mode, 'spectrum')
-        if prog is None:
+            logger.warning(
+                "[SPOTIFY_VIS] Mode '%s' shader unavailable; GL-only visualizer skipping frame",
+                mode,
+            )
             return False
 
         u = self._gl_uniforms.get(mode, {})

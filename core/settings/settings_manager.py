@@ -287,6 +287,19 @@ class SettingsManager(QObject):
                 if not self._settings.contains(key):
                     self._settings.setValue(key, value)
 
+    @staticmethod
+    def _normalize_widgets_mapping(value: Any) -> Any:
+        if not isinstance(value, Mapping):
+            return value
+        widgets = dict(value)
+        vis_section = widgets.get("spotify_visualizer")
+        if isinstance(vis_section, Mapping):
+            widgets["spotify_visualizer"] = normalize_visualizer_section_mapping(
+                vis_section,
+                apply_preset_overlay=False,
+            )
+        return widgets
+
     def _apply_profile_overrides(self, defaults: Dict[str, Any]) -> None:
         """Apply per-profile default overrides before merging canonical values."""
         app_name = getattr(self, "_application", "")
@@ -882,10 +895,15 @@ class SettingsManager(QObject):
                                 continue
                             new_value = normalized_vis.get(key)
                             if old_value != new_value:
-                                repairs[f'widgets.spotify_visualizer.{key}'] = (
-                                    f"Manual floor normalized to {float(new_value):.2f} "
-                                    f"(range {self._MANUAL_FLOOR_MIN:.2f}-{self._MANUAL_FLOOR_MAX:.2f})"
-                                )
+                                if new_value is None:
+                                    repairs[f'widgets.spotify_visualizer.{key}'] = (
+                                        "Legacy global manual floor migrated to per-mode technical keys"
+                                    )
+                                else:
+                                    repairs[f'widgets.spotify_visualizer.{key}'] = (
+                                        f"Manual floor normalized to {float(new_value):.2f} "
+                                        f"(range {self._MANUAL_FLOOR_MIN:.2f}-{self._MANUAL_FLOOR_MAX:.2f})"
+                                    )
                         widgets_copy = dict(widgets)
                         widgets_copy['spotify_visualizer'] = normalized_vis
                         self._settings.setValue('widgets', widgets_copy)
@@ -1192,6 +1210,8 @@ class SettingsManager(QObject):
         else:
             return False, self._MISSING
 
+        if root == "widgets":
+            mapping = self._normalize_widgets_mapping(mapping)
         self._settings.setValue(root, mapping)
         return True, old_value
 
@@ -1274,6 +1294,8 @@ class SettingsManager(QObject):
         """
 
         mapping = dict(value) if isinstance(value, Mapping) else value
+        if section == "widgets":
+            mapping = self._normalize_widgets_mapping(mapping)
         with self._lock:
             old_value = self._settings.value(section)
             self._settings.setValue(section, mapping)

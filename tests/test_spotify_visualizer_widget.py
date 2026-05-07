@@ -124,6 +124,24 @@ def test_spotify_visualizer_set_floor_config_clamps_and_snaps(np_module):
     assert worker._raw_bass_avg == pytest.approx(worker._manual_floor)  # type: ignore[attr-defined]
 
 
+def test_compute_snapshot_is_bounded_and_ignores_unrelated_private_state(np_module):
+    class _ExplodingCopy:
+        def __copy__(self):
+            raise AssertionError("unrelated private state should not be copied")
+
+        def __deepcopy__(self, memo):
+            raise AssertionError("unrelated private state should not be copied")
+
+    worker = _make_audio_worker(np_module)
+    worker._unrelated_private_runtime_owner = _ExplodingCopy()  # type: ignore[attr-defined]
+
+    snapshot = worker.make_compute_snapshot()
+
+    assert snapshot._manual_floor == pytest.approx(worker._manual_floor)  # type: ignore[attr-defined]
+    assert snapshot._np is np_module
+    assert not hasattr(snapshot, "_unrelated_private_runtime_owner")
+
+
 def test_dynamic_floor_updates_running_average(np_module):
     worker = _make_audio_worker(np_module)
     worker._raw_bass_avg = 3.0  # type: ignore[attr-defined]
@@ -345,6 +363,21 @@ class _ImmediateComputeThreadManager:
             callback(result)
 
 
+class _DeferredComputeThreadManager:
+    def __init__(self) -> None:
+        self.tasks: list[tuple[Callable[[], object], Callable[[object], None] | None]] = []
+
+    def submit_compute_task(self, fn, callback=None) -> None:
+        self.tasks.append((fn, callback))
+
+    def run_next(self) -> object:
+        fn, callback = self.tasks.pop(0)
+        result = SimpleNamespace(success=True, result=fn())
+        if callback is not None:
+            callback(result)
+        return result
+
+
 def _synthetic_audio(np_module, *, hz: float, amp: float, n: int = 4096):
     t = np_module.arange(n, dtype="float32") / 48000.0
     signal = (
@@ -389,10 +422,10 @@ def _poison_audio_worker_state(engine: _SpotifyBeatEngine) -> None:
     aw._pre_agc_bass = 0.88
     aw._pre_agc_mid = 0.77
     aw._pre_agc_treble = 0.66
-    aw._bubble_control_norm = 9.0
-    aw._bubble_pre_agc_bass = 0.91
-    aw._bubble_pre_agc_mid = 0.82
-    aw._bubble_pre_agc_treble = 0.73
+    aw._pre_agc_control_norm = 9.0
+    aw._pre_agc_control_bass = 0.91
+    aw._pre_agc_control_mid = 0.82
+    aw._pre_agc_control_treble = 0.73
 
 
 def _assert_audio_worker_state_reset(engine: _SpotifyBeatEngine) -> None:
@@ -431,10 +464,10 @@ def _assert_audio_worker_state_reset(engine: _SpotifyBeatEngine) -> None:
     assert aw._pre_agc_bass == pytest.approx(0.0)
     assert aw._pre_agc_mid == pytest.approx(0.0)
     assert aw._pre_agc_treble == pytest.approx(0.0)
-    assert aw._bubble_control_norm == pytest.approx(1.0)
-    assert aw._bubble_pre_agc_bass == pytest.approx(0.0)
-    assert aw._bubble_pre_agc_mid == pytest.approx(0.0)
-    assert aw._bubble_pre_agc_treble == pytest.approx(0.0)
+    assert aw._pre_agc_control_norm == pytest.approx(1.0)
+    assert aw._pre_agc_control_bass == pytest.approx(0.0)
+    assert aw._pre_agc_control_mid == pytest.approx(0.0)
+    assert aw._pre_agc_control_treble == pytest.approx(0.0)
 
 
 def _poison_engine_runtime_state(engine: _SpotifyBeatEngine, np_module) -> tuple[object, object]:
@@ -482,7 +515,9 @@ def test_mode_switch_requests_overlay_reset_after_target_mode_lands(qt_app, qtbo
     parent._spotify_bars_overlay.reset_requests.clear()
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
-    assert parent._spotify_bars_overlay.reset_requests == ["oscilloscope"]
+    assert parent._spotify_bars_overlay is None
+    assert widget._vis_mode is VisualizerMode.OSCILLOSCOPE
+    assert widget._waiting_for_fresh_engine_frame is True
 
 
 @pytest.mark.qt
@@ -1042,7 +1077,7 @@ def test_mode_switch_replays_distinct_per_mode_shared_technical_state(qt_app, qt
     assert widget._kick_lane_gain == pytest.approx(0.77)
     assert widget._transient_clamp == pytest.approx(1.3)
     assert widget._sine_wave_transient_width_mix == pytest.approx(0.21)
-    assert parent._spotify_bars_overlay._sine_wave_transient_width_mix == pytest.approx(0.21)
+    assert parent._spotify_bars_overlay is None
 
     widget.set_visualization_mode(VisualizerMode.BLOB)
 
@@ -1057,8 +1092,7 @@ def test_mode_switch_replays_distinct_per_mode_shared_technical_state(qt_app, qt
     assert widget._transient_clamp == pytest.approx(2.2)
     assert widget._blob_transient_mix_bass == pytest.approx(0.92)
     assert widget._blob_transient_mix_vocal == pytest.approx(0.38)
-    assert parent._spotify_bars_overlay._blob_transient_mix_bass == pytest.approx(0.92)
-    assert parent._spotify_bars_overlay._blob_transient_mix_vocal == pytest.approx(0.38)
+    assert parent._spotify_bars_overlay is None
 
 
 @pytest.mark.qt
@@ -1252,6 +1286,188 @@ def test_runtime_switch_paths_reset_all_bleed_state_for_all_modes(qt_app, qtbot,
 
 
 @pytest.mark.qt
+def test_runtime_switch_paths_apply_target_technical_floor_for_all_modes(qt_app, qtbot, np_module):
+    from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    ordered_modes = [
+        getattr(VisualizerMode, desc.mode_id.upper())
+        for desc in iter_visualizer_mode_descriptors()
+        if getattr(VisualizerMode, desc.mode_id.upper(), None) is not None
+    ]
+    spotify_cfg = {"mode": "spectrum"}
+    expected_floor: dict[str, float] = {}
+    expected_sensitivity: dict[str, float] = {}
+    for idx, mode in enumerate(ordered_modes):
+        mode_id = mode.name.lower()
+        spotify_cfg[get_preset_key(mode_id)] = get_custom_preset_index(mode_id)
+        spotify_cfg[f"{mode_id}_bar_count"] = 18 + idx
+        spotify_cfg[f"{mode_id}_dynamic_floor"] = False
+        spotify_cfg[f"{mode_id}_manual_floor"] = 0.14 + idx * 0.07
+        spotify_cfg[f"{mode_id}_adaptive_sensitivity"] = False
+        spotify_cfg[f"{mode_id}_sensitivity"] = 0.55 + idx * 0.11
+        expected_floor[mode_id] = spotify_cfg[f"{mode_id}_manual_floor"]
+        expected_sensitivity[mode_id] = spotify_cfg[f"{mode_id}_sensitivity"]
+
+    class _Settings:
+        def get(self, key, default=None):
+            if key == "widgets":
+                return {"spotify_visualizer": dict(spotify_cfg)}
+            return default
+
+    engine = _SpotifyBeatEngine(18)
+    engine._audio_worker._np = np_module
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=18)
+    qtbot.addWidget(widget)
+    widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = False
+
+    for idx, target in enumerate(ordered_modes):
+        previous = ordered_modes[idx - 1]
+        widget._vis_mode = previous
+        widget._mode_transition_phase = 0
+        widget._mode_transition_pending = None
+        widget._last_floor_config = (False, 0.99)
+        widget._last_sensitivity_config = (False, 2.25)
+        engine._audio_worker.set_floor_config(False, 0.99)
+        engine._audio_worker.set_sensitivity_config(False, 2.25)
+
+        assert mode_transition.switch_to_mode(widget, target.name.lower()) is True
+        now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+        mode_transition.mode_transition_fade_factor(widget, now)
+
+        target_key = target.name.lower()
+        assert widget._vis_mode is target
+        assert engine._audio_worker._manual_floor == pytest.approx(expected_floor[target_key])
+        assert engine._audio_worker._raw_bass_avg == pytest.approx(expected_floor[target_key])
+        assert engine._audio_worker._last_floor_config == (
+            False,
+            pytest.approx(expected_floor[target_key]),
+        )
+        assert engine._audio_worker._last_sensitivity_config == (
+            False,
+            pytest.approx(expected_sensitivity[target_key]),
+        )
+
+    original_engine_id = id(widget._engine)
+    for idx, target in enumerate(ordered_modes):
+        previous = ordered_modes[idx - 1]
+        widget._vis_mode = previous
+        widget._mode_transition_phase = 0
+        widget._mode_transition_pending = None
+        engine._audio_worker.set_floor_config(False, 0.99)
+
+        assert mode_transition.cycle_mode(widget) is True
+        now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+        mode_transition.mode_transition_fade_factor(widget, now)
+
+        assert widget._vis_mode is target
+        assert id(widget._engine) == original_engine_id
+        assert engine._audio_worker._manual_floor == pytest.approx(expected_floor[target.name.lower()])
+
+
+@pytest.mark.qt
+def test_widget_cycle_does_not_activate_target_before_overlay_teardown(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+
+    fade_out_started: list[str] = []
+
+    def _defer_fade_out(target, duration_ms=1200, on_complete=None):
+        fade_out_started.append("started")
+
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.mode_transition.start_widget_fade_out",
+        _defer_fade_out,
+    )
+
+    assert widget._cycle_mode() is True
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(widget, now)
+
+    assert fade_out_started == ["started"]
+    assert widget._vis_mode is VisualizerMode.SPECTRUM
+    assert widget._mode_transition_pending is VisualizerMode.OSCILLOSCOPE
+    assert parent._spotify_bars_overlay is not None
+
+    mode_transition.on_mode_fade_out_complete(widget)
+
+    assert widget._vis_mode is VisualizerMode.OSCILLOSCOPE
+    assert widget._mode_transition_pending is None
+    assert parent._spotify_bars_overlay is None
+    assert widget._mode_teardown_block_until_ready is True
+
+
+@pytest.mark.qt
+def test_runtime_mode_activation_clears_widget_owned_visual_state(qt_app, qtbot):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=12)
+    qtbot.addWidget(widget)
+
+    widget._devcurve_runtime_state = object()
+    widget._devcurve_last_tick_ts = 123.0
+    widget._devcurve_active_amplitude = 0.91
+    widget._devcurve_curve_bass = [0.9, 0.8]
+    widget._devcurve_specular_slot0 = [0.5, 0.4, 0.3, 0.2]
+    widget._blob_shaper_runtime_profile = [0.8] * 8
+    widget._blob_live_bass_energy = 0.77
+    widget._sine_peak_bass = 0.66
+    widget._heartbeat_intensity = 0.55
+
+    mode_transition.reset_mode_owned_runtime_state(widget, reason="test")
+
+    assert widget._devcurve_runtime_state is None
+    assert widget._devcurve_last_tick_ts == pytest.approx(0.0)
+    assert widget._devcurve_active_amplitude == pytest.approx(0.0)
+    assert widget._devcurve_curve_bass == []
+    assert widget._devcurve_specular_slot0 == [0.0, 0.0, 0.0, 0.0]
+    assert widget._blob_shaper_runtime_profile is None
+    assert widget._blob_live_bass_energy == pytest.approx(0.0)
+    assert widget._sine_peak_bass == pytest.approx(0.0)
+    assert widget._heartbeat_intensity == pytest.approx(0.0)
+
+
+@pytest.mark.qt
+def test_gpu_payload_carries_activation_generation_snapshot(qt_app, qtbot, np_module):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    engine = _SpotifyBeatEngine(10)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+
+    samples = _synthetic_audio(np_module, hz=220.0, amp=0.30)
+    engine._audio_buffer.publish(_AudioFrame(samples=samples, activation_id=engine.get_activation_id()))
+    engine.tick()
+    widget._display_bars = engine.get_smoothed_bars()
+
+    assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is True
+    frame = parent.frames[-1]
+    assert frame["activation_id"] == engine.get_activation_id()
+    assert frame["engine_generation"] == engine.get_generation_id()
+    assert frame["latest_frame_generation"] == engine.get_latest_generation_with_frame()
+    assert frame["latest_waveform_generation"] == engine.get_latest_generation_with_waveform()
+
+
+@pytest.mark.qt
 def test_mode_switch_synthetic_audio_matches_fresh_worker_after_reset(qt_app, qtbot, np_module):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
@@ -1363,6 +1579,90 @@ def test_preset_activation_discards_audio_buffer_and_idle_state(qt_app, qtbot, n
     _assert_engine_runtime_state_reset(engine, old_audio_buffer, old_result_buffer)
     assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
     assert engine.get_latest_generation_with_frame() < engine.get_generation_id()
+
+
+@pytest.mark.qt
+def test_stale_compute_job_cannot_commit_dsp_state_after_activation(qt_app, qtbot, np_module):
+    engine = _SpotifyBeatEngine(24)
+    engine._audio_worker._np = np_module
+    thread_manager = _DeferredComputeThreadManager()
+    engine.set_thread_manager(thread_manager)
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    old_activation = engine.get_activation_id()
+    hot_samples = _synthetic_audio(np_module, hz=92.0, amp=0.95)
+    engine._audio_buffer.publish(_AudioFrame(samples=hot_samples, activation_id=old_activation))
+    engine.tick()
+
+    assert len(thread_manager.tasks) == 1
+    assert engine._compute_task_active is True
+
+    engine.reset_smoothing_state()
+    engine.reset_floor_state()
+    reset_activation = engine.get_activation_id()
+    reset_floor = engine._audio_worker._applied_noise_floor
+    reset_env_short = engine._audio_worker._env_short
+    reset_transient_bass = engine._audio_worker._transient_bass
+
+    thread_manager.run_next()
+
+    assert engine.get_activation_id() == reset_activation
+    assert engine._audio_worker._activation_id == reset_activation
+    assert engine._audio_worker._applied_noise_floor == pytest.approx(reset_floor)
+    assert engine._audio_worker._env_short == pytest.approx(reset_env_short)
+    assert engine._audio_worker._transient_bass == pytest.approx(reset_transient_bass)
+    assert engine.get_latest_generation_with_frame() < engine.get_generation_id()
+    assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
+
+
+@pytest.mark.qt
+def test_stale_audio_frame_with_old_activation_is_ignored(qt_app, qtbot, np_module):
+    engine = _SpotifyBeatEngine(18)
+    engine._audio_worker._np = np_module
+    thread_manager = _DeferredComputeThreadManager()
+    engine.set_thread_manager(thread_manager)
+    engine.set_playback_state(True)
+
+    old_activation = engine.get_activation_id()
+    engine.reset_smoothing_state()
+
+    hot_samples = _synthetic_audio(np_module, hz=110.0, amp=0.90)
+    engine._audio_buffer.publish(_AudioFrame(samples=hot_samples, activation_id=old_activation))
+    engine.tick()
+
+    assert thread_manager.tasks == []
+    assert engine.get_latest_generation_with_frame() < engine.get_generation_id()
+    assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
+
+
+@pytest.mark.qt
+def test_beat_engine_force_stop_cancels_compute_and_discards_runtime_buffers(qt_app, qtbot, np_module):
+    engine = _SpotifyBeatEngine(18)
+    engine._audio_worker._np = np_module
+    thread_manager = _DeferredComputeThreadManager()
+    engine.set_thread_manager(thread_manager)
+    engine.set_playback_state(True)
+
+    old_audio_buffer = engine._audio_buffer
+    old_result_buffer = engine._bars_result_buffer
+    engine._audio_buffer.publish(
+        _AudioFrame(
+            samples=_synthetic_audio(np_module, hz=110.0, amp=0.85),
+            activation_id=engine.get_activation_id(),
+        )
+    )
+    engine.tick()
+
+    assert engine._compute_task_active is True
+    assert thread_manager.tasks
+
+    engine.force_stop()
+
+    assert engine._compute_task_active is False
+    assert engine._audio_buffer is not old_audio_buffer
+    assert engine._bars_result_buffer is not old_result_buffer
+    assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
 
 
 @pytest.mark.qt
@@ -1611,7 +1911,7 @@ def test_mode_cycle_resets_engine_smoothing(qt_app, qtbot, monkeypatch):
 
 
 @pytest.mark.qt
-def test_mode_cycle_does_not_destroy_overlay_during_crossfade(qt_app, qtbot, monkeypatch):
+def test_mode_cycle_cold_clears_overlay_before_target_activation(qt_app, qtbot, monkeypatch):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
     qtbot.addWidget(widget)
 
@@ -1627,7 +1927,7 @@ def test_mode_cycle_does_not_destroy_overlay_during_crossfade(qt_app, qtbot, mon
     now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
     mode_transition.mode_transition_fade_factor(widget, now)
 
-    assert cleared["count"] == 0
+    assert cleared["count"] == 1
 
 
 @pytest.mark.qt
@@ -1692,6 +1992,10 @@ def test_visualizer_widget_initializes_fresh_generation_state(qt_app, qtbot):
     assert widget._waiting_for_fresh_engine_frame is False
     assert widget._pending_engine_generation == -1
     assert widget._last_engine_generation_seen == -1
+    assert widget._pending_engine_activation_id == -1
+    assert widget._last_engine_activation_seen == -1
+    assert widget._pending_engine_activation_id == -1
+    assert widget._last_engine_activation_seen == -1
 
 
 @pytest.mark.qt
@@ -1703,6 +2007,8 @@ def test_tick_pipeline_backfills_missing_fresh_generation_state(qt_app, qtbot):
     delattr(widget, "_waiting_for_fresh_engine_frame")
     delattr(widget, "_pending_engine_generation")
     delattr(widget, "_last_engine_generation_seen")
+    delattr(widget, "_pending_engine_activation_id")
+    delattr(widget, "_last_engine_activation_seen")
 
     tick_pipeline._ensure_fresh_generation_state(widget)
 

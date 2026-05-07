@@ -179,7 +179,10 @@ def _canonical_mode_defaults(mode: str) -> Dict[str, Any]:
 
 def _canonical_mode_prefix(mode: str) -> str:
     prefixes = vp.MODE_KEY_PREFIXES.get(mode)  # type: ignore[attr-defined]
+    preferred = f"{mode}_"
     if prefixes:
+        if preferred in prefixes:
+            return preferred
         return prefixes[0]
     return f"{mode}_"
 
@@ -258,6 +261,7 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     sanitized: Dict[str, Any] = {}
     original_filtered: Dict[str, Any] = {}
     migrated_keys: set[str] = set()
+    legacy_global_authored: set[str] = set()
     mode_prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
     primary_prefix = _canonical_mode_prefix(mode)
     for section in sections:
@@ -268,6 +272,10 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
             section_payload = _promote_legacy_spectrum_lane_scalars(section_payload)
         migrated = vp._migrate_preset_settings(mode, section_payload)  # type: ignore[attr-defined]
         filtered = vp._filter_settings_for_mode(mode, migrated)  # type: ignore[attr-defined]
+        for suffix in _MANDATORY_TECH_SUFFIXES:
+            if suffix in original_section and suffix not in filtered:
+                filtered[suffix] = deepcopy(original_section[suffix])
+                legacy_global_authored.add(suffix)
         original_filtered.update(raw_filtered)
         if mode == "oscilloscope" and "osc_sensitivity" in section:
             if "osc_line_amplitude" in filtered:
@@ -319,9 +327,9 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     promoted_mode_keys = {
         f"{_mode_tech_prefix(mode)}{suffix}"
         for suffix in _MANDATORY_TECH_SUFFIXES
-        if suffix in original_filtered
+        if suffix in original_filtered or suffix in legacy_global_authored
     }
-    allowed_keys = authored_keys | promoted_mode_keys | migrated_keys | {"mode"}
+    allowed_keys = authored_keys | promoted_mode_keys | migrated_keys | legacy_global_authored | {"mode"}
     sanitized = {key: value for key, value in sanitized.items() if key in allowed_keys}
     if mode == "spectrum" and "spectrum_notch_positions_linear" in sanitized:
         sanitized["spectrum_notch_positions_linear"] = _normalize_spectrum_linear_notches(
@@ -330,6 +338,12 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
     sanitized["mode"] = mode
     _promote_global_technical_settings(mode, sanitized)
     _strip_deprecated_curated_keys(mode, sanitized)
+    canonical_defaults = _canonical_mode_defaults(mode)
+    prefix = _mode_tech_prefix(mode)
+    for suffix in _MANDATORY_TECH_SUFFIXES:
+        mode_key = f"{prefix}{suffix}"
+        if mode_key in canonical_defaults:
+            sanitized.setdefault(mode_key, deepcopy(canonical_defaults[mode_key]))
 
     orig_keys = set(original_filtered.keys())
     new_keys = set(sanitized.keys())
@@ -503,17 +517,8 @@ def _apply_cleaned_payload_in_place(payload: Dict[str, Any], cleaned: Mapping[st
 
         backup_section = snapshot.get("custom_preset_backup")
         if isinstance(backup_section, dict):
-            dotted_prefix = "widgets.spotify_visualizer."
-            dotted_keys = [
-                key for key in list(backup_section.keys())
-                if isinstance(key, str) and key.startswith(dotted_prefix)
-            ]
-            for key in dotted_keys:
-                backup_section.pop(key, None)
-            if dotted_keys:
-                for key, value in cleaned_block.items():
-                    backup_section[f"{dotted_prefix}{key}"] = deepcopy(value)
-                updated_paths.append("snapshot.custom_preset_backup")
+            snapshot.pop("custom_preset_backup", None)
+            updated_paths.append("snapshot.custom_preset_backup")
 
     if isinstance(payload.get("spotify_visualizer"), Mapping):
         payload["spotify_visualizer"] = deepcopy(cleaned_block)

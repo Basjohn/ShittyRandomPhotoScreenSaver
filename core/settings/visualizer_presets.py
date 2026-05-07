@@ -58,22 +58,14 @@ _PLACEHOLDER_NAME_RE = re.compile(
 )
 
 GLOBAL_ALLOWED_KEYS = {
-    "adaptive_sensitivity",
-    "agc_strength",
-    "audio_block_size",
     "bar_border_color",
     "bar_border_opacity",
-    "bar_count",
     "bar_fill_color",
-    "dynamic_floor",
-    "dynamic_range_enabled",
     "ghost_alpha",
     "ghost_decay",
     "ghosting_enabled",
-    "manual_floor",
     "monitor",
     "mode",
-    "sensitivity",
 }
 # rainbow_enabled / rainbow_speed are now per-mode keys (e.g. spectrum_rainbow_enabled)
 # and match MODE_KEY_PREFIXES automatically. Kept out of GLOBAL_ALLOWED_KEYS so presets
@@ -106,7 +98,6 @@ def _is_global_visualizer_key(key: str) -> bool:
         "enabled",
         "visualizers_enabled",
         "monitor",
-        "bar_count",
         "ghosting_enabled",
         "ghost_alpha",
         "ghost_decay",
@@ -135,6 +126,70 @@ def build_normalized_custom_snapshot(mode_key: str, spotify_vis_config: Mapping[
     )
     snapshot = extract_visualizer_snapshot(mode_key, normalized_live)
     return normalize_visualizer_mode_payload(mode_key, snapshot)
+
+
+@dataclass(frozen=True)
+class VisualizerActivationPayload:
+    mode: str
+    preset_index: int
+    is_custom: bool
+    preset_name: str
+    preset_path: str | None
+    resolved_config: Dict[str, Any]
+
+
+def resolve_visualizer_activation_payload(
+    config: Mapping[str, Any] | None,
+    *,
+    mode: str | None = None,
+    prefix: str = "widgets.spotify_visualizer",
+) -> VisualizerActivationPayload:
+    """Resolve one canonical runtime/settings activation payload."""
+    source = dict(config) if isinstance(config, Mapping) else {}
+    normalized_live = normalize_visualizer_section_mapping(
+        source,
+        prefix=prefix,
+        apply_preset_overlay=False,
+    )
+    mode_key = str(mode or normalized_live.get("mode") or source.get("mode") or "bubble")
+    mode_key = builtins.str(mode_key).strip().lower()
+    if mode_key not in MODES:
+        mode_key = "bubble"
+
+    normalized_live["mode"] = mode_key
+    preset_index = resolve_preset_index_from_mapping(mode_key, normalized_live, prefix=prefix)
+    resolved_config = apply_preset_to_config(mode_key, preset_index, dict(normalized_live))
+    resolved_config["mode"] = mode_key
+    resolved_config = normalize_visualizer_section_mapping(
+        resolved_config,
+        prefix=prefix,
+        apply_preset_overlay=False,
+        resolve_preset_indices=False,
+    )
+    resolved_config["mode"] = mode_key
+
+    preset_key = get_preset_key(mode_key)
+    resolved_config[preset_key] = preset_index
+
+    custom_index = get_custom_preset_index(mode_key)
+    is_custom = preset_index == custom_index
+    preset_name = "Custom"
+    preset_path: str | None = None
+    presets = get_presets(mode_key)
+    if 0 <= preset_index < len(presets):
+        preset_name = presets[preset_index].name
+    if not is_custom:
+        path = get_preset_file_path(mode_key, preset_index)
+        preset_path = str(path) if path is not None else None
+
+    return VisualizerActivationPayload(
+        mode=mode_key,
+        preset_index=preset_index,
+        is_custom=is_custom,
+        preset_name=preset_name,
+        preset_path=preset_path,
+        resolved_config=resolved_config,
+    )
 
 
 def restore_visualizer_snapshot(

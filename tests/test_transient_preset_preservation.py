@@ -11,6 +11,7 @@ from __future__ import annotations
 
 
 from core.settings import default_settings
+from core.settings.defaults import get_default_settings
 from core.settings.models import SpotifyVisualizerSettings
 from tools import visualizer_preset_repair as repair
 
@@ -21,22 +22,22 @@ _MODES = ("spectrum", "bubble", "blob", "sine_wave", "oscilloscope")
 
 
 class TestDefaultSettingsContainTransientKeys:
-    """Verify default_settings.py has per-mode transient entries."""
+    """Verify canonical defaults keep transient controls mode-owned."""
 
     def test_per_mode_defaults_present(self):
-        viz = default_settings.DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
+        viz = get_default_settings()["widgets"]["spotify_visualizer"]
         for mode in _MODES:
             for key in _TRANSIENT_KEYS:
                 full_key = f"{mode}_{key}"
                 assert full_key in viz, f"Missing default: {full_key}"
 
-    def test_global_defaults_present(self):
-        viz = default_settings.DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
+    def test_global_defaults_not_present_in_canonical_defaults(self):
+        viz = get_default_settings()["widgets"]["spotify_visualizer"]
         for key in _TRANSIENT_KEYS:
-            assert key in viz, f"Missing global default: {key}"
+            assert key not in viz, f"Unexpected legacy global default: {key}"
 
     def test_default_values_sane(self):
-        viz = default_settings.DEFAULT_SETTINGS["widgets"]["spotify_visualizer"]
+        viz = get_default_settings()["widgets"]["spotify_visualizer"]
         for mode in _MODES:
             assert viz[f"{mode}_kick_lane_gain"] == 1.0
             assert viz[f"{mode}_transient_pulse_gain"] == 1.0

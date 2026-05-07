@@ -16,7 +16,10 @@ from core.logging.logger import (
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
 from core.settings.models import SpotifyVisualizerSettings, PER_MODE_TECHNICAL_MODES
-from core.settings.visualizer_presets import apply_preset_to_config, resolve_preset_index_from_mapping
+from core.settings.visualizer_presets import (
+    VisualizerActivationPayload,
+    resolve_visualizer_activation_payload,
+)
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 from widgets.base_overlay_widget import (
     BaseOverlayWidget,
@@ -453,6 +456,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._waiting_for_fresh_engine_frame: bool = False
         self._pending_engine_generation: int = -1
         self._last_engine_generation_seen: int = -1
+        self._pending_engine_activation_id: int = -1
+        self._last_engine_activation_seen: int = -1
 
         # Mode transition driven by double-click (no timers, tick-driven)
         self._mode_transition_ts: float = 0.0   # 0 = no transition active
@@ -774,7 +779,7 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         apply_vis_mode_kwargs(self, kwargs)
         mode_key = vm.name.lower()
-        merged_runtime_technical = self._merge_runtime_technical_overrides(mode_key, kwargs)
+        replaced_runtime_technical = self._replace_runtime_technical_overrides(mode_key, kwargs)
 
         try:
             self._cached_vis_kwargs = copy.deepcopy(kwargs)
@@ -792,13 +797,14 @@ class SpotifyVisualizerWidget(QWidget):
         if self._mode_transition_phase == 0:
             self._apply_pending_mode_transition_layout()
 
-        if merged_runtime_technical:
+        if replaced_runtime_technical:
             self._apply_technical_config_for_mode(vm, reason="vis_mode_config")
 
         if mode_changed:
             self._waiting_for_fresh_engine_frame = True
             self._waiting_for_fresh_frame = True
-            self._request_overlay_mode_reset(mode=vm.name.lower(), reason="vis_mode_config")
+            self._reset_mode_owned_runtime_state(reason="vis_mode_config")
+            self._clear_gl_overlay()
             self._prepare_engine_for_mode_reset()
             self._clear_runtime_bar_state()
 
@@ -874,7 +880,7 @@ class SpotifyVisualizerWidget(QWidget):
 
         return extracted
 
-    def _merge_runtime_technical_overrides(
+    def _replace_runtime_technical_overrides(
         self,
         mode_key: str,
         kwargs: Dict[str, Any],
@@ -882,10 +888,112 @@ class SpotifyVisualizerWidget(QWidget):
         overrides = self._extract_technical_config_from_kwargs(mode_key, kwargs)
         if not overrides:
             return False
-        current = dict(self._technical_config_cache.get(mode_key, {}))
+        current: Dict[str, Any] = {}
+        if self._settings_model is not None:
+            try:
+                current = self._build_technical_cache(self._settings_model).get(mode_key, {})
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to rebuild technical cache for mode=%s", mode_key, exc_info=True)
+        if not current:
+            current = dict(self._technical_config_cache.get(mode_key, {}))
         current.update(overrides)
         self._technical_config_cache[mode_key] = current
         return True
+
+    def _map_mode_key_to_enum(self, mode_key: str) -> VisualizerMode:
+        return {
+            "spectrum": VisualizerMode.SPECTRUM,
+            "oscilloscope": VisualizerMode.OSCILLOSCOPE,
+            "blob": VisualizerMode.BLOB,
+            "sine_wave": VisualizerMode.SINE_WAVE,
+            "bubble": VisualizerMode.BUBBLE,
+            "devcurve": VisualizerMode.DEVCURVE,
+        }.get(str(mode_key).lower(), VisualizerMode.SPECTRUM)
+
+    def _log_live_activation_state(
+        self,
+        mode: VisualizerMode,
+        payload: VisualizerActivationPayload,
+        *,
+        reason: str,
+    ) -> None:
+        try:
+            mode_key = mode.name.lower()
+            technical_cache = dict(self._technical_config_cache.get(mode_key, {}))
+            engine = self._engine
+            worker = getattr(engine, "_audio_worker", None) if engine is not None else None
+            overlay = getattr(self.parent(), "_spotify_bars_overlay", None) if self.parent() is not None else None
+            logger.info(
+                (
+                    "[SPOTIFY_VIS][LIVE] reason=%s mode=%s preset_index=%d preset_kind=%s preset_name=%s "
+                    "preset_path=%s cache_manual=%.3f worker_manual=%.3f worker_dynamic=%s worker_sensitivity=%.3f "
+                    "worker_recommended=%s worker_block=%d worker_input_gain=%.3f worker_agc=%.3f "
+                    "engine_generation=%s engine_activation=%s overlay_activation=%s overlay_generation=%s"
+                ),
+                reason,
+                mode_key,
+                int(payload.preset_index),
+                "custom" if payload.is_custom else "curated",
+                payload.preset_name,
+                payload.preset_path or "<custom>",
+                float(technical_cache.get("manual_floor", 0.12)),
+                float(getattr(worker, "_manual_floor", 0.12) if worker is not None else 0.12),
+                bool(getattr(worker, "_use_dynamic_floor", True) if worker is not None else True),
+                float(getattr(worker, "_user_sensitivity", 1.0) if worker is not None else 1.0),
+                bool(getattr(worker, "_use_recommended", True) if worker is not None else True),
+                int(getattr(worker, "_preferred_block_size", 0) if worker is not None else 0),
+                float(getattr(worker, "_input_gain", 1.0) if worker is not None else 1.0),
+                float(getattr(worker, "_agc_strength", 0.5) if worker is not None else 0.5),
+                getattr(engine, "get_generation_id", lambda: None)(),
+                getattr(engine, "get_activation_id", lambda: None)(),
+                getattr(overlay, "_activation_id", None),
+                getattr(overlay, "_engine_generation", None),
+            )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to log live activation state", exc_info=True)
+
+    def apply_resolved_activation_payload(
+        self,
+        model: SpotifyVisualizerSettings,
+        payload: VisualizerActivationPayload,
+        *,
+        reason: str,
+        force_runtime_reset: bool = False,
+    ) -> None:
+        """Apply one canonical resolved activation payload to the live widget."""
+        try:
+            snapshot = copy.deepcopy(model)
+        except Exception:
+            snapshot = model
+        self._settings_model = snapshot
+        self._technical_config_cache = self._build_technical_cache(snapshot)
+
+        vm = self._map_mode_key_to_enum(payload.mode)
+        mode_changed = vm != self._vis_mode
+        if mode_changed:
+            self._vis_mode = vm
+
+        from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+        apply_spotify_vis_model_config(self, snapshot, apply_mode=False)
+
+        self._last_gpu_geom = None
+        self._last_gpu_fade_sent = -1.0
+        self._has_pushed_first_frame = False
+        self._mode_transition_apply_height_on_resume = True
+        if self._mode_transition_phase == 0:
+            self._apply_pending_mode_transition_layout()
+
+        self._apply_technical_config_for_mode(vm, reason=f"{reason}:activation_payload")
+
+        if force_runtime_reset or mode_changed:
+            self._waiting_for_fresh_engine_frame = True
+            self._waiting_for_fresh_frame = True
+            self._reset_mode_owned_runtime_state(reason=reason)
+            self._clear_gl_overlay()
+            self._prepare_engine_for_mode_reset()
+            self._clear_runtime_bar_state()
+
+        self._log_live_activation_state(vm, payload, reason=reason)
 
     def _build_technical_cache(self, model: SpotifyVisualizerSettings) -> Dict[str, Dict[str, Any]]:
         cache: Dict[str, Dict[str, Any]] = {}
@@ -1014,16 +1122,18 @@ class SpotifyVisualizerWidget(QWidget):
         try:
             cfg = sm.get('widgets', {}) or {}
             vis_cfg = dict(cfg.get('spotify_visualizer', {}) or {})
-            vis_cfg['mode'] = mode_str
-            preset_idx = resolve_preset_index_from_mapping(mode_str, vis_cfg)
-            resolved_cfg = apply_preset_to_config(mode_str, preset_idx, vis_cfg)
-            resolved_cfg['mode'] = mode_str
-            model = SpotifyVisualizerSettings.from_mapping(resolved_cfg)
-            self.set_settings_model(model, apply_now=False)
-            from rendering.spotify_widget_creators import apply_spotify_vis_model_config
-
-            apply_spotify_vis_model_config(self, model, apply_mode=False)
-            self._apply_technical_config_for_mode(mode, reason=f"{reason}:target_config")
+            payload = resolve_visualizer_activation_payload(vis_cfg, mode=mode_str)
+            model = SpotifyVisualizerSettings.from_mapping(
+                payload.resolved_config,
+                apply_preset_overlay=False,
+                resolve_preset_indices=False,
+            )
+            self.apply_resolved_activation_payload(
+                model,
+                payload,
+                reason=reason,
+                force_runtime_reset=False,
+            )
             logger.debug("[SPOTIFY_VIS] Applied full runtime config for mode=%s reason=%s", mode_str, reason)
         except Exception:
             logger.debug(
@@ -1796,9 +1906,16 @@ class SpotifyVisualizerWidget(QWidget):
         """Cold-reset visualizer runtime state after a mode or preset activation."""
         self._waiting_for_fresh_engine_frame = True
         self._waiting_for_fresh_frame = True
-        self._request_overlay_mode_reset(mode=self._vis_mode_str, reason=reason)
+        self._reset_mode_owned_runtime_state(reason=reason)
+        self._clear_gl_overlay()
         self._prepare_engine_for_mode_reset()
         self._clear_runtime_bar_state()
+
+    def _reset_mode_owned_runtime_state(self, *, reason: str = "activation") -> None:
+        """Delegates to widgets.spotify_visualizer.mode_transition."""
+        from widgets.spotify_visualizer.mode_transition import reset_mode_owned_runtime_state
+
+        reset_mode_owned_runtime_state(self, reason=reason)
 
     def _should_capture_audio_now(self) -> bool:
         """Return True when audio capture/FFT should actively run."""
@@ -1807,13 +1924,20 @@ class SpotifyVisualizerWidget(QWidget):
     def _track_engine_generation(self, engine: Optional[_SpotifyBeatEngine]) -> None:
         if engine is None:
             self._pending_engine_generation = -1
+            self._pending_engine_activation_id = -1
             return
         try:
             gen = int(engine.get_generation_id())
         except Exception:
             gen = -1
+        try:
+            activation_id = int(engine.get_activation_id())
+        except Exception:
+            activation_id = -1
         self._pending_engine_generation = gen
+        self._pending_engine_activation_id = activation_id
         self._last_engine_generation_seen = -1
+        self._last_engine_activation_seen = -1
 
     def _handle_mode_cycle_state_reset(self) -> None:
         self._reset_teardown_bookkeeping()
@@ -1969,30 +2093,6 @@ class SpotifyVisualizerWidget(QWidget):
             prewarm_spotify_visualizer_overlay(parent)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to prewarm parent GL overlay", exc_info=True)
-
-        overlay = getattr(parent, '_spotify_bars_overlay', None)
-        if overlay is not None and hasattr(overlay, 'mode_fallback_requested'):
-            try:
-                overlay.mode_fallback_requested.connect(
-                    self._handle_mode_fallback, Qt.ConnectionType.UniqueConnection,
-                )
-            except RuntimeError:
-                pass  # already connected
-
-    def _handle_mode_fallback(self, failed_mode: str, fallback_mode: str) -> None:
-        """Deferred handler: perform a real mode switch to spectrum preset 1."""
-        QTimer.singleShot(0, lambda: self._execute_mode_fallback(failed_mode, fallback_mode))
-
-    def _execute_mode_fallback(self, failed_mode: str, fallback_mode: str) -> None:
-        wm = getattr(self, '_widget_manager', None)
-        if wm is None or not hasattr(wm, 'force_visualizer_mode_preset'):
-            logger.warning(
-                "[SPOTIFY_VIS] Cannot execute mode fallback — no widget_manager "
-                "(failed=%s target=%s)", failed_mode, fallback_mode,
-            )
-            return
-        wm.force_visualizer_mode_preset(fallback_mode, 0, reason=f"shader_unavailable:{failed_mode}")
-        self._reset_visualizer_state(clear_overlay=False, replay_cached=False)
 
     def _finish_staged_startup_reveal(
         self,
@@ -2576,7 +2676,7 @@ class SpotifyVisualizerWidget(QWidget):
         # the SpotifyBarsGLOverlay.
         painter.end()
 
-    def set_visualization_mode(self, mode: VisualizerMode) -> None:
+    def set_visualization_mode(self, mode: VisualizerMode, *, reset_runtime: bool = True) -> None:
         """Set the visualization display mode."""
         if mode != self._vis_mode:
             self._vis_mode = mode
@@ -2590,15 +2690,17 @@ class SpotifyVisualizerWidget(QWidget):
             self._has_pushed_first_frame = False
             self._waiting_for_fresh_engine_frame = True
             self._waiting_for_fresh_frame = True
-            # Reset/track the shared engine as a full generation handoff so the
-            # new mode waits for a real fresh frame instead of partially reusing
-            # stale waveform/bar state from the previous mode.
-            try:
-                self._request_overlay_mode_reset(mode=mode.name.lower(), reason="mode_switch")
-                self._prepare_engine_for_mode_reset()
-                self._clear_runtime_bar_state()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to prepare engine on mode switch", exc_info=True)
+            if reset_runtime:
+                # Direct mode changes must be as cold as a settings restart:
+                # destroy the GL overlay, clear widget-owned mode envelopes,
+                # then reset the shared engine without replacing it.
+                try:
+                    self._reset_mode_owned_runtime_state(reason="mode_switch")
+                    self._clear_gl_overlay()
+                    self._prepare_engine_for_mode_reset()
+                    self._clear_runtime_bar_state()
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to prepare engine on mode switch", exc_info=True)
             logger.debug("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
 
     def get_visualization_mode(self) -> VisualizerMode:

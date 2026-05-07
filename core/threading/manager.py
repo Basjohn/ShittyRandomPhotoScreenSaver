@@ -6,7 +6,7 @@ Adapted from SPQDocker reusable modules for screensaver use.
 """
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor, Future
+from concurrent.futures import ThreadPoolExecutor, Future, wait as wait_futures
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional
@@ -343,6 +343,28 @@ class ThreadManager:
         for task_id in active_ids:
             self.cancel_task(task_id)
         
+        if wait and timeout is not None:
+            futures = [
+                task.future for task in self._active_tasks.values()
+                if task.future is not None
+            ]
+            if futures:
+                done, not_done = wait_futures(futures, timeout=max(0.0, float(timeout)))
+                if not_done:
+                    stuck_ids = [
+                        task.task_id for task in self._active_tasks.values()
+                        if task.future in not_done
+                    ]
+                    logger.warning(
+                        "ThreadManager shutdown timed out after %.1fs with %d active tasks: %s",
+                        float(timeout),
+                        len(not_done),
+                        stuck_ids,
+                    )
+                    for future in not_done:
+                        future.cancel()
+                    wait = False
+
         # Shutdown executors
         for pool_type, executor in self._executors.items():
             try:

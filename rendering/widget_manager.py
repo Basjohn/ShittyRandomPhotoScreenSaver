@@ -27,6 +27,7 @@ from core.settings.visualizer_presets import (
     build_normalized_custom_snapshot,
     get_custom_preset_index,
     get_preset_count,
+    resolve_visualizer_activation_payload,
     restore_visualizer_snapshot,
     resolve_preset_index_from_mapping,
     VISUALIZER_CUSTOM_STORAGE_KEY,
@@ -745,24 +746,48 @@ class WidgetManager:
             self._refresh_reddit_configs()
             return
 
-    def _log_spotify_vis_config(self, context: str, cfg: Mapping[str, Any]) -> None:
-        """Emit a single structured log line for Spotify VIS config rewires."""
+    def _log_spotify_vis_config(
+        self,
+        context: str,
+        cfg: Mapping[str, Any],
+        *,
+        model: Optional[SpotifyVisualizerSettings] = None,
+        activation_payload: Optional[object] = None,
+    ) -> None:
+        """Emit a single structured log line for resolved Spotify VIS technical config."""
         try:
+            resolved_model = model
+            if resolved_model is None:
+                resolved_model = SpotifyVisualizerSettings.from_mapping(cfg)
+            mode_key = str(getattr(resolved_model, "mode", cfg.get("mode", "spectrum")) or "spectrum")
+            preset_index = getattr(activation_payload, "preset_index", None)
+            preset_kind = "custom" if getattr(activation_payload, "is_custom", False) else "curated"
+            preset_name = getattr(activation_payload, "preset_name", None)
+            preset_path = getattr(activation_payload, "preset_path", None)
             logger.info(
                 (
                     "[SPOTIFY_VIS][CFG] %s adaptive=%s sensitivity=%.3f dynamic=%s manual=%.3f "
-                    "mode=%s density=%s displacement=%s heartbeat=%s vshift=%s"
+                    "mode=%s bars=%s block=%s input_gain=%.3f agc=%.3f density=%s displacement=%s heartbeat=%s "
+                    "vshift=%s preset_index=%s preset_kind=%s preset_name=%s preset_path=%s"
                 ),
                 context,
-                cfg.get('adaptive_sensitivity'),
-                float(cfg.get('sensitivity', 0.0)),
-                cfg.get('dynamic_floor'),
-                float(cfg.get('manual_floor', 0.0)),
-                cfg.get('mode'),
-                cfg.get('sine_density'),
-                cfg.get('sine_displacement'),
-                cfg.get('sine_heartbeat'),
-                cfg.get('sine_vertical_shift'),
+                resolved_model.resolve_adaptive_sensitivity(mode_key),
+                float(resolved_model.resolve_sensitivity(mode_key)),
+                resolved_model.resolve_dynamic_floor(mode_key),
+                float(resolved_model.resolve_manual_floor(mode_key)),
+                mode_key,
+                int(resolved_model.resolve_bar_count(mode_key)),
+                int(resolved_model.resolve_audio_block_size(mode_key)),
+                float(resolved_model.resolve_input_gain(mode_key)),
+                float(resolved_model.resolve_agc_strength(mode_key)),
+                getattr(resolved_model, 'sine_density', cfg.get('sine_density')),
+                getattr(resolved_model, 'sine_displacement', cfg.get('sine_displacement')),
+                getattr(resolved_model, 'sine_heartbeat', cfg.get('sine_heartbeat')),
+                getattr(resolved_model, 'sine_vertical_shift', cfg.get('sine_vertical_shift')),
+                preset_index,
+                preset_kind,
+                preset_name,
+                preset_path,
             )
         except Exception:
             logger.debug("[SPOTIFY_VIS][CFG] %s %s", context, cfg, exc_info=True)
@@ -833,8 +858,18 @@ class WidgetManager:
         if not isinstance(spotify_cfg, Mapping):
             return
 
-        model = SpotifyVisualizerSettings.from_mapping(spotify_cfg)
-        self._log_spotify_vis_config("refresh", spotify_cfg)
+        activation_payload = resolve_visualizer_activation_payload(spotify_cfg)
+        model = SpotifyVisualizerSettings.from_mapping(
+            activation_payload.resolved_config,
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
+        self._log_spotify_vis_config(
+            "refresh",
+            activation_payload.resolved_config,
+            model=model,
+            activation_payload=activation_payload,
+        )
         try:
             logger.info(
                 (
@@ -851,88 +886,40 @@ class WidgetManager:
         except Exception:
             logger.debug("[SPOTIFY_VIS][REFRESH] Failed to log model snapshot", exc_info=True)
 
-        # Push full settings model so widget can resolve per-mode technical config
-        try:
-            vis.set_settings_model(model)
-        except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to push Spotify model to widget", exc_info=True)
-
-        # Full vis mode config refresh — ensures ALL per-mode settings
-        # (wobble, wave effect, glow, colors, etc.) apply immediately on save
-        try:
-            from rendering.spotify_widget_creators import apply_spotify_vis_model_config
-            apply_spotify_vis_model_config(vis, model)
-        except ImportError:
-            # Fallback: apply_vis_mode_config directly if helper not available
+        if hasattr(vis, "apply_resolved_activation_payload"):
             try:
-                if hasattr(vis, 'apply_vis_mode_config'):
-                    spectrum_render_mode = str(getattr(model, "spectrum_render_mode", "bars") or "bars").lower()
-                    spectrum_single_piece = spectrum_render_mode != "segment"
-                    vis.apply_vis_mode_config(
-                        mode=str(model.mode),
-                        sine_micro_wobble=model.sine_micro_wobble,
-                        sine_wave_effect=model.sine_wave_effect,
-                        sine_vertical_shift=model.sine_vertical_shift,
-                        sine_card_adaptation=model.sine_card_adaptation,
-                        sine_speed=model.sine_speed,
-                        sine_wave_travel=model.sine_wave_travel,
-                        sine_line_count=model.sine_line_count,
-                        sine_line_offset_bias=model.sine_line_offset_bias,
-                        sine_travel_line2=model.sine_travel_line2,
-                        sine_travel_line3=model.sine_travel_line3,
-                        sine_travel_line4=model.sine_travel_line4,
-                        sine_travel_line5=model.sine_travel_line5,
-                        sine_travel_line6=model.sine_travel_line6,
-                        sine_line1_shift=model.sine_line1_shift,
-                        sine_line2_shift=model.sine_line2_shift,
-                        sine_line3_shift=model.sine_line3_shift,
-                        sine_line4_shift=model.sine_line4_shift,
-                        sine_line5_shift=model.sine_line5_shift,
-                        sine_line6_shift=model.sine_line6_shift,
-                        sine_line2_color=model.sine_line2_color,
-                        sine_line2_glow_color=model.sine_line2_glow_color,
-                        sine_line3_color=model.sine_line3_color,
-                        sine_line3_glow_color=model.sine_line3_glow_color,
-                        sine_line4_color=model.sine_line4_color,
-                        sine_line4_glow_color=model.sine_line4_glow_color,
-                        sine_line5_color=model.sine_line5_color,
-                        sine_line5_glow_color=model.sine_line5_glow_color,
-                        sine_line6_color=model.sine_line6_color,
-                        sine_line6_glow_color=model.sine_line6_glow_color,
-                        sine_ghost_line2_enabled=model.sine_ghost_line2_enabled,
-                        sine_ghost_line3_enabled=model.sine_ghost_line3_enabled,
-                        sine_ghost_line4_enabled=model.sine_ghost_line4_enabled,
-                        sine_ghost_line5_enabled=model.sine_ghost_line5_enabled,
-                        sine_ghost_line6_enabled=model.sine_ghost_line6_enabled,
-                        osc_speed=model.osc_speed,
-                        osc_line_amplitude=model.osc_line_amplitude,
-                        osc_smoothing=model.osc_smoothing,
-                        osc_glow_enabled=model.osc_glow_enabled,
-                        osc_glow_intensity=model.osc_glow_intensity,
-                        osc_reactive_glow=model.osc_reactive_glow,
-                        spectrum_mirrored=model.spectrum_mirrored,
-                        spectrum_shape_nodes=model.spectrum_shape_nodes,
-                        spectrum_lane_strengths_mirrored=model.spectrum_lane_strengths_mirrored,
-                        spectrum_lane_strengths_linear=model.spectrum_lane_strengths_linear,
-                        spectrum_wave_amplitude=model.spectrum_wave_amplitude,
-                        spectrum_profile_floor=model.spectrum_profile_floor,
-                        spectrum_single_piece=spectrum_single_piece,
-                    )
-            except Exception:
-                logger.debug("[WIDGET_MANAGER] Failed to reapply vis mode config", exc_info=True)
-        except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to reapply full vis mode config", exc_info=True)
-
-        if force_runtime_reset:
-            try:
-                reset_runtime = getattr(vis, "reset_runtime_activation_state", None)
-                if callable(reset_runtime):
-                    reset_runtime(reason=reset_reason)
-            except Exception:
-                logger.debug(
-                    "[WIDGET_MANAGER] Failed to reset visualizer runtime state after config refresh",
-                    exc_info=True,
+                vis.apply_resolved_activation_payload(
+                    model,
+                    activation_payload,
+                    reason=reset_reason,
+                    force_runtime_reset=force_runtime_reset,
                 )
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to apply resolved Spotify activation payload", exc_info=True)
+        else:
+            try:
+                vis.set_settings_model(model)
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to push Spotify model to widget", exc_info=True)
+
+            try:
+                from rendering.spotify_widget_creators import apply_spotify_vis_model_config
+                apply_spotify_vis_model_config(vis, model)
+            except ImportError:
+                logger.debug("[WIDGET_MANAGER] Spotify visualizer config helper unavailable", exc_info=True)
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to reapply full vis mode config", exc_info=True)
+
+            if force_runtime_reset:
+                try:
+                    reset_runtime = getattr(vis, "reset_runtime_activation_state", None)
+                    if callable(reset_runtime):
+                        reset_runtime(reason=reset_reason)
+                except Exception:
+                    logger.debug(
+                        "[WIDGET_MANAGER] Failed to reset visualizer runtime state after config refresh",
+                        exc_info=True,
+                    )
 
         media_cfg = cfg.get('media', {}) if isinstance(cfg, Mapping) else {}
         self._apply_media_card_style_to_visualizer(vis, media_cfg)

@@ -62,7 +62,8 @@ Active ids:
 
 ### 5.3 Shared seams
 - Mapping normalization: `visualizer_settings_snapshot.py`
-- Baseline/fallback contract: `visualizer_settings_contract.py`
+- Technical normalization / legacy migration contract: `visualizer_settings_contract.py`
+- Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Runtime config application: `widgets/spotify_visualizer/config_applier.py`
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
 
@@ -70,6 +71,9 @@ Active ids:
 - Mode-owned behavior belongs to mode-owned code.
 - Shared seams must remain neutral and explicit.
 - No hidden cross-mode dependency on authored mode keys.
+- Technical settings are mode-owned at runtime and in canonical persistence. Shared/global technical keys are legacy migration inputs only and must not remain in normalized settings, custom snapshots, or preset payloads.
+- Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.
+- Live diagnostics for visualizer activation must report the resolved preset identity and the actual applied worker/widget technical state, not only raw settings payloads.
 
 ## 6. Preset Architecture Contract
 - Authored curated source: `presets/visualizer_modes/`.

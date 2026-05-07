@@ -57,6 +57,7 @@ class _SpotifyBeatEngine(QObject):
         self._latest_bars: Optional[List[float]] = None
         self._last_audio_ts: float = 0.0
         self._generation_id: int = 0
+        self._activation_id: int = 0
         self._latest_generation_with_frame: int = 0
         self._latest_generation_with_waveform: int = 0
 
@@ -101,6 +102,7 @@ class _SpotifyBeatEngine(QObject):
         self._audio_buffer = TripleBuffer()
         self._bars_result_buffer = TripleBuffer()
         self._audio_worker._buffer = self._audio_buffer
+        self._audio_worker._activation_id = self._activation_id
 
     def reconfigure_bar_count(self, bar_count: int) -> None:
         """Rebuild shared runtime state for a new bar count."""
@@ -121,9 +123,16 @@ class _SpotifyBeatEngine(QObject):
         self._idle_wave_phase = 0.0
         self._energy_bands = EnergyBands()
         self._generation_id += 1
+        self._activation_id += 1
+        self._audio_worker._activation_id = self._activation_id
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
-        logger.debug("[SPOTIFY_VIS] Beat engine bar-count reconfigured -> %d (generation=%d)", new_count, self._generation_id)
+        logger.debug(
+            "[SPOTIFY_VIS] Beat engine bar-count reconfigured -> %d (generation=%d activation=%d)",
+            new_count,
+            self._generation_id,
+            self._activation_id,
+        )
     
     def reset_smoothing_state(self) -> None:
         """Reset all smoothing/energy state for a clean mode switch.
@@ -144,11 +153,17 @@ class _SpotifyBeatEngine(QObject):
         self._last_audio_ts = 0.0
         self._audio_worker.reset_reactivity_state()
         self._generation_id += 1
+        self._activation_id += 1
+        self._audio_worker._activation_id = self._activation_id
         # Force consumers to wait for the next FFT result produced after
         # this reset instead of reusing the pre-reset generation id.
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
-        logger.debug("[SPOTIFY_VIS] Beat engine smoothing state reset (generation=%d)", self._generation_id)
+        logger.debug(
+            "[SPOTIFY_VIS] Beat engine smoothing state reset (generation=%d activation=%d)",
+            self._generation_id,
+            self._activation_id,
+        )
 
     def reset_floor_state(self) -> None:
         """Reset dynamic/manual floor accumulator state."""
@@ -353,6 +368,14 @@ class _SpotifyBeatEngine(QObject):
         Called during application shutdown to ensure audio capture threads
         are terminated and the process can exit cleanly.
         """
+        self.cancel_pending_compute_tasks()
+        self._replace_runtime_buffers()
+        self._latest_bars = [0.0] * self._bar_count
+        self._smoothed_bars = [0.0] * self._bar_count
+        self._last_audio_ts = 0.0
+        self._waveform = [0.0] * 256
+        self._waveform_count = 0
+        self._idle_wave_phase = 0.0
         self._ref_count = 0
         self._stop_worker()
 
@@ -369,6 +392,7 @@ class _SpotifyBeatEngine(QObject):
 
         self._compute_task_active = True
         token = self._compute_gate_token
+        activation_id = self._activation_id
         
         smoothed_copy = list(self._smoothed_bars)
         last_smooth_ts = self._last_smooth_ts
@@ -379,7 +403,14 @@ class _SpotifyBeatEngine(QObject):
 
         def _job(local_samples=samples):
             """FFT + smoothing on COMPUTE pool - keeps UI thread free."""
-            raw_bars = self._audio_worker.compute_bars_from_samples(local_samples)
+            try:
+                worker_state = self._audio_worker.make_compute_snapshot()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to snapshot audio worker for compute", exc_info=True)
+                return None
+            from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
+
+            raw_bars = compute_bars_from_samples(worker_state, local_samples)
             if not isinstance(raw_bars, list):
                 return None
             
@@ -387,7 +418,15 @@ class _SpotifyBeatEngine(QObject):
             dt = max(0.0, now_ts - last_smooth_ts) if last_smooth_ts >= 0.0 else 0.0
             
             if dt > 2.0 or dt <= 0.0:
-                return {'raw': raw_bars, 'smoothed': list(raw_bars), 'ts': now_ts, 'reset': True}
+                return {
+                    'raw': raw_bars,
+                    'smoothed': list(raw_bars),
+                    'ts': now_ts,
+                    'reset': True,
+                    'energy': extract_energy_bands(raw_bars),
+                    'worker_state': worker_state,
+                    'activation_id': activation_id,
+                }
             
             base_tau = smoothing_tau
             tau_rise = base_tau * 0.35
@@ -426,21 +465,35 @@ class _SpotifyBeatEngine(QObject):
             
             # Extract energy bands from smoothed bars
             energy = extract_energy_bands(smoothed)
-            return {'raw': raw_bars, 'smoothed': smoothed, 'ts': now_ts,
-                    'energy': energy}
+            return {
+                'raw': raw_bars,
+                'smoothed': smoothed,
+                'ts': now_ts,
+                'energy': energy,
+                'worker_state': worker_state,
+                'activation_id': activation_id,
+            }
 
         def _on_result(result) -> None:
             try:
-                if token != self._compute_gate_token:
+                if token != self._compute_gate_token or activation_id != self._activation_id:
                     return
                 self._compute_task_active = False
                 success = getattr(result, "success", True)
                 data = getattr(result, "result", None)
                 if not success or data is None:
                     return
+                if data.get('activation_id') != self._activation_id:
+                    return
                 raw_bars = data.get('raw')
                 smoothed_bars = data.get('smoothed')
                 ts = data.get('ts', time.time())
+                worker_state = data.get('worker_state')
+                if worker_state is not None:
+                    try:
+                        self._audio_worker.commit_compute_snapshot(worker_state)
+                    except Exception:
+                        logger.debug("[SPOTIFY_VIS] Failed to commit audio worker compute state", exc_info=True)
                 if isinstance(raw_bars, list):
                     self._bars_result_buffer.publish(raw_bars)
                     self._latest_bars = raw_bars
@@ -470,6 +523,9 @@ class _SpotifyBeatEngine(QObject):
     def get_generation_id(self) -> int:
         return self._generation_id
 
+    def get_activation_id(self) -> int:
+        return self._activation_id
+
     def get_latest_generation_with_frame(self) -> int:
         return self._latest_generation_with_frame
 
@@ -485,6 +541,16 @@ class _SpotifyBeatEngine(QObject):
         if not self._is_spotify_playing:
             self._update_idle_waveform(now_ts)
         frame = self._audio_buffer.consume_latest()
+        if frame is not None:
+            frame_activation = getattr(frame, "activation_id", None)
+            if isinstance(frame_activation, int) and frame_activation != self._activation_id:
+                logger.debug(
+                    "[SPOTIFY_VIS] Dropped stale audio frame activation=%s current=%s",
+                    frame_activation,
+                    self._activation_id,
+                )
+                frame = None
+
         if frame is not None:
             samples = getattr(frame, "samples", None)
             if samples is not None:
@@ -521,8 +587,12 @@ class _SpotifyBeatEngine(QObject):
                     if not self._compute_task_active:
                         self._schedule_compute_bars_task(samples)
                 else:
-                    bars_inline = self._audio_worker.compute_bars_from_samples(samples)
+                    worker_state = self._audio_worker.make_compute_snapshot()
+                    from widgets.spotify_visualizer.bar_computation import compute_bars_from_samples
+
+                    bars_inline = compute_bars_from_samples(worker_state, samples)
                     if isinstance(bars_inline, list):
+                        self._audio_worker.commit_compute_snapshot(worker_state)
                         try:
                             self._bars_result_buffer.publish(bars_inline)
                         except Exception as e:
@@ -624,16 +694,16 @@ class _SpotifyBeatEngine(QObject):
         """Get energy bands computed BEFORE AGC normalization.
 
         Post-noise-floor, pre-normalization values that preserve full dynamic
-        range.  Modes that need true loudness variance (bubbles, blob) should
+        range.  Modes that need true loudness variance should
         use these instead of post-AGC bar-derived energy.
 
         Scaled by the reactivity ramp factor during AGC warmup.
         """
         w = self._audio_worker
         ramp = self._get_play_ramp_factor()
-        bass = getattr(w, '_bubble_pre_agc_bass', getattr(w, '_pre_agc_bass', 0.0)) * ramp
-        mid = getattr(w, '_bubble_pre_agc_mid', getattr(w, '_pre_agc_mid', 0.0)) * ramp
-        high = getattr(w, '_bubble_pre_agc_treble', getattr(w, '_pre_agc_treble', 0.0)) * ramp
+        bass = getattr(w, '_pre_agc_control_bass', getattr(w, '_pre_agc_bass', 0.0)) * ramp
+        mid = getattr(w, '_pre_agc_control_mid', getattr(w, '_pre_agc_mid', 0.0)) * ramp
+        high = getattr(w, '_pre_agc_control_treble', getattr(w, '_pre_agc_treble', 0.0)) * ramp
         bass = max(0.0, min(1.0, float(bass)))
         mid = max(0.0, min(1.0, float(mid)))
         high = max(0.0, min(1.0, float(high)))

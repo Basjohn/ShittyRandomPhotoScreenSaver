@@ -44,7 +44,7 @@ Living map of the current SRPSS codebase.
 | Settings store | `core/settings/json_store.py` | Atomic JSON persistence |
 | Settings manager | `core/settings/settings_manager.py` | Dotted API over structured roots |
 | Snapshot normalization | `core/settings/visualizer_settings_snapshot.py` | Canonical visualizer mapping normalization |
-| Baseline/fallback contract | `core/settings/visualizer_settings_contract.py` | Shared fallback resolution for visualizer settings |
+| Technical normalization / legacy migration contract | `core/settings/visualizer_settings_contract.py` | Migrates legacy shared technical inputs into canonical per-mode visualizer settings |
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |
 | Shadow tuning loader | `core/settings/shadow_tuning.py` | Loads `shadowtuning.json`; provides `CARD_SHADOW_TUNING` + `VOLUME_SLIDER_SHADOW_TUNING` |
 | Storage paths | `core/settings/storage_paths.py` | Canonical `%APPDATA%` path resolver for all persistent files |
@@ -54,9 +54,9 @@ Living map of the current SRPSS codebase.
 | Module | File | Role |
 |---|---|---|
 | Mode registry | `core/settings/visualizer_mode_registry.py` | Mode ids, labels, key prefixes, slider ownership |
-| Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading + apply |
+| Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading, canonical activation payload resolution, and preset apply |
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
-| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator |
+| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask (with border-width inset) to clip GL content to the visible card boundary |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping |
 | Spline Curve runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | DevCurve/Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
@@ -67,7 +67,7 @@ Living map of the current SRPSS codebase.
 | Module | File | Role |
 |---|---|---|
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
-| Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync |
+| Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff |
 | Startup policy | `rendering/overlay_startup_policy.py` | Primary and secondary startup timing |
 | Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link Reddit controls separate from URL clicks so refresh controls do not trigger normal-build browser exits |
 | GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface |

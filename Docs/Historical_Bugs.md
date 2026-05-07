@@ -1307,3 +1307,29 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
 - **Guardrails:**
   - Do not attempt rect-shrink or QPainter-clip approaches for this bug family again.
   - The mask inset must account for both the 1-px painted-frame shadow inset (`inset=1.0`) AND the centred card border width (`border_width/2`).
+
+<a id="R-21"></a>
+### [R-21] 2026-05-06 — Visualizer Runtime Mode/Preset Bleed Survived Audio Resets (Awaiting Validation)
+
+- [ ] COMPLETELY FUCKED
+- [x] ACTIVE
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Symptoms:** Runtime switches between visualizer modes or presets could leave the target mode visually corrupted even when the target settings were logged as applied. Two clear examples were Spline/DevCurve -> Spectrum becoming blown out and uniform, and Spectrum -> Spline/DevCurve becoming flat with weak reactivity. Opening settings and returning could make the same target mode look normal, which proved runtime hot activation was not equivalent to the settings refresh/restart path.
+
+- **Failed narrow fixes:** Resetting the shared beat engine, audio worker AGC/floor state, audio buffers, waveform buffers, idle phase, and generation counters was necessary but not sufficient. Resetting/destroying the GL overlay and widget-owned accumulators was also necessary, but still not sufficient. Those fixes cleaned visible state containers, but they did not protect the mutable DSP state inside an already-running background FFT job.
+
+- **Root causes found:** Runtime activation did not have a hard transaction boundary. A canceled compute callback was rejected after completion, but the background job itself still called bar computation on the live `SpotifyVisualizerAudioWorker`, mutating dynamic floor, AGC envelopes, transient bus/event state, bar history, and related DSP caches before the callback token check. That let previous-mode audio authority leak into the target mode even when the target settings had already been applied. A later log pass showed a second authority leak: during `DevCurve -> Spectrum`, `WidgetManager` logged target Spectrum config (`manual=0.140`) while the live floor logs still reported DevCurve config (`manual=0.610`, `expansion=5.989`). That proved reset/overlay cleanup and detached compute jobs were still insufficient unless the fade-complete and pre-reset paths force the target mode's full technical config onto the shared engine before fresh frames are accepted. The deeper settings-side contributor was ambiguous technical-key ownership: shared/global technical keys were still treated as live state in parts of save/load/logging while presets and runtime were already mode-owned. That made diagnostics misleading and allowed active-mode technical values to be rewritten back into shared keys instead of staying isolated to their mode/preset payload. A further concrete seam was the split runtime activation path itself: startup/create, refresh, and hot mode switches were not all consuming the same resolved mode/preset payload, and `sine_wave` technical sensitivity could be shadowed by the separate visual `sine_sensitivity` key when prefix resolution preferred loose aliases over the canonical `sine_wave_*` technical key.
+
+- **Fix direction:** Treat runtime mode and preset activation as an atomic activation boundary without creating a new beat engine. Each activation increments an id, discards audio/result buffers, resets idle/waveform/smoothed/widget/overlay state, reapplies target technical config before and after the engine reset, and refuses reveal until the engine generation and activation id match. Background FFT jobs compute against a bounded detached audio-worker snapshot and commit floor/AGC/transient/bar state only after the callback verifies both the compute token and activation id. Stale audio frames tagged with an old activation id are dropped.
+
+- **Guardrails:**
+  - Runtime mode switch, context-menu switch, double-click cycle, and preset switch must be tested as activation paths, not only as settings-key updates.
+  - Tests must poison and assert cleanup across audio worker DSP state, queued compute jobs, audio/result buffers, widget-owned visual accumulators, and GL overlay payload state.
+  - Background FFT jobs must never mutate live DSP state unless their compute token and activation id are current at commit time.
+  - Runtime transition tests must assert the live audio worker's target-mode technical values, not only widget-side logs or fake-engine reset counts.
+  - Visualizer technical settings must remain canonicalized as per-mode keys. Shared/global technical keys are migration inputs only and should not survive normalized settings, custom snapshots, preset payloads, or runtime diagnostics.
+  - Canonical per-mode technical keys must win over looser alias prefixes when a mode also has visual keys with overlapping names; `sine_wave_*` technical keys must not be shadowed by `sine_*` visual keys.
+  - Do not solve this by creating per-mode beat engines. The shared engine identity must remain stable; only its state/config may be reset.
+  - If settings round-trip fixes a visualizer state that runtime switching breaks, compare reconstruction-owned state first before tuning creative values.

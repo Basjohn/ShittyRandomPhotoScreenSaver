@@ -105,17 +105,19 @@ def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
         # Fading out
         t = min(1.0, elapsed / dur) if dur > 0 else 1.0
         if t >= 1.0:
-            # Fade-out complete: switch mode, begin fade-in
-            pending = widget._mode_transition_pending
-            if pending is not None:
-                try:
-                    setattr(widget, "_mode_transition_resume_ts", now_ts)
-                except Exception:
-                    setattr(widget, "_mode_transition_resume_ts", 0.0)
-                widget.set_visualization_mode(pending)
-                widget._mode_transition_pending = None
+            # GPU fade-out complete. The actual target-mode activation is
+            # owned by on_mode_fade_out_complete(), after the old GL overlay is
+            # destroyed. Pushing target frames before that teardown was the
+            # source of runtime-only mode bleed.
+            try:
+                setattr(widget, "_mode_transition_resume_ts", now_ts)
+            except Exception:
+                setattr(widget, "_mode_transition_resume_ts", 0.0)
             widget._mode_transition_phase = 3  # waiting-for-ready
             widget._mode_transition_ts = now_ts
+            if getattr(widget, "_mode_teardown_state", "idle") != "fading_out":
+                # Unit/direct path with no ShadowFadeProfile callback.
+                on_mode_fade_out_complete(widget)
             return 0.0
         return 1.0 - t
 
@@ -173,6 +175,7 @@ def reset_visualizer_state(
     replay_cached: bool = False,
 ) -> None:
     """Clear runtime visualizer state so the next mode behaves like a cold start."""
+    reset_mode_owned_runtime_state(widget, reason="widget_reset_state")
     zeros = [0.0] * widget._bar_count
     widget._display_bars = list(zeros)
     widget._target_bars = list(zeros)
@@ -237,6 +240,8 @@ def reset_visualizer_state(
     widget._waiting_for_fresh_engine_frame = False
     widget._pending_engine_generation = -1
     widget._last_engine_generation_seen = -1
+    widget._pending_engine_activation_id = -1
+    widget._last_engine_activation_seen = -1
     widget._request_overlay_mode_reset(reason="widget_reset_state")
     if clear_overlay:
         widget._clear_gl_overlay()
@@ -247,6 +252,147 @@ def reset_visualizer_state(
             apply_vis_mode_kwargs(widget, copy.deepcopy(widget._cached_vis_kwargs))
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to replay cached settings during reset", exc_info=True)
+
+
+def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activation") -> None:
+    """Clear widget-owned visual accumulators that a settings restart recreates.
+
+    This deliberately leaves authored settings/config fields alone. It only
+    resets live envelopes, sampled frames, animation phases, and diagnostics
+    that can bleed when switching modes or presets without reconstructing the
+    widget.
+    """
+
+    for attr in (
+        "_last_visual_smooth_ts",
+        "_heartbeat_intensity",
+        "_heartbeat_avg_bass",
+        "_heartbeat_fast_bass",
+        "_heartbeat_floor_bass",
+        "_heartbeat_fast_prev",
+        "_heartbeat_last_ts",
+        "_heartbeat_last_log_ts",
+        "_heartbeat_last_trigger_ts",
+        "_crawl_last_log_ts",
+        "_latency_last_log_ts",
+        "_last_peak_ts",
+        "_bubble_last_tick_ts",
+        "_devcurve_last_tick_ts",
+        "_devcurve_smoothness_max_step",
+        "_devcurve_active_amplitude",
+        "_devcurve_idle_amplitude",
+        "_devcurve_foreground_travel_rate",
+        "_devcurve_foreground_travel_pos",
+        "_devcurve_specular_travel_rate",
+        "_devcurve_specular_activity_alpha",
+        "_devcurve_diag_last_log_ts",
+        "_blob_smoothed_energy",
+        "_blob_glow_energy",
+        "_blob_raw_bass_energy",
+        "_blob_raw_mid_energy",
+        "_blob_raw_high_energy",
+        "_blob_raw_overall_energy",
+        "_blob_live_bass_energy",
+        "_blob_live_mid_energy",
+        "_blob_live_high_energy",
+        "_blob_live_overall_energy",
+        "_blob_peak_energy",
+        "_blob_peak_bass",
+        "_blob_peak_mid",
+        "_blob_peak_high",
+        "_blob_peak_overall",
+        "_blob_peak_hold_remaining",
+        "_blob_kick_event_strength",
+        "_blob_snare_event_strength",
+        "_blob_kick_event_envelope",
+        "_blob_snare_event_envelope",
+        "_blob_diag_last_ts",
+        "_blob_runtime_diag_ts",
+        "_blob_shaper_solver_ts",
+        "_line_smoothed_bass",
+        "_line_smoothed_mid",
+        "_line_smoothed_high",
+        "_line_kick_event_strength",
+        "_line_snare_event_strength",
+        "_line_kick_event_envelope",
+        "_line_snare_event_envelope",
+        "_sine_peak_bass",
+        "_sine_peak_mid",
+        "_sine_peak_high",
+        "_sine_peak_hold_remaining",
+    ):
+        try:
+            setattr(widget, attr, 0.0)
+        except Exception:
+            pass
+
+    for attr in (
+        "_devcurve_curve_bass",
+        "_devcurve_curve_vocals",
+        "_devcurve_curve_mids",
+        "_devcurve_curve_transients",
+        "_bubble_pos_data",
+        "_bubble_extra_data",
+        "_bubble_trail_data",
+        "_peaks",
+    ):
+        try:
+            setattr(widget, attr, [])
+        except Exception:
+            pass
+
+    for attr in (
+        "_devcurve_runtime_state",
+        "_blob_shaper_runtime_profile",
+        "_blob_shaper_runtime_velocity",
+        "_blob_shaper_runtime_target_profile",
+        "_blob_shaper_solver_seed",
+        "_blob_diag_last_sig",
+        "_latency_last_signature",
+    ):
+        try:
+            setattr(widget, attr, None)
+        except Exception:
+            pass
+
+    try:
+        widget._devcurve_sample_count = 0
+        widget._devcurve_foreground_layer = ""
+        widget._devcurve_foreground_layer_id = -1
+        widget._devcurve_specular_slot0 = [0.0, 0.0, 0.0, 0.0]
+        widget._devcurve_specular_slot1 = [0.0, 0.0, 0.0, 0.0]
+        widget._devcurve_specular_slot2 = [0.0, 0.0, 0.0, 0.0]
+        widget._devcurve_draw_order = ["bass", "vocals", "mids", "transients"]
+    except Exception:
+        pass
+
+    try:
+        widget._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
+        widget._blob_stage_progress_filtered = (-1.0, -1.0, -1.0)
+        widget._blob_stage_progress_ready = False
+        widget._blob_seed_pending = True
+    except Exception:
+        pass
+
+    try:
+        widget._bubble_count = 0
+        widget._bubble_compute_pending = False
+        bubble_sim = getattr(widget, "_bubble_simulation", None)
+        if bubble_sim is not None and hasattr(bubble_sim, "reset"):
+            bubble_sim.reset()
+    except Exception:
+        pass
+
+    try:
+        from widgets.spotify_visualizer.blob_pockets import reset_blob_pocket_state
+
+        widget._blob_pocket_state = reset_blob_pocket_state(
+            getattr(widget, "_blob_pocket_state", None)
+        )
+    except Exception:
+        pass
+
+    logger.debug("[SPOTIFY_VIS] Mode-owned runtime state reset reason=%s", reason)
 
 
 # ------------------------------------------------------------------
@@ -358,12 +504,40 @@ def on_mode_fade_out_complete(widget: Any) -> None:
 
     if not Shiboken.isValid(widget):
         return
+    if (
+        getattr(widget, "_mode_teardown_state", "idle") == "waiting_bars"
+        and getattr(widget, "_mode_transition_pending", None) is None
+    ):
+        return
     widget._clear_gl_overlay()
+    pending = getattr(widget, "_mode_transition_pending", None)
+    if pending is not None:
+        try:
+            setattr(widget, "_mode_transition_resume_ts", time.time())
+        except Exception:
+            setattr(widget, "_mode_transition_resume_ts", 0.0)
+        try:
+            widget.set_visualization_mode(pending, reset_runtime=False)
+        except TypeError:
+            widget.set_visualization_mode(pending)
+        widget._mode_transition_pending = None
+    apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
+    if callable(apply_full):
+        try:
+            apply_full(widget._vis_mode, reason="mode_fade_out_complete")
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply target config at fade completion", exc_info=True)
+    widget._mode_transition_phase = 3
     widget._mode_teardown_state = 'waiting_bars'
     widget._mode_teardown_block_until_ready = True
     widget._mode_teardown_wait_started_ts = time.time()
     widget._pending_shadow_cache_invalidation = True
+    reset_mode_owned_runtime_state(widget, reason="mode_fade_out_complete")
     prepare_engine_for_mode_reset(widget)
+    try:
+        widget._clear_runtime_bar_state()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear runtime bars after mode activation", exc_info=True)
 
 
 def prepare_engine_for_mode_reset(widget: Any) -> None:
@@ -379,6 +553,12 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
     if engine is None:
         return
     try:
+        apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
+        if callable(apply_full):
+            try:
+                apply_full(widget._vis_mode, reason="mode_prepare_reset")
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to apply target config before engine reset", exc_info=True)
         engine.cancel_pending_compute_tasks()
         engine.reset_smoothing_state()
         engine.reset_floor_state()

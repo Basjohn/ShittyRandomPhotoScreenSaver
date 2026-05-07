@@ -1334,14 +1334,7 @@ class TestPerModeTechnicalRoundTrip:
     def _sample_payload(self):
         from core.settings.models import PER_MODE_TECHNICAL_MODES
 
-        payload = {
-            "widgets.spotify_visualizer.bar_count": 64,
-            "widgets.spotify_visualizer.manual_floor": 2.5,
-            "widgets.spotify_visualizer.dynamic_floor": True,
-            "widgets.spotify_visualizer.dynamic_range_enabled": False,
-            "widgets.spotify_visualizer.adaptive_sensitivity": True,
-            "widgets.spotify_visualizer.sensitivity": 1.0,
-        }
+        payload = {}
         per_mode = {}
         for idx, mode in enumerate(PER_MODE_TECHNICAL_MODES, start=1):
             overrides = {
@@ -1374,6 +1367,21 @@ class TestPerModeTechnicalRoundTrip:
             prefix = f"widgets.spotify_visualizer.{mode}_"
             for key, value in overrides.items():
                 assert data[f"{prefix}{key}"] == value
+        legacy_globals = {
+            "widgets.spotify_visualizer.bar_count",
+            "widgets.spotify_visualizer.manual_floor",
+            "widgets.spotify_visualizer.dynamic_floor",
+            "widgets.spotify_visualizer.dynamic_range_enabled",
+            "widgets.spotify_visualizer.adaptive_sensitivity",
+            "widgets.spotify_visualizer.sensitivity",
+            "widgets.spotify_visualizer.agc_strength",
+            "widgets.spotify_visualizer.input_gain",
+            "widgets.spotify_visualizer.kick_lane_gain",
+            "widgets.spotify_visualizer.transient_pulse_gain",
+            "widgets.spotify_visualizer.transient_clamp",
+            "widgets.spotify_visualizer.audio_block_size",
+        }
+        assert not legacy_globals.intersection(data.keys())
 
     def test_from_mapping_round_trip(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -1400,6 +1408,81 @@ class TestPerModeTechnicalRoundTrip:
         serialized = model.to_dict()
         self._assert_model_matches(model, per_mode)
         self._assert_dict_matches(serialized, per_mode)
+
+    def test_from_mapping_migrates_legacy_shared_technical_inputs_once(self):
+        from core.settings.models import PER_MODE_TECHNICAL_MODES, SpotifyVisualizerSettings
+
+        payload = {
+            "widgets.spotify_visualizer.mode": "bubble",
+            "widgets.spotify_visualizer.bar_count": 64,
+            "widgets.spotify_visualizer.manual_floor": 0.27,
+            "widgets.spotify_visualizer.dynamic_floor": False,
+            "widgets.spotify_visualizer.dynamic_range_enabled": True,
+            "widgets.spotify_visualizer.audio_block_size": 384,
+            "widgets.spotify_visualizer.adaptive_sensitivity": False,
+            "widgets.spotify_visualizer.sensitivity": 0.91,
+            "widgets.spotify_visualizer.agc_strength": 0.66,
+            "widgets.spotify_visualizer.input_gain": 1.21,
+            "widgets.spotify_visualizer.kick_lane_gain": 1.44,
+            "widgets.spotify_visualizer.transient_pulse_gain": 1.18,
+            "widgets.spotify_visualizer.transient_clamp": 1.73,
+            "widgets.spotify_visualizer.spectrum_manual_floor": 0.41,
+        }
+
+        model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
+        serialized = model.to_dict()
+
+        for mode in PER_MODE_TECHNICAL_MODES:
+            expected_floor = 0.41 if mode == "spectrum" else 0.27
+            assert model.resolve_bar_count(mode) == 64
+            assert model.resolve_manual_floor(mode) == pytest.approx(expected_floor)
+            assert model.resolve_dynamic_floor(mode) is False
+            assert model.resolve_dynamic_range_enabled(mode) is True
+            assert model.resolve_audio_block_size(mode) == 384
+            assert model.resolve_adaptive_sensitivity(mode) is False
+            assert model.resolve_sensitivity(mode) == pytest.approx(0.91)
+            assert model.resolve_agc_strength(mode) == pytest.approx(0.66)
+            assert model.resolve_input_gain(mode) == pytest.approx(1.21)
+            assert model.resolve_kick_lane_gain(mode) == pytest.approx(1.44)
+            assert model.resolve_transient_pulse_gain(mode) == pytest.approx(1.18)
+            assert model.resolve_transient_clamp(mode) == pytest.approx(1.73)
+
+        self._assert_dict_matches(
+            serialized,
+            {
+                mode: {
+                    "bar_count": 64,
+                    "manual_floor": 0.41 if mode == "spectrum" else 0.27,
+                    "dynamic_floor": False,
+                    "dynamic_range_enabled": True,
+                    "audio_block_size": 384,
+                    "adaptive_sensitivity": False,
+                    "sensitivity": 0.91,
+                }
+                for mode in PER_MODE_TECHNICAL_MODES
+            },
+        )
+        assert serialized["widgets.spotify_visualizer.spectrum_agc_strength"] == pytest.approx(0.66)
+        assert serialized["widgets.spotify_visualizer.spectrum_input_gain"] == pytest.approx(1.21)
+        assert serialized["widgets.spotify_visualizer.spectrum_kick_lane_gain"] == pytest.approx(1.44)
+        assert serialized["widgets.spotify_visualizer.spectrum_transient_pulse_gain"] == pytest.approx(1.18)
+        assert serialized["widgets.spotify_visualizer.spectrum_transient_clamp"] == pytest.approx(1.73)
+
+    def test_from_mapping_prefers_canonical_sine_wave_technical_key_over_visual_sine_alias(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        payload = {
+            "widgets.spotify_visualizer.mode": "sine_wave",
+            "widgets.spotify_visualizer.sine_sensitivity": 1.0,
+            "widgets.spotify_visualizer.sine_wave_sensitivity": 0.73,
+            "widgets.spotify_visualizer.sine_wave_adaptive_sensitivity": False,
+        }
+
+        model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
+
+        assert model.resolve_sensitivity("sine_wave") == pytest.approx(0.73)
+        assert model.sine_sensitivity == pytest.approx(1.0)
+        assert model.resolve_adaptive_sensitivity("sine_wave") is False
 
 
 # ===========================================================================
@@ -1846,7 +1929,7 @@ class TestVisualizerModeRegistryContract:
 
 
 class TestVisualizerSettingsContract:
-    def test_resolve_visualizer_baselines_reads_shared_legacy_defaults_once(self):
+    def test_resolve_visualizer_baselines_reads_legacy_shared_technical_inputs_once(self):
         from core.settings.visualizer_settings_contract import resolve_visualizer_baselines
 
         data = {
@@ -1858,6 +1941,10 @@ class TestVisualizerSettingsContract:
             "dynamic_range_enabled": True,
             "agc_strength": 0.61,
             "input_gain": 1.3,
+            "kick_lane_gain": 1.2,
+            "transient_pulse_gain": 1.4,
+            "transient_clamp": 1.8,
+            "audio_block_size": 384,
         }
 
         baselines = resolve_visualizer_baselines(lambda key, default=None: data.get(key, default))
@@ -1871,9 +1958,13 @@ class TestVisualizerSettingsContract:
             "dynamic_range_enabled": True,
             "agc_strength": pytest.approx(0.61),
             "input_gain": pytest.approx(1.3),
+            "kick_lane_gain": pytest.approx(1.2),
+            "transient_pulse_gain": pytest.approx(1.4),
+            "transient_clamp": pytest.approx(1.8),
+            "audio_block_size": 384,
         }
 
-    def test_build_visualizer_mode_kwargs_applies_shared_sparse_fallback_contract(self):
+    def test_build_visualizer_mode_kwargs_uses_legacy_baselines_only_for_missing_mode_keys(self):
         from core.settings.visualizer_settings_contract import build_visualizer_mode_kwargs
 
         baselines = {
@@ -1885,9 +1976,16 @@ class TestVisualizerSettingsContract:
             "dynamic_range_enabled": True,
             "agc_strength": 0.61,
             "input_gain": 1.3,
+            "kick_lane_gain": 1.2,
+            "transient_pulse_gain": 1.4,
+            "transient_clamp": 1.8,
+            "audio_block_size": 384,
         }
         per_mode = {
             ("blob", "bar_count"): 24,
+            ("blob", "manual_floor"): 0.22,
+            ("bubble", "adaptive_sensitivity"): True,
+            ("bubble", "audio_block_size"): 512,
             ("spectrum", "lane_transient_mix"): 0.72,
             ("sine_wave", "rainbow_enabled"): True,
         }
@@ -1899,10 +1997,17 @@ class TestVisualizerSettingsContract:
 
         assert kwargs["blob_bar_count"] == 24
         assert kwargs["bubble_bar_count"] == 41
-        assert kwargs["blob_manual_floor"] == pytest.approx(0.18)
+        assert kwargs["blob_manual_floor"] == pytest.approx(0.22)
+        assert kwargs["bubble_manual_floor"] == pytest.approx(0.18)
+        assert kwargs["bubble_adaptive_sensitivity"] is True
+        assert kwargs["bubble_audio_block_size"] == 512
+        assert kwargs["oscilloscope_input_gain"] == pytest.approx(1.3)
+        assert kwargs["devcurve_kick_lane_gain"] == pytest.approx(1.2)
+        assert kwargs["devcurve_transient_pulse_gain"] == pytest.approx(1.4)
+        assert kwargs["devcurve_transient_clamp"] == pytest.approx(1.8)
         assert kwargs["spectrum_lane_transient_mix"] == pytest.approx(0.72)
         assert kwargs["bubble_transient_mix_bass"] == pytest.approx(0.75)
-        assert kwargs["oscilloscope_audio_block_size"] == 0
+        assert kwargs["oscilloscope_audio_block_size"] == 384
         assert "bubble_use_raw_energy" not in kwargs
 
     def test_section_normalizer_drops_retired_live_compat_keys(self):

@@ -931,28 +931,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
         spotify_vis_config.update(collect_devcurve_mode_settings(tab))
     collect_per_mode_technical_controls(tab, spotify_vis_config, current_mode=_cur_mode)
 
-    def _per_mode_value(key: str, fallback):
-        return spotify_vis_config.get(f'{_cur_mode}_{key}', fallback)
-
-    spotify_vis_config['bar_count'] = _per_mode_value(
-        'bar_count', tab._default_int('spotify_visualizer', 'bar_count', 32)
-    )
-    spotify_vis_config['adaptive_sensitivity'] = _per_mode_value(
-        'adaptive_sensitivity', tab._default_bool('spotify_visualizer', 'adaptive_sensitivity', True)
-    )
-    spotify_vis_config['sensitivity'] = _per_mode_value(
-        'sensitivity', tab._default_float('spotify_visualizer', 'sensitivity', 1.0)
-    )
-    spotify_vis_config['dynamic_floor'] = _per_mode_value(
-        'dynamic_floor', tab._default_bool('spotify_visualizer', 'dynamic_floor', True)
-    )
-    spotify_vis_config['manual_floor'] = _per_mode_value(
-        'manual_floor', tab._default_float('spotify_visualizer', 'manual_floor', 0.12)
-    )
-    spotify_vis_config['dynamic_range_enabled'] = _per_mode_value(
-        'dynamic_range_enabled', tab._default_bool('spotify_visualizer', 'dynamic_range_enabled', False)
-    )
-
     collect_visualizer_preset_indices(tab, spotify_vis_config)
 
     return media_config, spotify_vis_config
