@@ -1026,6 +1026,91 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to log live activation state", exc_info=True)
 
+    def _log_active_render_state_snapshot(self, *, reason: str) -> None:
+        """Log active-mode render state snapshot for bleed diagnosis."""
+        try:
+            mode = self._vis_mode
+            mode_str = mode.name.lower()
+            
+            # Preset info from settings model
+            sm = getattr(self, "_settings_model", None)
+            preset_index = getattr(sm, "preset_index", -1) if sm else -1
+            preset_kind = "custom" if (sm and getattr(sm, "is_custom", False)) else "curated" if sm else "unknown"
+            
+            # Bar/energy array summaries
+            display_bars = getattr(self, "_display_bars", [])
+            target_bars = getattr(self, "_target_bars", [])
+            visual_bars = getattr(self, "_visual_bars", [])
+            per_bar_energy = getattr(self, "_per_bar_energy", [])
+            
+            display_max = max(display_bars) if display_bars else 0.0
+            display_avg = sum(display_bars) / len(display_bars) if display_bars else 0.0
+            target_max = max(target_bars) if target_bars else 0.0
+            target_avg = sum(target_bars) / len(target_bars) if target_bars else 0.0
+            visual_max = max(visual_bars) if visual_bars else 0.0
+            visual_avg = sum(visual_bars) / len(visual_bars) if visual_bars else 0.0
+            energy_max = max(per_bar_energy) if per_bar_energy else 0.0
+            energy_avg = sum(per_bar_energy) / len(per_bar_energy) if per_bar_energy else 0.0
+            
+            # Overlay activation/generation ids
+            overlay = getattr(self.parent(), "_spotify_bars_overlay", None) if self.parent() is not None else None
+            overlay_activation = getattr(overlay, "_activation_id", None) if overlay else None
+            overlay_generation = getattr(overlay, "_engine_generation", None) if overlay else None
+            
+            # Mode-specific fields
+            if mode_str == "spectrum":
+                spectrum_glow = getattr(self, "_spectrum_glow_enabled", False)
+                spectrum_glow_intensity = getattr(self, "_spectrum_glow_intensity", 0.0)
+                spectrum_mirrored = getattr(self, "_spectrum_mirrored", False)
+                spectrum_growth = getattr(self, "_spectrum_growth", 1.0)
+                
+                # Hash for shape nodes
+                shape_nodes = getattr(self, "_spectrum_shape_nodes", [])
+                shape_hash = hash(str(shape_nodes)) if shape_nodes else 0
+                
+                logger.info(
+                    "[SPOTIFY_VIS][RENDER_STATE] reason=%s mode=%s preset=%s:%d bars=%d "
+                    "display_max=%.3f display_avg=%.3f target_max=%.3f target_avg=%.3f "
+                    "visual_max=%.3f visual_avg=%.3f energy_max=%.3f energy_avg=%.3f "
+                    "spectrum_glow=%s spectrum_glow_intensity=%.3f spectrum_mirrored=%s "
+                    "spectrum_growth=%.3f shape_hash=%s overlay_activation=%s overlay_generation=%s",
+                    reason, mode_str, preset_kind, preset_index, len(display_bars),
+                    display_max, display_avg, target_max, target_avg,
+                    visual_max, visual_avg, energy_max, energy_avg,
+                    spectrum_glow, spectrum_glow_intensity, spectrum_mirrored,
+                    spectrum_growth, shape_hash, overlay_activation, overlay_generation,
+                )
+            elif mode_str == "devcurve":
+                devcurve_growth = getattr(self, "_devcurve_growth", 1.0)
+                devcurve_base_level = getattr(self, "_devcurve_base_level", 0.58)
+                devcurve_smoothness = getattr(self, "_devcurve_smoothness", 0.5)
+                
+                logger.info(
+                    "[SPOTIFY_VIS][RENDER_STATE] reason=%s mode=%s preset=%s:%d bars=%d "
+                    "display_max=%.3f display_avg=%.3f target_max=%.3f target_avg=%.3f "
+                    "visual_max=%.3f visual_avg=%.3f energy_max=%.3f energy_avg=%.3f "
+                    "devcurve_growth=%.3f devcurve_base_level=%.3f devcurve_smoothness=%.3f "
+                    "overlay_activation=%s overlay_generation=%s",
+                    reason, mode_str, preset_kind, preset_index, len(display_bars),
+                    display_max, display_avg, target_max, target_avg,
+                    visual_max, visual_avg, energy_max, energy_avg,
+                    devcurve_growth, devcurve_base_level, devcurve_smoothness,
+                    overlay_activation, overlay_generation,
+                )
+            else:
+                logger.info(
+                    "[SPOTIFY_VIS][RENDER_STATE] reason=%s mode=%s preset=%s:%d bars=%d "
+                    "display_max=%.3f display_avg=%.3f target_max=%.3f target_avg=%.3f "
+                    "visual_max=%.3f visual_avg=%.3f energy_max=%.3f energy_avg=%.3f "
+                    "overlay_activation=%s overlay_generation=%s",
+                    reason, mode_str, preset_kind, preset_index, len(display_bars),
+                    display_max, display_avg, target_max, target_avg,
+                    visual_max, visual_avg, energy_max, energy_avg,
+                    overlay_activation, overlay_generation,
+                )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to log render state snapshot", exc_info=True)
+
     def apply_resolved_activation_payload(
         self,
         model: SpotifyVisualizerSettings,

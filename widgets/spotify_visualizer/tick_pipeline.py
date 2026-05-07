@@ -642,6 +642,14 @@ def push_gpu_frame(
     from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
     extra = build_gpu_push_extra_kwargs(widget, mode_str, widget._engine)
 
+    if first_frame:
+        log_render = getattr(widget, "_log_active_render_state_snapshot", None)
+        if callable(log_render):
+            try:
+                log_render(reason="before_first_overlay_push")
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to log render state before first overlay push", exc_info=True)
+
     if (
         mode_str == 'sine_wave'
         and is_viz_diagnostics_enabled()
@@ -688,6 +696,14 @@ def push_gpu_frame(
     _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
     if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", _gpu_push_elapsed)
+
+    if first_frame and used_gpu:
+        log_render = getattr(widget, "_log_active_render_state_snapshot", None)
+        if callable(log_render):
+            try:
+                log_render(reason="after_first_overlay_push")
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to log render state after first overlay push", exc_info=True)
 
     if used_gpu:
         widget._has_pushed_first_frame = True

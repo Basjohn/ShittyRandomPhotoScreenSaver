@@ -392,6 +392,18 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
     except Exception:
         pass
 
+    try:
+        zeros = [0.0] * int(getattr(widget, "_bar_count", 0))
+        widget._display_bars = list(zeros)
+        widget._target_bars = list(zeros)
+        widget._visual_bars = list(zeros)
+        widget._per_bar_energy = list(zeros)
+        widget._has_pushed_first_frame = False
+        widget._last_gpu_geom = None
+        widget._last_gpu_fade_sent = -1.0
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear runtime bar arrays during mode-owned reset", exc_info=True)
+
     logger.debug("[SPOTIFY_VIS] Mode-owned runtime state reset reason=%s", reason)
 
 
@@ -533,11 +545,17 @@ def on_mode_fade_out_complete(widget: Any) -> None:
     widget._mode_teardown_wait_started_ts = time.time()
     widget._pending_shadow_cache_invalidation = True
     reset_mode_owned_runtime_state(widget, reason="mode_fade_out_complete")
-    prepare_engine_for_mode_reset(widget)
+    log_render = getattr(widget, "_log_active_render_state_snapshot", None)
+    if callable(log_render):
+        try:
+            log_render(reason="after_full_runtime_fade_out_complete")
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to log render state after fade_out_complete", exc_info=True)
     try:
         widget._clear_runtime_bar_state()
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to clear runtime bars after mode activation", exc_info=True)
+        logger.debug("[SPOTIFY_VIS] Failed to clear runtime bars before mode activation", exc_info=True)
+    prepare_engine_for_mode_reset(widget)
 
 
 def prepare_engine_for_mode_reset(widget: Any) -> None:
@@ -559,6 +577,12 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
                 apply_full(widget._vis_mode, reason="mode_prepare_reset")
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to apply target config before engine reset", exc_info=True)
+        log_render = getattr(widget, "_log_active_render_state_snapshot", None)
+        if callable(log_render):
+            try:
+                log_render(reason="after_full_runtime_prepare_reset")
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to log render state after prepare_reset", exc_info=True)
         engine.cancel_pending_compute_tasks()
         engine.reset_smoothing_state()
         engine.reset_floor_state()
@@ -582,6 +606,12 @@ def prepare_engine_for_mode_reset(widget: Any) -> None:
         apply_technical = getattr(widget, "_apply_technical_config_for_mode", None)
         if callable(apply_technical):
             apply_technical(widget._vis_mode, reason="mode_prepare_reset")
+            log_render = getattr(widget, "_log_active_render_state_snapshot", None)
+            if callable(log_render):
+                try:
+                    log_render(reason="after_technical_config_prepare_reset")
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to log render state after technical config", exc_info=True)
             try:
                 mode_name = getattr(widget._vis_mode, "name", str(widget._vis_mode))
                 tech = getattr(widget, "_get_mode_technical_config", None)
