@@ -3,7 +3,6 @@ from typing import Any, Callable, Dict, List, Mapping, Optional
 from copy import deepcopy
 import math
 import threading
-import sys
 import json
 from datetime import datetime
 from pathlib import Path
@@ -70,15 +69,8 @@ class SettingsManager(QObject):
         app_name = application
         try:
             if application == "Screensaver":
-                exe_name = str(getattr(sys, "argv", [""])[0]).lower()
-                if (
-                    "srpss mc" in exe_name
-                    or "srpss_mc" in exe_name
-                    or "srpss media center" in exe_name
-                    or "srpss_media_center" in exe_name
-                    or "main_mc.py" in exe_name
-                ):
-                    app_name = "Screensaver_MC"
+                from core.settings.storage_paths import detect_current_profile
+                app_name = detect_current_profile(default="Screensaver")
         except Exception as exc:
             logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
 

@@ -35,7 +35,6 @@ Guardrails:
 - For visualizer painted-card clipping, do not solve escape by changing visualizer mode size/content, preset geometry, curve amplitude, waveform math, or authored mode behavior. The required fix is visibility/clipping/masking to the card boundary only.
 
 Near-term targets:
-- Spotify visualizer state bleed fix (2026-05-07): Removed widget-level cached config variables (_last_floor_config, _last_sensitivity_config, _last_energy_boost, _last_input_gain, _last_audio_block_size) and _replay_engine_config() method. Removed redundant apply_full_runtime_config_for_mode() call from mode_transition.py. Technical config/presets are now the single source of truth for per-mode settings. **AWAITING VALIDATION** - not yet confirmed successful.
 - Align all visualizer settings/model/tests/tooling/docs with canonical per-mode technical ownership; remove active-mode save paths that rewrite shared technical keys and keep diagnostics mode-resolved.
 - Keep preset/custom/runtime normalization using all stable mode ids, not only currently active descriptor gates. Blob preset ownership was previously being dropped during normalization when blob was dev-gated, which let hot activation fall back to curated preset 1 instead of the stored target preset/custom payload.
 - Keep live activation diagnostics comparing resolved preset identity with actual worker/widget-applied technical state; do not trust raw settings logs alone for bleed closure.

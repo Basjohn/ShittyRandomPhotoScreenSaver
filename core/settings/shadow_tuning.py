@@ -42,35 +42,35 @@ _CARD_DEFAULTS: Dict[str, Any] = {
     "card_shrink_bottom": 11,
     "offset_x": 4,
     "offset_y": 6,
-    "blur_steps": 50,
-    "spread": 9,
-    "max_alpha": 10,
+    "blur_steps": 55,
+    "spread": 8,
+    "max_alpha": 8,
     "radius_extra": 0,
 }
 
 _VOLUME_SLIDER_DEFAULTS: Dict[str, Any] = {
-    "card_shrink_right": 6,
-    "card_shrink_bottom": 6,
-    "offset_x": 2,
-    "offset_y": 3,
-    "blur_steps": 30,
-    "spread": 5,
-    "max_alpha": 12,
+    "card_shrink_right": 7,
+    "card_shrink_bottom": 7,
+    "offset_x": 4,
+    "offset_y": 4,
+    "blur_steps": 60,
+    "spread": 3,
+    "max_alpha": 4,
     "radius_extra": 0,
 }
 
 _TEXT_DEFAULTS: Dict[str, Any] = {
-    "offset_x": 1,
-    "offset_y": 1,
-    "alpha": 100,
+    "offset_x": 3,
+    "offset_y": 3,
+    "alpha": 180,
     "min_font_size": 10,
     "small_font_min_scale": 0.3,
 }
 
 _TEXT_LARGE_DEFAULTS: Dict[str, Any] = {
-    "offset_x": 2,
-    "offset_y": 2,
-    "alpha": 180,
+    "offset_x": 4,
+    "offset_y": 4,
+    "alpha": 100,
     "min_font_size": 20,
     "small_font_min_scale": 0.3,
 }
@@ -78,14 +78,14 @@ _TEXT_LARGE_DEFAULTS: Dict[str, Any] = {
 _HEADER_DEFAULTS: Dict[str, Any] = {
     "offset_x": 2,
     "offset_y": 2,
-    "alpha": 80,
+    "alpha": 220,
 }
 
 _ICON_DEFAULTS: Dict[str, Any] = {
     "offset_x": 3,
     "offset_y": 4,
-    "alpha": 67,
-    "scale": 1.0,
+    "alpha": 95,
+    "scale": 1.5,
 }
 
 _CONTROL_DEFAULTS: Dict[str, Any] = {
@@ -113,9 +113,33 @@ _FULL_DEFAULTS: Dict[str, Any] = {
 
 def _shadow_tuning_path() -> Path:
     """Return the path to ``shadowtuning.json`` next to ``settings_v2.json``."""
-    from core.settings.storage_paths import get_app_data_dir
+    from core.settings.storage_paths import detect_current_profile, get_app_data_dir
 
-    return get_app_data_dir() / "shadowtuning.json"
+    profile = detect_current_profile(default="Screensaver")
+    return get_app_data_dir(profile) / "shadowtuning.json"
+
+
+def _copy_shadow_tuning_from_normal_profile_if_needed(target_path: Path) -> bool:
+    """Copy normal-profile shadow tuning to MC profile on first MC run.
+
+    Returns True if a copy occurred.
+    """
+    try:
+        from core.settings.storage_paths import get_app_data_dir
+
+        normal_path = get_app_data_dir("Screensaver") / "shadowtuning.json"
+        if target_path.exists():
+            return False
+        if not normal_path.is_file():
+            return False
+
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_text(normal_path.read_text(encoding="utf-8"), encoding="utf-8")
+        logger.info("[SHADOW_TUNING] Copied normal profile tuning to %s", target_path)
+        return True
+    except Exception:
+        logger.debug("[SHADOW_TUNING] Failed to copy normal profile tuning", exc_info=True)
+        return False
 
 
 def _write_defaults(path: Path) -> None:
@@ -192,6 +216,13 @@ def load_shadow_tuning() -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]
     """
     path = _shadow_tuning_path()
 
+    try:
+        from core.settings.storage_paths import detect_current_profile
+        if detect_current_profile(default="Screensaver") == "Screensaver_MC":
+            _copy_shadow_tuning_from_normal_profile_if_needed(path)
+    except Exception:
+        logger.debug("[SHADOW_TUNING] MC first-run shadow tuning copy check failed", exc_info=True)
+
     if not path.is_file():
         _write_defaults(path)
         return dict(_CARD_DEFAULTS), dict(_VOLUME_SLIDER_DEFAULTS), dict(_TEXT_DEFAULTS), dict(_TEXT_LARGE_DEFAULTS), dict(_HEADER_DEFAULTS), dict(_ICON_DEFAULTS), dict(_CONTROL_DEFAULTS)
@@ -224,6 +255,16 @@ def load_shadow_tuning() -> tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]
         canonical["icon"],
         canonical["control"],
     )
+
+
+def ensure_shadow_tuning_file() -> Path:
+    """Ensure the active profile has a shadowtuning.json file.
+
+    Safe to call at startup. Returns the path that should exist.
+    """
+    path = _shadow_tuning_path()
+    load_shadow_tuning()
+    return path
 
 
 # ---------------------------------------------------------------------------

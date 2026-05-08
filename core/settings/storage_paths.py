@@ -40,6 +40,38 @@ _resolved_base: Optional[Path] = None
 _resolved_profile: Optional[str] = None
 
 
+def detect_current_profile(default: str = "Screensaver") -> str:
+    """Return the current SRPSS profile name.
+
+    Returns:
+        "Screensaver" for the normal build.
+        "Screensaver_MC" for Media Center / MC builds.
+
+    This must be side-effect free. Do not instantiate SettingsManager here.
+    """
+    import sys
+
+    try:
+        argv0 = str(getattr(sys, "argv", [""])[0] or "").lower()
+        main_mod = sys.modules.get("__main__")
+        main_file = str(getattr(main_mod, "__file__", "") or "").lower() if main_mod is not None else ""
+
+        probe = f"{argv0} {main_file}"
+
+        if (
+            "srpss mc" in probe
+            or "srpss_mc" in probe
+            or "srpss media center" in probe
+            or "srpss_media_center" in probe
+            or "main_mc.py" in probe
+        ):
+            return "Screensaver_MC"
+    except Exception:
+        pass
+
+    return default
+
+
 def _appdata_root() -> Path:
     """Return ``%APPDATA%`` or a platform-appropriate fallback."""
     from os import environ

@@ -4,21 +4,21 @@ Keep this document as the long-term anti-regression memory for the project.
 ## Quick Navigation (Numbered IDs)
 
 ### Active / Unresolved
-1. [U-07 — 2026-05-07 — Spotify Visualizer State Bleed: Cached Config Variables vs Technical Config Dual-Source-of-Truth (Awaiting Validation)](#U-07)
-2. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
-3. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
+1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
+2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recently Resolved
-1. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#U-07)
-2. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-3. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-4. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-5. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-6. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-7. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-8. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-9. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-10. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+2. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+3. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+4. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+5. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+6. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+7. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+8. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+9. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+10. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+11. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
 ### Archived / Legacy Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
@@ -292,27 +292,39 @@ Keep this document as the long-term anti-regression memory for the project.
 
 ## Section 2 — Unresolved / Active Investigation (Includes Archived Open Threads)
 
-<a id="U-07"></a>
-### [U-07] 2026-05-07 — Spotify Visualizer State Bleed: Cached Config Variables vs Technical Config Dual-Source-of-Truth (Awaiting Validation)
+<a id="R-22"></a>
+### [R-22] 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)
 
 - [ ] COMPLETELY FUCKED
-- [ ] ACTIVE
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
-- **Observed runtime symptom:** Spotify visualizer mode switches may carry over stale technical config values (floor, sensitivity, energy boost, input gain, audio block size) from the previous mode, causing incorrect behavior in the new mode.
-- **Root cause identified:** Widget-level cached config variables (`_last_floor_config`, `_last_sensitivity_config`, `_last_energy_boost`, `_last_input_gain`, `_last_audio_block_size`) created a conflicting dual-source-of-truth architecture with technical config/presets. During mode transitions, `_apply_technical_config_for_mode` was called 3x, while `_replay_engine_config` was called 1x (then overwritten by the final technical config application). This meant the replayed cached values were immediately overwritten, making the cached variables ineffective.
-- **Attempted fix (2026-05-07):** Removed widget-level cached config variables and replay mechanism to make technical config/presets the single source of truth for per-mode settings.
-  - Removed 5 widget-level cached variables from `spotify_visualizer_widget.py`: `_last_floor_config`, `_last_sensitivity_config`, `_last_energy_boost`, `_last_input_gain`, `_last_audio_block_size`
-  - Removed `_replay_engine_config()` method from `spotify_visualizer_widget.py`
-  - Simplified public config methods (`apply_floor_config`, `apply_sensitivity_config`, `_apply_energy_boost`, `_apply_input_gain`, `_apply_audio_block_size`) to remove caching and deduplication checks
-  - Removed redundant `apply_full_runtime_config_for_mode()` call from `mode_transition.py`
-  - Removed `_replay_engine_config()` call from `mode_transition.py`
-  - Updated tests to check engine state instead of widget cached variables
-  - Preserved audio worker's own `_last_floor_config` and `_last_sensitivity_config` (serve different purpose for internal state management)
-- **Why this fix should work:** Technical config values (floor, sensitivity, energy boost, input gain, block size) are per-mode settings that should come from the preset/mode configuration, not from cached global state. Mode choice and preset choice DO persist via settings, but technical config values should be per-mode. The cached variables were vestigial from when technical config was handled globally before normalization with presets/modes.
-- **Validation status:** **AWAITING VALIDATION** - Implementation complete, not yet confirmed successful through runtime testing.
-- **Documentation:** Full investigation retained in `spotify_visualizer_state_bleed_analysis.md`.
+- **Observed runtime symptom:** Spotify visualizer mode switches (e.g., DevCurve → Spectrum) caused visual state bleed where the new mode would start with stale bar array values from the previous mode. Spectrum would start roof-pinned or move as a uniform ceiling line; DevCurve would start dead/barely reactive.
+- **Actual root cause:** Runtime bar/display state arrays (`_display_bars`, `_target_bars`, `_visual_bars`, `_per_bar_energy`) were not being cleared during mode transitions. The `reset_mode_owned_runtime_state()` function cleared these arrays, but the clearing occurred in the wrong order relative to engine reset, and there was no source tracking to prevent stale compute/frame commits from old activations.
+- **What finally worked:** Three coordinated fixes:
+  1. **Bar clearing order:** Moved `_clear_runtime_bar_state()` call earlier in `on_mode_fade_out_complete()` so bars are cleared before `prepare_engine_for_mode_reset()`. Also moved the RENDER_STATE logging for `after_full_runtime_fade_out_complete` to occur AFTER the reset to capture the cleared state.
+  2. **Direct bar clearing in reset:** Strengthened `reset_mode_owned_runtime_state()` to directly clear all four runtime bar arrays to zero, rather than relying on a separate helper call.
+  3. **Source tracking:** Added source generation/activation tracking fields (`_display_bars_source_generation`, `_display_bars_source_activation`, etc.) to the widget. These fields are cleared to `-1` during reset and set from the current engine generation/activation when bars are written from engine frames. This allows detection of stale compute/frame commits in logs.
+- **Why the final solution worked:**
+  - Bar arrays are now guaranteed to be zero at all reset checkpoints (`after_full_runtime_fade_out_complete`, `after_full_runtime_prepare_reset`, `after_technical_config_prepare_reset`)
+  - Source tracking allows RENDER_STATE logs to prove that first non-zero bars after reset come from the current activation, not a stale one
+  - The ordering fix ensures bars are cleared before any engine reset logic that might re-introduce state
+- **Regression guards added:**
+  - `test_on_mode_fade_out_complete_clears_bar_arrays_before_prepare_engine_reset`: Proves old-mode display bars cannot survive into `prepare_engine_for_mode_reset()`
+  - `test_reset_mode_owned_runtime_state_clears_runtime_bar_arrays`: Verifies the reset function clears all bar arrays and source tracking fields
+  - `test_prepare_engine_for_mode_reset_does_not_call_replay_engine_config`: Ensures no replay regression
+  - `test_stale_activation_frame_cannot_commit_display_bars_after_mode_reset`: Verifies source tracking fields are cleared after reset
+- **Validation evidence:** Runtime logs from Spectrum → DevCurve switch show:
+  - All reset checkpoints have `display_max=0.000`
+  - First non-zero display bars have `display_source_generation` and `display_source_activation` matching current `engine_generation` and `engine_activation`
+  - Overlay generation/activation match engine generation/activation
+  - No stale activation detected
+- **Takeaways:**
+  - Runtime state that can cause visual bleed must be cleared explicitly during mode transitions
+  - Source tracking is valuable for diagnosing state bleed issues in logs
+  - RENDER_STATE logging must be placed after state changes to capture the correct state
+  - Do not rely on implicit clearing or ordering assumptions for critical visual state
 
 <a id="U-06"></a>
 ### [U-06] 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)
