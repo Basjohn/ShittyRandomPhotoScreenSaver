@@ -64,3 +64,7 @@ When changing Gmail widget OAuth/backend, include tests for:
 For bugs with user-visible rendering/startup/focus behavior:
 - tests are required,
 - but final sign-off requires runtime observation (manual or harness-backed evidence).
+
+## 7. Harness Reference
+- Use `Docs/Harness_Index.md` as the compact lookup for recurring investigation harnesses and smoke commands.
+- If a new harness becomes part of normal diagnosis workflow, add it there in the same change.

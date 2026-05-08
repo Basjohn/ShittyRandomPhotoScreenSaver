@@ -15,9 +15,11 @@ Before editing substantial code, consult the relevant canonical docs:
 1. `Spec.md` for architecture and behavior contracts.
 2. `Index.md` for module ownership and file locations.
 3. `Docs/Guardrails.md` for engineering rules and known anti-regression policies.
-4. `Docs/Visualizer_Change_Checklist.md` for visualizer/settings changes.
-5. `Docs/Historical_Bugs.md` when touching fragile or previously regressed areas.
-6. `Current_Plan.md` only for active work context if relevant.
+4. `Docs/Documentation_Maintenance.md` when shared work may require doc drift cleanup.
+5. `Docs/Harness_Index.md` when diagnosis or validation may benefit from an existing harness/probe.
+6. `Docs/Visualizer_Change_Checklist.md` for visualizer/settings changes.
+7. `Docs/Historical_Bugs.md` when touching fragile or previously regressed areas.
+8. `Current_Plan.md` only for active work context if relevant.
 
 Do not treat stale memory as more authoritative than these repo docs.
 
@@ -102,7 +104,7 @@ After edits, run the narrowest useful checks available:
 
 - `python -m py_compile <changed .py files>` for changed Python files.
 - Targeted tests for changed contracts.
-- Existing harnesses/probes when touching their guarded areas.
+- Existing harnesses/probes when touching their guarded areas; prefer `Docs/Harness_Index.md` when it already documents the workflow.
 
 If validation cannot be run, say exactly why.
 

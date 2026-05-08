@@ -13,8 +13,9 @@ Living map of the current SRPSS codebase.
 | `Docs/Guardrails.md` | Engineering rules and anti-regression policy |
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
+| `Docs/Documentation_Maintenance.md` | Lightweight drift-check routine for canonical docs |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
-| `Docs/Gmail_Widget_Plan.md` | Gmail-specific working plan and follow-up reference |
+| `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
 

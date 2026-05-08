@@ -9,6 +9,8 @@ Before substantial edits, read these files as needed:
 - `Spec.md` — canonical architecture and behavior contracts.
 - `Index.md` — current module ownership map and file locations.
 - `Docs/Guardrails.md` — engineering safety rules and anti-regression policy.
+- `Docs/Documentation_Maintenance.md` — lightweight drift-check routine for keeping canonical docs aligned.
+- `Docs/Harness_Index.md` — compact reference for recurring investigation harnesses and smoke commands.
 - `Current_Plan.md` — active work only, if present and relevant.
 - `Docs/Visualizer_Change_Checklist.md` — required sweep for visualizer setting changes.
 - `Docs/Historical_Bugs.md` — dated bug narratives and root-cause record when touching fragile areas.
@@ -65,6 +67,8 @@ If a task touches architecture, settings, visualizers, Qt focus/effects, Gmail w
 After modifying Python files, run at least syntax/import-safe checks on changed files when possible, e.g. `python -m py_compile <changed files>`.
 
 When relevant, also run or update targeted tests/harnesses. Prefer targeted validation over broad slow commands unless the task asks for full validation.
+
+When a recurring diagnostic or smoke command already exists, prefer the documented tool flow in `Docs/Harness_Index.md` over inventing a fresh ad hoc workflow.
 
 Final response must include:
 - Files changed.
