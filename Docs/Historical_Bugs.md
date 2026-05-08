@@ -1,13 +1,17 @@
+# Historical Bugs
+
+Last updated: 2026-05-08
+
 Track significant bugs with clear dates, failed attempts, and final fixes.
-Keep this document as the long-term anti-regression memory for the project.
+This is the long-term anti-regression record for the project, not an active task list.
 
 ## Quick Navigation (Numbered IDs)
 
-### Active / Unresolved
+### Open Issues
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
-### Recently Resolved
+### Recent Resolutions
 1. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
 2. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
 3. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
@@ -20,14 +24,14 @@ Keep this document as the long-term anti-regression memory for the project.
 10. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
 11. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
-### Archived / Legacy Context
+### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
 3. [A-03 — 2026-03-22 — Settings Dialog Flicker / Placeholder Regression (Resolved) - USER NOTE: UNRESOLVED BUT LOW PRIORITY NOW. SEE DUPLICATION OF THIS ISSUE IN THIS VERY DOCUMENT.](#A-03)
 4. [A-04 — 2026-03-22 — MC Keyboard Focus / Ctrl Halo Interaction Regressions (Historical Partial Fixes Archived; superseded by U-05 current matrix)](#A-04)
 5. [A-05 — 2026-03-22 — Blob Ghost/Pulse Investigation (Resolved Subsystems Archived)](#A-05)
 
-### Resolved Archive
+### Older Resolved Archive
 1. [R-07 — 2026-03-28 — Startup Fade / Visualizer Secondary-Stage Ownership Split (Resolved)](#R-07)
 2. [R-08 — 2026-02-26 / 2026-03-05 — Pixel Shift Visualizer Bleed-Through (Resolved)](#R-08)
 3. [R-09 — 2026-03-05 — Settings Spinbox/LineEdit Fill Regression (Resolved)](#R-09)
@@ -40,10 +44,7 @@ Keep this document as the long-term anti-regression memory for the project.
 10. [R-16 — 2026-04-18 — One-Dir Runtime Misdetected As Script + Curated Slot Drift (Resolved)](#R-16)
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
-
-
-
-## Section 1 — Resolved / Closed (Recent)
+## Recent Entries
 
 <a id="R-18"></a>
 ### [R-18] 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)
@@ -1302,8 +1303,8 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
   - randomized core angular homes and increased core depth/radius envelope to avoid stable ring lock
 - **Loop-avoidance reminder:** if Goo resembles isolated circles, do not tune "hotness" first; inspect field kernel tail, threshold range, and center-void suppression as the first triage path.
 
-<a id="U-07"></a>
-### [R-20] 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)
+<a id="R-21"></a>
+### [R-21] 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] ACTIVE
@@ -1343,8 +1344,8 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
   - Do not attempt rect-shrink or QPainter-clip approaches for this bug family again.
   - The mask inset must account for both the 1-px painted-frame shadow inset (`inset=1.0`) AND the centred card border width (`border_width/2`).
 
-<a id="R-21"></a>
-### [R-21] 2026-05-06 — Visualizer Runtime Mode/Preset Bleed Survived Audio Resets (Awaiting Validation)
+<a id="R-22"></a>
+### [R-22] 2026-05-06 — Visualizer Runtime Mode/Preset Bleed Survived Audio Resets (Awaiting Validation)
 
 - [ ] COMPLETELY FUCKED
 - [x] ACTIVE

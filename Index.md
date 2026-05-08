@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-04-29
+Last updated: 2026-05-08
 
 Living map of the current SRPSS codebase.
 
@@ -14,7 +14,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
-| `Docs/Gmail_Widget_Plan.md` | Pruned Gmail widget working plan: active settings/runtime/visual/release tasks, compact completed ledger, and unresolved flicker/runtime validation items |
+| `Docs/Gmail_Widget_Plan.md` | Gmail-specific working plan and follow-up reference |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
 
@@ -56,8 +56,8 @@ Living map of the current SRPSS codebase.
 | Mode registry | `core/settings/visualizer_mode_registry.py` | Mode ids, labels, key prefixes, slider ownership |
 | Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading, canonical activation payload resolution, and preset apply |
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
-| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; `_replay_engine_config` reads from authoritative config (`_get_mode_technical_config`) instead of widget cache |
-| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask (with border-width inset) to clip GL content to the visible card boundary |
+| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache |
+| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask with border-width inset so GL content stays inside the visible card boundary |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping |
 | Spline Curve runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | DevCurve/Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |
@@ -69,9 +69,9 @@ Living map of the current SRPSS codebase.
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff |
 | Startup policy | `rendering/overlay_startup_policy.py` | Primary and secondary startup timing |
-| Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link Reddit controls separate from URL clicks so refresh controls do not trigger normal-build browser exits |
+| Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks so refresh/menu interactions do not trigger browser-exit helper paths |
 | GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface |
-| Frame push / overlay state | `rendering/display_image_ops.py` | Per-frame overlay state routing, including `border_width_px` handoff to the GL overlay for stencil mask inset |
+| Frame push / overlay state | `rendering/display_image_ops.py` | Per-frame overlay state routing, including `border_width_px` handoff to the GL overlay for stencil-mask inset |
 | Transition busy state | `rendering/display_widget.py` / `engine/display_manager.py` | Pending/active transition reporting used by overlay widgets to defer refresh/cache churn during image-load and GL transition windows |
 
 ## Gmail Integration
@@ -84,17 +84,17 @@ Living map of the current SRPSS codebase.
 | Deep-link helpers | `core/gmail/gmail_deeplinks.py` | Gmail inbox/thread/search URL builders; `X-GM-THRID` decimal-to-hex conversion |
 | Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
 | Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, date formatting modes, formatting/text cleanup utilities, punctuation-aware shortening, email cache |
-| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Default-open Backend bucket, credentials, non-blocking IMAP Save & Test, widget settings, single Gmail width control, date display mode, sender/subject cleanup controls, two-row Text Limits grid, header logo px adjustment after Margin, optional default-on refresh spiral, sender column width, default-off grouping toggle, deferred auth refresh, Gmail load signal-block/visibility flicker guardrails |
+| Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, non-blocking IMAP Save & Test, widget settings, sender/subject cleanup controls, grouping toggle, deferred auth refresh, and Gmail-specific signal-block/visibility guardrails |
 | Settings cache | `ui/settings_dialog_cache.py` | Settings dialog cached defaults/font data; cache generation includes canonical defaults modules so Gmail defaults do not go stale |
-| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay — email list/cache ordering, actions with active-backend IMAP Archive hidden, row hit targets, Media-style layout margins/header frame, read/unread envelope selection, central URL click targets, optional refresh control, action menu popup ownership, build-safe Gmail image/action icon resolution, precomputed header desaturation, pending/active transition-aware refresh/result deferral including in-flight spinner suspension, async cache writes, DPR-aware stable-content paint cache with shared painted-shadow/effect guardrails, unchanged-result/no-op repaint guards, `perf_widgets.log` instrumentation |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay for Gmail list rendering, backend-safe actions, row/menu hit targets, transition-aware refresh/result deferral, async cache writes, DPR-aware stable-content paint cache, grouping toggle support, and perf instrumentation |
 | Asset guard tests | `tests/test_gmail_assets.py` | Verifies required Gmail image assets exist and normal/MC Nuitka scripts include only the notification OGG plus Qt multimedia requirements |
 
 ## Shared Shadow Path
 
 | Module | File | Role |
 |---|---|---|
-| Painted frame shadows | `widgets/base_overlay_widget.py` | Settings-controlled cached painter-drawn card and label text shadows for framed runtime overlay widgets |
-| Shadow tuning | `core/settings/shadow_tuning.py` | Canonical `shadowtuning.json` defaults for card, text, header, and Spotify volume-slider painted shadows |
+| Painted frame shadows | `widgets/base_overlay_widget.py` | Settings-controlled cached painter-drawn card, text, and header shadow path for framed runtime overlay widgets |
+| Shadow tuning | `core/settings/shadow_tuning.py` | Canonical `shadowtuning.json` defaults for card, text, header, control, icon, and Spotify volume-slider painted shadows |
 | Visualizer parity | `widgets/spotify_visualizer_widget.py` | Uses the shared painted-shadow contract for the visualizer card without changing GL/audio/bar rendering |
 
 ## Source Ingestion

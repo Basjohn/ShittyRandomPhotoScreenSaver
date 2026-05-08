@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-04-29
+Last updated: 2026-05-08
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -66,7 +66,7 @@ Active ids:
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Runtime config application: `widgets/spotify_visualizer/config_applier.py`
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
-- Engine config replay: `_replay_engine_config()` reads from authoritative config (`_get_mode_technical_config`) instead of widget cache
+- Engine config replay: `_replay_engine_config()` reads from authoritative mode config via `_get_mode_technical_config(...)`, not transient widget cache
 
 ### 5.4 Mode isolation
 - Mode-owned behavior belongs to mode-owned code.
@@ -76,6 +76,12 @@ Active ids:
 - Preset-varying runtime visuals that affect activation or renderer state, including bar fill/border styling and legacy ghost controls, are mode-owned too. They must not travel through shared/global authored keys after normalization.
 - Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.
 - Live diagnostics for visualizer activation must report the resolved preset identity and the actual applied worker/widget technical state, not only raw settings payloads.
+
+### 5.5 Runtime card/shadow contract
+- Runtime overlay card shadows are painter-owned, not `QGraphicsDropShadowEffect`-owned.
+- `widgets.shadows.enabled`, `widgets.shadows.text_enabled`, and `widgets.shadows.header_enabled` are the runtime shadow controls for framed widgets.
+- Framed widgets that use the painted shadow path must explicitly clear transparent backing regions before repainting cached shadow output so stale shadow pixels cannot accumulate in the gutter.
+- Direct `QWidget` implementations that do not inherit `BaseOverlayWidget` but need framed-card parity, such as the Spotify visualizer, must mirror the same painted-frame contract explicitly rather than assuming inheritance.
 
 ## 6. Preset Architecture Contract
 - Authored curated source: `presets/visualizer_modes/`.
