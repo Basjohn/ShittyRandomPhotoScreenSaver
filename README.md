@@ -35,10 +35,12 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
   - **GMAIL** Via Imap with customizable notifications, control from inside the app/saver etc.
   - **Clock widgets** (up to three): 12h/24h, multiple time zones, analogue or digital
   - **Weather widget** using Open‑Meteo (no API key) with location autodetect on first run
-  - **Media widget** (Spotify now‑playing) with optional controls and artwork
-  - **Spotify beat visualizer** paired with the media widget – thin GPU bar overlay with a 1‑bar idle floor and a configurable ghosting trail (opacity + decay), with an automatic software fallback on non‑GL stacks
+  - **Media widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
+  - **Beat visualizer** paired with the media widget – Overly robust and feature filled af.
   - **Reddit widget** showing top posts from a configured subreddit
+    
   Widget requests are welcome, the engine is robust enough to handle all sorts of your weird kinky shit.
+  Realisitically since so many APIs are bogged down and so much scraping is blocked each has to be assessed. Steam/Search/*Arr widgets are the next best targets if anyone ever cares about this   project beyond me.
 
 - **Settings dialog (config mode)**
   - Dark, frameless UI
@@ -129,22 +131,6 @@ The settings dialog lets you:
 All changes are applied immediately and persisted between runs.
 
 ---
-
-## Development & Testing
-
-SRPSS targets **Python 3.11** on Windows. Use the wrappers and docs below so logs/tests behave:
-
-- **Interpreter**: follow `Docs/DEV_ENV.md` for the recommended `python -3.11` launchers.
-- **Running tests**: use the logging-first wrapper so runs are captured under `logs/`:
-
-  ```powershell
-  python tests/pytest.py                # run full suite
-  python tests/pytest.py tests/test_perf_dt_max.py -vv
-  ```
-
-- **Perf/diagnostics**:
-  - Set `SRPSS_PERF_METRICS=1` before launching the saver to collect widget/transition timings.
-  - Check `Docs/Performance_Base_Line_2_5.md` for current performance targets and log commands.
 
 - **Docs**: `Spec.md` and `Index.md` are the canonical references for architecture/module mapping; `Docs/10_WIDGET_GUIDELINES.md` covers overlay styling/lifecycle rules.
 
