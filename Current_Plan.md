@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-05-08
+Last updated: 2026-05-11
 
 This file tracks active work only. Completed implementation details belong in `Docs/Historical_Bugs.md` or the relevant reference docs, not here.
 
@@ -13,7 +13,17 @@ This file tracks active work only. Completed implementation details belong in `D
 
 ## Active Tasks
 
-### 1. Gmail Thread Grouping
+### 1. Project-Wide Audit (2026-05-11)
+Status: Audit documents complete. No code changes made yet. Use `Audits/2026-05-11_Project_Audit/00_INDEX.md` as the work tracker.
+
+Top items from audit to action (in priority order):
+- **A-01 / D-01** — Remove stale archive comment in `rendering/widget_manager.py` (trivial, P1)
+- **V-08 / A-08** — Fix `_exchange_code` blocking the UI thread in `core/gmail/gmail_oauth.py` (P1)
+- **A-02 / EB-11** — Write Gmail thread grouping design contract before implementation (P1)
+- **DD-01 through DD-07** — Resolve phantom memory/doc references (P1, documentation sweep)
+- **D-05** — Remove always-true `is_devcurve_enabled()` gate from `widgets_tab_media.py` (P3, trivial)
+
+### 2. Gmail Thread Grouping
 Status: All other Gmail work is complete. The only remaining Gmail task worth carrying here is thread grouping.
 
 Task scope:

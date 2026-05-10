@@ -116,6 +116,66 @@ def test_gmail_no_auth_and_no_cache_does_not_request_fade(qt_app, monkeypatch):
         widget.cleanup()
 
 
+def test_gmail_fetch_error_keeps_displayed_cache_visible(qt_app):
+    """Fetch errors should not replace valid displayed mail with retry UI."""
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    updates = []
+    try:
+        email = EmailMetadata(
+            id="cached_msg",
+            thread_id="cached_thread",
+            sender="Sender",
+            subject="Cached Subject",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=False,
+        )
+        widget._emails = [email]
+        widget._has_displayed_valid_data = True
+        widget._last_error = None
+        widget.update = lambda *args, **kwargs: updates.append("update")  # type: ignore[method-assign]
+
+        widget._on_fetch_error("Network error")
+
+        assert widget._last_error is None
+        assert [item.id for item in widget._emails] == ["cached_msg"]
+        assert updates == []
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_cache_max_age_is_two_weeks():
+    """Disk cache should remain valid for up to two weeks as a fallback surface."""
+    from widgets.gmail_widget import CACHE_MAX_AGE_HOURS
+
+    assert CACHE_MAX_AGE_HOURS == 24 * 14
+
+
+def test_gmail_error_state_height_exceeds_single_row_height(qt_app):
+    """Retry/auth state should reserve more vertical room than a one-row content card."""
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.resize(600, 120)
+        widget._last_error = "Network error"
+        widget._update_card_height_from_content(1)
+        error_height = widget.minimumHeight()
+
+        widget._last_error = None
+        widget._update_card_height_from_content(1)
+        row_height = widget.minimumHeight()
+
+        assert error_height > row_height
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_widget_no_real_credentials_in_code():
     """Verify test code uses explicit fake credentials only."""
     import inspect

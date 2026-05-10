@@ -55,7 +55,7 @@ from widgets.shadow_utils import (
 logger = get_logger(__name__)
 
 
-CACHE_MAX_AGE_HOURS = 72
+CACHE_MAX_AGE_HOURS = 24 * 14
 CACHE_DIR = get_app_data_dir() / "cache"
 CACHE_PATH = CACHE_DIR / "gmail_cache.json"
 GMAIL_IMAGE_ASSETS = (
@@ -868,6 +868,9 @@ class GmailWidget(BaseOverlayWidget):
         self._set_refreshing(False)
         if defer_for_transition and self._defer_fetch_error_if_transition(error_msg, generation):
             return
+        if self._has_displayed_valid_data and self._emails:
+            logger.warning("[GMAIL] Fetch failed but keeping cached/displayed content visible: %s", error_msg)
+            return
         self._last_error = error_msg
         logger.warning("[GMAIL] Displaying error state: %s", error_msg)
         self._update_card_height_from_content(1)
@@ -920,6 +923,9 @@ class GmailWidget(BaseOverlayWidget):
     def _update_card_height_from_content(
         self, visible_rows: Optional[int] = None
     ) -> None:
+        if self._last_error:
+            self._update_card_height_for_error_state()
+            return
         rows = max(1, int(visible_rows)) if visible_rows is not None else 0
         if rows <= 0:
             rows = len(self._emails) or self._limit or 1
@@ -951,6 +957,40 @@ class GmailWidget(BaseOverlayWidget):
             + card_padding
         )
         target = content_height + margin_top + margin_bottom + 4
+        try:
+            self.setMinimumHeight(target)
+            self.setMaximumHeight(target)
+        except Exception:
+            pass
+
+    def _update_card_height_for_error_state(self) -> None:
+        base_font_pt = max(8, int(self._font_size))
+        header_font_pt = int(self._header_font_pt or base_font_pt)
+        header_font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
+        header_layout = self._calculate_header_layout(
+            header_font,
+            self._header_text(),
+            self._brand_pixmap,
+        )
+        header_bottom = int(header_layout["bottom"]) + 8
+        error_font = QFont(self._font_family, base_font_pt, QFont.Weight.Normal)
+        error_metrics = QFontMetrics(error_font)
+        available_width = max(200, self._width - 40)
+        error_rect = error_metrics.boundingRect(
+            QRect(0, 0, available_width, 200),
+            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop | Qt.TextFlag.TextWordWrap),
+            "Gmail unavailable. Tap to retry.",
+        )
+        error_height = max(error_metrics.height() * 2, error_rect.height())
+        card_padding = 26
+        try:
+            margins = self.contentsMargins()
+            margin_top = margins.top()
+            margin_bottom = margins.bottom()
+        except Exception:
+            margin_top = 0
+            margin_bottom = 0
+        target = header_bottom + error_height + card_padding + margin_top + margin_bottom + 8
         try:
             self.setMinimumHeight(target)
             self.setMaximumHeight(target)
@@ -1220,9 +1260,9 @@ class GmailWidget(BaseOverlayWidget):
         margins = self.contentsMargins()
         rect = self.rect().adjusted(
             margins.left() + self._content_padding_left,
-            0,
+            self._header_bottom_y() + 8,
             -(margins.right() + self._content_padding_right),
-            0,
+            -max(12, margins.bottom()),
         )
         is_auth = self._last_error and "auth" in self._last_error.lower()
         msg = (
@@ -1230,8 +1270,13 @@ class GmailWidget(BaseOverlayWidget):
             if is_auth
             else "Gmail unavailable. Tap to retry."
         )
+        painter.setFont(QFont(self._font_family, max(8, int(self._font_size)), QFont.Weight.Normal))
         painter.setPen(self._text_color.darker(120))
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, msg)
+        painter.drawText(
+            rect,
+            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap),
+            msg,
+        )
 
     def _paint_emails(self, painter: QPainter) -> None:
         margins = self.contentsMargins()
