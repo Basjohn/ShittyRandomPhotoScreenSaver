@@ -1853,7 +1853,7 @@ class TestVisualizerPresetDefaultResolution:
 class TestVisualizerModeRegistryContract:
     def test_registry_matches_preset_modes_and_has_stable_preset_keys(self):
         from core.dev_gates import force_gate
-        force_gate(blob=True, devcurve=True)
+        force_gate(blob=True)
         from core.settings.visualizer_mode_registry import (
             VISUALIZER_MODE_IDS,
             iter_visualizer_mode_descriptors,
@@ -2398,7 +2398,7 @@ class TestVisualizerModeBinding:
         from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping
 
         prior_blob_gate = is_blob_enabled()
-        force_gate(blob=True, devcurve=False)
+        force_gate(blob=True)
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_preset_indices,
             load_visualizer_preset_indices,
@@ -2457,7 +2457,7 @@ class TestVisualizerModeBinding:
             )
             assert tab._devcurve_preset_slider.preset_index() == 0
         finally:
-            force_gate(blob=prior_blob_gate, devcurve=False)
+            force_gate(blob=prior_blob_gate)
 
 
 class TestBlobSettingsBinding:

@@ -18,8 +18,6 @@ from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
 from widgets.media_widget import MediaWidget
-# Gmail widget archived - see archive/gmail_feature/RESTORE_GMAIL.md
-# from widgets.gmail_widget import GmailWidget, GmailPosition
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings, RedditWidgetSettings
 from core.settings.visualizer_presets import (

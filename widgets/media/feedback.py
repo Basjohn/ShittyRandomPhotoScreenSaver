@@ -33,6 +33,11 @@ def ensure_shared_feedback_timer(cls: type) -> None:
         timer.setInterval(cls._shared_feedback_timer_interval_ms)
         timer.timeout.connect(cls._on_shared_feedback_tick)
         cls._shared_feedback_timer = timer
+        try:
+            from core.resources.manager import ResourceManager
+            ResourceManager().register_qt(timer, description="MediaWidget shared feedback timer")
+        except Exception:
+            pass
     if not timer.isActive():
         timer.start()
         if is_perf_metrics_enabled():

@@ -18,9 +18,10 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode, parse_qs, urlparse
 
-from PySide6.QtCore import QObject, Signal, QTimer
+from PySide6.QtCore import QObject, Signal
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from core.settings.storage_paths import get_app_data_dir
 from core.windows.dpapi import save_encrypted, load_encrypted
 
@@ -276,8 +277,8 @@ class GmailOAuthManager(QObject):
                                 b"<p>You can close this window and return to the application.</p>"
                                 b"</body></html>"
                             )
-                            # Schedule token exchange on UI thread
-                            QTimer.singleShot(0, lambda: manager._exchange_code(code))
+                            # Submit token exchange as IO task (not on UI thread)
+                            ThreadManager.instance().submit_io_task(manager._exchange_code, code)
                         else:
                             self.wfile.write(
                                 b"<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
@@ -285,7 +286,7 @@ class GmailOAuthManager(QObject):
                                 b"<p>Invalid state parameter. Please try again.</p>"
                                 b"</body></html>"
                             )
-                            QTimer.singleShot(0, lambda: manager.auth_failed.emit("Invalid state parameter"))
+                            ThreadManager.run_on_ui_thread(manager._emit_auth_failed_safe, "Invalid state parameter")
                     else:
                         self.wfile.write(
                             b"<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
@@ -300,7 +301,7 @@ class GmailOAuthManager(QObject):
                             if error_desc:
                                 full_error += f" — {error_desc}"
                             logger.error("[GMAIL_OAUTH] Callback received error: %s", full_error)
-                            QTimer.singleShot(0, lambda err=full_error: manager.auth_failed.emit(err))
+                            ThreadManager.run_on_ui_thread(manager._emit_auth_failed_safe, full_error)
                 else:
                     self.send_response(404)
                     self.end_headers()
@@ -329,11 +330,27 @@ class GmailOAuthManager(QObject):
         self._auth_thread = None
         self._redirect_uri = None
 
+    def _emit_auth_failed_safe(self, msg: str) -> None:
+        """Emit auth_failed on the UI thread with R-10 RuntimeError guard."""
+        try:
+            self.objectName()
+        except RuntimeError:
+            return
+        self.auth_failed.emit(msg)
+
+    def _emit_auth_completed_safe(self, creds: "GmailCredentials") -> None:
+        """Emit auth_completed on the UI thread with R-10 RuntimeError guard."""
+        try:
+            self.objectName()
+        except RuntimeError:
+            return
+        self.auth_completed.emit(creds)
+
     def _exchange_code(self, code: str) -> None:
         """Exchange authorization code for tokens.
 
-        TODO(P2): When widget has access to app ThreadManager, submit this
-        as an IO task to avoid blocking the UI thread during the POST.
+        Runs on a ThreadManager IO thread (not the UI thread).
+        Qt signals are emitted back on the UI thread via run_on_ui_thread.
         """
         try:
             import requests
@@ -351,7 +368,7 @@ class GmailOAuthManager(QObject):
             self._process_token_response(token_data)
         except Exception as exc:
             logger.error("[GMAIL_OAUTH] Token exchange failed: %s", exc)
-            self.auth_failed.emit(str(exc))
+            ThreadManager.run_on_ui_thread(self._emit_auth_failed_safe, str(exc))
         finally:
             self._stop_callback_server()
 
@@ -374,11 +391,11 @@ class GmailOAuthManager(QObject):
                 scope=scope,
             )
             self._save_credentials()
-            self.auth_completed.emit(self._credentials)
+            ThreadManager.run_on_ui_thread(self._emit_auth_completed_safe, self._credentials)
             logger.info("[GMAIL_OAUTH] Authentication completed successfully")
         except KeyError as exc:
             logger.error("[GMAIL_OAUTH] Malformed token response: %s", exc)
-            self.auth_failed.emit(f"Malformed token response: {exc}")
+            ThreadManager.run_on_ui_thread(self._emit_auth_failed_safe, f"Malformed token response: {exc}")
 
     def _refresh_token(self) -> None:
         """Refresh the access token using the refresh token."""

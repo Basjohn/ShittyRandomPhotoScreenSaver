@@ -23,11 +23,11 @@ def _build_snapshot_with_default_gates() -> dict:
     from core.dev_gates import force_gate, is_blob_enabled
 
     prior_blob_gate = is_blob_enabled()
-    force_gate(blob=False, devcurve=False)
+    force_gate(blob=False)
     try:
         return build_defaults_snapshot()
     finally:
-        force_gate(blob=prior_blob_gate, devcurve=False)
+        force_gate(blob=prior_blob_gate)
 
 
 class TestDefaultsStructure:
@@ -114,12 +114,12 @@ class TestDefaultsArtifactParity:
         import core.settings.defaults_snapshot as defaults_snapshot_module
 
         prior_blob_gate = is_blob_enabled()
-        force_gate(blob=False, devcurve=False)
+        force_gate(blob=False)
         try:
             reloaded = importlib.reload(defaults_snapshot_module)
             assert reloaded.DEFAULTS == _build_snapshot_with_default_gates()
         finally:
-            force_gate(blob=prior_blob_gate, devcurve=False)
+            force_gate(blob=prior_blob_gate)
 
     def test_snapshot_json_matches_builder_output(self):
         assert _load_snapshot_json() == _build_snapshot_with_default_gates()

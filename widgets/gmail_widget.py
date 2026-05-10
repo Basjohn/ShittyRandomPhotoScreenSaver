@@ -496,6 +496,7 @@ class GmailWidget(BaseOverlayWidget):
         except Exception:
             self._update_timer = QTimer(self)
             self._update_timer.timeout.connect(self._fetch_emails)
+            self._register_resource(self._update_timer, "gmail_update_timer_fallback")
             self._update_timer.start(interval_ms)
 
     def _fetch_emails(self, *, defer_for_transition: bool = True) -> bool:
@@ -561,6 +562,7 @@ class GmailWidget(BaseOverlayWidget):
             if self._refresh_spin_timer is None:
                 self._refresh_spin_timer = QTimer(self)
                 self._refresh_spin_timer.timeout.connect(self._advance_refresh_spinner)
+                self._register_resource(self._refresh_spin_timer, "gmail_refresh_spin_timer")
             if not self._refresh_spinner_suspended_for_transition:
                 self._refresh_spin_timer.start(80)
         else:
@@ -630,6 +632,7 @@ class GmailWidget(BaseOverlayWidget):
             self._deferred_refresh_timer = QTimer(self)
             self._deferred_refresh_timer.setSingleShot(True)
             self._deferred_refresh_timer.timeout.connect(self._flush_deferred_refresh)
+            self._register_resource(self._deferred_refresh_timer, "gmail_deferred_refresh_timer")
         if not self._deferred_refresh_timer.isActive():
             self._deferred_refresh_timer.start(250)
 
@@ -677,6 +680,7 @@ class GmailWidget(BaseOverlayWidget):
             self._deferred_fetch_timer = QTimer(self)
             self._deferred_fetch_timer.setSingleShot(True)
             self._deferred_fetch_timer.timeout.connect(self._flush_deferred_fetch_result)
+            self._register_resource(self._deferred_fetch_timer, "gmail_deferred_fetch_timer")
         if not self._deferred_fetch_timer.isActive():
             self._deferred_fetch_timer.start(250)
 

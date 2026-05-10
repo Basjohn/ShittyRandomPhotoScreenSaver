@@ -27,18 +27,11 @@ def is_blob_enabled() -> bool:
     return _DEV_BLOB
 
 
-def is_devcurve_enabled() -> bool:
-    """Legacy compatibility helper: Dev Curve/Spline Curve is always active."""
-    return True
-
-
-def force_gate(*, blob: bool | None = None, devcurve: bool | None = None) -> None:
+def force_gate(*, blob: bool | None = None) -> None:
     """Override gate state programmatically (for tests)."""
     global _DEV_BLOB
     if blob is not None:
         _DEV_BLOB = blob
-    # Kept for API compatibility: devcurve gate no longer controls visibility.
-    _ = devcurve
 
 
 _init_from_argv()
