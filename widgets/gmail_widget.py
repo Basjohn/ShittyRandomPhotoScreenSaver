@@ -34,10 +34,12 @@ from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition, WidgetLifecycleState
 from widgets.gmail_components import (
+    DisplayRow,
     GmailPosition,
     clean_sender_name,
     deserialize_email_cache,
     format_email_date,
+    group_emails,
     shorten_subject,
     smart_title_case_subject,
     serialize_email_cache,
@@ -111,6 +113,7 @@ class GmailWidget(BaseOverlayWidget):
         self._backend: GmailBackend = GmailBackend.instance()
         self._gmail_client = None  # GmailClient or GmailImapClient
         self._emails: List[EmailMetadata] = []
+        self._display_rows: List[DisplayRow] = []
         self._unread_count = 0
         self._has_displayed_valid_data = False
         self._last_error: Optional[str] = None
@@ -377,9 +380,10 @@ class GmailWidget(BaseOverlayWidget):
         cached = self._load_email_cache()
         if cached:
             self._emails = cached
+            self._rebuild_display_rows()
             self._unread_count = sum(1 for e in self._emails if e.is_unread)
             self._has_displayed_valid_data = True
-            self._update_card_height_from_content(len(self._emails))
+            self._update_card_height_from_content(len(self._display_rows))
             self._invalidate_content_cache_and_update()
             self._request_fade_in()
         else:
@@ -419,6 +423,7 @@ class GmailWidget(BaseOverlayWidget):
         self._cancelled = True
         self._fetch_generation += 1
         self._emails.clear()
+        self._display_rows.clear()
         self._row_hit_rects.clear()
         self._action_hit_rects.clear()
         self._clear_content_cache()
@@ -786,14 +791,16 @@ class GmailWidget(BaseOverlayWidget):
             return
         self._emails = display_emails
         self._last_error = None
+        self._rebuild_display_rows()
         self._detect_new_mail(emails)
         if unread_count != self._unread_count:
             self._unread_count = unread_count
             self.unread_count_changed.emit(unread_count)
+        visible_count = len(self._display_rows)
         if display_emails:
             self._has_displayed_valid_data = True
             self._write_email_cache_deferred(display_emails)
-            self._update_card_height_from_content(len(display_emails))
+            self._update_card_height_from_content(visible_count)
             self._invalidate_content_cache_and_update()
             if not self.isVisible():
                 self._request_fade_in()
@@ -802,6 +809,14 @@ class GmailWidget(BaseOverlayWidget):
             self._invalidate_content_cache_and_update()
             if not self.isVisible():
                 self._request_fade_in()
+
+    def _rebuild_display_rows(self) -> None:
+        """Rebuild _display_rows from _emails, applying thread grouping if enabled."""
+        emails = self._emails[: self._limit]
+        if self._group_threads and emails:
+            self._display_rows = group_emails(emails)[: self._limit]
+        else:
+            self._display_rows = [DisplayRow(email=e) for e in emails]
 
     def _detect_new_mail(self, emails: List[EmailMetadata]) -> None:
         """Detect newly-arrived unread messages and play notification sound.
@@ -1293,7 +1308,7 @@ class GmailWidget(BaseOverlayWidget):
             1,
             self.width() - left - margins.right() - self._content_padding_right,
         )
-        visible_emails = self._emails[: self._limit]
+        visible_rows = self._display_rows[: self._limit]
         action_width = 24 if self._show_three_dot_menu else 0
         env_slot_width = (
             self._envelope_pixmap.width() + 6
@@ -1305,7 +1320,7 @@ class GmailWidget(BaseOverlayWidget):
             time_font = QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal)
             time_fm = QFontMetrics(time_font)
             time_slot_width = max(
-                (time_fm.horizontalAdvance(self._format_email_date(email.date)) + 8 for email in visible_emails),
+                (time_fm.horizontalAdvance(self._format_email_date(row.email.date)) + 8 for row in visible_rows),
                 default=0,
             )
         text_area_width = max(1, available_width - env_slot_width - time_slot_width - action_width - 18)
@@ -1315,7 +1330,8 @@ class GmailWidget(BaseOverlayWidget):
             configured_sender_width = max(40, int(self._sender_column_width))
             sender_slot_width = min(configured_sender_width, max_sender_width)
         prev_unread = None
-        for i, email in enumerate(visible_emails):
+        for i, row in enumerate(visible_rows):
+            email = row.email
             if prev_unread is not None and prev_unread != email.is_unread and self._show_separators:
                 sep_y = row_y - 1
                 painter.setPen(QPen(self._boundary_separator_color, self._boundary_separator_thickness))
@@ -1331,7 +1347,6 @@ class GmailWidget(BaseOverlayWidget):
                 time_text = self._format_email_date(email.date)
             env_x = left
             env_width = env_slot_width
-            # Pre-compute line height so we can vertically centre the envelope
             subject_font = QFont(self._font_family, base_font_pt, subject_weight)
             subject_fm = QFontMetrics(subject_font)
             line_height = subject_fm.height() + 6
@@ -1341,7 +1356,6 @@ class GmailWidget(BaseOverlayWidget):
                     line_centre = row_y + (line_height * 0.5)
                     icon_half = float(env_pm.height()) / 2.0
                     env_y = int(line_centre - icon_half)
-                    # Clamp so icon never sits above row or below row bottom
                     env_y = max(row_y, min(env_y, row_y + line_height - env_pm.height()))
                     painter.drawPixmap(env_x, env_y, env_pm)
             sender_width = 0
@@ -1369,6 +1383,8 @@ class GmailWidget(BaseOverlayWidget):
                 max_words=self._max_subject_words,
                 max_chars=self._max_subject_chars,
             )
+            if row.count > 1:
+                subject_text = f"{subject_text} ({row.count})"
             subject_max_width = max(20, available_width - time_width - sender_width - env_width - action_width - 18)
             subject_text = subject_fm.elidedText(
                 subject_text, Qt.TextElideMode.ElideRight, subject_max_width
@@ -1418,7 +1434,7 @@ class GmailWidget(BaseOverlayWidget):
                     font_size=base_font_pt,
                     enabled=text_shadows_enabled(self._shadow_config),
                 )
-            if self._show_separators and i < len(visible_emails) - 1:
+            if self._show_separators and i < len(visible_rows) - 1:
                 sep_y = row_y + line_height
                 painter.setPen(QPen(self._separator_color, self._separator_thickness))
                 painter.drawLine(left, sep_y, left + available_width, sep_y)
@@ -1894,7 +1910,13 @@ class GmailWidget(BaseOverlayWidget):
         self._refresh_interval = next_interval
 
     def set_group_threads(self, enabled: bool) -> None:
-        self._set_attr_and_update("_group_threads", bool(enabled))
+        enabled = bool(enabled)
+        if self._group_threads == enabled:
+            return
+        self._group_threads = enabled
+        self._rebuild_display_rows()
+        self._update_card_height_from_content(len(self._display_rows) or 1)
+        self._invalidate_content_cache_and_update()
 
     def set_show_sender(self, show: bool) -> None:
         self._set_attr_and_update("_show_sender", bool(show))

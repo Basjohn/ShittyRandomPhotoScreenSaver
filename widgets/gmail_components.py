@@ -8,6 +8,7 @@ monolith threshold. Contains:
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from email.header import decode_header, make_header
 from email.utils import parseaddr
@@ -366,6 +367,46 @@ def _email_from_cache_dict(data: dict[str, Any]) -> Optional[EmailMetadata]:
     except (KeyError, ValueError, TypeError) as e:
         logger.warning("[GMAIL] Failed to deserialize cached email: %s", e)
         return None
+
+
+@dataclass(frozen=True)
+class DisplayRow:
+    """A single row in the Gmail widget — either one email or a group of threads.
+
+    When ``count > 1`` the row represents a collapsed thread group.
+    ``email`` is always the *most recent* message in the group (the one whose
+    URL should be opened on click).
+    """
+    email: EmailMetadata
+    count: int = 1
+
+
+def _normalize_subject(subject: str) -> str:
+    """Strip common reply/forward prefixes and collapse whitespace for grouping."""
+    text = re.sub(r"^(?:(?:re|fw|fwd)\s*:\s*)+", "", subject, flags=re.IGNORECASE).strip()
+    return re.sub(r"\s+", " ", text).lower()
+
+
+def group_emails(emails: List[EmailMetadata]) -> List[DisplayRow]:
+    """Group emails by (normalised_sender_address, normalised_subject).
+
+    Within each group the most recent email (by date) becomes the
+    representative row.  Groups are returned sorted most-recent-first,
+    matching the natural inbox order.
+    """
+    if not emails:
+        return []
+    groups: dict[str, list[EmailMetadata]] = {}
+    for email in emails:
+        _, addr = parseaddr(email.sender)
+        key = (addr.lower().strip(), _normalize_subject(email.subject))
+        groups.setdefault(str(key), []).append(email)
+    rows: List[DisplayRow] = []
+    for members in groups.values():
+        members.sort(key=lambda e: e.date, reverse=True)
+        rows.append(DisplayRow(email=members[0], count=len(members)))
+    rows.sort(key=lambda r: r.email.date, reverse=True)
+    return rows
 
 
 def serialize_email_cache(emails: List[EmailMetadata]) -> str:

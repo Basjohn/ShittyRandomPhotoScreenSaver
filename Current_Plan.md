@@ -11,7 +11,17 @@ This file tracks active work only. Completed implementation details belong in `D
 - Do not close visual/runtime bugs from tests alone when symptoms are user-visible.
 - Avoid broad focus, window-flag, compositor, widget-shadow, visualizer, or Qt effect rewrites unless the current task directly requires them.
 
+----
+### User Shorthand Box: Never remove this box, only integrate its tasks into the active plan and then remove the text prompting the tasks.
+----
+1. Regenerate defaults so parity tests pass.
+2. For Gmail grouping (functional now) make sure a normal font weight/style bracket is present in the sender column when it has multiple messages grouped, this would eat sender max space (by 3/4 characters it is a space, bracket, number, close bracket) and not push boundries.
+3. Check the audit for any tasks related to startup speed/consistency and closing/cleanup speed/consistency/stability and prioritise those.
+4. Find your next best targets from the audit if nothing from 3 matches.
+----
+
 ## Active Tasks
+
 
 ### 1. Module Size Refactors (2026-05-11) — IN PROGRESS
 
