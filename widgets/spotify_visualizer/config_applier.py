@@ -1213,3 +1213,87 @@ def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     ]
 
 
+def replay_engine_config(widget: Any, engine: Any) -> None:
+    """Ensure the shared engine reflects the authoritative config for current mode.
+
+    Reads the authoritative per-mode technical config from settings/presets
+    and replays it to the engine, audio worker, and GL overlay so that all
+    subsystems stay in sync after a reset or mode switch.
+    """
+    if engine is None:
+        return
+
+    config = widget._get_mode_technical_config(widget._vis_mode)
+    if config is None:
+        logger.debug("[SPOTIFY_VIS] No technical config available for mode=%s, skipping replay", widget._vis_mode.name)
+        return
+
+    dynamic_floor = bool(config.get("dynamic_floor", True))
+    manual_floor = float(config.get("manual_floor", 0.12))
+    adaptive = bool(config.get("adaptive_sensitivity", True))
+    sensitivity = float(config.get("sensitivity", 1.0))
+    audio_block_size = int(config.get("audio_block_size", 0) or 0)
+    dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
+    energy_boost = widget._compute_energy_boost(dynamic_range_enabled)
+    agc_strength = max(0.0, min(1.0, float(config.get("agc_strength", 0.5))))
+    input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
+
+    kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
+    transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.5))))
+    transient_clamp = max(0.0, min(3.0, float(config.get("transient_clamp", 1.5))))
+    spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
+    bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
+    bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
+    blob_transient_mix_bass = max(0.0, min(1.0, float(config.get("blob_transient_mix_bass", 0.5))))
+    blob_transient_mix_vocal = max(0.0, min(1.0, float(config.get("blob_transient_mix_vocal", 0.35))))
+    sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
+    osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
+
+    widget._use_raw_energy = False
+    widget._kick_lane_gain = kick_lane_gain
+    widget._transient_pulse_gain = transient_pulse_gain
+    widget._transient_clamp = transient_clamp
+    widget._spectrum_lane_transient_mix = spectrum_lane_transient_mix
+    widget._bubble_transient_mix_bass = bubble_transient_mix_bass
+    widget._bubble_transient_mix_vocal = bubble_transient_mix_vocal
+    widget._blob_transient_mix_bass = blob_transient_mix_bass
+    widget._blob_transient_mix_vocal = blob_transient_mix_vocal
+    widget._sine_wave_transient_width_mix = sine_wave_transient_width_mix
+    widget._osc_transient_width_mix = osc_transient_width_mix
+
+    widget.apply_floor_config(dynamic_floor, manual_floor)
+    widget.apply_sensitivity_config(adaptive, sensitivity)
+    widget._apply_audio_block_size(audio_block_size)
+    widget._apply_energy_boost(energy_boost)
+    widget._apply_agc_strength(agc_strength)
+    widget._apply_input_gain(input_gain)
+
+    if engine is not None:
+        aw = getattr(engine, '_audio_worker', None)
+        if aw is not None:
+            try:
+                aw._kick_lane_gain = kick_lane_gain
+                aw._spectrum_lane_transient_mix = spectrum_lane_transient_mix
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to replay transient config to audio worker", exc_info=True)
+
+    parent = widget.parent()
+    overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
+    if overlay is not None:
+        try:
+            overlay._blob_transient_mix_bass = blob_transient_mix_bass
+            overlay._blob_transient_mix_vocal = blob_transient_mix_vocal
+            overlay._transient_clamp = transient_clamp
+            overlay._sine_wave_transient_width_mix = sine_wave_transient_width_mix
+            overlay._osc_transient_width_mix = osc_transient_width_mix
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to replay transient config to GL overlay", exc_info=True)
+
+    logger.debug("[SPOTIFY_VIS] Replayed authoritative config for mode=%s", widget._vis_mode.name)
+    try:
+        _active_notches = (widget._spectrum_notch_positions_mirrored
+                           if widget._spectrum_mirrored
+                           else widget._spectrum_notch_positions_linear)
+        engine.set_notch_positions(_active_notches)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to replay notch positions config", exc_info=True)

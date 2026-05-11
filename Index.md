@@ -59,9 +59,13 @@ Living map of the current SRPSS codebase.
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask with border-width inset so GL content stays inside the visible card boundary |
-| Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping |
+| Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping; engine config replay |
 | Spline Curve runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | DevCurve/Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |
+| Startup staging | `widgets/spotify_visualizer/startup_staging.py` | Extracted startup staging, lifecycle hooks, hot start, and cleanup |
+| Card paint | `widgets/spotify_visualizer/card_paint.py` | Painted-frame-shadow pixmap generation and card style |
+| Media bridge | `widgets/spotify_visualizer/media_bridge.py` | Media state tracking, anchor seeding, GL overlay teardown |
+| Engine lifecycle | `widgets/spotify_visualizer/engine_lifecycle.py` | Engine reset, audio fallback, wake, generation tracking |
 
 ## Rendering System
 

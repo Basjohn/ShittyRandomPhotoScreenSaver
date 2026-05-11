@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 from typing import List, Optional, Dict, Any, Callable
-from dataclasses import asdict, is_dataclass
-import time
 import copy
 
-from PySide6.QtCore import QRect, QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
+from PySide6.QtCore import QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPixmap
 from PySide6.QtWidgets import QWidget
 from core.logging.logger import (
     get_logger,
     is_verbose_logging,
-    is_perf_metrics_enabled,
 )
 from core.threading.manager import ThreadManager
 from core.process import ProcessSupervisor
@@ -21,10 +18,7 @@ from core.settings.visualizer_presets import (
     resolve_visualizer_activation_payload,
 )
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
-from widgets.base_overlay_widget import (
-    BaseOverlayWidget,
-    PAINTED_FRAME_SHADOW_TUNING,
-)
+from widgets.base_overlay_widget import BaseOverlayWidget
 
 
 # Re-export package symbols for backward compatibility with external importers
@@ -590,91 +584,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._set_startup_phase_attr("reveal_not_before_ts", float(value))
 
     def _replay_engine_config(self, engine: Optional[_SpotifyBeatEngine]) -> None:
-        """Ensure the shared engine reflects the authoritative config for current mode."""
-        if engine is None:
-            return
-
-        # Read authoritative config for current mode from settings/presets
-        config = self._get_mode_technical_config(self._vis_mode)
-        if config is None:
-            logger.debug("[SPOTIFY_VIS] No technical config available for mode=%s, skipping replay", self._vis_mode.name)
-            return
-
-        # Apply ALL authoritative config using same helper methods as _apply_technical_config_for_mode
-        dynamic_floor = bool(config.get("dynamic_floor", True))
-        manual_floor = float(config.get("manual_floor", 0.12))
-        adaptive = bool(config.get("adaptive_sensitivity", True))
-        sensitivity = float(config.get("sensitivity", 1.0))
-        audio_block_size = int(config.get("audio_block_size", 0) or 0)
-        dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
-        energy_boost = self._compute_energy_boost(dynamic_range_enabled)
-        agc_strength = max(0.0, min(1.0, float(config.get("agc_strength", 0.5))))
-        input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
-
-        # Transient bus controls (only those applied to engine/audio worker/overlay)
-        kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
-        transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.5))))
-        transient_clamp = max(0.0, min(3.0, float(config.get("transient_clamp", 1.5))))
-        spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
-        bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
-        bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
-        blob_transient_mix_bass = max(0.0, min(1.0, float(config.get("blob_transient_mix_bass", 0.5))))
-        blob_transient_mix_vocal = max(0.0, min(1.0, float(config.get("blob_transient_mix_vocal", 0.35))))
-        sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
-        osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
-
-        # Update widget instance variables (for parity with _apply_technical_config_for_mode)
-        self._use_raw_energy = False
-        self._kick_lane_gain = kick_lane_gain
-        self._transient_pulse_gain = transient_pulse_gain
-        self._transient_clamp = transient_clamp
-        self._spectrum_lane_transient_mix = spectrum_lane_transient_mix
-        self._bubble_transient_mix_bass = bubble_transient_mix_bass
-        self._bubble_transient_mix_vocal = bubble_transient_mix_vocal
-        self._blob_transient_mix_bass = blob_transient_mix_bass
-        self._blob_transient_mix_vocal = blob_transient_mix_vocal
-        self._sine_wave_transient_width_mix = sine_wave_transient_width_mix
-        self._osc_transient_width_mix = osc_transient_width_mix
-
-        # Apply using same helper methods as _apply_technical_config_for_mode
-        self.apply_floor_config(dynamic_floor, manual_floor)
-        self.apply_sensitivity_config(adaptive, sensitivity)
-        self._apply_audio_block_size(audio_block_size)
-        self._apply_energy_boost(energy_boost)
-        self._apply_agc_strength(agc_strength)
-        self._apply_input_gain(input_gain)
-
-        # Apply to audio worker (for parity with _apply_technical_config_for_mode)
-        if engine is not None:
-            aw = getattr(engine, '_audio_worker', None)
-            if aw is not None:
-                try:
-                    aw._kick_lane_gain = kick_lane_gain
-                    aw._spectrum_lane_transient_mix = spectrum_lane_transient_mix
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to replay transient config to audio worker", exc_info=True)
-
-        # Apply transient controls to GL overlay
-        parent = self.parent()
-        overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
-        if overlay is not None:
-            try:
-                overlay._blob_transient_mix_bass = blob_transient_mix_bass
-                overlay._blob_transient_mix_vocal = blob_transient_mix_vocal
-                overlay._transient_clamp = transient_clamp
-                overlay._sine_wave_transient_width_mix = sine_wave_transient_width_mix
-                overlay._osc_transient_width_mix = osc_transient_width_mix
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to replay transient config to GL overlay", exc_info=True)
-
-        logger.debug("[SPOTIFY_VIS] Replayed authoritative config for mode=%s", self._vis_mode.name)
-        try:
-            _active_notches = (self._spectrum_notch_positions_mirrored
-                               if self._spectrum_mirrored
-                               else self._spectrum_notch_positions_linear)
-            engine.set_notch_positions(_active_notches)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to replay notch positions config", exc_info=True)
+        from widgets.spotify_visualizer.config_applier import replay_engine_config
+        replay_engine_config(self, engine)
 
     # ------------------------------------------------------------------
     # Public configuration
@@ -1640,40 +1551,8 @@ class SpotifyVisualizerWidget(QWidget):
         self.update()
 
     def _update_card_style(self) -> None:
-        selector = f"#{self.objectName()}" if self.objectName() else "QWidget"
-        if self.uses_painted_frame_shadow():
-            self.setStyleSheet(
-                f"""
-                {selector} {{
-                    background-color: transparent;
-                    border: 0px solid transparent;
-                    border-radius: 8px;
-                }}
-                """
-            )
-        elif self._show_background:
-            bg = QColor(self._bg_color)
-            alpha = int(255 * max(0.0, min(1.0, self._bg_opacity)))
-            bg.setAlpha(alpha)
-            self.setStyleSheet(
-                f"""
-                {selector} {{
-                    background-color: rgba({bg.red()}, {bg.green()}, {bg.blue()}, {bg.alpha()});
-                    border: {self._border_width}px solid rgba({self._card_border_color.red()}, {self._card_border_color.green()}, {self._card_border_color.blue()}, {self._card_border_color.alpha()});
-                    border-radius: 8px;
-                }}
-                """
-            )
-        else:
-            self.setStyleSheet(
-                f"""
-                {selector} {{
-                    background-color: transparent;
-                    border: 0px solid transparent;
-                    border-radius: 8px;
-                }}
-                """
-            )
+        from widgets.spotify_visualizer.card_paint import update_card_style
+        update_card_style(self)
 
     def set_bar_style(self, *, bg_color: QColor, bg_opacity: float, border_color: QColor, border_width: Optional[int] = None,
                       show_background: bool = True) -> None:
@@ -1695,97 +1574,16 @@ class SpotifyVisualizerWidget(QWidget):
         self._painted_frame_shadow_cache_key = None
 
     def _painted_frame_shadow_card_rect(self) -> QRectF:
-        tuning = PAINTED_FRAME_SHADOW_TUNING
-        return QRectF(
-            0.0,
-            0.0,
-            max(1.0, float(self.width() - int(tuning["card_shrink_right"]))),
-            max(1.0, float(self.height() - int(tuning["card_shrink_bottom"]))),
-        )
+        from widgets.spotify_visualizer.card_paint import painted_frame_shadow_card_rect
+        return painted_frame_shadow_card_rect(self)
 
     def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
-        if not self.uses_painted_frame_shadow() or self.width() <= 0 or self.height() <= 0:
-            return None
-        try:
-            dpr = max(1.0, float(self.devicePixelRatioF()))
-        except Exception:
-            dpr = 1.0
-        bg = QColor(self._bg_color)
-        bg.setAlpha(int(255 * max(0.0, min(1.0, self._bg_opacity))))
-        tuning = PAINTED_FRAME_SHADOW_TUNING
-        key = (
-            self.width(),
-            self.height(),
-            round(dpr, 3),
-            bg.getRgb(),
-            self._card_border_color.getRgb(),
-            int(self._border_width),
-            tuple(sorted(tuning.items())),
-        )
-        if (
-            self._painted_frame_shadow_pixmap is not None
-            and not self._painted_frame_shadow_pixmap.isNull()
-            and self._painted_frame_shadow_cache_key == key
-        ):
-            return self._painted_frame_shadow_pixmap
-
-        pixmap = QPixmap(max(1, int(self.width() * dpr)), max(1, int(self.height() * dpr)))
-        pixmap.setDevicePixelRatio(dpr)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        try:
-            card_rect = self._painted_frame_shadow_card_rect().adjusted(1.0, 1.0, -1.0, -1.0)
-            radius = max(0.0, float(8 + int(tuning["radius_extra"])))
-            offset_x = float(tuning["offset_x"])
-            offset_y = float(tuning["offset_y"])
-            steps = max(1, int(tuning["blur_steps"]))
-            spread = max(0.0, float(tuning["spread"]))
-            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
-
-            for layer in range(steps, 0, -1):
-                frac = layer / float(steps)
-                grow = spread * frac
-                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
-                if alpha <= 0:
-                    continue
-                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
-                shadow_path = QPainterPath()
-                shadow_path.addRoundedRect(shadow_rect, radius + grow, radius + grow)
-                painter.fillPath(shadow_path, QColor(0, 0, 0, alpha))
-
-            frame_path = QPainterPath()
-            frame_path.addRoundedRect(card_rect, radius, radius)
-            painter.fillPath(frame_path, bg)
-            if self._border_width > 0 and self._card_border_color.alpha() > 0:
-                pen = QPen(self._card_border_color, max(1, int(self._border_width)))
-                pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-                painter.setPen(pen)
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawPath(frame_path)
-        finally:
-            painter.end()
-
-        self._painted_frame_shadow_pixmap = pixmap
-        self._painted_frame_shadow_cache_key = key
-        return pixmap
+        from widgets.spotify_visualizer.card_paint import ensure_painted_frame_shadow_pixmap
+        return ensure_painted_frame_shadow_pixmap(self)
 
     def _paint_painted_frame_shadow(self) -> None:
-        if not self.uses_painted_frame_shadow():
-            return
-        painter = QPainter(self)
-        try:
-            painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
-            painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
-        finally:
-            painter.end()
-        pixmap = self._ensure_painted_frame_shadow_pixmap()
-        if pixmap is not None and not pixmap.isNull():
-            painter = QPainter(self)
-            try:
-                painter.drawPixmap(0, 0, pixmap)
-            finally:
-                painter.end()
+        from widgets.spotify_visualizer.card_paint import paint_painted_frame_shadow
+        paint_painted_frame_shadow(self)
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         self._invalidate_painted_frame_shadow_cache()
@@ -1844,396 +1642,76 @@ class SpotifyVisualizerWidget(QWidget):
 
     @staticmethod
     def _media_info_to_payload(info: object) -> Optional[dict]:
-        """Convert cached media info objects into the payload shape used by updates."""
-        if info is None:
-            return None
-        if isinstance(info, dict):
-            payload = dict(info)
-        else:
-            payload: dict[str, object] = {}
-            try:
-                if is_dataclass(info):
-                    payload = asdict(info)
-                else:
-                    for attr in ("title", "artist", "album", "app_name", "artwork", "artwork_url", "state"):
-                        if hasattr(info, attr):
-                            payload[attr] = getattr(info, attr)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to build media seed payload", exc_info=True)
-                return None
+        from widgets.spotify_visualizer.media_bridge import media_info_to_payload
+        return media_info_to_payload(info)
 
-        state = payload.get("state")
-        try:
-            if hasattr(state, "value"):
-                payload["state"] = state.value
-            elif state is not None:
-                payload["state"] = str(state)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to normalize media seed state", exc_info=True)
-        return payload or None
-
-    def _seed_playback_state_from_anchor(
-        self,
-        *,
-        reason: str,
-        request_refresh_if_missing: bool,
-    ) -> bool:
-        """Seed playback state from the anchor media widget or its shared cache."""
-        anchor = self._anchor_media
-        candidate = getattr(anchor, "_last_info", None) if anchor is not None else None
-
-        if candidate is None and anchor is not None:
-            try:
-                shared_getter = getattr(type(anchor), "_get_shared_valid_info", None)
-                if callable(shared_getter):
-                    candidate = shared_getter()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to read shared media cache", exc_info=True)
-
-        if candidate is None and anchor is not None:
-            try:
-                candidate = getattr(type(anchor), "_shared_last_valid_info", None)
-            except Exception:
-                candidate = None
-
-        payload = self._media_info_to_payload(candidate)
-        if payload is not None:
-            self.handle_media_update(payload)
-            logger.debug("[SPOTIFY_VIS] Seeded playback state from anchor (%s)", reason)
-            return True
-
-        if request_refresh_if_missing and anchor is not None:
-            refresher = getattr(anchor, "refresh_playback_state", None)
-            if callable(refresher):
-                try:
-                    refresher()
-                    logger.debug("[SPOTIFY_VIS] Requested anchor playback refresh (%s)", reason)
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to request anchor playback refresh", exc_info=True)
-        return False
+    def _seed_playback_state_from_anchor(self, *, reason: str, request_refresh_if_missing: bool) -> bool:
+        from widgets.spotify_visualizer.media_bridge import seed_playback_state_from_anchor
+        return seed_playback_state_from_anchor(self, reason=reason, request_refresh_if_missing=request_refresh_if_missing)
 
     def handle_media_update(self, payload: dict) -> None:
-        """Receive media state from MediaWidget.
-
-        Expects payload from MediaWidget.media_updated with a ``state``
-        field of "playing"/"paused"/"stopped". When not playing, the
-        visualizer decays to idle even if other apps are producing audio.
-        Contract: this is provider-neutral and follows whichever media
-        provider is currently active (Spotify or MusicBee).
-        """
-
-        try:
-            state = str(payload.get("state", "")).lower()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            state = ""
-        prev = self._spotify_playing
-        self._spotify_playing = state == "playing"
-        self._last_media_state_ts = time.time()
-        self._fallback_logged = False
-        if self._spotify_playing:
-            self._startup_require_playing_before_reveal = False
-
-        # WAKE TRIGGER: Play state transition from paused→playing
-        if self._spotify_playing and not prev:
-            self._trigger_wake(reason="play_state_transition")
-
-        # WAKE TRIGGER: Artwork changed (indicates track change, possibly during pause)
-        artwork_url = payload.get("artwork_url", "")
-        artwork_hash = hash(artwork_url) if artwork_url else 0
-        if artwork_hash != getattr(self, "_last_artwork_hash", 0):
-            self._last_artwork_hash = artwork_hash
-            if not self._spotify_playing:
-                # Artwork changed while paused - likely a wake event
-                self._trigger_wake(reason="paused_artwork_change")
-
-        # CRITICAL: Pass playback state to beat engine for audio processing gating
-        try:
-            if self._engine is not None:
-                self._engine.set_playback_state(self._spotify_playing)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to set beat engine playback state", exc_info=True)
-
-        first_media = not self._has_seen_media
-        if first_media:
-            # Track that we have seen at least one Spotify media state update
-            # so later calls can focus purely on bar gating.
-            self._has_seen_media = True
-
-        if is_verbose_logging():
-            try:
-                logger.debug(
-                    "[SPOTIFY_VIS] handle_media_update: state=%r (prev_playing=%s, now_playing=%s)",
-                    state,
-                    prev,
-                    self._spotify_playing,
-                )
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-
-        if (
-            self._spotify_playing
-            and self._startup_reveal_pending
-            and self._startup_hot_start_started
-            and not self._waiting_for_fresh_frame
-        ):
-            self._finish_staged_startup_reveal(reason="play_state_ready")
-
-        self.sync_visibility_with_anchor()
+        from widgets.spotify_visualizer.media_bridge import handle_media_update
+        handle_media_update(self, payload)
 
     def sync_visibility_with_anchor(self) -> None:
-        """Show/hide based on anchor media widget visibility."""
-        try:
-            anchor_visible = self._is_anchor_visible()
-            if anchor_visible:
-                if self._enabled and self._startup_secondary_stage_pending:
-                    if not self._is_parent_secondary_stage_ready():
-                        logger.debug("[SPOTIFY_VIS] Waiting for centralized secondary-stage startup deadline")
-                        return
-                    self.begin_spotify_secondary_stage()
-                    return
-                if self._startup_reveal_pending:
-                    return
-                if self._enabled and not self.isVisible():
-                    self._start_widget_fade_in()
-            elif self.isVisible():
-                self.hide()
-                self._clear_gl_overlay()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-    
+        from widgets.spotify_visualizer.media_bridge import sync_visibility_with_anchor
+        sync_visibility_with_anchor(self)
+
     def _destroy_parent_overlay(self, *, reason: str) -> None:
-        parent = self.parent()
-        if parent is None:
-            logger.warning("[SPOTIFY_VIS] Overlay destroy requested without parent (reason=%s)", reason)
-            return
-
-        overlay = getattr(parent, "_spotify_bars_overlay", None)
-        if overlay is None:
-            logger.debug("[SPOTIFY_VIS] No overlay to destroy (reason=%s)", reason)
-            return
-
-        logger.debug(
-            "[SPOTIFY_VIS] Destroying SpotifyBarsGLOverlay (reason=%s id=%s)",
-            reason,
-            hex(id(overlay)),
-        )
-
-        pixel_shift_manager = getattr(parent, "_pixel_shift_manager", None)
-        if pixel_shift_manager is not None:
-            try:
-                pixel_shift_manager.unregister_widget(overlay)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to unregister overlay from PixelShiftManager", exc_info=True)
-
-        try:
-            overlay.hide()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to hide overlay before destroy", exc_info=True)
-
-        try:
-            if hasattr(overlay, "clear_overlay_buffer"):
-                overlay.clear_overlay_buffer()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to blank overlay buffer before destroy", exc_info=True)
-
-        try:
-            overlay.update()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to schedule overlay update before destroy", exc_info=True)
-
-        try:
-            if hasattr(overlay, "cleanup_gl"):
-                overlay.cleanup_gl()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to cleanup overlay GL state", exc_info=True)
-
-        try:
-            overlay.deleteLater()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to schedule overlay delete", exc_info=True)
-
-        try:
-            setattr(parent, "_spotify_bars_overlay", None)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to clear parent overlay reference", exc_info=True)
-
-        # Clear transient opacity state before waiting for the fresh GL frame.
-        self._pending_shadow_cache_invalidation = True
-        self._invalidate_shadow_cache_if_needed()
-        self._shadow_config_missing = True
-        self._waiting_for_fresh_frame = True
+        from widgets.spotify_visualizer.media_bridge import destroy_parent_overlay
+        destroy_parent_overlay(self, reason=reason)
 
     def _request_overlay_mode_reset(self, *, mode: Optional[str] = None, reason: str = "widget_reset") -> None:
-        """Ask the GL overlay (if present) to cold-reset its per-mode state."""
-
-        parent = self.parent()
-        if parent is None or not hasattr(parent, "push_spotify_visualizer_frame"):
-            return
-        overlay = getattr(parent, "_spotify_bars_overlay", None)
-        if overlay is None or not hasattr(overlay, "request_mode_reset"):
-            return
-        try:
-            target = mode or self._vis_mode_str
-            overlay.request_mode_reset(target)
-            logger.debug("[SPOTIFY_VIS] Requested overlay mode reset: mode=%s reason=%s", target, reason)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to request overlay mode reset", exc_info=True)
+        from widgets.spotify_visualizer.media_bridge import request_overlay_mode_reset
+        request_overlay_mode_reset(self, mode=mode, reason=reason)
 
     def _reset_engine_state(self, *, reason: str) -> None:
-        """Hard-reset beat engine + widget bar/energy state after crossover."""
-
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            engine = None
-
-        if engine is not None:
-            try:
-                engine.cancel_pending_compute_tasks()
-                engine.reset_smoothing_state()
-                engine.reset_floor_state()
-                engine.set_smoothing(self._smoothing)
-                self._replay_engine_config(engine)
-                # Reapply the active mode's technical config so manual/dynamic floors
-                # and sensitivity caches refresh whenever the engine is reset.
-                self._apply_technical_config_for_mode(
-                    self._vis_mode,
-                    reason=f"engine_reset:{reason}" if reason else "engine_reset",
-                )
-                if self._should_capture_audio_now():
-                    engine.ensure_started()
-                else:
-                    engine.set_playback_state(False)
-                self._track_engine_generation(engine)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to reset engine state", exc_info=True)
-
-        zeros = [0.0] * self._bar_count
-        self._display_bars = list(zeros)
-        self._target_bars = list(zeros)
-        self._visual_bars = list(zeros)
-        self._per_bar_energy = list(zeros)
-        self._waiting_for_fresh_engine_frame = True
-        self._waiting_for_fresh_frame = True
-        if reason:
-            logger.debug("[SPOTIFY_VIS] Engine state reset reason=%s", reason)
+        from widgets.spotify_visualizer.engine_lifecycle import reset_engine_state
+        reset_engine_state(self, reason=reason)
 
     def reset_runtime_activation_state(self, *, reason: str = "activation") -> None:
-        """Cold-reset visualizer runtime state after a mode or preset activation."""
-        self._waiting_for_fresh_engine_frame = True
-        self._waiting_for_fresh_frame = True
-        self._reset_mode_owned_runtime_state(reason=reason)
-        self._clear_gl_overlay()
-        self._prepare_engine_for_mode_reset()
-        self._clear_runtime_bar_state()
+        from widgets.spotify_visualizer.engine_lifecycle import reset_runtime_activation_state
+        reset_runtime_activation_state(self, reason=reason)
 
     def _reset_mode_owned_runtime_state(self, *, reason: str = "activation") -> None:
-        """Delegates to widgets.spotify_visualizer.mode_transition."""
         from widgets.spotify_visualizer.mode_transition import reset_mode_owned_runtime_state
-
         reset_mode_owned_runtime_state(self, reason=reason)
 
     def _should_capture_audio_now(self) -> bool:
-        """Return True when audio capture/FFT should actively run."""
-        return bool(self._enabled and self._spotify_playing)
+        from widgets.spotify_visualizer.engine_lifecycle import should_capture_audio_now
+        return should_capture_audio_now(self)
 
     def _track_engine_generation(self, engine: Optional[_SpotifyBeatEngine]) -> None:
-        if engine is None:
-            self._pending_engine_generation = -1
-            self._pending_engine_activation_id = -1
-            return
-        try:
-            gen = int(engine.get_generation_id())
-        except Exception:
-            gen = -1
-        try:
-            activation_id = int(engine.get_activation_id())
-        except Exception:
-            activation_id = -1
-        self._pending_engine_generation = gen
-        self._pending_engine_activation_id = activation_id
-        self._last_engine_generation_seen = -1
-        self._last_engine_activation_seen = -1
+        from widgets.spotify_visualizer.engine_lifecycle import track_engine_generation
+        track_engine_generation(self, engine)
 
     def _handle_mode_cycle_state_reset(self) -> None:
-        self._reset_teardown_bookkeeping()
-        self._pending_shadow_cache_invalidation = True
-        self._prepare_engine_for_mode_reset()
+        from widgets.spotify_visualizer.engine_lifecycle import handle_mode_cycle_state_reset
+        handle_mode_cycle_state_reset(self)
 
     def _clear_gl_overlay(self) -> None:
-        """Destroy the GL bars overlay when visualizer hides."""
-        self._request_overlay_mode_reset(reason="clear_gl_overlay")
-        self._destroy_parent_overlay(reason="clear_gl_overlay")
-        
-    def _is_media_state_stale(self) -> bool:
-        """Return True if Spotify state has not updated within fallback timeout."""
-        last = getattr(self, "_last_media_state_ts", 0.0)
-        if last <= 0.0:
-            return True
-        try:
-            timeout = float(self._media_fallback_timeout)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            timeout = 8.0
-        return (time.time() - last) >= max(1.0, timeout)
+        from widgets.spotify_visualizer.engine_lifecycle import clear_gl_overlay
+        clear_gl_overlay(self)
 
-    def _has_audio_activity(
-        self,
-        bars: List[float],
-        raw_bars: Optional[List[float]] = None,
-    ) -> bool:
-        """Heuristic to detect meaningful audio energy on the loopback feed."""
-        candidates = raw_bars if isinstance(raw_bars, list) and raw_bars else bars
-        if not isinstance(candidates, list) or not candidates:
-            return False
-        threshold = 0.01
-        try:
-            return max(candidates) >= threshold
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            return any((b or 0.0) >= threshold for b in candidates)
+    def _is_media_state_stale(self) -> bool:
+        from widgets.spotify_visualizer.engine_lifecycle import is_media_state_stale
+        return is_media_state_stale(self)
+
+    def _has_audio_activity(self, bars: List[float], raw_bars: Optional[List[float]] = None) -> bool:
+        from widgets.spotify_visualizer.engine_lifecycle import has_audio_activity
+        return has_audio_activity(self, bars, raw_bars)
 
     def _is_fallback_forced(self) -> bool:
-        return time.time() <= getattr(self, "_fallback_forced_until", 0.0)
+        from widgets.spotify_visualizer.engine_lifecycle import is_fallback_forced
+        return is_fallback_forced(self)
 
     def _update_fallback_force_state(self, audio_active: bool) -> None:
-        now = time.time()
-        if self._spotify_playing:
-            self._fallback_mismatch_start = 0.0
-            self._fallback_forced_until = 0.0
-            return
-
-        if audio_active:
-            if self._fallback_mismatch_start <= 0.0:
-                self._fallback_mismatch_start = now
-            elif (now - self._fallback_mismatch_start) >= 3.0:
-                if not self._is_fallback_forced():
-                    self._fallback_forced_until = now + 20.0
-                    logger.warning(
-                        "[SPOTIFY_VIS] Forcing audio fallback for 20s (bridge reports paused but audio active)",
-                    )
-        else:
-            self._fallback_mismatch_start = 0.0
+        from widgets.spotify_visualizer.engine_lifecycle import update_fallback_force_state
+        update_fallback_force_state(self, audio_active)
 
     def _trigger_wake(self, *, reason: str = "unspecified", allow_defer: bool = True) -> None:
-        """Trigger wake sequence for visualizer recovery after pause."""
-        if allow_defer and (
-            self._startup_secondary_stage_pending
-            or (self._enabled and not self._startup_hot_start_started)
-        ):
-            self._startup_wake_deferred = True
-            logger.debug("[SPOTIFY_VIS] Deferred wake until staged hot start (reason=%s)", reason)
-            return
-
-        logger.debug("[SPOTIFY_VIS] Wake triggered (reason=%s)", reason)
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-            if engine and hasattr(engine, 'wake'):
-                engine.wake()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Wake failed", exc_info=True)
+        from widgets.spotify_visualizer.engine_lifecycle import trigger_wake
+        trigger_wake(self, reason=reason, allow_defer=allow_defer)
 
     # ------------------------------------------------------------------
     # Lifecycle Implementation Hooks
@@ -2244,352 +1722,76 @@ class SpotifyVisualizerWidget(QWidget):
         logger.debug("[LIFECYCLE] SpotifyVisualizerWidget initialized")
 
     def _is_anchor_visible(self) -> bool:
-        anchor = self._anchor_media
-        if anchor is None:
-            return True
-        try:
-            return bool(anchor.isVisible())
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        return True
+        from widgets.spotify_visualizer.startup_staging import is_anchor_visible
+        return is_anchor_visible(self)
 
     def _cancel_pending_startup_reveal(self) -> None:
-        self._startup_reveal_pending = False
-        self._startup_reveal_token += 1
-        self._startup_reveal_ready_token = -1
+        from widgets.spotify_visualizer.startup_staging import cancel_pending_startup_reveal
+        cancel_pending_startup_reveal(self)
 
     def _ensure_spotify_secondary_stage_registration(self) -> None:
-        if self._spotify_secondary_stage_registered:
-            return
-
-        parent = self.parent()
-        register = getattr(parent, "register_spotify_secondary_fade", None) if parent is not None else None
-        if not callable(register):
-            return
-
-        try:
-            register(self.begin_spotify_secondary_stage)
-            self._spotify_secondary_stage_registered = True
-            logger.debug("[SPOTIFY_VIS] Self-registered Spotify secondary startup stage")
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to self-register Spotify secondary stage", exc_info=True)
+        from widgets.spotify_visualizer.startup_staging import ensure_spotify_secondary_stage_registration
+        ensure_spotify_secondary_stage_registration(self)
 
     def _is_parent_secondary_stage_ready(self) -> bool:
-        parent = self.parent()
-        if parent is None:
-            return True
-        try:
-            overlay_expected = getattr(parent, "_overlay_fade_expected", set()) or set()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            overlay_expected = set()
-        try:
-            overlay_started = bool(getattr(parent, "_overlay_fade_started", False))
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            overlay_started = False
-        if overlay_expected and not overlay_started:
-            return False
-        try:
-            not_before_ts = float(
-                getattr(parent, "_spotify_secondary_not_before_ts", 0.0) or 0.0
-            )
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            not_before_ts = 0.0
-        if not_before_ts <= 0.0:
-            return not overlay_expected
-        return time.monotonic() >= not_before_ts
+        from widgets.spotify_visualizer.startup_staging import is_parent_secondary_stage_ready
+        return is_parent_secondary_stage_ready(self)
 
     def _prewarm_parent_overlay(self) -> None:
-        parent = self.parent()
-        if parent is None:
-            return
-        try:
-            from rendering.display_image_ops import prewarm_spotify_visualizer_overlay
+        from widgets.spotify_visualizer.startup_staging import prewarm_parent_overlay
+        prewarm_parent_overlay(self)
 
-            prewarm_spotify_visualizer_overlay(parent)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to prewarm parent GL overlay", exc_info=True)
-
-    def _finish_staged_startup_reveal(
-        self,
-        *,
-        reason: str,
-        allow_waiting_fallback: bool = False,
-    ) -> None:
-        if not self._enabled or not self._startup_reveal_pending:
-            return
-        if not self._is_anchor_visible():
-            return
-        if self._startup_require_playing_before_reveal and not self._spotify_playing:
-            return
-        if self._waiting_for_fresh_frame and not allow_waiting_fallback:
-            return
-        try:
-            not_before_ts = float(getattr(self, "_startup_reveal_not_before_ts", 0.0) or 0.0)
-        except Exception:
-            not_before_ts = 0.0
-        if not_before_ts > 0.0 and time.monotonic() < not_before_ts:
-            if not allow_waiting_fallback and not self._waiting_for_fresh_frame:
-                try:
-                    delay_ms = max(
-                        1,
-                        int((not_before_ts - time.monotonic()) * 1000.0),
-                    )
-                except Exception:
-                    delay_ms = 1
-                self._schedule_ready_driven_startup_reveal(delay_ms=delay_ms)
-            return
-
-        self._cancel_pending_startup_reveal()
-        try:
-            if not self.isVisible():
-                self._start_widget_fade_in()
-            logger.debug("[SPOTIFY_VIS] Completed staged startup reveal (reason=%s)", reason)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed staged startup reveal", exc_info=True)
+    def _finish_staged_startup_reveal(self, *, reason: str, allow_waiting_fallback: bool = False) -> None:
+        from widgets.spotify_visualizer.startup_staging import finish_staged_startup_reveal
+        finish_staged_startup_reveal(self, reason=reason, allow_waiting_fallback=allow_waiting_fallback)
 
     def _schedule_ready_driven_startup_reveal(self, *, delay_ms: int) -> None:
-        if not self._startup_reveal_pending:
-            return
-        token = int(getattr(self, "_startup_reveal_token", 0))
-        if self._startup_reveal_ready_token == token:
-            return
-        self._startup_reveal_ready_token = token
-
-        def _maybe_reveal() -> None:
-            if token != self._startup_reveal_token:
-                return
-            self._startup_reveal_ready_token = -1
-            self._finish_staged_startup_reveal(reason="fresh_frame_ready_delay")
-
-        try:
-            QTimer.singleShot(max(0, int(delay_ms)), _maybe_reveal)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to schedule ready-driven reveal", exc_info=True)
-            self._startup_reveal_ready_token = -1
-            _maybe_reveal()
+        from widgets.spotify_visualizer.startup_staging import schedule_ready_driven_startup_reveal
+        schedule_ready_driven_startup_reveal(self, delay_ms=delay_ms)
 
     def _schedule_startup_reveal_fallback(self) -> None:
-        delay_ms = max(0, int(self._startup_reveal_fallback_ms))
-        self._startup_reveal_token += 1
-        token = self._startup_reveal_token
-
-        def _maybe_reveal() -> None:
-            if token != self._startup_reveal_token:
-                return
-            self._finish_staged_startup_reveal(
-                reason="fallback_timer",
-                allow_waiting_fallback=True,
-            )
-
-        try:
-            if delay_ms <= 0:
-                _maybe_reveal()
-            else:
-                QTimer.singleShot(delay_ms, _maybe_reveal)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to schedule startup reveal fallback", exc_info=True)
-            _maybe_reveal()
+        from widgets.spotify_visualizer.startup_staging import schedule_startup_reveal_fallback
+        schedule_startup_reveal_fallback(self)
 
     def _mode_allows_idle_reveal(self) -> bool:
-        """Return True when the current mode should reveal while paused."""
-        return str(getattr(self, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "devcurve"}
+        from widgets.spotify_visualizer.startup_staging import mode_allows_idle_reveal
+        return mode_allows_idle_reveal(self)
 
     def _arm_staged_startup(self, *, reason: str) -> None:
-        try:
-            self.hide()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-
-        self._ensure_spotify_secondary_stage_registration()
-        self._cancel_pending_startup_reveal()
-        self._startup_secondary_stage_pending = bool(self._spotify_secondary_stage_registered)
-        self._startup_hot_start_started = False
-        self._startup_reveal_not_before_ts = 0.0
-        self._startup_wake_deferred = False
-        self._startup_require_playing_before_reveal = False
-        self._seed_playback_state_from_anchor(
-            reason=reason,
-            request_refresh_if_missing=True,
-        )
-        self._startup_require_playing_before_reveal = (
-            (not self._spotify_playing) and (not self._mode_allows_idle_reveal())
-        )
+        from widgets.spotify_visualizer.startup_staging import arm_staged_startup
+        arm_staged_startup(self, reason=reason)
 
     def _begin_hot_start(self, *, reason: str, reset_reason: str) -> None:
-        if self._startup_hot_start_started:
-            return
-
-        self._startup_hot_start_started = True
-        self._startup_secondary_stage_pending = False
-        self._startup_reveal_not_before_ts = time.monotonic() + (
-            max(0, int(self._startup_min_reveal_delay_ms)) / 1000.0
-        )
-        self._seed_playback_state_from_anchor(
-            reason=reason,
-            request_refresh_if_missing=False,
-        )
-        self._startup_require_playing_before_reveal = (
-            (not self._spotify_playing) and (not self._mode_allows_idle_reveal())
-        )
-
-        try:
-            engine = get_shared_spotify_beat_engine(self._bar_count)
-            self._engine = engine
-            if self._thread_manager is not None:
-                engine.set_thread_manager(self._thread_manager)
-            engine.acquire()
-            self._reset_engine_state(reason=reset_reason)
-            logger.info(
-                "[SPOTIFY_VIS] Staged engine reset applied (reason=%s, mode=%s, bars=%d)",
-                reset_reason,
-                self._vis_mode.name,
-                self._bar_count,
-            )
-            engine.set_playback_state(self._spotify_playing)
-            if self._startup_wake_deferred:
-                self._startup_wake_deferred = False
-                logger.debug(
-                    "[SPOTIFY_VIS] Consumed deferred wake during staged hot start without explicit engine.wake()",
-                )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
-
-        if self._thread_manager is not None and self._bars_timer is None:
-            try:
-                self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
-                self._current_timer_interval_ms = 16
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                self._bars_timer = None
-        elif self._animation_manager is not None and self._anim_listener_id is not None:
-            self._using_animation_ticks = True
-
-        self._prewarm_parent_overlay()
-        self._startup_reveal_pending = True
-        self._schedule_startup_reveal_fallback()
+        from widgets.spotify_visualizer.startup_staging import begin_hot_start
+        begin_hot_start(self, reason=reason, reset_reason=reset_reason)
 
     def begin_spotify_secondary_stage(self) -> None:
-        if not self._enabled:
-            return
-        if not self._is_anchor_visible():
-            logger.debug("[SPOTIFY_VIS] Secondary stage skipped until anchor becomes visible")
-            return
-        self._begin_hot_start(
-            reason="secondary_stage",
-            reset_reason="secondary_stage",
-        )
+        from widgets.spotify_visualizer.startup_staging import begin_spotify_secondary_stage
+        begin_spotify_secondary_stage(self)
 
     def _activate_impl(self) -> None:
-        """Activate visualizer - start audio capture (lifecycle hook)."""
-        self._enabled = True
-        self._arm_staged_startup(reason="activate_impl")
-        if not self._startup_secondary_stage_pending:
-            self._begin_hot_start(
-                reason="activate_impl_immediate",
-                reset_reason="activate_impl",
-            )
-        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget activated")
-    
+        from widgets.spotify_visualizer.startup_staging import activate_impl
+        activate_impl(self)
+
     def _deactivate_impl(self) -> None:
-        """Deactivate visualizer - stop audio capture (lifecycle hook)."""
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            engine = None
-        if engine is not None:
-            try:
-                engine.release()
-            except Exception:
-                logger.debug("[LIFECYCLE] Failed to release shared beat engine", exc_info=True)
-        
-        try:
-            self.detach_from_animation_manager()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        
-        if self._bars_timer is not None:
-            try:
-                self._bars_timer.stop()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            self._bars_timer = None
-        self._using_animation_ticks = False
-        
-        self._log_perf_snapshot(reset=True)
-        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget deactivated")
-    
+        from widgets.spotify_visualizer.startup_staging import deactivate_impl
+        deactivate_impl(self)
+
     def _cleanup_impl(self) -> None:
-        """Clean up visualizer resources (lifecycle hook)."""
-        self._deactivate_impl()
-        self._engine = None
-        # Free GL handles on the bars overlay to prevent VRAM leaks
-        self._destroy_parent_overlay(reason="cleanup_impl")
-        logger.debug("[LIFECYCLE] SpotifyVisualizerWidget cleaned up")
+        from widgets.spotify_visualizer.startup_staging import cleanup_impl
+        cleanup_impl(self)
 
     # ------------------------------------------------------------------
     # Legacy Lifecycle Methods (for backward compatibility)
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        if self._enabled:
-            return
-        self._enabled = True
-        self._arm_staged_startup(reason="start")
-        if self._startup_secondary_stage_pending:
-            logger.debug("[SPOTIFY_VIS] Deferred hot start to Spotify secondary stage")
-            return
-        self._begin_hot_start(
-            reason="start_immediate",
-            reset_reason="cold_start",
-        )
+        from widgets.spotify_visualizer.startup_staging import start_legacy
+        start_legacy(self)
 
     def stop(self) -> None:
-        if not self._enabled:
-            return
-        self._enabled = False
-        self._startup_secondary_stage_pending = False
-        self._startup_hot_start_started = False
-        self._startup_wake_deferred = False
-        self._startup_require_playing_before_reveal = False
-        self._cancel_pending_startup_reveal()
-
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            engine = None
-        if engine is not None:
-            try:
-                engine.release()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to release shared beat engine", exc_info=True)
-
-        try:
-            self.detach_from_animation_manager()
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager on stop", exc_info=True)
-
-        try:
-            if self._bars_timer is not None:
-                self._bars_timer.stop()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        self._bars_timer = None
-        self._using_animation_ticks = False
-
-        # Emit a concise PERF summary for this widget's activity during the
-        # last enabled period so we can see its effective update/paint rate
-        # and dt jitter alongside compositor and animation metrics.
-        self._log_perf_snapshot(reset=True)
-
-        try:
-            self.hide()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        from widgets.spotify_visualizer.startup_staging import stop_legacy
+        stop_legacy(self)
 
     def cleanup(self) -> None:
         self.stop()

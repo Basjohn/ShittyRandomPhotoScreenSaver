@@ -13,25 +13,42 @@ This file tracks active work only. Completed implementation details belong in `D
 
 ## Active Tasks
 
-### 1. Project-Wide Audit (2026-05-11)
-Status: Audit documents complete. No code changes made yet. Use `Audits/2026-05-11_Project_Audit/00_INDEX.md` as the work tracker.
+### 1. Module Size Refactors (2026-05-11) — IN PROGRESS
 
-Top items from audit to action (in priority order):
-- **A-01 / D-01** — Remove stale archive comment in `rendering/widget_manager.py` (trivial, P1)
-- **V-08 / A-08** — Fix `_exchange_code` blocking the UI thread in `core/gmail/gmail_oauth.py` (P1)
-- **A-02 / EB-11** — Write Gmail thread grouping design contract before implementation (P1)
-- **DD-01 through DD-07** — Resolve phantom memory/doc references (P1, documentation sweep)
-- **D-05** — Remove always-true `is_devcurve_enabled()` gate from `widgets_tab_media.py` (P3, trivial)
+#### 1a. Split `core/settings/models.py` → `core/settings/models/` package ✅ DONE
+- `_enums.py` — DisplayMode, TransitionType, WidgetPosition
+- `_core.py` — Display, Transition, Input, Cache, Source, Shadow, Clock settings
+- `_visualizer_helpers.py` — per-mode constants and coercion helpers
+- `_spotify_visualizer.py` — SpotifyVisualizerSettings (1624 lines, standalone)
+- `_widget_settings.py` — Weather, Reddit, Media, Accessibility settings
+- `_app.py` — AppSettings container
+- `__init__.py` — re-exports all public names (backward compat verified, 171 tests pass)
 
-### 2. Gmail Thread Grouping
-Status: All other Gmail work is complete. The only remaining Gmail task worth carrying here is thread grouping.
+#### 1b. Extract from `spotify_visualizer_widget.py` (2958 → 2159) ✅ DONE
+Five extraction passes completed — each a pure structural move with thin forwarder left behind:
 
-Task scope:
-- Research and settle grouping semantics before changing runtime behavior.
-- Prefer `X-GM-THRID` where available.
-- Keep read and unread groups separate.
-- Define collapsed-row action semantics before enabling the feature by default.
-- Preserve the current default-off behavior until the runtime contract is clear.
+| Pass | Cluster | Target file | Lines: before→after |
+|---|---|---|---|
+| 1 | Startup staging + lifecycle hooks | `spotify_visualizer/startup_staging.py` | 2958→2681 (−277) |
+| 2 | Painted-frame-shadow + card paint | `spotify_visualizer/card_paint.py` | 2681→2564 (−117) |
+| 3 | Media state, anchor, overlay teardown | `spotify_visualizer/media_bridge.py` | 2564→2350 (−214) |
+| 4 | Engine reset, fallback, wake, gen tracking | `spotify_visualizer/engine_lifecycle.py` | 2350→2242 (−108) |
+| 5 | `_replay_engine_config` → `config_applier.py` | — | 2242→2159 (−83) |
+
+Total reduction: **2958 → 2159 (−799 lines, −27%)**. All 155 tests pass. Index.md updated.
+
+### 2. Completed Audit Items (2026-05-11)
+- ✅ D-01: Removed stale archive comment in `widget_manager.py`
+- ✅ D-05: Removed always-true `is_devcurve_enabled()` gate
+- ✅ D-06: Removed dead `force_gate(devcurve=...)` parameter
+- ✅ V-08/A-08: Moved `_exchange_code` off UI thread via ThreadManager
+- ✅ V-01: Registered gmail_widget.py QTimers with ResourceManager
+- ✅ A-03: Registered feedback.py shared QTimer with ResourceManager
+- ✅ D-02: Deleted `core/presets.py` shim (zero callers)
+- ✅ V-02, A-04, A-05, A-06: Reddit/weather/spotify_volume/widget_manager timers verified already registered
+
+### 3. Gmail Thread Grouping
+Status: Not active. Design contract needed before implementation.
 
 ## Watchlist
 - Mute button fade-in reliability under startup event pressure.
