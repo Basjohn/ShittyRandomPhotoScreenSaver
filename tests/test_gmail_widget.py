@@ -271,6 +271,39 @@ def test_gmail_widget_text_cleanup_settings(qt_app):
         widget.cleanup()
 
 
+def test_gmail_grouped_rows_put_count_in_sender_slot_not_subject(qt_app):
+    """Grouped Gmail rows should reserve the count inside the sender column budget."""
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_components import DisplayRow
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        row = DisplayRow(
+            email=EmailMetadata(
+                id="fake_msg",
+                thread_id="fake_thread",
+                sender="PayPal <service@paypal.com>",
+                subject="receipt for your payment",
+                date=datetime.now(),
+                labels=("INBOX", "UNREAD"),
+                is_unread=True,
+            ),
+            count=3,
+        )
+
+        sender_text = widget._build_sender_display_text(row)
+        subject_text = widget._build_subject_display_text(row)
+
+        assert sender_text.endswith(" (3)")
+        assert subject_text == "Receipt For Your Payment"
+        assert "(3)" not in subject_text
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_widget_date_display_setting(qt_app):
     """Verify Gmail date display mode applies to row date formatting."""
     from datetime import datetime

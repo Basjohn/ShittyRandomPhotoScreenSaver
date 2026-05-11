@@ -1363,11 +1363,7 @@ class GmailWidget(BaseOverlayWidget):
                 sender_font = QFont(self._font_family, base_font_pt, sender_weight)
                 painter.setFont(sender_font)
                 sender_fm = QFontMetrics(sender_font)
-                sender_text = clean_sender_name(
-                    email.sender,
-                    enabled=self._clean_sender_names,
-                    max_words=self._max_sender_words,
-                )
+                sender_text = self._build_sender_display_text(row)
                 sender_text = sender_fm.elidedText(
                     sender_text, Qt.TextElideMode.ElideRight, sender_slot_width
                 )
@@ -1375,16 +1371,7 @@ class GmailWidget(BaseOverlayWidget):
             subject_font = QFont(self._font_family, base_font_pt, subject_weight)
             painter.setFont(subject_font)
             subject_fm = QFontMetrics(subject_font)
-            subject_text = email.subject
-            if self._auto_title_case:
-                subject_text = smart_title_case_subject(subject_text)
-            subject_text = shorten_subject(
-                subject_text,
-                max_words=self._max_subject_words,
-                max_chars=self._max_subject_chars,
-            )
-            if row.count > 1:
-                subject_text = f"{subject_text} ({row.count})"
+            subject_text = self._build_subject_display_text(row)
             subject_max_width = max(20, available_width - time_width - sender_width - env_width - action_width - 18)
             subject_text = subject_fm.elidedText(
                 subject_text, Qt.TextElideMode.ElideRight, subject_max_width
@@ -1451,6 +1438,28 @@ class GmailWidget(BaseOverlayWidget):
                     painter.drawEllipse(QPoint(dot_x, dot_y + j * 6), 2, 2)
             prev_unread = email.is_unread
             row_y += line_height + self._row_vertical_spacing
+
+    @staticmethod
+    def _group_count_suffix(row: DisplayRow) -> str:
+        return f" ({row.count})" if row.count > 1 else ""
+
+    def _build_sender_display_text(self, row: DisplayRow) -> str:
+        sender_text = clean_sender_name(
+            row.email.sender,
+            enabled=self._clean_sender_names,
+            max_words=self._max_sender_words,
+        )
+        return f"{sender_text}{self._group_count_suffix(row)}"
+
+    def _build_subject_display_text(self, row: DisplayRow) -> str:
+        subject_text = row.email.subject
+        if self._auto_title_case:
+            subject_text = smart_title_case_subject(subject_text)
+        return shorten_subject(
+            subject_text,
+            max_words=self._max_subject_words,
+            max_chars=self._max_subject_chars,
+        )
 
     # ------------------------------------------------------------------
     # Click Handling

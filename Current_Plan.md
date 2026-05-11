@@ -12,13 +12,6 @@ This file tracks active work only. Completed implementation details belong in `D
 - Avoid broad focus, window-flag, compositor, widget-shadow, visualizer, or Qt effect rewrites unless the current task directly requires them.
 
 ----
-### User Shorthand Box: Never remove this box, only integrate its tasks into the active plan and then remove the text prompting the tasks.
-----
-1. Regenerate defaults so parity tests pass.
-2. For Gmail grouping (functional now) make sure a normal font weight/style bracket is present in the sender column when it has multiple messages grouped, this would eat sender max space (by 3/4 characters it is a space, bracket, number, close bracket) and not push boundries.
-3. Check the audit for any tasks related to startup speed/consistency and closing/cleanup speed/consistency/stability and prioritise those.
-4. Find your next best targets from the audit if nothing from 3 matches.
-----
 
 ## Active Tasks
 
@@ -57,8 +50,19 @@ Total reduction: **2958 → 2159 (−799 lines, −27%)**. All 155 tests pass. I
 - ✅ D-02: Deleted `core/presets.py` shim (zero callers)
 - ✅ V-02, A-04, A-05, A-06: Reddit/weather/spotify_volume/widget_manager timers verified already registered
 
-### 3. Gmail Thread Grouping
-Status: Not active. Design contract needed before implementation.
+### 3. Defaults Snapshot Parity (2026-05-11) — IN PROGRESS
+- Regenerate the derived defaults snapshot artifacts from canonical defaults so `tests/test_settings_defaults_parity.py` matches the current defaults contract again.
+- Keep `core/settings/default_settings.py` and `core/settings/defaults.py` as the only sources of truth; regenerated artifacts must stay derived-only.
+- Validation target: run the defaults parity test after regeneration so the active plan does not carry stale artifact drift.
+
+### 4. Audit Follow-Through: Startup / Cleanup / Stability (2026-05-11) — IN PROGRESS
+- Prioritize startup-speed/startup-consistency and closing/cleanup stability items from the 2026-05-11 audit before lower-signal cleanup.
+- First focus:
+  - V-05 / A-06 / T-04 — `rendering/widget_manager.py` raise-timer ownership, lifecycle cleanup, and teardown coverage.
+  - V-07 — `ui/settings_dialog.py` toast auto-dismiss timer safety during early dialog close.
+  - V-13 — targeted `deleteLater()` lifecycle audit for high-count widget teardown paths where cleanup safety is still unclear.
+  - Risk Register P2 migration overhead note — keep an eye on settings-load migration cost if startup work touches that path.
+- If these no longer produce worthwhile active tasks, next-best audit targets should come from unresolved P1/P2 items with clear tests and bounded risk, not broad speculative rewrites.
 
 ## Watchlist
 - Mute button fade-in reliability under startup event pressure.
